@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ALTERHISTORY — 架空世界地図</title>
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+<div id="app">
+  <header class="toolbar" role="toolbar" aria-label="ツールバー">
+    <div class="group">
+      <button id="btn-open" class="primary" title="地図ファイルを開く (O)">開く</button>
+      <button id="btn-fit" title="地図全体を表示 (F)">全体表示</button>
+    </div>
+    <div class="group">
+      <button id="btn-save" title="ALTERHISTORY 形式で保存 (Ctrl+S)" disabled>保存</button>
+      <details id="export-menu" class="menu">
+        <summary aria-disabled="true" title="画像や他のソフト向けに書き出す">書き出し ▾</summary>
+        <div class="menu-list" role="menu">
+          <button role="menuitem" data-export="png">PNG 画像（2倍の解像度）</button>
+          <button role="menuitem" data-export="svg">SVG 画像（拡大しても劣化しない）</button>
+          <button role="menuitem" data-export="azgaar">Azgaar 互換の .map</button>
+        </div>
+      </details>
+    </div>
+    <div class="group">
+      <label>色分け
+        <select id="sel-overlay" title="1〜5 キーで切替">
+          <option value="none">なし</option>
+          <option value="state" selected>国家</option>
+          <option value="culture">文化</option>
+          <option value="religion">宗教</option>
+          <option value="province">属州</option>
+        </select>
+      </label>
+      <label>下地
+        <select id="sel-base" title="B キーで切替">
+          <option value="biome" selected>バイオーム</option>
+          <option value="height">標高</option>
+        </select>
+      </label>
+    </div>
+    <div class="group toggles" role="group" aria-label="表示する要素">
+      <label><input type="checkbox" id="chk-coast" checked> 海岸線</label>
+      <label><input type="checkbox" id="chk-rivers" checked> 河川</label>
+      <label><input type="checkbox" id="chk-routes" checked> 道路</label>
+      <label><input type="checkbox" id="chk-burgs" checked> 都市</label>
+      <label><input type="checkbox" id="chk-labels" checked> ラベル</label>
+    </div>
+    <div class="spacer"></div>
+    <button id="btn-help" title="ショートカット一覧 (?)">ヘルプ</button>
+  </header>
+
+  <div id="edit-toolbar" class="toolbar edit-toolbar" role="toolbar" aria-label="編集ツール">
+    <div class="group" role="group" aria-label="ツール">
+      <button data-tool="select" class="tool-btn active" title="選択(V) — クリックして中身を見る・編集する">選択</button>
+      <button data-tool="paint:state" class="tool-btn" title="国家を塗る(1)">国家</button>
+      <button data-tool="paint:culture" class="tool-btn" title="文化を塗る(2)">文化</button>
+      <button data-tool="paint:religion" class="tool-btn" title="宗教を塗る(3)">宗教</button>
+      <button data-tool="paint:province" class="tool-btn" title="属州を塗る(4)">属州</button>
+      <button data-tool="paint:biome" class="tool-btn" title="地形を塗る(5)">地形</button>
+      <button data-tool="add:burg" class="tool-btn" title="都市を置く(6)">都市を置く</button>
+      <button data-tool="add:marker" class="tool-btn" title="マーカーを置く(7)">マーカーを置く</button>
+    </div>
+    <div class="group" id="tool-target-group" hidden>
+      <label>対象
+        <select id="tool-target"></select>
+      </label>
+    </div>
+    <div class="group" id="tool-radius-group" hidden>
+      <label>ブラシの大きさ
+        <input type="range" id="tool-radius" min="10" max="200" value="40">
+      </label>
+    </div>
+    <div class="group spacer-group">
+      <span id="tool-hint" class="tool-hint"></span>
+    </div>
+  </div>
+
+  <main>
+    <section id="stage" aria-label="地図">
+      <canvas id="map-canvas" tabindex="0" aria-label="地図の表示領域"></canvas>
+      <div id="empty-state">
+        <h1>地図ファイルを開いてください</h1>
+        <p>Azgaar 形式の <code>.map</code>（<code>.map.gz</code> も可）や、ALTERHISTORY 形式のファイルを、<br>
+           この画面にドラッグ＆ドロップするか、下のボタンから選んでください。</p>
+        <button id="btn-open-empty" class="primary large">ファイルを選ぶ</button>
+      </div>
+      <div id="loading" hidden><span id="loading-text">読み込み中…</span></div>
+      <div id="banner" role="alert" hidden>
+        <div id="banner-body"></div>
+        <button id="banner-close" aria-label="閉じる">×</button>
+      </div>
+      <div id="drop-hint" hidden>ここにドロップして開く</div>
+    </section>
+    <aside id="sidebar" aria-label="凡例・編集">
+      <div id="editor-panel" hidden></div>
+      <h2 id="legend-title">凡例</h2>
+      <ul id="legend-list"></ul>
+    </aside>
+  </main>
+
+  <footer class="statusbar">
+    <span id="status-map">未読み込み</span>
+    <span id="status-hover"></span>
+    <span id="status-zoom"></span>
+  </footer>
+
+  <input type="file" id="file-input" accept=".map,.gz" hidden>
+
+  <dialog id="help-dialog">
+    <h2>操作方法</h2>
+    <table>
+      <tbody>
+        <tr><th colspan="2">マウス</th></tr>
+        <tr><td>ホイール</td><td>カーソル位置を中心に拡大・縮小</td></tr>
+        <tr><td>ドラッグ</td><td>地図を移動</td></tr>
+        <tr><td>ダブルクリック</td><td>その場所を拡大</td></tr>
+        <tr><th colspan="2">キーボード</th></tr>
+        <tr><td><kbd>O</kbd></td><td>ファイルを開く</td></tr>
+        <tr><td><kbd>Ctrl</kbd>+<kbd>S</kbd></td><td>ALTERHISTORY 形式で保存</td></tr>
+        <tr><td><kbd>F</kbd> / <kbd>0</kbd></td><td>地図全体を表示</td></tr>
+        <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>拡大 / 縮小</td></tr>
+        <tr><td><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd></td><td>地図を移動</td></tr>
+        <tr><td><kbd>1</kbd>〜<kbd>5</kbd></td><td>色分け: なし / 国家 / 文化 / 宗教 / 属州</td></tr>
+        <tr><td><kbd>B</kbd></td><td>下地: バイオーム ⇔ 標高</td></tr>
+        <tr><td><kbd>C</kbd> <kbd>R</kbd> <kbd>T</kbd> <kbd>U</kbd> <kbd>L</kbd></td><td>海岸線 / 河川 / 道路 / 都市 / ラベルの表示切替</td></tr>
+        <tr><th colspan="2">編集ツール</th></tr>
+        <tr><td><kbd>V</kbd></td><td>選択ツール（クリックで中身を見る・編集する）</td></tr>
+        <tr><td><kbd>1</kbd>〜<kbd>5</kbd></td><td>塗るツール: 国家 / 文化 / 宗教 / 属州 / 地形（選択ツールの時は色分けの切替）</td></tr>
+        <tr><td><kbd>6</kbd> <kbd>7</kbd></td><td>都市を置く / マーカーを置く</td></tr>
+        <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>ブラシの大きさ</td></tr>
+        <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>元に戻す／やり直す</td></tr>
+        <tr><td><kbd>?</kbd></td><td>この一覧を表示</td></tr>
+      </tbody>
+    </table>
+    <form method="dialog"><button class="primary">閉じる</button></form>
+  </dialog>
+</div>
+
+<!-- Delaunator（ISC License）。ボロノイ図の構築に使う。グローバル Delaunator を定義する -->
+<script src="js/vendor/delaunator.min.js"></script>
+<!-- ビルド済みのアプリ本体（js/ の ES Modules を1つにまとめたもの）。file:// で直接開ける -->
+<script src="dist/app.js"></script>
+</body>
+</html>

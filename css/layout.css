@@ -1,0 +1,22 @@
+#app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+.toolbar {
+  display: flex; align-items: center; gap: 18px; padding: 8px 12px;
+  background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
+}
+.toolbar .group { display: flex; align-items: center; gap: 8px; }
+.toolbar .spacer { flex: 1; }
+.toolbar label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
+.toggles label { gap: 4px; color: var(--text); }
+
+main { display: grid; grid-template-columns: 1fr 260px; min-height: 0; }
+#stage { position: relative; min-width: 0; min-height: 0; background: #2f4a72; }
+#map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; outline: none; }
+#map-canvas.dragging { cursor: grabbing; }
+#sidebar { background: var(--panel); border-left: 1px solid var(--line); overflow-y: auto; padding: 10px 12px; }
+#sidebar h2 { font-size: 14px; margin: 0 0 8px; color: var(--muted); font-weight: 600; }
+
+.statusbar {
+  display: flex; gap: 20px; padding: 4px 12px; background: var(--panel);
+  border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; min-height: 26px;
+}
+#status-hover { flex: 1; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
