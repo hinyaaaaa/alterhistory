@@ -40,6 +40,7 @@ export function attachExtension(map) {
   const warnings = [];
   map.ext = createExtension();
   if (!isNativeHeader(map.meta.extraHeader)) return warnings;
+  // worldTime は Azgaar形式読み込み時点では既定値のまま。ALTERHISTORY拡張から後で復元する
 
   map.meta.source = "alterhistory";
   const indexes = Object.keys(map.passthrough).map(Number).filter((i) => i >= MIN_EXT_INDEX);
@@ -56,6 +57,9 @@ export function attachExtension(map) {
     }
     map.ext = { ...createExtension(), ...ext, data: ext.data ?? {} };
     delete map.passthrough[last];
+    if (map.ext.data.worldTime && Number.isInteger(map.ext.data.worldTime.year) && Number.isInteger(map.ext.data.worldTime.month)) {
+      map.worldTime = { year: map.ext.data.worldTime.year, month: map.ext.data.worldTime.month };
+    }
     // 元の行数を復元する。記録が無い・不正なときは、拡張行の直前までを元の範囲とみなす
     const n = ext.lineCount;
     map.meta.lineCount = Number.isInteger(n) && n > 0 && n <= last ? n : last;

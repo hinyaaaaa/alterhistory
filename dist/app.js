@@ -679,6 +679,9 @@
       ext: null,
       // セル形状の手動編集（頂点の移動）。L51 の読み取り専用コピー。書き出しでは passthrough の原文を戻す
       graphOverride: {},
+      // 世界の時刻（年月）。core/sim/time.js が扱う。ファイルには保存せず、
+      // ALTERHISTORY拡張データ(ext.data.worldTime)に保存する（io層で読み書き）。
+      worldTime: { year: 1, month: 1 },
       // 実行時のみ使う「版数」。編集のたびに、影響する層の数字を進める。
       // 描画の層キャッシュや凡例が「作り直す必要があるか」を判断するために使う（ファイルには保存しない）。
       //   terrain: 地形（バイオーム・水陸）/ politics: 国家・文化・宗教・属州 / places: 都市・マーカー等
@@ -1150,6 +1153,9 @@
       }
       map.ext = { ...createExtension(), ...ext, data: ext.data ?? {} };
       delete map.passthrough[last];
+      if (map.ext.data.worldTime && Number.isInteger(map.ext.data.worldTime.year) && Number.isInteger(map.ext.data.worldTime.month)) {
+        map.worldTime = { year: map.ext.data.worldTime.year, month: map.ext.data.worldTime.month };
+      }
       const n = ext.lineCount;
       map.meta.lineCount = Number.isInteger(n) && n > 0 && n <= last ? n : last;
     } catch (e) {
@@ -1690,10 +1696,16 @@
       },
       /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */
       saveNative() {
-        return runExport("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB", (map, fileName) => ({
-          blob: textBlob(serializeAzgaar(map, { native: true, exportedAt: todayString() }), "text/plain"),
-          name: exportFileName(map, fileName, "map")
-        }));
+        return runExport("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB", (map, fileName) => {
+          var _a;
+          map.ext ?? (map.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} });
+          (_a = map.ext).data ?? (_a.data = {});
+          map.ext.data.worldTime = { ...map.worldTime };
+          return {
+            blob: textBlob(serializeAzgaar(map, { native: true, exportedAt: todayString() }), "text/plain"),
+            name: exportFileName(map, fileName, "map")
+          };
+        });
       },
       /** Azgaar 互換の .map（ALTERHISTORY の目印・拡張データを含めない） */
       saveAzgaar() {
@@ -1731,9 +1743,9 @@
 
   // js/ui/dom.js
   function byId(id) {
-    const el2 = document.getElementById(id);
-    if (!el2) throw new Error(`\u8981\u7D20 #${id} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08index.html \u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
-    return el2;
+    const el5 = document.getElementById(id);
+    if (!el5) throw new Error(`\u8981\u7D20 #${id} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08index.html \u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
+    return el5;
   }
 
   // js/ui/download.js
@@ -1937,8 +1949,8 @@
       menu.classList.toggle("disabled", !hasMap);
       if (!hasMap) menu.open = false;
       for (const [name, id] of Object.entries(TOGGLE_IDS)) {
-        const el2 = byId(id);
-        if (el2.checked !== v[name]) el2.checked = v[name];
+        const el5 = byId(id);
+        if (el5.checked !== v[name]) el5.checked = v[name];
       }
     };
     store.subscribe(sync);
@@ -2447,6 +2459,7 @@ ${shown}${more}`;
   };
   function initEditMode({ store, viewport, editActions, panels }) {
     const canvas = byId("map-canvas");
+    let militaryDialog = null;
     let tool = TOOLS.SELECT;
     let target = 0;
     let radius = 40;
@@ -2536,21 +2549,33 @@ ${shown}${more}`;
     canvas.addEventListener("pointercancel", endStroke);
     canvas.addEventListener("click", (e) => {
       const map = store.getState().map;
-      if (!map || tool !== TOOLS.SELECT) return;
+      if (!map) return;
       const [wx, wy] = toWorld(e);
       if (!inMap(map, wx, wy)) return;
       const cell = editActions.findCell(wx, wy);
+      if (militaryDialog?.pending && militaryDialog.consumeMapClick(cell)) return;
+      if (tool !== TOOLS.SELECT) return;
       const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
       if (!picked) return;
       if (picked.type === "burg") panels.openBurg(picked.id);
       else if (picked.type === "marker") panels.openMarker(picked.id);
       else panels.openCell(picked.id);
     });
-    return { setTool, setTarget, setRadius, setMarkerType, get tool() {
-      return tool;
-    }, get target() {
-      return target;
-    } };
+    return {
+      setTool,
+      setTarget,
+      setRadius,
+      setMarkerType,
+      get tool() {
+        return tool;
+      },
+      get target() {
+        return target;
+      },
+      setMilitaryDialog(d) {
+        militaryDialog = d;
+      }
+    };
   }
 
   // js/ui/shortcuts.js
@@ -2558,7 +2583,7 @@ ${shown}${more}`;
   var OVERLAY_KEYS = { 1: "none", 2: "state", 3: "culture", 4: "religion", 5: "province" };
   var TOGGLE_KEYS = { c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
   var TOOL_KEYS = { 1: TOOLS.PAINT_STATE, 2: TOOLS.PAINT_CULTURE, 3: TOOLS.PAINT_RELIGION, 4: TOOLS.PAINT_PROVINCE, 5: TOOLS.PAINT_BIOME, 6: TOOLS.ADD_BURG, 7: TOOLS.ADD_MARKER };
-  function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar }) {
+  function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, militaryDialog }) {
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) {
         if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -2577,13 +2602,30 @@ ${shown}${more}`;
         return;
       }
       const t = e.target;
-      if (t instanceof HTMLElement && (t.closest("select, input, textarea, dialog[open]") || t.isContentEditable)) return;
+      const inFormField = t instanceof HTMLElement && (t.closest("select, input, textarea") || t.isContentEditable);
+      const inDialog = t instanceof HTMLElement && t.closest("dialog[open]");
+      if (inFormField) return;
+      if (inDialog && e.key !== " " && e.key !== "Spacebar" && e.key !== "Escape") return;
       const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
       const hasMap = !!store.getState().map;
       if (key === "o") {
         e.preventDefault();
         openFileDialog();
         return;
+      }
+      if (key === " " || key === "Spacebar") {
+        e.preventDefault();
+        if (!hasMap || !timeActions) return;
+        if (timeActions.isRunning()) timeActions.stop();
+        else timeActions.start();
+        return;
+      }
+      if (key === "m") {
+        if (hasMap) militaryDialog?.open();
+        return;
+      }
+      if (key === "Escape") {
+        militaryDialog?.cancelPending();
       }
       if (key === "?") {
         e.preventDefault();
@@ -3587,6 +3629,1167 @@ ${shown}${more}`;
     };
   }
 
+  // js/core/sim/units.js
+  var UNIT_TYPES = Object.freeze([
+    { key: "infantry", label: "\u6B69\u5175", unit: "\u4EBA", icon: "\u2694\uFE0F", power: 1, rural: 0.9, urban: 0.5, industryShare: 0 },
+    { key: "armor", label: "\u6A5F\u7532", unit: "\u53F0", icon: "\u{1F6E1}\uFE0F", power: 8, rural: 0, urban: 0, industryShare: 0.35 },
+    { key: "air", label: "\u822A\u7A7A", unit: "\u6A5F", icon: "\u2708\uFE0F", power: 15, rural: 0, urban: 0, industryShare: 0.25 },
+    { key: "navy", label: "\u6D77\u8ECD", unit: "\u96BB", icon: "\u{1F6A2}", power: 40, rural: 0, urban: 0, industryShare: 0.2, naval: true },
+    { key: "special", label: "\u7279\u6B8A\u90E8\u968A", unit: "\u4EBA", icon: "\u{1F396}\uFE0F", power: 4, rural: 0.02, urban: 0.03, industryShare: 0.05 },
+    { key: "advanced", label: "\u5148\u7AEF\u6280\u8853", unit: "\u4EBA", icon: "\u{1F52C}", power: 6, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6 },
+    { key: "nuclear", label: "\u6838", unit: "\u767A", icon: "\u2622\uFE0F", power: 500, rural: 0, urban: 0, industryShare: 0, minTech: 9 }
+  ]);
+  var UNIT_KEYS = UNIT_TYPES.map((u) => u.key);
+  var UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]));
+  var DOCTRINES = Object.freeze([
+    { key: "balanced", label: "\u5747\u8861", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 } },
+    { key: "mechanized", label: "\u6A5F\u7532\u91CD\u8996", mult: { infantry: 0.8, armor: 1.4, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 } },
+    { key: "airpower", label: "\u822A\u7A7A\u91CD\u8996", mult: { infantry: 0.8, armor: 1, air: 1.5, navy: 1, special: 1, advanced: 1.1, nuclear: 1 } },
+    { key: "attrition", label: "\u4EBA\u6D77\u6226\u8853", mult: { infantry: 1.4, armor: 0.9, air: 0.9, navy: 1, special: 1, advanced: 0.9, nuclear: 1 } }
+  ]);
+  var DOCTRINE_BY_KEY = Object.fromEntries(DOCTRINES.map((d) => [d.key, d]));
+  function emptyForce() {
+    return Object.fromEntries(UNIT_KEYS.map((k) => [k, 0]));
+  }
+  function forcePower(units, doctrineKey = "balanced") {
+    const mult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY.balanced.mult;
+    let total = 0;
+    for (const key of UNIT_KEYS) {
+      const n = units?.[key] ?? 0;
+      if (n > 0) total += n * UNIT_BY_KEY[key].power * (mult[key] ?? 1);
+    }
+    return total;
+  }
+  function forceHeadcount(units) {
+    return UNIT_KEYS.reduce((sum, k) => sum + (units?.[k] ?? 0), 0);
+  }
+
+  // js/core/sim/economy.js
+  var TECH_MIN = 1;
+  var TECH_MAX = 10;
+  var GROWTH_RATE_BY_TECH = (tech) => 6e-3 + (tech - 1) * 16e-4;
+  var INDUSTRY_PER_CAPITA_BY_TECH = (tech) => 0.05 + (tech - 1) * 0.09;
+  function ensureEconomy(state) {
+    if (typeof state.techLevel !== "number") state.techLevel = 3;
+    if (typeof state.industry !== "number") state.industry = 0;
+    if (typeof state.popCarryCap !== "number") {
+      state.popCarryCap = Math.max(1, (state.rural ?? 0) + (state.urban ?? 0)) * 3;
+    }
+    return state;
+  }
+  function computeAnnualUpdate(state) {
+    const tech = clampTech(state.techLevel ?? 3);
+    const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
+    const cap = Math.max(1, state.popCarryCap ?? (pop * 3 || 1));
+    const r = GROWTH_RATE_BY_TECH(tech);
+    const growth = pop > 0 ? r * pop * (1 - pop / cap) : 0;
+    const newPop = Math.max(0, pop + growth);
+    const ratio = pop > 0 ? (state.urban ?? 0) / pop : 0.3;
+    const newUrban = round2((state.urban ?? 0) + growth * ratio);
+    const newRural = round2(newPop - newUrban);
+    const industry = round2(newPop / 1e3 * INDUSTRY_PER_CAPITA_BY_TECH(tech));
+    return { rural: newRural, urban: newUrban, industry };
+  }
+  function clampTech(v) {
+    return Math.min(TECH_MAX, Math.max(TECH_MIN, Math.round(v)));
+  }
+  function round2(v) {
+    return Math.round(v * 100) / 100;
+  }
+
+  // js/core/sim/military.js
+  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function regimentsOf(state) {
+    return Array.isArray(state.military) ? state.military : [];
+  }
+  function nextRegimentId(state) {
+    const list = regimentsOf(state);
+    return list.length ? Math.max(...list.map((r) => r.i)) + 1 : 0;
+  }
+  function planCreateRegiment(map, stateId, cell, { name, icon = "\u{1F6E1}\uFE0F", doctrine = "balanced" } = {}) {
+    const state = map.pack.states[stateId];
+    if (!isLive7(state)) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u914D\u7F6E\u3067\u304D\u307E\u305B\u3093");
+    const { p } = map.geometry.pack;
+    const reg = {
+      i: nextRegimentId(state),
+      name: name || `${state.name}\u8ECD`,
+      icon,
+      state: stateId,
+      cell,
+      x: p[cell][0],
+      y: p[cell][1],
+      bx: p[cell][0],
+      by: p[cell][1],
+      doctrine,
+      u: emptyForce()
+    };
+    const next = [...regimentsOf(state), reg];
+    return { command: makeCommand("\u90E8\u968A\u3092\u7DE8\u6210", ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
+      m.pack.states[stateId].military = v;
+    }, next)]), id: reg.i };
+  }
+  function planMoveRegiment(map, stateId, regId, cell) {
+    const state = map.pack.states[stateId];
+    const reg = regimentsOf(state).find((r) => r.i === regId);
+    if (!reg) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
+    if (reg.cell === cell) return null;
+    const { p } = map.geometry.pack;
+    return makeCommand("\u90E8\u968A\u3092\u79FB\u52D5", ["places"], [setProps(reg, { cell, x: p[cell][0], y: p[cell][1] })]);
+  }
+  function planEditRegiment(map, stateId, regId, patch) {
+    const state = map.pack.states[stateId];
+    const reg = regimentsOf(state).find((r) => r.i === regId);
+    if (!reg) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const next = {};
+    if (patch.name !== void 0 && patch.name !== reg.name) next.name = patch.name;
+    if (patch.icon !== void 0 && patch.icon !== reg.icon) next.icon = patch.icon;
+    if (patch.doctrine !== void 0 && patch.doctrine !== reg.doctrine) next.doctrine = patch.doctrine;
+    if (patch.u) {
+      const u = { ...reg.u };
+      for (const k of UNIT_KEYS) if (patch.u[k] !== void 0) u[k] = Math.max(0, Math.round(patch.u[k]));
+      if (JSON.stringify(u) !== JSON.stringify(reg.u)) next.u = u;
+    }
+    if (!Object.keys(next).length) return null;
+    return makeCommand("\u90E8\u968A\u3092\u7DE8\u96C6", ["places"], [setProps(reg, next)]);
+  }
+  function planDisbandRegiment(map, stateId, regId) {
+    const state = map.pack.states[stateId];
+    const list = regimentsOf(state);
+    if (!list.some((r) => r.i === regId)) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const next = list.filter((r) => r.i !== regId);
+    return makeCommand("\u90E8\u968A\u3092\u89E3\u6563", ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
+      m.pack.states[stateId].military = v;
+    }, next)]);
+  }
+  function planAnnualConscription(map, stateId) {
+    const state = map.pack.states[stateId];
+    if (!isLive7(state)) return null;
+    ensureEconomy(state);
+    const capital = map.pack.burgs[state.capital];
+    if (!capital) return null;
+    const pop = (state.rural ?? 0) + (state.urban ?? 0);
+    const industry = state.industry ?? 0;
+    let list = regimentsOf(state);
+    let home = list.find((r) => r.i === 0) ?? null;
+    const delta = emptyForce();
+    let any = false;
+    for (const key of UNIT_KEYS) {
+      const def = UNIT_BY_KEY[key];
+      if (def.minTech && (state.techLevel ?? 3) < def.minTech) continue;
+      const fromPop = pop / 1e3 * (def.rural + def.urban) * 0.15;
+      const fromIndustry = def.industryShare > 0 ? industry * def.industryShare / (def.power / 4) : 0;
+      const add = Math.round(fromPop + fromIndustry);
+      if (add > 0) {
+        delta[key] = add;
+        any = true;
+      }
+    }
+    if (!any) return null;
+    const parts = [];
+    if (home) {
+      const u = { ...home.u };
+      for (const k of UNIT_KEYS) u[k] = (u[k] ?? 0) + delta[k];
+      parts.push(setProps(home, { u }));
+    } else {
+      const { p } = map.geometry.pack;
+      const cell = capital.cell;
+      const reg = { i: 0, name: `${state.name}\u56FD\u9632\u672C\u968A`, icon: "\u{1F6E1}\uFE0F", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], doctrine: "balanced", u: delta };
+      parts.push(setList((m) => m.pack.states[stateId].military, (m, v) => {
+        m.pack.states[stateId].military = v;
+      }, [reg, ...list]));
+    }
+    return makeCommand("\u5E74\u6B21\u5FB4\u5175", [], parts);
+  }
+
+  // js/core/sim/battle.js
+  function applyLosses(units, fraction) {
+    const out = { ...units };
+    for (const k of UNIT_KEYS) out[k] = Math.max(0, Math.floor((out[k] ?? 0) * (1 - fraction)));
+    return out;
+  }
+  function simulateBattle(attacker, defender, rnd) {
+    const aPower = forcePower(attacker.units, attacker.doctrine);
+    const dPower = forcePower(defender.units, defender.doctrine);
+    if (aPower <= 0 && dPower <= 0) throw new Error("\u4E21\u8ECD\u3068\u3082\u6226\u529B\u304C\u3042\u308A\u307E\u305B\u3093");
+    const noise = () => rnd.float(0.85, 1.15);
+    const aRoll = aPower * noise();
+    const dRoll = dPower * noise();
+    const winner = aRoll >= dRoll ? "attacker" : "defender";
+    const ratio = Math.max(aRoll, dRoll) / Math.max(1e-9, Math.min(aRoll, dRoll));
+    const winnerLoss = clamp(0.03 + 0.09 / ratio, 0.03, 0.12);
+    const loserLoss = clamp(0.4 - 0.25 / ratio, 0.15, 0.4);
+    const attackerLoss = winner === "attacker" ? winnerLoss : loserLoss;
+    const defenderLoss = winner === "defender" ? winnerLoss : loserLoss;
+    return {
+      winner,
+      aPower: round(aPower),
+      dPower: round(dPower),
+      attackerLossFraction: attackerLoss,
+      defenderLossFraction: defenderLoss,
+      attackerCasualties: Math.round(forceHeadcount(attacker.units) * attackerLoss),
+      defenderCasualties: Math.round(forceHeadcount(defender.units) * defenderLoss)
+    };
+  }
+  function planResolveBattle(map, a, b, rnd) {
+    const aState = map.pack.states[a.stateId], bState = map.pack.states[b.stateId];
+    const aReg = regimentsOf(aState).find((r) => r.i === a.regId);
+    const bReg = regimentsOf(bState).find((r) => r.i === b.regId);
+    if (!aReg) throw new Error("\u653B\u6483\u5074\u306E\u90E8\u968A\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093");
+    if (!bReg) throw new Error("\u9632\u5FA1\u5074\u306E\u90E8\u968A\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093");
+    if (a.stateId === b.stateId) throw new Error("\u540C\u3058\u56FD\u5BB6\u306E\u90E8\u968A\u3069\u3046\u3057\u3067\u306F\u6226\u95D8\u3067\u304D\u307E\u305B\u3093");
+    const result = simulateBattle(
+      { units: aReg.u, doctrine: aReg.doctrine },
+      { units: bReg.u, doctrine: bReg.doctrine },
+      rnd
+    );
+    const parts = [
+      setProps(aReg, { u: applyLosses(aReg.u, result.attackerLossFraction) }),
+      setProps(bReg, { u: applyLosses(bReg.u, result.defenderLossFraction) })
+    ];
+    const command = makeCommand(`\u6226\u95D8\uFF08${aReg.name} vs ${bReg.name}\uFF09`, [], parts);
+    return { command, result };
+  }
+  function clamp(v, min, max) {
+    return Math.min(max, Math.max(min, v));
+  }
+  function round(v) {
+    return Math.round(v * 100) / 100;
+  }
+
+  // js/core/edit/alliances.js
+  var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function listAlliances(map) {
+    return map.ext?.data?.alliances ?? [];
+  }
+  function nextAllianceId(map) {
+    const list = listAlliances(map);
+    return list.length ? Math.max(...list.map((a) => a.id)) + 1 : 1;
+  }
+  function planCreateAlliance(map, name, memberIds) {
+    const uniq = [...new Set(memberIds)];
+    if (uniq.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
+    for (const id of uniq) if (!isLive8(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq };
+    const before = listAlliances(map);
+    const write = (m, list) => {
+      const ext = ensureExt(m);
+      ext.data.alliances = list;
+      if (!list.length) delete ext.data.alliances;
+    };
+    return {
+      command: makeCommand(`\u540C\u76DF\u3092\u7D50\u6210\uFF08${alliance.name}\uFF09`, [], [{ apply: (m) => write(m, [...before, alliance]), revert: (m) => write(m, before) }]),
+      id: alliance.id
+    };
+  }
+  function planEditAlliance(map, allianceId, patch) {
+    const list = listAlliances(map);
+    const a = list.find((x) => x.id === allianceId);
+    if (!a) throw new Error("\u305D\u306E\u540C\u76DF\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const nextMembers = patch.members ? [...new Set(patch.members)] : a.members;
+    if (nextMembers.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
+    const nextName = patch.name !== void 0 ? patch.name : a.name;
+    if (nextName === a.name && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
+    const before = list;
+    const after = list.map((x) => x.id === allianceId ? { ...x, name: nextName, members: nextMembers } : x);
+    const write = (m, v) => {
+      ensureExt(m).data.alliances = v;
+    };
+    return makeCommand("\u540C\u76DF\u3092\u7DE8\u96C6", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
+  }
+  function planDissolveAlliance(map, allianceId) {
+    const list = listAlliances(map);
+    if (!list.some((a) => a.id === allianceId)) throw new Error("\u305D\u306E\u540C\u76DF\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const before = list;
+    const after = list.filter((a) => a.id !== allianceId);
+    const write = (m, v) => {
+      const ext = ensureExt(m);
+      ext.data.alliances = v;
+      if (!v.length) delete ext.data.alliances;
+    };
+    return makeCommand("\u540C\u76DF\u3092\u89E3\u6D88", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
+  }
+  function alliancesOf(map, stateId) {
+    return listAlliances(map).filter((a) => a.members.includes(stateId));
+  }
+
+  // js/core/edit/wars.js
+  var isLive9 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function listWars(map) {
+    return map.ext?.data?.wars ?? [];
+  }
+  function nextWarId(map) {
+    const list = listWars(map);
+    return list.length ? Math.max(...list.map((w) => w.id)) + 1 : 1;
+  }
+  function writeWars(m, list) {
+    const ext = ensureExt(m);
+    ext.data.wars = list;
+    if (!list.length) delete ext.data.wars;
+  }
+  function activeWars(map) {
+    return listWars(map).filter((w) => !w.endedAt);
+  }
+  function warsOf(map, stateId) {
+    return listWars(map).filter((w) => w.attackers.includes(stateId) || w.defenders.includes(stateId));
+  }
+  function planDeclareWar(map, { name, attackers, defenders, date }) {
+    const a = [...new Set(attackers)], d = [...new Set(defenders)];
+    if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
+    for (const id of [...a, ...d]) if (!isLive9(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
+    const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
+    const war = {
+      id: nextWarId(map),
+      name: name || `${aNames[0]}\u5BFE${dNames[0]}\u6226\u4E89`,
+      attackers: a,
+      defenders: d,
+      startedAt: date,
+      endedAt: null,
+      battles: [],
+      advantage: {}
+    };
+    const before = listWars(map);
+    return { command: makeCommand(`\u5BA3\u6226\u5E03\u544A\uFF08${war.name}\uFF09`, [], [{ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) }]), id: war.id };
+  }
+  function planRecordBattle(map, warId, { attackerState, defenderState, result, date }) {
+    const list = listWars(map);
+    const war = list.find((w) => w.id === warId);
+    if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (war.endedAt) throw new Error("\u7D42\u7D50\u3057\u305F\u6226\u4E89\u306B\u306F\u8A18\u9332\u3067\u304D\u307E\u305B\u3093");
+    const entry = { year: date.year, month: date.month, attackerState, defenderState, winner: result.winner, aPower: result.aPower, dPower: result.dPower };
+    const advGain = result.winner === "attacker" ? 1 : -1;
+    const before = list;
+    const after = list.map((w) => w.id !== warId ? w : {
+      ...w,
+      battles: [...w.battles, entry],
+      advantage: { ...w.advantage, [attackerState]: (w.advantage[attackerState] ?? 0) + advGain, [defenderState]: (w.advantage[defenderState] ?? 0) - advGain }
+    });
+    return makeCommand("\u6226\u7E3E\u3092\u8A18\u9332", [], [{ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, before) }]);
+  }
+  function suggestCessions(map, attackerId, defenderId, { maxDepth = 3 } = {}) {
+    const c = map.pack.cells;
+    const { cells: geomCells } = map.geometry.pack;
+    const n = c.state.length;
+    const depth = new Int16Array(n).fill(-1);
+    const queue = [];
+    for (let i = 0; i < n; i++) {
+      if (c.state[i] !== defenderId || c.biome[i] === 0) continue;
+      if (geomCells.c[i].some((j) => c.state[j] === attackerId)) {
+        depth[i] = 0;
+        queue.push(i);
+      }
+    }
+    for (let h = 0; h < queue.length; h++) {
+      const i = queue[h];
+      if (depth[i] >= maxDepth) continue;
+      for (const j of geomCells.c[i]) {
+        if (c.state[j] === defenderId && c.biome[j] !== 0 && depth[j] < 0) {
+          depth[j] = depth[i] + 1;
+          queue.push(j);
+        }
+      }
+    }
+    const frontierCells = queue;
+    const provinceCandidates = /* @__PURE__ */ new Map();
+    for (const i of frontierCells) {
+      const pid = c.province[i];
+      if (pid > 0) provinceCandidates.set(pid, (provinceCandidates.get(pid) ?? 0) + 1);
+    }
+    const byProvince = [...provinceCandidates.keys()].map((pid) => {
+      const p = map.pack.provinces[pid];
+      return { type: "province", provinceId: pid, name: p?.fullName ?? p?.name ?? `\u5C5E\u5DDE#${pid}`, cells: p?.cells ?? provinceCandidates.get(pid) };
+    });
+    const noProvince = new Set(frontierCells.filter((i) => c.province[i] === 0));
+    const regions = [];
+    const visited = /* @__PURE__ */ new Set();
+    for (const start2 of noProvince) {
+      if (visited.has(start2)) continue;
+      const comp = [start2];
+      visited.add(start2);
+      for (let h = 0; h < comp.length; h++) {
+        for (const j of geomCells.c[comp[h]]) {
+          if (noProvince.has(j) && !visited.has(j)) {
+            visited.add(j);
+            comp.push(j);
+          }
+        }
+      }
+      regions.push(comp);
+    }
+    const byRegion = regions.map((cells, idx) => ({ type: "region", regionCells: cells, name: `\u672A\u7DE8\u5165\u5730\u57DF${idx + 1}\uFF08${cells.length}\u30BB\u30EB\uFF09`, cells: cells.length }));
+    return [...byProvince, ...byRegion].sort((a, b) => b.cells - a.cells);
+  }
+  function planSignPeace(map, warId, terms, date) {
+    const list = listWars(map);
+    const war = list.find((w) => w.id === warId);
+    if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (war.endedAt) throw new Error("\u65E2\u306B\u7D42\u7D50\u3057\u3066\u3044\u307E\u3059");
+    if (!isLive9(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const parts = [];
+    const c = map.pack.cells;
+    const moveCells = (cells) => {
+      if (!cells.length) return;
+      const changes = cells.map((i) => [i, c.state[i], terms.toStateId]);
+      parts.push(setIndexed((m) => m.pack.cells.state, changes));
+      for (const b of map.pack.burgs) {
+        if (b && b.i && !b.removed && cells.includes(b.cell)) parts.push(setProps(b, { state: terms.toStateId }));
+      }
+    };
+    for (const pid of terms.provinceIds ?? []) {
+      const cells = [];
+      for (let i = 0; i < c.province.length; i++) if (c.province[i] === pid) cells.push(i);
+      moveCells(cells);
+      const province = map.pack.provinces[pid];
+      if (province) parts.push(setProps(province, { state: terms.toStateId }));
+    }
+    for (const cells of terms.regionCells ?? []) moveCells(cells);
+    if (terms.reparations) {
+      const from = map.pack.states[war.defenders.includes(terms.toStateId) ? war.attackers[0] : war.defenders[0]];
+      if (from && typeof from.industry === "number") parts.push(setProps(from, { industry: Math.max(0, from.industry - terms.reparations) }));
+    }
+    const before = list;
+    const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: date, terms });
+    parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, before) });
+    return makeCommand(`\u8B1B\u548C\u6761\u7D04\uFF08${war.name}\uFF09`, ["politics"], parts);
+  }
+
+  // js/app/sim-actions.js
+  function createSimActions({ store, renderer }) {
+    const rnd = createRandom(Date.now());
+    const rerender = () => renderer.requestRender();
+    const withMap = (fn) => {
+      const m = store.getState().map;
+      return m ? fn(m) : void 0;
+    };
+    const commitOrThrow = (plan) => {
+      if (plan) {
+        store.commit(plan);
+        rerender();
+      }
+    };
+    const safeRun = (label, fn) => {
+      try {
+        return fn();
+      } catch (e) {
+        store.update((s) => {
+          s.error = `${label}: ${e.message}`;
+        });
+        return void 0;
+      }
+    };
+    const currentDate = () => store.getState().map?.worldTime ?? { year: 1, month: 1 };
+    return {
+      // --- 部隊 ---
+      createRegiment(stateId, cell, opts) {
+        return withMap((map) => safeRun("\u90E8\u968A\u306E\u7DE8\u6210", () => {
+          const r = planCreateRegiment(map, stateId, cell, opts);
+          commitOrThrow(r.command);
+          return r.id;
+        }));
+      },
+      moveRegiment(stateId, regId, cell) {
+        withMap((map) => safeRun("\u90E8\u968A\u306E\u79FB\u52D5", () => commitOrThrow(planMoveRegiment(map, stateId, regId, cell))));
+      },
+      editRegiment(stateId, regId, patch) {
+        withMap((map) => safeRun("\u90E8\u968A\u306E\u7DE8\u96C6", () => commitOrThrow(planEditRegiment(map, stateId, regId, patch))));
+      },
+      disbandRegiment(stateId, regId) {
+        withMap((map) => safeRun("\u90E8\u968A\u306E\u89E3\u6563", () => commitOrThrow(planDisbandRegiment(map, stateId, regId))));
+      },
+      regimentsOf(stateId) {
+        return withMap((map) => regimentsOf(map.pack.states[stateId] ?? {})) ?? [];
+      },
+      // --- 戦闘 ---
+      /** 攻撃を実行し、関連する戦争があれば戦績も記録する。戻り値は戦闘結果（表示用） */
+      attack(a, b, warId) {
+        return withMap((map) => safeRun("\u6226\u95D8", () => {
+          const { command, result } = planResolveBattle(map, a, b, rnd);
+          store.beginBatch(`\u6226\u95D8\uFF08${map.pack.states[a.stateId].name} vs ${map.pack.states[b.stateId].name}\uFF09`);
+          store.commit(command);
+          if (warId != null) {
+            const recCmd = planRecordBattle(map, warId, { attackerState: a.stateId, defenderState: b.stateId, result, date: currentDate() });
+            if (recCmd) store.commit(recCmd);
+          }
+          store.endBatch();
+          rerender();
+          return result;
+        }));
+      },
+      // --- 同盟 ---
+      listAlliances() {
+        return withMap((map) => listAlliances(map)) ?? [];
+      },
+      alliancesOf(stateId) {
+        return withMap((map) => alliancesOf(map, stateId)) ?? [];
+      },
+      createAlliance(name, memberIds) {
+        return withMap((map) => safeRun("\u540C\u76DF\u306E\u7D50\u6210", () => {
+          const r = planCreateAlliance(map, name, memberIds);
+          commitOrThrow(r.command);
+          return r.id;
+        }));
+      },
+      editAlliance(id, patch) {
+        withMap((map) => safeRun("\u540C\u76DF\u306E\u7DE8\u96C6", () => commitOrThrow(planEditAlliance(map, id, patch))));
+      },
+      dissolveAlliance(id) {
+        withMap((map) => safeRun("\u540C\u76DF\u306E\u89E3\u6D88", () => commitOrThrow(planDissolveAlliance(map, id))));
+      },
+      // --- 戦争・講和 ---
+      listWars() {
+        return withMap((map) => listWars(map)) ?? [];
+      },
+      activeWars() {
+        return withMap((map) => activeWars(map)) ?? [];
+      },
+      warsOf(stateId) {
+        return withMap((map) => warsOf(map, stateId)) ?? [];
+      },
+      declareWar(attackers, defenders, name) {
+        return withMap((map) => safeRun("\u5BA3\u6226\u5E03\u544A", () => {
+          const r = planDeclareWar(map, { name, attackers, defenders, date: currentDate() });
+          commitOrThrow(r.command);
+          return r.id;
+        }));
+      },
+      suggestCessions(attackerId, defenderId) {
+        return withMap((map) => suggestCessions(map, attackerId, defenderId)) ?? [];
+      },
+      signPeace(warId, terms) {
+        withMap((map) => safeRun("\u8B1B\u548C\u6761\u7D04", () => commitOrThrow(planSignPeace(map, warId, terms, currentDate()))));
+      }
+    };
+  }
+
+  // js/core/sim/time.js
+  function createWorldTime(year = 1, month = 1) {
+    return { year, month };
+  }
+  function advanceMonth(time) {
+    let { year, month } = time;
+    month += 1;
+    let yearChanged = false;
+    if (month > 12) {
+      month = 1;
+      year += 1;
+      yearChanged = true;
+    }
+    return { time: { year, month }, yearChanged };
+  }
+  function formatWorldTime(time) {
+    return `${time.year}\u5E74 ${time.month}\u6708`;
+  }
+
+  // js/core/sim/world.js
+  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function planAnnualUpdate(map) {
+    const parts = [];
+    for (const state of map.pack.states) {
+      if (!isLive10(state)) continue;
+      ensureEconomy(state);
+      const { rural, urban, industry } = computeAnnualUpdate(state);
+      if (rural !== state.rural || urban !== state.urban || industry !== state.industry) {
+        parts.push(setProps(state, { rural, urban, industry }));
+      }
+      const conscription = planAnnualConscription(map, state.i);
+      if (conscription) parts.push(...conscription.parts);
+    }
+    if (!parts.length) return null;
+    return makeCommand("\u5E74\u6B21\u66F4\u65B0\uFF08\u4EBA\u53E3\u30FB\u7523\u696D\u30FB\u5FB4\u5175\uFF09", ["politics", "places"], parts);
+  }
+
+  // js/app/time-actions.js
+  var DEFAULT_MS_PER_MONTH = 2 * 60 * 1e3 / 12;
+  function createTimeActions({ store, renderer }) {
+    let timer = null;
+    let msPerMonth = DEFAULT_MS_PER_MONTH;
+    function tick() {
+      const map = store.getState().map;
+      if (!map) return;
+      const { time, yearChanged } = advanceMonth(map.worldTime);
+      store.update((s) => {
+        s.map.worldTime = time;
+      });
+      if (yearChanged) {
+        const cmd = planAnnualUpdate(map);
+        if (cmd) store.commit(cmd);
+      }
+      renderer.requestRender();
+    }
+    return {
+      isRunning: () => timer !== null,
+      getSpeed: () => msPerMonth,
+      /** 1年あたりのミリ秒で速度を設定する */
+      setSpeedPerYear(msPerYear) {
+        msPerMonth = Math.max(200, msPerYear / 12);
+        if (timer) {
+          this.stop();
+          this.start();
+        }
+        store.update((s) => {
+          s.timeSpeed = msPerMonth;
+        });
+      },
+      start() {
+        if (timer || !store.getState().map) return;
+        timer = setInterval(tick, msPerMonth);
+        store.update((s) => {
+          s.timeRunning = true;
+        });
+      },
+      stop() {
+        if (!timer) return;
+        clearInterval(timer);
+        timer = null;
+        store.update((s) => {
+          s.timeRunning = false;
+        });
+      },
+      /** 手動で1ヶ月分だけ進める（停止中でも使える） */
+      stepMonth() {
+        tick();
+      },
+      /** 新しい地図を読み込んだときに時計をリセットし、進行中なら止める */
+      resetForNewMap() {
+        this.stop();
+        store.update((s) => {
+          if (s.map) s.map.worldTime = createWorldTime();
+        });
+      }
+    };
+  }
+
+  // js/ui/time-bar.js
+  function initTimeBar({ store, timeActions }) {
+    const toggleBtn = byId("btn-time-toggle");
+    const stepBtn = byId("btn-time-step");
+    const dateEl = byId("world-date");
+    const speedSel = byId("sel-time-speed");
+    toggleBtn.addEventListener("click", () => {
+      if (timeActions.isRunning()) timeActions.stop();
+      else timeActions.start();
+    });
+    stepBtn.addEventListener("click", () => timeActions.stepMonth());
+    speedSel.addEventListener("change", () => timeActions.setSpeedPerYear(Number(speedSel.value)));
+    function sync() {
+      const state = store.getState();
+      const hasMap = !!state.map;
+      toggleBtn.disabled = !hasMap;
+      stepBtn.disabled = !hasMap;
+      speedSel.disabled = !hasMap;
+      const running = !!state.timeRunning;
+      toggleBtn.textContent = running ? "\u23F8 \u505C\u6B62" : "\u25B6 \u958B\u59CB";
+      toggleBtn.classList.toggle("running", running);
+      dateEl.textContent = hasMap ? formatWorldTime(state.map.worldTime) : "\u2014";
+    }
+    store.subscribe(sync);
+    sync();
+  }
+
+  // js/ui/military-dialog.js
+  function initMilitaryDialog({ store, editActions, panels }) {
+    const dialog = byId("military-dialog");
+    const openBtn = byId("btn-open-military");
+    const closeBtn = byId("military-close");
+    const tabs = [...document.querySelectorAll(".tab-btn")];
+    const panelsEl = { regiments: byId("tab-regiments"), wars: byId("tab-wars"), alliances: byId("tab-alliances") };
+    let pending = null;
+    function open(tabName) {
+      if (!store.getState().map) return;
+      dialog.showModal();
+      if (tabName) setTab(tabName);
+      panels.military.render();
+      panels.wars.render();
+      panels.alliances.render();
+    }
+    function close() {
+      dialog.close();
+    }
+    openBtn.addEventListener("click", () => open());
+    closeBtn.addEventListener("click", close);
+    dialog.addEventListener("cancel", () => {
+      pending = null;
+    });
+    function setTab(name) {
+      for (const t of tabs) t.classList.toggle("active", t.dataset.tab === name);
+      for (const [k, el5] of Object.entries(panelsEl)) el5.hidden = k !== name;
+    }
+    for (const t of tabs) t.addEventListener("click", () => setTab(t.dataset.tab));
+    byId("tab-regiments").addEventListener("request-place-regiment", (e) => {
+      pending = { type: "place", stateId: e.detail.stateId };
+      close();
+      store.update((s) => {
+        s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u90E8\u968A\u3092\u914D\u7F6E\u3059\u308B\u5834\u6240\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044";
+      });
+    });
+    byId("tab-regiments").addEventListener("request-move-regiment", (e) => {
+      pending = { type: "move", stateId: e.detail.stateId, regId: e.detail.regId };
+      close();
+      store.update((s) => {
+        s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044";
+      });
+    });
+    return {
+      get pending() {
+        return pending;
+      },
+      /** map-view から呼ばれる: クリックされたセルを、待ち受け中の配置/移動に使う */
+      consumeMapClick(cell) {
+        if (!pending) return false;
+        if (pending.type === "place") {
+          const simActions = panels.simActions;
+          const id = simActions.createRegiment(pending.stateId, cell, {});
+          if (id != null) {
+            pending = null;
+            store.update((s) => {
+              s.hint = null;
+            });
+            open("regiments");
+          }
+        } else if (pending.type === "move") {
+          panels.simActions.moveRegiment(pending.stateId, pending.regId, cell);
+          pending = null;
+          store.update((s) => {
+            s.hint = null;
+          });
+          open("regiments");
+        }
+        return true;
+      },
+      cancelPending() {
+        pending = null;
+        store.update((s) => {
+          s.hint = null;
+        });
+      },
+      open,
+      close,
+      setTab
+    };
+  }
+
+  // js/ui/panels/military-panel.js
+  var el2 = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  var isLive11 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function initMilitaryPanel({ store, simActions, editActions }) {
+    const root = byId("tab-regiments");
+    let selectedState = null;
+    let attackPick = null;
+    function render() {
+      root.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        root.append(el2("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const states = map.pack.states.filter(isLive11);
+      if (selectedState == null || !states.some((s) => s.i === selectedState)) selectedState = states[0]?.i ?? null;
+      const picker = el2("div", "state-picker");
+      picker.append(el2("span", "field-label", "\u56FD\u5BB6"));
+      const sel = document.createElement("select");
+      for (const s of states) {
+        const o = document.createElement("option");
+        o.value = s.i;
+        o.textContent = s.fullName ?? s.name;
+        if (s.i === selectedState) o.selected = true;
+        sel.append(o);
+      }
+      sel.addEventListener("change", () => {
+        selectedState = Number(sel.value);
+        render();
+      });
+      picker.append(sel);
+      const addBtn = el2("button", "", "\uFF0B \u65B0\u3057\u3044\u90E8\u968A\u3092\u7DE8\u6210\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\uFF09");
+      addBtn.type = "button";
+      addBtn.addEventListener("click", () => {
+        root.dispatchEvent(new CustomEvent("request-place-regiment", { detail: { stateId: selectedState }, bubbles: true }));
+      });
+      picker.append(addBtn);
+      root.append(picker);
+      if (!states.length) {
+        root.append(el2("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      const list = el2("div", "regiment-list");
+      const regs = simActions.regimentsOf(selectedState);
+      if (!regs.length) list.append(el2("p", "muted", "\u3053\u306E\u56FD\u306B\u306F\u307E\u3060\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093"));
+      for (const r of regs) list.append(regimentCard(map, selectedState, r));
+      root.append(list);
+    }
+    function regimentCard(map, stateId, reg) {
+      const card = el2("div", "regiment-card");
+      const head = el2("div", "regiment-card-head");
+      const nameInput = document.createElement("input");
+      nameInput.value = reg.name;
+      nameInput.style.fontWeight = "600";
+      nameInput.style.background = "transparent";
+      nameInput.style.border = "0";
+      nameInput.style.width = "auto";
+      nameInput.style.flex = "1";
+      nameInput.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { name: nameInput.value }));
+      const disbandBtn = el2("button", "danger", "\u89E3\u6563");
+      disbandBtn.type = "button";
+      disbandBtn.addEventListener("click", () => {
+        if (confirm(`\u300C${reg.name}\u300D\u3092\u89E3\u6563\u3057\u307E\u3059\u304B\uFF1F`)) simActions.disbandRegiment(stateId, reg.i);
+      });
+      head.append(nameInput, disbandBtn);
+      card.append(head);
+      const cellInfo = el2("p", "muted", `\u914D\u7F6E: \u30BB\u30EB#${reg.cell}`);
+      card.append(cellInfo);
+      const doctrineRow = el2("label", "field");
+      doctrineRow.append(el2("span", "field-label", "\u30C9\u30AF\u30C8\u30EA\u30F3"));
+      const dsel = document.createElement("select");
+      for (const d of DOCTRINES) {
+        const o = document.createElement("option");
+        o.value = d.key;
+        o.textContent = d.label;
+        if (d.key === (reg.doctrine ?? "balanced")) o.selected = true;
+        dsel.append(o);
+      }
+      dsel.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { doctrine: dsel.value }));
+      doctrineRow.append(dsel);
+      card.append(doctrineRow);
+      const units = el2("div", "regiment-units");
+      for (const u of UNIT_TYPES) {
+        const field = el2("div", "unit-field");
+        field.append(el2("span", "", `${u.icon} ${u.label}`));
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = "0";
+        input.value = reg.u?.[u.key] ?? 0;
+        input.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { u: { [u.key]: Number(input.value) || 0 } }));
+        field.append(input);
+        units.append(field);
+      }
+      card.append(units);
+      card.append(el2("p", "regiment-power", `\u7DCF\u6226\u529B: ${Math.round(forcePower(reg.u, reg.doctrine)).toLocaleString()}\u3000\u7DCF\u5175\u54E1/\u6A5F\u6570: ${forceHeadcount(reg.u).toLocaleString()}`));
+      const actions = el2("div", "regiment-actions");
+      const moveBtn = el2("button", "", "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09");
+      moveBtn.type = "button";
+      moveBtn.addEventListener("click", () => root.dispatchEvent(new CustomEvent("request-move-regiment", { detail: { stateId, regId: reg.i }, bubbles: true })));
+      const attackBtn = el2("button", "", attackPick && attackPick.stateId === stateId && attackPick.regId === reg.i ? "\u5BFE\u8C61\u3092\u9078\u629E\u4E2D\u2026" : "\u653B\u6483\u3059\u308B");
+      attackBtn.type = "button";
+      attackBtn.addEventListener("click", () => {
+        attackPick = { stateId, regId: reg.i };
+        render();
+      });
+      actions.append(moveBtn, attackBtn);
+      card.append(actions);
+      if (attackPick && !(attackPick.stateId === stateId)) {
+        const row = el2("div", "attack-target");
+        row.append(el2("span", "", `${attackPick.regId != null ? "\u653B\u6483\u5BFE\u8C61\u3068\u3057\u3066" : ""} \u300C${reg.name}\u300D\u3092\u9078\u629E:`));
+        const go = el2("button", "danger", "\u3053\u306E\u90E8\u968A\u3092\u653B\u6483");
+        go.type = "button";
+        go.addEventListener("click", () => {
+          const result = simActions.attack(attackPick, { stateId, regId: reg.i });
+          attackPick = null;
+          if (result) alert(formatBattleResult(map, result));
+          render();
+        });
+        row.append(go);
+        card.append(row);
+      }
+      return card;
+    }
+    function formatBattleResult(map, r) {
+      const winLabel = r.winner === "attacker" ? "\u653B\u6483\u5074\u306E\u52DD\u5229" : "\u9632\u5FA1\u5074\u306E\u52DD\u5229";
+      return `${winLabel}
+\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLossFraction * 100).toFixed(0)}%\uFF08${r.attackerCasualties}\uFF09
+\u9632\u5FA1\u5074 \u6226\u529B${r.dPower} \u88AB\u5BB3${(r.defenderLossFraction * 100).toFixed(0)}%\uFF08${r.defenderCasualties}\uFF09`;
+    }
+    store.subscribe((_s, change) => {
+      if (["replace", "commit", "undo", "redo"].includes(change.type)) render();
+    });
+    return {
+      render,
+      selectState(id) {
+        selectedState = id;
+        render();
+      },
+      get selectedState() {
+        return selectedState;
+      },
+      cancelAttackPick() {
+        attackPick = null;
+        render();
+      }
+    };
+  }
+
+  // js/ui/panels/wars-panel.js
+  var el3 = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  var isLive12 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function initWarsPanel({ store, simActions }) {
+    const root = byId("tab-wars");
+    function render() {
+      root.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        root.append(el3("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const states = map.pack.states.filter(isLive12);
+      root.append(declareForm(map, states));
+      const wars = simActions.listWars().slice().reverse();
+      if (!wars.length) {
+        root.append(el3("p", "muted", "\u6226\u4E89\u306E\u8A18\u9332\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      for (const w of wars) root.append(warCard(map, states, w));
+    }
+    function stateName(map, id) {
+      return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
+    }
+    function declareForm(map, states) {
+      const wrap = el3("div", "editor-section");
+      wrap.append(el3("h4", "", "\u5BA3\u6226\u5E03\u544A"));
+      const row = el3("div", "member-picker");
+      const aSel = document.createElement("select");
+      const bSel = document.createElement("select");
+      for (const s of states) {
+        const o1 = document.createElement("option");
+        o1.value = s.i;
+        o1.textContent = s.name;
+        aSel.append(o1);
+      }
+      for (const s of states) {
+        const o2 = document.createElement("option");
+        o2.value = s.i;
+        o2.textContent = s.name;
+        bSel.append(o2);
+      }
+      if (states[1]) bSel.value = String(states[1].i);
+      const nameInput = document.createElement("input");
+      nameInput.placeholder = "\u6226\u4E89\u306E\u540D\u524D\uFF08\u7701\u7565\u53EF\uFF09";
+      const go = el3("button", "danger", "\u5BA3\u6226\u5E03\u544A\u3059\u308B");
+      go.type = "button";
+      go.addEventListener("click", () => {
+        if (aSel.value === bSel.value) {
+          alert("\u540C\u3058\u56FD\u5BB6\u3069\u3046\u3057\u3067\u306F\u6226\u4E89\u3067\u304D\u307E\u305B\u3093");
+          return;
+        }
+        simActions.declareWar([Number(aSel.value)], [Number(bSel.value)], nameInput.value || void 0);
+      });
+      row.append(el3("span", "", "\u653B\u6483\u5074"), aSel, el3("span", "", "\u9632\u5FA1\u5074"), bSel);
+      wrap.append(row, nameInput, go);
+      return wrap;
+    }
+    function warCard(map, states, w) {
+      const card = el3("div", `war-card${w.endedAt ? " ended" : ""}`);
+      card.append(el3("div", "war-title", w.name));
+      const aNames = w.attackers.map((id) => stateName(map, id)).join("\u30FB");
+      const dNames = w.defenders.map((id) => stateName(map, id)).join("\u30FB");
+      card.append(el3("div", "war-meta", `${aNames} \u5BFE ${dNames}\u3000\u958B\u6226: ${formatWorldTime(w.startedAt)}${w.endedAt ? `\u3000\u7D42\u7D50: ${formatWorldTime(w.endedAt)}` : ""}`));
+      const log = el3("div", "battle-log");
+      if (w.battles.length) {
+        for (const b of w.battles.slice(-8).reverse()) {
+          log.append(el3("div", "", `${b.year}\u5E74${b.month}\u6708 ${stateName(map, b.attackerState)} vs ${stateName(map, b.defenderState)} \u2192 ${b.winner === "attacker" ? "\u653B\u6483\u5074" : "\u9632\u5FA1\u5074"}\u306E\u52DD\u5229`));
+        }
+      } else log.append(el3("div", "", "\u307E\u3060\u6226\u95D8\u306E\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093"));
+      card.append(log);
+      if (!w.endedAt) {
+        const adv = w.advantage[w.attackers[0]] ?? 0;
+        card.append(el3("p", "muted", `\u512A\u52E2\u5EA6\uFF08\u653B\u6483\u5074\u57FA\u6E96\uFF09: ${adv > 0 ? "+" : ""}${adv}`));
+        card.append(peaceForm(map, states, w));
+      } else {
+        card.append(el3("p", "muted", "\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u307E\u3057\u305F"));
+      }
+      return card;
+    }
+    function peaceForm(map, states, w) {
+      const wrap = el3("div", "editor-section");
+      wrap.append(el3("h4", "", "\u8B1B\u548C\u6761\u7D04"));
+      const dirRow = el3("div", "member-picker");
+      const aTo = el3("button", "", `${stateName(map, w.attackers[0])}\u306B\u5272\u8B72`);
+      const dTo = el3("button", "", `${stateName(map, w.defenders[0])}\u306B\u5272\u8B72`);
+      let direction = "attacker";
+      const syncDir = () => {
+        aTo.classList.toggle("active", direction === "attacker");
+        dTo.classList.toggle("active", direction === "defender");
+        refreshList();
+      };
+      aTo.type = "button";
+      dTo.type = "button";
+      aTo.addEventListener("click", () => {
+        direction = "attacker";
+        syncDir();
+      });
+      dTo.addEventListener("click", () => {
+        direction = "defender";
+        syncDir();
+      });
+      dirRow.append(aTo, dTo);
+      wrap.append(dirRow);
+      const listEl = el3("div", "cession-list");
+      wrap.append(listEl);
+      const checks = [];
+      function refreshList() {
+        listEl.replaceChildren();
+        checks.length = 0;
+        const from = direction === "attacker" ? w.defenders[0] : w.attackers[0];
+        const to = direction === "attacker" ? w.attackers[0] : w.defenders[0];
+        const candidates = simActions.suggestCessions(to, from);
+        if (!candidates.length) {
+          listEl.append(el3("p", "muted", "\u5272\u8B72\u3067\u304D\u305D\u3046\u306A\u5730\u57DF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u56FD\u5883\u304C\u63A5\u3057\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF09"));
+          return;
+        }
+        for (const c of candidates) {
+          const row = el3("label", "cession-item");
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.dataset.type = c.type;
+          if (c.type === "province") cb.dataset.provinceId = c.provinceId;
+          else cb.__regionCells = c.regionCells;
+          row.append(cb, el3("span", "", `${c.name}\uFF08${c.cells}\u30BB\u30EB\uFF09`));
+          listEl.append(row);
+          checks.push(cb);
+        }
+      }
+      refreshList();
+      const repRow = el3("label", "field");
+      repRow.append(el3("span", "field-label", "\u8CE0\u511F\u91D1\uFF08\u76F8\u624B\u306E\u7523\u696D\u529B\u304B\u3089\u5DEE\u3057\u5F15\u304F\u30FB\u4EFB\u610F\uFF09"));
+      const repInput = document.createElement("input");
+      repInput.type = "number";
+      repInput.min = "0";
+      repInput.value = "0";
+      repRow.append(repInput);
+      wrap.append(repRow);
+      const signBtn = el3("button", "danger", "\u3053\u306E\u5185\u5BB9\u3067\u8B1B\u548C\u3059\u308B");
+      signBtn.type = "button";
+      signBtn.addEventListener("click", () => {
+        const provinceIds = checks.filter((c) => c.checked && c.dataset.type === "province").map((c) => Number(c.dataset.provinceId));
+        const regionCells = checks.filter((c) => c.checked && c.dataset.type === "region").map((c) => c.__regionCells);
+        const toStateId = direction === "attacker" ? w.attackers[0] : w.defenders[0];
+        simActions.signPeace(w.id, { provinceIds, regionCells, toStateId, reparations: Number(repInput.value) || 0 });
+      });
+      wrap.append(signBtn);
+      return wrap;
+    }
+    store.subscribe((_s, change) => {
+      if (["replace", "commit", "undo", "redo"].includes(change.type)) render();
+    });
+    return { render };
+  }
+
+  // js/ui/panels/alliances-panel.js
+  var el4 = (tag, cls, text) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text != null) e.textContent = text;
+    return e;
+  };
+  var isLive13 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function initAlliancesPanel({ store, simActions }) {
+    const root = byId("tab-alliances");
+    function render() {
+      root.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        root.append(el4("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const states = map.pack.states.filter(isLive13);
+      root.append(createForm(map, states));
+      const list = simActions.listAlliances();
+      if (!list.length) {
+        root.append(el4("p", "muted", "\u540C\u76DF\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      for (const a of list) root.append(allianceCard(map, states, a));
+    }
+    function stateName(map, id) {
+      return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
+    }
+    function memberPicker(states, checkedIds = []) {
+      const wrap = el4("div", "member-picker");
+      const boxes = [];
+      for (const s of states) {
+        const label = el4("label", "");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.value = s.i;
+        cb.checked = checkedIds.includes(s.i);
+        label.append(cb, document.createTextNode(s.name));
+        wrap.append(label);
+        boxes.push(cb);
+      }
+      return { wrap, boxes };
+    }
+    function createForm(map, states) {
+      const wrap = el4("div", "editor-section");
+      wrap.append(el4("h4", "", "\u65B0\u3057\u3044\u540C\u76DF"));
+      const nameInput = document.createElement("input");
+      nameInput.placeholder = "\u540C\u76DF\u306E\u540D\u524D";
+      wrap.append(nameInput);
+      const { wrap: picker, boxes } = memberPicker(states);
+      wrap.append(picker);
+      const go = el4("button", "", "\u540C\u76DF\u3092\u7D50\u6210\uFF082\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u629E\uFF09");
+      go.type = "button";
+      go.addEventListener("click", () => {
+        const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
+        if (ids.length < 2) {
+          alert("2\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+          return;
+        }
+        simActions.createAlliance(nameInput.value, ids);
+      });
+      wrap.append(go);
+      return wrap;
+    }
+    function allianceCard(map, states, a) {
+      const card = el4("div", "alliance-card");
+      const head = el4("div", "regiment-card-head");
+      const nameInput = document.createElement("input");
+      nameInput.value = a.name;
+      nameInput.style.fontWeight = "600";
+      nameInput.style.background = "transparent";
+      nameInput.style.border = "0";
+      nameInput.style.flex = "1";
+      nameInput.addEventListener("change", () => simActions.editAlliance(a.id, { name: nameInput.value }));
+      const delBtn = el4("button", "danger", "\u89E3\u6D88");
+      delBtn.type = "button";
+      delBtn.addEventListener("click", () => {
+        if (confirm(`\u300C${a.name}\u300D\u3092\u89E3\u6D88\u3057\u307E\u3059\u304B\uFF1F`)) simActions.dissolveAlliance(a.id);
+      });
+      head.append(nameInput, delBtn);
+      card.append(head);
+      const chips = el4("div", "member-chip-list");
+      for (const id of a.members) chips.append(el4("span", "member-chip", stateName(map, id)));
+      card.append(chips);
+      const { wrap: picker, boxes } = memberPicker(states, a.members);
+      card.append(el4("p", "muted", "\u52A0\u76DF\u56FD\u306E\u5909\u66F4:"));
+      card.append(picker);
+      const update = el4("button", "", "\u30E1\u30F3\u30D0\u30FC\u3092\u66F4\u65B0");
+      update.type = "button";
+      update.addEventListener("click", () => {
+        const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
+        if (ids.length < 2) {
+          alert("2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
+          return;
+        }
+        simActions.editAlliance(a.id, { members: ids });
+      });
+      card.append(update);
+      return card;
+    }
+    store.subscribe((_s, change) => {
+      if (["replace", "commit", "undo", "redo"].includes(change.type)) render();
+    });
+    return { render };
+  }
+
   // js/main.js
   function start() {
     const Delaunator = globalThis.Delaunator;
@@ -3604,7 +4807,10 @@ ${shown}${more}`;
       hover: null,
       view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true },
       editTool: "select",
-      brushRadius: 40
+      brushRadius: 40,
+      timeRunning: false,
+      timeSpeed: 12e4,
+      hint: null
     });
     const viewport = createViewport(1280, 774);
     const renderer = createRenderer({
@@ -3625,8 +4831,14 @@ ${shown}${more}`;
     const help = initHelpDialog();
     const files = initFileInput({ actions });
     const editActions = createEditActions({ store, renderer });
-    const panels = initEditorPanel({ store, editActions });
-    const deps = { store, viewport, renderer, actions, editActions, panels, openFileDialog: files.open, openHelp: help.open };
+    const simActions = createSimActions({ store, renderer });
+    const timeActions = createTimeActions({ store, renderer });
+    const editorPanel = initEditorPanel({ store, editActions });
+    const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
+    const warsPanel = initWarsPanel({ store, simActions });
+    const alliancesPanel = initAlliancesPanel({ store, simActions });
+    const panels = { ...editorPanel, simActions, military: militaryPanel, wars: warsPanel, alliances: alliancesPanel };
+    const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
     initBanner(deps);
     initToolbar(deps);
     initLegend(deps);
@@ -3634,10 +4846,16 @@ ${shown}${more}`;
     initMapView(deps);
     const editMode = initEditMode(deps);
     const editToolbar = initEditToolbar({ store, editMode });
-    initShortcuts({ ...deps, editMode, editToolbar });
+    const militaryDialog = initMilitaryDialog(deps);
+    editMode.setMilitaryDialog(militaryDialog);
+    initTimeBar({ store, timeActions });
+    store.subscribe((_s, change) => {
+      if (change.type === "replace") timeActions.stop();
+    });
+    initShortcuts({ ...deps, editMode, editToolbar, timeActions, militaryDialog });
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
     renderer.resize();
-    globalThis.alterhistory = { store, viewport, renderer, actions };
+    globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions, militaryDialog };
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

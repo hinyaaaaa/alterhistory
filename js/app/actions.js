@@ -96,10 +96,15 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
 
     /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */
     saveNative() {
-      return runExport("保存ファイル", (map, fileName) => ({
-        blob: textBlob(serializeAzgaar(map, { native: true, exportedAt: todayString() }), "text/plain"),
-        name: exportFileName(map, fileName, "map"),
-      }));
+      return runExport("保存ファイル", (map, fileName) => {
+        map.ext ??= { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
+        map.ext.data ??= {};
+        map.ext.data.worldTime = { ...map.worldTime };
+        return {
+          blob: textBlob(serializeAzgaar(map, { native: true, exportedAt: todayString() }), "text/plain"),
+          name: exportFileName(map, fileName, "map"),
+        };
+      });
     },
     /** Azgaar 互換の .map（ALTERHISTORY の目印・拡張データを含めない） */
     saveAzgaar() {

@@ -21,6 +21,7 @@ const PAINT_TOOL_KIND = {
 
 export function initEditMode({ store, viewport, editActions, panels }) {
   const canvas = byId("map-canvas");
+  let militaryDialog = null; // main.js から後付けで渡す（循環importを避けるため）
   let tool = TOOLS.SELECT;
   let target = 0;          // 塗る先の実体ID（0=消す）。パネルで選ぶ
   let radius = 40;         // ブラシ半径（ワールド座標）
@@ -92,10 +93,13 @@ export function initEditMode({ store, viewport, editActions, panels }) {
   // 選択ツール: クリックで対象を選び、パネルを開く
   canvas.addEventListener("click", (e) => {
     const map = store.getState().map;
-    if (!map || tool !== TOOLS.SELECT) return;
+    if (!map) return;
     const [wx, wy] = toWorld(e);
     if (!inMap(map, wx, wy)) return;
     const cell = editActions.findCell(wx, wy);
+    // 部隊の配置・移動待ちがあれば、どのツールが選ばれていても最優先でそちらを処理する
+    if (militaryDialog?.pending && militaryDialog.consumeMapClick(cell)) return;
+    if (tool !== TOOLS.SELECT) return;
     const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
     if (!picked) return;
     if (picked.type === "burg") panels.openBurg(picked.id);
@@ -104,5 +108,9 @@ export function initEditMode({ store, viewport, editActions, panels }) {
   });
 
 
-  return { setTool, setTarget, setRadius, setMarkerType, get tool() { return tool; }, get target() { return target; } };
+  return {
+    setTool, setTarget, setRadius, setMarkerType,
+    get tool() { return tool; }, get target() { return target; },
+    setMilitaryDialog(d) { militaryDialog = d; },
+  };
 }

@@ -6,7 +6,7 @@
   "description": "ALTERHISTORY — 日本語で使える架空世界地図ジェネレーター",
   "scripts": {
     "build": "esbuild js/main.js --bundle --format=iife --target=es2020 --outfile=dist/app.js",
-    "test": "node tests/reader.test.mjs && node tests/stats.test.mjs && node tests/store.test.mjs && node tests/geometry.test.mjs && node tests/support.test.mjs && node tests/writer.test.mjs && node tests/override.test.mjs && node tests/export.test.mjs && node tests/paint.test.mjs && node tests/attributes.test.mjs && node tests/notes.test.mjs && node tests/diplomacy.test.mjs && node tests/markers.test.mjs && node tests/burgs.test.mjs && node tests/ui.smoke.test.mjs && node tests/edit-ui.smoke.test.mjs"
+    "test": "node tests/reader.test.mjs && node tests/stats.test.mjs && node tests/store.test.mjs && node tests/geometry.test.mjs && node tests/support.test.mjs && node tests/writer.test.mjs && node tests/override.test.mjs && node tests/export.test.mjs && node tests/paint.test.mjs && node tests/attributes.test.mjs && node tests/notes.test.mjs && node tests/diplomacy.test.mjs && node tests/markers.test.mjs && node tests/burgs.test.mjs && node tests/sim-economy.test.mjs && node tests/wars.test.mjs && node tests/ui.smoke.test.mjs && node tests/edit-ui.smoke.test.mjs && node tests/sim-ui.smoke.test.mjs"
   },
   "devDependencies": {
     "@napi-rs/canvas": "^1.0.9",

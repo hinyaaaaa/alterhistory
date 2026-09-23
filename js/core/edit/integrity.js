@@ -4,6 +4,12 @@
 // 手で編集された地図には、最初から食い違いがあるため（実データで確認: 都市の文化2件のずれ、
 // 水域に塗られた宗教540セルなど）。編集が「新たに壊したもの」だけを報告するのが目的。
 //
+// 注意（年次経済更新との関係）: core/sim/world.js の年次更新は、国家の rural/urban を
+// 「経済モデル上の集計値」として直接書き換える（人口の年成長）。これはセル単位の pop 配列には
+// 反映しない設計上の判断（セル単位の追随はスコープ外）。そのため、経済更新を行った後は
+// rural/urban の「セル合計との一致」チェックは意味を持たなくなる。skipEconomyChecks を
+// true にすると、この2項目の検査を省く（stats.rural もこの対象）。
+//
 // 純粋ロジック層：DOM に依存しない。
 
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
@@ -85,7 +91,7 @@ function problemsPoles(map) {
 }
 
 /** @returns {string[]} 問題の一覧（空なら健全） */
-export function checkIntegrity(map, baseline = null) {
+export function checkIntegrity(map, baseline = null, { skipEconomyChecks = false } = {}) {
   const c = map.pack.cells, problems = [];
   const P = map.pack;
 
@@ -119,7 +125,10 @@ export function checkIntegrity(map, baseline = null) {
     if (!cap) { problems.push(`国家#${s.i}の首都都市がありません`); continue; }
     if ((!baseline || baseline.capitals.has(s.i)) && c.state[cap.cell] !== s.i) problems.push(`国家#${s.i}の首都が他国のセルにあります`);
   }
-  for (const p of problemsStats(map)) if (!baseline || !baseline.stats.has(p.key)) problems.push(p.msg);
+  for (const p of problemsStats(map)) {
+    if (skipEconomyChecks && p.key.startsWith("state:") && p.key.endsWith(":rural")) continue;
+    if (!baseline || !baseline.stats.has(p.key)) problems.push(p.msg);
+  }
   for (const p of problemsPoles(map)) if (!baseline || !baseline.poles.has(p.key)) problems.push(p.msg);
   return problems;
 }

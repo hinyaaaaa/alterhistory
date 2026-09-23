@@ -20,6 +20,13 @@ import { createEditActions } from "./app/edit-actions.js";
 import { initEditMode } from "./ui/edit-mode.js";
 import { initEditToolbar } from "./ui/edit-toolbar.js";
 import { initEditorPanel } from "./ui/panels/editor-panel.js";
+import { createSimActions } from "./app/sim-actions.js";
+import { createTimeActions } from "./app/time-actions.js";
+import { initTimeBar } from "./ui/time-bar.js";
+import { initMilitaryDialog } from "./ui/military-dialog.js";
+import { initMilitaryPanel } from "./ui/panels/military-panel.js";
+import { initWarsPanel } from "./ui/panels/wars-panel.js";
+import { initAlliancesPanel } from "./ui/panels/alliances-panel.js";
 
 function start() {
   const Delaunator = globalThis.Delaunator;
@@ -32,6 +39,7 @@ function start() {
     map: null, fileName: "", warnings: [], error: null, notice: null, busy: null, hover: null,
     view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true },
     editTool: "select", brushRadius: 40,
+    timeRunning: false, timeSpeed: 120000, hint: null,
   });
   const viewport = createViewport(1280, 774);
   const renderer = createRenderer({
@@ -48,8 +56,14 @@ function start() {
   const help = initHelpDialog();
   const files = initFileInput({ actions });
   const editActions = createEditActions({ store, renderer });
-  const panels = initEditorPanel({ store, editActions });
-  const deps = { store, viewport, renderer, actions, editActions, panels, openFileDialog: files.open, openHelp: help.open };
+  const simActions = createSimActions({ store, renderer });
+  const timeActions = createTimeActions({ store, renderer });
+  const editorPanel = initEditorPanel({ store, editActions });
+  const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
+  const warsPanel = initWarsPanel({ store, simActions });
+  const alliancesPanel = initAlliancesPanel({ store, simActions });
+  const panels = { ...editorPanel, simActions, military: militaryPanel, wars: warsPanel, alliances: alliancesPanel };
+  const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
 
   initBanner(deps);
   initToolbar(deps);
@@ -58,13 +72,18 @@ function start() {
   initMapView(deps);
   const editMode = initEditMode(deps);
   const editToolbar = initEditToolbar({ store, editMode });
-  initShortcuts({ ...deps, editMode, editToolbar });
+  const militaryDialog = initMilitaryDialog(deps);
+  editMode.setMilitaryDialog(militaryDialog);
+  initTimeBar({ store, timeActions });
+  // 新しい地図を開いたら、時間の進行を止める（前の地図の進行を引き継がない）
+  store.subscribe((_s, change) => { if (change.type === "replace") timeActions.stop(); });
+  initShortcuts({ ...deps, editMode, editToolbar, timeActions, militaryDialog });
 
   new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { store, viewport, renderer, actions };
+  globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions, militaryDialog };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

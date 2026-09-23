@@ -80,6 +80,29 @@
     </div>
   </div>
 
+  <div id="time-bar" class="toolbar time-bar" role="toolbar" aria-label="時間">
+    <div class="group">
+      <button id="btn-time-toggle" title="時間の進行を開始/停止 (Space)">▶ 開始</button>
+      <button id="btn-time-step" title="1ヶ月だけ進める">+1ヶ月</button>
+    </div>
+    <div class="group">
+      <span id="world-date" class="world-date">1年 1月</span>
+    </div>
+    <div class="group">
+      <label>速さ
+        <select id="sel-time-speed">
+          <option value="20000">1年=20秒</option>
+          <option value="60000">1年=1分</option>
+          <option value="120000" selected>1年=2分</option>
+          <option value="300000">1年=5分</option>
+        </select>
+      </label>
+    </div>
+    <div class="group spacer-group">
+      <button id="btn-open-military" title="部隊・戦争・同盟を管理する">軍事・外交</button>
+    </div>
+  </div>
+
   <main>
     <section id="stage" aria-label="地図">
       <canvas id="map-canvas" tabindex="0" aria-label="地図の表示領域"></canvas>
@@ -111,6 +134,21 @@
 
   <input type="file" id="file-input" accept=".map,.gz" hidden>
 
+  <dialog id="military-dialog" class="wide-dialog">
+    <div class="dialog-header">
+      <h2>軍事・外交</h2>
+      <button id="military-close" class="editor-close" aria-label="閉じる">×</button>
+    </div>
+    <div class="dialog-tabs" role="tablist">
+      <button class="tab-btn active" data-tab="regiments" role="tab">部隊</button>
+      <button class="tab-btn" data-tab="wars" role="tab">戦争</button>
+      <button class="tab-btn" data-tab="alliances" role="tab">同盟</button>
+    </div>
+    <div id="tab-regiments" class="tab-panel"></div>
+    <div id="tab-wars" class="tab-panel" hidden></div>
+    <div id="tab-alliances" class="tab-panel" hidden></div>
+  </dialog>
+
   <dialog id="help-dialog">
     <h2>操作方法</h2>
     <table>
@@ -134,6 +172,9 @@
         <tr><td><kbd>6</kbd> <kbd>7</kbd></td><td>都市を置く / マーカーを置く</td></tr>
         <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>ブラシの大きさ</td></tr>
         <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>元に戻す／やり直す</td></tr>
+        <tr><th colspan="2">時間・軍事</th></tr>
+        <tr><td><kbd>Space</kbd></td><td>時間の進行を開始/停止</td></tr>
+        <tr><td><kbd>M</kbd></td><td>軍事・外交パネルを開く</td></tr>
         <tr><td><kbd>?</kbd></td><td>この一覧を表示</td></tr>
       </tbody>
     </table>

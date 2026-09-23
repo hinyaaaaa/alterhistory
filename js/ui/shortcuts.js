@@ -7,7 +7,7 @@ const OVERLAY_KEYS = { 1: "none", 2: "state", 3: "culture", 4: "religion", 5: "p
 const TOGGLE_KEYS = { c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
 const TOOL_KEYS = { 1: TOOLS.PAINT_STATE, 2: TOOLS.PAINT_CULTURE, 3: TOOLS.PAINT_RELIGION, 4: TOOLS.PAINT_PROVINCE, 5: TOOLS.PAINT_BIOME, 6: TOOLS.ADD_BURG, 7: TOOLS.ADD_MARKER };
 
-export function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar }) {
+export function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, militaryDialog }) {
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -19,13 +19,25 @@ export function initShortcuts({ store, actions, openFileDialog, openHelp, editMo
       return;
     }
     // 入力欄・選択欄・ダイアログ操作中は、地図のショートカットを効かせない
+    // （ただし Space による時間制御は、ダイアログを開いたまま押しても効くようにする）
     const t = e.target;
-    if (t instanceof HTMLElement && (t.closest("select, input, textarea, dialog[open]") || t.isContentEditable)) return;
+    const inFormField = t instanceof HTMLElement && (t.closest("select, input, textarea") || t.isContentEditable);
+    const inDialog = t instanceof HTMLElement && t.closest("dialog[open]");
+    if (inFormField) return;
+    if (inDialog && e.key !== " " && e.key !== "Spacebar" && e.key !== "Escape") return;
 
     const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     const hasMap = !!store.getState().map;
 
     if (key === "o") { e.preventDefault(); openFileDialog(); return; }
+    if (key === " " || key === "Spacebar") {
+      e.preventDefault();
+      if (!hasMap || !timeActions) return;
+      if (timeActions.isRunning()) timeActions.stop(); else timeActions.start();
+      return;
+    }
+    if (key === "m") { if (hasMap) militaryDialog?.open(); return; }
+    if (key === "Escape") { militaryDialog?.cancelPending(); }
     if (key === "?" ) { e.preventDefault(); openHelp(); return; }
     if (!hasMap) return; // 以降は地図が読み込まれているときだけ
 

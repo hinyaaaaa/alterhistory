@@ -84,6 +84,9 @@ export function createEmptyMap() {
     ext: null,
     // セル形状の手動編集（頂点の移動）。L51 の読み取り専用コピー。書き出しでは passthrough の原文を戻す
     graphOverride: {},
+    // 世界の時刻（年月）。core/sim/time.js が扱う。ファイルには保存せず、
+    // ALTERHISTORY拡張データ(ext.data.worldTime)に保存する（io層で読み書き）。
+    worldTime: { year: 1, month: 1 },
     // 実行時のみ使う「版数」。編集のたびに、影響する層の数字を進める。
     // 描画の層キャッシュや凡例が「作り直す必要があるか」を判断するために使う（ファイルには保存しない）。
     //   terrain: 地形（バイオーム・水陸）/ politics: 国家・文化・宗教・属州 / places: 都市・マーカー等
