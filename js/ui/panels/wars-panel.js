@@ -1,6 +1,7 @@
 // 戦争タブ：宣戦布告、戦績の閲覧、講和条約の締結。
 import { formatWorldTime } from "../../core/sim/time.js";
 import { byId } from "../dom.js";
+import { alertDialog } from "../dialogs.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
@@ -33,8 +34,8 @@ export function initWarsPanel({ store, simActions }) {
     const nameInput = document.createElement("input"); nameInput.placeholder = "戦争の名前（省略可）";
     const go = el("button", "danger", "宣戦布告する");
     go.type = "button";
-    go.addEventListener("click", () => {
-      if (aSel.value === bSel.value) { alert("同じ国家どうしでは戦争できません"); return; }
+    go.addEventListener("click", async () => {
+      if (aSel.value === bSel.value) { await alertDialog("同じ国家どうしでは戦争できません"); return; }
       simActions.declareWar([Number(aSel.value)], [Number(bSel.value)], nameInput.value || undefined);
     });
     row.append(el("span", "", "攻撃側"), aSel, el("span", "", "防御側"), bSel);

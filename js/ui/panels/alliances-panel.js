@@ -1,5 +1,6 @@
 // 同盟タブ：3カ国以上の同盟を作成・編集・解消する。
 import { byId } from "../dom.js";
+import { confirmDialog, alertDialog } from "../dialogs.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
@@ -43,9 +44,9 @@ export function initAlliancesPanel({ store, simActions }) {
     wrap.append(picker);
     const go = el("button", "", "同盟を結成（2カ国以上を選択）");
     go.type = "button";
-    go.addEventListener("click", () => {
+    go.addEventListener("click", async () => {
       const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
-      if (ids.length < 2) { alert("2カ国以上を選んでください"); return; }
+      if (ids.length < 2) { await alertDialog("2カ国以上を選んでください"); return; }
       simActions.createAlliance(nameInput.value, ids);
     });
     wrap.append(go);
@@ -60,7 +61,7 @@ export function initAlliancesPanel({ store, simActions }) {
     nameInput.addEventListener("change", () => simActions.editAlliance(a.id, { name: nameInput.value }));
     const delBtn = el("button", "danger", "解消");
     delBtn.type = "button";
-    delBtn.addEventListener("click", () => { if (confirm(`「${a.name}」を解消しますか？`)) simActions.dissolveAlliance(a.id); });
+    delBtn.addEventListener("click", async () => { if (await confirmDialog(`「${a.name}」を解消しますか？`, { danger: true, okLabel: "解消" })) simActions.dissolveAlliance(a.id); });
     head.append(nameInput, delBtn);
     card.append(head);
 
@@ -73,9 +74,9 @@ export function initAlliancesPanel({ store, simActions }) {
     card.append(picker);
     const update = el("button", "", "メンバーを更新");
     update.type = "button";
-    update.addEventListener("click", () => {
+    update.addEventListener("click", async () => {
       const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
-      if (ids.length < 2) { alert("2カ国以上が必要です"); return; }
+      if (ids.length < 2) { await alertDialog("2カ国以上が必要です"); return; }
       simActions.editAlliance(a.id, { members: ids });
     });
     card.append(update);

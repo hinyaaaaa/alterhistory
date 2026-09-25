@@ -10,7 +10,7 @@
 // 純粋ロジック層：DOM に依存しない。編集はコマンド(commands.js の部品)として返す。
 
 import { setList, setProps, makeCommand } from "../edit/commands.js";
-import { UNIT_KEYS, UNIT_BY_KEY, emptyForce, forcePower } from "./units.js";
+import { UNIT_KEYS, UNIT_BY_KEY, emptyForce, DOCTRINE_BY_KEY, DEFAULT_DOCTRINE } from "./units.js";
 import { ensureEconomy } from "./economy.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
@@ -27,7 +27,7 @@ function nextRegimentId(state) {
 }
 
 /** 部隊を新規作成する。セル位置に配置し、初期兵力は空（徴兵や編集で満たす） */
-export function planCreateRegiment(map, stateId, cell, { name, icon = "🛡️", doctrine = "balanced" } = {}) {
+export function planCreateRegiment(map, stateId, cell, { name, icon = "🛡️" } = {}) {
   const state = map.pack.states[stateId];
   if (!isLive(state)) throw new Error("その国家は存在しません");
   if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("地図の外には配置できません");
@@ -35,7 +35,7 @@ export function planCreateRegiment(map, stateId, cell, { name, icon = "🛡️",
   const reg = {
     i: nextRegimentId(state), name: name || `${state.name}軍`, icon, state: stateId,
     cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1],
-    doctrine, u: emptyForce(),
+    u: emptyForce(),
   };
   const next = [...regimentsOf(state), reg];
   return { command: makeCommand("部隊を編成", ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => { m.pack.states[stateId].military = v; }, next)]), id: reg.i };
@@ -52,7 +52,8 @@ export function planMoveRegiment(map, stateId, regId, cell) {
   return makeCommand("部隊を移動", ["places"], [setProps(reg, { cell, x: p[cell][0], y: p[cell][1] })]);
 }
 
-/** 部隊の兵力構成・名前・ドクトリンを直接編集する（司令部での手動調整用） */
+/** 部隊の兵力構成・名前を直接編集する（司令部での手動調整用。ドクトリンは国家単位のため、
+    core/edit/military-doctrine.js の planSetDoctrine で変更する） */
 export function planEditRegiment(map, stateId, regId, patch) {
   const state = map.pack.states[stateId];
   const reg = regimentsOf(state).find((r) => r.i === regId);
@@ -60,7 +61,6 @@ export function planEditRegiment(map, stateId, regId, patch) {
   const next = {};
   if (patch.name !== undefined && patch.name !== reg.name) next.name = patch.name;
   if (patch.icon !== undefined && patch.icon !== reg.icon) next.icon = patch.icon;
-  if (patch.doctrine !== undefined && patch.doctrine !== reg.doctrine) next.doctrine = patch.doctrine;
   if (patch.u) {
     const u = { ...reg.u };
     for (const k of UNIT_KEYS) if (patch.u[k] !== undefined) u[k] = Math.max(0, Math.round(patch.u[k]));
@@ -95,6 +95,9 @@ export function planAnnualConscription(map, stateId) {
 
   const pop = (state.rural ?? 0) + (state.urban ?? 0);
   const industry = state.industry ?? 0;
+  const doctrine = DOCTRINE_BY_KEY[state.doctrine] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
+  // 人海戦術ドクトリンの国は、同じ人口からより多くの歩兵・特殊部隊を徴兵できる（HOI4のMass Assaultに相当）
+  const conscriptBonus = 1 + (doctrine.conscriptBonus ?? 0);
   let list = regimentsOf(state);
   let home = list.find((r) => r.i === 0) ?? null;
 
@@ -103,8 +106,10 @@ export function planAnnualConscription(map, stateId) {
   for (const key of UNIT_KEYS) {
     const def = UNIT_BY_KEY[key];
     if (def.minTech && (state.techLevel ?? 3) < def.minTech) continue;
-    const fromPop = (pop / 1000) * (def.rural + def.urban) * 0.15; // 年間の徴兵ペース（緩やか）
-    const fromIndustry = def.industryShare > 0 ? (industry * def.industryShare) / (def.power / 4) : 0;
+    const manpowerBonus = (key === "infantry" || key === "special") ? conscriptBonus : 1;
+    const fromPop = (pop / 1000) * (def.rural + def.urban) * 0.15 * manpowerBonus; // 年間の徴兵ペース（緩やか）
+    const unitCost = (def.soft + def.hard) / 2; // 兵科1つあたりの相対コストの目安（火力の平均値）
+    const fromIndustry = def.industryShare > 0 ? (industry * def.industryShare) / (unitCost / 4) : 0;
     const add = Math.round(fromPop + fromIndustry);
     if (add > 0) { delta[key] = add; any = true; }
   }
@@ -118,7 +123,7 @@ export function planAnnualConscription(map, stateId) {
   } else {
     const { p } = map.geometry.pack;
     const cell = capital.cell;
-    const reg = { i: 0, name: `${state.name}国防本隊`, icon: "🛡️", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], doctrine: "balanced", u: delta };
+    const reg = { i: 0, name: `${state.name}国防本隊`, icon: "🛡️", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u: delta };
     parts.push(setList((m) => m.pack.states[stateId].military, (m, v) => { m.pack.states[stateId].military = v; }, [reg, ...list]));
   }
   return makeCommand("年次徴兵", [], parts);

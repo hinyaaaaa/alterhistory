@@ -7,7 +7,7 @@ const OVERLAY_KEYS = { 1: "none", 2: "state", 3: "culture", 4: "religion", 5: "p
 const TOGGLE_KEYS = { c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
 const TOOL_KEYS = { 1: TOOLS.PAINT_STATE, 2: TOOLS.PAINT_CULTURE, 3: TOOLS.PAINT_RELIGION, 4: TOOLS.PAINT_PROVINCE, 5: TOOLS.PAINT_BIOME, 6: TOOLS.ADD_BURG, 7: TOOLS.ADD_MARKER };
 
-export function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, militaryDialog }) {
+export function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, militaryDialog, panels }) {
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -37,7 +37,7 @@ export function initShortcuts({ store, actions, openFileDialog, openHelp, editMo
       return;
     }
     if (key === "m") { if (hasMap) militaryDialog?.open(); return; }
-    if (key === "Escape") { militaryDialog?.cancelPending(); }
+    if (key === "Escape") { militaryDialog?.cancelPending(); panels?.military?.cancelAttackPick(); }
     if (key === "?" ) { e.preventDefault(); openHelp(); return; }
     if (!hasMap) return; // 以降は地図が読み込まれているときだけ
 

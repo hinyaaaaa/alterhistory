@@ -6,7 +6,7 @@ import { createRandom } from "../js/core/random.js";
 import { createWorldTime, advanceMonth, formatWorldTime } from "../js/core/sim/time.js";
 import { ensureEconomy, computeAnnualUpdate, clampTech, TECH_MIN, TECH_MAX } from "../js/core/sim/economy.js";
 import { planAnnualUpdate } from "../js/core/sim/world.js";
-import { UNIT_KEYS, UNIT_BY_KEY, forcePower, forceHeadcount, emptyForce, DOCTRINES } from "../js/core/sim/units.js";
+import { UNIT_KEYS, UNIT_BY_KEY, forcePower, forceHeadcount, forceHardness, attackDamage, emptyForce, DOCTRINES } from "../js/core/sim/units.js";
 import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegiment, planAnnualConscription, regimentsOf } from "../js/core/sim/military.js";
 import { simulateBattle, planResolveBattle } from "../js/core/sim/battle.js";
 import { checkIntegrity, snapshotBaseline } from "../js/core/edit/integrity.js";
@@ -49,11 +49,16 @@ check("techLevelの範囲", clampTech(0) === TECH_MIN && clampTech(99) === TECH_
 console.log("=== 兵科・戦闘力 ===");
 check("兵科は7種類", UNIT_KEYS.length === 7);
 check("空の兵力は戦力0", forcePower(emptyForce()) === 0);
-check("歩兵100は戦力100(power=1)", forcePower({ ...emptyForce(), infantry: 100 }) === 100);
-check("核は圧倒的な戦力係数", UNIT_BY_KEY.nuclear.power > UNIT_BY_KEY.armor.power * 10);
-check("ドクトリンで戦力が変わる", forcePower({ ...emptyForce(), armor: 100 }, "mechanized") > forcePower({ ...emptyForce(), armor: 100 }, "balanced"));
+check("歩兵100は戦力100相当(soft=1,hard=0.1の平均0.55→丸めなしで55)", forcePower({ ...emptyForce(), infantry: 100 }) === 55);
+check("核は圧倒的な戦力係数", UNIT_BY_KEY.nuclear.soft > UNIT_BY_KEY.armor.soft * 10);
+check("ドクトリンで戦力が変わる", forcePower({ ...emptyForce(), armor: 100 }, "mobile") > forcePower({ ...emptyForce(), armor: 100 }, "balanced"));
 check("兵員数の合算", forceHeadcount({ ...emptyForce(), infantry: 500, armor: 20 }) === 520);
-check("ドクトリンは4種類", DOCTRINES.length === 4);
+check("ドクトリンは5種類", DOCTRINES.length === 5);
+check("歩兵のみは非装甲(hardness=0)", forceHardness({ ...emptyForce(), infantry: 100 }) === 0);
+check("機甲のみは高装甲率(hardness=0.9)", forceHardness({ ...emptyForce(), armor: 100 }) === 0.9);
+check("歩兵しかない軍は、機甲だらけの相手には攻撃が通りにくい(soft主体からhard主体へ按分が下がる)",
+  attackDamage({ ...emptyForce(), infantry: 100 }, 0.9, "balanced", "Generic") < attackDamage({ ...emptyForce(), infantry: 100 }, 0, "balanced", "Generic"));
+check("海洋国家(Naval)は海軍が強化される", attackDamage({ ...emptyForce(), navy: 10 }, 0, "balanced", "Naval") > attackDamage({ ...emptyForce(), navy: 10 }, 0, "balanced", "Generic"));
 
 for (const f of ["境界線の貴方.map", "新世界より.map"]) {
   console.log("=====", f);

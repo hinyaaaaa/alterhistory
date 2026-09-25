@@ -31,8 +31,6 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
     window.Element.prototype.setPointerCapture = () => {};
     window.Element.prototype.releasePointerCapture = () => {};
     window.Element.prototype.hasPointerCapture = () => false;
-    window.confirm = () => true;
-    window.alert = () => {};
     Object.assign(window, { TextDecoder, Blob, Response, DecompressionStream });
   },
 });
@@ -40,6 +38,23 @@ const { window } = dom;
 const $ = (id) => window.document.getElementById(id);
 const q = (sel) => window.document.querySelector(sel);
 const qa = (sel) => [...window.document.querySelectorAll(sel)];
+
+// alert()/confirm()/prompt() の代替として js/ui/dialogs.js が作る .confirm-dialog を、
+// 開いたら自動でOKを押す（常に「はい」を選んだことにする）。テスト実行前に一度だけ仕込めばよい。
+// prompt 相当（入力欄あり）に答える文字列は window.__nextPromptAnswer で指定できる（既定は「新しい村」）。
+new window.MutationObserver((mutations) => {
+  for (const m of mutations) {
+    for (const node of m.addedNodes) {
+      if (node.nodeType === 1 && node.matches?.(".confirm-dialog")) {
+        const input = node.querySelector(".confirm-dialog-input");
+        if (input) input.value = window.__nextPromptAnswer ?? "新しい村";
+        const buttons = [...node.querySelectorAll(".confirm-dialog-actions button")];
+        const ok = buttons.at(-1); // buildDialog は cancel を先、OKを最後に追加する
+        Promise.resolve().then(() => ok?.click());
+      }
+    }
+  }
+}).observe(window.document.body, { childList: true });
 
 const ready = await waitFor(() => window.alterhistory, 8000, "アプリ起動");
 check("アプリが起動する", ready);

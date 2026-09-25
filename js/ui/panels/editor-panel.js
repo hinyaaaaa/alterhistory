@@ -6,6 +6,7 @@ import { htmlToEditable, editableToHtml } from "../../core/edit/notes.js";
 import { relationLabel, RELATIONS } from "../../core/edit/diplomacy.js";
 import { DEFAULT_MARKER_TYPES, defaultMarkerName } from "../../core/edit/markers.js";
 import { byId } from "../dom.js";
+import { confirmDialog, promptDialog } from "../dialogs.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
@@ -71,7 +72,7 @@ export function initEditorPanel({ store, editActions }) {
 
     const del = el("button", "danger", "このマーカーを削除");
     del.type = "button";
-    del.addEventListener("click", () => { if (confirm("このマーカーを削除しますか？")) { editActions.removeMarker(m.i); close(); } });
+    del.addEventListener("click", async () => { if (await confirmDialog("このマーカーを削除しますか？", { danger: true, okLabel: "削除" })) { editActions.removeMarker(m.i); close(); } });
     form.append(del);
     body.append(form);
   }
@@ -101,7 +102,7 @@ export function initEditorPanel({ store, editActions }) {
     del.type = "button";
     del.disabled = !!reason;
     if (reason) del.title = reason;
-    del.addEventListener("click", () => { if (confirm("この都市を削除しますか？")) { editActions.removeBurg(b.i); close(); } });
+    del.addEventListener("click", async () => { if (await confirmDialog("この都市を削除しますか？", { danger: true, okLabel: "削除" })) { editActions.removeBurg(b.i); close(); } });
     form.append(del);
     if (reason) form.append(el("p", "hint", reason));
     body.append(form);
@@ -116,10 +117,48 @@ export function initEditorPanel({ store, editActions }) {
     const form = el("div", "editor-form");
     const stats = [["セル数", e.cells], ["面積", e.area], ["都市数", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
     form.append(table(stats));
+    if (kind === "state") form.append(techLevelSection(e.i));
+    if (kind === "state") form.append(doctrineSection(e.i));
     form.append(attributesField(kind, e.i));
     form.append(noteField(map, kind, e.i));
     if (kind === "state") form.append(diplomacySection(map, e.i));
     body.append(form);
+  }
+
+  function techLevelSection(stateId) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", "技術水準"));
+    const row = el("div", "tech-level-row");
+    const slider = document.createElement("input");
+    slider.type = "range";
+    slider.min = String(editActions.TECH_MIN);
+    slider.max = String(editActions.TECH_MAX);
+    slider.step = "1";
+    slider.value = String(editActions.getTechLevel(stateId) ?? 3);
+    const value = el("span", "tech-level-value", slider.value);
+    slider.addEventListener("input", () => { value.textContent = slider.value; });
+    slider.addEventListener("change", () => editActions.setTechLevel(stateId, Number(slider.value)));
+    row.append(slider, value);
+    wrap.append(row);
+    wrap.append(el("p", "hint", "1（低い）〜10（高い）。人口成長率・産業力の計算に使われます。"));
+    return wrap;
+  }
+
+  function doctrineSection(stateId) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", "戦争ドクトリン"));
+    const sel = document.createElement("select");
+    const current = editActions.getDoctrine(stateId);
+    for (const d of editActions.DOCTRINES) {
+      const o = document.createElement("option");
+      o.value = d.key; o.textContent = d.label;
+      if (d.key === current) o.selected = true;
+      sel.append(o);
+    }
+    sel.addEventListener("change", () => editActions.setDoctrine(stateId, sel.value));
+    wrap.append(sel);
+    wrap.append(el("p", "hint", "国全体の戦い方の方針。全部隊の戦闘力に一律で影響します（部隊ごとには設定しません）。"));
+    return wrap;
   }
 
   function diplomacySection(map, stateId) {
@@ -202,6 +241,6 @@ export function initEditorPanel({ store, editActions }) {
     openMarker: (id) => open("marker", id),
     openEntity: (kind, id) => open(kind, id),
     close,
-    promptBurgName(cb) { const name = prompt("新しい都市の名前"); cb(name); },
+    promptBurgName(cb) { promptDialog("新しい都市の名前").then(cb); },
   };
 }

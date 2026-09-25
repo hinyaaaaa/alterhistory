@@ -1,4 +1,13 @@
-#app { display: grid; grid-template-rows: auto 1fr auto; height: 100vh; }
+/* #app の直下は5要素固定: header(表示ツールバー) / #edit-toolbar / #time-bar / main(地図) / footer(ステータスバー)。
+   子要素を増減したら、このトラック数も必ず合わせること（合っていないと 1fr が意図しない行に付き、
+   main の高さが不安定になる＝地図の大きさが揺れる・ツールバーが伸縮して見えるバグの原因になる）。 */
+#app {
+  display: grid;
+  grid-template-rows:
+    [toolbar-start] auto [toolbar-end edit-toolbar-start] auto [edit-toolbar-end time-bar-start] auto
+    [time-bar-end main-start] 1fr [main-end statusbar-start] auto [statusbar-end];
+  height: 100vh;
+}
 .toolbar {
   display: flex; align-items: center; gap: 18px; padding: 8px 12px;
   background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap;
@@ -8,7 +17,7 @@
 .toolbar label { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); cursor: pointer; }
 .toggles label { gap: 4px; color: var(--text); }
 
-main { display: grid; grid-template-columns: 1fr 260px; min-height: 0; }
+main { display: grid; grid-template-columns: 1fr 260px; min-height: 0; overflow: hidden; }
 #stage { position: relative; min-width: 0; min-height: 0; background: #2f4a72; }
 #map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; outline: none; }
 #map-canvas.dragging { cursor: grabbing; }

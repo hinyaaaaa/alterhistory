@@ -7,6 +7,8 @@ import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapit
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
 import { planSetAttributes, getAttributes } from "../core/edit/attributes.js";
 import { planSetDiplomacy, getRelation } from "../core/edit/diplomacy.js";
+import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
+import { planSetDoctrine, getDoctrine, DOCTRINES, DEFAULT_DOCTRINE } from "../core/edit/military-doctrine.js";
 import { createRandom } from "../core/random.js";
 import { cellIndexOf } from "../core/spatial.js";
 
@@ -63,6 +65,14 @@ export function createEditActions({ store, renderer }) {
     getRelation(a, b) { return withMap((map) => getRelation(map, a, b)) ?? null; },
     setDiplomacy(a, b, relation) { withMap((map) => safeRun("外交関係の変更", () => commitOrThrow(planSetDiplomacy(map, a, b, relation)))); },
 
+    TECH_MIN, TECH_MAX,
+    getTechLevel(stateId) { return withMap((map) => getTechLevel(map, stateId)) ?? null; },
+    setTechLevel(stateId, value) { withMap((map) => safeRun("技術水準の変更", () => commitOrThrow(planSetTechLevel(map, stateId, value)))); },
+
+    DOCTRINES,
+    getDoctrine(stateId) { return withMap((map) => getDoctrine(map, stateId)) ?? DEFAULT_DOCTRINE; },
+    setDoctrine(stateId, doctrineKey) { withMap((map) => safeRun("戦争ドクトリンの変更", () => commitOrThrow(planSetDoctrine(map, stateId, doctrineKey)))); },
+
     /** ブラシの半径(ワールド座標)内にあるセルIDを返す */
     cellsWithin(x, y, radius) { return withMap((map) => cellIndexOf(map).findWithin(x, y, radius)) ?? []; },
     /** (x, y) に最も近いセルID。地図が無ければ -1 */
@@ -70,4 +80,4 @@ export function createEditActions({ store, renderer }) {
   };
 }
 
-export { PAINT_KINDS };
+export { PAINT_KINDS, TECH_MIN, TECH_MAX, DOCTRINES };

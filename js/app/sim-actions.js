@@ -2,7 +2,7 @@
 // UI から呼ばれる。ロジック自体は core/sim/*, core/edit/{alliances,wars}.js にあり、ここは配線と通知だけ。
 
 import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegiment, regimentsOf } from "../core/sim/military.js";
-import { planResolveBattle } from "../core/sim/battle.js";
+import { planResolveBattle, planResolveMuster } from "../core/sim/battle.js";
 import { planCreateAlliance, planEditAlliance, planDissolveAlliance, listAlliances, alliancesOf } from "../core/edit/alliances.js";
 import { planDeclareWar, planRecordBattle, suggestCessions, planSignPeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
 import { createRandom } from "../core/random.js";
@@ -34,6 +34,27 @@ export function createSimActions({ store, renderer }) {
       return withMap((map) => safeRun("戦闘", () => {
         const { command, result } = planResolveBattle(map, a, b, rnd);
         store.beginBatch(`戦闘（${map.pack.states[a.stateId].name} vs ${map.pack.states[b.stateId].name}）`);
+        store.commit(command);
+        if (warId != null) {
+          const recCmd = planRecordBattle(map, warId, { attackerState: a.stateId, defenderState: b.stateId, result, date: currentDate() });
+          if (recCmd) store.commit(recCmd);
+        }
+        store.endBatch();
+        rerender();
+        return result;
+      }));
+    },
+
+    /**
+     * 動員会戦：同じ場所にいる複数部隊をまとめて攻撃側として動員し、
+     * 狙った部隊がいる場所の防御側全部隊と合算戦力で戦う。
+     * @param {{stateId:number, regIds:number[]}} a 動員する自国部隊のID一覧
+     * @param {{stateId:number, regId:number}} b 攻撃対象の部隊
+     */
+    musterAttack(a, b, warId) {
+      return withMap((map) => safeRun("会戦", () => {
+        const { command, result } = planResolveMuster(map, a, b, rnd);
+        store.beginBatch(`会戦（${map.pack.states[a.stateId].name} vs ${map.pack.states[b.stateId].name}）`);
         store.commit(command);
         if (warId != null) {
           const recCmd = planRecordBattle(map, warId, { attackerState: a.stateId, defenderState: b.stateId, result, date: currentDate() });

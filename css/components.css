@@ -45,6 +45,11 @@ dialog th { text-align: left; color: var(--muted); padding-top: 10px; font-size:
 dialog td { padding: 3px 8px 3px 0; vertical-align: top; }
 dialog td:first-child { white-space: nowrap; }
 
+.confirm-dialog { min-width: 280px; max-width: 420px; }
+.confirm-dialog p { margin: 0 0 14px; white-space: pre-wrap; }
+.confirm-dialog-input { width: 100%; box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; color: var(--text); margin-bottom: 14px; }
+.confirm-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 button:disabled { opacity: 0.45; cursor: not-allowed; }
 button:disabled:hover { border-color: var(--line); }
 
@@ -96,6 +101,9 @@ button:disabled:hover { border-color: var(--line); }
 .attr-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 6px; }
 .attr-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; }
 .attr-remove { padding: 2px 9px; }
+.tech-level-row { display: flex; align-items: center; gap: 10px; }
+.tech-level-row input[type="range"] { flex: 1; }
+.tech-level-value { min-width: 1.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--text); }
 .diplomacy-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
 .diplomacy-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.danger { border-color: var(--danger); color: var(--danger); }
@@ -128,6 +136,10 @@ button.link { background: none; border: 0; color: var(--accent); text-align: lef
 .regiment-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .regiment-power { color: var(--muted); font-size: 12px; }
 .attack-target { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); }
+.regiment-card-head input[type="checkbox"] { margin-right: 2px; }
+#tab-regiments .hint { color: var(--muted); font-size: 12px; margin: 0 0 12px; }
+#tab-regiments .muted { color: var(--muted); font-size: 12px; }
+.muster-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); position: sticky; bottom: 0; }
 
 /* 戦争・講和 */
 .war-card { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 10px; background: var(--panel-2); }
