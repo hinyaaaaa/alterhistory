@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>ALTERHISTORY — 架空世界地図</title>
+  <title>ALTERHISTORY — 作戦司令室</title>
   <link rel="stylesheet" href="css/base.css">
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
@@ -11,11 +11,12 @@
 <body>
 <div id="app">
   <header class="toolbar" role="toolbar" aria-label="ツールバー">
-    <div class="group">
+    <div class="brand" aria-hidden="true"><span class="brand-mark">✦</span><span class="brand-name">ALTERHISTORY</span></div>
+    <div class="group" data-label="ファイル">
       <button id="btn-open" class="primary" title="地図ファイルを開く (O)">開く</button>
       <button id="btn-fit" title="地図全体を表示 (F)">全体表示</button>
     </div>
-    <div class="group">
+    <div class="group" data-label="保存">
       <button id="btn-save" title="ALTERHISTORY 形式で保存 (Ctrl+S)" disabled>保存</button>
       <details id="export-menu" class="menu">
         <summary aria-disabled="true" title="画像や他のソフト向けに書き出す">書き出し ▾</summary>
@@ -26,7 +27,7 @@
         </div>
       </details>
     </div>
-    <div class="group">
+    <div class="group" data-label="表示">
       <label>色分け
         <select id="sel-overlay" title="1〜5 キーで切替">
           <option value="none">なし</option>
@@ -55,7 +56,7 @@
   </header>
 
   <div id="edit-toolbar" class="toolbar edit-toolbar" role="toolbar" aria-label="編集ツール">
-    <div class="group" role="group" aria-label="ツール">
+    <div class="group" role="group" aria-label="ツール" data-label="編集ツール">
       <button data-tool="select" class="tool-btn active" title="選択(V) — クリックして中身を見る・編集する">選択</button>
       <button data-tool="paint:state" class="tool-btn" title="国家を塗る(1)">国家</button>
       <button data-tool="paint:culture" class="tool-btn" title="文化を塗る(2)">文化</button>
@@ -85,7 +86,7 @@
       <button id="btn-time-toggle" title="時間の進行を開始/停止 (Space)">▶ 開始</button>
       <button id="btn-time-step" title="1ヶ月だけ進める">+1ヶ月</button>
     </div>
-    <div class="group">
+    <div class="group" data-label="世界暦">
       <span id="world-date" class="world-date">1年 1月</span>
     </div>
     <div class="group">
@@ -99,7 +100,7 @@
       </label>
     </div>
     <div class="group spacer-group">
-      <button id="btn-open-military" title="部隊・戦争・同盟を管理する">軍事・外交</button>
+      <button id="btn-open-military" class="primary" title="部隊・戦争・同盟を管理する">⚔ 軍事・外交</button>
     </div>
   </div>
 
@@ -111,6 +112,10 @@
         <p>Azgaar 形式の <code>.map</code>（<code>.map.gz</code> も可）や、ALTERHISTORY 形式のファイルを、<br>
            この画面にドラッグ＆ドロップするか、下のボタンから選んでください。</p>
         <button id="btn-open-empty" class="primary large">ファイルを選ぶ</button>
+      </div>
+      <div id="stage-frame" aria-hidden="true">
+        <span class="corner tl"></span><span class="corner tr"></span>
+        <span class="corner bl"></span><span class="corner br"></span>
       </div>
       <div id="loading" hidden><span id="loading-text">読み込み中…</span></div>
       <div id="banner" role="alert" hidden>
@@ -140,9 +145,9 @@
       <button id="military-close" class="editor-close" aria-label="閉じる">×</button>
     </div>
     <div class="dialog-tabs" role="tablist">
-      <button class="tab-btn active" data-tab="regiments" role="tab">部隊</button>
-      <button class="tab-btn" data-tab="wars" role="tab">戦争</button>
-      <button class="tab-btn" data-tab="alliances" role="tab">同盟</button>
+      <button class="tab-btn active" data-tab="regiments" role="tab"><span class="tab-icon">⚑</span>部隊</button>
+      <button class="tab-btn" data-tab="wars" role="tab"><span class="tab-icon">⚔</span>戦争</button>
+      <button class="tab-btn" data-tab="alliances" role="tab"><span class="tab-icon">⛨</span>同盟</button>
     </div>
     <div id="tab-regiments" class="tab-panel"></div>
     <div id="tab-wars" class="tab-panel" hidden></div>
@@ -150,7 +155,7 @@
   </dialog>
 
   <dialog id="help-dialog">
-    <h2>操作方法</h2>
+    <h2>作戦指令 早見表</h2>
     <table>
       <tbody>
         <tr><th colspan="2">マウス</th></tr>

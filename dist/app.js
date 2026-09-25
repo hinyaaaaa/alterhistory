@@ -1,7 +1,7 @@
 (() => {
   // js/core/store.js
   var DEFAULT_HISTORY_LIMIT = 200;
-  var LOST = /* @__PURE__ */ Symbol("saved-state-dropped-from-history");
+  var LOST = Symbol("saved-state-dropped-from-history");
   function createStore(initialState, { historyLimit = DEFAULT_HISTORY_LIMIT } = {}) {
     let state = initialState;
     let savedTop = null;
