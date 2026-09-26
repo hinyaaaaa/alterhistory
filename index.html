@@ -10,13 +10,12 @@
 </head>
 <body>
 <div id="app">
-  <header class="toolbar" role="toolbar" aria-label="ツールバー">
+  <header class="topbar" role="toolbar" aria-label="ツールバー">
     <div class="brand" aria-hidden="true"><span class="brand-mark">✦</span><span class="brand-name">ALTERHISTORY</span></div>
-    <div class="group" data-label="ファイル">
+
+    <div class="topbar-group">
       <button id="btn-open" class="primary" title="地図ファイルを開く (O)">開く</button>
       <button id="btn-fit" title="地図全体を表示 (F)">全体表示</button>
-    </div>
-    <div class="group" data-label="保存">
       <button id="btn-save" title="ALTERHISTORY 形式で保存 (Ctrl+S)" disabled>保存</button>
       <details id="export-menu" class="menu">
         <summary aria-disabled="true" title="画像や他のソフト向けに書き出す">書き出し ▾</summary>
@@ -27,84 +26,77 @@
         </div>
       </details>
     </div>
-    <div class="group" data-label="表示">
-      <label>色分け
-        <select id="sel-overlay" title="1〜5 キーで切替">
-          <option value="none">なし</option>
-          <option value="state" selected>国家</option>
-          <option value="culture">文化</option>
-          <option value="religion">宗教</option>
-          <option value="province">属州</option>
-        </select>
-      </label>
-      <label>下地
-        <select id="sel-base" title="B キーで切替">
-          <option value="biome" selected>バイオーム</option>
-          <option value="height">標高</option>
-        </select>
-      </label>
+
+    <div class="topbar-title">
+      <span id="status-map">未読み込み</span>
     </div>
-    <div class="group toggles" role="group" aria-label="表示する要素">
-      <label><input type="checkbox" id="chk-coast" checked> 海岸線</label>
-      <label><input type="checkbox" id="chk-rivers" checked> 河川</label>
-      <label><input type="checkbox" id="chk-routes" checked> 道路</label>
-      <label><input type="checkbox" id="chk-burgs" checked> 都市</label>
-      <label><input type="checkbox" id="chk-labels" checked> ラベル</label>
+
+    <div class="topbar-group">
+      <!-- Azgaar 式のレイヤーパネル。表示条件・下地・要素の表示ON/OFFをこの中に集約し、
+           常時表示のバーには置かない（散らからないよう折りたたむ）。中身のIDは従来のまま。 -->
+      <details id="layers-menu" class="menu">
+        <summary title="表示するレイヤーを選ぶ">🗺 レイヤー ▾</summary>
+        <div class="menu-list layers-panel" role="menu">
+          <div class="layers-section">
+            <span class="layers-section-title">色分け</span>
+            <select id="sel-overlay" title="1〜5 キーで切替">
+              <option value="none">なし</option>
+              <option value="state" selected>国家</option>
+              <option value="culture">文化</option>
+              <option value="religion">宗教</option>
+              <option value="province">属州</option>
+            </select>
+          </div>
+          <div class="layers-section">
+            <span class="layers-section-title">下地</span>
+            <select id="sel-base" title="B キーで切替">
+              <option value="biome" selected>バイオーム</option>
+              <option value="height">標高</option>
+            </select>
+          </div>
+          <div class="layers-section">
+            <span class="layers-section-title">表示する要素</span>
+            <label class="layer-toggle"><input type="checkbox" id="chk-coast" checked> 海岸線 <kbd>C</kbd></label>
+            <label class="layer-toggle"><input type="checkbox" id="chk-rivers" checked> 河川 <kbd>R</kbd></label>
+            <label class="layer-toggle"><input type="checkbox" id="chk-routes" checked> 道路 <kbd>T</kbd></label>
+            <label class="layer-toggle"><input type="checkbox" id="chk-burgs" checked> 都市 <kbd>U</kbd></label>
+            <label class="layer-toggle"><input type="checkbox" id="chk-labels" checked> ラベル <kbd>L</kbd></label>
+          </div>
+        </div>
+      </details>
+      <button id="btn-help" title="ショートカット一覧 (?)">?</button>
     </div>
-    <div class="spacer"></div>
-    <button id="btn-help" title="ショートカット一覧 (?)">ヘルプ</button>
   </header>
 
-  <div id="edit-toolbar" class="toolbar edit-toolbar" role="toolbar" aria-label="編集ツール">
-    <div class="group" role="group" aria-label="ツール" data-label="編集ツール">
-      <button data-tool="select" class="tool-btn active" title="選択(V) — クリックして中身を見る・編集する">選択</button>
-      <button data-tool="paint:state" class="tool-btn" title="国家を塗る(1)">国家</button>
-      <button data-tool="paint:culture" class="tool-btn" title="文化を塗る(2)">文化</button>
-      <button data-tool="paint:religion" class="tool-btn" title="宗教を塗る(3)">宗教</button>
-      <button data-tool="paint:province" class="tool-btn" title="属州を塗る(4)">属州</button>
-      <button data-tool="paint:biome" class="tool-btn" title="地形を塗る(5)">地形</button>
-      <button data-tool="add:burg" class="tool-btn" title="都市を置く(6)">都市を置く</button>
-      <button data-tool="add:marker" class="tool-btn" title="マーカーを置く(7)">マーカーを置く</button>
-    </div>
-    <div class="group" id="tool-target-group" hidden>
-      <label>対象
-        <select id="tool-target"></select>
-      </label>
-    </div>
-    <div class="group" id="tool-radius-group" hidden>
-      <label>ブラシの大きさ
-        <input type="range" id="tool-radius" min="10" max="200" value="40">
-      </label>
-    </div>
-    <div class="group spacer-group">
-      <span id="tool-hint" class="tool-hint"></span>
-    </div>
-  </div>
-
-  <div id="time-bar" class="toolbar time-bar" role="toolbar" aria-label="時間">
-    <div class="group">
-      <button id="btn-time-toggle" title="時間の進行を開始/停止 (Space)">▶ 開始</button>
-      <button id="btn-time-step" title="1ヶ月だけ進める">+1ヶ月</button>
-    </div>
-    <div class="group" data-label="世界暦">
-      <span id="world-date" class="world-date">1年 1月</span>
-    </div>
-    <div class="group">
-      <label>速さ
-        <select id="sel-time-speed">
-          <option value="20000">1年=20秒</option>
-          <option value="60000">1年=1分</option>
-          <option value="120000" selected>1年=2分</option>
-          <option value="300000">1年=5分</option>
-        </select>
-      </label>
-    </div>
-    <div class="group spacer-group">
-      <button id="btn-open-military" class="primary" title="部隊・戦争・同盟を管理する">⚔ 軍事・外交</button>
-    </div>
-  </div>
-
   <main>
+    <!-- Azgaar 式の縦アイコンツールバー。常時は幅の狭いアイコン列のみ。
+         対象/ブラシ半径は選んだツールの下にだけ小さく展開する（edit-toolbar.js が hidden を切替） -->
+    <nav id="edit-toolbar" class="edit-rail" role="toolbar" aria-label="編集ツール">
+      <div class="rail-group" role="group" aria-label="ツール">
+        <button data-tool="select" class="tool-btn active" title="選択(V) — クリックして中身を見る・編集する"><span class="tool-icon">⛭</span><span class="tool-label">選択</span></button>
+        <button data-tool="paint:state" class="tool-btn" title="国家を塗る(1)"><span class="tool-icon">🏳</span><span class="tool-label">国家</span></button>
+        <button data-tool="paint:culture" class="tool-btn" title="文化を塗る(2)"><span class="tool-icon">☖</span><span class="tool-label">文化</span></button>
+        <button data-tool="paint:religion" class="tool-btn" title="宗教を塗る(3)"><span class="tool-icon">☨</span><span class="tool-label">宗教</span></button>
+        <button data-tool="paint:province" class="tool-btn" title="属州を塗る(4)"><span class="tool-icon">▦</span><span class="tool-label">属州</span></button>
+        <button data-tool="paint:biome" class="tool-btn" title="地形を塗る(5)"><span class="tool-icon">▲</span><span class="tool-label">地形</span></button>
+        <button data-tool="add:burg" class="tool-btn" title="都市を置く(6)"><span class="tool-icon">⌂</span><span class="tool-label">都市</span></button>
+        <button data-tool="add:marker" class="tool-btn" title="マーカーを置く(7)"><span class="tool-icon">📍</span><span class="tool-label">目印</span></button>
+      </div>
+      <div class="rail-flyout" id="tool-target-group" hidden>
+        <label class="field-label">対象
+          <select id="tool-target"></select>
+        </label>
+      </div>
+      <div class="rail-flyout" id="tool-radius-group" hidden>
+        <label class="field-label">ブラシの大きさ
+          <input type="range" id="tool-radius" min="10" max="200" value="40">
+        </label>
+      </div>
+      <div class="rail-hint-slot">
+        <span id="tool-hint" class="tool-hint"></span>
+      </div>
+    </nav>
+
     <section id="stage" aria-label="地図">
       <canvas id="map-canvas" tabindex="0" aria-label="地図の表示領域"></canvas>
       <div id="empty-state">
@@ -131,8 +123,27 @@
     </aside>
   </main>
 
+  <!-- HOI4 式の時間バー。1本だけに絞り、中央に大きく年月・速度、左右に操作を置く -->
+  <div id="time-bar" class="timebar" role="toolbar" aria-label="時間">
+    <div class="timebar-side timebar-left">
+      <button id="btn-time-toggle" title="時間の進行を開始/停止 (Space)">▶ 開始</button>
+      <button id="btn-time-step" title="1ヶ月だけ進める">+1ヶ月</button>
+    </div>
+    <div class="timebar-center">
+      <span id="world-date" class="world-date">1年 1月</span>
+      <select id="sel-time-speed" title="1年がどれくらいの実時間で進むか">
+        <option value="20000">高速</option>
+        <option value="60000">早い</option>
+        <option value="120000" selected>普通</option>
+        <option value="300000">低速</option>
+      </select>
+    </div>
+    <div class="timebar-side timebar-right">
+      <button id="btn-open-military" class="primary" title="部隊・戦争・同盟を管理する">⚔ 軍事・外交</button>
+    </div>
+  </div>
+
   <footer class="statusbar">
-    <span id="status-map">未読み込み</span>
     <span id="status-hover"></span>
     <span id="status-zoom"></span>
   </footer>

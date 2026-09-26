@@ -1924,13 +1924,16 @@
       menu.open = false;
       exporters[item.dataset.export]?.();
     });
+    const layersMenu = byId("layers-menu");
+    const closableMenus = [menu, layersMenu];
     document.addEventListener("pointerdown", (e) => {
-      if (menu.open && !menu.contains(e.target)) menu.open = false;
+      for (const m of closableMenus) if (m.open && !m.contains(e.target)) m.open = false;
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape" && menu.open) {
-        menu.open = false;
-        menu.querySelector("summary").focus();
+      if (e.key !== "Escape") return;
+      for (const m of closableMenus) if (m.open) {
+        m.open = false;
+        m.querySelector("summary").focus();
       }
     });
     const selOverlay = byId("sel-overlay");
@@ -3434,7 +3437,7 @@ ${shown}${more}`;
     const hint = byId("tool-hint");
     const HINTS = {
       [TOOLS.SELECT]: "\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u4E2D\u8EAB\u3092\u898B\u308B\u30FB\u7DE8\u96C6\u3059\u308B",
-      [TOOLS.PAINT_STATE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u56FD\u5BB6\u3092\u5857\u308B\uFF08\u53F3\u306E\u300C\u5BFE\u8C61\u300D\u3067\u5857\u308B\u56FD\u5BB6\u3092\u9078\u3076\uFF09",
+      [TOOLS.PAINT_STATE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u56FD\u5BB6\u3092\u5857\u308B\uFF08\u4E0B\u306E\u300C\u5BFE\u8C61\u300D\u3067\u5857\u308B\u56FD\u5BB6\u3092\u9078\u3076\uFF09",
       [TOOLS.PAINT_CULTURE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u6587\u5316\u3092\u5857\u308B",
       [TOOLS.PAINT_RELIGION]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5B97\u6559\u3092\u5857\u308B",
       [TOOLS.PAINT_PROVINCE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5C5E\u5DDE\u3092\u5857\u308B",
@@ -3476,8 +3479,12 @@ ${shown}${more}`;
     }
     function sync() {
       const tool = editMode.tool;
-      for (const b of buttons) b.classList.toggle("active", b.dataset.tool === tool);
-      hint.textContent = store.getState().map ? HINTS[tool] ?? "" : "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044";
+      const hasMap = !!store.getState().map;
+      for (const b of buttons) {
+        b.classList.toggle("active", b.dataset.tool === tool);
+        b.disabled = !hasMap;
+      }
+      hint.textContent = hasMap ? HINTS[tool] ?? "" : "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044";
       radiusGroup.hidden = !tool.startsWith("paint:");
     }
     for (const b of buttons) {

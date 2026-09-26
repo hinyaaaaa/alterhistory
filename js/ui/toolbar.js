@@ -19,9 +19,16 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
     menu.open = false;              // 選んだらメニューを閉じる
     exporters[item.dataset.export]?.();
   });
-  // メニューの外を押したとき / Esc で閉じる
-  document.addEventListener("pointerdown", (e) => { if (menu.open && !menu.contains(e.target)) menu.open = false; });
-  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && menu.open) { menu.open = false; menu.querySelector("summary").focus(); } });
+  // メニューの外を押したとき / Esc で閉じる（書き出しメニュー・レイヤーメニュー共通）
+  const layersMenu = byId("layers-menu");
+  const closableMenus = [menu, layersMenu];
+  document.addEventListener("pointerdown", (e) => {
+    for (const m of closableMenus) if (m.open && !m.contains(e.target)) m.open = false;
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape") return;
+    for (const m of closableMenus) if (m.open) { m.open = false; m.querySelector("summary").focus(); }
+  });
 
   const selOverlay = byId("sel-overlay");
   const selBase = byId("sel-base");

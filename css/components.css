@@ -1,5 +1,5 @@
 /* ==========================================================================
-   コンポーネント別スタイル（HOI4 風・戦略卓上ゲーム UI）
+   コンポーネント別スタイル（HOI4 の操作性 × Azgaar のレイヤー構成）
    ========================================================================== */
 
 /* --- 空の状態・読み込み・警告・ドロップヒント --- */
@@ -86,7 +86,7 @@ dialog td:first-child { white-space: nowrap; }
 button:disabled { opacity: 0.4; cursor: not-allowed; }
 button:disabled:hover { border-color: var(--line); color: var(--text-dim); }
 
-/* --- 書き出しメニュー（details/summary） --- */
+/* --- メニュー（details/summary 共通。書き出し・レイヤーパネルで使用） --- */
 .menu { position: relative; }
 .menu > summary {
   list-style: none; cursor: pointer; user-select: none; padding: 6px 14px;
@@ -99,25 +99,83 @@ button:disabled:hover { border-color: var(--line); color: var(--text-dim); }
 .menu > summary:hover { border-color: var(--brass-dim); }
 .menu.disabled > summary { opacity: 0.4; cursor: not-allowed; pointer-events: none; }
 .menu-list {
-  position: absolute; top: calc(100% + 5px); left: 0; z-index: 20; min-width: 270px;
+  position: absolute; top: calc(100% + 5px); right: 0; z-index: 20; min-width: 260px;
   display: flex; flex-direction: column; gap: 2px; padding: 5px;
   background: var(--panel); border: 1px solid var(--brass-dim); border-radius: var(--radius);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
 }
+#export-menu .menu-list { left: 0; right: auto; }
 .menu-list button { text-align: left; border: 0; background: transparent; padding: 8px 11px; box-shadow: none; font-weight: 500; }
 .menu-list button:hover { background: var(--panel-2); color: var(--brass-bright); }
 
-/* --- 編集ツールバー --- */
-.edit-toolbar { border-top: 1px solid var(--line); background: linear-gradient(180deg, var(--panel), var(--panel-2)); }
-.tool-btn { text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; padding: 6px 12px; }
+/* --- Azgaar 式レイヤーパネル（details の中身） --- */
+.layers-panel { min-width: 220px; padding: 10px; gap: 12px; }
+.layers-section {
+  display: flex; flex-direction: column; gap: 6px;
+  padding-bottom: 10px; border-bottom: 1px solid var(--line);
+}
+.layers-section:last-child { border-bottom: 0; padding-bottom: 0; }
+.layers-section-title {
+  font-size: 10px; color: var(--brass-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 700;
+}
+.layers-section select { width: 100%; }
+.layer-toggle {
+  display: flex; align-items: center; gap: 6px; cursor: pointer; padding: 3px 2px;
+  color: var(--text-dim); font-size: 12px;
+}
+.layer-toggle:hover { color: var(--text); }
+.layer-toggle kbd { margin-left: auto; }
+
+/* ==========================================================================
+   上部バー（常時表示は最小限）
+   ========================================================================== */
+.brand {
+  display: flex; align-items: center; gap: 8px; padding-right: 14px;
+  border-right: 1px solid var(--line);
+  color: var(--brass-bright); font-weight: 700; letter-spacing: 0.12em; font-size: 13px;
+  white-space: nowrap;
+}
+.brand-mark { color: var(--brass); font-size: 14px; }
+
+/* ==========================================================================
+   左サイドの編集レール（Azgaar 式・縦アイコンツールバー）
+   ========================================================================== */
+.edit-rail {
+  display: flex; flex-direction: column; align-items: stretch; gap: 0;
+  width: 64px; flex-shrink: 0;
+  background: linear-gradient(90deg, var(--panel), var(--panel-2));
+  border-right: 1px solid var(--line);
+  box-shadow: 6px 0 16px rgba(0, 0, 0, 0.3);
+  position: relative; z-index: 10;
+  padding: 8px 0;
+  overflow-y: auto;
+}
+.rail-group { display: flex; flex-direction: column; gap: 3px; padding: 0 6px; }
+.tool-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  padding: 8px 2px; width: 100%;
+  font-size: 10px; letter-spacing: 0.01em; text-transform: none; font-weight: 500;
+  color: var(--text-dim);
+}
+.tool-icon { font-size: 17px; line-height: 1; }
+.tool-label { font-size: 9px; }
 .tool-btn.active {
   background: linear-gradient(180deg, var(--brass-bright), var(--brass));
   color: var(--accent-text); border-color: var(--brass-dim);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
 }
-.spacer-group { flex: 1; justify-content: flex-end; }
-.tool-hint { color: var(--muted); font-size: 11px; font-style: normal; }
-#tool-radius { width: 130px; }
+.rail-flyout {
+  margin: 8px 6px 0; padding: 8px; background: var(--panel-3);
+  border: 1px solid var(--line); border-radius: var(--radius);
+}
+.rail-flyout .field-label {
+  display: flex; flex-direction: column; gap: 5px;
+  font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em;
+}
+.rail-flyout select { width: 100%; font-size: 11px; }
+#tool-radius { width: 100%; }
+.rail-hint-slot { margin-top: auto; padding: 8px 6px 0; }
+.tool-hint { color: var(--muted); font-size: 10px; line-height: 1.5; display: block; }
 
 #map-canvas.tool-paint { cursor: crosshair; }
 #map-canvas.tool-place { cursor: copy; }
@@ -143,9 +201,7 @@ button:disabled:hover { border-color: var(--line); color: var(--text-dim); }
 .editor-table th { text-align: left; color: var(--muted); font-weight: 600; padding: 3px 8px 3px 0; white-space: nowrap; text-transform: uppercase; font-size: 10px; letter-spacing: 0.05em; }
 .editor-table td { padding: 3px 0; }
 .editor-form { display: flex; flex-direction: column; gap: 12px; }
-.editor-section {
-  border-top: 1px solid var(--line); padding-top: 10px;
-}
+.editor-section { border-top: 1px solid var(--line); padding-top: 10px; }
 .editor-section h4 {
   margin: 0 0 8px; font-size: 11px; color: var(--brass-dim); font-weight: 700;
   text-transform: uppercase; letter-spacing: 0.08em;
@@ -170,17 +226,33 @@ button.danger:hover { background: rgba(179, 57, 44, 0.18); border-color: var(--d
 button.link { background: none; border: 0; box-shadow: none; color: var(--brass-bright); text-align: left; padding: 2px 0; font-weight: 500; }
 button.link:hover { color: var(--brass-bright); text-decoration: underline; }
 
-/* --- 時間バー --- */
-.time-bar {
+/* ==========================================================================
+   下部の時間バー（HOI4 式：中央に大きく年月、左右に操作を集約）
+   ========================================================================== */
+.timebar {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  padding: 8px 16px;
   border-top: 1px solid var(--line);
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.3);
+  position: relative; z-index: 20;
 }
+.timebar::before {
+  content: "";
+  position: absolute; left: 0; right: 0; top: -1px; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--brass-dim) 8%, var(--brass-dim) 92%, transparent);
+  opacity: 0.55;
+}
+.timebar-side { display: flex; align-items: center; gap: 8px; flex: 1; }
+.timebar-right { justify-content: flex-end; }
+.timebar-center { display: flex; align-items: center; gap: 10px; }
 .world-date {
-  font-weight: 700; font-size: 16px; min-width: 8.5em; display: inline-block;
+  font-weight: 700; font-size: 17px; min-width: 8.5em; display: inline-block;
   color: var(--brass-bright); letter-spacing: 0.04em; font-variant-numeric: tabular-nums;
-  padding: 3px 12px; background: var(--panel-3); border: 1px solid var(--line-strong); border-radius: var(--radius);
+  padding: 5px 16px; background: var(--panel-3); border: 1px solid var(--line-strong); border-radius: var(--radius);
   text-align: center;
 }
+#sel-time-speed { width: 5.5em; text-align: center; }
 #btn-time-toggle { min-width: 6em; }
 #btn-time-toggle.running {
   background: linear-gradient(180deg, var(--danger-bright), var(--danger));
@@ -253,23 +325,6 @@ button.link:hover { color: var(--brass-bright); text-decoration: underline; }
 .member-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0; }
 .member-picker label { display: inline-flex; align-items: center; gap: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
 .member-picker input { margin: 0; }
-
-/* --- ブランド表示（左端の紋章プレート） --- */
-.brand {
-  display: flex; align-items: center; gap: 8px; padding-right: 16px;
-  border-right: 1px solid var(--line);
-  color: var(--brass-bright); font-weight: 700; letter-spacing: 0.12em; font-size: 13px;
-  white-space: nowrap;
-}
-.brand-mark { color: var(--brass); font-size: 14px; }
-
-/* --- 帯の中の「グループ見出し」（HOI4 の作戦セクション名を模す） --- */
-.toolbar .group[data-label] { position: relative; padding-top: 11px; }
-.toolbar .group[data-label]::before {
-  content: attr(data-label);
-  position: absolute; top: -4px; left: 0;
-  font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.09em;
-}
 
 /* --- 地図フレームのコーナー装飾（操作卓の縁取り） --- */
 #stage-frame { position: absolute; inset: 0; pointer-events: none; z-index: 4; }

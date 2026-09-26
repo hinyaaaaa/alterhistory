@@ -16,7 +16,7 @@ export function initEditToolbar({ store, editMode }) {
 
   const HINTS = {
     [TOOLS.SELECT]: "クリックして中身を見る・編集する",
-    [TOOLS.PAINT_STATE]: "ドラッグして国家を塗る（右の「対象」で塗る国家を選ぶ）",
+    [TOOLS.PAINT_STATE]: "ドラッグして国家を塗る（下の「対象」で塗る国家を選ぶ）",
     [TOOLS.PAINT_CULTURE]: "ドラッグして文化を塗る",
     [TOOLS.PAINT_RELIGION]: "ドラッグして宗教を塗る",
     [TOOLS.PAINT_PROVINCE]: "ドラッグして属州を塗る",
@@ -45,8 +45,12 @@ export function initEditToolbar({ store, editMode }) {
 
   function sync() {
     const tool = editMode.tool;
-    for (const b of buttons) b.classList.toggle("active", b.dataset.tool === tool);
-    hint.textContent = store.getState().map ? (HINTS[tool] ?? "") : "地図を開いてください";
+    const hasMap = !!store.getState().map;
+    for (const b of buttons) {
+      b.classList.toggle("active", b.dataset.tool === tool);
+      b.disabled = !hasMap;
+    }
+    hint.textContent = hasMap ? (HINTS[tool] ?? "") : "地図を開いてください";
     radiusGroup.hidden = !(tool.startsWith("paint:"));
   }
 
