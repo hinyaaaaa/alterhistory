@@ -11,7 +11,6 @@ import { byId } from "./ui/dom.js";
 import { downloadBlob, createBrowserCanvas } from "./ui/download.js";
 import { initMapView } from "./ui/map-view.js";
 import { initToolbar } from "./ui/toolbar.js";
-import { initLegend } from "./ui/legend.js";
 import { initStatusBar } from "./ui/status-bar.js";
 import { initBanner } from "./ui/banner.js";
 import { initFileInput } from "./ui/file-input.js";
@@ -19,11 +18,11 @@ import { initShortcuts, initHelpDialog } from "./ui/shortcuts.js";
 import { createEditActions } from "./app/edit-actions.js";
 import { initEditMode } from "./ui/edit-mode.js";
 import { initEditToolbar } from "./ui/edit-toolbar.js";
+import { initEditPanel } from "./ui/edit-panel.js";
 import { initEditorPanel } from "./ui/panels/editor-panel.js";
 import { createSimActions } from "./app/sim-actions.js";
 import { createTimeActions } from "./app/time-actions.js";
 import { initTimeBar } from "./ui/time-bar.js";
-import { initMilitaryDialog } from "./ui/military-dialog.js";
 import { initMilitaryPanel } from "./ui/panels/military-panel.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
 import { initAlliancesPanel } from "./ui/panels/alliances-panel.js";
@@ -37,7 +36,7 @@ function start() {
 
   const store = createStore({
     map: null, fileName: "", warnings: [], error: null, notice: null, busy: null, hover: null,
-    view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true },
+    view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "all" },
     editTool: "select", brushRadius: 40,
     timeRunning: false, timeSpeed: 120000, hint: null,
   });
@@ -58,32 +57,50 @@ function start() {
   const editActions = createEditActions({ store, renderer });
   const simActions = createSimActions({ store, renderer });
   const timeActions = createTimeActions({ store, renderer });
-  const editorPanel = initEditorPanel({ store, editActions });
   const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
   const warsPanel = initWarsPanel({ store, simActions });
   const alliancesPanel = initAlliancesPanel({ store, simActions });
-  const panels = { ...editorPanel, simActions, military: militaryPanel, wars: warsPanel, alliances: alliancesPanel };
+  // editMode は editorPanel より後に作るが、editorPanel（国家タブの属州サブタブ）から
+  // 「属州を塗るツールに切り替える」ために参照したいので、後で編集パネルに差し込む
+  let editModeRef = null;
+  const editorPanel = initEditorPanel({
+    store, editActions, panels: null,
+    editMode: { setTool: (t) => editModeRef?.setTool(t) },
+  });
+  const panels = {
+    ...editorPanel, simActions, military: militaryPanel, wars: warsPanel, alliances: alliancesPanel,
+    // edit-mode.js が地図クリックを「部隊の配置/移動」として消費するために使う
+    regimentPending: () => militaryPanel.regimentPending(),
+    consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell),
+  };
+  editorPanel.setPanels?.(panels); // editor-panel.js 内で使う panels（wars/alliances/military）を後から渡す
   const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
 
   initBanner(deps);
   initToolbar(deps);
-  initLegend(deps);
   initStatusBar(deps);
   initMapView(deps);
   const editMode = initEditMode(deps);
+  editModeRef = editMode;
   const editToolbar = initEditToolbar({ store, editMode });
-  const militaryDialog = initMilitaryDialog(deps);
-  editMode.setMilitaryDialog(militaryDialog);
+  const editPanel = initEditPanel();
+  // 属州タブの「この属州を塗り直す」ボタンから、地図編集パネルを開いてツール欄を同期する
+  window.addEventListener("request-edit-panel-open", () => editPanel.open());
+  window.addEventListener("request-edit-panel-sync", (e) => {
+    editToolbar.fillTargets(e.detail?.tool ?? editMode.tool);
+    editToolbar.sync();
+    if (e.detail?.target != null) editToolbar.setTargetValue(e.detail.target);
+  });
   initTimeBar({ store, timeActions });
   // 新しい地図を開いたら、時間の進行を止める（前の地図の進行を引き継がない）
   store.subscribe((_s, change) => { if (change.type === "replace") timeActions.stop(); });
-  initShortcuts({ ...deps, editMode, editToolbar, timeActions, militaryDialog });
+  initShortcuts({ ...deps, editMode, editToolbar, timeActions });
 
   new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions, militaryDialog };
+  globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

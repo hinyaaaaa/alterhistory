@@ -23,6 +23,8 @@ const FONT_STACK = '"Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans CJK JP",s
 /**
  * ラベル。画面上で重なるラベルは、優先度の高いものだけを残す。
  * 優先度: 国名 > 首都 > 人口の多い都市
+ *
+ * burgs: true = 全都市名を表示 / false = 非表示 / "capitals" = 首都のみ表示
  */
 export function drawLabels(ctx, map, vp, { states = true, burgs = true } = {}) {
   const placed = []; // 画面座標の矩形
@@ -61,8 +63,9 @@ export function drawLabels(ctx, map, vp, { states = true, burgs = true } = {}) {
     }
   }
   if (burgs) {
+    const capitalsOnly = burgs === "capitals";
     const list = map.pack.burgs
-      .filter((b) => b && b.i && !b.removed)
+      .filter((b) => b && b.i && !b.removed && (!capitalsOnly || b.capital))
       .sort((a, b) => (b.capital ?? 0) - (a.capital ?? 0) || (b.population ?? 0) - (a.population ?? 0));
     for (const b of list) {
       if (!inView(b.x, b.y)) continue;

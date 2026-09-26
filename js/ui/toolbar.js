@@ -19,21 +19,19 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
     menu.open = false;              // 選んだらメニューを閉じる
     exporters[item.dataset.export]?.();
   });
-  // メニューの外を押したとき / Esc で閉じる（書き出しメニュー・レイヤーメニュー共通）
-  const layersMenu = byId("layers-menu");
-  const closableMenus = [menu, layersMenu];
-  document.addEventListener("pointerdown", (e) => {
-    for (const m of closableMenus) if (m.open && !m.contains(e.target)) m.open = false;
-  });
+  // メニューの外を押したとき / Esc で閉じる（書き出しメニュー）
+  document.addEventListener("pointerdown", (e) => { if (menu.open && !menu.contains(e.target)) menu.open = false; });
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
-    for (const m of closableMenus) if (m.open) { m.open = false; m.querySelector("summary").focus(); }
+    if (menu.open) { menu.open = false; menu.querySelector("summary").focus(); }
   });
 
   const selOverlay = byId("sel-overlay");
   const selBase = byId("sel-base");
+  const selBurgLabels = byId("sel-burg-labels");
   selOverlay.addEventListener("change", () => actions.setOverlay(selOverlay.value));
   selBase.addEventListener("change", () => actions.setView({ base: selBase.value }));
+  selBurgLabels.addEventListener("change", () => actions.setView({ burgLabels: selBurgLabels.value }));
   for (const [name, id] of Object.entries(TOGGLE_IDS)) {
     byId(id).addEventListener("change", (e) => actions.setView({ [name]: e.target.checked }));
   }
@@ -43,6 +41,7 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
     const v = state.view;
     if (selOverlay.value !== v.overlay) selOverlay.value = v.overlay;
     if (selBase.value !== v.base) selBase.value = v.base;
+    if (v.burgLabels && selBurgLabels.value !== v.burgLabels) selBurgLabels.value = v.burgLabels;
     const hasMap = !!state.map;
     btnSave.disabled = !hasMap;
     menu.classList.toggle("disabled", !hasMap);

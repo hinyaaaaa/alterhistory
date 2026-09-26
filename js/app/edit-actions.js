@@ -7,6 +7,7 @@ import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapit
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
 import { planSetAttributes, getAttributes } from "../core/edit/attributes.js";
 import { planSetDiplomacy, getRelation } from "../core/edit/diplomacy.js";
+import { planRenameEntity } from "../core/edit/entities.js";
 import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
 import { planSetDoctrine, getDoctrine, DOCTRINES, DEFAULT_DOCTRINE } from "../core/edit/military-doctrine.js";
 import { createRandom } from "../core/random.js";
@@ -64,6 +65,9 @@ export function createEditActions({ store, renderer }) {
 
     getRelation(a, b) { return withMap((map) => getRelation(map, a, b)) ?? null; },
     setDiplomacy(a, b, relation) { withMap((map) => safeRun("外交関係の変更", () => commitOrThrow(planSetDiplomacy(map, a, b, relation)))); },
+
+    /** 国家・文化・宗教・属州の名前を変える（都市は renameBurg を使う） */
+    renameEntity(kind, id, name) { withMap((map) => safeRun("名前の変更", () => commitOrThrow(planRenameEntity(map, kind, id, name)))); },
 
     TECH_MIN, TECH_MAX,
     getTechLevel(stateId) { return withMap((map) => getTechLevel(map, stateId)) ?? null; },

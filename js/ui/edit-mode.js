@@ -21,7 +21,6 @@ const PAINT_TOOL_KIND = {
 
 export function initEditMode({ store, viewport, editActions, panels }) {
   const canvas = byId("map-canvas");
-  let militaryDialog = null; // main.js から後付けで渡す（循環importを避けるため）
   let tool = TOOLS.SELECT;
   let target = 0;          // 塗る先の実体ID（0=消す）。パネルで選ぶ
   let radius = 40;         // ブラシ半径（ワールド座標）
@@ -98,7 +97,7 @@ export function initEditMode({ store, viewport, editActions, panels }) {
     if (!inMap(map, wx, wy)) return;
     const cell = editActions.findCell(wx, wy);
     // 部隊の配置・移動待ちがあれば、どのツールが選ばれていても最優先でそちらを処理する
-    if (militaryDialog?.pending && militaryDialog.consumeMapClick(cell)) return;
+    if (panels.regimentPending?.() && panels.consumeRegimentPlacement?.(cell)) return;
     if (tool !== TOOLS.SELECT) return;
     const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
     if (!picked) return;
@@ -107,10 +106,23 @@ export function initEditMode({ store, viewport, editActions, panels }) {
     else panels.openCell(picked.id);
   });
 
+  // 選択ツール中、国家に属すセルをダブルクリックすると国家タブを開く
+  // （シングルクリックはセル情報。ダブルクリックだけ国家タブへ直行する、という使い分け）
+  canvas.addEventListener("dblclick", (e) => {
+    const map = store.getState().map;
+    if (!map || tool !== TOOLS.SELECT) return;
+    const [wx, wy] = toWorld(e);
+    if (!inMap(map, wx, wy)) return;
+    const cell = editActions.findCell(wx, wy);
+    if (cell < 0) return;
+    const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
+    if (picked && picked.type !== "cell") return; // 都市・マーカーは既にクリックで開いている
+    const stateId = map.pack.cells.state[cell];
+    if (stateId) panels.openEntity("state", stateId);
+  });
 
   return {
     setTool, setTarget, setRadius, setMarkerType,
     get tool() { return tool; }, get target() { return target; },
-    setMilitaryDialog(d) { militaryDialog = d; },
   };
 }

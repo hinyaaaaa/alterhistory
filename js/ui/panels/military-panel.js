@@ -9,10 +9,12 @@ const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 export function initMilitaryPanel({ store, simActions, editActions }) {
   const root = byId("tab-regiments");
   let selectedState = null;
+  let lockedToState = false; // true の間は国家セレクタを表示しない（国家タブのサブタブとして開いた時）
   let attackPick = null; // { stateId, regIds: number[] } 動員して攻撃対象を選ぶモード（regIdsが1件なら従来の1対1攻撃と同じ）
   let musterMode = false; // true の間、同じセルの部隊カードに動員チェックボックスを出す
   const musterSelection = new Set(); // 動員モードでチェックされた regId
   const cardCache = new Map(); // regId -> { el, reg, stateId } 直前の描画内容
+  let pending = null; // { type: "place"|"move", stateId, regId? } 「地図をクリックして配置/移動」の待ち受け
 
   /** 部隊が属する国家のドクトリンキー（戦争ドクトリンは部隊ではなく国家に紐づく） */
   function doctrineOf(stateId) { return editActions.getDoctrine(stateId); }
@@ -44,15 +46,22 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     root.replaceChildren();
 
     const picker = el("div", "state-picker");
-    picker.append(el("span", "field-label", "国家"));
-    const sel = document.createElement("select");
-    for (const s of states) { const o = document.createElement("option"); o.value = s.i; o.textContent = s.fullName ?? s.name; if (s.i === selectedState) o.selected = true; sel.append(o); }
-    sel.addEventListener("change", () => { selectedState = Number(sel.value); cardCache.clear(); musterSelection.clear(); musterMode = false; render(); });
-    picker.append(sel);
+    if (!lockedToState) {
+      picker.append(el("span", "field-label", "国家"));
+      const sel = document.createElement("select");
+      for (const s of states) { const o = document.createElement("option"); o.value = s.i; o.textContent = s.fullName ?? s.name; if (s.i === selectedState) o.selected = true; sel.append(o); }
+      sel.addEventListener("change", () => { selectedState = Number(sel.value); cardCache.clear(); musterSelection.clear(); musterMode = false; render(); });
+      picker.append(sel);
+    }
 
-    const addBtn = el("button", "", "＋ 新しい部隊を編成（地図をクリックして配置）");
+    const addBtn = el("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "地図をクリックして配置…（クリックで取消）" : "＋ 新しい部隊を編成（地図をクリックして配置）");
     addBtn.type = "button";
-    addBtn.addEventListener("click", () => { root.dispatchEvent(new CustomEvent("request-place-regiment", { detail: { stateId: selectedState }, bubbles: true })); });
+    addBtn.addEventListener("click", () => {
+      if (pending?.type === "place") { pending = null; store.update((s) => { s.hint = null; }); render(); return; }
+      pending = { type: "place", stateId: selectedState };
+      store.update((s) => { s.hint = "地図をクリックして部隊を配置する場所を選んでください"; });
+      render();
+    });
     picker.append(addBtn);
 
     const musterBtn = el("button", musterMode ? "primary" : "", musterMode ? "動員モードを終了" : "部隊を動員して攻撃…");
@@ -173,9 +182,15 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     card.append(power);
 
     const actions = el("div", "regiment-actions");
-    const moveBtn = el("button", "", "移動（地図をクリック）");
+    const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
+    const moveBtn = el("button", "", isMovePicking ? "地図をクリックして移動先へ…" : "移動（地図をクリック）");
+    moveBtn.dataset.field = "move-btn";
     moveBtn.type = "button";
-    moveBtn.addEventListener("click", () => root.dispatchEvent(new CustomEvent("request-move-regiment", { detail: { stateId, regId: reg.i }, bubbles: true })));
+    moveBtn.addEventListener("click", () => {
+      pending = { type: "move", stateId, regId: reg.i };
+      store.update((s) => { s.hint = "地図をクリックして移動先を選んでください"; });
+      render();
+    });
     const isPicking = attackPick && attackPick.stateId === stateId && attackPick.regIds.length === 1 && attackPick.regIds[0] === reg.i;
     const attackBtn = el("button", "", isPicking ? "対象を選択中…" : "単独で攻撃する");
     attackBtn.dataset.field = "attack-btn";
@@ -245,6 +260,10 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     const attackBtn = card.querySelector('[data-field="attack-btn"]');
     if (attackBtn) attackBtn.textContent = isPicking ? "対象を選択中…" : "単独で攻撃する";
 
+    const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
+    const moveBtn = card.querySelector('[data-field="move-btn"]');
+    if (moveBtn) moveBtn.textContent = isMovePicking ? "地図をクリックして移動先へ…" : "移動（地図をクリック）";
+
     const targetSlot = card.querySelector('[data-field="attack-target-slot"]');
     if (targetSlot) fillAttackTarget(map, stateId, reg, targetSlot);
   }
@@ -260,7 +279,25 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
   return {
     render,
     selectState(id) { selectedState = id; cardCache.clear(); render(); },
+    /** 国家タブのサブタブとして開くとき: その国家に固定し、国家セレクタを隠す */
+    lockToState(id) { lockedToState = true; selectedState = id; cardCache.clear(); render(); },
+    unlock() { lockedToState = false; },
     get selectedState() { return selectedState; },
     cancelAttackPick() { if (attackPick || musterMode) { attackPick = null; musterMode = false; musterSelection.clear(); render(); } },
+    /** 地図クリックで部隊の配置/移動を待っているか（edit-mode.js から参照） */
+    regimentPending() { return pending != null; },
+    /** edit-mode.js から: クリックされたセルを、待ち受け中の配置/移動に使う */
+    consumeRegimentPlacement(cell) {
+      if (!pending) return false;
+      if (pending.type === "place") {
+        const id = simActions.createRegiment(pending.stateId, cell, {});
+        if (id != null) { pending = null; store.update((s) => { s.hint = null; }); render(); }
+      } else if (pending.type === "move") {
+        simActions.moveRegiment(pending.stateId, pending.regId, cell);
+        pending = null; store.update((s) => { s.hint = null; }); render();
+      }
+      return true;
+    },
+    cancelPending() { if (pending) { pending = null; store.update((s) => { s.hint = null; }); render(); } },
   };
 }

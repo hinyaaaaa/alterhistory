@@ -1,4 +1,5 @@
 // 編集ツールバー：ツールボタン・対象セレクト・ブラシ半径のUIと、editMode への橋渡し。
+// ボタン自体は右側の「地図編集パネル」(#edit-panel)の中にある（edit-panel.js がパネルの開閉を担当）。
 import { TOOLS } from "./edit-mode.js";
 import { PAINT_KINDS } from "../core/edit/paint.js";
 import { byId } from "./dom.js";
@@ -7,7 +8,7 @@ const TARGET_LIST = { state: "states", culture: "cultures", religion: "religions
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
 
 export function initEditToolbar({ store, editMode }) {
-  const buttons = [...document.querySelectorAll("#edit-toolbar [data-tool]")];
+  const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
   const targetGroup = byId("tool-target-group");
   const targetSel = byId("tool-target");
   const radiusGroup = byId("tool-radius-group");
@@ -70,5 +71,9 @@ export function initEditToolbar({ store, editMode }) {
     if (change.type === "replace") { fillTargets(editMode.tool); sync(); }
   });
   sync();
-  return { fillTargets, sync };
+  return {
+    fillTargets, sync,
+    /** 外部（属州タブの「塗り直す」ボタン等）からツールと対象をまとめて合わせる */
+    setTargetValue(id) { targetSel.value = String(id); editMode.setTarget(id); },
+  };
 }

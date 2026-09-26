@@ -7,6 +7,8 @@ export function viewToRenderOptions(view) {
     rivers: view.rivers,
     routes: view.routes ? { roads: true, trails: true, searoutes: true } : false,
     burgs: view.burgs,
-    labels: view.labels ? { states: true, burgs: true } : false,
+    labels: view.labels
+      ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : true }
+      : false,
   };
 }

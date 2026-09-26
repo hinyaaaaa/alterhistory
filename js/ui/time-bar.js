@@ -19,7 +19,8 @@ export function initTimeBar({ store, timeActions }) {
     stepBtn.disabled = !hasMap;
     speedSel.disabled = !hasMap;
     const running = !!state.timeRunning;
-    toggleBtn.textContent = running ? "⏸ 停止" : "▶ 開始";
+    toggleBtn.textContent = running ? "⏸" : "▶";
+    toggleBtn.title = running ? "停止 (Space)" : "開始 (Space)";
     toggleBtn.classList.toggle("running", running);
     dateEl.textContent = hasMap ? formatWorldTime(state.map.worldTime) : "—";
   }

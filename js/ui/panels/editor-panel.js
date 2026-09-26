@@ -1,5 +1,6 @@
 // エディタパネル：選ばれた対象（セル・都市・マーカー・国家など）の情報と編集フォームを表示する。
-// サイドバーの凡例の下に差し込む1枚のパネル。DOMを直接組み立てる（フレームワーク不使用）。
+// 左サイドバーに差し込む1枚のパネル。DOMを直接組み立てる（フレームワーク不使用）。
+// 国家（kind === "state"）はサブタブ化して、基本情報・外交・軍事・属州を1つのタブ内に集約する。
 
 import { describeCell } from "../../core/query.js";
 import { htmlToEditable, editableToHtml } from "../../core/edit/notes.js";
@@ -10,18 +11,33 @@ import { confirmDialog, promptDialog } from "../dialogs.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
+const STATE_SUBTABS = [
+  { key: "info", label: "基本情報", icon: "⛭" },
+  { key: "diplomacy", label: "外交", icon: "⛨" },
+  { key: "military", label: "軍事", icon: "⚔" },
+  { key: "provinces", label: "属州", icon: "▦" },
+];
 
-export function initEditorPanel({ store, editActions }) {
+export function initEditorPanel({ store, editActions, editMode, panels: initialPanels }) {
   const root = byId("editor-panel");
+  const sidebar = byId("sidebar");
   let current = null; // { kind: "cell"|"burg"|"marker"|"state"|..., id }
+  let stateSubtab = "info"; // 国家タブが開いているときの、選ばれているサブタブ
+  // panels（wars/alliances/military）は循環importを避けるため main.js から後付けで渡す
+  let panels = initialPanels ?? null;
 
-  function open(kind, id) { current = { kind, id }; render(); }
-  function close() { current = null; render(); }
+  function open(kind, id) { current = { kind, id }; if (kind === "state") stateSubtab = "info"; render(); }
+  function close() {
+    current = null;
+    panels?.military?.unlock?.();
+    render();
+  }
 
   function render() {
     root.replaceChildren();
-    if (!current) { root.hidden = true; return; }
+    if (!current) { root.hidden = true; sidebar.classList.remove("has-content"); return; }
     root.hidden = false;
+    sidebar.classList.add("has-content");
     const map = store.getState().map;
     if (!map) { close(); return; }
 
@@ -33,13 +49,129 @@ export function initEditorPanel({ store, editActions }) {
     header.append(title, closeBtn);
     root.append(header);
 
-    const body = el("div", "editor-body");
+    if (current.kind === "cell") { const body = el("div", "editor-body"); root.append(body); renderCell(map, title, body); return; }
+    if (current.kind === "burg") { const body = el("div", "editor-body"); root.append(body); renderBurg(map, title, body); return; }
+    if (current.kind === "marker") { const body = el("div", "editor-body"); root.append(body); renderMarker(map, title, body); return; }
+    if (current.kind === "state") { renderStateTabs(map, title, root); return; }
+    const body = el("div", "editor-body"); root.append(body); renderEntity(map, current.kind, title, body);
+  }
+
+  /** 国家タブ本体：サブタブ切り替え（基本情報／外交／軍事／属州） */
+  function renderStateTabs(map, title, root) {
+    const e = map.pack.states[current.id];
+    if (!isLive(e)) { close(); return; }
+    title.textContent = `🏳 ${e.fullName ?? e.name}`;
+
+    const tabs = el("div", "dialog-tabs");
+    tabs.setAttribute("role", "tablist");
+    for (const t of STATE_SUBTABS) {
+      const b = el("button", `tab-btn${stateSubtab === t.key ? " active" : ""}`);
+      b.type = "button"; b.setAttribute("role", "tab");
+      const icon = el("span", "tab-icon", t.icon);
+      b.append(icon, document.createTextNode(t.label));
+      b.addEventListener("click", () => { stateSubtab = t.key; render(); });
+      tabs.append(b);
+    }
+    root.append(tabs);
+
+    const body = el("div", "editor-body tab-panel");
     root.append(body);
 
-    if (current.kind === "cell") renderCell(map, title, body);
-    else if (current.kind === "burg") renderBurg(map, title, body);
-    else if (current.kind === "marker") renderMarker(map, title, body);
-    else renderEntity(map, current.kind, title, body);
+    if (stateSubtab === "info") renderStateInfo(map, e, body);
+    else if (stateSubtab === "diplomacy") renderStateDiplomacy(map, e, body);
+    else if (stateSubtab === "military") renderStateMilitary(map, e, body);
+    else if (stateSubtab === "provinces") renderStateProvinces(map, e, body);
+  }
+
+  function renderStateInfo(map, e, body) {
+    const form = el("div", "editor-form");
+    const stats = [["セル数", e.cells], ["面積", e.area], ["都市数", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
+    form.append(table(stats));
+    form.append(textField("国家名", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v)));
+    form.append(techLevelSection(e.i));
+    form.append(doctrineSection(e.i));
+    form.append(growthRateSection(e.i));
+    form.append(attributesField("state", e.i));
+    form.append(noteField(map, "state", e.i));
+    body.append(form);
+  }
+
+  function renderStateDiplomacy(map, e, body) {
+    const form = el("div", "editor-form");
+    form.append(diplomacySection(map, e.i));
+    body.append(form);
+
+    // 戦争・同盟は国をまたぐ全体管理なので、外交サブタブの下に続けて表示する
+    if (panels?.wars) {
+      const warsWrap = el("div", "editor-section");
+      warsWrap.append(el("h4", "", "戦争"));
+      const warsMount = byId("tab-wars");
+      warsWrap.append(warsMount);
+      warsMount.hidden = false;
+      body.append(warsWrap);
+      panels.wars.render();
+    }
+    if (panels?.alliances) {
+      const alliancesWrap = el("div", "editor-section");
+      alliancesWrap.append(el("h4", "", "同盟"));
+      const alliancesMount = byId("tab-alliances");
+      alliancesWrap.append(alliancesMount);
+      alliancesMount.hidden = false;
+      body.append(alliancesWrap);
+      panels.alliances.render();
+    }
+  }
+
+  function renderStateMilitary(map, e, body) {
+    if (!panels?.military) { body.append(el("p", "muted", "軍事パネルが利用できません")); return; }
+    panels.military.lockToState(e.i);
+    const mount = byId("tab-regiments");
+    body.append(mount);
+    mount.hidden = false;
+  }
+
+  function renderStateProvinces(map, e, body) {
+    const form = el("div", "editor-form");
+    const provinces = map.pack.provinces.filter((p) => isLive(p) && p.state === e.i);
+    if (!provinces.length) {
+      form.append(el("p", "muted", "この国家にはまだ属州がありません。「属州を塗る」ツールで地図上に属州を作れます。"));
+    } else {
+      const list = el("div", "attr-list");
+      for (const p of provinces) {
+        const row = el("div", "diplomacy-row");
+        row.append(el("span", "diplomacy-name", `${p.fullName ?? p.name}（${p.cells ?? 0}セル）`));
+        const repaint = el("button", "", "この属州を塗り直す");
+        repaint.type = "button";
+        repaint.title = "地図編集パネルの「属州を塗る」ツールに切り替えて、この属州を対象にします";
+        repaint.addEventListener("click", () => {
+          editMode?.setTool?.("paint:province");
+          window.dispatchEvent(new CustomEvent("request-edit-panel-open"));
+          window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
+        });
+        row.append(repaint);
+        list.append(row);
+      }
+      form.append(list);
+    }
+    body.append(form);
+  }
+
+  function growthRateSection(stateId) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", "人口増加率"));
+    const attrs = editActions.getAttributes("state", stateId);
+    const existing = attrs.find(([k]) => k === "人口増加率");
+    const row = el("label", "field");
+    const input = document.createElement("input");
+    input.type = "number"; input.step = "0.1"; input.value = existing ? existing[1] : "1.0";
+    input.addEventListener("change", () => {
+      const next = attrs.filter(([k]) => k !== "人口増加率");
+      next.push(["人口増加率", input.value]);
+      editActions.setAttributes("state", stateId, next);
+    });
+    row.append(el("span", "field-label", "年あたりの倍率（例：1.0＝現状維持）"), input);
+    wrap.append(row);
+    return wrap;
   }
 
   function renderCell(map, title, body) {
@@ -50,6 +182,8 @@ export function initEditorPanel({ store, editActions }) {
       ["宗教", info.religion], ["属州", info.province], ["都市", info.burg]];
     body.append(table(rows.filter(([, v]) => v != null)));
     if (info.burg) { const b = el("button", "link", `都市「${info.burg}」を開く`); b.addEventListener("click", () => open("burg", map.pack.cells.burg[current.id])); body.append(b); }
+    const stateId = map.pack.cells.state[current.id];
+    if (stateId) { const b = el("button", "link", `国家「${info.state}」を開く`); b.addEventListener("click", () => open("state", stateId)); body.append(b); }
   }
 
   function renderMarker(map, title, body) {
@@ -108,20 +242,19 @@ export function initEditorPanel({ store, editActions }) {
     body.append(form);
   }
 
+  /** 文化・宗教・属州（単独）用。国家は renderStateTabs 側でサブタブ表示する */
   function renderEntity(map, kind, title, body) {
-    const list = { state: map.pack.states, culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
+    const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
     const e = list?.[current.id];
     if (!isLive(e)) { close(); return; }
-    const labelOf = { state: "国家", culture: "文化", religion: "宗教", province: "属州" }[kind];
+    const labelOf = { culture: "文化", religion: "宗教", province: "属州" }[kind];
     title.textContent = `${labelOf}「${e.fullName ?? e.name}」`;
     const form = el("div", "editor-form");
     const stats = [["セル数", e.cells], ["面積", e.area], ["都市数", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
     form.append(table(stats));
-    if (kind === "state") form.append(techLevelSection(e.i));
-    if (kind === "state") form.append(doctrineSection(e.i));
+    form.append(textField("名前", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v)));
     form.append(attributesField(kind, e.i));
     form.append(noteField(map, kind, e.i));
-    if (kind === "state") form.append(diplomacySection(map, e.i));
     body.append(form);
   }
 
@@ -242,5 +375,7 @@ export function initEditorPanel({ store, editActions }) {
     openEntity: (kind, id) => open(kind, id),
     close,
     promptBurgName(cb) { promptDialog("新しい都市の名前").then(cb); },
+    /** wars/alliances/military パネルを後から差し込む（main.js の組み立て順の都合） */
+    setPanels(p) { panels = p; },
   };
 }

@@ -426,7 +426,8 @@
       }
     }
     if (burgs) {
-      const list = map.pack.burgs.filter((b) => b && b.i && !b.removed).sort((a, b) => (b.capital ?? 0) - (a.capital ?? 0) || (b.population ?? 0) - (a.population ?? 0));
+      const capitalsOnly = burgs === "capitals";
+      const list = map.pack.burgs.filter((b) => b && b.i && !b.removed && (!capitalsOnly || b.capital)).sort((a, b) => (b.capital ?? 0) - (a.capital ?? 0) || (b.population ?? 0) - (a.population ?? 0));
       for (const b of list) {
         if (!inView(b.x, b.y)) continue;
         const dy = (b.capital ? 6.5 : 5) / k;
@@ -570,7 +571,7 @@
       rivers: view.rivers,
       routes: view.routes ? { roads: true, trails: true, searoutes: true } : false,
       burgs: view.burgs,
-      labels: view.labels ? { states: true, burgs: true } : false
+      labels: view.labels ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : true } : false
     };
   }
 
@@ -1236,24 +1237,6 @@
     religion: { label: "\u5B97\u6559", entities: (m) => m.pack.religions, cells: (m) => m.pack.cells.religion },
     province: { label: "\u5C5E\u5DDE", entities: (m) => m.pack.provinces, cells: (m) => m.pack.cells.province }
   });
-  function listEntities(map, kind) {
-    const def = ENTITY_KINDS[kind];
-    if (!def) return [];
-    const ids = def.cells(map);
-    const counts = /* @__PURE__ */ new Map();
-    for (let i = 0; i < ids.length; i++) {
-      if (map.pack.cells.biome[i] === 0) continue;
-      counts.set(ids[i], (counts.get(ids[i]) ?? 0) + 1);
-    }
-    return def.entities(map).filter((e) => e && e.i && !e.removed && counts.has(e.i)).map((e) => ({
-      id: e.i,
-      name: e.fullName ?? e.name ?? `#${e.i}`,
-      color: e.color ?? "#ccc",
-      cells: counts.get(e.i),
-      center: e.center ?? null,
-      pole: e.pole ?? null
-    })).sort((a, b) => b.cells - a.cells);
-  }
   function entityPosition(map, entity) {
     if (entity.pole) return [entity.pole[0], entity.pole[1]];
     const p = entity.center != null ? map.geometry?.pack.p[entity.center] : null;
@@ -1924,22 +1907,22 @@
       menu.open = false;
       exporters[item.dataset.export]?.();
     });
-    const layersMenu = byId("layers-menu");
-    const closableMenus = [menu, layersMenu];
     document.addEventListener("pointerdown", (e) => {
-      for (const m of closableMenus) if (m.open && !m.contains(e.target)) m.open = false;
+      if (menu.open && !menu.contains(e.target)) menu.open = false;
     });
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
-      for (const m of closableMenus) if (m.open) {
-        m.open = false;
-        m.querySelector("summary").focus();
+      if (menu.open) {
+        menu.open = false;
+        menu.querySelector("summary").focus();
       }
     });
     const selOverlay = byId("sel-overlay");
     const selBase = byId("sel-base");
+    const selBurgLabels = byId("sel-burg-labels");
     selOverlay.addEventListener("change", () => actions.setOverlay(selOverlay.value));
     selBase.addEventListener("change", () => actions.setView({ base: selBase.value }));
+    selBurgLabels.addEventListener("change", () => actions.setView({ burgLabels: selBurgLabels.value }));
     for (const [name, id] of Object.entries(TOGGLE_IDS)) {
       byId(id).addEventListener("change", (e) => actions.setView({ [name]: e.target.checked }));
     }
@@ -1947,6 +1930,7 @@
       const v = state.view;
       if (selOverlay.value !== v.overlay) selOverlay.value = v.overlay;
       if (selBase.value !== v.base) selBase.value = v.base;
+      if (v.burgLabels && selBurgLabels.value !== v.burgLabels) selBurgLabels.value = v.burgLabels;
       const hasMap = !!state.map;
       btnSave.disabled = !hasMap;
       menu.classList.toggle("disabled", !hasMap);
@@ -1958,64 +1942,6 @@
     };
     store.subscribe(sync);
     sync(store.getState());
-  }
-
-  // js/ui/legend.js
-  function initLegend({ store, actions, panels }) {
-    const title = byId("legend-title");
-    const list = byId("legend-list");
-    let lastKey = null;
-    function render(state) {
-      const { map, view } = state;
-      const key = map ? `${map.geometry?.pack.p.length}:${view.overlay}:${state.fileName}` : "none";
-      if (key === lastKey) return;
-      lastKey = key;
-      list.replaceChildren();
-      if (!map || view.overlay === "none") {
-        title.textContent = "\u51E1\u4F8B";
-        list.append(message(map ? "\u8272\u5206\u3051\u3092\u9078\u3076\u3068\u3001\u3053\u3053\u306B\u4E00\u89A7\u304C\u8868\u793A\u3055\u308C\u307E\u3059" : "\u5730\u56F3\u3092\u958B\u304F\u3068\u8868\u793A\u3055\u308C\u307E\u3059"));
-        return;
-      }
-      const items = listEntities(map, view.overlay);
-      title.textContent = `\u51E1\u4F8B\uFF1A${ENTITY_KINDS[view.overlay].label}\uFF08${items.length}\uFF09`;
-      if (items.length === 0) {
-        list.append(message("\u8A72\u5F53\u3059\u308B\u3082\u306E\u304C\u3042\u308A\u307E\u305B\u3093"));
-        return;
-      }
-      const frag = document.createDocumentFragment();
-      for (const it of items) {
-        const li = document.createElement("li");
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.title = `${it.name}\uFF08${it.cells}\u30BB\u30EB\uFF09\u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u79FB\u52D5\u3001\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u7DE8\u96C6`;
-        const chip = document.createElement("span");
-        chip.className = "chip";
-        chip.style.background = it.color;
-        const name = document.createElement("span");
-        name.className = "legend-name";
-        name.textContent = it.name;
-        const count = document.createElement("span");
-        count.className = "legend-count";
-        count.textContent = String(it.cells);
-        btn.append(chip, name, count);
-        btn.addEventListener("click", () => actions.locate(it));
-        btn.addEventListener("contextmenu", (e) => {
-          e.preventDefault();
-          panels?.openEntity(view.overlay, it.id);
-        });
-        li.append(btn);
-        frag.append(li);
-      }
-      list.append(frag);
-    }
-    function message(text) {
-      const li = document.createElement("li");
-      li.className = "legend-empty";
-      li.textContent = text;
-      return li;
-    }
-    store.subscribe(render);
-    render(store.getState());
   }
 
   // js/ui/status-bar.js
@@ -2462,7 +2388,6 @@ ${shown}${more}`;
   };
   function initEditMode({ store, viewport, editActions, panels }) {
     const canvas = byId("map-canvas");
-    let militaryDialog = null;
     let tool = TOOLS.SELECT;
     let target = 0;
     let radius = 40;
@@ -2556,13 +2481,25 @@ ${shown}${more}`;
       const [wx, wy] = toWorld(e);
       if (!inMap(map, wx, wy)) return;
       const cell = editActions.findCell(wx, wy);
-      if (militaryDialog?.pending && militaryDialog.consumeMapClick(cell)) return;
+      if (panels.regimentPending?.() && panels.consumeRegimentPlacement?.(cell)) return;
       if (tool !== TOOLS.SELECT) return;
       const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
       if (!picked) return;
       if (picked.type === "burg") panels.openBurg(picked.id);
       else if (picked.type === "marker") panels.openMarker(picked.id);
       else panels.openCell(picked.id);
+    });
+    canvas.addEventListener("dblclick", (e) => {
+      const map = store.getState().map;
+      if (!map || tool !== TOOLS.SELECT) return;
+      const [wx, wy] = toWorld(e);
+      if (!inMap(map, wx, wy)) return;
+      const cell = editActions.findCell(wx, wy);
+      if (cell < 0) return;
+      const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
+      if (picked && picked.type !== "cell") return;
+      const stateId = map.pack.cells.state[cell];
+      if (stateId) panels.openEntity("state", stateId);
     });
     return {
       setTool,
@@ -2574,9 +2511,6 @@ ${shown}${more}`;
       },
       get target() {
         return target;
-      },
-      setMilitaryDialog(d) {
-        militaryDialog = d;
       }
     };
   }
@@ -2586,7 +2520,7 @@ ${shown}${more}`;
   var OVERLAY_KEYS = { 1: "none", 2: "state", 3: "culture", 4: "religion", 5: "province" };
   var TOGGLE_KEYS = { c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
   var TOOL_KEYS = { 1: TOOLS.PAINT_STATE, 2: TOOLS.PAINT_CULTURE, 3: TOOLS.PAINT_RELIGION, 4: TOOLS.PAINT_PROVINCE, 5: TOOLS.PAINT_BIOME, 6: TOOLS.ADD_BURG, 7: TOOLS.ADD_MARKER };
-  function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, militaryDialog, panels }) {
+  function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, panels }) {
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) {
         if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -2623,12 +2557,8 @@ ${shown}${more}`;
         else timeActions.start();
         return;
       }
-      if (key === "m") {
-        if (hasMap) militaryDialog?.open();
-        return;
-      }
       if (key === "Escape") {
-        militaryDialog?.cancelPending();
+        panels?.military?.cancelPending();
         panels?.military?.cancelAttackPick();
       }
       if (key === "?") {
@@ -3103,6 +3033,22 @@ ${shown}${more}`;
     return makeCommand(`\u5916\u4EA4\u95A2\u4FC2\u306E\u5909\u66F4\uFF08${A.name}\u3068${B.name}\uFF09`, [], parts);
   }
 
+  // js/core/edit/entities.js
+  var LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+  var isLive5 = (e) => !!e && typeof e === "object" && !e.removed;
+  function planRenameEntity(map, kind, id, name) {
+    const listKey = LIST_KEY[kind];
+    if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306E\u540D\u524D\u306F\u5909\u66F4\u3067\u304D\u307E\u305B\u3093");
+    const e = map.pack[listKey]?.[id];
+    if (!isLive5(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) throw new Error("\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
+    const field = "fullName" in e ? "fullName" : "name";
+    if (trimmed === e[field]) return null;
+    const label = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
+    return makeCommand(`${label}\u306E\u540D\u524D\u3092\u5909\u66F4`, ["places"], [setProps(e, { [field]: trimmed })]);
+  }
+
   // js/core/sim/economy.js
   var TECH_MIN = 1;
   var TECH_MAX = 10;
@@ -3137,15 +3083,15 @@ ${shown}${more}`;
   }
 
   // js/core/edit/economy.js
-  var isLive5 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive6 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getTechLevel(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive5(s)) return null;
+    if (!isLive6(s)) return null;
     return typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
   }
   function planSetTechLevel(map, stateId, value) {
     const s = map.pack.states[stateId];
-    if (!isLive5(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive6(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const after = clampTech(value);
     const before = typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
     if (before === after) return null;
@@ -3225,15 +3171,15 @@ ${shown}${more}`;
   }
 
   // js/core/edit/military-doctrine.js
-  var isLive6 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getDoctrine(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive6(s)) return null;
+    if (!isLive7(s)) return null;
     return DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
   }
   function planSetDoctrine(map, stateId, doctrineKey) {
     const s = map.pack.states[stateId];
-    if (!isLive6(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive7(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (!DOCTRINE_BY_KEY[doctrineKey]) throw new Error("\u4E0D\u660E\u306A\u30C9\u30AF\u30C8\u30EA\u30F3\u3067\u3059");
     const before = DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
     if (before === doctrineKey) return null;
@@ -3399,6 +3345,10 @@ ${shown}${more}`;
       setDiplomacy(a, b, relation) {
         withMap((map) => safeRun("\u5916\u4EA4\u95A2\u4FC2\u306E\u5909\u66F4", () => commitOrThrow(planSetDiplomacy(map, a, b, relation))));
       },
+      /** 国家・文化・宗教・属州の名前を変える（都市は renameBurg を使う） */
+      renameEntity(kind, id, name) {
+        withMap((map) => safeRun("\u540D\u524D\u306E\u5909\u66F4", () => commitOrThrow(planRenameEntity(map, kind, id, name))));
+      },
       TECH_MIN,
       TECH_MAX,
       getTechLevel(stateId) {
@@ -3427,9 +3377,9 @@ ${shown}${more}`;
 
   // js/ui/edit-toolbar.js
   var TARGET_LIST = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive7 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive8 = (e) => !!e && typeof e === "object" && !e.removed;
   function initEditToolbar({ store, editMode }) {
-    const buttons = [...document.querySelectorAll("#edit-toolbar [data-tool]")];
+    const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
     const targetGroup = byId("tool-target-group");
     const targetSel = byId("tool-target");
     const radiusGroup = byId("tool-radius-group");
@@ -3468,7 +3418,7 @@ ${shown}${more}`;
       erase.value = "0";
       erase.textContent = `\uFF08${PAINT_KINDS[kind].label}\u306A\u3057\u306B\u3059\u308B\uFF09`;
       targetSel.append(erase);
-      const list = map.pack[TARGET_LIST[kind]].filter(isLive7);
+      const list = map.pack[TARGET_LIST[kind]].filter(isLive8);
       for (const e of list) {
         const o = document.createElement("option");
         o.value = e.i;
@@ -3505,7 +3455,41 @@ ${shown}${more}`;
       }
     });
     sync();
-    return { fillTargets, sync };
+    return {
+      fillTargets,
+      sync,
+      /** 外部（属州タブの「塗り直す」ボタン等）からツールと対象をまとめて合わせる */
+      setTargetValue(id) {
+        targetSel.value = String(id);
+        editMode.setTarget(id);
+      }
+    };
+  }
+
+  // js/ui/edit-panel.js
+  function initEditPanel() {
+    const panel = byId("edit-panel");
+    const openBtn = byId("btn-edit-mode");
+    function isOpen() {
+      return !panel.hidden;
+    }
+    function open() {
+      panel.hidden = false;
+      openBtn.setAttribute("aria-expanded", "true");
+    }
+    function close() {
+      panel.hidden = true;
+      openBtn.setAttribute("aria-expanded", "false");
+    }
+    function toggle() {
+      if (isOpen()) close();
+      else open();
+    }
+    openBtn.addEventListener("click", toggle);
+    byId("edit-panel-close").addEventListener("click", close);
+    return { open, close, toggle, get isOpen() {
+      return isOpen();
+    } };
   }
 
   // js/ui/dialogs.js
@@ -3608,25 +3592,38 @@ ${shown}${more}`;
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive8 = (e) => !!e && typeof e === "object" && !e.removed;
-  function initEditorPanel({ store, editActions }) {
+  var isLive9 = (e) => !!e && typeof e === "object" && !e.removed;
+  var STATE_SUBTABS = [
+    { key: "info", label: "\u57FA\u672C\u60C5\u5831", icon: "\u26ED" },
+    { key: "diplomacy", label: "\u5916\u4EA4", icon: "\u26E8" },
+    { key: "military", label: "\u8ECD\u4E8B", icon: "\u2694" },
+    { key: "provinces", label: "\u5C5E\u5DDE", icon: "\u25A6" }
+  ];
+  function initEditorPanel({ store, editActions, editMode, panels: initialPanels }) {
     const root = byId("editor-panel");
+    const sidebar = byId("sidebar");
     let current = null;
+    let stateSubtab = "info";
+    let panels = initialPanels ?? null;
     function open(kind, id) {
       current = { kind, id };
+      if (kind === "state") stateSubtab = "info";
       render();
     }
     function close() {
       current = null;
+      panels?.military?.unlock?.();
       render();
     }
     function render() {
       root.replaceChildren();
       if (!current) {
         root.hidden = true;
+        sidebar.classList.remove("has-content");
         return;
       }
       root.hidden = false;
+      sidebar.classList.add("has-content");
       const map = store.getState().map;
       if (!map) {
         close();
@@ -3640,12 +3637,149 @@ ${shown}${more}`;
       closeBtn.addEventListener("click", close);
       header.append(title, closeBtn);
       root.append(header);
+      if (current.kind === "cell") {
+        const body2 = el2("div", "editor-body");
+        root.append(body2);
+        renderCell(map, title, body2);
+        return;
+      }
+      if (current.kind === "burg") {
+        const body2 = el2("div", "editor-body");
+        root.append(body2);
+        renderBurg(map, title, body2);
+        return;
+      }
+      if (current.kind === "marker") {
+        const body2 = el2("div", "editor-body");
+        root.append(body2);
+        renderMarker(map, title, body2);
+        return;
+      }
+      if (current.kind === "state") {
+        renderStateTabs(map, title, root);
+        return;
+      }
       const body = el2("div", "editor-body");
       root.append(body);
-      if (current.kind === "cell") renderCell(map, title, body);
-      else if (current.kind === "burg") renderBurg(map, title, body);
-      else if (current.kind === "marker") renderMarker(map, title, body);
-      else renderEntity(map, current.kind, title, body);
+      renderEntity(map, current.kind, title, body);
+    }
+    function renderStateTabs(map, title, root2) {
+      const e = map.pack.states[current.id];
+      if (!isLive9(e)) {
+        close();
+        return;
+      }
+      title.textContent = `\u{1F3F3} ${e.fullName ?? e.name}`;
+      const tabs = el2("div", "dialog-tabs");
+      tabs.setAttribute("role", "tablist");
+      for (const t of STATE_SUBTABS) {
+        const b = el2("button", `tab-btn${stateSubtab === t.key ? " active" : ""}`);
+        b.type = "button";
+        b.setAttribute("role", "tab");
+        const icon = el2("span", "tab-icon", t.icon);
+        b.append(icon, document.createTextNode(t.label));
+        b.addEventListener("click", () => {
+          stateSubtab = t.key;
+          render();
+        });
+        tabs.append(b);
+      }
+      root2.append(tabs);
+      const body = el2("div", "editor-body tab-panel");
+      root2.append(body);
+      if (stateSubtab === "info") renderStateInfo(map, e, body);
+      else if (stateSubtab === "diplomacy") renderStateDiplomacy(map, e, body);
+      else if (stateSubtab === "military") renderStateMilitary(map, e, body);
+      else if (stateSubtab === "provinces") renderStateProvinces(map, e, body);
+    }
+    function renderStateInfo(map, e, body) {
+      const form = el2("div", "editor-form");
+      const stats = [["\u30BB\u30EB\u6570", e.cells], ["\u9762\u7A4D", e.area], ["\u90FD\u5E02\u6570", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
+      form.append(table(stats));
+      form.append(textField("\u56FD\u5BB6\u540D", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v)));
+      form.append(techLevelSection(e.i));
+      form.append(doctrineSection(e.i));
+      form.append(growthRateSection(e.i));
+      form.append(attributesField("state", e.i));
+      form.append(noteField(map, "state", e.i));
+      body.append(form);
+    }
+    function renderStateDiplomacy(map, e, body) {
+      const form = el2("div", "editor-form");
+      form.append(diplomacySection(map, e.i));
+      body.append(form);
+      if (panels?.wars) {
+        const warsWrap = el2("div", "editor-section");
+        warsWrap.append(el2("h4", "", "\u6226\u4E89"));
+        const warsMount = byId("tab-wars");
+        warsWrap.append(warsMount);
+        warsMount.hidden = false;
+        body.append(warsWrap);
+        panels.wars.render();
+      }
+      if (panels?.alliances) {
+        const alliancesWrap = el2("div", "editor-section");
+        alliancesWrap.append(el2("h4", "", "\u540C\u76DF"));
+        const alliancesMount = byId("tab-alliances");
+        alliancesWrap.append(alliancesMount);
+        alliancesMount.hidden = false;
+        body.append(alliancesWrap);
+        panels.alliances.render();
+      }
+    }
+    function renderStateMilitary(map, e, body) {
+      if (!panels?.military) {
+        body.append(el2("p", "muted", "\u8ECD\u4E8B\u30D1\u30CD\u30EB\u304C\u5229\u7528\u3067\u304D\u307E\u305B\u3093"));
+        return;
+      }
+      panels.military.lockToState(e.i);
+      const mount = byId("tab-regiments");
+      body.append(mount);
+      mount.hidden = false;
+    }
+    function renderStateProvinces(map, e, body) {
+      const form = el2("div", "editor-form");
+      const provinces = map.pack.provinces.filter((p) => isLive9(p) && p.state === e.i);
+      if (!provinces.length) {
+        form.append(el2("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u300C\u5C5E\u5DDE\u3092\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u5C5E\u5DDE\u3092\u4F5C\u308C\u307E\u3059\u3002"));
+      } else {
+        const list = el2("div", "attr-list");
+        for (const p of provinces) {
+          const row = el2("div", "diplomacy-row");
+          row.append(el2("span", "diplomacy-name", `${p.fullName ?? p.name}\uFF08${p.cells ?? 0}\u30BB\u30EB\uFF09`));
+          const repaint = el2("button", "", "\u3053\u306E\u5C5E\u5DDE\u3092\u5857\u308A\u76F4\u3059");
+          repaint.type = "button";
+          repaint.title = "\u5730\u56F3\u7DE8\u96C6\u30D1\u30CD\u30EB\u306E\u300C\u5C5E\u5DDE\u3092\u5857\u308B\u300D\u30C4\u30FC\u30EB\u306B\u5207\u308A\u66FF\u3048\u3066\u3001\u3053\u306E\u5C5E\u5DDE\u3092\u5BFE\u8C61\u306B\u3057\u307E\u3059";
+          repaint.addEventListener("click", () => {
+            editMode?.setTool?.("paint:province");
+            window.dispatchEvent(new CustomEvent("request-edit-panel-open"));
+            window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
+          });
+          row.append(repaint);
+          list.append(row);
+        }
+        form.append(list);
+      }
+      body.append(form);
+    }
+    function growthRateSection(stateId) {
+      const wrap = el2("div", "editor-section");
+      wrap.append(el2("h4", "", "\u4EBA\u53E3\u5897\u52A0\u7387"));
+      const attrs = editActions.getAttributes("state", stateId);
+      const existing = attrs.find(([k]) => k === "\u4EBA\u53E3\u5897\u52A0\u7387");
+      const row = el2("label", "field");
+      const input = document.createElement("input");
+      input.type = "number";
+      input.step = "0.1";
+      input.value = existing ? existing[1] : "1.0";
+      input.addEventListener("change", () => {
+        const next = attrs.filter(([k]) => k !== "\u4EBA\u53E3\u5897\u52A0\u7387");
+        next.push(["\u4EBA\u53E3\u5897\u52A0\u7387", input.value]);
+        editActions.setAttributes("state", stateId, next);
+      });
+      row.append(el2("span", "field-label", "\u5E74\u3042\u305F\u308A\u306E\u500D\u7387\uFF08\u4F8B\uFF1A1.0\uFF1D\u73FE\u72B6\u7DAD\u6301\uFF09"), input);
+      wrap.append(row);
+      return wrap;
     }
     function renderCell(map, title, body) {
       const info = describeCell(map, current.id);
@@ -3667,6 +3801,12 @@ ${shown}${more}`;
       if (info.burg) {
         const b = el2("button", "link", `\u90FD\u5E02\u300C${info.burg}\u300D\u3092\u958B\u304F`);
         b.addEventListener("click", () => open("burg", map.pack.cells.burg[current.id]));
+        body.append(b);
+      }
+      const stateId = map.pack.cells.state[current.id];
+      if (stateId) {
+        const b = el2("button", "link", `\u56FD\u5BB6\u300C${info.state}\u300D\u3092\u958B\u304F`);
+        b.addEventListener("click", () => open("state", stateId));
         body.append(b);
       }
     }
@@ -3716,14 +3856,14 @@ ${shown}${more}`;
     }
     function renderBurg(map, title, body) {
       const b = map.pack.burgs[current.id];
-      if (!isLive8(b)) {
+      if (!isLive9(b)) {
         close();
         return;
       }
       title.textContent = `${b.capital ? "\u{1F3F0} " : "\u{1F3D8}\uFE0F "}${b.name}`;
       const form = el2("div", "editor-form");
       form.append(table([
-        ["\u56FD\u5BB6", isLive8(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
+        ["\u56FD\u5BB6", isLive9(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
         ["\u6587\u5316", map.pack.cultures[b.culture]?.name ?? ""],
         ["\u4EBA\u53E3(\u6982\u7B97)", (b.population ?? 0).toFixed(2)]
       ]));
@@ -3751,22 +3891,20 @@ ${shown}${more}`;
       body.append(form);
     }
     function renderEntity(map, kind, title, body) {
-      const list = { state: map.pack.states, culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
+      const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
       const e = list?.[current.id];
-      if (!isLive8(e)) {
+      if (!isLive9(e)) {
         close();
         return;
       }
-      const labelOf = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
+      const labelOf = { culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
       title.textContent = `${labelOf}\u300C${e.fullName ?? e.name}\u300D`;
       const form = el2("div", "editor-form");
       const stats = [["\u30BB\u30EB\u6570", e.cells], ["\u9762\u7A4D", e.area], ["\u90FD\u5E02\u6570", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
       form.append(table(stats));
-      if (kind === "state") form.append(techLevelSection(e.i));
-      if (kind === "state") form.append(doctrineSection(e.i));
+      form.append(textField("\u540D\u524D", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v)));
       form.append(attributesField(kind, e.i));
       form.append(noteField(map, kind, e.i));
-      if (kind === "state") form.append(diplomacySection(map, e.i));
       body.append(form);
     }
     function techLevelSection(stateId) {
@@ -3809,7 +3947,7 @@ ${shown}${more}`;
     function diplomacySection(map, stateId) {
       const wrap = el2("div", "editor-section");
       wrap.append(el2("h4", "", "\u5916\u4EA4\u95A2\u4FC2"));
-      const others = map.pack.states.filter((s) => isLive8(s) && s.i !== stateId);
+      const others = map.pack.states.filter((s) => isLive9(s) && s.i !== stateId);
       for (const s of others) {
         const row = el2("div", "diplomacy-row");
         row.append(el2("span", "diplomacy-name", s.name));
@@ -3917,12 +4055,16 @@ ${shown}${more}`;
       close,
       promptBurgName(cb) {
         promptDialog("\u65B0\u3057\u3044\u90FD\u5E02\u306E\u540D\u524D").then(cb);
+      },
+      /** wars/alliances/military パネルを後から差し込む（main.js の組み立て順の都合） */
+      setPanels(p) {
+        panels = p;
       }
     };
   }
 
   // js/core/sim/military.js
-  var isLive9 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function regimentsOf(state) {
     return Array.isArray(state.military) ? state.military : [];
   }
@@ -3932,7 +4074,7 @@ ${shown}${more}`;
   }
   function planCreateRegiment(map, stateId, cell, { name, icon = "\u{1F6E1}\uFE0F" } = {}) {
     const state = map.pack.states[stateId];
-    if (!isLive9(state)) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive10(state)) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u914D\u7F6E\u3067\u304D\u307E\u305B\u3093");
     const { p } = map.geometry.pack;
     const reg = {
@@ -3987,7 +4129,7 @@ ${shown}${more}`;
   }
   function planAnnualConscription(map, stateId) {
     const state = map.pack.states[stateId];
-    if (!isLive9(state)) return null;
+    if (!isLive10(state)) return null;
     ensureEconomy(state);
     const capital = map.pack.burgs[state.capital];
     if (!capital) return null;
@@ -4154,7 +4296,7 @@ ${shown}${more}`;
   }
 
   // js/core/edit/alliances.js
-  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive11 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listAlliances(map) {
     return map.ext?.data?.alliances ?? [];
   }
@@ -4165,7 +4307,7 @@ ${shown}${more}`;
   function planCreateAlliance(map, name, memberIds) {
     const uniq = [...new Set(memberIds)];
     if (uniq.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
-    for (const id of uniq) if (!isLive10(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of uniq) if (!isLive11(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq };
     const before = listAlliances(map);
     const write = (m, list) => {
@@ -4210,7 +4352,7 @@ ${shown}${more}`;
   }
 
   // js/core/edit/wars.js
-  var isLive11 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive12 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listWars(map) {
     return map.ext?.data?.wars ?? [];
   }
@@ -4232,7 +4374,7 @@ ${shown}${more}`;
   function planDeclareWar(map, { name, attackers, defenders, date }) {
     const a = [...new Set(attackers)], d = [...new Set(defenders)];
     if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
-    for (const id of [...a, ...d]) if (!isLive11(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of [...a, ...d]) if (!isLive12(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
     const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
     const war = {
@@ -4321,7 +4463,7 @@ ${shown}${more}`;
     const war = list.find((w) => w.id === warId);
     if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (war.endedAt) throw new Error("\u65E2\u306B\u7D42\u7D50\u3057\u3066\u3044\u307E\u3059");
-    if (!isLive11(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive12(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     const parts = [];
     const c = map.pack.cells;
     const moveCells = (cells) => {
@@ -4498,11 +4640,11 @@ ${shown}${more}`;
   }
 
   // js/core/sim/world.js
-  var isLive12 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive13 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planAnnualUpdate(map) {
     const parts = [];
     for (const state of map.pack.states) {
-      if (!isLive12(state)) continue;
+      if (!isLive13(state)) continue;
       ensureEconomy(state);
       const { rural, urban, industry } = computeAnnualUpdate(state);
       if (rural !== state.rural || urban !== state.urban || industry !== state.industry) {
@@ -4595,94 +4737,13 @@ ${shown}${more}`;
       stepBtn.disabled = !hasMap;
       speedSel.disabled = !hasMap;
       const running = !!state.timeRunning;
-      toggleBtn.textContent = running ? "\u23F8 \u505C\u6B62" : "\u25B6 \u958B\u59CB";
+      toggleBtn.textContent = running ? "\u23F8" : "\u25B6";
+      toggleBtn.title = running ? "\u505C\u6B62 (Space)" : "\u958B\u59CB (Space)";
       toggleBtn.classList.toggle("running", running);
       dateEl.textContent = hasMap ? formatWorldTime(state.map.worldTime) : "\u2014";
     }
     store.subscribe(sync);
     sync();
-  }
-
-  // js/ui/military-dialog.js
-  function initMilitaryDialog({ store, editActions, panels }) {
-    const dialog = byId("military-dialog");
-    const openBtn = byId("btn-open-military");
-    const closeBtn = byId("military-close");
-    const tabs = [...document.querySelectorAll(".tab-btn")];
-    const panelsEl = { regiments: byId("tab-regiments"), wars: byId("tab-wars"), alliances: byId("tab-alliances") };
-    let pending = null;
-    function open(tabName) {
-      if (!store.getState().map) return;
-      dialog.showModal();
-      if (tabName) setTab(tabName);
-      panels.military.render();
-      panels.wars.render();
-      panels.alliances.render();
-    }
-    function close() {
-      dialog.close();
-    }
-    openBtn.addEventListener("click", () => open());
-    closeBtn.addEventListener("click", close);
-    dialog.addEventListener("cancel", () => {
-      pending = null;
-    });
-    function setTab(name) {
-      for (const t of tabs) t.classList.toggle("active", t.dataset.tab === name);
-      for (const [k, el6] of Object.entries(panelsEl)) el6.hidden = k !== name;
-    }
-    for (const t of tabs) t.addEventListener("click", () => setTab(t.dataset.tab));
-    byId("tab-regiments").addEventListener("request-place-regiment", (e) => {
-      pending = { type: "place", stateId: e.detail.stateId };
-      close();
-      store.update((s) => {
-        s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u90E8\u968A\u3092\u914D\u7F6E\u3059\u308B\u5834\u6240\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044";
-      });
-    });
-    byId("tab-regiments").addEventListener("request-move-regiment", (e) => {
-      pending = { type: "move", stateId: e.detail.stateId, regId: e.detail.regId };
-      close();
-      store.update((s) => {
-        s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044";
-      });
-    });
-    return {
-      get pending() {
-        return pending;
-      },
-      /** map-view から呼ばれる: クリックされたセルを、待ち受け中の配置/移動に使う */
-      consumeMapClick(cell) {
-        if (!pending) return false;
-        if (pending.type === "place") {
-          const simActions = panels.simActions;
-          const id = simActions.createRegiment(pending.stateId, cell, {});
-          if (id != null) {
-            pending = null;
-            store.update((s) => {
-              s.hint = null;
-            });
-            open("regiments");
-          }
-        } else if (pending.type === "move") {
-          panels.simActions.moveRegiment(pending.stateId, pending.regId, cell);
-          pending = null;
-          store.update((s) => {
-            s.hint = null;
-          });
-          open("regiments");
-        }
-        return true;
-      },
-      cancelPending() {
-        pending = null;
-        store.update((s) => {
-          s.hint = null;
-        });
-      },
-      open,
-      close,
-      setTab
-    };
   }
 
   // js/ui/panels/military-panel.js
@@ -4692,14 +4753,16 @@ ${shown}${more}`;
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive13 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initMilitaryPanel({ store, simActions, editActions }) {
     const root = byId("tab-regiments");
     let selectedState = null;
+    let lockedToState = false;
     let attackPick = null;
     let musterMode = false;
     const musterSelection = /* @__PURE__ */ new Set();
     const cardCache = /* @__PURE__ */ new Map();
+    let pending = null;
     function doctrineOf(stateId) {
       return editActions.getDoctrine(stateId);
     }
@@ -4723,31 +4786,45 @@ ${shown}${more}`;
         cardCache.clear();
         return;
       }
-      const states = map.pack.states.filter(isLive13);
+      const states = map.pack.states.filter(isLive14);
       if (selectedState == null || !states.some((s) => s.i === selectedState)) selectedState = states[0]?.i ?? null;
       root.replaceChildren();
       const picker = el3("div", "state-picker");
-      picker.append(el3("span", "field-label", "\u56FD\u5BB6"));
-      const sel = document.createElement("select");
-      for (const s of states) {
-        const o = document.createElement("option");
-        o.value = s.i;
-        o.textContent = s.fullName ?? s.name;
-        if (s.i === selectedState) o.selected = true;
-        sel.append(o);
+      if (!lockedToState) {
+        picker.append(el3("span", "field-label", "\u56FD\u5BB6"));
+        const sel = document.createElement("select");
+        for (const s of states) {
+          const o = document.createElement("option");
+          o.value = s.i;
+          o.textContent = s.fullName ?? s.name;
+          if (s.i === selectedState) o.selected = true;
+          sel.append(o);
+        }
+        sel.addEventListener("change", () => {
+          selectedState = Number(sel.value);
+          cardCache.clear();
+          musterSelection.clear();
+          musterMode = false;
+          render();
+        });
+        picker.append(sel);
       }
-      sel.addEventListener("change", () => {
-        selectedState = Number(sel.value);
-        cardCache.clear();
-        musterSelection.clear();
-        musterMode = false;
-        render();
-      });
-      picker.append(sel);
-      const addBtn = el3("button", "", "\uFF0B \u65B0\u3057\u3044\u90E8\u968A\u3092\u7DE8\u6210\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\uFF09");
+      const addBtn = el3("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\u2026\uFF08\u30AF\u30EA\u30C3\u30AF\u3067\u53D6\u6D88\uFF09" : "\uFF0B \u65B0\u3057\u3044\u90E8\u968A\u3092\u7DE8\u6210\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\uFF09");
       addBtn.type = "button";
       addBtn.addEventListener("click", () => {
-        root.dispatchEvent(new CustomEvent("request-place-regiment", { detail: { stateId: selectedState }, bubbles: true }));
+        if (pending?.type === "place") {
+          pending = null;
+          store.update((s) => {
+            s.hint = null;
+          });
+          render();
+          return;
+        }
+        pending = { type: "place", stateId: selectedState };
+        store.update((s) => {
+          s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u90E8\u968A\u3092\u914D\u7F6E\u3059\u308B\u5834\u6240\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044";
+        });
+        render();
       });
       picker.append(addBtn);
       const musterBtn = el3("button", musterMode ? "primary" : "", musterMode ? "\u52D5\u54E1\u30E2\u30FC\u30C9\u3092\u7D42\u4E86" : "\u90E8\u968A\u3092\u52D5\u54E1\u3057\u3066\u653B\u6483\u2026");
@@ -4864,9 +4941,17 @@ ${shown}${more}`;
       power.dataset.field = "power";
       card.append(power);
       const actions = el3("div", "regiment-actions");
-      const moveBtn = el3("button", "", "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09");
+      const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
+      const moveBtn = el3("button", "", isMovePicking ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3078\u2026" : "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09");
+      moveBtn.dataset.field = "move-btn";
       moveBtn.type = "button";
-      moveBtn.addEventListener("click", () => root.dispatchEvent(new CustomEvent("request-move-regiment", { detail: { stateId, regId: reg.i }, bubbles: true })));
+      moveBtn.addEventListener("click", () => {
+        pending = { type: "move", stateId, regId: reg.i };
+        store.update((s) => {
+          s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044";
+        });
+        render();
+      });
       const isPicking = attackPick && attackPick.stateId === stateId && attackPick.regIds.length === 1 && attackPick.regIds[0] === reg.i;
       const attackBtn = el3("button", "", isPicking ? "\u5BFE\u8C61\u3092\u9078\u629E\u4E2D\u2026" : "\u5358\u72EC\u3067\u653B\u6483\u3059\u308B");
       attackBtn.dataset.field = "attack-btn";
@@ -4922,6 +5007,9 @@ ${shown}${more}`;
       const isPicking = attackPick && attackPick.stateId === stateId && attackPick.regIds.length === 1 && attackPick.regIds[0] === reg.i;
       const attackBtn = card.querySelector('[data-field="attack-btn"]');
       if (attackBtn) attackBtn.textContent = isPicking ? "\u5BFE\u8C61\u3092\u9078\u629E\u4E2D\u2026" : "\u5358\u72EC\u3067\u653B\u6483\u3059\u308B";
+      const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
+      const moveBtn = card.querySelector('[data-field="move-btn"]');
+      if (moveBtn) moveBtn.textContent = isMovePicking ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3078\u2026" : "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09";
       const targetSlot = card.querySelector('[data-field="attack-target-slot"]');
       if (targetSlot) fillAttackTarget(map, stateId, reg, targetSlot);
     }
@@ -4943,6 +5031,16 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
         cardCache.clear();
         render();
       },
+      /** 国家タブのサブタブとして開くとき: その国家に固定し、国家セレクタを隠す */
+      lockToState(id) {
+        lockedToState = true;
+        selectedState = id;
+        cardCache.clear();
+        render();
+      },
+      unlock() {
+        lockedToState = false;
+      },
       get selectedState() {
         return selectedState;
       },
@@ -4951,6 +5049,41 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
           attackPick = null;
           musterMode = false;
           musterSelection.clear();
+          render();
+        }
+      },
+      /** 地図クリックで部隊の配置/移動を待っているか（edit-mode.js から参照） */
+      regimentPending() {
+        return pending != null;
+      },
+      /** edit-mode.js から: クリックされたセルを、待ち受け中の配置/移動に使う */
+      consumeRegimentPlacement(cell) {
+        if (!pending) return false;
+        if (pending.type === "place") {
+          const id = simActions.createRegiment(pending.stateId, cell, {});
+          if (id != null) {
+            pending = null;
+            store.update((s) => {
+              s.hint = null;
+            });
+            render();
+          }
+        } else if (pending.type === "move") {
+          simActions.moveRegiment(pending.stateId, pending.regId, cell);
+          pending = null;
+          store.update((s) => {
+            s.hint = null;
+          });
+          render();
+        }
+        return true;
+      },
+      cancelPending() {
+        if (pending) {
+          pending = null;
+          store.update((s) => {
+            s.hint = null;
+          });
           render();
         }
       }
@@ -4964,7 +5097,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initWarsPanel({ store, simActions }) {
     const root = byId("tab-wars");
     function render() {
@@ -4974,7 +5107,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
         root.append(el4("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive14);
+      const states = map.pack.states.filter(isLive15);
       root.append(declareForm(map, states));
       const wars = simActions.listWars().slice().reverse();
       if (!wars.length) {
@@ -5124,7 +5257,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive16 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initAlliancesPanel({ store, simActions }) {
     const root = byId("tab-alliances");
     function render() {
@@ -5134,7 +5267,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
         root.append(el5("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive15);
+      const states = map.pack.states.filter(isLive16);
       root.append(createForm(map, states));
       const list = simActions.listAlliances();
       if (!list.length) {
@@ -5239,7 +5372,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       notice: null,
       busy: null,
       hover: null,
-      view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true },
+      view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "all" },
       editTool: "select",
       brushRadius: 40,
       timeRunning: false,
@@ -5267,29 +5400,50 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     const editActions = createEditActions({ store, renderer });
     const simActions = createSimActions({ store, renderer });
     const timeActions = createTimeActions({ store, renderer });
-    const editorPanel = initEditorPanel({ store, editActions });
     const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
     const warsPanel = initWarsPanel({ store, simActions });
     const alliancesPanel = initAlliancesPanel({ store, simActions });
-    const panels = { ...editorPanel, simActions, military: militaryPanel, wars: warsPanel, alliances: alliancesPanel };
+    let editModeRef = null;
+    const editorPanel = initEditorPanel({
+      store,
+      editActions,
+      panels: null,
+      editMode: { setTool: (t) => editModeRef?.setTool(t) }
+    });
+    const panels = {
+      ...editorPanel,
+      simActions,
+      military: militaryPanel,
+      wars: warsPanel,
+      alliances: alliancesPanel,
+      // edit-mode.js が地図クリックを「部隊の配置/移動」として消費するために使う
+      regimentPending: () => militaryPanel.regimentPending(),
+      consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell)
+    };
+    editorPanel.setPanels?.(panels);
     const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
     initBanner(deps);
     initToolbar(deps);
-    initLegend(deps);
     initStatusBar(deps);
     initMapView(deps);
     const editMode = initEditMode(deps);
+    editModeRef = editMode;
     const editToolbar = initEditToolbar({ store, editMode });
-    const militaryDialog = initMilitaryDialog(deps);
-    editMode.setMilitaryDialog(militaryDialog);
+    const editPanel = initEditPanel();
+    window.addEventListener("request-edit-panel-open", () => editPanel.open());
+    window.addEventListener("request-edit-panel-sync", (e) => {
+      editToolbar.fillTargets(e.detail?.tool ?? editMode.tool);
+      editToolbar.sync();
+      if (e.detail?.target != null) editToolbar.setTargetValue(e.detail.target);
+    });
     initTimeBar({ store, timeActions });
     store.subscribe((_s, change) => {
       if (change.type === "replace") timeActions.stop();
     });
-    initShortcuts({ ...deps, editMode, editToolbar, timeActions, militaryDialog });
+    initShortcuts({ ...deps, editMode, editToolbar, timeActions });
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
     renderer.resize();
-    globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions, militaryDialog };
+    globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions };
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();
