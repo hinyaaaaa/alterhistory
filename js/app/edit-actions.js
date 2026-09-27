@@ -7,7 +7,8 @@ import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapit
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
 import { planSetAttributes, getAttributes } from "../core/edit/attributes.js";
 import { planSetDiplomacy, getRelation } from "../core/edit/diplomacy.js";
-import { planRenameEntity } from "../core/edit/entities.js";
+import { planRenameEntity, planAddEntity, planAddProvince } from "../core/edit/entities.js";
+import { planDeclareIndependence, planMergeStates } from "../core/edit/sovereignty.js";
 import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
 import { planSetDoctrine, getDoctrine, DOCTRINES, DEFAULT_DOCTRINE } from "../core/edit/military-doctrine.js";
 import { createRandom } from "../core/random.js";
@@ -68,6 +69,23 @@ export function createEditActions({ store, renderer }) {
 
     /** 国家・文化・宗教・属州の名前を変える（都市は renameBurg を使う） */
     renameEntity(kind, id, name) { withMap((map) => safeRun("名前の変更", () => commitOrThrow(planRenameEntity(map, kind, id, name)))); },
+
+    /** 国家・文化・宗教を新規作成する。まだどのセルも持たない状態で作られるので、
+     *  続けて「塗る」ツールでセルに塗って地図上に反映する必要がある */
+    addEntity(kind, name) {
+      return withMap((map) => { let out; safeRun(`${{ state: "国家", culture: "文化", religion: "宗教" }[kind] ?? "実体"}の新規作成`, () => { const r = planAddEntity(map, { kind, name, rnd }); commitOrThrow(r.command); out = r.id; }); return out; });
+    },
+    /** 属州を新規作成する（所属する国家を指定する） */
+    addProvince(stateId, name) {
+      return withMap((map) => { let out; safeRun("属州の新規作成", () => { const r = planAddProvince(map, { state: stateId, name, rnd }); commitOrThrow(r.command); out = r.id; }); return out; });
+    },
+
+    /** 属州を独立させ、新しい国家として切り出す */
+    declareIndependence(provinceId, name) {
+      return withMap((map) => { let out; safeRun("属州の独立", () => { const r = planDeclareIndependence(map, { provinceId, name, rnd }); commitOrThrow(r.command); out = r.id; }); return out; });
+    },
+    /** 国家を統合する（from を to に併合し、from は解散する） */
+    mergeStates(from, to) { withMap((map) => safeRun("国家の統合", () => commitOrThrow(planMergeStates(map, { from, to })))); },
 
     TECH_MIN, TECH_MAX,
     getTechLevel(stateId) { return withMap((map) => getTechLevel(map, stateId)) ?? null; },

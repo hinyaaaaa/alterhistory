@@ -5,10 +5,14 @@ import { byId } from "./dom.js";
 export function initLegend({ store, actions, panels }) {
   const title = byId("legend-title");
   const list = byId("legend-list");
+  const wrap = byId("legend");
   let lastKey = null;
 
   function render(state) {
     const { map, view } = state;
+    // サイドバーは editor-panel（選択中の対象）が開いている間だけでなく、
+    // 凡例を表示できる状態（地図が読み込まれている）でも幅を確保する（CSS側で判定）。
+    wrap.classList.toggle("has-map", !!map);
     const key = map ? `${map.geometry?.pack.p.length}:${view.overlay}:${state.fileName}` : "none";
     if (key === lastKey) return; // 表示に関係ない更新（ホバー等）では作り直さない
     lastKey = key;

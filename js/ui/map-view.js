@@ -57,6 +57,9 @@ export function initMapView({ store, viewport, actions }) {
 
   canvas.addEventListener("dblclick", (e) => {
     if (!store.getState().map) return;
+    // 選択ツール中のダブルクリックは edit-mode.js が国家タブを開く操作として使うため、
+    // ここでのズームは行わない（同じダブルクリックで2つの操作が同時に起きるのを防ぐ）。
+    if (store.getState().editTool === "select") return;
     const [sx, sy] = localPos(e);
     actions.zoomAt(sx, sy, 2);
   });

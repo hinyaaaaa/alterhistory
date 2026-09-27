@@ -89,7 +89,10 @@ export function initEditMode({ store, viewport, editActions, panels }) {
   canvas.addEventListener("pointerup", endStroke);
   canvas.addEventListener("pointercancel", endStroke);
 
-  // 選択ツール: クリックで対象を選び、パネルを開く
+  // 選択ツール: クリックで対象を選び、パネルを開く。
+  // 都市・マーカーは実体があるのでクリックで即座に開く。
+  // 何も無い地形セルの単純クリックではパネルを表示しない（要望により廃止）。
+  // 国家に属すセルの情報を見たい場合はダブルクリックで国家タブを開く（下記参照）。
   canvas.addEventListener("click", (e) => {
     const map = store.getState().map;
     if (!map) return;
@@ -100,14 +103,12 @@ export function initEditMode({ store, viewport, editActions, panels }) {
     if (panels.regimentPending?.() && panels.consumeRegimentPlacement?.(cell)) return;
     if (tool !== TOOLS.SELECT) return;
     const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
-    if (!picked) return;
+    if (!picked || picked.type === "cell") return; // 地形セルの単純クリックは無視
     if (picked.type === "burg") panels.openBurg(picked.id);
     else if (picked.type === "marker") panels.openMarker(picked.id);
-    else panels.openCell(picked.id);
   });
 
   // 選択ツール中、国家に属すセルをダブルクリックすると国家タブを開く
-  // （シングルクリックはセル情報。ダブルクリックだけ国家タブへ直行する、という使い分け）
   canvas.addEventListener("dblclick", (e) => {
     const map = store.getState().map;
     if (!map || tool !== TOOLS.SELECT) return;

@@ -1,6 +1,8 @@
 // 問い合わせ：セルや実体（国家・文化…）について、表示用の情報を取り出す。
 // 純粋関数のみ。UI からも、将来の編集ツールからも使う。
 
+import { forcePower, forceHeadcount } from "./sim/units.js";
+
 const nameOf = (list, id) => {
   const e = list?.[id];
   if (!e || e.removed) return null;
@@ -59,4 +61,52 @@ export function entityPosition(map, entity) {
   if (entity.pole) return [entity.pole[0], entity.pole[1]];
   const p = entity.center != null ? map.geometry?.pack.p[entity.center] : null;
   return p ? [p[0], p[1]] : null;
+}
+
+const isLiveState = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+
+/** 国家の総人口（農村+都市。単位は千人、実データの rural/urban と同じ） */
+export function statePopulation(state) {
+  return (state.rural ?? 0) + (state.urban ?? 0);
+}
+
+/** 国家の総軍事力（全部隊の戦力を合算。ドクトリン補正込み） */
+export function stateMilitaryPower(state) {
+  const list = Array.isArray(state.military) ? state.military : [];
+  const doctrine = state.doctrine ?? "balanced";
+  return list.reduce((sum, r) => sum + forcePower(r.u, doctrine), 0);
+}
+
+/** 国家の総兵員数（部隊の基数の単純合計。核・機甲などは1基=1として数える目安値） */
+export function stateHeadcount(state) {
+  const list = Array.isArray(state.military) ? state.military : [];
+  return list.reduce((sum, r) => sum + forceHeadcount(r.u), 0);
+}
+
+/**
+ * 全国家を指標で順位付けする。実在しない・削除済みの国家は除く。
+ * @param {"population"|"military"|"cells"|"area"} metric
+ * @returns {{id:number, name:string, value:number, rank:number}[]} value 降順
+ */
+export function rankStates(map, metric) {
+  const states = map.pack.states.filter(isLiveState);
+  const valueOf = {
+    population: statePopulation,
+    military: stateMilitaryPower,
+    cells: (s) => s.cells ?? 0,
+    area: (s) => s.area ?? 0,
+  }[metric];
+  if (!valueOf) return [];
+  return states
+    .map((s) => ({ id: s.i, name: s.fullName ?? s.name ?? `#${s.i}`, value: valueOf(s) }))
+    .sort((a, b) => b.value - a.value)
+    .map((r, i) => ({ ...r, rank: i + 1 }));
+}
+
+/** ある国家の、指定指標での順位（1始まり）と全国家数を返す */
+export function stateRank(map, stateId, metric) {
+  const ranked = rankStates(map, metric);
+  const total = ranked.length;
+  const entry = ranked.find((r) => r.id === stateId);
+  return entry ? { rank: entry.rank, total, value: entry.value } : null;
 }

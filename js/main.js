@@ -10,6 +10,7 @@ import { createActions } from "./app/actions.js";
 import { byId } from "./ui/dom.js";
 import { downloadBlob, createBrowserCanvas } from "./ui/download.js";
 import { initMapView } from "./ui/map-view.js";
+import { initLegend } from "./ui/legend.js";
 import { initToolbar } from "./ui/toolbar.js";
 import { initStatusBar } from "./ui/status-bar.js";
 import { initBanner } from "./ui/banner.js";
@@ -80,9 +81,10 @@ function start() {
   initToolbar(deps);
   initStatusBar(deps);
   initMapView(deps);
+  initLegend(deps);
   const editMode = initEditMode(deps);
   editModeRef = editMode;
-  const editToolbar = initEditToolbar({ store, editMode });
+  const editToolbar = initEditToolbar({ store, editMode, editActions });
   const editPanel = initEditPanel();
   // 属州タブの「この属州を塗り直す」ボタンから、地図編集パネルを開いてツール欄を同期する
   window.addEventListener("request-edit-panel-open", () => editPanel.open());

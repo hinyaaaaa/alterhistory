@@ -2,7 +2,7 @@
 // 左サイドバーに差し込む1枚のパネル。DOMを直接組み立てる（フレームワーク不使用）。
 // 国家（kind === "state"）はサブタブ化して、基本情報・外交・軍事・属州を1つのタブ内に集約する。
 
-import { describeCell } from "../../core/query.js";
+import { describeCell, statePopulation, stateMilitaryPower, stateHeadcount, stateRank } from "../../core/query.js";
 import { htmlToEditable, editableToHtml } from "../../core/edit/notes.js";
 import { relationLabel, RELATIONS } from "../../core/edit/diplomacy.js";
 import { DEFAULT_MARKER_TYPES, defaultMarkerName } from "../../core/edit/markers.js";
@@ -35,9 +35,8 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
 
   function render() {
     root.replaceChildren();
-    if (!current) { root.hidden = true; sidebar.classList.remove("has-content"); return; }
+    if (!current) { root.hidden = true; return; }
     root.hidden = false;
-    sidebar.classList.add("has-content");
     const map = store.getState().map;
     if (!map) { close(); return; }
 
@@ -62,6 +61,11 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     if (!isLive(e)) { close(); return; }
     title.textContent = `🏳 ${e.fullName ?? e.name}`;
 
+    // 選択中でないサブタブの持ち出しパネル（軍事・戦争・同盟）は、
+    // DOMツリーから外れて孤立するだけで実害は無いが、hidden を戻して一貫させる
+    if (stateSubtab !== "military") { const m = byId("tab-regiments"); m.hidden = true; panels?.military?.unlock?.(); }
+    if (stateSubtab !== "diplomacy") { byId("tab-wars").hidden = true; byId("tab-alliances").hidden = true; }
+
     const tabs = el("div", "dialog-tabs");
     tabs.setAttribute("role", "tablist");
     for (const t of STATE_SUBTABS) {
@@ -85,8 +89,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
 
   function renderStateInfo(map, e, body) {
     const form = el("div", "editor-form");
-    const stats = [["セル数", e.cells], ["面積", e.area], ["都市数", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
-    form.append(table(stats));
+    form.append(basicStatsSection(map, e));
     form.append(textField("国家名", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v)));
     form.append(techLevelSection(e.i));
     form.append(doctrineSection(e.i));
@@ -94,6 +97,29 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(attributesField("state", e.i));
     form.append(noteField(map, "state", e.i));
     body.append(form);
+  }
+
+  /** 人口・軍事力・領土・都市数と各種ランキングをまとめて表示する */
+  function basicStatsSection(map, e) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", "国力"));
+    const pop = statePopulation(e);
+    const power = stateMilitaryPower(e);
+    const headcount = stateHeadcount(e);
+    const popRank = stateRank(map, e.i, "population");
+    const powerRank = stateRank(map, e.i, "military");
+    const cellsRank = stateRank(map, e.i, "cells");
+    const burgCount = Array.isArray(e.burgs) ? e.burgs.length : (e.burgs ?? 0);
+    const rows = [
+      ["人口", `${pop.toFixed(2)}（千人）${popRank ? `　順位 ${popRank.rank}/${popRank.total}` : ""}`],
+      ["軍事力", `${power.toFixed(0)}${powerRank ? `　順位 ${powerRank.rank}/${powerRank.total}` : ""}`],
+      ["兵員数（基数）", headcount.toFixed(0)],
+      ["領土（セル数）", `${e.cells ?? 0}${cellsRank ? `　順位 ${cellsRank.rank}/${cellsRank.total}` : ""}`],
+      ["面積", e.area ?? 0],
+      ["都市数", burgCount],
+    ];
+    wrap.append(table(rows));
+    return wrap;
   }
 
   function renderStateDiplomacy(map, e, body) {
@@ -149,11 +175,52 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
           window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
         });
         row.append(repaint);
+        const independence = el("button", "", "独立させる");
+        independence.type = "button";
+        independence.title = "この属州の領土を切り離し、新しい独立国家にします";
+        independence.addEventListener("click", async () => {
+          const name = await promptDialog(`独立させて作る新国家の名前`, `${p.fullName ?? p.name}`);
+          if (!name || !name.trim()) return;
+          if (!(await confirmDialog(`属州「${p.fullName ?? p.name}」を独立させ、新国家「${name}」を作ります。よろしいですか？`))) return;
+          editActions.declareIndependence(p.i, name);
+        });
+        row.append(independence);
         list.append(row);
       }
       form.append(list);
     }
+    form.append(mergeSection(map, e));
     body.append(form);
+  }
+
+  /** 国家統合：この国家を、選んだ他の国家に吸収させる（この国家は解散する） */
+  function mergeSection(map, e) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", "国家の統合"));
+    const others = map.pack.states.filter((s) => isLive(s) && s.i !== e.i && s.i > 0);
+    if (!others.length) {
+      wrap.append(el("p", "hint", "統合できる他の国家がありません。"));
+      return wrap;
+    }
+    const row = el("div", "diplomacy-row");
+    const sel = document.createElement("select");
+    for (const s of others) { const o = document.createElement("option"); o.value = s.i; o.textContent = s.fullName ?? s.name; sel.append(o); }
+    row.append(sel);
+    const btn = el("button", "danger", "この国家を統合させる（解散）");
+    btn.type = "button";
+    btn.addEventListener("click", async () => {
+      const target = map.pack.states[Number(sel.value)];
+      const ok = await confirmDialog(
+        `「${e.fullName ?? e.name}」を「${target?.fullName ?? target?.name}」に統合します。「${e.fullName ?? e.name}」は解散し、消滅します。この操作は元に戻せます（Undo）が、よろしいですか？`,
+        { danger: true, okLabel: "統合する" },
+      );
+      if (!ok) return;
+      editActions.mergeStates(e.i, Number(sel.value));
+    });
+    row.append(btn);
+    wrap.append(row);
+    wrap.append(el("p", "hint", "この国家の全領土・都市・属州・部隊を選んだ国家に統合し、この国家自体は解散します。"));
+    return wrap;
   }
 
   function growthRateSection(stateId) {

@@ -281,7 +281,7 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     selectState(id) { selectedState = id; cardCache.clear(); render(); },
     /** 国家タブのサブタブとして開くとき: その国家に固定し、国家セレクタを隠す */
     lockToState(id) { lockedToState = true; selectedState = id; cardCache.clear(); render(); },
-    unlock() { lockedToState = false; },
+    unlock() { lockedToState = false; root.hidden = true; },
     get selectedState() { return selectedState; },
     cancelAttackPick() { if (attackPick || musterMode) { attackPick = null; musterMode = false; musterSelection.clear(); render(); } },
     /** 地図クリックで部隊の配置/移動を待っているか（edit-mode.js から参照） */

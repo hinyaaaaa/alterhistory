@@ -37,7 +37,9 @@
    サイドバーは何も選んでいない間は幅0にして、地図をできるだけ広く使う（editor-panel.js が
    #sidebar に .has-content を付け外しする） */
 main { display: grid; grid-template-columns: 0fr 1fr; min-height: 0; overflow: hidden; position: relative; transition: grid-template-columns 0.15s ease; }
-main:has(#sidebar.has-content) { grid-template-columns: 300px 1fr; }
+/* サイドバーは、対象が選ばれて editor-panel が開いているか、
+   凡例を表示できる（地図が読み込まれている）間、幅を確保する */
+main:has(#editor-panel:not([hidden])), main:has(.legend.has-map) { grid-template-columns: 300px 1fr; }
 main > * { min-height: 0; }
 
 #stage {
@@ -57,7 +59,7 @@ main > * { min-height: 0; }
   position: relative;
   z-index: 2;
 }
-#sidebar:empty, #sidebar:has(#editor-panel[hidden]) { padding: 0; }
+#sidebar:has(#editor-panel[hidden]):not(:has(.legend.has-map)) { padding: 0; }
 
 .statusbar {
   display: flex; gap: 20px; padding: 3px 14px; background: var(--panel);
