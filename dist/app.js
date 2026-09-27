@@ -1207,6 +1207,78 @@
     return loadFromBytes(bytes, Delaunator);
   }
 
+  // js/core/sim/units.js
+  var UNIT_TYPES = Object.freeze([
+    { key: "infantry", label: "\u6B69\u5175", unit: "\u4EBA", icon: "\u2694\uFE0F", soft: 1, hard: 0.1, hardness: 0, rural: 0.9, urban: 0.5, industryShare: 0 },
+    { key: "armor", label: "\u6A5F\u7532", unit: "\u53F0", icon: "\u{1F6E1}\uFE0F", soft: 3, hard: 10, hardness: 0.9, rural: 0, urban: 0, industryShare: 0.35 },
+    { key: "air", label: "\u822A\u7A7A", unit: "\u6A5F", icon: "\u2708\uFE0F", soft: 5, hard: 6, hardness: 0, rural: 0, urban: 0, industryShare: 0.25 },
+    { key: "navy", label: "\u6D77\u8ECD", unit: "\u96BB", icon: "\u{1F6A2}", soft: 8, hard: 14, hardness: 0.6, rural: 0, urban: 0, industryShare: 0.2, naval: true },
+    { key: "special", label: "\u7279\u6B8A\u90E8\u968A", unit: "\u4EBA", icon: "\u{1F396}\uFE0F", soft: 1.5, hard: 0.5, hardness: 0.1, rural: 0.02, urban: 0.03, industryShare: 0.05 },
+    { key: "advanced", label: "\u5148\u7AEF\u6280\u8853", unit: "\u4EBA", icon: "\u{1F52C}", soft: 2, hard: 6, hardness: 0.5, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6 },
+    { key: "nuclear", label: "\u6838", unit: "\u767A", icon: "\u2622\uFE0F", soft: 500, hard: 500, hardness: 0, rural: 0, urban: 0, industryShare: 0, minTech: 9 }
+  ]);
+  var UNIT_KEYS = UNIT_TYPES.map((u) => u.key);
+  var UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]));
+  var DOCTRINES = Object.freeze([
+    { key: "balanced", label: "\u5747\u8861", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
+    { key: "mobile", label: "\u6A5F\u52D5\u6226", mult: { infantry: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 0.85 },
+    { key: "firepower", label: "\u706B\u529B\u4E3B\u7FA9", mult: { infantry: 1.15, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
+    { key: "battleplan", label: "\u8A08\u753B\u9632\u5FA1", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1, defenseBonus: 0.15 },
+    { key: "massassault", label: "\u4EBA\u6D77\u6226\u8853", mult: { infantry: 1.3, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 }, moraleLoss: 1.25, conscriptBonus: 0.3 }
+  ]);
+  var DOCTRINE_BY_KEY = Object.fromEntries(DOCTRINES.map((d) => [d.key, d]));
+  var DEFAULT_DOCTRINE = "balanced";
+  var STATE_TYPE_MULT = Object.freeze({
+    Generic: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
+    Naval: { infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
+    Nomadic: { infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
+    Highland: { infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
+    Hunting: { infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
+    Lake: { infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
+    River: { infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 }
+  });
+  function stateTypeMult(type) {
+    return STATE_TYPE_MULT[type] ?? STATE_TYPE_MULT.Generic;
+  }
+  function emptyForce() {
+    return Object.fromEntries(UNIT_KEYS.map((k) => [k, 0]));
+  }
+  function forcePower(units, doctrineKey = DEFAULT_DOCTRINE) {
+    const mult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
+    let total = 0;
+    for (const key of UNIT_KEYS) {
+      const n = units?.[key] ?? 0;
+      if (n > 0) total += n * ((UNIT_BY_KEY[key].soft + UNIT_BY_KEY[key].hard) / 2) * (mult[key] ?? 1);
+    }
+    return total;
+  }
+  function forceHeadcount(units) {
+    return UNIT_KEYS.reduce((sum, k) => sum + (units?.[k] ?? 0), 0);
+  }
+  function forceHardness(units) {
+    let weight = 0, sum = 0;
+    for (const key of UNIT_KEYS) {
+      const n = units?.[key] ?? 0;
+      if (n <= 0) continue;
+      weight += n;
+      sum += n * UNIT_BY_KEY[key].hardness;
+    }
+    return weight > 0 ? sum / weight : 0;
+  }
+  function attackDamage(units, defenderHardness, doctrineKey = DEFAULT_DOCTRINE, stateType = "Generic") {
+    const dmult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
+    const tmult = stateTypeMult(stateType);
+    let total = 0;
+    for (const key of UNIT_KEYS) {
+      const n = units?.[key] ?? 0;
+      if (n <= 0) continue;
+      const def = UNIT_BY_KEY[key];
+      const effective = def.soft * (1 - defenderHardness) + def.hard * defenderHardness;
+      total += n * effective * (dmult[key] ?? 1) * (tmult[key] ?? 1);
+    }
+    return total;
+  }
+
   // js/core/query.js
   var nameOf = (list, id) => {
     const e = list?.[id];
@@ -1237,10 +1309,58 @@
     religion: { label: "\u5B97\u6559", entities: (m) => m.pack.religions, cells: (m) => m.pack.cells.religion },
     province: { label: "\u5C5E\u5DDE", entities: (m) => m.pack.provinces, cells: (m) => m.pack.cells.province }
   });
+  function listEntities(map, kind) {
+    const def = ENTITY_KINDS[kind];
+    if (!def) return [];
+    const ids = def.cells(map);
+    const counts = /* @__PURE__ */ new Map();
+    for (let i = 0; i < ids.length; i++) {
+      if (map.pack.cells.biome[i] === 0) continue;
+      counts.set(ids[i], (counts.get(ids[i]) ?? 0) + 1);
+    }
+    return def.entities(map).filter((e) => e && e.i && !e.removed && counts.has(e.i)).map((e) => ({
+      id: e.i,
+      name: e.fullName ?? e.name ?? `#${e.i}`,
+      color: e.color ?? "#ccc",
+      cells: counts.get(e.i),
+      center: e.center ?? null,
+      pole: e.pole ?? null
+    })).sort((a, b) => b.cells - a.cells);
+  }
   function entityPosition(map, entity) {
     if (entity.pole) return [entity.pole[0], entity.pole[1]];
     const p = entity.center != null ? map.geometry?.pack.p[entity.center] : null;
     return p ? [p[0], p[1]] : null;
+  }
+  var isLiveState = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function statePopulation(state) {
+    return (state.rural ?? 0) + (state.urban ?? 0);
+  }
+  function stateMilitaryPower(state) {
+    const list = Array.isArray(state.military) ? state.military : [];
+    const doctrine = state.doctrine ?? "balanced";
+    return list.reduce((sum, r) => sum + forcePower(r.u, doctrine), 0);
+  }
+  function stateHeadcount(state) {
+    const list = Array.isArray(state.military) ? state.military : [];
+    return list.reduce((sum, r) => sum + forceHeadcount(r.u), 0);
+  }
+  function rankStates(map, metric) {
+    const states = map.pack.states.filter(isLiveState);
+    const valueOf = {
+      population: statePopulation,
+      military: stateMilitaryPower,
+      cells: (s) => s.cells ?? 0,
+      area: (s) => s.area ?? 0
+    }[metric];
+    if (!valueOf) return [];
+    return states.map((s) => ({ id: s.i, name: s.fullName ?? s.name ?? `#${s.i}`, value: valueOf(s) })).sort((a, b) => b.value - a.value).map((r, i) => ({ ...r, rank: i + 1 }));
+  }
+  function stateRank(map, stateId, metric) {
+    const ranked = rankStates(map, metric);
+    const total = ranked.length;
+    const entry = ranked.find((r) => r.id === stateId);
+    return entry ? { rank: entry.rank, total, value: entry.value } : null;
   }
 
   // js/io/azgaar-writer.js
@@ -1864,6 +1984,7 @@
     });
     canvas.addEventListener("dblclick", (e) => {
       if (!store.getState().map) return;
+      if (store.getState().editTool === "select") return;
       const [sx, sy] = localPos(e);
       actions.zoomAt(sx, sy, 2);
     });
@@ -1888,6 +2009,66 @@
         actions.setHover(describeCell(map, cell));
       });
     }
+  }
+
+  // js/ui/legend.js
+  function initLegend({ store, actions, panels }) {
+    const title = byId("legend-title");
+    const list = byId("legend-list");
+    const wrap = byId("legend");
+    let lastKey = null;
+    function render(state) {
+      const { map, view } = state;
+      wrap.classList.toggle("has-map", !!map);
+      const key = map ? `${map.geometry?.pack.p.length}:${view.overlay}:${state.fileName}` : "none";
+      if (key === lastKey) return;
+      lastKey = key;
+      list.replaceChildren();
+      if (!map || view.overlay === "none") {
+        title.textContent = "\u51E1\u4F8B";
+        list.append(message(map ? "\u8272\u5206\u3051\u3092\u9078\u3076\u3068\u3001\u3053\u3053\u306B\u4E00\u89A7\u304C\u8868\u793A\u3055\u308C\u307E\u3059" : "\u5730\u56F3\u3092\u958B\u304F\u3068\u8868\u793A\u3055\u308C\u307E\u3059"));
+        return;
+      }
+      const items = listEntities(map, view.overlay);
+      title.textContent = `\u51E1\u4F8B\uFF1A${ENTITY_KINDS[view.overlay].label}\uFF08${items.length}\uFF09`;
+      if (items.length === 0) {
+        list.append(message("\u8A72\u5F53\u3059\u308B\u3082\u306E\u304C\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      const frag = document.createDocumentFragment();
+      for (const it of items) {
+        const li = document.createElement("li");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.title = `${it.name}\uFF08${it.cells}\u30BB\u30EB\uFF09\u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u79FB\u52D5\u3001\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u7DE8\u96C6`;
+        const chip = document.createElement("span");
+        chip.className = "chip";
+        chip.style.background = it.color;
+        const name = document.createElement("span");
+        name.className = "legend-name";
+        name.textContent = it.name;
+        const count = document.createElement("span");
+        count.className = "legend-count";
+        count.textContent = String(it.cells);
+        btn.append(chip, name, count);
+        btn.addEventListener("click", () => actions.locate(it));
+        btn.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          panels?.openEntity(view.overlay, it.id);
+        });
+        li.append(btn);
+        frag.append(li);
+      }
+      list.append(frag);
+    }
+    function message(text) {
+      const li = document.createElement("li");
+      li.className = "legend-empty";
+      li.textContent = text;
+      return li;
+    }
+    store.subscribe(render);
+    render(store.getState());
   }
 
   // js/ui/toolbar.js
@@ -1974,6 +2155,7 @@
   }
 
   // js/ui/banner.js
+  var AUTO_DISMISS_MS = 5e3;
   function initBanner({ store, actions }) {
     const banner = byId("banner");
     const body = byId("banner-body");
@@ -1981,15 +2163,19 @@
     const loadingText = byId("loading-text");
     const empty = byId("empty-state");
     byId("banner-close").addEventListener("click", () => actions.dismissMessage());
+    let dismissTimer = 0;
+    let lastKey = null;
     store.subscribe((s) => {
       empty.hidden = !!s.map;
       loading.hidden = !s.busy;
       if (s.busy) loadingText.textContent = s.busy;
       banner.classList.remove("info");
+      let key = null;
       if (s.error) {
         banner.hidden = false;
         banner.classList.remove("warn");
         body.textContent = s.error;
+        key = `error:${s.error}`;
       } else if (s.warnings?.length) {
         banner.hidden = false;
         banner.classList.add("warn");
@@ -1998,13 +2184,20 @@
 \u2026\u307B\u304B ${s.warnings.length - 5} \u4EF6` : "";
         body.textContent = `\u8AAD\u307F\u8FBC\u307F\u306F\u5B8C\u4E86\u3057\u307E\u3057\u305F\u304C\u3001\u6CE8\u610F\u304C\u3042\u308A\u307E\u3059\uFF08${s.warnings.length}\u4EF6\uFF09
 ${shown}${more}`;
+        key = `warn:${s.warnings.length}`;
       } else if (s.notice) {
         banner.hidden = false;
         banner.classList.remove("warn");
         banner.classList.add("info");
         body.textContent = s.notice;
+        key = `notice:${s.notice}`;
       } else {
         banner.hidden = true;
+      }
+      if (key !== lastKey) {
+        lastKey = key;
+        clearTimeout(dismissTimer);
+        if (key) dismissTimer = setTimeout(() => actions.dismissMessage(), AUTO_DISMISS_MS);
       }
     });
   }
@@ -2484,10 +2677,9 @@ ${shown}${more}`;
       if (panels.regimentPending?.() && panels.consumeRegimentPlacement?.(cell)) return;
       if (tool !== TOOLS.SELECT) return;
       const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
-      if (!picked) return;
+      if (!picked || picked.type === "cell") return;
       if (picked.type === "burg") panels.openBurg(picked.id);
       else if (picked.type === "marker") panels.openMarker(picked.id);
-      else panels.openCell(picked.id);
     });
     canvas.addEventListener("dblclick", (e) => {
       const map = store.getState().map;
@@ -3048,6 +3240,226 @@ ${shown}${more}`;
     const label = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
     return makeCommand(`${label}\u306E\u540D\u524D\u3092\u5909\u66F4`, ["places"], [setProps(e, { [field]: trimmed })]);
   }
+  function pickColor(existingCount, rnd) {
+    const golden = 137.508;
+    const hue = Math.round((existingCount * golden + (rnd ? rnd.float(0, 360) : 0)) % 360);
+    const sat = 55 + (rnd ? Math.round(rnd.float(0, 15)) : 10);
+    const light = 45 + (rnd ? Math.round(rnd.float(-10, 10)) : 0);
+    return hslToHex(hue, sat, light);
+  }
+  function hslToHex(h, s, l) {
+    s /= 100;
+    l /= 100;
+    const k = (n) => (n + h / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const toHex = (n) => Math.round(f(n) * 255).toString(16).padStart(2, "0");
+    return `#${toHex(0)}${toHex(8)}${toHex(4)}`;
+  }
+  var LABEL_OF = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" };
+  function planAddEntity(map, { kind, name, rnd }) {
+    if (kind === "province") throw new Error("\u5C5E\u5DDE\u306F\u6240\u5C5E\u3059\u308B\u56FD\u5BB6\u304C\u5FC5\u8981\u3067\u3059\u3002planAddProvince \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044");
+    const listKey = LIST_KEY[kind];
+    if (!listKey) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) throw new Error(`${LABEL_OF[kind]}\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044`);
+    const existing = map.pack[listKey];
+    const id = existing.length || 1;
+    const liveCount = existing.filter(isLive5).length;
+    const entity = {
+      i: id,
+      name: trimmed,
+      fullName: trimmed,
+      color: pickColor(liveCount, rnd),
+      cells: 0,
+      area: 0,
+      rural: 0,
+      urban: 0,
+      burgs: 0
+    };
+    if (kind === "state") {
+      entity.capital = 0;
+      entity.neighbors = [];
+    }
+    const list = existing.length ? existing.slice() : [null];
+    list[id] = entity;
+    const parts = [setList((m) => m.pack[listKey], (m, v) => {
+      m.pack[listKey] = v;
+    }, list)];
+    return { command: makeCommand(`${LABEL_OF[kind]}\u3092\u65B0\u898F\u4F5C\u6210`, ["politics"], parts), id };
+  }
+  function planAddProvince(map, { state, name, rnd }) {
+    const owner = map.pack.states[state];
+    if (!isLive5(owner) || !owner.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) throw new Error("\u5C5E\u5DDE\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
+    const existing = map.pack.provinces;
+    const id = existing.length || 1;
+    const liveCount = existing.filter(isLive5).length;
+    const entity = {
+      i: id,
+      state,
+      name: trimmed,
+      fullName: trimmed,
+      color: pickColor(liveCount, rnd),
+      cells: 0,
+      area: 0,
+      rural: 0,
+      urban: 0,
+      burgs: []
+    };
+    const list = existing.length ? existing.slice() : [null];
+    list[id] = entity;
+    const parts = [setList((m) => m.pack.provinces, (m, v) => {
+      m.pack.provinces = v;
+    }, list)];
+    return { command: makeCommand("\u5C5E\u5DDE\u3092\u65B0\u898F\u4F5C\u6210", ["politics"], parts), id };
+  }
+
+  // js/core/edit/sovereignty.js
+  var round63 = (v) => Math.round(v * 1e6) / 1e6;
+  var isLive6 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLiveState2 = (s) => isLive6(s) && s.i > 0;
+  var liveBurg2 = (map, id) => {
+    const b = id > 0 ? map.pack.burgs[id] : null;
+    return isLive6(b) && b.i ? b : null;
+  };
+  function pickColor2(existingCount, rnd) {
+    const golden = 137.508;
+    const hue = Math.round((existingCount * golden + (rnd ? rnd.float(0, 360) : 0)) % 360);
+    const sat = 55 + (rnd ? Math.round(rnd.float(0, 15)) : 10);
+    const light = 45 + (rnd ? Math.round(rnd.float(-10, 10)) : 0);
+    const s = sat / 100, l = light / 100;
+    const k = (n) => (n + hue / 30) % 12;
+    const a = s * Math.min(l, 1 - l);
+    const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+    const toHex = (n) => Math.round(f(n) * 255).toString(16).padStart(2, "0");
+    return `#${toHex(0)}${toHex(8)}${toHex(4)}`;
+  }
+  function nearestCell(map, pole) {
+    const { p } = map.geometry.pack;
+    let best = -1, bestD = Infinity;
+    for (let i = 0; i < p.length; i++) {
+      const d = (p[i][0] - pole[0]) ** 2 + (p[i][1] - pole[1]) ** 2;
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+  function planDeclareIndependence(map, { provinceId, name, rnd }) {
+    const province = map.pack.provinces[provinceId];
+    if (!isLive6(province) || !province.i) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const fromState = map.pack.states[province.state];
+    if (!isLiveState2(fromState)) throw new Error("\u5C5E\u5DDE\u306E\u6240\u5C5E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const trimmed = (name ?? "").trim();
+    if (!trimmed) throw new Error("\u65B0\u3057\u3044\u56FD\u5BB6\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
+    const c = map.pack.cells;
+    const cells = [];
+    for (let i = 0; i < c.province.length; i++) if (c.province[i] === provinceId) cells.push(i);
+    if (!cells.length) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306B\u306F\u30BB\u30EB\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u72EC\u7ACB\u3055\u305B\u308B\u9818\u571F\u304C\u3042\u308A\u307E\u305B\u3093\uFF09");
+    const areas = cellAreas(map.geometry);
+    const newId = map.pack.states.length || 1;
+    const liveCount = map.pack.states.filter(isLiveState2).length;
+    const centerBurg = liveBurg2(map, province.burg);
+    let rural = 0, area = 0, urban = 0;
+    const burgIds = [];
+    for (const i of cells) {
+      rural += c.pop[i] ?? 0;
+      area += areas[i];
+      const b = liveBurg2(map, c.burg[i]);
+      if (b) {
+        urban += b.population ?? 0;
+        burgIds.push(b.i);
+      }
+    }
+    const newState = {
+      i: newId,
+      name: trimmed,
+      fullName: trimmed,
+      color: pickColor2(liveCount, rnd),
+      cells: cells.length,
+      area: round63(area),
+      rural: round63(rural),
+      urban: round63(urban),
+      burgs: burgIds.length,
+      capital: centerBurg ? centerBurg.i : 0,
+      neighbors: []
+    };
+    const statesList = map.pack.states.length ? map.pack.states.slice() : [null];
+    statesList[newId] = newState;
+    const parts = [
+      setList((m) => m.pack.states, (m, v) => {
+        m.pack.states = v;
+      }, statesList),
+      setIndexed((m) => m.pack.cells.state, cells.map((i) => [i, c.state[i], newId])),
+      // 属州はそのまま新国家に付け替える（独立した属州は、新国家の中心的な属州として引き継ぐ）
+      setProps(province, { state: newId })
+    ];
+    for (const bid of burgIds) parts.push(setProps(map.pack.burgs[bid], { state: newId }));
+    if (centerBurg) parts.push(setProps(centerBurg, { capital: 1 }));
+    const patch = {};
+    if (typeof fromState.cells === "number") patch.cells = Math.max(0, fromState.cells - cells.length);
+    if (typeof fromState.area === "number") patch.area = round63(Math.max(0, fromState.area - area));
+    if (typeof fromState.rural === "number") patch.rural = round63(Math.max(0, fromState.rural - rural));
+    if (typeof fromState.urban === "number") patch.urban = round63(Math.max(0, fromState.urban - urban));
+    if (typeof fromState.burgs === "number") patch.burgs = Math.max(0, fromState.burgs - burgIds.length);
+    else if (Array.isArray(fromState.burgs)) patch.burgs = fromState.burgs.filter((b) => !burgIds.includes(b));
+    parts.push(setProps(fromState, patch));
+    if (fromState.capital && cells.includes(map.pack.burgs[fromState.capital]?.cell)) {
+      parts.push(setProps(fromState, { capital: 0 }));
+    }
+    const memberSet = new Set(cells);
+    const newPole = computePole(map, (cell) => memberSet.has(cell) ? newId : -1, newId);
+    if (newPole) parts.push(setProps(newState, { pole: newPole }));
+    if (fromState.pole) {
+      const poleCell = nearestCell(map, fromState.pole);
+      const stillInside = c.state[poleCell] === fromState.i && !memberSet.has(poleCell);
+      if (!stillInside) {
+        const remainPole = computePole(map, (cell) => c.state[cell] === fromState.i && !memberSet.has(cell) ? fromState.i : -1, fromState.i);
+        if (remainPole) parts.push(setProps(fromState, { pole: remainPole }));
+      }
+    }
+    return { command: makeCommand(`\u5C5E\u5DDE\u300C${province.fullName ?? province.name}\u300D\u306E\u72EC\u7ACB`, ["politics"], parts), id: newId };
+  }
+  function planMergeStates(map, { from, to }) {
+    if (from === to) throw new Error("\u540C\u3058\u56FD\u5BB6\u306F\u7D71\u5408\u3067\u304D\u307E\u305B\u3093");
+    const fromState = map.pack.states[from], toState = map.pack.states[to];
+    if (!isLiveState2(fromState)) throw new Error("\u7D71\u5408\u5143\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLiveState2(toState)) throw new Error("\u7D71\u5408\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const c = map.pack.cells;
+    const cells = [];
+    for (let i = 0; i < c.state.length; i++) if (c.state[i] === from) cells.push(i);
+    const parts = [];
+    if (cells.length) {
+      parts.push(setIndexed((m) => m.pack.cells.state, cells.map((i) => [i, from, to])));
+    }
+    const movedBurgIds = [];
+    for (const b of map.pack.burgs) {
+      if (!isLive6(b) || !b.i || b.state !== from) continue;
+      const patch = { state: to };
+      if (b.capital) patch.capital = 0;
+      parts.push(setProps(b, patch));
+      movedBurgIds.push(b.i);
+    }
+    for (const pr of map.pack.provinces) {
+      if (isLive6(pr) && pr.i && pr.state === from) parts.push(setProps(pr, { state: to }));
+    }
+    const toPatch = {};
+    if (typeof toState.cells === "number" && typeof fromState.cells === "number") toPatch.cells = toState.cells + fromState.cells;
+    if (typeof toState.area === "number" && typeof fromState.area === "number") toPatch.area = round63(toState.area + fromState.area);
+    if (typeof toState.rural === "number" && typeof fromState.rural === "number") toPatch.rural = round63(toState.rural + fromState.rural);
+    if (typeof toState.urban === "number" && typeof fromState.urban === "number") toPatch.urban = round63(toState.urban + fromState.urban);
+    if (typeof toState.burgs === "number") toPatch.burgs = toState.burgs + movedBurgIds.length;
+    else if (Array.isArray(toState.burgs)) toPatch.burgs = [...toState.burgs, ...movedBurgIds];
+    if (Array.isArray(fromState.military) && fromState.military.length) {
+      toPatch.military = [...Array.isArray(toState.military) ? toState.military : [], ...fromState.military];
+    }
+    if (Object.keys(toPatch).length) parts.push(setProps(toState, toPatch));
+    parts.push(setProps(fromState, { removed: true, cells: 0, area: 0, rural: 0, urban: 0, burgs: 0, capital: 0, military: [] }));
+    return makeCommand(`\u300C${fromState.fullName ?? fromState.name}\u300D\u3092\u300C${toState.fullName ?? toState.name}\u300D\u306B\u7D71\u5408`, ["politics"], parts);
+  }
 
   // js/core/sim/economy.js
   var TECH_MIN = 1;
@@ -3083,103 +3495,31 @@ ${shown}${more}`;
   }
 
   // js/core/edit/economy.js
-  var isLive6 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getTechLevel(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive6(s)) return null;
+    if (!isLive7(s)) return null;
     return typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
   }
   function planSetTechLevel(map, stateId, value) {
     const s = map.pack.states[stateId];
-    if (!isLive6(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive7(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const after = clampTech(value);
     const before = typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
     if (before === after) return null;
     return makeCommand(`\u6280\u8853\u6C34\u6E96\u306E\u5909\u66F4\uFF08${s.name}\uFF09`, [], [setProps(s, { techLevel: after })]);
   }
 
-  // js/core/sim/units.js
-  var UNIT_TYPES = Object.freeze([
-    { key: "infantry", label: "\u6B69\u5175", unit: "\u4EBA", icon: "\u2694\uFE0F", soft: 1, hard: 0.1, hardness: 0, rural: 0.9, urban: 0.5, industryShare: 0 },
-    { key: "armor", label: "\u6A5F\u7532", unit: "\u53F0", icon: "\u{1F6E1}\uFE0F", soft: 3, hard: 10, hardness: 0.9, rural: 0, urban: 0, industryShare: 0.35 },
-    { key: "air", label: "\u822A\u7A7A", unit: "\u6A5F", icon: "\u2708\uFE0F", soft: 5, hard: 6, hardness: 0, rural: 0, urban: 0, industryShare: 0.25 },
-    { key: "navy", label: "\u6D77\u8ECD", unit: "\u96BB", icon: "\u{1F6A2}", soft: 8, hard: 14, hardness: 0.6, rural: 0, urban: 0, industryShare: 0.2, naval: true },
-    { key: "special", label: "\u7279\u6B8A\u90E8\u968A", unit: "\u4EBA", icon: "\u{1F396}\uFE0F", soft: 1.5, hard: 0.5, hardness: 0.1, rural: 0.02, urban: 0.03, industryShare: 0.05 },
-    { key: "advanced", label: "\u5148\u7AEF\u6280\u8853", unit: "\u4EBA", icon: "\u{1F52C}", soft: 2, hard: 6, hardness: 0.5, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6 },
-    { key: "nuclear", label: "\u6838", unit: "\u767A", icon: "\u2622\uFE0F", soft: 500, hard: 500, hardness: 0, rural: 0, urban: 0, industryShare: 0, minTech: 9 }
-  ]);
-  var UNIT_KEYS = UNIT_TYPES.map((u) => u.key);
-  var UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]));
-  var DOCTRINES = Object.freeze([
-    { key: "balanced", label: "\u5747\u8861", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-    { key: "mobile", label: "\u6A5F\u52D5\u6226", mult: { infantry: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 0.85 },
-    { key: "firepower", label: "\u706B\u529B\u4E3B\u7FA9", mult: { infantry: 1.15, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-    { key: "battleplan", label: "\u8A08\u753B\u9632\u5FA1", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1, defenseBonus: 0.15 },
-    { key: "massassault", label: "\u4EBA\u6D77\u6226\u8853", mult: { infantry: 1.3, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 }, moraleLoss: 1.25, conscriptBonus: 0.3 }
-  ]);
-  var DOCTRINE_BY_KEY = Object.fromEntries(DOCTRINES.map((d) => [d.key, d]));
-  var DEFAULT_DOCTRINE = "balanced";
-  var STATE_TYPE_MULT = Object.freeze({
-    Generic: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
-    Naval: { infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
-    Nomadic: { infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
-    Highland: { infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
-    Hunting: { infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
-    Lake: { infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
-    River: { infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 }
-  });
-  function stateTypeMult(type) {
-    return STATE_TYPE_MULT[type] ?? STATE_TYPE_MULT.Generic;
-  }
-  function emptyForce() {
-    return Object.fromEntries(UNIT_KEYS.map((k) => [k, 0]));
-  }
-  function forcePower(units, doctrineKey = DEFAULT_DOCTRINE) {
-    const mult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
-    let total = 0;
-    for (const key of UNIT_KEYS) {
-      const n = units?.[key] ?? 0;
-      if (n > 0) total += n * ((UNIT_BY_KEY[key].soft + UNIT_BY_KEY[key].hard) / 2) * (mult[key] ?? 1);
-    }
-    return total;
-  }
-  function forceHeadcount(units) {
-    return UNIT_KEYS.reduce((sum, k) => sum + (units?.[k] ?? 0), 0);
-  }
-  function forceHardness(units) {
-    let weight = 0, sum = 0;
-    for (const key of UNIT_KEYS) {
-      const n = units?.[key] ?? 0;
-      if (n <= 0) continue;
-      weight += n;
-      sum += n * UNIT_BY_KEY[key].hardness;
-    }
-    return weight > 0 ? sum / weight : 0;
-  }
-  function attackDamage(units, defenderHardness, doctrineKey = DEFAULT_DOCTRINE, stateType = "Generic") {
-    const dmult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
-    const tmult = stateTypeMult(stateType);
-    let total = 0;
-    for (const key of UNIT_KEYS) {
-      const n = units?.[key] ?? 0;
-      if (n <= 0) continue;
-      const def = UNIT_BY_KEY[key];
-      const effective = def.soft * (1 - defenderHardness) + def.hard * defenderHardness;
-      total += n * effective * (dmult[key] ?? 1) * (tmult[key] ?? 1);
-    }
-    return total;
-  }
-
   // js/core/edit/military-doctrine.js
-  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getDoctrine(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive7(s)) return null;
+    if (!isLive8(s)) return null;
     return DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
   }
   function planSetDoctrine(map, stateId, doctrineKey) {
     const s = map.pack.states[stateId];
-    if (!isLive7(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive8(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (!DOCTRINE_BY_KEY[doctrineKey]) throw new Error("\u4E0D\u660E\u306A\u30C9\u30AF\u30C8\u30EA\u30F3\u3067\u3059");
     const before = DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
     if (before === doctrineKey) return null;
@@ -3349,6 +3689,47 @@ ${shown}${more}`;
       renameEntity(kind, id, name) {
         withMap((map) => safeRun("\u540D\u524D\u306E\u5909\u66F4", () => commitOrThrow(planRenameEntity(map, kind, id, name))));
       },
+      /** 国家・文化・宗教を新規作成する。まだどのセルも持たない状態で作られるので、
+       *  続けて「塗る」ツールでセルに塗って地図上に反映する必要がある */
+      addEntity(kind, name) {
+        return withMap((map) => {
+          let out;
+          safeRun(`${{ state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559" }[kind] ?? "\u5B9F\u4F53"}\u306E\u65B0\u898F\u4F5C\u6210`, () => {
+            const r = planAddEntity(map, { kind, name, rnd });
+            commitOrThrow(r.command);
+            out = r.id;
+          });
+          return out;
+        });
+      },
+      /** 属州を新規作成する（所属する国家を指定する） */
+      addProvince(stateId, name) {
+        return withMap((map) => {
+          let out;
+          safeRun("\u5C5E\u5DDE\u306E\u65B0\u898F\u4F5C\u6210", () => {
+            const r = planAddProvince(map, { state: stateId, name, rnd });
+            commitOrThrow(r.command);
+            out = r.id;
+          });
+          return out;
+        });
+      },
+      /** 属州を独立させ、新しい国家として切り出す */
+      declareIndependence(provinceId, name) {
+        return withMap((map) => {
+          let out;
+          safeRun("\u5C5E\u5DDE\u306E\u72EC\u7ACB", () => {
+            const r = planDeclareIndependence(map, { provinceId, name, rnd });
+            commitOrThrow(r.command);
+            out = r.id;
+          });
+          return out;
+        });
+      },
+      /** 国家を統合する（from を to に併合し、from は解散する） */
+      mergeStates(from, to) {
+        withMap((map) => safeRun("\u56FD\u5BB6\u306E\u7D71\u5408", () => commitOrThrow(planMergeStates(map, { from, to }))));
+      },
       TECH_MIN,
       TECH_MAX,
       getTechLevel(stateId) {
@@ -3373,123 +3754,6 @@ ${shown}${more}`;
         return withMap((map) => cellIndexOf(map).find(x, y)) ?? -1;
       }
     };
-  }
-
-  // js/ui/edit-toolbar.js
-  var TARGET_LIST = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive8 = (e) => !!e && typeof e === "object" && !e.removed;
-  function initEditToolbar({ store, editMode }) {
-    const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
-    const targetGroup = byId("tool-target-group");
-    const targetSel = byId("tool-target");
-    const radiusGroup = byId("tool-radius-group");
-    const radiusInput = byId("tool-radius");
-    const hint = byId("tool-hint");
-    const HINTS = {
-      [TOOLS.SELECT]: "\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u4E2D\u8EAB\u3092\u898B\u308B\u30FB\u7DE8\u96C6\u3059\u308B",
-      [TOOLS.PAINT_STATE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u56FD\u5BB6\u3092\u5857\u308B\uFF08\u4E0B\u306E\u300C\u5BFE\u8C61\u300D\u3067\u5857\u308B\u56FD\u5BB6\u3092\u9078\u3076\uFF09",
-      [TOOLS.PAINT_CULTURE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u6587\u5316\u3092\u5857\u308B",
-      [TOOLS.PAINT_RELIGION]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5B97\u6559\u3092\u5857\u308B",
-      [TOOLS.PAINT_PROVINCE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5C5E\u5DDE\u3092\u5857\u308B",
-      [TOOLS.PAINT_BIOME]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5730\u5F62\u3092\u5857\u308B\uFF08\u6C34\u57DF\u306F\u5857\u308C\u307E\u305B\u3093\uFF09",
-      [TOOLS.ADD_BURG]: "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u90FD\u5E02\u3092\u7F6E\u304F",
-      [TOOLS.ADD_MARKER]: "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u30DE\u30FC\u30AB\u30FC\u3092\u7F6E\u304F"
-    };
-    function fillTargets(tool) {
-      const map = store.getState().map;
-      targetSel.replaceChildren();
-      const kind = tool.startsWith("paint:") ? tool.slice(6) : null;
-      if (!map || !kind) {
-        targetGroup.hidden = true;
-        return;
-      }
-      targetGroup.hidden = false;
-      if (kind === "biome") {
-        for (const b of map.biomesData) {
-          if (!b || b.i === 0) continue;
-          const o = document.createElement("option");
-          o.value = b.i;
-          o.textContent = b.name;
-          targetSel.append(o);
-        }
-        return;
-      }
-      const erase = document.createElement("option");
-      erase.value = "0";
-      erase.textContent = `\uFF08${PAINT_KINDS[kind].label}\u306A\u3057\u306B\u3059\u308B\uFF09`;
-      targetSel.append(erase);
-      const list = map.pack[TARGET_LIST[kind]].filter(isLive8);
-      for (const e of list) {
-        const o = document.createElement("option");
-        o.value = e.i;
-        o.textContent = e.fullName ?? e.name;
-        targetSel.append(o);
-      }
-      if (list[0]) targetSel.value = String(list[0].i);
-    }
-    function sync() {
-      const tool = editMode.tool;
-      const hasMap = !!store.getState().map;
-      for (const b of buttons) {
-        b.classList.toggle("active", b.dataset.tool === tool);
-        b.disabled = !hasMap;
-      }
-      hint.textContent = hasMap ? HINTS[tool] ?? "" : "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044";
-      radiusGroup.hidden = !tool.startsWith("paint:");
-    }
-    for (const b of buttons) {
-      b.addEventListener("click", () => {
-        const map = store.getState().map;
-        if (!map) return;
-        editMode.setTool(b.dataset.tool);
-        fillTargets(b.dataset.tool);
-        sync();
-      });
-    }
-    targetSel.addEventListener("change", () => editMode.setTarget(Number(targetSel.value)));
-    radiusInput.addEventListener("input", () => editMode.setRadius(Number(radiusInput.value)));
-    store.subscribe((state, change) => {
-      if (change.type === "replace") {
-        fillTargets(editMode.tool);
-        sync();
-      }
-    });
-    sync();
-    return {
-      fillTargets,
-      sync,
-      /** 外部（属州タブの「塗り直す」ボタン等）からツールと対象をまとめて合わせる */
-      setTargetValue(id) {
-        targetSel.value = String(id);
-        editMode.setTarget(id);
-      }
-    };
-  }
-
-  // js/ui/edit-panel.js
-  function initEditPanel() {
-    const panel = byId("edit-panel");
-    const openBtn = byId("btn-edit-mode");
-    function isOpen() {
-      return !panel.hidden;
-    }
-    function open() {
-      panel.hidden = false;
-      openBtn.setAttribute("aria-expanded", "true");
-    }
-    function close() {
-      panel.hidden = true;
-      openBtn.setAttribute("aria-expanded", "false");
-    }
-    function toggle() {
-      if (isOpen()) close();
-      else open();
-    }
-    openBtn.addEventListener("click", toggle);
-    byId("edit-panel-close").addEventListener("click", close);
-    return { open, close, toggle, get isOpen() {
-      return isOpen();
-    } };
   }
 
   // js/ui/dialogs.js
@@ -3585,6 +3849,170 @@ ${shown}${more}`;
     });
   }
 
+  // js/ui/edit-toolbar.js
+  var TARGET_LIST = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+  var isLive9 = (e) => !!e && typeof e === "object" && !e.removed;
+  var NEW_VALUE = "__new__";
+  function initEditToolbar({ store, editMode, editActions }) {
+    const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
+    const targetGroup = byId("tool-target-group");
+    const targetSel = byId("tool-target");
+    const radiusGroup = byId("tool-radius-group");
+    const radiusInput = byId("tool-radius");
+    const hint = byId("tool-hint");
+    const HINTS = {
+      [TOOLS.SELECT]: "\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u4E2D\u8EAB\u3092\u898B\u308B\u30FB\u7DE8\u96C6\u3059\u308B",
+      [TOOLS.PAINT_STATE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u56FD\u5BB6\u3092\u5857\u308B\uFF08\u4E0B\u306E\u300C\u5BFE\u8C61\u300D\u3067\u5857\u308B\u56FD\u5BB6\u3092\u9078\u3076\u3002\u4E00\u89A7\u306E\u300C\uFF0B \u65B0\u3057\u3044\u56FD\u5BB6\u3092\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3082\u3067\u304D\u308B\uFF09",
+      [TOOLS.PAINT_CULTURE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u6587\u5316\u3092\u5857\u308B\uFF08\u300C\uFF0B \u65B0\u3057\u3044\u6587\u5316\u3092\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3082\u3067\u304D\u308B\uFF09",
+      [TOOLS.PAINT_RELIGION]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5B97\u6559\u3092\u5857\u308B\uFF08\u300C\uFF0B \u65B0\u3057\u3044\u5B97\u6559\u3092\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3082\u3067\u304D\u308B\uFF09",
+      [TOOLS.PAINT_PROVINCE]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5C5E\u5DDE\u3092\u5857\u308B\uFF08\u300C\uFF0B \u65B0\u3057\u3044\u5C5E\u5DDE\u3092\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3082\u3067\u304D\u308B\u3002\u5C5E\u5DDE\u306F\u305D\u306E\u56FD\u5BB6\u306E\u571F\u5730\u306B\u3057\u304B\u5857\u308C\u307E\u305B\u3093\uFF09",
+      [TOOLS.PAINT_BIOME]: "\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5730\u5F62\u3092\u5857\u308B\uFF08\u6C34\u57DF\u306F\u5857\u308C\u307E\u305B\u3093\uFF09",
+      [TOOLS.ADD_BURG]: "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u90FD\u5E02\u3092\u7F6E\u304F",
+      [TOOLS.ADD_MARKER]: "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u30DE\u30FC\u30AB\u30FC\u3092\u7F6E\u304F"
+    };
+    function fillTargets(tool) {
+      const map = store.getState().map;
+      targetSel.replaceChildren();
+      const kind = tool.startsWith("paint:") ? tool.slice(6) : null;
+      if (!map || !kind) {
+        targetGroup.hidden = true;
+        return;
+      }
+      targetGroup.hidden = false;
+      if (kind === "biome") {
+        for (const b of map.biomesData) {
+          if (!b || b.i === 0) continue;
+          const o = document.createElement("option");
+          o.value = b.i;
+          o.textContent = b.name;
+          targetSel.append(o);
+        }
+        return;
+      }
+      const erase = document.createElement("option");
+      erase.value = "0";
+      erase.textContent = `\uFF08${PAINT_KINDS[kind].label}\u306A\u3057\u306B\u3059\u308B\uFF09`;
+      targetSel.append(erase);
+      const list = map.pack[TARGET_LIST[kind]].filter(isLive9);
+      for (const e of list) {
+        const o = document.createElement("option");
+        o.value = e.i;
+        o.textContent = e.fullName ?? e.name;
+        targetSel.append(o);
+      }
+      const newOpt = document.createElement("option");
+      newOpt.value = NEW_VALUE;
+      newOpt.textContent = `\uFF0B \u65B0\u3057\u3044${PAINT_KINDS[kind].label}\u3092\u4F5C\u308B\u2026`;
+      targetSel.append(newOpt);
+      if (list[0]) targetSel.value = String(list[0].i);
+    }
+    async function pickStateForProvince(map) {
+      const states = map.pack.states.filter(isLive9);
+      if (!states.length) {
+        await alertDialog("\u56FD\u5BB6\u304C\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u5148\u306B\u56FD\u5BB6\u3092\u4F5C\u3063\u3066\u304F\u3060\u3055\u3044");
+        return null;
+      }
+      if (states.length === 1) return states[0].i;
+      const list = states.map((s, i) => `${i + 1}: ${s.fullName ?? s.name}`).join("\n");
+      const answer = await promptDialog(`\u3069\u306E\u56FD\u5BB6\u306E\u5C5E\u5DDE\u306B\u3057\u307E\u3059\u304B\uFF1F \u756A\u53F7\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044
+${list}`, "1");
+      if (answer == null) return null;
+      const idx = Number(answer.trim()) - 1;
+      return states[idx]?.i ?? null;
+    }
+    async function createNewTarget(kind) {
+      const label = PAINT_KINDS[kind].label;
+      const name = await promptDialog(`\u65B0\u3057\u3044${label}\u306E\u540D\u524D`);
+      if (!name || !name.trim()) return null;
+      const map = store.getState().map;
+      if (kind === "province") {
+        const stateId = await pickStateForProvince(map);
+        if (stateId == null) return null;
+        return editActions.addProvince(stateId, name);
+      }
+      return editActions.addEntity(kind, name);
+    }
+    function sync() {
+      const tool = editMode.tool;
+      const hasMap = !!store.getState().map;
+      for (const b of buttons) {
+        b.classList.toggle("active", b.dataset.tool === tool);
+        b.disabled = !hasMap;
+      }
+      hint.textContent = hasMap ? HINTS[tool] ?? "" : "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044";
+      radiusGroup.hidden = !tool.startsWith("paint:");
+    }
+    for (const b of buttons) {
+      b.addEventListener("click", () => {
+        const map = store.getState().map;
+        if (!map) return;
+        editMode.setTool(b.dataset.tool);
+        fillTargets(b.dataset.tool);
+        sync();
+      });
+    }
+    targetSel.addEventListener("change", async () => {
+      if (targetSel.value !== NEW_VALUE) {
+        editMode.setTarget(Number(targetSel.value));
+        return;
+      }
+      const kind = editMode.tool.startsWith("paint:") ? editMode.tool.slice(6) : null;
+      if (!kind) return;
+      const newId = await createNewTarget(kind);
+      fillTargets(editMode.tool);
+      if (newId != null) {
+        targetSel.value = String(newId);
+        editMode.setTarget(newId);
+      } else if (targetSel.options.length) {
+        targetSel.selectedIndex = 0;
+        editMode.setTarget(Number(targetSel.value));
+      }
+    });
+    radiusInput.addEventListener("input", () => editMode.setRadius(Number(radiusInput.value)));
+    store.subscribe((state, change) => {
+      if (change.type === "replace") {
+        fillTargets(editMode.tool);
+        sync();
+      }
+    });
+    sync();
+    return {
+      fillTargets,
+      sync,
+      /** 外部（属州タブの「塗り直す」ボタン等）からツールと対象をまとめて合わせる */
+      setTargetValue(id) {
+        targetSel.value = String(id);
+        editMode.setTarget(id);
+      }
+    };
+  }
+
+  // js/ui/edit-panel.js
+  function initEditPanel() {
+    const panel = byId("edit-panel");
+    const openBtn = byId("btn-edit-mode");
+    function isOpen() {
+      return !panel.hidden;
+    }
+    function open() {
+      panel.hidden = false;
+      openBtn.setAttribute("aria-expanded", "true");
+    }
+    function close() {
+      panel.hidden = true;
+      openBtn.setAttribute("aria-expanded", "false");
+    }
+    function toggle() {
+      if (isOpen()) close();
+      else open();
+    }
+    openBtn.addEventListener("click", toggle);
+    byId("edit-panel-close").addEventListener("click", close);
+    return { open, close, toggle, get isOpen() {
+      return isOpen();
+    } };
+  }
+
   // js/ui/panels/editor-panel.js
   var el2 = (tag, cls, text) => {
     const e = document.createElement(tag);
@@ -3592,7 +4020,7 @@ ${shown}${more}`;
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive9 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive10 = (e) => !!e && typeof e === "object" && !e.removed;
   var STATE_SUBTABS = [
     { key: "info", label: "\u57FA\u672C\u60C5\u5831", icon: "\u26ED" },
     { key: "diplomacy", label: "\u5916\u4EA4", icon: "\u26E8" },
@@ -3619,11 +4047,9 @@ ${shown}${more}`;
       root.replaceChildren();
       if (!current) {
         root.hidden = true;
-        sidebar.classList.remove("has-content");
         return;
       }
       root.hidden = false;
-      sidebar.classList.add("has-content");
       const map = store.getState().map;
       if (!map) {
         close();
@@ -3665,11 +4091,20 @@ ${shown}${more}`;
     }
     function renderStateTabs(map, title, root2) {
       const e = map.pack.states[current.id];
-      if (!isLive9(e)) {
+      if (!isLive10(e)) {
         close();
         return;
       }
       title.textContent = `\u{1F3F3} ${e.fullName ?? e.name}`;
+      if (stateSubtab !== "military") {
+        const m = byId("tab-regiments");
+        m.hidden = true;
+        panels?.military?.unlock?.();
+      }
+      if (stateSubtab !== "diplomacy") {
+        byId("tab-wars").hidden = true;
+        byId("tab-alliances").hidden = true;
+      }
       const tabs = el2("div", "dialog-tabs");
       tabs.setAttribute("role", "tablist");
       for (const t of STATE_SUBTABS) {
@@ -3694,8 +4129,7 @@ ${shown}${more}`;
     }
     function renderStateInfo(map, e, body) {
       const form = el2("div", "editor-form");
-      const stats = [["\u30BB\u30EB\u6570", e.cells], ["\u9762\u7A4D", e.area], ["\u90FD\u5E02\u6570", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
-      form.append(table(stats));
+      form.append(basicStatsSection(map, e));
       form.append(textField("\u56FD\u5BB6\u540D", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v)));
       form.append(techLevelSection(e.i));
       form.append(doctrineSection(e.i));
@@ -3703,6 +4137,27 @@ ${shown}${more}`;
       form.append(attributesField("state", e.i));
       form.append(noteField(map, "state", e.i));
       body.append(form);
+    }
+    function basicStatsSection(map, e) {
+      const wrap = el2("div", "editor-section");
+      wrap.append(el2("h4", "", "\u56FD\u529B"));
+      const pop = statePopulation(e);
+      const power = stateMilitaryPower(e);
+      const headcount = stateHeadcount(e);
+      const popRank = stateRank(map, e.i, "population");
+      const powerRank = stateRank(map, e.i, "military");
+      const cellsRank = stateRank(map, e.i, "cells");
+      const burgCount = Array.isArray(e.burgs) ? e.burgs.length : e.burgs ?? 0;
+      const rows = [
+        ["\u4EBA\u53E3", `${pop.toFixed(2)}\uFF08\u5343\u4EBA\uFF09${popRank ? `\u3000\u9806\u4F4D ${popRank.rank}/${popRank.total}` : ""}`],
+        ["\u8ECD\u4E8B\u529B", `${power.toFixed(0)}${powerRank ? `\u3000\u9806\u4F4D ${powerRank.rank}/${powerRank.total}` : ""}`],
+        ["\u5175\u54E1\u6570\uFF08\u57FA\u6570\uFF09", headcount.toFixed(0)],
+        ["\u9818\u571F\uFF08\u30BB\u30EB\u6570\uFF09", `${e.cells ?? 0}${cellsRank ? `\u3000\u9806\u4F4D ${cellsRank.rank}/${cellsRank.total}` : ""}`],
+        ["\u9762\u7A4D", e.area ?? 0],
+        ["\u90FD\u5E02\u6570", burgCount]
+      ];
+      wrap.append(table(rows));
+      return wrap;
     }
     function renderStateDiplomacy(map, e, body) {
       const form = el2("div", "editor-form");
@@ -3739,7 +4194,7 @@ ${shown}${more}`;
     }
     function renderStateProvinces(map, e, body) {
       const form = el2("div", "editor-form");
-      const provinces = map.pack.provinces.filter((p) => isLive9(p) && p.state === e.i);
+      const provinces = map.pack.provinces.filter((p) => isLive10(p) && p.state === e.i);
       if (!provinces.length) {
         form.append(el2("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u300C\u5C5E\u5DDE\u3092\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u5C5E\u5DDE\u3092\u4F5C\u308C\u307E\u3059\u3002"));
       } else {
@@ -3756,11 +4211,55 @@ ${shown}${more}`;
             window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
           });
           row.append(repaint);
+          const independence = el2("button", "", "\u72EC\u7ACB\u3055\u305B\u308B");
+          independence.type = "button";
+          independence.title = "\u3053\u306E\u5C5E\u5DDE\u306E\u9818\u571F\u3092\u5207\u308A\u96E2\u3057\u3001\u65B0\u3057\u3044\u72EC\u7ACB\u56FD\u5BB6\u306B\u3057\u307E\u3059";
+          independence.addEventListener("click", async () => {
+            const name = await promptDialog(`\u72EC\u7ACB\u3055\u305B\u3066\u4F5C\u308B\u65B0\u56FD\u5BB6\u306E\u540D\u524D`, `${p.fullName ?? p.name}`);
+            if (!name || !name.trim()) return;
+            if (!await confirmDialog(`\u5C5E\u5DDE\u300C${p.fullName ?? p.name}\u300D\u3092\u72EC\u7ACB\u3055\u305B\u3001\u65B0\u56FD\u5BB6\u300C${name}\u300D\u3092\u4F5C\u308A\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F`)) return;
+            editActions.declareIndependence(p.i, name);
+          });
+          row.append(independence);
           list.append(row);
         }
         form.append(list);
       }
+      form.append(mergeSection(map, e));
       body.append(form);
+    }
+    function mergeSection(map, e) {
+      const wrap = el2("div", "editor-section");
+      wrap.append(el2("h4", "", "\u56FD\u5BB6\u306E\u7D71\u5408"));
+      const others = map.pack.states.filter((s) => isLive10(s) && s.i !== e.i && s.i > 0);
+      if (!others.length) {
+        wrap.append(el2("p", "hint", "\u7D71\u5408\u3067\u304D\u308B\u4ED6\u306E\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
+        return wrap;
+      }
+      const row = el2("div", "diplomacy-row");
+      const sel = document.createElement("select");
+      for (const s of others) {
+        const o = document.createElement("option");
+        o.value = s.i;
+        o.textContent = s.fullName ?? s.name;
+        sel.append(o);
+      }
+      row.append(sel);
+      const btn = el2("button", "danger", "\u3053\u306E\u56FD\u5BB6\u3092\u7D71\u5408\u3055\u305B\u308B\uFF08\u89E3\u6563\uFF09");
+      btn.type = "button";
+      btn.addEventListener("click", async () => {
+        const target = map.pack.states[Number(sel.value)];
+        const ok = await confirmDialog(
+          `\u300C${e.fullName ?? e.name}\u300D\u3092\u300C${target?.fullName ?? target?.name}\u300D\u306B\u7D71\u5408\u3057\u307E\u3059\u3002\u300C${e.fullName ?? e.name}\u300D\u306F\u89E3\u6563\u3057\u3001\u6D88\u6EC5\u3057\u307E\u3059\u3002\u3053\u306E\u64CD\u4F5C\u306F\u5143\u306B\u623B\u305B\u307E\u3059\uFF08Undo\uFF09\u304C\u3001\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F`,
+          { danger: true, okLabel: "\u7D71\u5408\u3059\u308B" }
+        );
+        if (!ok) return;
+        editActions.mergeStates(e.i, Number(sel.value));
+      });
+      row.append(btn);
+      wrap.append(row);
+      wrap.append(el2("p", "hint", "\u3053\u306E\u56FD\u5BB6\u306E\u5168\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u30FB\u90E8\u968A\u3092\u9078\u3093\u3060\u56FD\u5BB6\u306B\u7D71\u5408\u3057\u3001\u3053\u306E\u56FD\u5BB6\u81EA\u4F53\u306F\u89E3\u6563\u3057\u307E\u3059\u3002"));
+      return wrap;
     }
     function growthRateSection(stateId) {
       const wrap = el2("div", "editor-section");
@@ -3856,14 +4355,14 @@ ${shown}${more}`;
     }
     function renderBurg(map, title, body) {
       const b = map.pack.burgs[current.id];
-      if (!isLive9(b)) {
+      if (!isLive10(b)) {
         close();
         return;
       }
       title.textContent = `${b.capital ? "\u{1F3F0} " : "\u{1F3D8}\uFE0F "}${b.name}`;
       const form = el2("div", "editor-form");
       form.append(table([
-        ["\u56FD\u5BB6", isLive9(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
+        ["\u56FD\u5BB6", isLive10(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
         ["\u6587\u5316", map.pack.cultures[b.culture]?.name ?? ""],
         ["\u4EBA\u53E3(\u6982\u7B97)", (b.population ?? 0).toFixed(2)]
       ]));
@@ -3893,7 +4392,7 @@ ${shown}${more}`;
     function renderEntity(map, kind, title, body) {
       const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
       const e = list?.[current.id];
-      if (!isLive9(e)) {
+      if (!isLive10(e)) {
         close();
         return;
       }
@@ -3947,7 +4446,7 @@ ${shown}${more}`;
     function diplomacySection(map, stateId) {
       const wrap = el2("div", "editor-section");
       wrap.append(el2("h4", "", "\u5916\u4EA4\u95A2\u4FC2"));
-      const others = map.pack.states.filter((s) => isLive9(s) && s.i !== stateId);
+      const others = map.pack.states.filter((s) => isLive10(s) && s.i !== stateId);
       for (const s of others) {
         const row = el2("div", "diplomacy-row");
         row.append(el2("span", "diplomacy-name", s.name));
@@ -4064,7 +4563,7 @@ ${shown}${more}`;
   }
 
   // js/core/sim/military.js
-  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive11 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function regimentsOf(state) {
     return Array.isArray(state.military) ? state.military : [];
   }
@@ -4074,7 +4573,7 @@ ${shown}${more}`;
   }
   function planCreateRegiment(map, stateId, cell, { name, icon = "\u{1F6E1}\uFE0F" } = {}) {
     const state = map.pack.states[stateId];
-    if (!isLive10(state)) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive11(state)) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u914D\u7F6E\u3067\u304D\u307E\u305B\u3093");
     const { p } = map.geometry.pack;
     const reg = {
@@ -4129,7 +4628,7 @@ ${shown}${more}`;
   }
   function planAnnualConscription(map, stateId) {
     const state = map.pack.states[stateId];
-    if (!isLive10(state)) return null;
+    if (!isLive11(state)) return null;
     ensureEconomy(state);
     const capital = map.pack.burgs[state.capital];
     if (!capital) return null;
@@ -4296,7 +4795,7 @@ ${shown}${more}`;
   }
 
   // js/core/edit/alliances.js
-  var isLive11 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive12 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listAlliances(map) {
     return map.ext?.data?.alliances ?? [];
   }
@@ -4307,7 +4806,7 @@ ${shown}${more}`;
   function planCreateAlliance(map, name, memberIds) {
     const uniq = [...new Set(memberIds)];
     if (uniq.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
-    for (const id of uniq) if (!isLive11(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of uniq) if (!isLive12(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq };
     const before = listAlliances(map);
     const write = (m, list) => {
@@ -4352,7 +4851,7 @@ ${shown}${more}`;
   }
 
   // js/core/edit/wars.js
-  var isLive12 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive13 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listWars(map) {
     return map.ext?.data?.wars ?? [];
   }
@@ -4374,7 +4873,7 @@ ${shown}${more}`;
   function planDeclareWar(map, { name, attackers, defenders, date }) {
     const a = [...new Set(attackers)], d = [...new Set(defenders)];
     if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
-    for (const id of [...a, ...d]) if (!isLive12(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of [...a, ...d]) if (!isLive13(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
     const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
     const war = {
@@ -4463,7 +4962,7 @@ ${shown}${more}`;
     const war = list.find((w) => w.id === warId);
     if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (war.endedAt) throw new Error("\u65E2\u306B\u7D42\u7D50\u3057\u3066\u3044\u307E\u3059");
-    if (!isLive12(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive13(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     const parts = [];
     const c = map.pack.cells;
     const moveCells = (cells) => {
@@ -4640,11 +5139,11 @@ ${shown}${more}`;
   }
 
   // js/core/sim/world.js
-  var isLive13 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive14 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planAnnualUpdate(map) {
     const parts = [];
     for (const state of map.pack.states) {
-      if (!isLive13(state)) continue;
+      if (!isLive14(state)) continue;
       ensureEconomy(state);
       const { rural, urban, industry } = computeAnnualUpdate(state);
       if (rural !== state.rural || urban !== state.urban || industry !== state.industry) {
@@ -4753,7 +5252,7 @@ ${shown}${more}`;
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initMilitaryPanel({ store, simActions, editActions }) {
     const root = byId("tab-regiments");
     let selectedState = null;
@@ -4786,7 +5285,7 @@ ${shown}${more}`;
         cardCache.clear();
         return;
       }
-      const states = map.pack.states.filter(isLive14);
+      const states = map.pack.states.filter(isLive15);
       if (selectedState == null || !states.some((s) => s.i === selectedState)) selectedState = states[0]?.i ?? null;
       root.replaceChildren();
       const picker = el3("div", "state-picker");
@@ -5040,6 +5539,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       },
       unlock() {
         lockedToState = false;
+        root.hidden = true;
       },
       get selectedState() {
         return selectedState;
@@ -5097,7 +5597,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive16 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initWarsPanel({ store, simActions }) {
     const root = byId("tab-wars");
     function render() {
@@ -5107,7 +5607,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
         root.append(el4("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive15);
+      const states = map.pack.states.filter(isLive16);
       root.append(declareForm(map, states));
       const wars = simActions.listWars().slice().reverse();
       if (!wars.length) {
@@ -5257,7 +5757,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     if (text != null) e.textContent = text;
     return e;
   };
-  var isLive16 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive17 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initAlliancesPanel({ store, simActions }) {
     const root = byId("tab-alliances");
     function render() {
@@ -5267,7 +5767,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
         root.append(el5("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive16);
+      const states = map.pack.states.filter(isLive17);
       root.append(createForm(map, states));
       const list = simActions.listAlliances();
       if (!list.length) {
@@ -5426,9 +5926,10 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     initToolbar(deps);
     initStatusBar(deps);
     initMapView(deps);
+    initLegend(deps);
     const editMode = initEditMode(deps);
     editModeRef = editMode;
-    const editToolbar = initEditToolbar({ store, editMode });
+    const editToolbar = initEditToolbar({ store, editMode, editActions });
     const editPanel = initEditPanel();
     window.addEventListener("request-edit-panel-open", () => editPanel.open());
     window.addEventListener("request-edit-panel-sync", (e) => {

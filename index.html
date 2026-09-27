@@ -48,6 +48,10 @@
   <main>
     <aside id="sidebar" aria-label="国家・都市の編集">
       <div id="editor-panel" hidden></div>
+      <div id="legend" class="legend">
+        <h3 id="legend-title">凡例</h3>
+        <ul id="legend-list" class="legend-list"></ul>
+      </div>
     </aside>
 
     <section id="stage" aria-label="地図">
@@ -153,11 +157,13 @@
   <input type="file" id="file-input" accept=".map,.gz" hidden>
 
   <!-- 軍事・外交・属州の各パネルの中身が実際に入る場所。国家タブ（editor-panel.js）が
-       サブタブを開いたときに、ここから該当パネルの要素を取り出して差し込む。 -->
-  <div id="panel-mounts" hidden>
-    <div id="tab-regiments" class="tab-panel"></div>
-    <div id="tab-wars" class="tab-panel"></div>
-    <div id="tab-alliances" class="tab-panel"></div>
+       サブタブを開いたときに、ここから該当パネルの要素を取り出して差し込む。
+       この div 自体は隠さない。中の各 .tab-panel が個別に hidden で表示/非表示を切り替える
+       （どのサブタブにも属していない間は各 .tab-panel 自身に hidden がついている）。 -->
+  <div id="panel-mounts">
+    <div id="tab-regiments" class="tab-panel" hidden></div>
+    <div id="tab-wars" class="tab-panel" hidden></div>
+    <div id="tab-alliances" class="tab-panel" hidden></div>
   </div>
 
   <dialog id="help-dialog">
