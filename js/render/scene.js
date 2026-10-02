@@ -6,6 +6,8 @@ import { drawTerrain } from "./layers/terrain.js";
 import { drawPolitics, drawCoast } from "./layers/politics.js";
 import { drawRivers, drawRoutes } from "./layers/lines.js";
 import { drawBurgs, drawLabels } from "./layers/places.js";
+import { drawTradeLines } from "./layers/trade-lines.js";
+import { drawZones, drawJourneys } from "./layers/journeys-zones.js";
 
 export const DEFAULT_RENDER_OPTIONS = Object.freeze({
   base: "biome",          // "biome" | "height"
@@ -14,6 +16,8 @@ export const DEFAULT_RENDER_OPTIONS = Object.freeze({
   rivers: true,
   routes: { roads: true, trails: true, searoutes: true },
   burgs: true,
+  zones: false,           // ゾーン（侵攻・疫病など）。画面では既定で表示する（options.js）
+  journeys: false,        // 旅の線。同上
   labels: { states: true, burgs: true },
   background: "#2f4a72",
 });
@@ -40,6 +44,9 @@ export function drawScene(ctx, map, vp, options = {}, dpr = 1) {
   if (o.coast) drawCoast(ctx, map, vp);
   if (o.rivers) drawRivers(ctx, map, vp);
   if (o.routes) drawRoutes(ctx, map, vp, o.routes);
+  if (o.zones) drawZones(ctx, map, vp, { selected: o.zoneSelected ?? null });
+  if (o.tradeLines) drawTradeLines(ctx, vp, o.tradeLines);
+  if (o.journeys) drawJourneys(ctx, map, vp, { selected: o.journeySelected ?? null });
   if (o.burgs) drawBurgs(ctx, map, vp);
   if (o.labels) drawLabels(ctx, map, vp, o.labels);
   ctx.restore();

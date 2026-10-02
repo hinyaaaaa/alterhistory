@@ -7,6 +7,11 @@ export function viewToRenderOptions(view) {
     rivers: view.rivers,
     routes: view.routes ? { roads: true, trails: true, searoutes: true } : false,
     burgs: view.burgs,
+    tradeLines: view.tradeLines ?? null,
+    zones: view.zones ?? true,
+    zoneSelected: view.zoneSelected ?? null,
+    journeys: view.journeys ?? true,
+    journeySelected: view.journeySelected ?? null,
     labels: view.labels
       ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : true }
       : false,

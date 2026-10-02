@@ -74,7 +74,17 @@ export function parseAzgaarText(text) {
 
   parseParams(lines[LINE.PARAMS], map);
   parseSettings(lines, map, warnings);
-  map.biomesData = json(lines[LINE.BIOMES], [], "バイオーム");
+  // バイオーム行は新しい版ではJSON、古い版(1.114系など)では「色の列|居住適性の列|名前の列」（各カンマ区切り）
+  const biomeLine = lines[LINE.BIOMES] ?? "";
+  if (!biomeLine.trimStart().startsWith("[") && biomeLine.includes("|")) {
+    const [colors, habitability, names] = biomeLine.split("|").map((part) => part.split(","));
+    map.biomesData = colors.map((color, i) => ({
+      i, name: names?.[i] ?? `バイオーム${i}`, color, habitability: Number(habitability?.[i]) || 0, iconsDensity: 0, icons: [],
+    }));
+    map.meta.biomesLegacy = true; // 保存時に元の旧形式へ書き戻すための目印
+  } else {
+    map.biomesData = json(biomeLine, [], "バイオーム");
+  }
   // 旧形式のみ。新形式では各エンティティが note を持つ
   map.notes = json(lines[LINE.NOTES], [], "ノート");
   // SVG は描画済みの画像。読み込みには不要で巨大なので、原文のまま保持する

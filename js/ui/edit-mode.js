@@ -11,6 +11,7 @@ export const TOOLS = Object.freeze({
   PAINT_STATE: "paint:state", PAINT_CULTURE: "paint:culture",
   PAINT_RELIGION: "paint:religion", PAINT_PROVINCE: "paint:province",
   PAINT_BIOME: "paint:biome",
+  PAINT_ZONE: "paint:zone",
   ADD_BURG: "add:burg", ADD_MARKER: "add:marker",
 });
 
@@ -25,6 +26,8 @@ export function initEditMode({ store, viewport, editActions, panels }) {
   let target = 0;          // 塗る先の実体ID（0=消す）。パネルで選ぶ
   let radius = 40;         // ブラシ半径（ワールド座標）
   let markerType = { type: "marker", icon: "📍" };
+  let zoneMode = "add";     // ゾーンを塗るとき: "add"（塗る）| "erase"（消す）
+  let picker = null;        // 「地図でセルを1つ選ぶ」待ち。クリックされたセルで呼ばれる（Esc で取り消し）
 
   const localPos = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
   const toWorld = (e) => { const [sx, sy] = localPos(e); return viewport.toWorld(sx, sy); };
@@ -39,6 +42,7 @@ export function initEditMode({ store, viewport, editActions, panels }) {
       if (!cells.length) return;
       cells.forEach((c) => painted.add(c));
       if (tool === TOOLS.PAINT_BIOME) editActions.paintBiome(target, cells);
+      else if (tool === TOOLS.PAINT_ZONE) editActions.paintZone(target, cells, zoneMode);
       else editActions.paintCells(PAINT_TOOL_KIND[tool], target, cells);
     },
   });
@@ -52,17 +56,34 @@ export function initEditMode({ store, viewport, editActions, panels }) {
   function setTarget(id) { target = id; }
   function setRadius(r) { radius = Math.max(6, Math.min(300, r)); store.update((s) => { s.brushRadius = radius; }); }
   function setMarkerType(t) { markerType = t; }
+  function setZoneMode(m) { zoneMode = m === "erase" ? "erase" : "add"; }
+
+  /** 地図上のセルを1つ選んでもらう。選ばれたら cb(cell)。取り消し（Esc・cancelPick）は cb(null) */
+  function pickCell(cb) {
+    cancelPick();
+    picker = cb;
+    canvas.classList.add("tool-place");
+    store.update((s) => { s.pickingCell = true; });
+  }
+  function cancelPick() {
+    if (!picker) return;
+    const cb = picker; picker = null;
+    canvas.classList.remove("tool-place");
+    store.update((s) => { s.pickingCell = false; });
+    cb(null);
+  }
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && picker) cancelPick(); });
 
   canvas.addEventListener("pointerdown", (e) => {
     const map = store.getState().map;
-    if (!map || e.button !== 0 || tool === TOOLS.SELECT) return;
+    if (!map || e.button !== 0 || tool === TOOLS.SELECT || picker) return;
     const [wx, wy] = toWorld(e);
     if (!inMap(map, wx, wy)) return;
     const cell = editActions.findCell(wx, wy);
     if (cell < 0) return;
 
     if (tool === TOOLS.ADD_BURG) {
-      panels.promptBurgName((name) => { if (name) { const id = editActions.addBurg(cell, name); if (id != null) panels.openBurg(id); } });
+      panels.promptBurgName((name) => { if (name != null) { const id = editActions.addBurg(cell, name); if (id != null) panels.openBurg(id); } }, cell);
       return;
     }
     if (tool === TOOLS.ADD_MARKER) {
@@ -99,6 +120,14 @@ export function initEditMode({ store, viewport, editActions, panels }) {
     const [wx, wy] = toWorld(e);
     if (!inMap(map, wx, wy)) return;
     const cell = editActions.findCell(wx, wy);
+    // セルの選択待ち（旅の目的地など）は、どのツールよりも優先する
+    if (picker && cell >= 0) {
+      const cb = picker; picker = null;
+      canvas.classList.remove("tool-place");
+      store.update((s) => { s.pickingCell = false; });
+      cb(cell);
+      return;
+    }
     // 部隊の配置・移動待ちがあれば、どのツールが選ばれていても最優先でそちらを処理する
     if (panels.regimentPending?.() && panels.consumeRegimentPlacement?.(cell)) return;
     if (tool !== TOOLS.SELECT) return;
@@ -123,7 +152,7 @@ export function initEditMode({ store, viewport, editActions, panels }) {
   });
 
   return {
-    setTool, setTarget, setRadius, setMarkerType,
+    setTool, setTarget, setRadius, setMarkerType, setZoneMode, pickCell, cancelPick,
     get tool() { return tool; }, get target() { return target; },
   };
 }

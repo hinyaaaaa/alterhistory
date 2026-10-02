@@ -48,7 +48,9 @@ export function serializeAzgaar(map, { native = false, exportedAt } = {}) {
   L.set(LINE.PARAMS, header.join("|"));
   L.set(LINE.SETTINGS, isLegacy ? map.settings.raw : json(map.settings.options));
   L.set(LINE.COORDINATES, isLegacy ? json(map.coordinates) : "");
-  L.set(LINE.BIOMES, json(map.biomesData));
+  L.set(LINE.BIOMES, map.meta.biomesLegacy
+    ? [map.biomesData.map((b) => b.color), map.biomesData.map((b) => b.habitability ?? 0), map.biomesData.map((b) => b.name)].map((col) => col.join(",")).join("|")
+    : json(map.biomesData));
   L.set(LINE.NOTES, isLegacy ? json(map.notes) : "");
   L.set(LINE.SVG, map.rawLines[LINE.SVG] ?? "");
   L.set(LINE.GRID, json(gridGeneral));

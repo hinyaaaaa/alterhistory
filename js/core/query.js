@@ -57,6 +57,33 @@ export function listEntities(map, kind) {
 }
 
 /** 実体の位置（ワールド座標）。国家は pole、無ければ中心セル */
+/** そのセル、または隣接を hops 回までたどった範囲にある最も近い都市（無ければ null）。旅の「どこから・どこへ」の表示用 */
+export function burgNearCell(map, cell, hops = 2) {
+  const { burg } = map.pack.cells;
+  const adj = map.geometry.pack.cells.c;
+  const seen = new Set([cell]);
+  let layer = [cell];
+  for (let h = 0; h <= hops; h++) {
+    for (const i of layer) {
+      const b = map.pack.burgs[burg[i]];
+      if (burg[i] > 0 && b && !b.removed && b.i) return b;
+    }
+    const next = [];
+    for (const i of layer) for (const j of adj[i]) if (!seen.has(j)) { seen.add(j); next.push(j); }
+    layer = next;
+  }
+  return null;
+}
+
+/** 場所の呼び名: 近くの都市 → 国の領内 → 海上 → 無人の地 */
+export function placeLabel(map, cell) {
+  const b = burgNearCell(map, cell, 2);
+  if (b) return b.name;
+  if (map.pack.cells.biome[cell] === 0) return "海上";
+  const s = map.pack.states[map.pack.cells.state[cell]];
+  return s && s.i && !s.removed ? `${s.name}領内` : "無人の地";
+}
+
 export function entityPosition(map, entity) {
   if (entity.pole) return [entity.pole[0], entity.pole[1]];
   const p = entity.center != null ? map.geometry?.pack.p[entity.center] : null;

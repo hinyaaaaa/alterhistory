@@ -10,6 +10,7 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
   const root = byId("tab-regiments");
   let selectedState = null;
   let lockedToState = false; // true の間は国家セレクタを表示しない（国家タブのサブタブとして開いた時）
+  let targetBrowseState = null; // 攻撃対象選択中、どの相手国の部隊一覧を見せているか
   let attackPick = null; // { stateId, regIds: number[] } 動員して攻撃対象を選ぶモード（regIdsが1件なら従来の1対1攻撃と同じ）
   let musterMode = false; // true の間、同じセルの部隊カードに動員チェックボックスを出す
   const musterSelection = new Set(); // 動員モードでチェックされた regId
@@ -108,6 +109,49 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
       }
       root.append(bar);
     }
+
+    // 攻撃対象の選択中は、たとえ国家セレクタが隠れていても（＝国家タブから開いた時でも）
+    // 攻撃対象となる「相手国の部隊」を選べる必要がある。ここだけは lockedToState を無視して
+    // 他国の部隊一覧を出す（そうしないと、自国のタブからは絶対に攻撃対象を選べなくなってしまう）。
+    if (attackPick && attackPick.stateId === selectedState) {
+      root.append(attackTargetSection(map, states));
+    }
+  }
+
+  /** 攻撃対象選択中に出す、相手国とその部隊の一覧（lockedToState 中でもここだけは例外的に他国を見せる） */
+  function attackTargetSection(map, states) {
+    const wrap = el("div", "editor-section attack-target-section");
+    wrap.append(el("h4", "", "攻撃対象を選ぶ"));
+    const others = states.filter((s) => s.i !== attackPick.stateId);
+    if (!others.length) { wrap.append(el("p", "muted", "他に国家がありません。")); return wrap; }
+    if (targetBrowseState == null || !others.some((s) => s.i === targetBrowseState)) targetBrowseState = others[0].i;
+
+    const row = el("div", "state-picker");
+    row.append(el("span", "field-label", "相手国"));
+    const sel = document.createElement("select");
+    for (const s of others) { const o = document.createElement("option"); o.value = s.i; o.textContent = s.fullName ?? s.name; if (s.i === targetBrowseState) o.selected = true; sel.append(o); }
+    sel.addEventListener("change", () => { targetBrowseState = Number(sel.value); render(); });
+    row.append(sel);
+    const cancelBtn = el("button", "", "攻撃を取りやめる");
+    cancelBtn.type = "button";
+    cancelBtn.addEventListener("click", () => { attackPick = null; render(); });
+    row.append(cancelBtn);
+    wrap.append(row);
+
+    const targetRegs = simActions.regimentsOf(targetBrowseState);
+    if (!targetRegs.length) { wrap.append(el("p", "muted", "この国にはまだ部隊がありません（部隊が無い国は攻め落とせません）。")); return wrap; }
+    const list = el("div", "regiment-list");
+    for (const r of targetRegs) {
+      const card = el("div", "regiment-card target-card");
+      card.append(el("p", "regiment-name-ro", `${r.name}　配置: セル#${r.cell}`));
+      card.append(el("p", "regiment-power", `総戦力: ${Math.round(forcePower(r.u, doctrineOf(targetBrowseState))).toLocaleString()}`));
+      const slot = el("div", "attack-target-slot");
+      card.append(slot);
+      fillAttackTarget(map, targetBrowseState, r, slot);
+      list.append(card);
+    }
+    wrap.append(list);
+    return wrap;
   }
 
   /**
@@ -283,7 +327,7 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     lockToState(id) { lockedToState = true; selectedState = id; cardCache.clear(); render(); },
     unlock() { lockedToState = false; root.hidden = true; },
     get selectedState() { return selectedState; },
-    cancelAttackPick() { if (attackPick || musterMode) { attackPick = null; musterMode = false; musterSelection.clear(); render(); } },
+    cancelAttackPick() { if (attackPick || musterMode) { attackPick = null; musterMode = false; musterSelection.clear(); targetBrowseState = null; render(); } },
     /** 地図クリックで部隊の配置/移動を待っているか（edit-mode.js から参照） */
     regimentPending() { return pending != null; },
     /** edit-mode.js から: クリックされたセルを、待ち受け中の配置/移動に使う */

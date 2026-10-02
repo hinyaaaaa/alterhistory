@@ -50,6 +50,17 @@ export function createTimeActions({ store, renderer }) {
     },
     /** 手動で1ヶ月分だけ進める（停止中でも使える） */
     stepMonth() { tick(); },
+    /** 現在の年月を直接指定し、そこから始める（進行の巻き戻し・早送りではなく「上書き」）。
+     *  年次更新（人口・産業など）は行わない＝単に時計の針をその年月に合わせるだけ。
+     *  「江戸時代の1800年から始めたい」のような、シナリオの起点を決める用途を想定。 */
+    setWorldTime(year, month = 1) {
+      const map = store.getState().map;
+      if (!map) return;
+      const y = Math.max(1, Math.round(Number(year) || 1));
+      const m = Math.min(12, Math.max(1, Math.round(Number(month) || 1)));
+      store.update((s) => { s.map.worldTime = { year: y, month: m }; });
+      renderer.requestRender();
+    },
     /** 新しい地図を読み込んだときに時計をリセットし、進行中なら止める */
     resetForNewMap() {
       this.stop();

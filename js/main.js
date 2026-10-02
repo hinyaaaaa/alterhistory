@@ -11,6 +11,8 @@ import { byId } from "./ui/dom.js";
 import { downloadBlob, createBrowserCanvas } from "./ui/download.js";
 import { initMapView } from "./ui/map-view.js";
 import { initLegend } from "./ui/legend.js";
+import { initChrome } from "./ui/chrome.js";
+import { initSidebarToggle } from "./ui/sidebar-toggle.js";
 import { initToolbar } from "./ui/toolbar.js";
 import { initStatusBar } from "./ui/status-bar.js";
 import { initBanner } from "./ui/banner.js";
@@ -20,6 +22,10 @@ import { createEditActions } from "./app/edit-actions.js";
 import { initEditMode } from "./ui/edit-mode.js";
 import { initEditToolbar } from "./ui/edit-toolbar.js";
 import { initEditPanel } from "./ui/edit-panel.js";
+import { createBuilderActions } from "./app/builder-actions.js";
+import { initHistoryBuilder } from "./ui/history-builder.js";
+import { createEconomyView } from "./ui/economy-view.js";
+import { createTravelView } from "./ui/travel-view.js";
 import { initEditorPanel } from "./ui/panels/editor-panel.js";
 import { createSimActions } from "./app/sim-actions.js";
 import { createTimeActions } from "./app/time-actions.js";
@@ -40,6 +46,7 @@ function start() {
     view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "all" },
     editTool: "select", brushRadius: 40,
     timeRunning: false, timeSpeed: 120000, hint: null,
+    exportOpts: { title: true, legend: true, scaleBar: true },
   });
   const viewport = createViewport(1280, 774);
   const renderer = createRenderer({
@@ -82,10 +89,16 @@ function start() {
   initStatusBar(deps);
   initMapView(deps);
   initLegend(deps);
+  initSidebarToggle(deps);
+  initChrome(deps);
   const editMode = initEditMode(deps);
   editModeRef = editMode;
   const editToolbar = initEditToolbar({ store, editMode, editActions });
   const editPanel = initEditPanel();
+  const builderActions = createBuilderActions({ store, editActions, editMode, actions });
+  const economyView = createEconomyView({ store, editActions, builderActions });
+  const travelView = createTravelView({ store, editActions, editMode, viewport, actions });
+  const historyBuilder = initHistoryBuilder({ store, viewport, renderer, editActions, builderActions, editMode, panels, views: { economy: economyView, travel: travelView } });
   // 属州タブの「この属州を塗り直す」ボタンから、地図編集パネルを開いてツール欄を同期する
   window.addEventListener("request-edit-panel-open", () => editPanel.open());
   window.addEventListener("request-edit-panel-sync", (e) => {
@@ -93,7 +106,7 @@ function start() {
     editToolbar.sync();
     if (e.detail?.target != null) editToolbar.setTargetValue(e.detail.target);
   });
-  initTimeBar({ store, timeActions });
+  initTimeBar({ store, timeActions, editActions });
   // 新しい地図を開いたら、時間の進行を止める（前の地図の進行を引き継がない）
   store.subscribe((_s, change) => { if (change.type === "replace") timeActions.stop(); });
   initShortcuts({ ...deps, editMode, editToolbar, timeActions });
@@ -102,7 +115,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions };
+  globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions, editorPanel, builderActions, historyBuilder };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

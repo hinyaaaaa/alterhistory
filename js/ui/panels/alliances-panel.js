@@ -1,4 +1,5 @@
 // 同盟タブ：3カ国以上の同盟を作成・編集・解消する。
+import { formatWorldTime } from "../../core/sim/time.js";
 import { byId } from "../dom.js";
 import { confirmDialog, alertDialog } from "../dialogs.js";
 
@@ -16,8 +17,15 @@ export function initAlliancesPanel({ store, simActions }) {
 
     root.append(createForm(map, states));
     const list = simActions.listAlliances();
-    if (!list.length) { root.append(el("p", "muted", "同盟はまだありません")); return; }
-    for (const a of list) root.append(allianceCard(map, states, a));
+    const active = list.filter((a) => !a.dissolvedAt);
+    const dissolved = list.filter((a) => a.dissolvedAt);
+    if (!active.length) root.append(el("p", "muted", "同盟はまだありません"));
+    else for (const a of active) root.append(allianceCard(map, states, a));
+
+    if (dissolved.length) {
+      root.append(el("h4", "", "解消済みの同盟（履歴）"));
+      for (const a of dissolved) root.append(allianceCard(map, states, a));
+    }
   }
 
   function stateName(map, id) { return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`; }
@@ -54,32 +62,44 @@ export function initAlliancesPanel({ store, simActions }) {
   }
 
   function allianceCard(map, states, a) {
-    const card = el("div", "alliance-card");
+    const dissolved = !!a.dissolvedAt;
+    const card = el("div", `alliance-card${dissolved ? " dissolved" : ""}`);
     const head = el("div", "regiment-card-head");
     const nameInput = document.createElement("input");
     nameInput.value = a.name; nameInput.style.fontWeight = "600"; nameInput.style.background = "transparent"; nameInput.style.border = "0"; nameInput.style.flex = "1";
+    nameInput.disabled = dissolved;
     nameInput.addEventListener("change", () => simActions.editAlliance(a.id, { name: nameInput.value }));
-    const delBtn = el("button", "danger", "解消");
-    delBtn.type = "button";
-    delBtn.addEventListener("click", async () => { if (await confirmDialog(`「${a.name}」を解消しますか？`, { danger: true, okLabel: "解消" })) simActions.dissolveAlliance(a.id); });
-    head.append(nameInput, delBtn);
+    head.append(nameInput);
+    if (!dissolved) {
+      const delBtn = el("button", "danger", "解消");
+      delBtn.type = "button";
+      delBtn.addEventListener("click", async () => { if (await confirmDialog(`「${a.name}」を解消しますか？`, { danger: true, okLabel: "解消" })) simActions.dissolveAlliance(a.id); });
+      head.append(delBtn);
+    }
     card.append(head);
+
+    const dateLine = a.formedAt
+      ? `結成: ${formatWorldTime(a.formedAt)}${dissolved ? `　解消: ${formatWorldTime(a.dissolvedAt)}` : ""}`
+      : (dissolved ? "解消済み" : "");
+    if (dateLine) card.append(el("p", "hint", dateLine));
 
     const chips = el("div", "member-chip-list");
     for (const id of a.members) chips.append(el("span", "member-chip", stateName(map, id)));
     card.append(chips);
 
-    const { wrap: picker, boxes } = memberPicker(states, a.members);
-    card.append(el("p", "muted", "加盟国の変更:"));
-    card.append(picker);
-    const update = el("button", "", "メンバーを更新");
-    update.type = "button";
-    update.addEventListener("click", async () => {
-      const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
-      if (ids.length < 2) { await alertDialog("2カ国以上が必要です"); return; }
-      simActions.editAlliance(a.id, { members: ids });
-    });
-    card.append(update);
+    if (!dissolved) {
+      const { wrap: picker, boxes } = memberPicker(states, a.members);
+      card.append(el("p", "muted", "加盟国の変更:"));
+      card.append(picker);
+      const update = el("button", "", "メンバーを更新");
+      update.type = "button";
+      update.addEventListener("click", async () => {
+        const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
+        if (ids.length < 2) { await alertDialog("2カ国以上が必要です"); return; }
+        simActions.editAlliance(a.id, { members: ids });
+      });
+      card.append(update);
+    }
     return card;
   }
 

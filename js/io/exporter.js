@@ -9,6 +9,7 @@
 import { createViewport } from "../render/viewport.js";
 import { drawScene } from "../render/scene.js";
 import { createSvgContext } from "../render/svg-context.js";
+import { drawAnnotations, DEFAULT_ANNOTATIONS } from "../render/layers/annotations.js";
 
 /** 出力用のビューポート: 地図全体を等倍(k=1)で収める */
 function wholeMapViewport(map) {
@@ -25,18 +26,21 @@ function wholeMapViewport(map) {
  * @param {(w:number,h:number)=>any} createCanvas
  * @returns Canvas（呼び出し側が PNG に変換する）
  */
-export function renderMapToCanvas(map, renderOptions, { scale = 2, createCanvas }) {
+export function renderMapToCanvas(map, renderOptions, { scale = 2, createCanvas, annotations = DEFAULT_ANNOTATIONS }) {
   const { vp, w, h } = wholeMapViewport(map);
   const canvas = createCanvas(Math.round(w * scale), Math.round(h * scale));
-  drawScene(canvas.getContext("2d"), map, vp, renderOptions, scale);
+  const ctx = canvas.getContext("2d");
+  drawScene(ctx, map, vp, renderOptions, scale);
+  drawAnnotations(ctx, map, { w, h, dpr: scale, overlay: renderOptions?.overlay, options: annotations });
   return canvas;
 }
 
 /** @returns {string} SVG 文書 */
-export function renderMapToSvg(map, renderOptions) {
+export function renderMapToSvg(map, renderOptions, { annotations = DEFAULT_ANNOTATIONS } = {}) {
   const { vp, w, h } = wholeMapViewport(map);
   const ctx = createSvgContext(w, h);
   drawScene(ctx, map, vp, renderOptions, 1);
+  drawAnnotations(ctx, map, { w, h, dpr: 1, overlay: renderOptions?.overlay, options: annotations });
   return ctx.toString();
 }
 

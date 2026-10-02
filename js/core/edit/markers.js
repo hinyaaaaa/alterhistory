@@ -21,6 +21,10 @@ export const DEFAULT_MARKER_TYPES = Object.freeze([
   { type: "ruins", icon: "🏛️", label: "遺跡" },
   { type: "statues", icon: "🗿", label: "像" },
   { type: "caves", icon: "🕳️", label: "洞窟" },
+  { type: "independence", icon: "🏳️", label: "独立宣言" },
+  { type: "founding", icon: "👑", label: "建国" },
+  { type: "war", icon: "⚔️", label: "開戦" },
+  { type: "peace", icon: "🕊️", label: "講和" },
 ]);
 
 /** "hot-springs" → "Hot springs"（公式 getDefaultMarkerName と同じ規則） */

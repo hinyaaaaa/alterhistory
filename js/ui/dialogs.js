@@ -5,7 +5,7 @@
 //
 // 呼び出し側は Promise を await する形になる（標準関数と違って同期では返らない）。
 
-function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLabel, danger }) {
+function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLabel, danger, suggest, hint }) {
   const dialog = document.createElement("dialog");
   dialog.className = "confirm-dialog";
 
@@ -21,6 +21,19 @@ function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLa
     dialog.append(input);
   }
 
+  // 名前の仮生成ボタン: 押すたびに入力欄を新しい候補で埋める（確定は OK を押したとき）
+  let suggestBtn = null;
+  if (input && suggest) {
+    suggestBtn = el("button", "suggest-btn", "🎲 仮の名前を生成");
+    suggestBtn.type = "button";
+    suggestBtn.addEventListener("click", () => {
+      const v = suggest();
+      if (v) { input.value = v; input.focus(); input.select(); }
+    });
+    dialog.append(suggestBtn);
+  }
+  if (hint) dialog.append(el("p", "hint", hint));
+
   const actions = el("div", "confirm-dialog-actions");
   let cancelBtn = null;
   if (cancelLabel !== null) {
@@ -35,7 +48,7 @@ function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLa
   dialog.append(actions);
 
   document.body.append(dialog);
-  return { dialog, input, okBtn, cancelBtn };
+  return { dialog, input, okBtn, cancelBtn, suggestBtn };
 }
 
 function el(tag, cls, text) {
@@ -76,6 +89,7 @@ export function promptDialog(message, defaultValue = "", opts = {}) {
     const { dialog, input, okBtn, cancelBtn } = buildDialog({
       bodyText: message, showInput: true, inputValue: defaultValue,
       okLabel: opts.okLabel, cancelLabel: opts.cancelLabel,
+      suggest: opts.suggest, hint: opts.hint,
     });
     const finish = (result) => { dialog.close(); dialog.remove(); resolve(result); };
     okBtn.addEventListener("click", () => finish(input.value));

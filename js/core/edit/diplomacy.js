@@ -5,9 +5,15 @@
 //   ・各国家の diplomacy は、国家ID を添字とする配列（自国と削除済みの国家は "x"）。
 //   ・国家0（無所属）の diplomacy は関係ではなく、外交の記録（[題, 本文] の配列）。変更のたびに追記する。
 //
+// 変更履歴: ALTERHISTORY拡張データ ext.data.diplomacyLog = [{ year, month, a, b, from, to }] に、
+// 「いつ・どの国とどの国が・どう変わったか」を記録する（Azgaar形式には無い概念）。
+// 一覧表示・年表づくりに使う。既存の states[0].diplomacy のテキストログとは別に持つ
+// （あちらは自由文でAzgaar互換、こちらは構造化データで検索・集計しやすくするため）。
+//
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand, setProps } from "./commands.js";
+import { ensureExt } from "./attributes.js";
 
 export const RELATIONS = Object.freeze([
   { id: "Ally", label: "同盟" },
@@ -33,8 +39,13 @@ export function getRelation(map, a, b) {
   return typeof r === "string" && r !== "x" ? r : null;
 }
 
+/** 関係変更の構造化ログ（年表用）。新しい順 */
+export function listDiplomacyLog(map) {
+  return map.ext?.data?.diplomacyLog ?? [];
+}
+
 /** @returns {object|null} 変更が無ければ null */
-export function planSetDiplomacy(map, a, b, relation) {
+export function planSetDiplomacy(map, a, b, relation, date) {
   const states = map.pack.states;
   const A = states[a], B = states[b];
   if (a === b) throw new Error("同じ国家どうしの関係は設定できません");
@@ -56,5 +67,16 @@ export function planSetDiplomacy(map, a, b, relation) {
     const from = old ? relationLabel(old) : "未設定";
     parts.push(setProps(states[0], { diplomacy: [...log, [`関係の変更：${relationLabel(relation)}`, `${A.name}と${B.name}の関係が「${from}」から「${relationLabel(relation)}」に変わった`]] }));
   }
+
+  // 構造化ログにも年月付きで記録する（同盟・戦争と同様、年表に使うため）
+  if (date) {
+    const before = listDiplomacyLog(map);
+    const entry = { year: date.year, month: date.month, a, b, from: old, to: relation };
+    parts.push({
+      apply: (m) => { ensureExt(m).data.diplomacyLog = [...before, entry]; },
+      revert: (m) => { const ext = ensureExt(m); if (before.length) ext.data.diplomacyLog = before; else delete ext.data.diplomacyLog; },
+    });
+  }
+
   return makeCommand(`外交関係の変更（${A.name}と${B.name}）`, [], parts);
 }

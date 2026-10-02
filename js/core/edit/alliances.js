@@ -1,6 +1,7 @@
 // 多国間同盟：既存の2国間 diplomacy（同盟/敵対など）とは別に、3カ国以上のグループを扱う。
 //
-// 保存場所: ALTERHISTORY拡張データ ext.data.alliances = [{ id, name, members:[stateId,...] }]
+// 保存場所: ALTERHISTORY拡張データ ext.data.alliances = [{ id, name, members:[stateId,...], formedAt, dissolvedAt }]
+// formedAt/dissolvedAt は { year, month } | null（結成日・解消日）。世界の現在時刻から自動で記録する。
 // Azgaar形式には無い概念のため、edit/attributes.js と同様に拡張データに保存する。
 //
 // 純粋ロジック層：DOM に依存しない。
@@ -20,11 +21,11 @@ function nextAllianceId(map) {
 }
 
 /** 同盟を作る。メンバーは2カ国以上必須（ユーザー要件：3カ国以上を想定するが、2国も許容） */
-export function planCreateAlliance(map, name, memberIds) {
+export function planCreateAlliance(map, name, memberIds, date) {
   const uniq = [...new Set(memberIds)];
   if (uniq.length < 2) throw new Error("同盟には2カ国以上が必要です");
   for (const id of uniq) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
-  const alliance = { id: nextAllianceId(map), name: name || "新しい同盟", members: uniq };
+  const alliance = { id: nextAllianceId(map), name: name || "新しい同盟", members: uniq, formedAt: date ?? null, dissolvedAt: null };
   const before = listAlliances(map);
   const write = (m, list) => { const ext = ensureExt(m); ext.data.alliances = list; if (!list.length) delete ext.data.alliances; };
   return {
@@ -48,17 +49,19 @@ export function planEditAlliance(map, allianceId, patch) {
   return makeCommand("同盟を編集", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
 }
 
-/** 同盟を解消する */
-export function planDissolveAlliance(map, allianceId) {
+/** 同盟を解消する（解消日を記録して残す。一覧からは消えず「解消済み」として履歴に残る） */
+export function planDissolveAlliance(map, allianceId, date) {
   const list = listAlliances(map);
-  if (!list.some((a) => a.id === allianceId)) throw new Error("その同盟は存在しません");
+  const a = list.find((x) => x.id === allianceId);
+  if (!a) throw new Error("その同盟は存在しません");
+  if (a.dissolvedAt) throw new Error("既に解消されています");
   const before = list;
-  const after = list.filter((a) => a.id !== allianceId);
-  const write = (m, v) => { const ext = ensureExt(m); ext.data.alliances = v; if (!v.length) delete ext.data.alliances; };
+  const after = list.map((x) => (x.id === allianceId ? { ...x, dissolvedAt: date ?? null } : x));
+  const write = (m, v) => { ensureExt(m).data.alliances = v; };
   return makeCommand("同盟を解消", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
 }
 
-/** 指定国家が加盟している同盟の一覧 */
+/** 指定国家が加盟している同盟の一覧（解消済みも含む。現存のものだけなら .filter(a => !a.dissolvedAt)） */
 export function alliancesOf(map, stateId) {
   return listAlliances(map).filter((a) => a.members.includes(stateId));
 }

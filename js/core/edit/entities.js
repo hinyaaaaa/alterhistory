@@ -22,6 +22,8 @@ export function planRenameEntity(map, kind, id, name) {
   return makeCommand(`${label}の名前を変更`, ["places"], [setProps(e, { [field]: trimmed })]);
 }
 
+const EXTRA_KEYS = ["name", "form", "formName", "deity", "type"];
+
 /** 新しい実体の色。HSLで均等に散らし、既存の実体数から角度をずらして被りにくくする */
 function pickColor(existingCount, rnd) {
   const golden = 137.508; // 黄金角。均等に色相を散らす定番の手法
@@ -47,10 +49,11 @@ const LABEL_OF = { state: "国家", culture: "文化", religion: "宗教", provi
  * 作った時点ではどのセルも持たない（cells:0 等）。続けて「塗る」ツール（core/edit/paint.js の
  * planPaint）で、作成した実体をセルに塗って初めて地図上に反映される。
  * @param {object} map
- * @param {{kind:"state"|"culture"|"religion", name:string, rnd?:object}} opts
+ * @param {{kind:"state"|"culture"|"religion", name:string, rnd?:object, extra?:{name?:string,form?:string,formName?:string,deity?:string,type?:string}}} opts
+ *   extra: 国家の短縮名・政体、宗教の神名・種別など。名前の仮生成（naming.js）が渡す
  * @returns {{command:object, id:number}}
  */
-export function planAddEntity(map, { kind, name, rnd }) {
+export function planAddEntity(map, { kind, name, rnd, extra }) {
   if (kind === "province") throw new Error("属州は所属する国家が必要です。planAddProvince を使ってください");
   const listKey = LIST_KEY[kind];
   if (!listKey) throw new Error(`未対応の種類です: ${kind}`);
@@ -65,6 +68,8 @@ export function planAddEntity(map, { kind, name, rnd }) {
     cells: 0, area: 0, rural: 0, urban: 0, burgs: 0,
   };
   if (kind === "state") { entity.capital = 0; entity.neighbors = []; }
+  // 名前の仮生成が付ける補助項目（政体・神名など）。既存の必須項目は上書きさせない
+  for (const k of EXTRA_KEYS) if (typeof extra?.[k] === "string" && extra[k].trim()) entity[k] = extra[k].trim();
 
   const list = existing.length ? existing.slice() : [null];
   list[id] = entity;

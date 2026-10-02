@@ -27,6 +27,9 @@ export function initMapView({ store, viewport, actions }) {
 
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 && e.button !== 1) return;
+    // 塗りツール中の左ドラッグは「塗る」操作（edit-mode.js）。ここでも地図を動かすと、
+    // 塗りながら地図が流れてしまう。地図を動かしたいときは中ボタン、またはツールを選択に戻す。
+    if (e.button === 0 && (store.getState().editTool ?? "").startsWith("paint:")) return;
     canvas.setPointerCapture(e.pointerId);
     drag = { x: e.clientX, y: e.clientY, moved: false };
     canvas.focus();

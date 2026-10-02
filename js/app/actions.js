@@ -6,6 +6,8 @@ import { entityPosition } from "../core/query.js";
 import { serializeAzgaar } from "../io/azgaar-writer.js";
 import { renderMapToCanvas, renderMapToSvg, canvasToPngBlob, exportFileName, todayString } from "../io/exporter.js";
 import { viewToRenderOptions } from "../render/options.js";
+import { DEFAULT_ANNOTATIONS } from "../render/layers/annotations.js";
+import { buildChronicle, serializeChronicle, chronicleToMarkdown } from "../io/chronicle.js";
 
 const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
@@ -33,7 +35,7 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
    * 書き出しの共通処理。「処理中」を先に表示し、失敗は画面に出す（黙って失敗しない）。
    * 地図が無いときは何もしない。
    */
-  async function runExport(label, produce) {
+  async function runExport(label, produce, onDone) {
     const { map, fileName } = store.getState();
     if (!map) return;
     store.update((s) => { s.busy = `${label}を作成中…`; s.error = null; });
@@ -41,6 +43,7 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
     try {
       const { blob, name } = await produce(map, fileName);
       download(blob, name);
+      onDone?.();
       store.update((s) => { s.busy = null; });
       showNotice(`${name} を書き出しました（${(blob.size / 1024 / 1024).toFixed(1)} MB）`);
     } catch (e) {
@@ -50,6 +53,7 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
 
   const textBlob = (text, type) => new Blob([text], { type });
   const renderOpts = () => viewToRenderOptions(store.getState().view);
+  const annotationOpts = () => ({ ...DEFAULT_ANNOTATIONS, ...(store.getState().exportOpts ?? {}) });
 
   return {
     /** ファイルを開く。失敗しても前の地図は残す */
@@ -104,7 +108,7 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
           blob: textBlob(serializeAzgaar(map, { native: true, exportedAt: todayString() }), "text/plain"),
           name: exportFileName(map, fileName, "map"),
         };
-      });
+      }, () => store.markSaved());
     },
     /** Azgaar 互換の .map（ALTERHISTORY の目印・拡張データを含めない） */
     saveAzgaar() {
@@ -113,17 +117,39 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
         name: exportFileName(map, fileName, "map", "_azgaar"),
       }));
     },
+    /**
+     * AI 向けセーブデータ（クロニクル）。Claude 等にアップロードして歴史を構築してもらうための書き出し。
+     *   .chronicle.json … 全情報（ID を名前に解決済み・年表・国家別集約・セル単位の完全データ）
+     *   .chronicle.md   … 同じ内容の読み物版（AI にも人間にも読みやすい要約）
+     * 2 ファイルを 1 回の操作でダウンロードする。
+     */
+    exportChronicle() {
+      return runExport("AI用クロニクル", (map, fileName) => {
+        map.ext ??= { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
+        const ch = buildChronicle(map, { fileName, exportedAt: todayString() });
+        const base = exportFileName(map, fileName, "x").replace(/\.x$/, "");
+        // 2 つ目（読み物版）は先にダウンロードを発火し、1 つ目（JSON）を runExport の標準経路で返す
+        download(textBlob(chronicleToMarkdown(ch), "text/markdown"), `${base}.chronicle.md`);
+        return { blob: textBlob(serializeChronicle(ch), "application/json"), name: `${base}.chronicle.json` };
+      });
+    },
     exportPng() {
       return runExport("PNG画像", async (map, fileName) => ({
-        blob: await canvasToPngBlob(renderMapToCanvas(map, renderOpts(), { scale: PNG_SCALE, createCanvas })),
+        blob: await canvasToPngBlob(renderMapToCanvas(map, renderOpts(), { scale: PNG_SCALE, createCanvas, annotations: annotationOpts() })),
         name: exportFileName(map, fileName, "png"),
       }));
     },
     exportSvg() {
       return runExport("SVG画像", (map, fileName) => ({
-        blob: textBlob(renderMapToSvg(map, renderOpts()), "image/svg+xml"),
+        blob: textBlob(renderMapToSvg(map, renderOpts(), { annotations: annotationOpts() }), "image/svg+xml"),
         name: exportFileName(map, fileName, "svg"),
       }));
+    },
+
+    /** 書き出し画像に入れるもの（題名・凡例・スケールバー）の切替 */
+    setExportOption(name, on) {
+      if (!(name in DEFAULT_ANNOTATIONS)) return;
+      store.update((s) => { s.exportOpts = { ...DEFAULT_ANNOTATIONS, ...(s.exportOpts ?? {}), [name]: !!on }; });
     },
 
     setHover(cellInfo) {

@@ -13,11 +13,15 @@
 // 統計（cells/area/rural/urban/burgs）は core/edit/paint.js と同じ考え方で、セル配列から
 // 実測して差分更新する（保存値の絶対更新はしない。理由は paint.js のコメント参照）。
 //
+// どちらも、戦争・同盟と同様に ext.data.sovereigntyLog へ年月付きで記録する（年表用）。
+//
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand, setIndexed, setProps, setList } from "./commands.js";
 import { computePole } from "./pole.js";
 import { cellAreas } from "../geometry.js";
+import { ensureExt } from "./attributes.js";
+import { defaultMarkerName } from "./markers.js";
 
 const round6 = (v) => Math.round(v * 1e6) / 1e6;
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
@@ -47,13 +51,37 @@ function nearestCell(map, pole) {
   return best;
 }
 
+/** 年表用の構造化ログに1件追記するコマンド部品 */
+function logEntry(map, entry) {
+  const before = map.ext?.data?.sovereigntyLog ?? [];
+  return {
+    apply: (m) => { ensureExt(m).data.sovereigntyLog = [...before, entry]; },
+    revert: (m) => { const ext = ensureExt(m); if (before.length) ext.data.sovereigntyLog = before; else delete ext.data.sovereigntyLog; },
+  };
+}
+
+/** 出来事の目印として地図上にマーカーを立てるコマンド部品（独立・建国など） */
+function addEventMarker(map, { cell, type, name }) {
+  if (cell == null || cell < 0) return null;
+  const { p } = map.geometry.pack;
+  const id = Math.max(-1, ...map.markers.map((m) => m.i)) + 1;
+  const icon = type === "founding" ? "👑" : "🏳️";
+  const marker = { i: id, type, icon, x: p[cell][0], y: p[cell][1], cell, name: name || defaultMarkerName(type) };
+  return setList((m) => m.markers, (m, v) => { m.markers = v; }, [...map.markers, marker]);
+}
+
+/** 年表用の構造化ログ（独立・統合）。新しい順ではなく記録順 */
+export function listSovereigntyLog(map) {
+  return map.ext?.data?.sovereigntyLog ?? [];
+}
+
 /**
  * 属州を独立させ、新しい国家として切り出す。
  * @param {object} map
- * @param {{provinceId:number, name:string, rnd?:object}} opts
+ * @param {{provinceId:number, name:string, rnd?:object, date?:{year:number,month:number}}} opts
  * @returns {{command:object, id:number}} id は新しく作られた国家のID
  */
-export function planDeclareIndependence(map, { provinceId, name, rnd }) {
+export function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
   const province = map.pack.provinces[provinceId];
   if (!isLive(province) || !province.i) throw new Error("その属州は存在しません");
   const fromState = map.pack.states[province.state];
@@ -70,9 +98,6 @@ export function planDeclareIndependence(map, { provinceId, name, rnd }) {
   const newId = map.pack.states.length || 1;
   const liveCount = map.pack.states.filter(isLiveState).length;
 
-  // 新国家の首都: 属州の中心都市があればそれを使う。無ければ無首都のまま作る
-  const centerBurg = liveBurg(map, province.burg);
-
   let rural = 0, area = 0, urban = 0;
   const burgIds = [];
   for (const i of cells) {
@@ -82,10 +107,31 @@ export function planDeclareIndependence(map, { provinceId, name, rnd }) {
     if (b) { urban += b.population ?? 0; burgIds.push(b.i); }
   }
 
+  const memberSet = new Set(cells);
+  // 元の国家に領土が残らない独立は「独立」ではなく国家そのものの改名・統合になるので止める
+  let remaining = 0;
+  for (let i = 0; i < c.state.length; i++) if (c.state[i] === fromState.i && !memberSet.has(i)) remaining++;
+  if (!remaining) throw new Error("この属州は国家の全領土なので独立させられません（国家名を変えるか、統合を使ってください）");
+
+  // 新国家の首都: 属州の中心都市（属州内にあれば）、無ければ属州内で人口最大の都市。
+  // 首都の無い国家は不正なデータになるため、都市が1つも無い属州は独立できない。
+  const byPop = (a, b) => (b.population ?? 0) - (a.population ?? 0);
+  const inProvince = burgIds.map((id) => map.pack.burgs[id]);
+  const centerBurg = liveBurg(map, province.burg);
+  const capitalBurg = (centerBurg && burgIds.includes(centerBurg.i)) ? centerBurg : inProvince.slice().sort(byPop)[0];
+  if (!capitalBurg) throw new Error("この属州には都市が1つも無いため独立させられません。先に都市を置いてください");
+
+  // 元の国家の首都が独立側に含まれる場合は、残る都市の中から新しい首都を選ぶ
+  let newFromCapital = null;
+  if (burgIds.includes(fromState.capital)) {
+    newFromCapital = map.pack.burgs.filter((b) => liveBurg(map, b?.i) && b.state === fromState.i && !burgIds.includes(b.i)).sort(byPop)[0];
+    if (!newFromCapital) throw new Error("独立させると元の国家に都市が1つも残らないため、独立させられません");
+  }
+
   const newState = {
     i: newId, name: trimmed, fullName: trimmed, color: pickColor(liveCount, rnd),
     cells: cells.length, area: round6(area), rural: round6(rural), urban: round6(urban),
-    burgs: burgIds.length, capital: centerBurg ? centerBurg.i : 0, neighbors: [],
+    burgs: burgIds.length, capital: capitalBurg.i, neighbors: [],
   };
   const statesList = map.pack.states.length ? map.pack.states.slice() : [null];
   statesList[newId] = newState;
@@ -96,8 +142,9 @@ export function planDeclareIndependence(map, { provinceId, name, rnd }) {
     // 属州はそのまま新国家に付け替える（独立した属州は、新国家の中心的な属州として引き継ぐ）
     setProps(province, { state: newId }),
   ];
-  for (const bid of burgIds) parts.push(setProps(map.pack.burgs[bid], { state: newId }));
-  if (centerBurg) parts.push(setProps(centerBurg, { capital: 1 }));
+  // 都市は新国家の所属に。首都フラグは新首都だけに立てる（旧首都が独立側にあった場合の取り残しを防ぐ）
+  for (const bid of burgIds) parts.push(setProps(map.pack.burgs[bid], { state: newId, capital: bid === capitalBurg.i ? 1 : 0 }));
+  if (newFromCapital) parts.push(setProps(newFromCapital, { capital: 1 }));
 
   // 元の国家から、独立した分を差し引く
   const patch = {};
@@ -107,15 +154,11 @@ export function planDeclareIndependence(map, { provinceId, name, rnd }) {
   if (typeof fromState.urban === "number") patch.urban = round6(Math.max(0, fromState.urban - urban));
   if (typeof fromState.burgs === "number") patch.burgs = Math.max(0, fromState.burgs - burgIds.length);
   else if (Array.isArray(fromState.burgs)) patch.burgs = fromState.burgs.filter((b) => !burgIds.includes(b));
+  if (newFromCapital) patch.capital = newFromCapital.i;
   parts.push(setProps(fromState, patch));
 
-  // 元の国家の首都が独立した領土に含まれていた場合、首都を失う（無首都になる。ユーザーが後で選び直す）
-  if (fromState.capital && cells.includes(map.pack.burgs[fromState.capital]?.cell)) {
-    parts.push(setProps(fromState, { capital: 0 }));
-  }
 
   // 極（ラベル位置）を計算する
-  const memberSet = new Set(cells);
   const newPole = computePole(map, (cell) => (memberSet.has(cell) ? newId : -1), newId);
   if (newPole) parts.push(setProps(newState, { pole: newPole }));
   if (fromState.pole) {
@@ -127,15 +170,26 @@ export function planDeclareIndependence(map, { provinceId, name, rnd }) {
     }
   }
 
+  if (date) {
+    parts.push(logEntry(map, {
+      type: "independence", year: date.year, month: date.month,
+      fromState: fromState.i, newState: newId, provinceId, provinceName: province.fullName ?? province.name, name: trimmed,
+    }));
+  }
+  // 独立を示すマーカーを、新国家の中心（首都があればそこ、無ければ切り出した領土の代表セル）に立てる
+  const markerCell = capitalBurg.cell;
+  const markerPart = addEventMarker(map, { cell: markerCell, type: "independence", name: `${trimmed}独立宣言${date ? `（${date.year}年${date.month}月）` : ""}` });
+  if (markerPart) parts.push(markerPart);
+
   return { command: makeCommand(`属州「${province.fullName ?? province.name}」の独立`, ["politics"], parts), id: newId };
 }
 
 /**
  * 国家を統合する（from を to に併合し、from は解散する）。
  * @param {object} map
- * @param {{from:number, to:number}} opts
+ * @param {{from:number, to:number, date?:{year:number,month:number}}} opts
  */
-export function planMergeStates(map, { from, to }) {
+export function planMergeStates(map, { from, to, date }) {
   if (from === to) throw new Error("同じ国家は統合できません");
   const fromState = map.pack.states[from], toState = map.pack.states[to];
   if (!isLiveState(fromState)) throw new Error("統合元の国家が存在しません");
@@ -180,6 +234,21 @@ export function planMergeStates(map, { from, to }) {
   // from は解散する（削除フラグ。属していたセル・都市・属州は全て to に移した後なので、
   // 統計は0に揃えておく。neighbors 等は触らない＝そのまま残置される点に注意）
   parts.push(setProps(fromState, { removed: true, cells: 0, area: 0, rural: 0, urban: 0, burgs: 0, capital: 0, military: [] }));
+
+  if (date) {
+    parts.push(logEntry(map, {
+      type: "merge", year: date.year, month: date.month,
+      fromState: from, fromName: fromState.fullName ?? fromState.name, toState: to, toName: toState.fullName ?? toState.name,
+    }));
+  }
+  // 統合を示すマーカーを、消滅する国の旧首都（無ければ最初のセル）に立てる
+  const oldCapital = map.pack.burgs[fromState.capital];
+  const markerCell = oldCapital ? oldCapital.cell : cells[0];
+  const markerPart = addEventMarker(map, {
+    cell: markerCell, type: "founding",
+    name: `${fromState.fullName ?? fromState.name}が${toState.fullName ?? toState.name}に統合${date ? `（${date.year}年${date.month}月）` : ""}`,
+  });
+  if (markerPart) parts.push(markerPart);
 
   return makeCommand(`「${fromState.fullName ?? fromState.name}」を「${toState.fullName ?? toState.name}」に統合`, ["politics"], parts);
 }

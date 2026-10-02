@@ -26,6 +26,16 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   // panels（wars/alliances/military）は循環importを避けるため main.js から後付けで渡す
   let panels = initialPanels ?? null;
 
+  // 軍事・戦争・同盟の各パネルは、index.html の #panel-mounts に1つずつ実体がある。
+  // 国家タブのサブタブを開くとこの実体を editor-panel の中へ「移動」して見せるが、render() は
+  // 毎回 root の中身を丸ごと消すため、移動したままだと実体が文書から外れて二度と見つからなくなる。
+  // そこで参照を起動時に握っておき、再描画の直前に必ず元の置き場へ戻す。
+  const mountHome = byId("panel-mounts");
+  const mounts = { regiments: byId("tab-regiments"), wars: byId("tab-wars"), alliances: byId("tab-alliances") };
+  function reclaimMounts() {
+    for (const m of Object.values(mounts)) { m.hidden = true; mountHome.append(m); }
+  }
+
   function open(kind, id) { current = { kind, id }; if (kind === "state") stateSubtab = "info"; render(); }
   function close() {
     current = null;
@@ -34,6 +44,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   }
 
   function render() {
+    reclaimMounts(); // 中身を消す前に、持ち出していたパネルを元の置き場へ戻す
     root.replaceChildren();
     if (!current) { root.hidden = true; return; }
     root.hidden = false;
@@ -63,8 +74,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
 
     // 選択中でないサブタブの持ち出しパネル（軍事・戦争・同盟）は、
     // DOMツリーから外れて孤立するだけで実害は無いが、hidden を戻して一貫させる
-    if (stateSubtab !== "military") { const m = byId("tab-regiments"); m.hidden = true; panels?.military?.unlock?.(); }
-    if (stateSubtab !== "diplomacy") { byId("tab-wars").hidden = true; byId("tab-alliances").hidden = true; }
+    if (stateSubtab !== "military") panels?.military?.unlock?.();
 
     const tabs = el("div", "dialog-tabs");
     tabs.setAttribute("role", "tablist");
@@ -90,7 +100,8 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   function renderStateInfo(map, e, body) {
     const form = el("div", "editor-form");
     form.append(basicStatsSection(map, e));
-    form.append(textField("国家名", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v)));
+    form.append(textField("国家名", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v), () => editActions.suggestName("state", { id: e.i })));
+    form.append(...provisionalNote("state", e.i));
     form.append(techLevelSection(e.i));
     form.append(doctrineSection(e.i));
     form.append(growthRateSection(e.i));
@@ -124,6 +135,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
 
   function renderStateDiplomacy(map, e, body) {
     const form = el("div", "editor-form");
+    form.append(diplomacyMatrix(map, e.i));
     form.append(diplomacySection(map, e.i));
     body.append(form);
 
@@ -131,7 +143,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     if (panels?.wars) {
       const warsWrap = el("div", "editor-section");
       warsWrap.append(el("h4", "", "戦争"));
-      const warsMount = byId("tab-wars");
+      const warsMount = mounts.wars;
       warsWrap.append(warsMount);
       warsMount.hidden = false;
       body.append(warsWrap);
@@ -140,7 +152,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     if (panels?.alliances) {
       const alliancesWrap = el("div", "editor-section");
       alliancesWrap.append(el("h4", "", "同盟"));
-      const alliancesMount = byId("tab-alliances");
+      const alliancesMount = mounts.alliances;
       alliancesWrap.append(alliancesMount);
       alliancesMount.hidden = false;
       body.append(alliancesWrap);
@@ -148,19 +160,89 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     }
   }
 
+  /** 全国家×全国家の関係を一覧できるマトリクス表（Azgaarの外交表に相当）。
+   *  現在選んでいる国家の行・列は強調する。セルをクリックすると関係を変更できる。 */
+  function diplomacyMatrix(map, focusId) {
+    const wrap = el("div", "editor-section diplomacy-matrix-wrap");
+    wrap.append(el("h4", "", "外交一覧（全国家）"));
+    const states = map.pack.states.filter(isLive).sort((a, b) => a.i - b.i);
+    if (states.length < 2) { wrap.append(el("p", "hint", "国家が2つ以上ないと表になりません。")); return wrap; }
+
+    const table = document.createElement("table");
+    table.className = "diplomacy-matrix";
+    const thead = document.createElement("thead");
+    const headRow = document.createElement("tr");
+    headRow.append(document.createElement("th"));
+    for (const s of states) {
+      const th = document.createElement("th");
+      th.textContent = s.fullName ?? s.name;
+      th.title = s.fullName ?? s.name;
+      if (s.i === focusId) th.classList.add("focus");
+      headRow.append(th);
+    }
+    thead.append(headRow);
+    table.append(thead);
+
+    const tbody = document.createElement("tbody");
+    for (const rowState of states) {
+      const tr = document.createElement("tr");
+      const rowHead = document.createElement("th");
+      rowHead.textContent = rowState.fullName ?? rowState.name;
+      rowHead.scope = "row";
+      if (rowState.i === focusId) rowHead.classList.add("focus");
+      tr.append(rowHead);
+      for (const colState of states) {
+        const td = document.createElement("td");
+        if (rowState.i === colState.i) { td.className = "self"; tr.append(td); continue; }
+        const rel = editActions.getRelation(map, rowState.i, colState.i) ?? "Neutral";
+        td.className = `rel-${rel}`;
+        td.textContent = relationLabel(rel);
+        td.title = `${rowState.fullName ?? rowState.name} → ${colState.fullName ?? colState.name}: ${relationLabel(rel)}（クリックで変更）`;
+        if (rowState.i === focusId || colState.i === focusId) td.classList.add("focus-row-col");
+        td.addEventListener("click", () => openRelationPicker(td, rowState.i, colState.i, rel));
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+    table.append(tbody);
+
+    const scroller = el("div", "diplomacy-matrix-scroll");
+    scroller.append(table);
+    wrap.append(scroller);
+    return wrap;
+  }
+
+  /** マトリクスのセルをクリックしたときに出す、関係変更用の簡易インライン選択 */
+  function openRelationPicker(td, a, b, current) {
+    // 既に開いている選択を閉じる
+    document.querySelector(".diplomacy-matrix select.rel-picker")?.blur();
+    if (td.querySelector("select")) return;
+    const text = td.textContent;
+    td.replaceChildren();
+    const sel = document.createElement("select");
+    sel.className = "rel-picker";
+    for (const r of RELATIONS) { const o = document.createElement("option"); o.value = r.id; o.textContent = r.label; if (r.id === current) o.selected = true; sel.append(o); }
+    const restore = () => { td.replaceChildren(); td.textContent = text; };
+    sel.addEventListener("change", () => { editActions.setDiplomacy(a, b, sel.value); });
+    sel.addEventListener("blur", restore);
+    td.append(sel);
+    sel.focus();
+  }
+
   function renderStateMilitary(map, e, body) {
     if (!panels?.military) { body.append(el("p", "muted", "軍事パネルが利用できません")); return; }
     panels.military.lockToState(e.i);
-    const mount = byId("tab-regiments");
+    const mount = mounts.regiments;
     body.append(mount);
     mount.hidden = false;
   }
 
   function renderStateProvinces(map, e, body) {
     const form = el("div", "editor-form");
+    form.append(newProvinceSection(e));
     const provinces = map.pack.provinces.filter((p) => isLive(p) && p.state === e.i);
     if (!provinces.length) {
-      form.append(el("p", "muted", "この国家にはまだ属州がありません。「属州を塗る」ツールで地図上に属州を作れます。"));
+      form.append(el("p", "muted", "この国家にはまだ属州がありません。上の「作る」で新規作成し、「塗る」ツールで地図上に領土を割り当てられます。"));
     } else {
       const list = el("div", "attr-list");
       for (const p of provinces) {
@@ -179,9 +261,12 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
         independence.type = "button";
         independence.title = "この属州の領土を切り離し、新しい独立国家にします";
         independence.addEventListener("click", async () => {
-          const name = await promptDialog(`独立させて作る新国家の名前`, `${p.fullName ?? p.name}`);
-          if (!name || !name.trim()) return;
-          if (!(await confirmDialog(`属州「${p.fullName ?? p.name}」を独立させ、新国家「${name}」を作ります。よろしいですか？`))) return;
+          const name = await promptDialog(`独立させて作る新国家の名前`, `${p.fullName ?? p.name}`, {
+            suggest: () => editActions.suggestName("state", { stateId: e.i }),
+            hint: "空欄にすると、仮の名前が自動で付きます",
+          });
+          if (name == null) return;
+          if (!(await confirmDialog(`属州「${p.fullName ?? p.name}」を独立させ、新国家${name.trim() ? `「${name}」` : "（仮の名前）"}を作ります。よろしいですか？`))) return;
           editActions.declareIndependence(p.i, name);
         });
         row.append(independence);
@@ -191,6 +276,37 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     }
     form.append(mergeSection(map, e));
     body.append(form);
+  }
+
+  /** 新しい属州を作る（この国家に属させる）。属州は国家の設定なので国家タブ側に置く。
+   *  地図編集モード側には置かない（あちらは「どのセルをどの属州にするか」の塗り分け専用） */
+  function newProvinceSection(e) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", "新しい属州"));
+    const row = el("div", "diplomacy-row");
+    const input = document.createElement("input");
+    input.placeholder = "属州の名前（空欄なら仮の名前）";
+    row.append(input);
+    const dice = el("button", "suggest-mini", "🎲");
+    dice.type = "button";
+    dice.title = "仮の名前を生成";
+    dice.addEventListener("click", () => { input.value = editActions.suggestName("province", { stateId: e.i }); });
+    row.append(dice);
+    const btn = el("button", "", "作る");
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      const newId = editActions.addProvince(e.i, input.value);
+      input.value = "";
+      if (newId != null) {
+        // 作った直後、そのまま塗れるように地図編集パネルの「属州を塗る」に切り替える
+        editMode?.setTool?.("paint:province");
+        window.dispatchEvent(new CustomEvent("request-edit-panel-open"));
+        window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: newId } }));
+      }
+    });
+    row.append(btn);
+    wrap.append(row);
+    return wrap;
   }
 
   /** 国家統合：この国家を、選んだ他の国家に吸収させる（この国家は解散する） */
@@ -288,7 +404,8 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
       ["文化", map.pack.cultures[b.culture]?.name ?? ""],
       ["人口(概算)", (b.population ?? 0).toFixed(2)],
     ]));
-    form.append(textField("名前", b.name, (v) => editActions.renameBurg(b.i, v)));
+    form.append(textField("名前", b.name, (v) => editActions.renameBurg(b.i, v), () => editActions.suggestName("burg", { id: b.i })));
+    form.append(...provisionalNote("burg", b.i));
 
     if (!b.capital) {
       const cap = el("button", "", "この都市を首都にする");
@@ -319,7 +436,9 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     const form = el("div", "editor-form");
     const stats = [["セル数", e.cells], ["面積", e.area], ["都市数", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
     form.append(table(stats));
-    form.append(textField("名前", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v)));
+    form.append(textField("名前", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v), () => editActions.suggestName(kind, { id: e.i })));
+    form.append(...provisionalNote(kind, e.i));
+    if (kind === "culture") form.append(nameStyleSection(e.i));
     form.append(attributesField(kind, e.i));
     form.append(noteField(map, kind, e.i));
     body.append(form);
@@ -418,14 +537,60 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     return wrap;
   }
 
-  function textField(label, value, onChange) {
+  /** suggest を渡すと、入力欄の横に「🎲」（仮の名前を生成して即反映）が付く */
+  function textField(label, value, onChange, suggest) {
     const row = el("label", "field");
     row.append(el("span", "field-label", label));
     const input = document.createElement("input");
     input.value = value ?? "";
     input.addEventListener("change", () => onChange(input.value));
-    row.append(input);
+    if (!suggest) { row.append(input); return row; }
+    const box = el("span", "name-row");
+    const dice = el("button", "suggest-mini", "🎲");
+    dice.type = "button";
+    dice.title = "仮の名前を生成（押すたびに変わります。Undo で戻せます）";
+    dice.addEventListener("click", (ev) => {
+      ev.preventDefault();
+      const v = suggest();
+      if (v) { input.value = v; onChange(v); }
+    });
+    box.append(input, dice);
+    row.append(box);
     return row;
+  }
+
+  /** 仮の名前なら、その旨と「この名前で確定」ボタンを返す（そうでなければ空配列） */
+  function provisionalNote(kind, id) {
+    if (!editActions.isProvisional(kind, id)) return [];
+    const box = el("div", "provisional-note");
+    box.append(el("span", "", "🎲 仮の名前です。"));
+    const ok = el("button", "", "この名前で確定");
+    ok.type = "button";
+    ok.addEventListener("click", () => editActions.confirmName(kind, id));
+    box.append(ok);
+    return [box];
+  }
+
+  /** 文化の「名前の系統」。この文化の都市・属州・国家の仮名の雰囲気を決める */
+  function nameStyleSection(cultureId) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", "名前の系統（仮生成用）"));
+    const sel = document.createElement("select");
+    const explicit = editActions.getNameStyle(cultureId);
+    const auto = editActions.effectiveNameStyle(cultureId);
+    const o0 = document.createElement("option");
+    o0.value = ""; o0.textContent = `自動（${editActions.NAME_STYLES[auto].label}）`;
+    sel.append(o0);
+    for (const k of editActions.STYLE_KEYS) {
+      const o = document.createElement("option");
+      o.value = k; o.textContent = editActions.NAME_STYLES[k].label;
+      sel.append(o);
+    }
+    sel.value = explicit ?? "";
+    sel.addEventListener("change", () => editActions.setNameStyle(cultureId, sel.value || null));
+    wrap.append(sel);
+    wrap.append(el("p", "hint", "この文化の領域に作る都市・属州の仮の名前が、この系統の響きになります。"));
+    return wrap;
   }
 
   function table(rows) {
@@ -441,7 +606,12 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     openMarker: (id) => open("marker", id),
     openEntity: (kind, id) => open(kind, id),
     close,
-    promptBurgName(cb) { promptDialog("新しい都市の名前").then(cb); },
+    promptBurgName(cb, cell) {
+      promptDialog("新しい都市の名前", "", {
+        suggest: () => editActions.suggestName("burg", { cell }),
+        hint: "空欄のまま OK を押すと、その土地の文化に合わせた仮の名前が付きます",
+      }).then(cb);
+    },
     /** wars/alliances/military パネルを後から差し込む（main.js の組み立て順の都合） */
     setPanels(p) { panels = p; },
   };
