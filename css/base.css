@@ -65,6 +65,13 @@ body::before {
   opacity: 0.5;
 }
 
+/* [hidden] を必ず非表示にする。
+   ブラウザ標準の [hidden]{display:none} は詳細度が低く、.foo{display:flex} のような
+   クラス指定に負けて「hidden なのに表示される」。地図編集パネルがこれで常時開きっぱなしになり、
+   閉じるボタンも効かなかった（実ブラウザでのみ発覚。jsdom は CSS を描画しないため検出不能）。
+   !important で全要素に一括適用し、同種の再発を防ぐ。 */
+[hidden] { display: none !important; }
+
 button, select, input { font: inherit; color: inherit; }
 
 button {

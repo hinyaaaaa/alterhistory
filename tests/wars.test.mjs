@@ -29,7 +29,7 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
 
   console.log("--- 多国間同盟 ---");
   check("最初は同盟なし", listAlliances(map).length === 0);
-  const { command: cA, id: allianceId } = planCreateAlliance(map, "北方同盟", [s1.i, s2.i, s3.i]);
+  const { command: cA, id: allianceId } = planCreateAlliance(map, "北方同盟", [s1.i, s2.i, s3.i], { year: 12, month: 3 });
   store.commit(cA);
   check("3カ国同盟が作られる", listAlliances(map).length === 1 && listAlliances(map)[0].members.length === 3);
   check("加盟国から検索できる", alliancesOf(map, s2.i).length === 1);
@@ -43,9 +43,11 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
   store.undo();
   check("Undoでメンバーが戻る", listAlliances(map)[0].members.length === 3);
 
-  store.commit(planDissolveAlliance(map, allianceId));
-  check("解消すると空になる", listAlliances(map).length === 0);
-  check("ext.data.alliancesキー自体が消える", map.ext?.data?.alliances === undefined);
+  check("結成年月が記録される", JSON.stringify(listAlliances(map).find((a) => a.id === allianceId).formedAt) === JSON.stringify({ year: 12, month: 3 }));
+  store.commit(planDissolveAlliance(map, allianceId, { year: 15, month: 7 }));
+  check("解消しても履歴として残る", listAlliances(map).length === 1);
+  check("解消年月が記録される", JSON.stringify(listAlliances(map)[0].dissolvedAt) === JSON.stringify({ year: 15, month: 7 }));
+  check("二重の解消は例外", (() => { try { planDissolveAlliance(map, allianceId, { year: 16, month: 1 }); return false; } catch { return true; } })());
   store.undo();
   check("Undoで同盟が復活", listAlliances(map).length === 1);
   store.undo();

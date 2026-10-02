@@ -80,11 +80,11 @@ for (let i = 0; i < 11; i++) $("btn-time-step").click();
 check("年をまたぐと2年になる", store.getState().map.worldTime.year === 2 && store.getState().map.worldTime.month === 1, JSON.stringify(store.getState().map.worldTime));
 
 console.log("=== 開始/停止 ===");
-check("最初は停止表示", $("btn-time-toggle").textContent.includes("開始"));
+check("最初は停止表示", $("btn-time-toggle").textContent.includes("▶"));
 $("btn-time-toggle").click();
-check("開始すると表示が変わる", $("btn-time-toggle").textContent.includes("停止") && timeActions.isRunning());
+check("開始すると表示が変わる", $("btn-time-toggle").textContent.includes("⏸") && timeActions.isRunning());
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
-check("[Space]で停止する", !timeActions.isRunning() && $("btn-time-toggle").textContent.includes("開始"));
+check("[Space]で停止する", !timeActions.isRunning() && $("btn-time-toggle").textContent.includes("▶"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
 check("[Space]でもう一度開始する", timeActions.isRunning());
 timeActions.stop();
@@ -93,31 +93,31 @@ console.log("=== 速度変更 ===");
 $("sel-time-speed").value = "20000"; $("sel-time-speed").dispatchEvent(new window.Event("change"));
 check("速度が変わる(1年20秒 = 1ヶ月約1.67秒)", Math.abs(timeActions.getSpeed() - 20000 / 12) < 1);
 
-console.log("=== 軍事ダイアログを開く ===");
-$("btn-open-military").click();
-check("ダイアログが開く", $("military-dialog").hasAttribute("open"));
-check("部隊タブが最初に表示される", !$("tab-regiments").hidden && $("tab-wars").hidden);
-q('[data-tab="wars"]').click();
-check("タブ切替: 戦争タブが表示される", !$("tab-wars").hidden && $("tab-regiments").hidden);
-q('[data-tab="alliances"]').click();
-check("タブ切替: 同盟タブが表示される", !$("tab-alliances").hidden);
-q('[data-tab="regiments"]').click();
-$("military-close").click();
-check("×で閉じる", !$("military-dialog").hasAttribute("open"));
-window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "m", bubbles: true, cancelable: true }));
-check("[M]で開く", $("military-dialog").hasAttribute("open"));
+console.log("=== 国家タブを開く（地図のダブルクリック） ===");
+function cellOfState(stateId) {
+  for (let i = 0; i < map.pack.cells.state.length; i++) if (map.pack.cells.state[i] === stateId && !map.pack.cells.burg[i]) return i;
+  return -1;
+}
+function openStateTab(stateId) {
+  const cell = cellOfState(stateId);
+  const [sx, sy] = viewport.toScreen(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1]);
+  $("map-canvas").dispatchEvent(new window.MouseEvent("dblclick", { clientX: sx, clientY: sy, button: 0, bubbles: true }));
+}
+const state1 = map.pack.states.find((s) => s && s.i && !s.removed);
+openStateTab(state1.i);
+check("国家タブが開く（選択ツールに切替済みであること）", !$("editor-panel").hidden);
+function clickSubtab(label) { const b = qa(".dialog-tabs .tab-btn").find((x) => x.textContent.includes(label)); b?.click(); return b; }
+check("外交サブタブに切替できる", !!clickSubtab("外交"));
+check("軍事サブタブに切替できる（表示バグが直っているか）", !!clickSubtab("軍事") && !$("tab-regiments").hidden);
 
 console.log("=== 部隊の配置（地図クリック連携） ===");
-const state1 = map.pack.states.find((s) => s && s.i && !s.removed);
-const stateSel = q("#tab-regiments select");
-check("国家セレクトに選択肢がある", stateSel && stateSel.options.length > 0);
-stateSel.value = String(state1.i); stateSel.dispatchEvent(new window.Event("change"));
+check("国家タブ内では国家セレクタは出ない（自国固定）", !q("#tab-regiments select"));
 check("この国の部隊一覧が表示される(0件でも一覧枠は出る)", $("tab-regiments").textContent.includes("まだ部隊がありません") || $("tab-regiments").querySelector(".regiment-card"));
 
 const placeBtn = [...$("tab-regiments").querySelectorAll("button")].find((b) => b.textContent.includes("新しい部隊を編成"));
 check("編成ボタンがある", !!placeBtn);
 placeBtn.click();
-check("ダイアログが閉じてヒントが出る(地図クリック待ち)", !$("military-dialog").hasAttribute("open") && store.getState().hint);
+check("ヒントが出る(地図クリック待ち)", !!store.getState().hint);
 
 let landCell = -1; for (let i = 0; i < map.pack.cells.biome.length; i++) if (map.pack.cells.biome[i] !== 0) { landCell = i; break; }
 const [lx, ly] = viewport.toScreen(map.geometry.pack.p[landCell][0], map.geometry.pack.p[landCell][1]);
@@ -126,7 +126,6 @@ const beforeCount = simActions.regimentsOf(state1.i).length;
 canvas.dispatchEvent(new window.MouseEvent("click", { clientX: lx, clientY: ly, button: 0, bubbles: true }));
 await sleep(50);
 check("地図クリックで部隊が作られる", simActions.regimentsOf(state1.i).length === beforeCount + 1);
-check("配置後、ダイアログが自動で再度開く", $("military-dialog").hasAttribute("open"));
 check("ヒントが消える", !store.getState().hint);
 
 console.log("=== 部隊の編集（兵力・ドクトリン） ===");
@@ -142,8 +141,9 @@ check("総戦力の表示が更新される", card.textContent.includes("総戦�
 
 console.log("=== 攻撃フロー ===");
 const state2 = map.pack.states.filter((s) => s && s.i && !s.removed)[1];
-const stateSel2 = q("#tab-regiments select");
-stateSel2.value = String(state2.i); stateSel2.dispatchEvent(new window.Event("change"));
+// 相手国（state2）のタブを開き、部隊を1つ置く
+openStateTab(state2.i);
+clickSubtab("軍事");
 const placeBtn2 = [...$("tab-regiments").querySelectorAll("button")].find((b) => b.textContent.includes("新しい部隊を編成"));
 placeBtn2.click();
 let landCell2 = -1; for (let i = 0; i < map.pack.cells.biome.length; i++) if (map.pack.cells.biome[i] !== 0 && i !== landCell) { landCell2 = i; break; }
@@ -155,16 +155,17 @@ const card2 = [...$("tab-regiments").querySelectorAll(".regiment-card")].find((c
 const infantryInput2 = [...card2.querySelectorAll(".unit-field")].find((f) => f.textContent.includes("歩兵")).querySelector("input");
 infantryInput2.value = "100"; infantryInput2.dispatchEvent(new window.Event("change"));
 
-stateSel2.value = String(state1.i); stateSel2.dispatchEvent(new window.Event("change"));
+// 自国（state1）のタブに戻り、攻撃を始める
+openStateTab(state1.i);
+clickSubtab("軍事");
 const card1 = [...$("tab-regiments").querySelectorAll(".regiment-card")].find((c) => c.querySelector("input")?.value === newReg.name);
 const attackBtn = [...card1.querySelectorAll("button")].find((b) => b.textContent.includes("攻撃する"));
 attackBtn.click();
-// クリックで render() が呼ばれDOMが作り直されるため、更新後のボタンは改めてDOMから取り直す
-const card1After = [...$("tab-regiments").querySelectorAll(".regiment-card")].find((c) => c.querySelector("input")?.value === newReg.name);
-const attackBtnAfter = [...card1After.querySelectorAll("button")].find((b) => b.textContent.includes("選択"));
-check("攻撃対象選択モードになる", !!attackBtnAfter && attackBtnAfter.textContent.includes("対象を選択中"));
-stateSel2.value = String(state2.i); stateSel2.dispatchEvent(new window.Event("change"));
-const targetCard = [...$("tab-regiments").querySelectorAll(".regiment-card")].find((c) => c.querySelector("input")?.value === reg2.name);
+check("攻撃対象を選ぶセクションが出る（自国タブからでも相手国を選べる）", !!q("#tab-regiments .attack-target-section"));
+const targetSel = q("#tab-regiments .attack-target-section select");
+targetSel.value = String(state2.i); targetSel.dispatchEvent(new window.Event("change"));
+const targetCard = [...qa("#tab-regiments .target-card")].find((c) => c.textContent.includes(reg2.name));
+check("相手国の部隊が攻撃対象として並ぶ", !!targetCard && targetCard.textContent.includes(reg2.name));
 const confirmAttack = targetCard.querySelector(".attack-target button");
 check("攻撃対象の確認ボタンがある", !!confirmAttack);
 const beforeInfantry1 = simActions.regimentsOf(state1.i).find((r) => r.i === newReg.i).u.infantry;
@@ -173,7 +174,7 @@ const afterInfantry1 = simActions.regimentsOf(state1.i).find((r) => r.i === newR
 check("戦闘後、兵力が減少する", afterInfantry1 < beforeInfantry1, `${beforeInfantry1} → ${afterInfantry1}`);
 
 console.log("=== 同盟タブ ===");
-q('[data-tab="alliances"]').click();
+clickSubtab("外交");
 const allianceForm = $("tab-alliances");
 const nameInput = allianceForm.querySelector("input[placeholder]");
 nameInput.value = "友好同盟";
@@ -186,7 +187,7 @@ const allianceNameInputs = [...$("tab-alliances").querySelectorAll(".alliance-ca
 check("画面に同盟カードが表示される", allianceNameInputs.some((i) => i.value === "友好同盟"));
 
 console.log("=== 戦争タブ（宣戦布告） ===");
-q('[data-tab="wars"]').click();
+clickSubtab("外交");
 const warForm = $("tab-wars");
 const selects = [...warForm.querySelectorAll("select")];
 const declareBtn = [...warForm.querySelectorAll("button")].find((b) => b.textContent.includes("宣戦布告する"));
@@ -199,6 +200,29 @@ const beforeUndoWars = simActions.listWars().length;
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
 await sleep(30);
 check("Ctrl+Zで宣戦布告が取り消される", simActions.listWars().length === beforeUndoWars - 1 || simActions.listWars()[0]?.endedAt === undefined);
+
+console.log("=== 時間設定（年月の上書き・時代区分） ===");
+$("world-date").click();
+const tsd = q(".time-settings-dialog");
+check("年月表示をクリックすると時間設定ダイアログが開く", !!tsd && tsd.hasAttribute("open"));
+const numIns = [...tsd.querySelectorAll('.time-settings-row input[type="number"]')];
+numIns[0].value = "1700"; numIns[1].value = "6";
+[...tsd.querySelectorAll("button")].find((b) => b.textContent.includes("この年月に設定")).click();
+const wt = store.getState().map.worldTime;
+check("年月を直接上書きできる（1ヶ月ずつ進める以外の手段）", wt.year === 1700 && wt.month === 6, JSON.stringify(wt));
+check("上部バーの表示にも反映される", $("world-date").textContent.includes("1700年 6月"), $("world-date").textContent);
+$("btn-time-step").click();
+check("上書きした年月から進行が続く", store.getState().map.worldTime.year === 1700 && store.getState().map.worldTime.month === 7);
+tsd.querySelector('input[placeholder="時代の名前（例: 江戸時代）"]').value = "江戸時代";
+tsd.querySelector('input[placeholder="開始年"]').value = "1603";
+[...tsd.querySelectorAll("button")].find((b) => b.textContent.includes("時代を追加")).click();
+check("時代を追加すると一覧に出る", tsd.querySelector(".era-list").textContent.includes("江戸時代（1603年〜）"));
+check("今の年が属する時代名が上部バーに併記される", !!q("#world-date .era-name") && q("#world-date .era-name").textContent === "江戸時代");
+numIns[0].value = "1500";
+[...tsd.querySelectorAll("button")].find((b) => b.textContent.includes("この年月に設定")).click();
+check("時代の開始前の年では時代名が消える", !q("#world-date .era-name"));
+[...tsd.querySelectorAll("button")].find((b) => b.textContent === "閉じる").click();
+check("閉じるでダイアログが消える", !q(".time-settings-dialog"));
 
 check("スクリプトエラーなし", errors.length === 0, errors.join("|"));
 console.log(failed === 0 ? "\n全テスト合格" : `\n${failed}件失敗`);

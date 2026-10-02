@@ -45,6 +45,7 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
     window.HTMLCanvasElement.prototype.getContext = function () { return (this.__ctx ??= fakeCtx()); };
     window.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 700, right: 1000, bottom: 700, x: 0, y: 0 });
     window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); this.dispatchEvent(new window.Event("close")); };
     window.Element.prototype.setPointerCapture = () => {};
     window.Element.prototype.releasePointerCapture = () => {};
     window.Element.prototype.hasPointerCapture = () => false;
