@@ -1,7 +1,7 @@
 // ツールバー：コントロールの操作 → actions。状態（store）が変わったら表示を同期する。
 import { byId } from "./dom.js";
 import { getScale } from "../render/layers/annotations.js";
-import { LAYERS, PRESETS, isLayerOn, presetMatches, legendKindOf } from "../app/layers.js";
+import { LAYERS, isLayerOn, legendKindOf } from "../app/layers.js";
 
 const GROUP_TITLE = { base: "下地", fill: "色分け", line: "線", mark: "記号・文字" };
 
@@ -33,15 +33,7 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
   for (const box of annotBoxes) box.addEventListener("change", () => actions.setExportOption(box.dataset.annot, box.checked));
 
   // ---- レイヤー（Azgaar 方式）：独立したオン/オフのボタン。複数を同時に重ねられる ----
-  const presetBox = byId("layer-presets");
   const toggleBox = byId("layer-toggles");
-  const presetBtns = new Map();
-  for (const p of PRESETS) {
-    const b = document.createElement("button");
-    b.type = "button"; b.textContent = p.label; b.title = p.title; b.dataset.preset = p.id;
-    b.addEventListener("click", () => actions.applyPreset(p.id));
-    presetBox.append(b); presetBtns.set(p.id, b);
-  }
   const layerBtns = new Map();
   let lastGroup = null;
   for (const l of LAYERS) {
@@ -86,10 +78,6 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
     for (const seg of segs) {
       const cur = byId(seg.dataset.segFor).value;
       for (const b of seg.querySelectorAll("button[data-value]")) { const on = b.dataset.value === cur; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); }
-    }
-    for (const p of PRESETS) {
-      const on = presetMatches(v, p), btn = presetBtns.get(p.id);
-      btn.classList.toggle("active", on); btn.setAttribute("aria-pressed", String(on));
     }
     byId("layers-menu").classList.toggle("disabled", !hasMap);
     // 書き出しの付属物: 凡例は色分け「なし」だと出せず、スケールバーは縮尺の無い地図だと出せない（理由を表示）

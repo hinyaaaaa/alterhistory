@@ -60,22 +60,6 @@ export function legendKindOf(view) {
 const ALL_FILLS_OFF = { states: false, cultures: false, religions: false, provinces: false };
 const fillsOnly = (kind) => ({ ...ALL_FILLS_OFF, [FILL_KEY[kind]]: true });
 
-/**
- * プリセット（Azgaar の「政治・文化・宗教…」に相当）。選ぶと、ここに書いたキーを一度に切り替える。
- * 書いていないキー（河川・道路など）は触らない。
- */
-export const PRESETS = Object.freeze([
-  { id: "politics", label: "政治", title: "国家の色分けと国境。道路・川・名前も表示", set: { biomes: true, heights: false, ...fillsOnly("state"), borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto", legendKind: "state" } },
-  { id: "culture",  label: "文化", title: "文化の色分け", set: { biomes: true, heights: false, ...fillsOnly("culture"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "culture" } },
-  { id: "religion", label: "宗教", title: "宗教の色分け", set: { biomes: true, heights: false, ...fillsOnly("religion"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "religion" } },
-  { id: "province", label: "属州", title: "属州の色分け", set: { biomes: true, heights: false, ...fillsOnly("province"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "province" } },
-  { id: "terrain",  label: "地形", title: "色分けなしの地形図。首都だけ名前を表示", set: { biomes: true, heights: false, ...ALL_FILLS_OFF, borders: false, coast: true, rivers: true, routes: false, burgs: true, labels: true, burgLabels: "capitals" } },
-  { id: "height",   label: "標高", title: "標高だけを見る（記号・文字は消す）", set: { biomes: false, heights: true, ...ALL_FILLS_OFF, borders: false, coast: true, rivers: true, routes: false, burgs: false, labels: false } },
-]);
-
-/** そのプリセットが、今の表示と完全に一致しているか（ボタンの「選択中」表示用） */
-export const presetMatches = (view, preset) => Object.entries(preset.set).every(([k, v]) => (k === "legendKind" || k === "burgLabels" ? true : isLayerOn(view, k) === v));
-
 /** ID またはキーから、色分けを1種類だけ表示する patch（絵を塗る間などに使う） */
 export const exclusiveFillPatch = (kind) => (kind && FILL_KEY[kind] ? { ...fillsOnly(kind), legendKind: kind } : { ...ALL_FILLS_OFF });
 

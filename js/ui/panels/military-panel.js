@@ -44,7 +44,7 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
       picker.append(sel);
     }
 
-    const addBtn = el("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "地図をクリックして配置…（クリックで取消）" : "＋ 新しい部隊を編成（地図をクリックして配置）");
+    const addBtn = el("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "地図をクリックして配置…（クリックで取消）" : "＋ 部隊を編成（自国の領土をクリック）");
     addBtn.type = "button";
     addBtn.addEventListener("click", () => {
       if (pending?.type === "place") { pending = null; store.update((s) => { s.hint = null; }); render(); return; }
@@ -89,59 +89,45 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
   }
 
 
+  /** 部隊カード：普段は1〜2行（名前・戦力・移動・解散）。兵科の人数は「兵力」を開いたときだけ見せる */
   function buildRegimentCard(map, stateId, reg) {
-    const card = el("div", "regiment-card");
+    const card = el("div", "regiment-card mini");
     const head = el("div", "regiment-card-head");
-
-
     const nameInput = document.createElement("input");
-    nameInput.value = reg.name; nameInput.style.fontWeight = "600"; nameInput.style.background = "transparent"; nameInput.style.border = "0"; nameInput.style.width = "auto"; nameInput.style.flex = "1";
-    nameInput.dataset.field = "name";
+    nameInput.value = reg.name; nameInput.dataset.field = "name"; nameInput.className = "mini-name";
     nameInput.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { name: nameInput.value }));
-    const disbandBtn = el("button", "danger", "解散");
-    disbandBtn.type = "button";
+    const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
+    const moveBtn = el("button", "mini-btn", isMovePicking ? "📍…" : "📍");
+    moveBtn.dataset.field = "move-btn"; moveBtn.type = "button"; moveBtn.title = "移動：押してから、自国の領土内の移動先を地図でクリック";
+    moveBtn.addEventListener("click", () => {
+      pending = { type: "move", stateId, regId: reg.i };
+      store.update((s) => { s.hint = "地図をクリックして移動先を選んでください（自国の領土内）"; });
+      render();
+    });
+    const disbandBtn = el("button", "mini-btn danger", "解散"); disbandBtn.type = "button";
     disbandBtn.addEventListener("click", async () => { if (await confirmDialog(`「${reg.name}」を解散しますか？`, { danger: true, okLabel: "解散" })) simActions.disbandRegiment(stateId, reg.i); });
-    head.append(nameInput, disbandBtn);
+    head.append(nameInput, moveBtn, disbandBtn);
     card.append(head);
 
-    const cellInfo = el("p", "muted", `配置: セル#${reg.cell}`);
-    cellInfo.dataset.field = "cell";
-    card.append(cellInfo);
+    const power = el("p", "regiment-power", `戦力 ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}　兵員 ${forceHeadcount(reg.u).toLocaleString()}`);
+    power.dataset.field = "power";
+    card.append(power);
 
-    const doctrineRow = el("p", "muted regiment-doctrine", `戦争ドクトリン: ${doctrineLabelOf(stateId)}（国家パネルで変更）`);
-    doctrineRow.dataset.field = "doctrine-label";
-    card.append(doctrineRow);
-
+    const more = document.createElement("details"); more.className = "mini-more";
+    more.append(el("summary", "", "兵力を編集"));
     const units = el("div", "regiment-units");
     for (const u of UNIT_TYPES) {
-      const field = el("div", "unit-field");
-      field.append(el("span", "", `${u.icon} ${u.label}`));
+      if (u.key === "nuclear" && (map.pack.states[stateId]?.techLevel ?? 3) < 9) continue; // 核は技術水準9以上の国だけ配備できる（使うのは核作戦ウィンドウ）
+      const field = el("label", "unit-field"); field.title = u.desc ?? "";
+      field.append(el("span", "", `${u.icon} ${u.label}（${u.unit}）`));
       const input = document.createElement("input");
       input.type = "number"; input.min = "0"; input.value = reg.u?.[u.key] ?? 0;
       input.dataset.field = `unit:${u.key}`;
       input.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { u: { [u.key]: Number(input.value) || 0 } }));
-      field.append(input);
-      units.append(field);
+      field.append(input); units.append(field);
     }
-    card.append(units);
-
-    const power = el("p", "regiment-power", `総戦力: ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}　総兵員/機数: ${forceHeadcount(reg.u).toLocaleString()}`);
-    power.dataset.field = "power";
-    card.append(power);
-
-    const actions = el("div", "regiment-actions");
-    const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
-    const moveBtn = el("button", "", isMovePicking ? "地図をクリックして移動先へ…" : "移動（地図をクリック）");
-    moveBtn.dataset.field = "move-btn";
-    moveBtn.type = "button";
-    moveBtn.addEventListener("click", () => {
-      pending = { type: "move", stateId, regId: reg.i };
-      store.update((s) => { s.hint = "地図をクリックして移動先を選んでください"; });
-      render();
-    });
-    actions.append(moveBtn);
-    card.append(actions);
-
+    more.append(units);
+    card.append(more);
     return card;
   }
 
@@ -157,24 +143,18 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     const nameInput = card.querySelector('[data-field="name"]');
     if (nameInput && !isActive(nameInput)) nameInput.value = reg.name;
 
-    const cellInfo = card.querySelector('[data-field="cell"]');
-    if (cellInfo) cellInfo.textContent = `配置: セル#${reg.cell}`;
-
-    const doctrineLabel = card.querySelector('[data-field="doctrine-label"]');
-    if (doctrineLabel) doctrineLabel.textContent = `戦争ドクトリン: ${doctrineLabelOf(stateId)}（国家パネルで変更）`;
-
     for (const u of UNIT_TYPES) {
       const input = card.querySelector(`[data-field="unit:${u.key}"]`);
       if (input && !isActive(input)) input.value = reg.u?.[u.key] ?? 0;
     }
 
     const power = card.querySelector('[data-field="power"]');
-    if (power) power.textContent = `総戦力: ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}　総兵員/機数: ${forceHeadcount(reg.u).toLocaleString()}`;
+    if (power) power.textContent = `戦力 ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}　兵員 ${forceHeadcount(reg.u).toLocaleString()}`;
 
 
     const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
     const moveBtn = card.querySelector('[data-field="move-btn"]');
-    if (moveBtn) moveBtn.textContent = isMovePicking ? "地図をクリックして移動先へ…" : "移動（地図をクリック）";
+    if (moveBtn) moveBtn.textContent = isMovePicking ? "📍…" : "📍";
 
   }
 

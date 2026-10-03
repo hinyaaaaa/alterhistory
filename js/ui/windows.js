@@ -6,6 +6,25 @@ import { byId } from "./dom.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
+/** 既存の要素（右・左のパネル）を、タイトル部分のドラッグで動かせるウィンドウにする */
+export function makeDraggable(root, handle, stage, only = null) {
+  handle.style.cursor = "move"; handle.style.touchAction = "none";
+  handle.addEventListener("pointerdown", (e) => {
+    if (e.target instanceof HTMLElement && e.target.closest("button, input, select, textarea")) return;
+    if (only && !(e.target instanceof HTMLElement && e.target.closest(only))) return; // 見出し部分だけで動かす
+    const sr = stage.getBoundingClientRect(), r = root.getBoundingClientRect();
+    const dx = e.clientX - r.left, dy = e.clientY - r.top;
+    root.style.right = "auto"; root.style.bottom = "auto";
+    handle.setPointerCapture?.(e.pointerId);
+    const move = (ev) => {
+      root.style.left = `${Math.min(Math.max(0, ev.clientX - dx - sr.left), Math.max(0, sr.width - 80))}px`;
+      root.style.top = `${Math.min(Math.max(0, ev.clientY - dy - sr.top), Math.max(0, sr.height - 40))}px`;
+    };
+    const up = () => { handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); };
+    handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up);
+  });
+}
+
 export function initWindows() {
   const stage = byId("stage");
   const wins = new Map(); // id → { root, def }

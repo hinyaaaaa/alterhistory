@@ -98,9 +98,8 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
   // ---------- 部品 ----------
   function swatch(e) { const s = el("span", "b-swatch"); s.style.background = e.color ?? "#888"; return s; }
 
-  function provBadge(kind, id) {
-    return editActions.isProvisional(kind, id) ? el("span", "b-badge", "仮") : null;
-  }
+  // 仮決定の仕組みは廃止：名前はいつでも上書きでき、「仮」の印や確定ボタンは出さない
+  function provBadge() { return null; }
 
   function startPaint(kind, id) {
     task = { kind, id, size: task?.size ?? "m", autoCapital: task?.autoCapital ?? true, status: "地図をドラッグして、領土を塗ってください" };
@@ -114,6 +113,7 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
     task.size = size;
     task.mode = r.ok ? "auto" : "drag";
     if (r.ok) task.status = `おまかせで ${r.count} セルを領土にしました（Ctrl+Z で取り消し）`;
+    else if (r.reason === "no-adjacent-free-land") task.status = "隣り合う空き地がありません。地図をドラッグして塗り足してください";
     else if (r.reason === "no-free-land") task.status = "空き地がありません。地図をドラッグして塗ってください";
     else task.status = "領土を決められませんでした";
     if (!r.ok) builderActions.beginPaint(kind, id); // 失敗したら手で塗れるようにしておく
@@ -244,14 +244,17 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
     const sec = el("section", "b-sec");
     sec.append(el("h4", "b-title", "つくった歴史"));
 
-    const tabs = el("div", "b-tabs");
+    // 横タブは使わず、種類をプルダウンで選ぶ
+    const kindSel = document.createElement("select"); kindSel.className = "b-kind-select";
     for (const k of ["state", "religion", "culture"]) {
       const n = map.pack[LIST_KEY[k]].filter(isLive).length;
-      tabs.append(btn(`b-tab${tab === k ? " on" : ""}`, `${builderActions.KIND_LABEL[k]} ${n}`, "", () => { tab = k; render(); }));
+      const o = document.createElement("option"); o.value = k; o.textContent = `${builderActions.KIND_LABEL[k]}（${n}）`; kindSel.append(o);
     }
     const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed);
-    tabs.append(btn(`b-tab${tab === "burg" ? " on" : ""}`, `都市 ${burgs.length}`, "", () => { tab = "burg"; render(); }));
-    sec.append(tabs);
+    { const o = document.createElement("option"); o.value = "burg"; o.textContent = `都市（${burgs.length}）`; kindSel.append(o); }
+    kindSel.value = tab;
+    kindSel.addEventListener("change", () => { tab = kindSel.value; render(); });
+    sec.append(kindSel);
     if (tab === "burg") {
       const list = el("div", "b-cards");
       for (const b of burgs.sort((a, c) => (c.population ?? 0) - (a.population ?? 0)).slice(0, 80)) list.append(burgCard(b));
@@ -308,7 +311,6 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
     row.append(main);
 
     const ops = el("div", "b-row-ops");
-    ops.append(btn("suggest-mini", "🎲", "名前を引き直す", () => builderActions.rerollName(kind, e.i, styleOpt())));
     if (badge) ops.append(btn("suggest-mini", "✓", "この名前で確定", () => editActions.confirmName(kind, e.i)));
     const isOpenCard = openCards.has(key);
     ops.append(btn("suggest-mini b-more-btn", isOpenCard ? "▴" : "▾", "詳しく設定", () => {
@@ -389,11 +391,17 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
     appendEntityProfile(d, kind, e, { editActions, map: getMap(), openEntity: (k, i) => { tab = k; openCards.add(`${k}:${i}`); render(); } });
 
     const terr = el("div", "b-how");
-    terr.append(
-      btn("b-seg", "✋ 塗り足す", "この土地を地図でドラッグして広げる・直す", () => startPaint(kind, e.i)),
-      btn("b-seg", "🎲 おまかせで広げる", "空き地から自動で追加する", () => runAuto(kind, e.i, task?.size ?? "m")),
-    );
+    terr.append(btn("b-seg", "✋ 塗り足す", "この土地を地図でドラッグして広げる・直す", () => startPaint(kind, e.i)));
     d.append(terr);
+    // ランダムに決める操作は、一覧の行ではなくここ（詳細の中）にまとめる。誤って押しにくい
+    const rnd = document.createElement("details"); rnd.className = "b-random";
+    rnd.append(el("summary", "", "🎲 ランダム設定"));
+    const rndRow = el("div", "b-how");
+    rndRow.append(
+      btn("b-seg", "🎲 名前を引き直す", "名前を新しくランダムに決める（今の名前は置き換わります）", () => builderActions.rerollName(kind, e.i, styleOpt())),
+      btn("b-seg", "🎲 隣の空き地へ広げる", "この土地に接した空き地へ、地形に沿って自動で広げる", () => runAuto(kind, e.i, task?.size ?? "m")),
+    );
+    rnd.append(rndRow); d.append(rnd);
 
     const foot = el("div", "b-actions");
     foot.append(btn("", "全設定を開く ↗", "文章・外交など、すべての設定を左のパネルで開く", () => panels.openEntity(kind, e.i)));
@@ -405,6 +413,8 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
   const PROV_KINDS = { state: ["states", "国家"], culture: ["cultures", "文化"], religion: ["religions", "宗教"], province: ["provinces", "属州"], burg: ["burgs", "都市"] };
   let provOpen = false;
   function provisionalSection() {
+    return null; // 仮決定は廃止
+    // eslint-disable-next-line no-unreachable
     const list = builderActions.provisional();
     if (!list.length) return null;
     const box = el("section", "b-tray b-tray-col");

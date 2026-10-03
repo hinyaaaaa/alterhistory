@@ -6,7 +6,7 @@ import { planAddMarker, planMoveMarker, planEditMarker, planRemoveMarker } from 
 import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapital, whyCannotRemoveBurg } from "../core/edit/burgs.js";
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
 import { planSetDiplomacy, getRelation } from "../core/edit/diplomacy.js";
-import { planRenameEntity, planAddEntity, planAddProvince } from "../core/edit/entities.js";
+import { planRenameEntity, planAddEntity, planAddProvince, planRemoveEntity } from "../core/edit/entities.js";
 import { planDeclareIndependence, planMergeStates } from "../core/edit/sovereignty.js";
 import { listEras, eraAt, planSetEra, planRemoveEra } from "../core/edit/eras.js";
 import { planSetFinance, getFinance } from "../core/edit/finance.js";
@@ -129,6 +129,11 @@ export function createEditActions({ store, renderer }) {
         const plan = planRenameEntity(map, kind, id, name);
         commitOrThrow(withProvisional(map, plan, kind, id, !!takeSuggested(name, kind)));
       }));
+    },
+
+    /** 国家・文化・宗教・属州を削除する（Undo で戻せる）。成功したら true */
+    removeEntity(kind, id) {
+      return withMap((map) => { let ok = false; safeRun("削除", () => { commitOrThrow(planRemoveEntity(map, kind, id)); ok = true; }); return ok; }) ?? false;
     },
 
     /** 国家・文化・宗教を新規作成する。まだどのセルも持たない状態で作られるので、

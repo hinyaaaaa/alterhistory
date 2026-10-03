@@ -10,7 +10,7 @@ import { alertDialog } from "../dialogs.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 
-export function initWarsPanel({ store, simActions, getOutcome = () => null }) {
+export function initWarsPanel({ store, simActions, getOutcome = () => null, getWins = () => null }) {
   const root = byId("tab-wars");
   let selected = null;   // 選択中の戦争ID（null のときは一覧だけ）
   let creating = false;  // 宣戦布告フォームを開いているか
@@ -68,139 +68,32 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null }) {
     const sync = () => { go.disabled = !draft.attackers.size || !draft.defenders.size; };
     go.addEventListener("click", () => {
       const out = simActions.declareWarInstant([...draft.attackers], [...draft.defenders]);
-      if (out) { selected = out.id; creating = false; draft = { name: "", attackers: new Set(), defenders: new Set() }; render(); getOutcome()?.show(out.id); }
+      if (out) { selected = out.id; creating = false; draft = { name: "", attackers: new Set(), defenders: new Set() }; render(); }
     });
     wrap.append(warn, sideBox("攻撃側", "attackers", "defenders"), sideBox("防御側", "defenders", "attackers"), go);
     sync();
     return wrap;
   }
 
-  // ---- 戦争の詳細 ----
+  // ---- 戦争の詳細（戦況・名前の変更。講和は「講和条約」ウィンドウで決める） ----
   function warDetail(map, states, w) {
     const box = el("div", `war-card${w.endedAt ? " ended" : ""}`);
-    box.append(el("div", "war-title", w.name));
-    const aNames = w.attackers.map((id) => stateName(map, id)).join("・");
-    const dNames = w.defenders.map((id) => stateName(map, id)).join("・");
-    box.append(el("div", "war-meta", `${aNames} 対 ${dNames}　開戦: ${formatWorldTime(w.startedAt)}${w.endedAt ? `　終結: ${formatWorldTime(w.endedAt)}` : ""}`));
-    if (!w.endedAt) { box.append(musterSection(map, w)); box.append(battleForm(map, w)); }
-    box.append(battleLog(map, w));
-    if (!w.endedAt) {
-      const adv = w.advantage[w.attackers[0]] ?? 0;
-      box.append(el("p", "muted", `優勢度（攻撃側基準）: ${adv > 0 ? "+" : ""}${adv}`));
-      box.append(peaceForm(map, states, w));
-    } else box.append(el("p", "muted", "この戦争は終結しました"));
+    const nameIn = document.createElement("input"); nameIn.value = w.name; nameIn.className = "war-name-input";
+    nameIn.addEventListener("change", () => simActions.renameWar(w.id, nameIn.value));
+    box.append(el("label", "field-label", "戦争の名前"), nameIn);
+    const sit = getOutcome()?.situation(map, w);
+    if (sit) box.append(sit);
+    if (w.endedAt) {
+      box.append(el("p", "muted", `この戦争は終結しました。${w.treatyName ? `講和条約：${w.treatyName}` : ""}`));
+    } else {
+      const go = el("button", "primary", "講和条約を決める"); go.type = "button";
+      go.addEventListener("click", () => getWins()?.open("treaty"));
+      box.append(go);
+    }
     return box;
   }
 
-  /** 召集する部隊：参戦国ごとに全部隊を一覧し、チェックを付けた部隊がこの戦争の戦力になる */
-  function musterSection(map, w) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "召集する部隊"));
-    const current = w.muster ?? {};
-    const save = (sid, ids) => simActions.setMuster(w.id, { ...current, [sid]: ids });
-    for (const [label, ids] of [["攻撃側", w.attackers], ["防御側", w.defenders]]) {
-      for (const sid of ids) {
-        const regs = simActions.regimentsOf(sid);
-        const picked = new Set(current[sid] ?? []);
-        const sec = el("div", "muster-state");
-        sec.append(el("h5", "", `${label}：${stateName(map, sid)}　召集中の戦力 ${simActions.musterPower(w, sid).toLocaleString()}`));
-        if (!regs.length) sec.append(el("p", "muted", "部隊がありません（軍事ウィンドウで編成できます）"));
-        for (const r of regs) {
-          const row = el("label", "muster-row");
-          const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = picked.has(r.i);
-          cb.addEventListener("change", () => { const n = new Set(picked); if (cb.checked) n.add(r.i); else n.delete(r.i); save(sid, [...n]); });
-          row.append(cb, document.createTextNode(`${r.icon ?? "🛡️"} ${r.name ?? `部隊${r.i}`}`), el("span", "muted", `戦力 ${Math.round(forcePower(r.u)).toLocaleString()}`));
-          sec.append(row);
-        }
-        wrap.append(sec);
-      }
-    }
-    return wrap;
-  }
 
-  /** 戦闘を記録する：どの国どうしの戦闘で、どちらが勝ったか（召集した部隊の戦力を目安に出す） */
-  function battleForm(map, w) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "戦闘を記録する"));
-    const mk = (ids) => { const s = document.createElement("select"); for (const id of ids) { const o = document.createElement("option"); o.value = id; o.textContent = stateName(map, id); s.append(o); } return s; };
-    const aSel = mk(w.attackers), dSel = mk(w.defenders);
-    const win = document.createElement("select");
-    for (const [v, t] of [["attacker", "攻撃側の勝利"], ["defender", "防御側の勝利"]]) { const o = document.createElement("option"); o.value = v; o.textContent = t; win.append(o); }
-    const info = el("p", "muted", "");
-    const sync = () => {
-      const ap = simActions.musterPower(w, Number(aSel.value)), dp = simActions.musterPower(w, Number(dSel.value));
-      info.textContent = `召集した戦力：${ap.toLocaleString()} 対 ${dp.toLocaleString()}（勝敗は自由に決められます）`;
-    };
-    aSel.addEventListener("change", sync); dSel.addEventListener("change", sync); sync();
-    const go = el("button", "primary", "記録する"); go.type = "button";
-    go.addEventListener("click", () => simActions.recordBattle(w.id, { attackerState: Number(aSel.value), defenderState: Number(dSel.value), winner: win.value }));
-    const row = el("div", "member-picker");
-    row.append(el("span", "", "攻撃側"), aSel, el("span", "", "防御側"), dSel, win);
-    wrap.append(row, info, go);
-    return wrap;
-  }
-
-  function battleLog(map, w) {
-    const log = el("div", "battle-log");
-    if (w.battles.length) {
-      for (const b of w.battles.slice(-12).reverse()) {
-        log.append(el("div", "", `${b.year}年${b.month}月 ${stateName(map, b.attackerState)} vs ${stateName(map, b.defenderState)} → ${b.winner === "attacker" ? "攻撃側" : "防御側"}の勝利`));
-      }
-    } else log.append(el("div", "", "まだ戦闘の記録がありません"));
-    return log;
-  }
-
-  function peaceForm(map, states, w) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "講和条約"));
-    const dirRow = el("div", "member-picker");
-    const aTo = el("button", "", `${stateName(map, w.attackers[0])}に割譲`);
-    const dTo = el("button", "", `${stateName(map, w.defenders[0])}に割譲`);
-    let direction = "attacker";
-    const syncDir = () => { aTo.classList.toggle("active", direction === "attacker"); dTo.classList.toggle("active", direction === "defender"); refreshList(); };
-    aTo.type = "button"; dTo.type = "button";
-    aTo.addEventListener("click", () => { direction = "attacker"; syncDir(); });
-    dTo.addEventListener("click", () => { direction = "defender"; syncDir(); });
-    dirRow.append(aTo, dTo);
-    wrap.append(dirRow);
-
-    const listEl = el("div", "cession-list");
-    wrap.append(listEl);
-    const checks = [];
-    function refreshList() {
-      listEl.replaceChildren(); checks.length = 0;
-      const from = direction === "attacker" ? w.defenders[0] : w.attackers[0];
-      const to = direction === "attacker" ? w.attackers[0] : w.defenders[0];
-      const candidates = simActions.suggestCessions(to, from);
-      if (!candidates.length) { listEl.append(el("p", "muted", "割譲できそうな地域が見つかりませんでした（国境が接していない可能性があります）")); return; }
-      for (const c of candidates) {
-        const row = el("label", "cession-item");
-        const cb = document.createElement("input"); cb.type = "checkbox"; cb.dataset.type = c.type;
-        if (c.type === "province") cb.dataset.provinceId = c.provinceId; else cb.__regionCells = c.regionCells;
-        row.append(cb, el("span", "", `${c.name}（${c.cells}セル）`));
-        listEl.append(row);
-        checks.push(cb);
-      }
-    }
-    refreshList();
-
-    const repRow = el("label", "field");
-    repRow.append(el("span", "field-label", "賠償金（相手の産業力から差し引く・任意）"));
-    const repInput = document.createElement("input"); repInput.type = "number"; repInput.min = "0"; repInput.value = "0";
-    repRow.append(repInput);
-    wrap.append(repRow);
-
-    const signBtn = el("button", "danger", "この内容で講和する");
-    signBtn.type = "button";
-    signBtn.addEventListener("click", () => {
-      const provinceIds = checks.filter((c) => c.checked && c.dataset.type === "province").map((c) => Number(c.dataset.provinceId));
-      const regionCells = checks.filter((c) => c.checked && c.dataset.type === "region").map((c) => c.__regionCells);
-      const toStateId = direction === "attacker" ? w.attackers[0] : w.defenders[0];
-      simActions.signPeace(w.id, { provinceIds, regionCells, toStateId, reparations: Number(repInput.value) || 0 });
-    });
-    wrap.append(signBtn);
-    return wrap;
-  }
 
   store.subscribe((_s, change) => { if (["replace", "commit", "undo", "redo"].includes(change.type)) render(); });
   return { render };

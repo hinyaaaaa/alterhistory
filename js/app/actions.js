@@ -11,7 +11,7 @@ import { renderMapToCanvas, renderMapToSvg, canvasToPngBlob, exportFileName, tod
 import { viewToRenderOptions } from "../render/options.js";
 import { DEFAULT_ANNOTATIONS } from "../render/layers/annotations.js";
 import { buildChronicle, serializeChronicle, chronicleToMarkdown } from "../io/chronicle.js";
-import { LAYERS, PRESETS, FILL_KEY, FILL_KINDS, isLayerOn, exclusiveFillPatch, snapshotFills } from "./layers.js";
+import { LAYERS, FILL_KEY, FILL_KINDS, isLayerOn, exclusiveFillPatch, snapshotFills } from "./layers.js";
 
 const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
@@ -116,11 +116,6 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
       if (kind && on) patch.legendKind = kind;
       this.setView(patch);
     },
-    /** プリセット（政治・文化・宗教・属州・地形・標高）。そのプリセットが決めるレイヤーだけを一度に切り替える */
-    applyPreset(id) {
-      const p = PRESETS.find((x) => x.id === id);
-      if (p) this.setView({ ...p.set });
-    },
     /** 凡例に出す色分けの種類を選ぶ（オンの色分けの中から） */
     setLegendKind(kind) { if (FILL_KINDS.includes(kind)) this.setView({ legendKind: kind }); },
 
@@ -139,19 +134,11 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
      * 小さな実体は、見失わない程度（全体表示の8倍まで）に拡大する。外周が求まらなければ locate と同じ動き。
      * @returns {boolean} 外周に合わせて動かせたか
      */
+    /** 国・州・文化・宗教を選んだとき。ズームや移動はせず、今の地図の状態のまま強調だけする
+     *  （強調は ui/highlight.js が行うので、ここでは対象が存在するかだけ返す） */
     focusEntity(kind, entity) {
       const map = store.getState().map;
-      const def = ENTITY_KINDS[kind];
-      if (!map?.geometry || !def) return false;
-      const box = segmentsBounds(entityOutlineSegments(map.geometry, def.cells(map), entity.id, map.pack.cells.biome));
-      if (!box) { this.locate(entity); return false; }
-      const margin = 56; // 画面の端と外周のあいだの余白(px)
-      const bw = Math.max(1, box.x1 - box.x0), bh = Math.max(1, box.y1 - box.y0);
-      const kFit = Math.min((viewport.screenWidth - margin * 2) / bw, (viewport.screenHeight - margin * 2) / bh);
-      const k = Math.max(viewport.fitK, Math.min(kFit, viewport.fitK * 8, viewport.maxK));
-      viewport.centerOn((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, k);
-      rerender();
-      return true;
+      return !!(map?.geometry && ENTITY_KINDS[kind] && entity);
     },
 
     /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */

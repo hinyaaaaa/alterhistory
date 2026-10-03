@@ -66,7 +66,10 @@ export function createBuilderActions({ store, editActions, editMode, actions }) 
     /** 空き地から領土を自動で決めて塗る。{ok, count, reason} */
     autoClaim(kind, id, size = "m") {
       return withMap((map) => {
-        const r = pickAutoTerritory(map, { kind, size, rnd });
+        // すでに領土がある国・文化・宗教は、その領土に接した空き地から広げる（離れた場所に飛ばない）
+        const arr = map.pack.cells[kind], own = [];
+        if (id) for (let i = 0; i < arr.length; i++) if (arr[i] === id) own.push(i);
+        const r = pickAutoTerritory(map, { kind, size, rnd, ownCells: own });
         if (!r.cells.length) return { ok: false, count: 0, reason: r.reason ?? "no-free-land" };
         editActions.paintCells(kind, id, r.cells);
         return { ok: true, count: r.cells.length, reason: null };

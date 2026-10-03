@@ -4,11 +4,12 @@
 import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegiment, regimentsOf } from "../core/sim/military.js";
 import { planResolveBattle, planResolveMuster } from "../core/sim/battle.js";
 import { planCreateAlliance, planEditAlliance, planDissolveAlliance, listAlliances, alliancesOf } from "../core/edit/alliances.js";
-import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, planSignPeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
+import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, planSignPeace, planRenameWar, warsAwaitingTreaty, planPeaceVenue, peaceSides, estimatePeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
 import { forcePower } from "../core/sim/units.js";
 import { planAddMarker } from "../core/edit/markers.js";
 import { createRandom } from "../core/random.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
+import { planDraftNuclearOp, planCancelNuclearOp, planExecuteNuclearOp, listNuclearOps, nuclearStock } from "../core/sim/nuclear.js";
 
 export function createSimActions({ store, renderer }) {
   const rnd = createRandom(Date.now());
@@ -86,8 +87,8 @@ export function createSimActions({ store, renderer }) {
     // --- 同盟 ---
     listAlliances() { return withMap((map) => listAlliances(map)) ?? []; },
     alliancesOf(stateId) { return withMap((map) => alliancesOf(map, stateId)) ?? []; },
-    createAlliance(name, memberIds) {
-      return withMap((map) => safeRun("同盟の結成", () => { const r = planCreateAlliance(map, name, memberIds, currentDate()); commitOrThrow(r.command); return r.id; }));
+    createAlliance(name, memberIds, bond = "standard") {
+      return withMap((map) => safeRun("同盟の結成", () => { const r = planCreateAlliance(map, name, memberIds, currentDate(), bond); commitOrThrow(r.command); return r.id; }));
     },
     editAlliance(id, patch) { withMap((map) => safeRun("同盟の編集", () => commitOrThrow(planEditAlliance(map, id, patch)))); },
     dissolveAlliance(id) { withMap((map) => safeRun("同盟の解消", () => commitOrThrow(planDissolveAlliance(map, id, currentDate())))); },
@@ -122,10 +123,23 @@ export function createSimActions({ store, renderer }) {
             putMarker("war", "⚔️", capitalCell(store.getState().map, attackers[0]), `${dateLabel()} ${r.name}`);
           } finally { store.endBatch(); }
           rerender();
-          out = { id: r.id, name: r.name, result: r.result };
+          out = { id: r.id, name: r.name, result: r.result, joined: r.joined, endsAt: r.endsAt };
         });
         return out;
       });
+    },
+    // --- 核作戦（立案→実行。通常の戦争では使われない） ---
+    nuclearOps() { return withMap((map) => listNuclearOps(map)) ?? []; },
+    nuclearStock(stateId) { return withMap((map) => nuclearStock(map.pack.states[stateId])) ?? 0; },
+    draftNuclearOp(attackerId, targetId, warheads) { return withMap((map) => { let id; safeRun("核作戦の立案", () => { const r = planDraftNuclearOp(map, { attackerId, targetId, warheads }); commitOrThrow(r.command); id = r.id; }); return id; }); },
+    cancelNuclearOp(id) { withMap((map) => safeRun("核作戦の取り消し", () => commitOrThrow(planCancelNuclearOp(map, id)))); },
+    executeNuclearOp(id) {
+      withMap((map) => safeRun("核作戦の実行", () => {
+        const cmd = planExecuteNuclearOp(map, id, currentDate());
+        store.beginBatch(cmd.label ?? "核作戦の実行");
+        try { store.commit(cmd); const op = listNuclearOps(store.getState().map).find((o) => o.id === id); putMarker("nuclear", "☢️", capitalCell(store.getState().map, op.targetId), `${dateLabel()} ${op.name}`); } finally { store.endBatch(); }
+        rerender();
+      }));
     },
     getCurrency(stateId) { return withMap((map) => getCurrency(map.pack.states[stateId])); },
     /** 1 from通貨 = ? to通貨 */
@@ -150,6 +164,11 @@ export function createSimActions({ store, renderer }) {
         rerender();
       }));
     },
+    renameWar(warId, name) { withMap((map) => safeRun("戦争名の変更", () => commitOrThrow(planRenameWar(map, warId, name)))); },
+    warsAwaitingTreaty() { return withMap((map) => warsAwaitingTreaty(map)) ?? []; },
+    peaceVenue(warId) { return withMap((map) => planPeaceVenue(map, warId, rnd)); },
+    peaceSides(war) { return peaceSides(war); },
+    estimatePeace(warId, args) { return withMap((map) => estimatePeace(map, warId, args)); },
     suggestCessions(attackerId, defenderId) { return withMap((map) => suggestCessions(map, attackerId, defenderId)) ?? []; },
     signPeace(warId, terms) {
       withMap((map) => safeRun("講和条約", () => {

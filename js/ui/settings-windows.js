@@ -72,8 +72,11 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
   }
   wins.register("military", { title: "🛡 軍事", width: 900, body: milBody, onOpen: () => { renderMil(); panels.military.render(); } });
 
+  // ---- 講和条約（戦争ウィンドウから分離） ----
+  if (warOutcome) wins.register("treaty", { title: "📜 講和条約", width: 860, body: warOutcome.treatyBody, onOpen: () => warOutcome.renderTreaty() });
+
   // ---- 通貨・為替 ----
-  if (warOutcome) wins.register("currency", { title: "💱 通貨・為替", width: 760, body: warOutcome.currencyBody, onOpen: () => warOutcome.renderCurrency() });
+  if (warOutcome) wins.register("currency", { title: "💱 通貨・為替", width: 900, body: warOutcome.currencyBody, onOpen: () => warOutcome.renderCurrency() });
 
   // 開いている間は、編集のたびに表を最新にする（戦争・同盟の中身は各パネルが自分で更新する）
   store.subscribe((_s, change) => {
@@ -88,11 +91,7 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
     const b = e.target instanceof HTMLElement ? e.target.closest("button") : null;
     if (!b) return;
     if (b.dataset.openWin) wins.open(b.dataset.openWin);
-    else if (b.dataset.openList) {
-      // 国家・文化・宗教・属州の一覧は、左の凡例パネル。その色分けをオンにして開く
-      actions.setView({ [FILL_KEY[b.dataset.openList]]: true, legendKind: b.dataset.openList });
-      window.dispatchEvent(new Event("request-edit-panel-open"));
-    }
+    else if (b.dataset.click) byId(b.dataset.click)?.click(); // 既存のボタン（歴史をつくる・地図編集・時間設定）を開く
     menu.open = false;
   });
   const sync = (s) => menu.classList.toggle("disabled", !s.map);

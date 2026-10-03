@@ -48,7 +48,7 @@ export function initLegend({ store, actions, panels, highlight }) {
       const name = document.createElement("span"); name.className = "legend-name"; name.textContent = it.name;
       const count = document.createElement("span"); count.className = "legend-count"; count.textContent = String(it.cells);
       btn.append(chip, name);
-      if (isProvisional(map, kind, it.id)) { const tag = document.createElement("span"); tag.className = "legend-prov"; tag.textContent = "仮"; tag.title = "仮の名前（編集パネルで確定できます）"; btn.append(tag); }
+      if (false && isProvisional(map, kind, it.id)) { const tag = document.createElement("span"); tag.className = "legend-prov"; tag.textContent = "仮"; tag.title = "仮の名前（編集パネルで確定できます）"; btn.append(tag); }
       btn.append(count);
       btn.addEventListener("click", () => { actions.focusEntity(kind, it); highlight?.show(kind, it.id); });
       btn.addEventListener("contextmenu", (e) => { e.preventDefault(); panels?.openEntity(kind, it.id); });

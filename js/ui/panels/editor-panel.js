@@ -4,13 +4,13 @@
 
 import { describeCell, statePopulation, stateMilitaryPower, stateHeadcount, stateRank } from "../../core/query.js";
 import { htmlToEditable, editableToHtml } from "../../core/edit/notes.js";
-import { relationLabel, RELATIONS } from "../../core/edit/diplomacy.js";
+import { simpleRelation, SIMPLE_LABEL } from "../../core/edit/diplomacy.js";
 import { DEFAULT_MARKER_TYPES, defaultMarkerName } from "../../core/edit/markers.js";
 import { byId } from "../dom.js";
 import { confirmDialog, promptDialog } from "../dialogs.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-const isLive = (e) => !!e && typeof e === "object" && !e.removed;
+const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0; // 0番（Neutrals＝無所属）は外交などの対象にしない
 const STATE_SUBTABS = [
   { key: "info", label: "基本情報", icon: "⛭" },
   { key: "provinces", label: "属州", icon: "▦" },
@@ -58,23 +58,17 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     if (!isLive(e)) { close(); return; }
     title.textContent = `🏳 ${e.fullName ?? e.name}`;
 
-    const tabs = el("div", "dialog-tabs");
-    tabs.setAttribute("role", "tablist");
-    for (const t of STATE_SUBTABS) {
-      const b = el("button", `tab-btn${stateSubtab === t.key ? " active" : ""}`);
-      b.type = "button"; b.setAttribute("role", "tab");
-      const icon = el("span", "tab-icon", t.icon);
-      b.append(icon, document.createTextNode(t.label));
-      b.addEventListener("click", () => { stateSubtab = t.key; render(); });
-      tabs.append(b);
-    }
-    root.append(tabs);
-
-    const body = el("div", "editor-body tab-panel");
+    // 横タブは使わない：基本情報の下に、属州を折りたたみの欄として続ける
+    const body = el("div", "editor-body");
     root.append(body);
 
-    if (stateSubtab === "info") renderStateInfo(map, e, body);
-    else if (stateSubtab === "provinces") renderStateProvinces(map, e, body);
+    renderStateInfo(map, e, body);
+    const prov = document.createElement("details"); prov.className = "state-prov-fold"; prov.open = stateSubtab === "provinces";
+    prov.addEventListener("toggle", () => { stateSubtab = prov.open ? "provinces" : "info"; });
+    prov.append(el("summary", "", "▦ 属州"));
+    const provBody = el("div", "state-prov-body"); prov.append(provBody);
+    renderStateProvinces(map, e, provBody);
+    body.append(prov);
   }
 
   function renderStateInfo(map, e, body) {
@@ -115,7 +109,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   function buildDiplomacy(map, focusId) {
     const form = el("div", "editor-form");
     form.append(diplomacyMatrix(map, focusId));
-    form.append(diplomacySection(map, focusId));
     return form;
   }
 
@@ -123,7 +116,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
    *  現在選んでいる国家の行・列は強調する。セルをクリックすると関係を変更できる。 */
   function diplomacyMatrix(map, focusId) {
     const wrap = el("div", "editor-section diplomacy-matrix-wrap");
-    wrap.append(el("h4", "", "外交一覧（全国家）"));
+    wrap.append(el("h4", "", "外交一覧（全国家）"), el("p", "hint", "同盟を結ぶと「同盟」、戦争をすると「敵対」になり、講和すると中立に戻ります。ここでは設定しません。"));
     const states = map.pack.states.filter(isLive).sort((a, b) => a.i - b.i);
     if (states.length < 2) { wrap.append(el("p", "hint", "国家が2つ以上ないと表になりません。")); return wrap; }
 
@@ -153,12 +146,12 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
       for (const colState of states) {
         const td = document.createElement("td");
         if (rowState.i === colState.i) { td.className = "self"; tr.append(td); continue; }
-        const rel = editActions.getRelation(map, rowState.i, colState.i) ?? "Neutral";
-        td.className = `rel-${rel}`;
-        td.textContent = relationLabel(rel);
-        td.title = `${rowState.fullName ?? rowState.name} → ${colState.fullName ?? colState.name}: ${relationLabel(rel)}（クリックで変更）`;
+        // 関係は「同盟」「敵対」「中立」の3つだけ。同盟を結べば同盟、戦争をすれば敵対になり、手では設定しない
+        const rel = simpleRelation(map, rowState.i, colState.i);
+        td.className = `rel-${rel === "alliance" ? "Ally" : rel === "hostile" ? "Enemy" : "Neutral"}`;
+        td.textContent = SIMPLE_LABEL[rel];
+        td.title = `${rowState.fullName ?? rowState.name} と ${colState.fullName ?? colState.name}: ${SIMPLE_LABEL[rel]}`;
         if (rowState.i === focusId || colState.i === focusId) td.classList.add("focus-row-col");
-        td.addEventListener("click", () => openRelationPicker(td, rowState.i, colState.i, rel));
         tr.append(td);
       }
       tbody.append(tr);
@@ -171,22 +164,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     return wrap;
   }
 
-  /** マトリクスのセルをクリックしたときに出す、関係変更用の簡易インライン選択 */
-  function openRelationPicker(td, a, b, current) {
-    // 既に開いている選択を閉じる
-    document.querySelector(".diplomacy-matrix select.rel-picker")?.blur();
-    if (td.querySelector("select")) return;
-    const text = td.textContent;
-    td.replaceChildren();
-    const sel = document.createElement("select");
-    sel.className = "rel-picker";
-    for (const r of RELATIONS) { const o = document.createElement("option"); o.value = r.id; o.textContent = r.label; if (r.id === current) o.selected = true; sel.append(o); }
-    const restore = () => { td.replaceChildren(); td.textContent = text; };
-    sel.addEventListener("change", () => { editActions.setDiplomacy(a, b, sel.value); });
-    sel.addEventListener("blur", restore);
-    td.append(sel);
-    sel.focus();
-  }
 
   function renderStateProvinces(map, e, body) {
     const form = el("div", "editor-form");
@@ -395,39 +372,41 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     return wrap;
   }
 
+  /** 戦術ドクトリン：どれがどう違うかを、説明と効果（兵科ごとの倍率）で見せて選ばせる */
+  const UNIT_LABEL = { infantry: "歩兵", artillery: "砲兵", armor: "機甲", air: "航空", navy: "海軍", special: "特殊部隊", advanced: "先端技術" };
+  function doctrineEffects(d) {
+    const out = [];
+    for (const [k, label] of Object.entries(UNIT_LABEL)) {
+      const m = d.mult?.[k] ?? 1;
+      if (Math.abs(m - 1) > 0.001) out.push({ text: `${label} ×${m}`, up: m > 1 });
+    }
+    if (d.defenseBonus) out.push({ text: `守るとき戦力 +${Math.round(d.defenseBonus * 100)}%`, up: true });
+    if (d.moraleLoss && d.moraleLoss < 1) out.push({ text: "士気が崩れにくい", up: true });
+    if (d.moraleLoss && d.moraleLoss > 1) out.push({ text: "士気が崩れやすい", up: false });
+    if (d.conscriptBonus) out.push({ text: `徴兵 +${Math.round(d.conscriptBonus * 100)}%`, up: true });
+    return out;
+  }
   function doctrineSection(stateId) {
     const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "戦争ドクトリン"));
-    const sel = document.createElement("select");
+    wrap.append(el("h4", "", "戦術ドクトリン"));
+    wrap.append(el("p", "hint", "国全体の戦い方の方針（部隊ごとではなく国ごとに1つ）。得意な兵科が強くなる代わりに、別の兵科が少し弱くなります。"));
     const current = editActions.getDoctrine(stateId);
+    const list = el("div", "doctrine-list");
     for (const d of editActions.DOCTRINES) {
-      const o = document.createElement("option");
-      o.value = d.key; o.textContent = d.label;
-      if (d.key === current) o.selected = true;
-      sel.append(o);
+      const card = el("label", `doctrine-card${d.key === current ? " on" : ""}`);
+      const radio = document.createElement("input"); radio.type = "radio"; radio.name = `doctrine-${stateId}`; radio.checked = d.key === current;
+      radio.addEventListener("change", () => editActions.setDoctrine(stateId, d.key));
+      const body = el("div", "doctrine-body");
+      body.append(el("strong", "", d.label), el("p", "hint", d.desc ?? ""));
+      const chips = el("div", "doctrine-chips");
+      for (const e of doctrineEffects(d)) chips.append(el("span", `doctrine-chip ${e.up ? "up" : "down"}`, e.text));
+      if (!chips.children.length) chips.append(el("span", "doctrine-chip", "効果の偏りなし"));
+      body.append(chips); card.append(radio, body); list.append(card);
     }
-    sel.addEventListener("change", () => editActions.setDoctrine(stateId, sel.value));
-    wrap.append(sel);
-    wrap.append(el("p", "hint", "国全体の戦い方の方針。全部隊の戦闘力に一律で影響します（部隊ごとには設定しません）。"));
+    wrap.append(list);
     return wrap;
   }
 
-  function diplomacySection(map, stateId) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "外交関係"));
-    const others = map.pack.states.filter((s) => isLive(s) && s.i !== stateId);
-    for (const s of others) {
-      const row = el("div", "diplomacy-row");
-      row.append(el("span", "diplomacy-name", s.name));
-      const sel = document.createElement("select");
-      const current = editActions.getRelation(map, stateId, s.i) ?? "Neutral";
-      for (const r of RELATIONS) { const o = document.createElement("option"); o.value = r.id; o.textContent = r.label; if (r.id === current) o.selected = true; sel.append(o); }
-      sel.addEventListener("change", () => editActions.setDiplomacy(stateId, s.i, sel.value));
-      row.append(sel);
-      wrap.append(row);
-    }
-    return wrap;
-  }
 
   function noteField(map, type, id) {
     const wrap = el("div", "editor-section");
@@ -465,6 +444,8 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
 
   /** 仮の名前なら、その旨と「この名前で確定」ボタンを返す（そうでなければ空配列） */
   function provisionalNote(kind, id) {
+    return []; // 仮決定は廃止（名前はいつでも上書きできる）
+    // eslint-disable-next-line no-unreachable
     if (!editActions.isProvisional(kind, id)) return [];
     const box = el("div", "provisional-note");
     box.append(el("span", "", "🎲 仮の名前です。"));

@@ -1,5 +1,6 @@
 // 同盟タブ：3カ国以上の同盟を作成・編集・解消する。
 import { formatWorldTime } from "../../core/sim/time.js";
+import { BONDS, BOND_BY_KEY, bondOf } from "../../core/sim/war-flow.js";
 import { byId } from "../dom.js";
 import { confirmDialog, alertDialog } from "../dialogs.js";
 
@@ -43,6 +44,18 @@ export function initAlliancesPanel({ store, simActions }) {
     return { wrap, boxes };
   }
 
+  /** 同盟の拘束力を選ぶ（戦争への参戦と貿易封鎖の同調に連動する）。説明を見ながら選べる */
+  function bondPicker(current, onChange) {
+    const wrap = el("div", "bond-picker");
+    wrap.append(el("label", "field-label", "同盟の拘束力"));
+    const desc = el("p", "hint", BOND_BY_KEY[current].desc);
+    const sel = document.createElement("select");
+    for (const b of BONDS) { const o = document.createElement("option"); o.value = b.key; o.textContent = b.label; o.selected = b.key === current; sel.append(o); }
+    sel.addEventListener("change", () => { desc.textContent = BOND_BY_KEY[sel.value].desc; onChange(sel.value); });
+    wrap.append(sel, desc);
+    return { wrap, get value() { return sel.value; } };
+  }
+
   function createForm(map, states) {
     const wrap = el("div", "editor-section");
     wrap.append(el("h4", "", "新しい同盟"));
@@ -50,12 +63,14 @@ export function initAlliancesPanel({ store, simActions }) {
     wrap.append(nameInput);
     const { wrap: picker, boxes } = memberPicker(states);
     wrap.append(picker);
+    const bp = bondPicker("standard", () => {});
+    wrap.append(bp.wrap);
     const go = el("button", "", "同盟を結成（2カ国以上を選択）");
     go.type = "button";
     go.addEventListener("click", async () => {
       const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
       if (ids.length < 2) { await alertDialog("2カ国以上を選んでください"); return; }
-      simActions.createAlliance(nameInput.value, ids);
+      simActions.createAlliance(nameInput.value, ids, bp.value);
     });
     wrap.append(go);
     return wrap;
@@ -83,6 +98,8 @@ export function initAlliancesPanel({ store, simActions }) {
       : (dissolved ? "解消済み" : "");
     if (dateLine) card.append(el("p", "hint", dateLine));
 
+    if (!dissolved) card.append(bondPicker(bondOf(a), (v) => simActions.editAlliance(a.id, { bond: v })).wrap);
+    else card.append(el("p", "hint", `拘束力：${BOND_BY_KEY[bondOf(a)].label}`));
     const chips = el("div", "member-chip-list");
     for (const id of a.members) chips.append(el("span", "member-chip", stateName(map, id)));
     card.append(chips);

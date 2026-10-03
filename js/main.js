@@ -16,6 +16,10 @@ import { initChrome } from "./ui/chrome.js";
 import { initSidebarToggle } from "./ui/sidebar-toggle.js";
 import { initPanelDock } from "./ui/panel-dock.js";
 import { initSettingsWindows } from "./ui/settings-windows.js";
+import { initEntityLists } from "./ui/entity-list-window.js";
+import { initGenealogy } from "./ui/genealogy-window.js";
+import { initNuclearWindow } from "./ui/nuclear-window.js";
+import { makeDraggable } from "./ui/windows.js";
 import { initHighlight } from "./ui/highlight.js";
 import { initToolbar } from "./ui/toolbar.js";
 import { initStatusBar } from "./ui/status-bar.js";
@@ -72,7 +76,8 @@ function start() {
   const timeActions = createTimeActions({ store, renderer });
   const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
   const warOutcome = initWarOutcome({ store, simActions });
-  const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome });
+  let winsRef = null;
+  const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome, getWins: () => winsRef });
   const alliancesPanel = initAlliancesPanel({ store, simActions });
   // editMode は editorPanel より後に作るが、editorPanel（国家タブの属州サブタブ）から
   // 「属州を塗るツールに切り替える」ために参照したいので、後で編集パネルに差し込む
@@ -88,16 +93,28 @@ function start() {
     consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell),
   };
   editorPanel.setPanels?.(panels); // editor-panel.js 内で使う panels（wars/alliances/military）を後から渡す
-  initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
+  const highlight = initHighlight({ store, viewport, renderer }); // 一覧・地図クリックで、ズームせずに境界線を光らせる
+  const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
+  winsRef = wins;
+  initEntityLists({ store, wins, panels, editActions, highlight });
+  initGenealogy({ store, wins, editActions });
+  initNuclearWindow({ store, simActions, wins });
+  // 地図上の国・州などを選んだときも、ズームせず強調だけする
+  const rawOpen = panels.openEntity;
+  panels.openEntity = (kind, id) => { if (["state", "culture", "religion", "province"].includes(kind)) highlight.show(kind, id); return rawOpen(kind, id); };
+  for (const [id, head] of [["sidebar", "#editor-panel"], ["edit-panel", ".editor-header"], ["builder-panel", ".editor-header"]]) {
+    const root = byId(id);
+    // sidebar の中身(editor-panel)は描き直されるので、ドラッグはパネル全体の上端を掴む形にする
+    makeDraggable(root, id === "sidebar" ? root : root.querySelector(head), byId("stage"), id === "sidebar" ? ".editor-header" : null);
+  }
   const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
 
-  deps.highlight = initHighlight(deps); // 凡例の項目を押したとき、境界線を赤く光らせる
+  deps.highlight = highlight;
   initBanner(deps);
   initToolbar(deps);
   initStatusBar(deps);
   initMapView(deps);
   initLegend(deps);
-  initSidebarToggle(deps);
   initChrome(deps);
   initFontsSync(deps);
   const editMode = initEditMode(deps);
@@ -105,10 +122,7 @@ function start() {
   const editToolbar = initEditToolbar({ store, editMode, editActions });
   const editPanel = initEditPanel();
   // 右のパネルは × で小さくでき、元の場所（右端）の小さなボタンで開き直せる
-  initPanelDock([
-    { panel: "edit-panel", close: "edit-panel-close", tab: "tab-edit-panel", open: "btn-edit-mode" },
-    { panel: "builder-panel", close: "builder-close", tab: "tab-builder-panel", open: "btn-builder" },
-  ]);
+
   const builderActions = createBuilderActions({ store, editActions, editMode, actions });
   const economyView = createEconomyView({ store, editActions, builderActions });
   const travelView = createTravelView({ store, editActions, editMode, viewport, actions });
