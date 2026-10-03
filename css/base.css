@@ -38,7 +38,8 @@
   --info: #4c7fa6;
   --ally: #4c8a5e;
 
-  --font: "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Noto Sans CJK JP", system-ui, sans-serif;
+  --font: "Noto Sans JP", "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Noto Sans CJK JP", system-ui, sans-serif;
+  --font-serif: "Shippori Mincho", "Noto Serif JP", "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "MS PMincho", serif;
 
   --radius: 2px;
   --shadow-panel: 0 2px 0 rgba(0, 0, 0, 0.55), 0 6px 16px rgba(0, 0, 0, 0.35);

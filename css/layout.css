@@ -112,11 +112,13 @@ main > * { min-height: 0; }
 main { grid-row: 2; }
 .statusbar { grid-row: 3; }
 #app.hide-top .topbar, #app.hide-bottom .statusbar { display: none; }
-#app.hide-left #sidebar, #app.hide-left .sidebar-fab { display: none; }
+/* 左パネルは display:none にせず幅0の列として残す（消すと builder の列番号とずれ、地図の横に黒い空き列ができた） */
+#app.hide-left #sidebar { visibility: hidden; overflow: hidden; min-width: 0; pointer-events: none; }
+#app.hide-left .sidebar-fab { display: none; }
 #app.hide-right #btn-edit-mode, #app.hide-right #btn-builder, #app.hide-right #edit-panel, #app.hide-right #builder-panel { display: none; }
 @media (min-width: 721px) {
-  #app.hide-left main { grid-template-columns: 1fr !important; }
-  #app.hide-left main:has(#builder-panel:not([hidden])) { grid-template-columns: 1fr 320px !important; }
+  #app.hide-left main { grid-template-columns: 0 1fr !important; }
+  #app.hide-left main:has(#builder-panel:not([hidden])) { grid-template-columns: 0 1fr 320px !important; }
 }
 .chrome-fab {
   position: absolute; right: 10px; bottom: 10px; z-index: 6; width: 40px; height: 40px; padding: 0;
@@ -129,3 +131,24 @@ main { grid-row: 2; }
 .menu-check { display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .menu-check:hover { background: var(--panel-2); }
 .menu-right .menu-list { left: auto; right: 0; }
+
+/* --- 上部バーの並び：ファイル｜取り消し｜作業の種類 … 時間 … 表示 --- */
+.topbar-group + .topbar-group:not(.topbar-time) { padding-left: 10px; border-left: 1px solid var(--line); }
+.topbar-modes .builder-fab, .topbar-modes .edit-mode-fab { position: static; right: auto; top: auto; box-shadow: none; padding: 6px 12px; font-size: 12.5px; }
+.topbar-modes .edit-mode-fab[aria-expanded="true"] { right: auto; }
+.topbar-time { flex: 1 1 0; }
+@media (max-width: 960px) { .brand-name { display: none; } }
+@media (max-width: 720px) {
+  .topbar { flex-wrap: wrap; row-gap: 4px; padding: 4px 8px; }
+  .brand { display: none !important; }
+  .topbar-time { order: 9; flex-basis: 100%; }
+  .topbar-group + .topbar-group:not(.topbar-time) { padding-left: 0; border-left: 0; }
+  .icon-btn .lbl { display: none; }
+  .topbar-group { gap: 4px; }
+}
+/* --- 地図を開く前の案内（元の #empty-state に手順を足した） --- */
+.empty-steps { margin: 14px auto 18px; padding: 0; list-style: none; max-width: 30em; text-align: left; font-size: 13px; line-height: 1.8; counter-reset: step; color: var(--muted); }
+.empty-steps li { counter-increment: step; padding-left: 2em; position: relative; }
+.empty-steps li::before { content: counter(step); position: absolute; left: 0; top: 0.35em; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; border: 1px solid var(--brass-dim); border-radius: 50%; font-size: 11px; color: var(--brass); }
+.empty-steps b { color: var(--text); }
+.menu-sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }

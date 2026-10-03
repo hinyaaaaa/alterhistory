@@ -375,65 +375,340 @@
     ctx.globalAlpha = 1;
   }
 
+  // js/render/fonts.js
+  var FONT_PLACE = '"Shippori Mincho","Noto Serif JP","Yu Mincho","YuMincho","Hiragino Mincho ProN","Noto Serif CJK JP","MS PMincho",serif';
+  var FACES = ['500 16px "Shippori Mincho"', '700 16px "Shippori Mincho"', '800 16px "Shippori Mincho"'];
+  function loadMapFonts(text2, onReady) {
+    if (typeof document === "undefined" || !document.fonts?.load) return Promise.resolve(false);
+    const sample = [...new Set(String(text2))].join("") || "\u3042\u30A2\u4E9C";
+    return Promise.all(FACES.map((f) => document.fonts.load(f, sample))).then((r) => {
+      const got = r.some((x) => x.length);
+      if (got) onReady?.();
+      return got;
+    }).catch(() => false);
+  }
+
+  // js/core/sim/units.js
+  var UNIT_TYPES = Object.freeze([
+    { key: "infantry", label: "\u6B69\u5175", unit: "\u4EBA", icon: "\u2694\uFE0F", soft: 1, hard: 0.1, hardness: 0, rural: 0.9, urban: 0.5, industryShare: 0 },
+    { key: "armor", label: "\u6A5F\u7532", unit: "\u53F0", icon: "\u{1F6E1}\uFE0F", soft: 3, hard: 10, hardness: 0.9, rural: 0, urban: 0, industryShare: 0.35 },
+    { key: "air", label: "\u822A\u7A7A", unit: "\u6A5F", icon: "\u2708\uFE0F", soft: 5, hard: 6, hardness: 0, rural: 0, urban: 0, industryShare: 0.25 },
+    { key: "navy", label: "\u6D77\u8ECD", unit: "\u96BB", icon: "\u{1F6A2}", soft: 8, hard: 14, hardness: 0.6, rural: 0, urban: 0, industryShare: 0.2, naval: true },
+    { key: "special", label: "\u7279\u6B8A\u90E8\u968A", unit: "\u4EBA", icon: "\u{1F396}\uFE0F", soft: 1.5, hard: 0.5, hardness: 0.1, rural: 0.02, urban: 0.03, industryShare: 0.05 },
+    { key: "advanced", label: "\u5148\u7AEF\u6280\u8853", unit: "\u4EBA", icon: "\u{1F52C}", soft: 2, hard: 6, hardness: 0.5, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6 },
+    { key: "nuclear", label: "\u6838", unit: "\u767A", icon: "\u2622\uFE0F", soft: 500, hard: 500, hardness: 0, rural: 0, urban: 0, industryShare: 0, minTech: 9 }
+  ]);
+  var UNIT_KEYS = UNIT_TYPES.map((u) => u.key);
+  var UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]));
+  var DOCTRINES = Object.freeze([
+    { key: "balanced", label: "\u5747\u8861", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
+    { key: "mobile", label: "\u6A5F\u52D5\u6226", mult: { infantry: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 0.85 },
+    { key: "firepower", label: "\u706B\u529B\u4E3B\u7FA9", mult: { infantry: 1.15, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
+    { key: "battleplan", label: "\u8A08\u753B\u9632\u5FA1", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1, defenseBonus: 0.15 },
+    { key: "massassault", label: "\u4EBA\u6D77\u6226\u8853", mult: { infantry: 1.3, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 }, moraleLoss: 1.25, conscriptBonus: 0.3 }
+  ]);
+  var DOCTRINE_BY_KEY = Object.fromEntries(DOCTRINES.map((d) => [d.key, d]));
+  var DEFAULT_DOCTRINE = "balanced";
+  var STATE_TYPE_MULT = Object.freeze({
+    Generic: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
+    Naval: { infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
+    Nomadic: { infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
+    Highland: { infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
+    Hunting: { infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
+    Lake: { infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
+    River: { infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 }
+  });
+  function stateTypeMult(type) {
+    return STATE_TYPE_MULT[type] ?? STATE_TYPE_MULT.Generic;
+  }
+  function emptyForce() {
+    return Object.fromEntries(UNIT_KEYS.map((k) => [k, 0]));
+  }
+  function forcePower(units, doctrineKey = DEFAULT_DOCTRINE) {
+    const mult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
+    let total = 0;
+    for (const key of UNIT_KEYS) {
+      const n = units?.[key] ?? 0;
+      if (n > 0) total += n * ((UNIT_BY_KEY[key].soft + UNIT_BY_KEY[key].hard) / 2) * (mult[key] ?? 1);
+    }
+    return total;
+  }
+  function forceHeadcount(units) {
+    return UNIT_KEYS.reduce((sum, k) => sum + (units?.[k] ?? 0), 0);
+  }
+  function forceHardness(units) {
+    let weight = 0, sum = 0;
+    for (const key of UNIT_KEYS) {
+      const n = units?.[key] ?? 0;
+      if (n <= 0) continue;
+      weight += n;
+      sum += n * UNIT_BY_KEY[key].hardness;
+    }
+    return weight > 0 ? sum / weight : 0;
+  }
+  function attackDamage(units, defenderHardness, doctrineKey = DEFAULT_DOCTRINE, stateType = "Generic") {
+    const dmult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
+    const tmult = stateTypeMult(stateType);
+    let total = 0;
+    for (const key of UNIT_KEYS) {
+      const n = units?.[key] ?? 0;
+      if (n <= 0) continue;
+      const def = UNIT_BY_KEY[key];
+      const effective = def.soft * (1 - defenderHardness) + def.hard * defenderHardness;
+      total += n * effective * (dmult[key] ?? 1) * (tmult[key] ?? 1);
+    }
+    return total;
+  }
+
+  // js/core/query.js
+  var nameOf = (list, id) => {
+    const e = list?.[id];
+    if (!e || e.removed) return null;
+    return e.fullName ?? e.name ?? null;
+  };
+  function describeCell(map, i) {
+    const c = map.pack.cells;
+    if (!map.geometry || i < 0 || i >= c.biome.length) return null;
+    const isWater2 = c.biome[i] === 0;
+    const burgId = c.burg[i];
+    return {
+      cell: i,
+      water: isWater2,
+      height: map.geometry.pack.h[i],
+      biome: map.biomesData[c.biome[i]]?.name ?? null,
+      state: isWater2 ? null : nameOf(map.pack.states, c.state[i]),
+      culture: isWater2 ? null : nameOf(map.pack.cultures, c.culture[i]),
+      religion: isWater2 ? null : nameOf(map.pack.religions, c.religion[i]),
+      province: isWater2 ? null : nameOf(map.pack.provinces, c.province[i]),
+      burg: burgId ? map.pack.burgs[burgId]?.name ?? null : null,
+      hasRiver: c.river[i] > 0
+    };
+  }
+  var ENTITY_KINDS = Object.freeze({
+    state: { label: "\u56FD\u5BB6", entities: (m) => m.pack.states, cells: (m) => m.pack.cells.state },
+    culture: { label: "\u6587\u5316", entities: (m) => m.pack.cultures, cells: (m) => m.pack.cells.culture },
+    religion: { label: "\u5B97\u6559", entities: (m) => m.pack.religions, cells: (m) => m.pack.cells.religion },
+    province: { label: "\u5C5E\u5DDE", entities: (m) => m.pack.provinces, cells: (m) => m.pack.cells.province }
+  });
+  function listEntities(map, kind) {
+    const def = ENTITY_KINDS[kind];
+    if (!def) return [];
+    const ids2 = def.cells(map);
+    const counts = /* @__PURE__ */ new Map();
+    for (let i = 0; i < ids2.length; i++) {
+      if (map.pack.cells.biome[i] === 0) continue;
+      counts.set(ids2[i], (counts.get(ids2[i]) ?? 0) + 1);
+    }
+    return def.entities(map).filter((e) => e && e.i && !e.removed && counts.has(e.i)).map((e) => ({
+      id: e.i,
+      name: e.fullName ?? e.name ?? `#${e.i}`,
+      color: e.color ?? "#ccc",
+      cells: counts.get(e.i),
+      center: e.center ?? null,
+      pole: e.pole ?? null
+    })).sort((a, b) => b.cells - a.cells);
+  }
+  function burgNearCell(map, cell, hops = 2) {
+    const { burg } = map.pack.cells;
+    const adj = map.geometry.pack.cells.c;
+    const seen = /* @__PURE__ */ new Set([cell]);
+    let layer = [cell];
+    for (let h = 0; h <= hops; h++) {
+      for (const i of layer) {
+        const b = map.pack.burgs[burg[i]];
+        if (burg[i] > 0 && b && !b.removed && b.i) return b;
+      }
+      const next = [];
+      for (const i of layer) for (const j of adj[i]) if (!seen.has(j)) {
+        seen.add(j);
+        next.push(j);
+      }
+      layer = next;
+    }
+    return null;
+  }
+  function placeLabel(map, cell) {
+    const b = burgNearCell(map, cell, 2);
+    if (b) return b.name;
+    if (map.pack.cells.biome[cell] === 0) return "\u6D77\u4E0A";
+    const s = map.pack.states[map.pack.cells.state[cell]];
+    return s && s.i && !s.removed ? `${s.name}\u9818\u5185` : "\u7121\u4EBA\u306E\u5730";
+  }
+  function entityPosition(map, entity) {
+    if (entity.pole) return [entity.pole[0], entity.pole[1]];
+    const p = entity.center != null ? map.geometry?.pack.p[entity.center] : null;
+    return p ? [p[0], p[1]] : null;
+  }
+  var isLiveState = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function statePopulation(state) {
+    return (state.rural ?? 0) + (state.urban ?? 0);
+  }
+  function stateMilitaryPower(state) {
+    const list = Array.isArray(state.military) ? state.military : [];
+    const doctrine = state.doctrine ?? "balanced";
+    return list.reduce((sum, r) => sum + forcePower(r.u, doctrine), 0);
+  }
+  function stateHeadcount(state) {
+    const list = Array.isArray(state.military) ? state.military : [];
+    return list.reduce((sum, r) => sum + forceHeadcount(r.u), 0);
+  }
+  function rankStates(map, metric) {
+    const states = map.pack.states.filter(isLiveState);
+    const valueOf = {
+      population: statePopulation,
+      military: stateMilitaryPower,
+      cells: (s) => s.cells ?? 0,
+      area: (s) => s.area ?? 0
+    }[metric];
+    if (!valueOf) return [];
+    return states.map((s) => ({ id: s.i, name: s.fullName ?? s.name ?? `#${s.i}`, value: valueOf(s) })).sort((a, b) => b.value - a.value).map((r, i) => ({ ...r, rank: i + 1 }));
+  }
+  function stateRank(map, stateId, metric) {
+    const ranked = rankStates(map, metric);
+    const total = ranked.length;
+    const entry = ranked.find((r) => r.id === stateId);
+    return entry ? { rank: entry.rank, total, value: entry.value } : null;
+  }
+
   // js/render/layers/places.js
-  function drawBurgs(ctx, map, vp, { minPopulation = 0 } = {}) {
+  var clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+  var ramp = (z, z0, z1) => clamp((z - z0) / (z1 - z0), 0, 1);
+  var zoomOf = (vp) => vp.fitK > 0 ? vp.k / vp.fitK : 1;
+  function rankBurgs(map) {
+    const live3 = map.pack.burgs.filter((b) => b && b.i && !b.removed);
+    const towns = live3.filter((b) => !b.capital).sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
+    const p = /* @__PURE__ */ new Map();
+    towns.forEach((b, i) => p.set(b, towns.length > 1 ? i / (towns.length - 1) : 0));
+    const capitals = live3.filter((b) => b.capital).sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
+    return { capitals, towns, percentile: (b) => b.capital ? -1 : p.get(b) ?? 1 };
+  }
+  var labelZoom = (pc) => pc < 0 ? 0 : 1.15 + 5.2 * Math.pow(pc, 0.85);
+  var iconZoom = (pc) => pc < 0 ? 0 : labelZoom(pc) * 0.72;
+  function drawBurgs(ctx, map, vp, { minPopulation = 0, auto = false } = {}) {
     const vb = vp.visibleBounds(8);
+    const z = zoomOf(vp);
+    const rank = auto ? rankBurgs(map) : null;
     for (const b of map.pack.burgs) {
       if (!b || !b.i || b.removed) continue;
       if (b.x < vb.x0 || b.x > vb.x1 || b.y < vb.y0 || b.y > vb.y1) continue;
       if (!b.capital && (b.population ?? 0) < minPopulation) continue;
-      const r = (b.capital ? 3.6 : 2.2) / vp.k;
+      let alpha = 1, big = false;
+      if (auto) {
+        const pc = rank.percentile(b);
+        alpha = b.capital ? 1 : ramp(z, iconZoom(pc), iconZoom(pc) + 0.4);
+        big = pc >= 0 && pc < 0.12;
+        if (alpha <= 0) continue;
+      }
+      const r = (b.capital ? 4 : big ? 2.8 : 2.1) / vp.k;
+      ctx.globalAlpha = alpha;
       ctx.beginPath();
       ctx.arc(b.x, b.y, r, 0, Math.PI * 2);
-      ctx.fillStyle = b.capital ? "#7a1f1f" : "#f4efe4";
+      ctx.fillStyle = b.capital ? "#8a2323" : "#f6f1e5";
       ctx.fill();
-      ctx.lineWidth = 1 / vp.k;
+      ctx.lineWidth = (b.capital ? 1.4 : 1) / vp.k;
       ctx.strokeStyle = "#2b2118";
       ctx.stroke();
+      if (b.capital) {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, r * 0.38, 0, Math.PI * 2);
+        ctx.fillStyle = "#f6f1e5";
+        ctx.fill();
+      }
     }
+    ctx.globalAlpha = 1;
   }
-  var FONT_STACK = '"Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans CJK JP",sans-serif';
-  function drawLabels(ctx, map, vp, { states = true, burgs = true } = {}) {
+  function drawLabels(ctx, map, vp, { states = true, burgs = "auto" } = {}) {
     const placed = [];
     const k = vp.k;
+    const z = zoomOf(vp);
     const vb = vp.visibleBounds(0);
     const inView = (x, y) => x >= vb.x0 && x <= vb.x1 && y >= vb.y0 && y <= vb.y1;
-    const tryPlace = (text2, wx, wy, sizePx, style) => {
-      ctx.font = `${style.bold ? "bold " : ""}${sizePx / k}px ${FONT_STACK}`;
+    const hasSpacing = "letterSpacing" in ctx;
+    const tryPlace = (text2, wx, wy0, sizePx, style) => {
+      if (!text2) return false;
+      for (const dyPx of style.shifts ?? [0]) if (placeOnce(text2, wx, wy0 + dyPx / k, sizePx, style)) return true;
+      return false;
+    };
+    const placeOnce = (text2, wx, wy, sizePx, style) => {
+      const sp = style.spacing ?? 0;
+      ctx.font = `${style.weight >= 700 ? "bold " : ""}${sizePx / k}px ${FONT_PLACE}`;
+      if (hasSpacing) ctx.letterSpacing = `${sp / k}px`;
       const w = ctx.measureText(text2).width * k;
       const [sx, sy] = vp.toScreen(wx, wy);
-      const rect = [sx - w / 2 - 2, sy - sizePx / 2 - 1, sx + w / 2 + 2, sy + sizePx / 2 + 1];
+      const pad = 3;
+      const rect = [sx - w / 2 - pad, sy - sizePx / 2 - 2, sx + w / 2 + pad, sy + sizePx / 2 + 2];
       for (const r of placed) {
-        if (rect[0] < r[2] && rect[2] > r[0] && rect[1] < r[3] && rect[3] > r[1]) return false;
+        if (rect[0] < r[2] && rect[2] > r[0] && rect[1] < r[3] && rect[3] > r[1]) {
+          if (hasSpacing) ctx.letterSpacing = "0px";
+          return false;
+        }
       }
       placed.push(rect);
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
       ctx.lineJoin = "round";
+      ctx.globalAlpha = style.alpha ?? 1;
       ctx.lineWidth = style.halo / k;
-      ctx.strokeStyle = "rgba(255,252,240,0.9)";
+      ctx.strokeStyle = "rgba(250,246,232,0.93)";
       ctx.strokeText(text2, wx, wy);
       ctx.fillStyle = style.color;
       ctx.fillText(text2, wx, wy);
+      ctx.globalAlpha = 1;
+      if (hasSpacing) ctx.letterSpacing = "0px";
       return true;
     };
+    const rank = burgs === false ? null : rankBurgs(map);
+    const auto = burgs === "auto";
+    const capitalsOnly = burgs === "capitals";
+    const sizeOf = (b, pc) => {
+      const base = pc < 0 ? 14.5 : pc < 0.12 ? 12.5 : pc < 0.4 ? 11.5 : 10.5;
+      return base * (auto ? 1 + 0.05 * clamp(z - 2, 0, 6) : 1);
+    };
+    const placeBurg = (b) => {
+      if (!inView(b.x, b.y)) return;
+      const pc = rank.percentile(b);
+      let alpha = 1;
+      if (auto) {
+        const z0 = labelZoom(pc);
+        alpha = b.capital ? 1 : ramp(z, z0, z0 + 0.5);
+        if (alpha <= 0) return;
+      }
+      const size = sizeOf(b, pc);
+      const dy = (b.capital ? 7.5 : 6) / k;
+      tryPlace(b.name ?? "", b.x, b.y + dy, size, { color: b.capital ? "#1c120b" : "#241a12", halo: 2.8, weight: b.capital ? 800 : 500, spacing: b.capital ? 0.6 : 0.2, alpha });
+    };
+    if (rank) for (const b of rank.capitals) placeBurg(b);
     if (states) {
       const list = map.pack.states.filter((s) => s && s.i && !s.removed && s.pole).sort((a, b) => (b.area ?? 0) - (a.area ?? 0));
+      const fade = burgs === "auto" ? 1 - 0.8 * ramp(z, 4.5, 8) : 1;
       for (const s of list) {
         if (!inView(s.pole[0], s.pole[1])) continue;
-        const size = Math.max(11, Math.min(20, 9 + Math.sqrt(s.area ?? 0) * 0.02 * k));
-        tryPlace(s.name ?? "", s.pole[0], s.pole[1], size, { color: "#2b2118", halo: 3.2, bold: true });
+        const size = clamp(12 + Math.sqrt(s.area ?? 0) * 0.012 * Math.min(k, 3), 14, 24);
+        const draw = fade > 0.5 ? tryPlace : (...a) => placedSoft(...a);
+        draw(s.name ?? "", s.pole[0], s.pole[1], size, { color: "#2a1d12", halo: 3.6, weight: 800, spacing: size * 0.18, alpha: fade, shifts: [0, -22, 22, -40, 40] });
       }
     }
-    if (burgs) {
-      const capitalsOnly = burgs === "capitals";
-      const list = map.pack.burgs.filter((b) => b && b.i && !b.removed && (!capitalsOnly || b.capital)).sort((a, b) => (b.capital ?? 0) - (a.capital ?? 0) || (b.population ?? 0) - (a.population ?? 0));
-      for (const b of list) {
-        if (!inView(b.x, b.y)) continue;
-        const dy = (b.capital ? 6.5 : 5) / k;
-        tryPlace(b.name ?? "", b.x, b.y + dy, b.capital ? 12 : 10, { color: "#1e1712", halo: 2.4, bold: !!b.capital });
+    function placedSoft(text2, wx, wy, sizePx, style) {
+      const before = placed.length;
+      const ok = tryPlace(text2, wx, wy, sizePx, style);
+      if (ok) placed.length = before;
+      return ok;
+    }
+    if (!rank || capitalsOnly) return;
+    const topN = Math.max(1, Math.round(rank.towns.length * 0.15));
+    for (const b of rank.towns.slice(0, topN)) placeBurg(b);
+    if (auto) {
+      const a = ramp(z, 1.7, 2.3) * (1 - ramp(z, 7.5, 10));
+      if (a > 0) {
+        for (const p of map.pack.provinces ?? []) {
+          if (!p || !p.i || p.removed || !p.name) continue;
+          const pos = entityPosition(map, p);
+          if (!pos || !inView(pos[0], pos[1])) continue;
+          tryPlace(p.name, pos[0], pos[1] - 11 / k, 11.5, { color: "#4a3826", halo: 2.6, weight: 500, spacing: 3.2, alpha: a * 0.9, shifts: [0, 16, -16] });
+        }
       }
     }
+    for (const b of rank.towns.slice(topN)) placeBurg(b);
   }
 
   // js/render/layers/trade-lines.js
@@ -715,188 +990,6 @@
     };
   }
 
-  // js/core/sim/units.js
-  var UNIT_TYPES = Object.freeze([
-    { key: "infantry", label: "\u6B69\u5175", unit: "\u4EBA", icon: "\u2694\uFE0F", soft: 1, hard: 0.1, hardness: 0, rural: 0.9, urban: 0.5, industryShare: 0 },
-    { key: "armor", label: "\u6A5F\u7532", unit: "\u53F0", icon: "\u{1F6E1}\uFE0F", soft: 3, hard: 10, hardness: 0.9, rural: 0, urban: 0, industryShare: 0.35 },
-    { key: "air", label: "\u822A\u7A7A", unit: "\u6A5F", icon: "\u2708\uFE0F", soft: 5, hard: 6, hardness: 0, rural: 0, urban: 0, industryShare: 0.25 },
-    { key: "navy", label: "\u6D77\u8ECD", unit: "\u96BB", icon: "\u{1F6A2}", soft: 8, hard: 14, hardness: 0.6, rural: 0, urban: 0, industryShare: 0.2, naval: true },
-    { key: "special", label: "\u7279\u6B8A\u90E8\u968A", unit: "\u4EBA", icon: "\u{1F396}\uFE0F", soft: 1.5, hard: 0.5, hardness: 0.1, rural: 0.02, urban: 0.03, industryShare: 0.05 },
-    { key: "advanced", label: "\u5148\u7AEF\u6280\u8853", unit: "\u4EBA", icon: "\u{1F52C}", soft: 2, hard: 6, hardness: 0.5, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6 },
-    { key: "nuclear", label: "\u6838", unit: "\u767A", icon: "\u2622\uFE0F", soft: 500, hard: 500, hardness: 0, rural: 0, urban: 0, industryShare: 0, minTech: 9 }
-  ]);
-  var UNIT_KEYS = UNIT_TYPES.map((u) => u.key);
-  var UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]));
-  var DOCTRINES = Object.freeze([
-    { key: "balanced", label: "\u5747\u8861", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-    { key: "mobile", label: "\u6A5F\u52D5\u6226", mult: { infantry: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 0.85 },
-    { key: "firepower", label: "\u706B\u529B\u4E3B\u7FA9", mult: { infantry: 1.15, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-    { key: "battleplan", label: "\u8A08\u753B\u9632\u5FA1", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1, defenseBonus: 0.15 },
-    { key: "massassault", label: "\u4EBA\u6D77\u6226\u8853", mult: { infantry: 1.3, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 }, moraleLoss: 1.25, conscriptBonus: 0.3 }
-  ]);
-  var DOCTRINE_BY_KEY = Object.fromEntries(DOCTRINES.map((d) => [d.key, d]));
-  var DEFAULT_DOCTRINE = "balanced";
-  var STATE_TYPE_MULT = Object.freeze({
-    Generic: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
-    Naval: { infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
-    Nomadic: { infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
-    Highland: { infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
-    Hunting: { infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
-    Lake: { infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
-    River: { infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 }
-  });
-  function stateTypeMult(type) {
-    return STATE_TYPE_MULT[type] ?? STATE_TYPE_MULT.Generic;
-  }
-  function emptyForce() {
-    return Object.fromEntries(UNIT_KEYS.map((k) => [k, 0]));
-  }
-  function forcePower(units, doctrineKey = DEFAULT_DOCTRINE) {
-    const mult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
-    let total = 0;
-    for (const key of UNIT_KEYS) {
-      const n = units?.[key] ?? 0;
-      if (n > 0) total += n * ((UNIT_BY_KEY[key].soft + UNIT_BY_KEY[key].hard) / 2) * (mult[key] ?? 1);
-    }
-    return total;
-  }
-  function forceHeadcount(units) {
-    return UNIT_KEYS.reduce((sum, k) => sum + (units?.[k] ?? 0), 0);
-  }
-  function forceHardness(units) {
-    let weight = 0, sum = 0;
-    for (const key of UNIT_KEYS) {
-      const n = units?.[key] ?? 0;
-      if (n <= 0) continue;
-      weight += n;
-      sum += n * UNIT_BY_KEY[key].hardness;
-    }
-    return weight > 0 ? sum / weight : 0;
-  }
-  function attackDamage(units, defenderHardness, doctrineKey = DEFAULT_DOCTRINE, stateType = "Generic") {
-    const dmult = DOCTRINE_BY_KEY[doctrineKey]?.mult ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE].mult;
-    const tmult = stateTypeMult(stateType);
-    let total = 0;
-    for (const key of UNIT_KEYS) {
-      const n = units?.[key] ?? 0;
-      if (n <= 0) continue;
-      const def = UNIT_BY_KEY[key];
-      const effective = def.soft * (1 - defenderHardness) + def.hard * defenderHardness;
-      total += n * effective * (dmult[key] ?? 1) * (tmult[key] ?? 1);
-    }
-    return total;
-  }
-
-  // js/core/query.js
-  var nameOf = (list, id) => {
-    const e = list?.[id];
-    if (!e || e.removed) return null;
-    return e.fullName ?? e.name ?? null;
-  };
-  function describeCell(map, i) {
-    const c = map.pack.cells;
-    if (!map.geometry || i < 0 || i >= c.biome.length) return null;
-    const isWater2 = c.biome[i] === 0;
-    const burgId = c.burg[i];
-    return {
-      cell: i,
-      water: isWater2,
-      height: map.geometry.pack.h[i],
-      biome: map.biomesData[c.biome[i]]?.name ?? null,
-      state: isWater2 ? null : nameOf(map.pack.states, c.state[i]),
-      culture: isWater2 ? null : nameOf(map.pack.cultures, c.culture[i]),
-      religion: isWater2 ? null : nameOf(map.pack.religions, c.religion[i]),
-      province: isWater2 ? null : nameOf(map.pack.provinces, c.province[i]),
-      burg: burgId ? map.pack.burgs[burgId]?.name ?? null : null,
-      hasRiver: c.river[i] > 0
-    };
-  }
-  var ENTITY_KINDS = Object.freeze({
-    state: { label: "\u56FD\u5BB6", entities: (m) => m.pack.states, cells: (m) => m.pack.cells.state },
-    culture: { label: "\u6587\u5316", entities: (m) => m.pack.cultures, cells: (m) => m.pack.cells.culture },
-    religion: { label: "\u5B97\u6559", entities: (m) => m.pack.religions, cells: (m) => m.pack.cells.religion },
-    province: { label: "\u5C5E\u5DDE", entities: (m) => m.pack.provinces, cells: (m) => m.pack.cells.province }
-  });
-  function listEntities(map, kind) {
-    const def = ENTITY_KINDS[kind];
-    if (!def) return [];
-    const ids2 = def.cells(map);
-    const counts = /* @__PURE__ */ new Map();
-    for (let i = 0; i < ids2.length; i++) {
-      if (map.pack.cells.biome[i] === 0) continue;
-      counts.set(ids2[i], (counts.get(ids2[i]) ?? 0) + 1);
-    }
-    return def.entities(map).filter((e) => e && e.i && !e.removed && counts.has(e.i)).map((e) => ({
-      id: e.i,
-      name: e.fullName ?? e.name ?? `#${e.i}`,
-      color: e.color ?? "#ccc",
-      cells: counts.get(e.i),
-      center: e.center ?? null,
-      pole: e.pole ?? null
-    })).sort((a, b) => b.cells - a.cells);
-  }
-  function burgNearCell(map, cell, hops = 2) {
-    const { burg } = map.pack.cells;
-    const adj = map.geometry.pack.cells.c;
-    const seen = /* @__PURE__ */ new Set([cell]);
-    let layer = [cell];
-    for (let h = 0; h <= hops; h++) {
-      for (const i of layer) {
-        const b = map.pack.burgs[burg[i]];
-        if (burg[i] > 0 && b && !b.removed && b.i) return b;
-      }
-      const next = [];
-      for (const i of layer) for (const j of adj[i]) if (!seen.has(j)) {
-        seen.add(j);
-        next.push(j);
-      }
-      layer = next;
-    }
-    return null;
-  }
-  function placeLabel(map, cell) {
-    const b = burgNearCell(map, cell, 2);
-    if (b) return b.name;
-    if (map.pack.cells.biome[cell] === 0) return "\u6D77\u4E0A";
-    const s = map.pack.states[map.pack.cells.state[cell]];
-    return s && s.i && !s.removed ? `${s.name}\u9818\u5185` : "\u7121\u4EBA\u306E\u5730";
-  }
-  function entityPosition(map, entity) {
-    if (entity.pole) return [entity.pole[0], entity.pole[1]];
-    const p = entity.center != null ? map.geometry?.pack.p[entity.center] : null;
-    return p ? [p[0], p[1]] : null;
-  }
-  var isLiveState = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  function statePopulation(state) {
-    return (state.rural ?? 0) + (state.urban ?? 0);
-  }
-  function stateMilitaryPower(state) {
-    const list = Array.isArray(state.military) ? state.military : [];
-    const doctrine = state.doctrine ?? "balanced";
-    return list.reduce((sum, r) => sum + forcePower(r.u, doctrine), 0);
-  }
-  function stateHeadcount(state) {
-    const list = Array.isArray(state.military) ? state.military : [];
-    return list.reduce((sum, r) => sum + forceHeadcount(r.u), 0);
-  }
-  function rankStates(map, metric) {
-    const states = map.pack.states.filter(isLiveState);
-    const valueOf = {
-      population: statePopulation,
-      military: stateMilitaryPower,
-      cells: (s) => s.cells ?? 0,
-      area: (s) => s.area ?? 0
-    }[metric];
-    if (!valueOf) return [];
-    return states.map((s) => ({ id: s.i, name: s.fullName ?? s.name ?? `#${s.i}`, value: valueOf(s) })).sort((a, b) => b.value - a.value).map((r, i) => ({ ...r, rank: i + 1 }));
-  }
-  function stateRank(map, stateId, metric) {
-    const ranked = rankStates(map, metric);
-    const total = ranked.length;
-    const entry = ranked.find((r) => r.id === stateId);
-    return entry ? { rank: entry.rank, total, value: entry.value } : null;
-  }
-
   // js/core/edit/eras.js
   function listEras(map) {
     const list = map.ext?.data?.eras ?? [];
@@ -945,7 +1038,7 @@
   }
 
   // js/render/layers/annotations.js
-  var FONT = '"Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans CJK JP",sans-serif';
+  var FONT = FONT_PLACE;
   var PANEL_BG = "rgba(20,22,28,0.80)";
   var PANEL_LINE = "rgba(201,162,75,0.9)";
   var TEXT = "#f1ecdc";
@@ -1407,7 +1500,7 @@
     // ゾーン（侵攻・疫病など）。画面では既定で表示する（options.js）
     journeys: false,
     // 旅の線。同上
-    labels: { states: true, burgs: true },
+    labels: { states: true, burgs: "auto" },
     background: "#2f4a72"
   });
   function drawScene(ctx, map, vp, options = {}, dpr = 1) {
@@ -1426,7 +1519,7 @@
     if (o.zones) drawZones(ctx, map, vp, { selected: o.zoneSelected ?? null });
     if (o.tradeLines) drawTradeLines(ctx, vp, o.tradeLines);
     if (o.journeys) drawJourneys(ctx, map, vp, { selected: o.journeySelected ?? null });
-    if (o.burgs) drawBurgs(ctx, map, vp);
+    if (o.burgs) drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" });
     if (o.labels) drawLabels(ctx, map, vp, o.labels);
     ctx.restore();
   }
@@ -1540,7 +1633,7 @@
       zoneSelected: view.zoneSelected ?? null,
       journeys: view.journeys ?? true,
       journeySelected: view.journeySelected ?? null,
-      labels: view.labels ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : true } : false
+      labels: view.labels ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : view.burgLabels === "auto" ? "auto" : true } : false
     };
   }
 
@@ -2190,6 +2283,366 @@
     return loadFromBytes(bytes, Delaunator);
   }
 
+  // js/core/names/katakana.js
+  var NAME_STYLES = Object.freeze({
+    western: {
+      label: "\u897F\u6B27\u98A8",
+      heads: ["\u30A2\u30EB", "\u30A8\u30EB", "\u30AA\u30EB", "\u30AB\u30EB", "\u30B1\u30EB", "\u30C0\u30EB", "\u30C6\u30EB", "\u30CE\u30EB", "\u30D0\u30EB", "\u30D9\u30EB", "\u30DE\u30EB", "\u30E1\u30EB", "\u30B5\u30EB", "\u30CF\u30EB", "\u30D6\u30E9\u30F3", "\u30B0\u30EC\u30F3", "\u30A6\u30A3\u30F3", "\u30F4\u30A1\u30EB", "\u30D5\u30A7\u30EB", "\u30ED\u30B9", "\u30B2\u30EB", "\u30AB\u30F3"],
+      mids: ["\u30C9", "\u30E9", "\u30CD", "\u30BF", "\u30BB", "\u30EC", "\u30AC", "\u30DF"],
+      tails: ["\u30F3", "\u30B9", "\u30C8", "\u30CB\u30A2", "\u30E9\u30F3\u30C9", "\u30D6\u30EB\u30AF", "\u30CF\u30A4\u30E0", "\u30D5\u30A9\u30FC\u30C9", "\u30C8\u30F3", "\u30F4\u30A3\u30EB", "\u30C7\u30A3\u30A2", "\u30DF\u30A2", "\u30C9\u30FC\u30EB", "\u30B7\u30A2", "\u30A6\u30A7\u30A4", "\u30DD\u30FC\u30C8"],
+      midChance: 0.35
+    },
+    nordic: {
+      label: "\u5317\u6B27\u98A8",
+      heads: ["\u30BD\u30EB", "\u30E8\u30EB", "\u30CF\u30EB", "\u30F4\u30A1\u30EB", "\u30B0\u30F3", "\u30B9\u30AB\u30EB", "\u30D3\u30E7\u30EB", "\u30C8\u30EB", "\u30A6\u30EB", "\u30D5\u30ED", "\u30B9\u30F4\u30A7", "\u30D8\u30EB", "\u30ED\u30AF", "\u30A2\u30B9", "\u30C0\u30B0"],
+      mids: ["\u30AC", "\u30F4\u30A3", "\u30EB", "\u30CA", "\u30C8", "\u30C0"],
+      tails: ["\u30D8\u30A4\u30E0", "\u30AC\u30EB\u30C9", "\u30F4\u30A3\u30FC\u30AF", "\u30DB\u30EB\u30E0", "\u30CD\u30B9", "\u30DC\u30EB\u30B0", "\u30E9\u30F3\u30C9", "\u30D5\u30A3\u30E8\u30EB\u30C9", "\u30B9\u30BF\u30C3\u30C9", "\u30C0\u30FC\u30EB", "\u30F4\u30A1", "\u30EB"],
+      midChance: 0.25
+    },
+    latin: {
+      label: "\u30E9\u30C6\u30F3\u98A8",
+      heads: ["\u30ED", "\u30AB", "\u30A6\u30A1", "\u30C6\u30A3", "\u30DD", "\u30BB", "\u30A2\u30A6", "\u30EB", "\u30F4\u30A7", "\u30DF", "\u30AF", "\u30CE", "\u30A2", "\u30F4\u30A3", "\u30B3\u30EB"],
+      mids: ["\u30EB", "\u30DF", "\u30CA", "\u30C8", "\u30DD", "\u30AF", "\u30EC", "\u30BB", "\u30E9", "\u30EA"],
+      tails: ["\u30A6\u30E0", "\u30CB\u30A6\u30E0", "\u30C6\u30A3\u30A2", "\u30CA", "\u30CB\u30A2", "\u30DD\u30EA\u30B9", "\u30A6\u30B9", "\u30E9", "\u30B1\u30A2", "\u30C7\u30A3\u30A2", "\u30DF\u30A2"],
+      midChance: 0.7
+    },
+    arabic: {
+      label: "\u4E2D\u6771\u98A8",
+      heads: ["\u30A2\u30EB", "\u30C0", "\u30CF", "\u30AB", "\u30DF", "\u30B5", "\u30E9", "\u30D0", "\u30B8\u30E3", "\u30D5\u30A1", "\u30E0\u30CF", "\u30B6", "\u30BF", "\u30A4\u30B9"],
+      mids: ["\u30EB", "\u30E9", "\u30DF", "\u30D5", "\u30CF", "\u30B7", "\u30AF", "\u30BA", "\u30CA"],
+      tails: ["\u30D0\u30FC\u30C9", "\u30C0\u30FC\u30C9", "\u30CF\u30F3", "\u30E9\u30FC\u30F3", "\u30B9\u30BF\u30F3", "\u30CF\u30FC\u30E9", "\u30B8\u30FC\u30EB", "\u30FC\u30EB", "\u30FC\u30F3", "\u30DF\u30FC\u30EB", "\u30AB\u30F3\u30C9", "\u30FC\u30D5", "\u30E9"],
+      midChance: 0.6
+    },
+    slavic: {
+      label: "\u30B9\u30E9\u30F4\u98A8",
+      heads: ["\u30F4\u30A9", "\u30BA", "\u30D6", "\u30AF", "\u30CE", "\u30DD", "\u30B9", "\u30C8", "\u30DF", "\u30DA", "\u30B4", "\u30C9\u30D6", "\u30F4\u30E9", "\u30DC", "\u30F4\u30A7"],
+      mids: ["\u30ED", "\u30EA", "\u30E9", "\u30B9", "\u30F4", "\u30C0", "\u30DF", "\u30C8", "\u30AC", "\u30B6"],
+      tails: ["\u30B0\u30E9\u30FC\u30C9", "\u30B9\u30AF", "\u30F4\u30A3\u30C1", "\u30CB\u30AF", "\u30DD\u30EA", "\u30F4\u30A1", "\u30B4\u30ED\u30C9", "\u30B9\u30E9\u30D5", "\u30CB\u30C4\u30A1", "\u30F4\u30A9", "\u30CE\u30D5", "\u30D3\u30EB"],
+      midChance: 0.6
+    },
+    elvish: {
+      label: "\u30A8\u30EB\u30D5\u98A8",
+      heads: ["\u30E9", "\u30EA", "\u30A8", "\u30A2", "\u30B7", "\u30CA", "\u30A4", "\u30DF", "\u30D5", "\u30EB", "\u30BB", "\u30C6\u30A3"],
+      mids: ["\u30EA", "\u30CA", "\u30A8", "\u30E9", "\u30DF", "\u30BD", "\u30F4\u30A3", "\u30EC", "\u30A2", "\u30A4", "\u30EB"],
+      tails: ["\u30A8\u30EB", "\u30CB\u30A8\u30EB", "\u30BD\u30EA\u30A2", "\u30EA\u30A8\u30EB", "\u30CA\u30C7\u30A3\u30A2", "\u30DF\u30E9", "\u30ED\u30FC\u30F3", "\u30A6\u30A7\u30F3", "\u30C9\u30EA\u30EB", "\u30EA\u30B9", "\u30C7\u30A3\u30EB", "\u30B7\u30A2", "\u30FC\u30EB"],
+      midChance: 0.9
+    },
+    yamato: {
+      label: "\u548C\u98A8\uFF08\u30AB\u30CA\uFF09",
+      heads: ["\u30E4\u30DE", "\u30AB\u30EF", "\u30DF\u30BA", "\u30BF\u30B1", "\u30B7\u30E9", "\u30AF\u30ED", "\u30A2\u30AA", "\u30CF\u30CA", "\u30C8\u30E8", "\u30A2\u30B5", "\u30CA\u30E9", "\u30DF\u30CA", "\u30B5\u30AF", "\u30DB\u30BF", "\u30A4\u30BA", "\u30C4\u30AD"],
+      mids: ["\u30CE", "\u30DF", "\u30AB", "\u30B7", "\u30CF", "\u30C8"],
+      tails: ["\u30B7\u30DE", "\u30AC\u30EF", "\u30B6\u30AD", "\u30E4\u30DE", "\u30CE\u30DF\u30E4", "\u30C0", "\u30CF\u30E9", "\u30A6\u30E9", "\u30DF\u30E4", "\u30AE", "\u30B5\u30C8", "\u30B4\u30AF", "\u30BF\u30CB"],
+      midChance: 0.2
+    }
+  });
+  var STYLE_KEYS = Object.freeze(Object.keys(NAME_STYLES));
+  var DEFAULT_STYLE = "western";
+  var isStyle = (k) => Object.prototype.hasOwnProperty.call(NAME_STYLES, k);
+  var KATAKANA_ONLY = /^[ァ-ヴー]+$/;
+  var SMALL_START = /^[ァィゥェォャュョッンー]/;
+  function validate(name, { min = 2, max = 9 } = {}) {
+    if (typeof name !== "string" || !KATAKANA_ONLY.test(name)) return false;
+    if (name.length < min || name.length > max) return false;
+    if (SMALL_START.test(name)) return false;
+    if (/ンー|ッー|ーッ/.test(name)) return false;
+    if (/(.)\1/.test(name)) return false;
+    if (/^(.{1,3})\1/.test(name)) return false;
+    return true;
+  }
+  function cfg(style) {
+    return NAME_STYLES[isStyle(style) ? style : DEFAULT_STYLE];
+  }
+  function assemble(rnd, style, { shortTail = false, noTail = false } = {}) {
+    const s = cfg(style);
+    let prefix = rnd.pick(s.heads);
+    if (rnd.chance(s.midChance)) prefix += rnd.pick(s.mids);
+    if (noTail) return prefix;
+    const tails = shortTail ? s.tails.filter((t) => t.length <= 2) : s.tails;
+    const tail = rnd.pick(tails);
+    if (prefix.at(-1) === tail[0]) return null;
+    return prefix + tail;
+  }
+  function make(rnd, style, opts = {}) {
+    for (let i = 0; i < 60; i++) {
+      const n = assemble(rnd, style, opts);
+      if (n && validate(n, { max: opts.max ?? 9 })) return n;
+    }
+    const heads = cfg(style).heads.filter((h) => validate(h) && h.length <= (opts.max ?? 9));
+    return rnd.pick(heads.length ? heads : cfg(style).heads);
+  }
+  function generatePlaceName(rnd, style) {
+    return make(rnd, style);
+  }
+  function generateShortName(rnd, style) {
+    return make(rnd, style, { shortTail: rnd.chance(0.6), max: 6 });
+  }
+  var COMMON_FORMS = [
+    { w: 30, suffix: "\u738B\u56FD", form: "Monarchy", formName: "Kingdom" },
+    { w: 12, suffix: "\u5E1D\u56FD", form: "Monarchy", formName: "Empire" },
+    { w: 10, suffix: "\u516C\u56FD", form: "Monarchy", formName: "Duchy" },
+    { w: 14, suffix: "\u5171\u548C\u56FD", form: "Republic", formName: "Republic" },
+    { w: 6, suffix: "\u9023\u90A6", form: "Federation", formName: "Federation" },
+    { w: 5, suffix: "\u795E\u8056\u56FD", form: "Theocracy", formName: "Theocracy" },
+    { w: 6, suffix: "\u4FAF\u56FD", form: "Monarchy", formName: "Principality" },
+    { w: 5, suffix: "\u8FBA\u5883\u4F2F\u9818", form: "Monarchy", formName: "March" }
+  ];
+  var EXTRA_FORMS = {
+    arabic: [
+      { w: 14, suffix: "\u9996\u9577\u56FD", form: "Monarchy", formName: "Emirate" },
+      { w: 12, suffix: "\u30B9\u30EB\u30BF\u30F3\u56FD", form: "Monarchy", formName: "Sultanate" },
+      { w: 8, suffix: "\u30AB\u30EA\u30D5\u56FD", form: "Theocracy", formName: "Caliphate" }
+    ],
+    yamato: [{ w: 10, suffix: "\u7687\u56FD", form: "Monarchy", formName: "Empire" }]
+  };
+  function stateForms(style) {
+    return [...COMMON_FORMS, ...EXTRA_FORMS[style] ?? []];
+  }
+  function generateStateName(rnd, style, form) {
+    const stem = rnd.chance(0.5) ? make(rnd, style, { shortTail: true, max: 6 }) : make(rnd, style, { max: 6 });
+    const forms = stateForms(style);
+    const chosen = (form && forms.find((f) => f.suffix === form || f.formName === form)) ?? rnd.weighted(forms, forms.map((f) => f.w));
+    return { short: stem, name: stem + chosen.suffix, form: chosen.form, formName: chosen.formName };
+  }
+  var RELIGION_KINDS = [
+    { w: 40, type: "Organized", make: (d, r) => r.chance(0.65) ? { name: d + "\u6559", form: "Church" } : { name: d + "\u6559\u4F1A", form: "Church" } },
+    { w: 30, type: "Folk", make: (d, r) => r.chance(0.6) ? { name: d + "\u4FE1\u4EF0", form: "Animism" } : { name: d + "\u5D07\u62DD", form: "Shamanism" } },
+    { w: 20, type: "Cult", make: (d) => ({ name: d + "\u6559\u56E3", form: "Cult" }) },
+    { w: 10, type: "Heresy", make: (d) => ({ name: d + "\u6D3E", form: "Sect" }) }
+  ];
+  function generateReligionName(rnd, style) {
+    const deity = generateShortName(rnd, style);
+    const kind = rnd.weighted(RELIGION_KINDS, RELIGION_KINDS.map((k) => k.w));
+    const { name, form } = kind.make(deity, rnd);
+    return { name, deity, type: kind.type, form };
+  }
+  function generateCultureName(rnd, style) {
+    return generateShortName(rnd, style) + "\u4EBA";
+  }
+  var PROVINCE_SUFFIX = [["\u5DDE", 4], ["\u5730\u65B9", 3], ["\u9818", 3]];
+  function generateProvinceName(rnd, style) {
+    const stem = make(rnd, style, { shortTail: true, max: 6 });
+    return stem + rnd.weighted(PROVINCE_SUFFIX.map((p) => p[0]), PROVINCE_SUFFIX.map((p) => p[1]));
+  }
+
+  // js/core/edit/naming.js
+  var NAME_KINDS = ["burg", "state", "culture", "religion", "province"];
+  var isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var LIST = { burg: "burgs", state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+  function takenNames(map) {
+    const s = /* @__PURE__ */ new Set();
+    for (const kind of NAME_KINDS) {
+      for (const e of map.pack[LIST[kind]] ?? []) {
+        if (!isLive(e)) continue;
+        if (e.name) s.add(e.name);
+        if (e.fullName) s.add(e.fullName);
+      }
+    }
+    return s;
+  }
+  var styleKey = (cultureId) => `culture:${cultureId}`;
+  function getNameStyle(map, cultureId) {
+    const v = map.ext?.data?.nameStyles?.[styleKey(cultureId)];
+    return isStyle(v) ? v : null;
+  }
+  function styleOfCulture(map, cultureId) {
+    const explicit = getNameStyle(map, cultureId);
+    if (explicit) return explicit;
+    if (!cultureId || cultureId < 0) return DEFAULT_STYLE;
+    return STYLE_KEYS[(cultureId * 3 + 1) % STYLE_KEYS.length];
+  }
+  function planSetNameStyle(map, cultureId, style) {
+    const culture = map.pack.cultures?.[cultureId];
+    if (!isLive(culture)) throw new Error("\u305D\u306E\u6587\u5316\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const after = style ? String(style) : null;
+    if (after && !isStyle(after)) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u540D\u524D\u306E\u7CFB\u7D71\u3067\u3059: ${after}`);
+    const before = getNameStyle(map, cultureId);
+    if (before === after) return null;
+    const key = styleKey(cultureId);
+    const write = (m, v) => {
+      var _a;
+      const ext = ensureExt(m);
+      (_a = ext.data).nameStyles ?? (_a.nameStyles = {});
+      if (v) ext.data.nameStyles[key] = v;
+      else delete ext.data.nameStyles[key];
+      if (!Object.keys(ext.data.nameStyles).length) delete ext.data.nameStyles;
+    };
+    return makeCommand("\u540D\u524D\u306E\u7CFB\u7D71\u3092\u5909\u66F4", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
+  }
+  function cultureIdFor(map, { kind, id, cell, cultureId, stateId }) {
+    if (cultureId != null) return cultureId;
+    const c = map.pack.cells;
+    if (cell != null && c?.culture?.[cell] != null) return c.culture[cell];
+    const stateCulture = (sid) => {
+      const s = map.pack.states[sid];
+      if (!isLive(s)) return 0;
+      if (s.culture != null) return s.culture;
+      const cap = map.pack.burgs[s.capital];
+      return isLive(cap) ? cap.culture ?? 0 : 0;
+    };
+    if (stateId != null) return stateCulture(stateId);
+    if (id != null) {
+      const e = map.pack[LIST[kind]]?.[id];
+      if (!isLive(e)) return 0;
+      if (kind === "culture") return id;
+      if (kind === "burg") return e.culture ?? 0;
+      if (kind === "state") return stateCulture(id);
+      if (kind === "province") return stateCulture(e.state);
+      if (kind === "religion") return e.culture ?? 0;
+    }
+    return 0;
+  }
+  function suggestName(map, opts) {
+    const { kind, rnd } = opts;
+    if (!NAME_KINDS.includes(kind)) throw new Error(`\u540D\u524D\u3092\u751F\u6210\u3067\u304D\u306A\u3044\u7A2E\u985E\u3067\u3059: ${kind}`);
+    if (!rnd) throw new Error("\u4E71\u6570(rnd)\u304C\u5FC5\u8981\u3067\u3059");
+    let style = opts.style;
+    if (!isStyle(style)) {
+      const cid = cultureIdFor(map, opts);
+      style = cid ? styleOfCulture(map, cid) : rnd.pick(STYLE_KEYS);
+    }
+    const taken = takenNames(map);
+    if (opts.avoid) for (const n of opts.avoid) taken.add(n);
+    const gen = () => {
+      switch (kind) {
+        case "burg":
+          return { name: generatePlaceName(rnd, style), extra: {} };
+        case "province":
+          return { name: generateProvinceName(rnd, style), extra: {} };
+        case "culture":
+          return { name: generateCultureName(rnd, style), extra: {} };
+        case "religion": {
+          const r = generateReligionName(rnd, style);
+          return { name: r.name, extra: { deity: r.deity, type: r.type, form: r.form } };
+        }
+        case "state": {
+          const r = generateStateName(rnd, style, opts.form);
+          return { name: r.name, extra: { name: r.short, form: r.form, formName: r.formName } };
+        }
+        default:
+          throw new Error(kind);
+      }
+    };
+    let last = gen();
+    for (let i = 0; i < 60 && taken.has(last.name); i++) last = gen();
+    if (taken.has(last.name)) {
+      let n = 2;
+      while (taken.has(`${last.name}${n}`)) n++;
+      last = { ...last, name: `${last.name}${n}` };
+    }
+    return { ...last, style };
+  }
+  var provKey = (kind, id) => `${kind}:${id}`;
+  function isProvisional(map, kind, id) {
+    return !!map.ext?.data?.provisionalNames?.[provKey(kind, id)];
+  }
+  function listProvisional(map) {
+    return Object.keys(map.ext?.data?.provisionalNames ?? {}).map((k) => {
+      const [kind, id] = k.split(":");
+      return { kind, id: Number(id) };
+    });
+  }
+  function provisionalPart(map, kind, id, flag) {
+    const before = isProvisional(map, kind, id);
+    const key = provKey(kind, id);
+    const write = (m, v) => {
+      var _a;
+      const ext = ensureExt(m);
+      (_a = ext.data).provisionalNames ?? (_a.provisionalNames = {});
+      if (v) ext.data.provisionalNames[key] = 1;
+      else delete ext.data.provisionalNames[key];
+      if (!Object.keys(ext.data.provisionalNames).length) delete ext.data.provisionalNames;
+    };
+    return { apply: (m) => write(m, flag), revert: (m) => write(m, before) };
+  }
+  function planSetProvisional(map, kind, id, flag) {
+    if (!NAME_KINDS.includes(kind)) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
+    if (!isLive(map.pack[LIST[kind]]?.[id])) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (isProvisional(map, kind, id) === !!flag) return null;
+    return makeCommand(flag ? "\u540D\u524D\u3092\u4EEE\u306B\u623B\u3059" : "\u540D\u524D\u3092\u78BA\u5B9A", [], [provisionalPart(map, kind, id, !!flag)]);
+  }
+  function withProvisional(map, command, kind, id, flag) {
+    if (!command) return command;
+    if (isProvisional(map, kind, id) === !!flag) return command;
+    return makeCommand(command.label, command.layers, [...command.parts, provisionalPart(map, kind, id, !!flag)]);
+  }
+
+  // js/core/edit/katakana.js
+  var KANA_OR_KANJI = /[\u3040-\u30FF\u4E00-\u9FFF]/;
+  var isLatinName = (name) => typeof name === "string" && /[A-Za-z]/.test(name) && !KANA_OR_KANJI.test(name);
+  function latinBurgIds(map) {
+    const out = [];
+    (map.pack.burgs ?? []).forEach((b, i) => {
+      if (b && i > 0 && !b.removed && isLatinName(b.name)) out.push(i);
+    });
+    return out;
+  }
+  function planKatakanaBurgs(map, rnd) {
+    const ids2 = latinBurgIds(map);
+    if (!ids2.length) return null;
+    const avoid = /* @__PURE__ */ new Set();
+    const parts = [];
+    for (const id of ids2) {
+      const b = map.pack.burgs[id];
+      const s = suggestName(map, { kind: "burg", rnd, cell: b.cell, avoid });
+      avoid.add(s.name);
+      parts.push(setProps(b, { name: s.name }));
+    }
+    return makeCommand(`\u82F1\u8A9E\u306E\u90FD\u5E02\u540D\u3092\u30AB\u30BF\u30AB\u30CA\u306B\uFF08${ids2.length}\u4EF6\uFF09`, ["places"], parts);
+  }
+
+  // js/core/random.js
+  function createRandom(seed) {
+    let s = normalizeSeed(seed);
+    const next = () => {
+      s = s + 1831565813 | 0;
+      let t = Math.imul(s ^ s >>> 15, 1 | s);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+    return {
+      /** [0, 1) の実数 */
+      next,
+      /** [min, max] の整数 */
+      int: (min, max) => Math.floor(next() * (max - min + 1)) + min,
+      /** [min, max) の実数 */
+      float: (min, max) => next() * (max - min) + min,
+      /** 確率 p で true */
+      chance: (p) => next() < p,
+      /** 配列から1つ選ぶ */
+      pick: (arr) => arr[Math.floor(next() * arr.length)],
+      /** 重み付き選択。weights は arr と同じ長さ */
+      weighted(arr, weights) {
+        let total = 0;
+        for (const w of weights) total += w;
+        let r = next() * total;
+        for (let i = 0; i < arr.length; i++) {
+          r -= weights[i];
+          if (r <= 0) return arr[i];
+        }
+        return arr[arr.length - 1];
+      },
+      /** 新しい配列を返すシャッフル（入力は変更しない） */
+      shuffle(arr) {
+        const a = arr.slice();
+        for (let i = a.length - 1; i > 0; i--) {
+          const j = Math.floor(next() * (i + 1));
+          [a[i], a[j]] = [a[j], a[i]];
+        }
+        return a;
+      }
+    };
+  }
+  function normalizeSeed(seed) {
+    if (typeof seed === "number" && Number.isFinite(seed)) return seed >>> 0;
+    const str = String(seed ?? Date.now());
+    let h = 2166136261;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
   // js/io/azgaar-writer.js
   var CRLF2 = "\r\n";
   var json = (v) => JSON.stringify(v);
@@ -2317,6 +2770,7 @@
       lineJoin: "miter",
       globalAlpha: 1,
       font: "10px sans-serif",
+      letterSpacing: "0px",
       textAlign: "start",
       textBaseline: "alphabetic",
       dash: []
@@ -2353,7 +2807,7 @@
       const f = parseFont(st.font);
       const anchor = st.textAlign === "center" ? "middle" : st.textAlign === "right" || st.textAlign === "end" ? "end" : "start";
       const base = st.textBaseline === "middle" ? ` dominant-baseline="central"` : "";
-      return `x="${num(x)}" y="${num(y)}" font-size="${num(f.size * 1e3) / 1e3}" font-family="${esc(f.family)}"${f.bold ? ` font-weight="bold"` : ""} text-anchor="${anchor}"${base}`;
+      return `x="${num(x)}" y="${num(y)}" font-size="${num(f.size * 1e3) / 1e3}" font-family="${esc(f.family)}"${f.bold ? ` font-weight="bold"` : ""}${st.letterSpacing && st.letterSpacing !== "0px" ? ` letter-spacing="${esc(st.letterSpacing)}"` : ""} text-anchor="${anchor}"${base}`;
     };
     const ctx = {
       get fillStyle() {
@@ -2403,6 +2857,12 @@
       },
       set textAlign(v) {
         st.textAlign = v;
+      },
+      get letterSpacing() {
+        return st.letterSpacing;
+      },
+      set letterSpacing(v) {
+        st.letterSpacing = v;
       },
       get textBaseline() {
         return st.textBaseline;
@@ -2526,7 +2986,7 @@
   }
 
   // js/core/edit/wars.js
-  var isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive2 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listWars(map) {
     return map.ext?.data?.wars ?? [];
   }
@@ -2548,7 +3008,7 @@
   function planDeclareWar(map, { name, attackers, defenders, date }) {
     const a = [...new Set(attackers)], d = [...new Set(defenders)];
     if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
-    for (const id of [...a, ...d]) if (!isLive(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of [...a, ...d]) if (!isLive2(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
     const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
     const war = {
@@ -2637,7 +3097,7 @@
     const war = list.find((w) => w.id === warId);
     if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (war.endedAt) throw new Error("\u65E2\u306B\u7D42\u7D50\u3057\u3066\u3044\u307E\u3059");
-    if (!isLive(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive2(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     const parts = [];
     const c = map.pack.cells;
     const moveCells = (cells) => {
@@ -2667,7 +3127,7 @@
   }
 
   // js/core/edit/alliances.js
-  var isLive2 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive3 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listAlliances(map) {
     return map.ext?.data?.alliances ?? [];
   }
@@ -2678,7 +3138,7 @@
   function planCreateAlliance(map, name, memberIds, date) {
     const uniq = [...new Set(memberIds)];
     if (uniq.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
-    for (const id of uniq) if (!isLive2(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of uniq) if (!isLive3(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq, formedAt: date ?? null, dissolvedAt: null };
     const before = listAlliances(map);
     const write = (m, list) => {
@@ -2738,7 +3198,7 @@
   var INVERSE = { Vassal: "Suzerain", Suzerain: "Vassal" };
   var inverseRelation = (r) => INVERSE[r] ?? r;
   var relationLabel = (r) => LABEL[r] ?? r ?? "";
-  var isLive3 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive4 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getRelation(map, a, b) {
     const r = map.pack.states[a]?.diplomacy?.[b];
     return typeof r === "string" && r !== "x" ? r : null;
@@ -2750,7 +3210,7 @@
     const states = map.pack.states;
     const A = states[a], B = states[b];
     if (a === b) throw new Error("\u540C\u3058\u56FD\u5BB6\u3069\u3046\u3057\u306E\u95A2\u4FC2\u306F\u8A2D\u5B9A\u3067\u304D\u307E\u305B\u3093");
-    if (!isLive3(A) || !isLive3(B)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive4(A) || !isLive4(B)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (!LABEL[relation]) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u95A2\u4FC2\u3067\u3059: ${relation}`);
     const old = getRelation(map, a, b);
     if (old === relation && getRelation(map, b, a) === inverseRelation(relation)) return null;
@@ -2904,20 +3364,20 @@
     province: { list: "provinces", label: "\u5C5E\u5DDE" }
   });
   var round6 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive4 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive5 = (e) => !!e && typeof e === "object" && !e.removed;
   var liveBurg = (map, id) => {
     const b = id > 0 ? map.pack.burgs[id] : null;
-    return isLive4(b) && b.i ? b : null;
+    return isLive5(b) && b.i ? b : null;
   };
   function protectedCells(map) {
     const capital = /* @__PURE__ */ new Set(), provinceCenter = /* @__PURE__ */ new Set();
     for (const s of map.pack.states) {
-      if (!isLive4(s) || !s.i) continue;
+      if (!isLive5(s) || !s.i) continue;
       const b = liveBurg(map, s.capital);
       if (b) capital.add(b.cell);
     }
     for (const pr of map.pack.provinces) {
-      if (!isLive4(pr) || !pr.i) continue;
+      if (!isLive5(pr) || !pr.i) continue;
       const b = liveBurg(map, pr.burg);
       if (b) provinceCenter.add(b.cell);
     }
@@ -2941,7 +3401,7 @@
     if (!def) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
     const list = map.pack[def.list];
     const entity = target > 0 ? list[target] : null;
-    if (target > 0 && !isLive4(entity)) throw new Error(`${def.label}#${target} \u306F\u5B58\u5728\u3057\u306A\u3044\u304B\u3001\u524A\u9664\u3055\u308C\u3066\u3044\u307E\u3059`);
+    if (target > 0 && !isLive5(entity)) throw new Error(`${def.label}#${target} \u306F\u5B58\u5728\u3057\u306A\u3044\u304B\u3001\u524A\u9664\u3055\u308C\u3066\u3044\u307E\u3059`);
     const c = map.pack.cells;
     const arr = c[kind];
     const burgs = map.pack.burgs;
@@ -3076,18 +3536,18 @@
   // js/core/edit/notes.js
   var NOTE_TYPES = ["state", "province", "culture", "religion", "burg", "marker"];
   var MAX_NOTE = 2e4;
-  var isLive5 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive6 = (e) => !!e && typeof e === "object" && !e.removed;
   var isLegacy = (map) => map.settings.format === "legacy";
   function noteTarget(map, type, id) {
     if (type === "marker") return map.markers.find((m) => m.i === id) ?? null;
     if (type === "burg") {
       const b = map.pack.burgs[id];
-      return isLive5(b) && b.i ? b : null;
+      return isLive6(b) && b.i ? b : null;
     }
     const def = PAINT_KINDS[type];
     if (!def) return null;
     const e = map.pack[def.list][id];
-    return isLive5(e) && e.i ? e : null;
+    return isLive6(e) && e.i ? e : null;
   }
   var legacyIds = (type, id) => {
     const ids2 = [`${type}${id}`];
@@ -3214,11 +3674,11 @@
 
   // js/core/edit/sovereignty.js
   var round62 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive6 = (e) => !!e && typeof e === "object" && !e.removed;
-  var isLiveState2 = (s) => isLive6(s) && s.i > 0;
+  var isLive7 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLiveState2 = (s) => isLive7(s) && s.i > 0;
   var liveBurg2 = (map, id) => {
     const b = id > 0 ? map.pack.burgs[id] : null;
-    return isLive6(b) && b.i ? b : null;
+    return isLive7(b) && b.i ? b : null;
   };
   function pickColor(existingCount, rnd) {
     const golden = 137.508;
@@ -3272,7 +3732,7 @@
   }
   function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
     const province = map.pack.provinces[provinceId];
-    if (!isLive6(province) || !province.i) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive7(province) || !province.i) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const fromState = map.pack.states[province.state];
     if (!isLiveState2(fromState)) throw new Error("\u5C5E\u5DDE\u306E\u6240\u5C5E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
@@ -3384,14 +3844,14 @@
     }
     const movedBurgIds = [];
     for (const b of map.pack.burgs) {
-      if (!isLive6(b) || !b.i || b.state !== from) continue;
+      if (!isLive7(b) || !b.i || b.state !== from) continue;
       const patch = { state: to };
       if (b.capital) patch.capital = 0;
       parts.push(setProps(b, patch));
       movedBurgIds.push(b.i);
     }
     for (const pr of map.pack.provinces) {
-      if (isLive6(pr) && pr.i && pr.state === from) parts.push(setProps(pr, { state: to }));
+      if (isLive7(pr) && pr.i && pr.state === from) parts.push(setProps(pr, { state: to }));
     }
     const toPatch = {};
     if (typeof toState.cells === "number" && typeof fromState.cells === "number") toPatch.cells = toState.cells + fromState.cells;
@@ -4045,6 +4505,19 @@
   var TOGGLES = ["coast", "rivers", "routes", "burgs", "labels"];
   var NOTICE_MS = 5e3;
   var PNG_SCALE = 2;
+  var katakanaOnLoad = () => {
+    try {
+      return localStorage.getItem("alterhistory.katakanaBurgs") !== "0";
+    } catch {
+      return true;
+    }
+  };
+  var setKatakanaOnLoad = (on) => {
+    try {
+      localStorage.setItem("alterhistory.katakanaBurgs", on ? "1" : "0");
+    } catch {
+    }
+  };
   function createActions({ store, viewport, renderer, load, Delaunator, download, createCanvas }) {
     const rerender = () => renderer.requestRender();
     let noticeTimer = 0;
@@ -4098,12 +4571,26 @@
           store.replace({ ...prev, map, fileName: file.name, warnings, error: null, notice: null, busy: null, hover: null });
           viewport.fit();
           rerender();
+          if (katakanaOnLoad()) {
+            const n = this.katakanaBurgs(file.name);
+            if (n) showNotice(`\u82F1\u8A9E\u540D\u306E\u90FD\u5E02 ${n} \u4EF6\u3092\u30AB\u30BF\u30AB\u30CA\u306B\u3057\u307E\u3057\u305F\uFF08\u300C\u5143\u306B\u623B\u3059\u300D\u3067\u82F1\u8A9E\u540D\u306B\u623B\u305B\u307E\u3059\uFF09`);
+          }
         } catch (e) {
           store.update((s) => {
             s.busy = null;
             s.error = e.message;
           });
         }
+      },
+      /** 英語名の都市をカタカナにする。付け替えた件数を返す（Undo 1回で戻る） */
+      katakanaBurgs(seedText = "katakana") {
+        const map = store.getState().map;
+        if (!map) return 0;
+        const cmd = planKatakanaBurgs(map, createRandom(`${seedText}:${map.pack.burgs.length}`));
+        if (!cmd) return 0;
+        store.commit(cmd);
+        rerender();
+        return cmd.parts.length;
       },
       fit() {
         viewport.fit();
@@ -4314,289 +4801,6 @@
     }
   }
 
-  // js/core/names/katakana.js
-  var NAME_STYLES = Object.freeze({
-    western: {
-      label: "\u897F\u6B27\u98A8",
-      heads: ["\u30A2\u30EB", "\u30A8\u30EB", "\u30AA\u30EB", "\u30AB\u30EB", "\u30B1\u30EB", "\u30C0\u30EB", "\u30C6\u30EB", "\u30CE\u30EB", "\u30D0\u30EB", "\u30D9\u30EB", "\u30DE\u30EB", "\u30E1\u30EB", "\u30B5\u30EB", "\u30CF\u30EB", "\u30D6\u30E9\u30F3", "\u30B0\u30EC\u30F3", "\u30A6\u30A3\u30F3", "\u30F4\u30A1\u30EB", "\u30D5\u30A7\u30EB", "\u30ED\u30B9", "\u30B2\u30EB", "\u30AB\u30F3"],
-      mids: ["\u30C9", "\u30E9", "\u30CD", "\u30BF", "\u30BB", "\u30EC", "\u30AC", "\u30DF"],
-      tails: ["\u30F3", "\u30B9", "\u30C8", "\u30CB\u30A2", "\u30E9\u30F3\u30C9", "\u30D6\u30EB\u30AF", "\u30CF\u30A4\u30E0", "\u30D5\u30A9\u30FC\u30C9", "\u30C8\u30F3", "\u30F4\u30A3\u30EB", "\u30C7\u30A3\u30A2", "\u30DF\u30A2", "\u30C9\u30FC\u30EB", "\u30B7\u30A2", "\u30A6\u30A7\u30A4", "\u30DD\u30FC\u30C8"],
-      midChance: 0.35
-    },
-    nordic: {
-      label: "\u5317\u6B27\u98A8",
-      heads: ["\u30BD\u30EB", "\u30E8\u30EB", "\u30CF\u30EB", "\u30F4\u30A1\u30EB", "\u30B0\u30F3", "\u30B9\u30AB\u30EB", "\u30D3\u30E7\u30EB", "\u30C8\u30EB", "\u30A6\u30EB", "\u30D5\u30ED", "\u30B9\u30F4\u30A7", "\u30D8\u30EB", "\u30ED\u30AF", "\u30A2\u30B9", "\u30C0\u30B0"],
-      mids: ["\u30AC", "\u30F4\u30A3", "\u30EB", "\u30CA", "\u30C8", "\u30C0"],
-      tails: ["\u30D8\u30A4\u30E0", "\u30AC\u30EB\u30C9", "\u30F4\u30A3\u30FC\u30AF", "\u30DB\u30EB\u30E0", "\u30CD\u30B9", "\u30DC\u30EB\u30B0", "\u30E9\u30F3\u30C9", "\u30D5\u30A3\u30E8\u30EB\u30C9", "\u30B9\u30BF\u30C3\u30C9", "\u30C0\u30FC\u30EB", "\u30F4\u30A1", "\u30EB"],
-      midChance: 0.25
-    },
-    latin: {
-      label: "\u30E9\u30C6\u30F3\u98A8",
-      heads: ["\u30ED", "\u30AB", "\u30A6\u30A1", "\u30C6\u30A3", "\u30DD", "\u30BB", "\u30A2\u30A6", "\u30EB", "\u30F4\u30A7", "\u30DF", "\u30AF", "\u30CE", "\u30A2", "\u30F4\u30A3", "\u30B3\u30EB"],
-      mids: ["\u30EB", "\u30DF", "\u30CA", "\u30C8", "\u30DD", "\u30AF", "\u30EC", "\u30BB", "\u30E9", "\u30EA"],
-      tails: ["\u30A6\u30E0", "\u30CB\u30A6\u30E0", "\u30C6\u30A3\u30A2", "\u30CA", "\u30CB\u30A2", "\u30DD\u30EA\u30B9", "\u30A6\u30B9", "\u30E9", "\u30B1\u30A2", "\u30C7\u30A3\u30A2", "\u30DF\u30A2"],
-      midChance: 0.7
-    },
-    arabic: {
-      label: "\u4E2D\u6771\u98A8",
-      heads: ["\u30A2\u30EB", "\u30C0", "\u30CF", "\u30AB", "\u30DF", "\u30B5", "\u30E9", "\u30D0", "\u30B8\u30E3", "\u30D5\u30A1", "\u30E0\u30CF", "\u30B6", "\u30BF", "\u30A4\u30B9"],
-      mids: ["\u30EB", "\u30E9", "\u30DF", "\u30D5", "\u30CF", "\u30B7", "\u30AF", "\u30BA", "\u30CA"],
-      tails: ["\u30D0\u30FC\u30C9", "\u30C0\u30FC\u30C9", "\u30CF\u30F3", "\u30E9\u30FC\u30F3", "\u30B9\u30BF\u30F3", "\u30CF\u30FC\u30E9", "\u30B8\u30FC\u30EB", "\u30FC\u30EB", "\u30FC\u30F3", "\u30DF\u30FC\u30EB", "\u30AB\u30F3\u30C9", "\u30FC\u30D5", "\u30E9"],
-      midChance: 0.6
-    },
-    slavic: {
-      label: "\u30B9\u30E9\u30F4\u98A8",
-      heads: ["\u30F4\u30A9", "\u30BA", "\u30D6", "\u30AF", "\u30CE", "\u30DD", "\u30B9", "\u30C8", "\u30DF", "\u30DA", "\u30B4", "\u30C9\u30D6", "\u30F4\u30E9", "\u30DC", "\u30F4\u30A7"],
-      mids: ["\u30ED", "\u30EA", "\u30E9", "\u30B9", "\u30F4", "\u30C0", "\u30DF", "\u30C8", "\u30AC", "\u30B6"],
-      tails: ["\u30B0\u30E9\u30FC\u30C9", "\u30B9\u30AF", "\u30F4\u30A3\u30C1", "\u30CB\u30AF", "\u30DD\u30EA", "\u30F4\u30A1", "\u30B4\u30ED\u30C9", "\u30B9\u30E9\u30D5", "\u30CB\u30C4\u30A1", "\u30F4\u30A9", "\u30CE\u30D5", "\u30D3\u30EB"],
-      midChance: 0.6
-    },
-    elvish: {
-      label: "\u30A8\u30EB\u30D5\u98A8",
-      heads: ["\u30E9", "\u30EA", "\u30A8", "\u30A2", "\u30B7", "\u30CA", "\u30A4", "\u30DF", "\u30D5", "\u30EB", "\u30BB", "\u30C6\u30A3"],
-      mids: ["\u30EA", "\u30CA", "\u30A8", "\u30E9", "\u30DF", "\u30BD", "\u30F4\u30A3", "\u30EC", "\u30A2", "\u30A4", "\u30EB"],
-      tails: ["\u30A8\u30EB", "\u30CB\u30A8\u30EB", "\u30BD\u30EA\u30A2", "\u30EA\u30A8\u30EB", "\u30CA\u30C7\u30A3\u30A2", "\u30DF\u30E9", "\u30ED\u30FC\u30F3", "\u30A6\u30A7\u30F3", "\u30C9\u30EA\u30EB", "\u30EA\u30B9", "\u30C7\u30A3\u30EB", "\u30B7\u30A2", "\u30FC\u30EB"],
-      midChance: 0.9
-    },
-    yamato: {
-      label: "\u548C\u98A8\uFF08\u30AB\u30CA\uFF09",
-      heads: ["\u30E4\u30DE", "\u30AB\u30EF", "\u30DF\u30BA", "\u30BF\u30B1", "\u30B7\u30E9", "\u30AF\u30ED", "\u30A2\u30AA", "\u30CF\u30CA", "\u30C8\u30E8", "\u30A2\u30B5", "\u30CA\u30E9", "\u30DF\u30CA", "\u30B5\u30AF", "\u30DB\u30BF", "\u30A4\u30BA", "\u30C4\u30AD"],
-      mids: ["\u30CE", "\u30DF", "\u30AB", "\u30B7", "\u30CF", "\u30C8"],
-      tails: ["\u30B7\u30DE", "\u30AC\u30EF", "\u30B6\u30AD", "\u30E4\u30DE", "\u30CE\u30DF\u30E4", "\u30C0", "\u30CF\u30E9", "\u30A6\u30E9", "\u30DF\u30E4", "\u30AE", "\u30B5\u30C8", "\u30B4\u30AF", "\u30BF\u30CB"],
-      midChance: 0.2
-    }
-  });
-  var STYLE_KEYS = Object.freeze(Object.keys(NAME_STYLES));
-  var DEFAULT_STYLE = "western";
-  var isStyle = (k) => Object.prototype.hasOwnProperty.call(NAME_STYLES, k);
-  var KATAKANA_ONLY = /^[ァ-ヴー]+$/;
-  var SMALL_START = /^[ァィゥェォャュョッンー]/;
-  function validate(name, { min = 2, max = 9 } = {}) {
-    if (typeof name !== "string" || !KATAKANA_ONLY.test(name)) return false;
-    if (name.length < min || name.length > max) return false;
-    if (SMALL_START.test(name)) return false;
-    if (/ンー|ッー|ーッ/.test(name)) return false;
-    if (/(.)\1/.test(name)) return false;
-    if (/^(.{1,3})\1/.test(name)) return false;
-    return true;
-  }
-  function cfg(style) {
-    return NAME_STYLES[isStyle(style) ? style : DEFAULT_STYLE];
-  }
-  function assemble(rnd, style, { shortTail = false, noTail = false } = {}) {
-    const s = cfg(style);
-    let prefix = rnd.pick(s.heads);
-    if (rnd.chance(s.midChance)) prefix += rnd.pick(s.mids);
-    if (noTail) return prefix;
-    const tails = shortTail ? s.tails.filter((t) => t.length <= 2) : s.tails;
-    const tail = rnd.pick(tails);
-    if (prefix.at(-1) === tail[0]) return null;
-    return prefix + tail;
-  }
-  function make(rnd, style, opts = {}) {
-    for (let i = 0; i < 60; i++) {
-      const n = assemble(rnd, style, opts);
-      if (n && validate(n, { max: opts.max ?? 9 })) return n;
-    }
-    const heads = cfg(style).heads.filter((h) => validate(h) && h.length <= (opts.max ?? 9));
-    return rnd.pick(heads.length ? heads : cfg(style).heads);
-  }
-  function generatePlaceName(rnd, style) {
-    return make(rnd, style);
-  }
-  function generateShortName(rnd, style) {
-    return make(rnd, style, { shortTail: rnd.chance(0.6), max: 6 });
-  }
-  var COMMON_FORMS = [
-    { w: 30, suffix: "\u738B\u56FD", form: "Monarchy", formName: "Kingdom" },
-    { w: 12, suffix: "\u5E1D\u56FD", form: "Monarchy", formName: "Empire" },
-    { w: 10, suffix: "\u516C\u56FD", form: "Monarchy", formName: "Duchy" },
-    { w: 14, suffix: "\u5171\u548C\u56FD", form: "Republic", formName: "Republic" },
-    { w: 6, suffix: "\u9023\u90A6", form: "Federation", formName: "Federation" },
-    { w: 5, suffix: "\u795E\u8056\u56FD", form: "Theocracy", formName: "Theocracy" },
-    { w: 6, suffix: "\u4FAF\u56FD", form: "Monarchy", formName: "Principality" },
-    { w: 5, suffix: "\u8FBA\u5883\u4F2F\u9818", form: "Monarchy", formName: "March" }
-  ];
-  var EXTRA_FORMS = {
-    arabic: [
-      { w: 14, suffix: "\u9996\u9577\u56FD", form: "Monarchy", formName: "Emirate" },
-      { w: 12, suffix: "\u30B9\u30EB\u30BF\u30F3\u56FD", form: "Monarchy", formName: "Sultanate" },
-      { w: 8, suffix: "\u30AB\u30EA\u30D5\u56FD", form: "Theocracy", formName: "Caliphate" }
-    ],
-    yamato: [{ w: 10, suffix: "\u7687\u56FD", form: "Monarchy", formName: "Empire" }]
-  };
-  function stateForms(style) {
-    return [...COMMON_FORMS, ...EXTRA_FORMS[style] ?? []];
-  }
-  function generateStateName(rnd, style, form) {
-    const stem = rnd.chance(0.5) ? make(rnd, style, { shortTail: true, max: 6 }) : make(rnd, style, { max: 6 });
-    const forms = stateForms(style);
-    const chosen = (form && forms.find((f) => f.suffix === form || f.formName === form)) ?? rnd.weighted(forms, forms.map((f) => f.w));
-    return { short: stem, name: stem + chosen.suffix, form: chosen.form, formName: chosen.formName };
-  }
-  var RELIGION_KINDS = [
-    { w: 40, type: "Organized", make: (d, r) => r.chance(0.65) ? { name: d + "\u6559", form: "Church" } : { name: d + "\u6559\u4F1A", form: "Church" } },
-    { w: 30, type: "Folk", make: (d, r) => r.chance(0.6) ? { name: d + "\u4FE1\u4EF0", form: "Animism" } : { name: d + "\u5D07\u62DD", form: "Shamanism" } },
-    { w: 20, type: "Cult", make: (d) => ({ name: d + "\u6559\u56E3", form: "Cult" }) },
-    { w: 10, type: "Heresy", make: (d) => ({ name: d + "\u6D3E", form: "Sect" }) }
-  ];
-  function generateReligionName(rnd, style) {
-    const deity = generateShortName(rnd, style);
-    const kind = rnd.weighted(RELIGION_KINDS, RELIGION_KINDS.map((k) => k.w));
-    const { name, form } = kind.make(deity, rnd);
-    return { name, deity, type: kind.type, form };
-  }
-  function generateCultureName(rnd, style) {
-    return generateShortName(rnd, style) + "\u4EBA";
-  }
-  var PROVINCE_SUFFIX = [["\u5DDE", 4], ["\u5730\u65B9", 3], ["\u9818", 3]];
-  function generateProvinceName(rnd, style) {
-    const stem = make(rnd, style, { shortTail: true, max: 6 });
-    return stem + rnd.weighted(PROVINCE_SUFFIX.map((p) => p[0]), PROVINCE_SUFFIX.map((p) => p[1]));
-  }
-
-  // js/core/edit/naming.js
-  var NAME_KINDS = ["burg", "state", "culture", "religion", "province"];
-  var isLive7 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  var LIST = { burg: "burgs", state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  function takenNames(map) {
-    const s = /* @__PURE__ */ new Set();
-    for (const kind of NAME_KINDS) {
-      for (const e of map.pack[LIST[kind]] ?? []) {
-        if (!isLive7(e)) continue;
-        if (e.name) s.add(e.name);
-        if (e.fullName) s.add(e.fullName);
-      }
-    }
-    return s;
-  }
-  var styleKey = (cultureId) => `culture:${cultureId}`;
-  function getNameStyle(map, cultureId) {
-    const v = map.ext?.data?.nameStyles?.[styleKey(cultureId)];
-    return isStyle(v) ? v : null;
-  }
-  function styleOfCulture(map, cultureId) {
-    const explicit = getNameStyle(map, cultureId);
-    if (explicit) return explicit;
-    if (!cultureId || cultureId < 0) return DEFAULT_STYLE;
-    return STYLE_KEYS[(cultureId * 3 + 1) % STYLE_KEYS.length];
-  }
-  function planSetNameStyle(map, cultureId, style) {
-    const culture = map.pack.cultures?.[cultureId];
-    if (!isLive7(culture)) throw new Error("\u305D\u306E\u6587\u5316\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    const after = style ? String(style) : null;
-    if (after && !isStyle(after)) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u540D\u524D\u306E\u7CFB\u7D71\u3067\u3059: ${after}`);
-    const before = getNameStyle(map, cultureId);
-    if (before === after) return null;
-    const key = styleKey(cultureId);
-    const write = (m, v) => {
-      var _a;
-      const ext = ensureExt(m);
-      (_a = ext.data).nameStyles ?? (_a.nameStyles = {});
-      if (v) ext.data.nameStyles[key] = v;
-      else delete ext.data.nameStyles[key];
-      if (!Object.keys(ext.data.nameStyles).length) delete ext.data.nameStyles;
-    };
-    return makeCommand("\u540D\u524D\u306E\u7CFB\u7D71\u3092\u5909\u66F4", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
-  }
-  function cultureIdFor(map, { kind, id, cell, cultureId, stateId }) {
-    if (cultureId != null) return cultureId;
-    const c = map.pack.cells;
-    if (cell != null && c?.culture?.[cell] != null) return c.culture[cell];
-    const stateCulture = (sid) => {
-      const s = map.pack.states[sid];
-      if (!isLive7(s)) return 0;
-      if (s.culture != null) return s.culture;
-      const cap = map.pack.burgs[s.capital];
-      return isLive7(cap) ? cap.culture ?? 0 : 0;
-    };
-    if (stateId != null) return stateCulture(stateId);
-    if (id != null) {
-      const e = map.pack[LIST[kind]]?.[id];
-      if (!isLive7(e)) return 0;
-      if (kind === "culture") return id;
-      if (kind === "burg") return e.culture ?? 0;
-      if (kind === "state") return stateCulture(id);
-      if (kind === "province") return stateCulture(e.state);
-      if (kind === "religion") return e.culture ?? 0;
-    }
-    return 0;
-  }
-  function suggestName(map, opts) {
-    const { kind, rnd } = opts;
-    if (!NAME_KINDS.includes(kind)) throw new Error(`\u540D\u524D\u3092\u751F\u6210\u3067\u304D\u306A\u3044\u7A2E\u985E\u3067\u3059: ${kind}`);
-    if (!rnd) throw new Error("\u4E71\u6570(rnd)\u304C\u5FC5\u8981\u3067\u3059");
-    let style = opts.style;
-    if (!isStyle(style)) {
-      const cid = cultureIdFor(map, opts);
-      style = cid ? styleOfCulture(map, cid) : rnd.pick(STYLE_KEYS);
-    }
-    const taken = takenNames(map);
-    if (opts.avoid) for (const n of opts.avoid) taken.add(n);
-    const gen = () => {
-      switch (kind) {
-        case "burg":
-          return { name: generatePlaceName(rnd, style), extra: {} };
-        case "province":
-          return { name: generateProvinceName(rnd, style), extra: {} };
-        case "culture":
-          return { name: generateCultureName(rnd, style), extra: {} };
-        case "religion": {
-          const r = generateReligionName(rnd, style);
-          return { name: r.name, extra: { deity: r.deity, type: r.type, form: r.form } };
-        }
-        case "state": {
-          const r = generateStateName(rnd, style, opts.form);
-          return { name: r.name, extra: { name: r.short, form: r.form, formName: r.formName } };
-        }
-        default:
-          throw new Error(kind);
-      }
-    };
-    let last = gen();
-    for (let i = 0; i < 60 && taken.has(last.name); i++) last = gen();
-    if (taken.has(last.name)) {
-      let n = 2;
-      while (taken.has(`${last.name}${n}`)) n++;
-      last = { ...last, name: `${last.name}${n}` };
-    }
-    return { ...last, style };
-  }
-  var provKey = (kind, id) => `${kind}:${id}`;
-  function isProvisional(map, kind, id) {
-    return !!map.ext?.data?.provisionalNames?.[provKey(kind, id)];
-  }
-  function listProvisional(map) {
-    return Object.keys(map.ext?.data?.provisionalNames ?? {}).map((k) => {
-      const [kind, id] = k.split(":");
-      return { kind, id: Number(id) };
-    });
-  }
-  function provisionalPart(map, kind, id, flag) {
-    const before = isProvisional(map, kind, id);
-    const key = provKey(kind, id);
-    const write = (m, v) => {
-      var _a;
-      const ext = ensureExt(m);
-      (_a = ext.data).provisionalNames ?? (_a.provisionalNames = {});
-      if (v) ext.data.provisionalNames[key] = 1;
-      else delete ext.data.provisionalNames[key];
-      if (!Object.keys(ext.data.provisionalNames).length) delete ext.data.provisionalNames;
-    };
-    return { apply: (m) => write(m, flag), revert: (m) => write(m, before) };
-  }
-  function planSetProvisional(map, kind, id, flag) {
-    if (!NAME_KINDS.includes(kind)) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
-    if (!isLive7(map.pack[LIST[kind]]?.[id])) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    if (isProvisional(map, kind, id) === !!flag) return null;
-    return makeCommand(flag ? "\u540D\u524D\u3092\u4EEE\u306B\u623B\u3059" : "\u540D\u524D\u3092\u78BA\u5B9A", [], [provisionalPart(map, kind, id, !!flag)]);
-  }
-  function withProvisional(map, command, kind, id, flag) {
-    if (!command) return command;
-    if (isProvisional(map, kind, id) === !!flag) return command;
-    return makeCommand(command.label, command.layers, [...command.parts, provisionalPart(map, kind, id, !!flag)]);
-  }
-
   // js/ui/legend.js
   function initLegend({ store, actions, panels }) {
     const title = byId("legend-title");
@@ -4667,9 +4871,36 @@
     render(store.getState());
   }
 
+  // js/ui/fonts-sync.js
+  function initFontsSync({ store, renderer }) {
+    let lastMap = null, lastSig = "", timer = 0, loadedChars = /* @__PURE__ */ new Set();
+    const namesOf = (map) => {
+      let t = "";
+      for (const key of ["burgs", "states", "provinces"]) for (const e of map.pack[key] ?? []) if (e && !e.removed && e.name) t += e.name;
+      return t;
+    };
+    function check(state) {
+      const map = state.map;
+      if (!map) return;
+      const sig = `${map.rev?.places ?? 0}:${map.rev?.politics ?? 0}`;
+      if (map === lastMap && sig === lastSig) return;
+      lastMap = map;
+      lastSig = sig;
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const fresh = [...new Set(namesOf(map))].filter((c) => !loadedChars.has(c));
+        if (!fresh.length) return;
+        fresh.forEach((c) => loadedChars.add(c));
+        loadMapFonts(fresh.join(""), () => renderer.requestRender());
+      }, 250);
+    }
+    store.subscribe(check);
+    check(store.getState());
+  }
+
   // js/ui/chrome.js
   var REGIONS = ["top", "left", "right", "bottom"];
-  function initChrome({ store, viewport, renderer }) {
+  function initChrome({ store, viewport, renderer, actions }) {
     const app = byId("app");
     const boxes = Object.fromEntries([...document.querySelectorAll("[data-chrome]")].map((b) => [b.dataset.chrome, b]));
     const restore = byId("btn-chrome-restore");
@@ -4720,8 +4951,17 @@
       setAll(true);
     });
     restore.addEventListener("click", () => setAll(false));
+    const menus = [...document.querySelectorAll("details.menu")];
     document.addEventListener("pointerdown", (e) => {
-      if (menu.open && !menu.contains(e.target)) menu.open = false;
+      for (const m of menus) if (m.open && !m.contains(e.target)) m.open = false;
+    });
+    for (const m of menus) m.addEventListener("toggle", () => {
+      if (m.open) {
+        for (const o of menus) if (o !== m) o.open = false;
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") for (const m of menus) m.open = false;
     });
     document.addEventListener("keydown", (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== "h") return;
@@ -4754,6 +4994,21 @@
         e.returnValue = "";
       }
     });
+    const kana = byId("opt-katakana");
+    kana.checked = katakanaOnLoad();
+    kana.addEventListener("change", () => setKatakanaOnLoad(kana.checked));
+    byId("btn-katakana").addEventListener("click", () => {
+      menu.open = false;
+      const n = actions.katakanaBurgs();
+      store.update((st) => {
+        st.notice = n ? `\u82F1\u8A9E\u540D\u306E\u90FD\u5E02 ${n} \u4EF6\u3092\u30AB\u30BF\u30AB\u30CA\u306B\u3057\u307E\u3057\u305F\uFF08\u300C\u5143\u306B\u623B\u3059\u300D\u3067\u623B\u305B\u307E\u3059\uFF09` : "\u30AB\u30BF\u30AB\u30CA\u306B\u3059\u308B\u5BFE\u8C61\u306E\u90FD\u5E02\u306F\u3042\u308A\u307E\u305B\u3093";
+      });
+    });
+    const syncEmpty = () => {
+      byId("btn-katakana").disabled = !store.getState().map;
+    };
+    store.subscribe(syncEmpty);
+    syncEmpty();
     apply();
     return { setHidden, setAll, toggleAll, hidden: () => [...hidden] };
   }
@@ -4779,7 +5034,13 @@
   }
 
   // js/ui/toolbar.js
-  var TOGGLE_IDS = { coast: "chk-coast", rivers: "chk-rivers", routes: "chk-routes", burgs: "chk-burgs", labels: "chk-labels" };
+  var TOGGLE_IDS = { coast: "chk-coast", rivers: "chk-rivers", routes: "chk-routes", burgs: "chk-burgs", labels: "chk-labels", zones: "chk-zones", journeys: "chk-journeys" };
+  var DEFAULT_ON = /* @__PURE__ */ new Set(["zones", "journeys"]);
+  var PRESETS = {
+    politics: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto" },
+    terrain: { overlay: "none", base: "biome", coast: true, rivers: true, routes: false, burgs: true, labels: true, burgLabels: "capitals" },
+    height: { overlay: "none", base: "height", coast: true, rivers: true, routes: false, burgs: false, labels: false }
+  };
   function initToolbar({ store, actions, openFileDialog, openHelp }) {
     byId("btn-open").addEventListener("click", openFileDialog);
     byId("btn-open-empty").addEventListener("click", openFileDialog);
@@ -4816,6 +5077,17 @@
     for (const [name, id] of Object.entries(TOGGLE_IDS)) {
       byId(id).addEventListener("change", (e) => actions.setView({ [name]: e.target.checked }));
     }
+    const segs = [...document.querySelectorAll("[data-seg-for]")];
+    for (const seg of segs) {
+      seg.addEventListener("click", (e) => {
+        const b = e.target instanceof HTMLElement ? e.target.closest("button[data-value]") : null;
+        if (!b) return;
+        const sel = byId(seg.dataset.segFor);
+        sel.value = b.dataset.value;
+        sel.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+    }
+    for (const b of document.querySelectorAll("[data-preset]")) b.addEventListener("click", () => actions.setView({ ...PRESETS[b.dataset.preset] }));
     const sync = (state) => {
       const v = state.view;
       if (selOverlay.value !== v.overlay) selOverlay.value = v.overlay;
@@ -4827,8 +5099,24 @@
       if (!hasMap) menu.open = false;
       for (const [name, id] of Object.entries(TOGGLE_IDS)) {
         const el9 = byId(id);
-        if (el9.checked !== v[name]) el9.checked = v[name];
+        const want = v[name] ?? DEFAULT_ON.has(name);
+        if (el9.checked !== want) el9.checked = want;
       }
+      for (const seg of segs) {
+        const cur = byId(seg.dataset.segFor).value;
+        for (const b of seg.querySelectorAll("button[data-value]")) {
+          const on = b.dataset.value === cur;
+          b.classList.toggle("active", on);
+          b.setAttribute("aria-pressed", String(on));
+        }
+      }
+      for (const b of document.querySelectorAll("[data-preset]")) {
+        const p = PRESETS[b.dataset.preset];
+        const on = Object.entries(p).every(([k, val]) => (v[k] ?? DEFAULT_ON.has(k)) === val);
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", String(on));
+      }
+      byId("layers-menu").classList.toggle("disabled", !hasMap);
       const eo = state.exportOpts ?? {};
       for (const box of annotBoxes) {
         const name = box.dataset.annot;
@@ -5949,59 +6237,6 @@ ${shown}${more}`;
     if (before === doctrineKey) return null;
     const label = DOCTRINE_BY_KEY[doctrineKey].label;
     return makeCommand(`\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u5909\u66F4\uFF08${s.name}: ${label}\uFF09`, [], [setProps(s, { doctrine: doctrineKey })]);
-  }
-
-  // js/core/random.js
-  function createRandom(seed) {
-    let s = normalizeSeed(seed);
-    const next = () => {
-      s = s + 1831565813 | 0;
-      let t = Math.imul(s ^ s >>> 15, 1 | s);
-      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
-      return ((t ^ t >>> 14) >>> 0) / 4294967296;
-    };
-    return {
-      /** [0, 1) の実数 */
-      next,
-      /** [min, max] の整数 */
-      int: (min, max) => Math.floor(next() * (max - min + 1)) + min,
-      /** [min, max) の実数 */
-      float: (min, max) => next() * (max - min) + min,
-      /** 確率 p で true */
-      chance: (p) => next() < p,
-      /** 配列から1つ選ぶ */
-      pick: (arr) => arr[Math.floor(next() * arr.length)],
-      /** 重み付き選択。weights は arr と同じ長さ */
-      weighted(arr, weights) {
-        let total = 0;
-        for (const w of weights) total += w;
-        let r = next() * total;
-        for (let i = 0; i < arr.length; i++) {
-          r -= weights[i];
-          if (r <= 0) return arr[i];
-        }
-        return arr[arr.length - 1];
-      },
-      /** 新しい配列を返すシャッフル（入力は変更しない） */
-      shuffle(arr) {
-        const a = arr.slice();
-        for (let i = a.length - 1; i > 0; i--) {
-          const j = Math.floor(next() * (i + 1));
-          [a[i], a[j]] = [a[j], a[i]];
-        }
-        return a;
-      }
-    };
-  }
-  function normalizeSeed(seed) {
-    if (typeof seed === "number" && Number.isFinite(seed)) return seed >>> 0;
-    const str = String(seed ?? Date.now());
-    let h = 2166136261;
-    for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return h >>> 0;
   }
 
   // js/app/edit-actions.js
@@ -8763,7 +8998,7 @@ ${shown}${more}`;
     for (const k of UNIT_KEYS) out[k] = Math.max(0, Math.floor((out[k] ?? 0) * (1 - fraction)));
     return out;
   }
-  function clamp(v, min, max) {
+  function clamp2(v, min, max) {
     return Math.min(max, Math.max(min, v));
   }
   function round(v) {
@@ -8779,8 +9014,8 @@ ${shown}${more}`;
     const dRoll = dPower * noise();
     const winner = aRoll >= dRoll ? "attacker" : "defender";
     const ratio = Math.max(aRoll, dRoll) / Math.max(1e-9, Math.min(aRoll, dRoll));
-    let winnerLoss = clamp(0.03 + 0.09 / ratio, 0.03, 0.12);
-    let loserLoss = clamp(0.4 - 0.25 / ratio, 0.15, 0.4);
+    let winnerLoss = clamp2(0.03 + 0.09 / ratio, 0.03, 0.12);
+    let loserLoss = clamp2(0.4 - 0.25 / ratio, 0.15, 0.4);
     const defBonusOf = (doctrineKey) => DOCTRINE_BY_KEY[doctrineKey]?.defenseBonus ?? 0;
     const defenderBonus = defBonusOf(defender.doctrine);
     if (winner === "attacker") loserLoss *= 1 - defenderBonus;
@@ -8839,8 +9074,8 @@ ${shown}${more}`;
     const dRoll = dPower * noise();
     const winner = aRoll >= dRoll ? "attacker" : "defender";
     const ratio = Math.max(aRoll, dRoll) / Math.max(1e-9, Math.min(aRoll, dRoll));
-    let winnerLoss = clamp(0.03 + 0.09 / ratio, 0.03, 0.12);
-    let loserLoss = clamp(0.4 - 0.25 / ratio, 0.15, 0.4);
+    let winnerLoss = clamp2(0.03 + 0.09 / ratio, 0.03, 0.12);
+    let loserLoss = clamp2(0.4 - 0.25 / ratio, 0.15, 0.4);
     const defenderBonus = DOCTRINE_BY_KEY[defenderProfile.doctrine]?.defenseBonus ?? 0;
     if (winner === "attacker") loserLoss *= 1 - defenderBonus;
     else winnerLoss *= 1 - defenderBonus;
@@ -9996,7 +10231,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       notice: null,
       busy: null,
       hover: null,
-      view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "all" },
+      view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto" },
       editTool: "select",
       brushRadius: 40,
       timeRunning: false,
@@ -10054,6 +10289,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     initLegend(deps);
     initSidebarToggle(deps);
     initChrome(deps);
+    initFontsSync(deps);
     const editMode = initEditMode(deps);
     editModeRef = editMode;
     const editToolbar = initEditToolbar({ store, editMode, editActions });

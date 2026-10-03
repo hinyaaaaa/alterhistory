@@ -78,5 +78,19 @@ const big = militaryBurden({ rural: 100000, urban: 0, military: [{ u: { infantry
 check("装備が重いほど維持費は増える", big > small && small > 0, `${small.toFixed(3)} < ${big.toFixed(3)}`);
 check("維持費は税収の80%で頭打ち", militaryBurden({ rural: 1000, urban: 0, military: [{ u: { nuclear: 99999 } }] }) === 0.8);
 
+console.log("=== 英語名の都市をカタカナに ===");
+const { actions } = window.alterhistory;
+const ids = []; map().pack.burgs.forEach((b, i) => { if (i && b && !b.removed && ids.length < 5) ids.push(i); });
+const eng = ["Newbury", "Oxford", "Ashton", "Hartley", "Wilton"];
+ids.forEach((id, k) => { map().pack.burgs[id].name = eng[k]; });
+const n = actions.katakanaBurgs("test");
+const names = ids.map((id) => map().pack.burgs[id].name);
+check("英語名の都市が全部カタカナ側に付け替わる", n === 5 && names.every((x) => !/[A-Za-z]/.test(x)), names.join(","));
+check("付け替えた名前どうしは被らない", new Set(names).size === names.length);
+check("2回目は対象が無く 0 件", actions.katakanaBurgs("test") === 0);
+store.undo();
+check("Undo 1回で元の英語名に戻る", ids.every((id, k) => map().pack.burgs[id].name === eng[k]));
+check("ページ題名に「作戦司令室」が入っていない", !window.document.title.includes("作戦"), window.document.title);
+
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");
 process.exit(failed ? 1 : 0);

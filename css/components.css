@@ -252,7 +252,7 @@ button.link:hover { color: var(--brass-bright); text-decoration: underline; }
 }
 .world-date-sm:hover { border-color: var(--brass-dim); background: var(--panel-2); }
 .world-date-sm .era-name { display: block; font-size: 9px; font-weight: 500; color: var(--muted); letter-spacing: 0.04em; text-transform: none; }
-.time-speed-sm { width: 4.5em; font-size: 11px; padding: 3px 5px; }
+.time-speed-sm { width: 7.2em; font-size: 11px; padding: 3px 5px; }
 #btn-time-toggle.running {
   background: linear-gradient(180deg, var(--danger-bright), var(--danger));
   border-color: var(--danger-bright); color: #fdeceb;
@@ -551,3 +551,31 @@ dialog th, .menu-opts-title, .b-sub, .b-title { color: #b8a064; }
   .tooltip-hint { display: none; }
 }
 .legend-prov { font-size: 10px; padding: 0 5px; border: 1px solid var(--brass-dim); border-radius: 8px; color: #b8a064; margin-right: 6px; }
+
+/* --- 文字：見出し・題名は明朝（地図と同じ雰囲気）、操作部品はゴシック --- */
+.brand-name, #empty-state h1, dialog h2, .legend h3, .editor-header h3, .empty-card h2 { font-family: var(--font-serif); font-weight: 700; letter-spacing: 0.06em; }
+.brand-name { letter-spacing: 0.18em; font-weight: 800; }
+button, select, input, textarea { font-family: inherit; }
+body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
+
+/* --- レイヤーのポップアップ（上部バー「レイヤー」） --- */
+.layers-pop { width: 318px; max-height: calc(100vh - 80px); overflow: auto; padding: 4px 0; }
+.lp-sec { padding: 8px 12px 10px; border-bottom: 1px solid var(--line); }
+.layers-pop > .lp-sec:nth-last-child(2) { border-bottom: 0; }
+.lp-title { display: block; margin-bottom: 6px; font-size: 11px; letter-spacing: 0.08em; color: #b8a064; }
+.lp-title kbd, .layer-toggle kbd { margin-left: 4px; }
+.lp-help { margin: 8px 0 0; font-size: 11px; line-height: 1.6; color: var(--muted); }
+.lp-chips { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 8px; }
+.lp-wide { margin-bottom: 8px; }
+.layers-pop .layer-toggle { display: flex; align-items: center; gap: 6px; padding: 5px 4px; font-size: 12.5px; cursor: pointer; }
+.layers-note { margin: 4px 2px 0; }
+.seg { display: flex; border: 1px solid var(--brass-dim); border-radius: 4px; overflow: hidden; }
+.menu-list .seg button, .seg button {
+  flex: 1 1 0; padding: 7px 4px; margin: 0; border: 0; border-left: 1px solid var(--line); border-radius: 0;
+  background: var(--panel-2); color: var(--text); font-size: 12px; text-align: center; font-weight: 500; white-space: nowrap; box-shadow: none;
+}
+.seg button:first-child { border-left: 0; }
+.seg button:hover { background: var(--panel-3); color: var(--brass-bright); }
+.seg button.active { background: linear-gradient(180deg, var(--brass-bright), var(--brass)); color: var(--accent-text); font-weight: 700; }
+.seg-4 button { font-size: 11.5px; padding: 7px 2px; }
+.menu.disabled > summary { opacity: 0.5; pointer-events: none; }
