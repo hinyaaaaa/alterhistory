@@ -8,9 +8,12 @@
 
 import { makeCommand } from "./commands.js";
 import { ensureExt } from "./ext.js";
+import { diplomacyParts } from "./diplomacy.js";
+import { BOND_BY_KEY } from "../sim/war-flow.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
+const bondKey = (a) => (BOND_BY_KEY[a?.bond] ? a.bond : "standard");
 export function listAlliances(map) {
   return map.ext?.data?.alliances ?? [];
 }
@@ -21,15 +24,17 @@ function nextAllianceId(map) {
 }
 
 /** 同盟を作る。メンバーは2カ国以上必須（ユーザー要件：3カ国以上を想定するが、2国も許容） */
-export function planCreateAlliance(map, name, memberIds, date) {
+export function planCreateAlliance(map, name, memberIds, date, bond = "standard") {
   const uniq = [...new Set(memberIds)];
   if (uniq.length < 2) throw new Error("同盟には2カ国以上が必要です");
   for (const id of uniq) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
-  const alliance = { id: nextAllianceId(map), name: name || "新しい同盟", members: uniq, formedAt: date ?? null, dissolvedAt: null };
+  if (!BOND_BY_KEY[bond]) throw new Error("同盟の拘束力は 緩やか・標準・強固 から選んでください");
+  const alliance = { id: nextAllianceId(map), name: name || "新しい同盟", members: uniq, bond, formedAt: date ?? null, dissolvedAt: null };
+  const pairs = []; for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) pairs.push([uniq[i], uniq[j]]);
   const before = listAlliances(map);
   const write = (m, list) => { const ext = ensureExt(m); ext.data.alliances = list; if (!list.length) delete ext.data.alliances; };
   return {
-    command: makeCommand(`同盟を結成（${alliance.name}）`, [], [{ apply: (m) => write(m, [...before, alliance]), revert: (m) => write(m, before) }]),
+    command: makeCommand(`同盟を結成（${alliance.name}）`, [], [{ apply: (m) => write(m, [...before, alliance]), revert: (m) => write(m, before) }, ...diplomacyParts(map, pairs, "Ally")]),
     id: alliance.id,
   };
 }
@@ -42,9 +47,11 @@ export function planEditAlliance(map, allianceId, patch) {
   const nextMembers = patch.members ? [...new Set(patch.members)] : a.members;
   if (nextMembers.length < 2) throw new Error("同盟には2カ国以上が必要です");
   const nextName = patch.name !== undefined ? patch.name : a.name;
-  if (nextName === a.name && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
+  const nextBond = patch.bond ?? bondKey(a);
+  if (!BOND_BY_KEY[nextBond]) throw new Error("同盟の拘束力は 緩やか・標準・強固 から選んでください");
+  if (nextName === a.name && nextBond === bondKey(a) && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
   const before = list;
-  const after = list.map((x) => (x.id === allianceId ? { ...x, name: nextName, members: nextMembers } : x));
+  const after = list.map((x) => (x.id === allianceId ? { ...x, name: nextName, members: nextMembers, bond: nextBond } : x));
   const write = (m, v) => { ensureExt(m).data.alliances = v; };
   return makeCommand("同盟を編集", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
 }

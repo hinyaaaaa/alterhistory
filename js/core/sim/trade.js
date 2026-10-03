@@ -10,6 +10,7 @@
 // 純粋ロジック層：DOM に依存しない。map を変更しない。
 
 import { getRelation } from "../edit/diplomacy.js";
+import { blockedPairs, isBlockaded } from "./sanctions.js";
 import { activeWars } from "../edit/wars.js";
 
 // ---------- 産物（ALTERHISTORY 独自の小さなカタログ） ----------
@@ -135,7 +136,7 @@ function atWar(wars, a, b) {
 
 /** 取引のしやすさ 0〜1.3。戦争中は 0。隣国は高く、遠いほど低い */
 export function tradeAffinity(map, a, b, ctx) {
-  if (atWar(ctx.wars, a, b)) return 0;
+  if (atWar(ctx.wars, a, b) || isBlockaded(map, a, b, ctx.blocked)) return 0; // 戦争・同盟内の同調による封鎖
   const key = a < b ? `${a}:${b}` : `${b}:${a}`;
   const near = ctx.adjacent.has(key);
   const pa = map.pack.states[a].pole ?? [0, 0], pb = map.pack.states[b].pole ?? [0, 0];
@@ -156,9 +157,10 @@ export function tradeAffinity(map, a, b, ctx) {
  */
 export function computeTrade(map) {
   const wars = activeWars(map);
+  const blocked = blockedPairs(map);
   const adjacent = stateAdjacency(map);
   const diag = Math.hypot(map.meta.width || 1280, map.meta.height || 774);
-  const ctx = { wars, adjacent, diag };
+  const ctx = { wars, adjacent, diag, blocked };
   const live = map.pack.states.filter(isLive);
   const production = computeProduction(map);
 

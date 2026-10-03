@@ -3,7 +3,7 @@
 // name と fullName の両方を持つ実体では、表示に使われる fullName を優先して書き換える
 // （国家一覧・凡例などは fullName ?? name を表示に使っているため）。
 
-import { makeCommand, setProps, setList } from "./commands.js";
+import { makeCommand, setProps, setList, setIndexed } from "./commands.js";
 
 const LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
@@ -103,4 +103,50 @@ export function planAddProvince(map, { state, name, rnd }) {
 
   const parts = [setList((m) => m.pack.provinces, (m, v) => { m.pack.provinces = v; }, list)];
   return { command: makeCommand("属州を新規作成", ["politics"], parts), id };
+}
+
+const CELL_FIELD = { state: "state", culture: "culture", religion: "religion", province: "province" };
+
+/**
+ * 国家・文化・宗教・属州を削除する（解散扱い。removed を立てるので Undo で元に戻せる）。
+ * その実体に属していたセルは「所属なし(0)」になる。国家を消すと、その国の属州も一緒に消える。
+ * 戦争中の国家は消せない（先に講和する）。
+ */
+export function planRemoveEntity(map, kind, id) {
+  const listKey = LIST_KEY[kind];
+  if (!listKey) throw new Error("この種類は削除できません");
+  const e = map.pack[listKey]?.[id];
+  if (!isLive(e) || !e.i) throw new Error("その対象は存在しません");
+  const label = LABEL_OF[kind], nm = e.fullName ?? e.name;
+  const c = map.pack.cells;
+  const parts = [];
+  const clearCells = (field, ids) => {
+    const arr = c[field], changes = [];
+    for (let i = 0; i < arr.length; i++) if (ids.has(arr[i])) changes.push([i, arr[i], 0]);
+    if (changes.length) parts.push(setIndexed((m) => m.pack.cells[field], changes));
+  };
+  const zero = { cells: 0, area: 0, rural: 0, urban: 0 };
+
+  if (kind === "state") {
+    const wars = map.ext?.data?.wars ?? [];
+    if (wars.some((w) => !w.endedAt && (w.attackers.includes(id) || w.defenders.includes(id)))) throw new Error(`「${nm}」は戦争中のため削除できません。先に講和してください`);
+    const provIds = new Set(map.pack.provinces.filter((p) => isLive(p) && p.i && p.state === id).map((p) => p.i));
+    clearCells("state", new Set([id]));
+    if (provIds.size) clearCells("province", provIds);
+    for (const p of map.pack.provinces) if (provIds.has(p.i)) parts.push(setProps(p, { removed: true, ...zero }));
+    for (const b of map.pack.burgs) if (isLive(b) && b.i && b.state === id) parts.push(setProps(b, { state: 0, ...(b.capital ? { capital: 0 } : {}) }));
+    parts.push(setProps(e, { removed: true, ...zero, burgs: 0, capital: 0, military: [] }));
+  } else if (kind === "culture") {
+    clearCells("culture", new Set([id]));
+    for (const b of map.pack.burgs) if (isLive(b) && b.i && b.culture === id) parts.push(setProps(b, { culture: 0 }));
+    parts.push(setProps(e, { removed: true, ...zero }));
+  } else if (kind === "religion") {
+    clearCells("religion", new Set([id]));
+    parts.push(setProps(e, { removed: true, ...zero }));
+  } else {
+    clearCells("province", new Set([id]));
+    for (const b of map.pack.burgs) if (isLive(b) && b.i && b.province === id) parts.push(setProps(b, { province: 0 }));
+    parts.push(setProps(e, { removed: true, ...zero }));
+  }
+  return makeCommand(`${label}「${nm}」を削除`, ["politics", "places"], parts);
 }

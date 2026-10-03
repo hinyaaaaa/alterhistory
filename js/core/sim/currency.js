@@ -73,7 +73,11 @@ export function ratesParts(map, rnd) {
     const c = getCurrency(s);
     let rate = next.get(s.i);
     if (c.regime === "pegged") rate = next.get(c.pegTo) ?? getCurrency(map.pack.states[c.pegTo] ?? s).rate;
-    if (rate != null && rate !== c.rate) parts.push(setProps(s, { currency: { ...c, rate } }));
+    if (rate != null) {
+      // 相場の履歴（最大24年分）。前年比と推移グラフの表示に使う
+      const hist = [...(c.hist ?? [c.rate]), rate].slice(-24);
+      parts.push(setProps(s, { currency: { ...c, rate, prev: c.rate, hist } }));
+    }
   }
   return parts;
 }

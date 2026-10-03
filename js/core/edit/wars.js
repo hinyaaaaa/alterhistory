@@ -19,6 +19,8 @@ import { resolveWar, nameWar, applyLossFraction } from "../sim/war-engine.js";
 import { regimentsOf } from "../sim/military.js";
 import { convert, getCurrency } from "../sim/currency.js";
 import { getFinance } from "../sim/trade.js";
+import { expandWithAllies, estimateDurationMonths, addMonths, proposePeaceVenue, peaceImpact } from "../sim/war-flow.js";
+import { diplomacyParts, crossPairs } from "./diplomacy.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
@@ -73,15 +75,19 @@ export function planDeclareWar(map, { name, attackers, defenders, date }) {
  * @returns {{command, id, result}}
  */
 export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd }) {
-  const a = [...new Set(attackers)], d = [...new Set(defenders)];
-  if (!a.length || !d.length) throw new Error("攻撃側・防御側とも1カ国以上必要です");
-  for (const id of [...a, ...d]) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
-  if (a.some((id) => d.includes(id))) throw new Error("同じ国家が両陣営に入っています");
+  const a0 = [...new Set(attackers)], d0 = [...new Set(defenders)];
+  if (!a0.length || !d0.length) throw new Error("攻撃側・防御側とも1カ国以上必要です");
+  for (const id of [...a0, ...d0]) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
+  if (a0.some((id) => d0.includes(id))) throw new Error("同じ国家が両陣営に入っています");
+  // 同盟の拘束力に従って、同盟国が自動で参戦する
+  const { attackers: a, defenders: d, joined } = expandWithAllies(map, a0, d0);
   const result = resolveWar(map, a, d, rnd);
   const name = nameWar(map, { attackers: a, defenders: d, winner: result.winner, rnd, existingNames: listWars(map).map((w) => w.name) });
+  // 規模・地形・決着の差から、終戦日を自動で決める
+  const months = estimateDurationMonths(map, a, d, result, rnd);
   const war = {
-    id: nextWarId(map), name, attackers: a, defenders: d, startedAt: date, endedAt: null,
-    battles: [], advantage: {}, muster: {},
+    id: nextWarId(map), name, attackers: a, defenders: d, startedAt: date, endsAt: addMonths(date, months), durationMonths: months, endedAt: null,
+    joinedAllies: joined, battles: [], advantage: {}, muster: {},
     result: { winner: result.winner, decisiveness: result.decisiveness, compare: result.compare, aStrength: result.aStrength, dStrength: result.dStrength },
   };
   const parts = [];
@@ -89,9 +95,44 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd 
     const st = map.pack.states[Number(sid)];
     for (const r of regimentsOf(st)) parts.push(setProps(r, { u: applyLossFraction(r.u, frac) }));
   }
+  parts.push(...diplomacyParts(map, crossPairs(a, d), "Enemy")); // 戦争をしたら敵対
   const before = listWars(map);
   parts.push({ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) });
-  return { command: makeCommand(`宣戦布告（${war.name}）`, ["places"], parts), id: war.id, result: war.result, name };
+  return { command: makeCommand(`宣戦布告（${war.name}）`, ["places"], parts), id: war.id, result: war.result, name, joined, endsAt: war.endsAt };
+}
+
+/** 戦争名を変える（重複は不可） */
+export function planRenameWar(map, warId, name) {
+  const list = listWars(map);
+  const w = list.find((x) => x.id === warId);
+  if (!w) throw new Error("その戦争は存在しません");
+  const n = (name ?? "").trim();
+  if (!n) throw new Error("戦争の名前を入力してください");
+  if (n === w.name) return null;
+  if (warNameTaken(map, n, warId)) throw new Error(`「${n}」という戦争はすでにあります`);
+  const after = list.map((x) => (x.id === warId ? { ...x, name: n } : x));
+  return makeCommand("戦争名の変更", [], [{ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) }]);
+}
+
+/** 講和待ちの戦争（判定は出たが、講和条約がまだ結ばれていないもの） */
+export function warsAwaitingTreaty(map) { return listWars(map).filter((w) => w.result && !w.endedAt); }
+
+/** 講和の場所と条約名の提案（地名は関係国の都市、または全交戦国と中立の国の都市） */
+export function planPeaceVenue(map, warId, rnd) {
+  const w = listWars(map).find((x) => x.id === warId);
+  return w ? proposePeaceVenue(map, w, rnd) : null;
+}
+
+/** 講和の勝者側・敗者側 */
+export function peaceSides(war) {
+  const winnerSide = war.result?.winner === "defender" ? "defenders" : "attackers";
+  return { winners: war[winnerSide], losers: war[winnerSide === "attackers" ? "defenders" : "attackers"], stalemate: war.result?.winner === "stalemate" };
+}
+
+/** 講和で相手に渡る量の見積もり（UI表示用） */
+export function estimatePeace(map, warId, { loserId, cellGroups, reparations = 0 }) {
+  const loser = map.pack.states[loserId];
+  return peaceImpact(map, loserId, cellGroups, reparations, loser ? getFinance(loser).treasury : null);
 }
 
 /** 召集する部隊を保存する。muster は { [国家ID]: [部隊ID, ...] }。参戦国以外・存在しない部隊は取り除く */
@@ -209,6 +250,9 @@ export function planSignPeace(map, warId, terms, date) {
   if (!war) throw new Error("その戦争は存在しません");
   if (war.endedAt) throw new Error("既に終結しています");
   if (!isLive(map.pack.states[terms.toStateId])) throw new Error("割譲先の国家が存在しません");
+  const endDate = war.endsAt ?? date; // 終戦日は戦争ごとに自動で決まっている
+  const { winners, losers } = peaceSides(war);
+  if (!winners.includes(terms.toStateId) && !losers.includes(terms.toStateId)) throw new Error("受け取る国は交戦国から選んでください");
 
   const parts = [];
   const c = map.pack.cells;
@@ -242,7 +286,7 @@ export function planSignPeace(map, warId, terms, date) {
   for (const cells of terms.regionCells ?? []) moveCells(cells);
   if (terms.reparations) {
     // 賠償金は敗者（割譲を受ける側の相手）の国庫から勝者の国庫へ。額は支払国の通貨で指定し、受取国の通貨に換算する
-    const payerId = war.defenders.includes(terms.toStateId) ? war.attackers[0] : war.defenders[0];
+    const payerId = terms.fromStateId ?? (winners.includes(terms.toStateId) ? losers[0] : winners[0]);
     const payer = map.pack.states[payerId], payee = map.pack.states[terms.toStateId];
     if (payer && payee) {
       const received = convert(map, payerId, terms.toStateId, terms.reparations);
@@ -253,8 +297,13 @@ export function planSignPeace(map, warId, terms, date) {
     }
   }
   const before = list;
-  const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: date, terms, treatyName: terms.treatyName || `${w.name}の講和条約` });
+  const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: endDate, terms, treatyName: terms.treatyName || `${w.name}の講和条約` });
   parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, before) });
+  // 講和すれば敵対は終わり、中立に戻る（他の戦争で敵対中の組は、その戦争が終わるまで敵対のまま）
+  const stillHostile = new Set();
+  for (const w of list) if (w.id !== warId && !w.endedAt) for (const x of w.attackers) for (const y of w.defenders) stillHostile.add(x < y ? `${x}-${y}` : `${y}-${x}`);
+  const toNeutral = crossPairs(war.attackers, war.defenders).filter(([x, y]) => !stillHostile.has(x < y ? `${x}-${y}` : `${y}-${x}`));
+  parts.push(...diplomacyParts(map, toNeutral, "Neutral"));
 
   return makeCommand(`講和条約（${war.name}）`, ["politics"], parts);
 }

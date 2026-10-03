@@ -80,3 +80,33 @@ export function planSetDiplomacy(map, a, b, relation, date) {
 
   return makeCommand(`外交関係の変更（${A.name}と${B.name}）`, [], parts);
 }
+
+// ---- 二分化した関係：同盟 / 敵対 / どちらでもない（中立） ----
+// 友好・不仲のような細かい関係は設定しない。同盟を結べば「同盟」、戦争をすれば「敵対」になり、
+// 講和すれば中立に戻る。保存形式は Azgaar 互換（Ally / Enemy / Neutral）のまま。
+
+/** 複数の国の組に、同じ関係を一括で設定する部品を返す（同じ国の行を何度も書き換えても食い違わない） */
+export function diplomacyParts(map, pairs, relation) {
+  const rows = new Map();
+  const rowOf = (id) => { if (!rows.has(id)) rows.set(id, (map.pack.states[id].diplomacy ?? []).slice()); return rows.get(id); };
+  for (const [a, b] of pairs) {
+    if (a === b || !isLive(map.pack.states[a]) || !isLive(map.pack.states[b])) continue;
+    const ra = rowOf(a), rb = rowOf(b);
+    while (ra.length <= b) ra.push("x");
+    while (rb.length <= a) rb.push("x");
+    ra[b] = relation; rb[a] = relation;
+  }
+  return [...rows].map(([id, row]) => setProps(map.pack.states[id], { diplomacy: row }));
+}
+
+/** 国の組どうしの全組み合わせ */
+export function crossPairs(listA, listB) { const out = []; for (const a of listA) for (const b of listB) out.push([a, b]); return out; }
+
+/** 表示用の関係。"alliance" | "hostile" | "none"。保存値ではなく、同盟と戦争の状況から導く */
+export function simpleRelation(map, a, b) {
+  const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt);
+  if (wars.some((w) => (w.attackers.includes(a) && w.defenders.includes(b)) || (w.attackers.includes(b) && w.defenders.includes(a)))) return "hostile";
+  if ((map.ext?.data?.alliances ?? []).some((al) => !al.dissolvedAt && al.members.includes(a) && al.members.includes(b))) return "alliance";
+  return "none";
+}
+export const SIMPLE_LABEL = Object.freeze({ alliance: "同盟", hostile: "敵対", none: "中立" });

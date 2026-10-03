@@ -9,13 +9,13 @@
 // 純粋ロジック層：DOM に依存しない。乱数は core/random.js の createRandom を注入する。
 
 import { UNIT_KEYS, UNIT_BY_KEY, DEFAULT_DOCTRINE, forceHeadcount } from "./units.js";
-import { regimentsOf } from "./military.js";
+import { regimentsOf, isCoastalState } from "./military.js";
 
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
 /** 兵科ごとの役割。核は通常戦争の戦力に数えない */
-const LAND = ["infantry", "armor", "special", "advanced"];
+const LAND = ["infantry", "artillery", "armor", "special", "advanced"];
 const AIR = ["air"];
 const SEA = ["navy"];
 
@@ -130,9 +130,4 @@ export function nameWar(map, { attackers, defenders, winner, rnd, existingNames 
 function pickPlace(map, stateId, rnd) {
   const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && b.state === stateId);
   return burgs.length ? rnd.pick(burgs).name : null;
-}
-function isCoastalState(map, stateId) {
-  const c = map.pack.cells;
-  for (let i = 0; i < c.state.length; i++) if (c.state[i] === stateId && c.t?.[i] === 1) return true;
-  return false;
 }

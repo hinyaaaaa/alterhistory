@@ -36,7 +36,7 @@ export function countFreeLand(map, kind = "state") {
  *   seedCell を渡すと、そのセルから広げる（空き地でなければ無視して自動選択）
  * @returns {{cells:number[], seed:number, reason?:"no-free-land"}}
  */
-export function pickAutoTerritory(map, { kind = "state", size = "m", rnd, seedCell = -1 }) {
+export function pickAutoTerritory(map, { kind = "state", size = "m", rnd, seedCell = -1, ownCells = null }) {
   if (!KINDS.includes(kind)) throw new Error(`おまかせ領土に未対応の種類です: ${kind}`);
   const owner = map.pack.cells[kind], { biome } = map.pack.cells;
   const { cells: geom, p } = map.geometry.pack;
@@ -53,7 +53,8 @@ export function pickAutoTerritory(map, { kind = "state", size = "m", rnd, seedCe
   const ratio = (TERRITORY_SIZES[size] ?? TERRITORY_SIZES.m).ratio;
   const want = Math.max(MIN_CELLS, Math.round(landCount * ratio));
   let seed = seedCell >= 0 && free(seedCell) ? seedCell : -1;
-  if (seed < 0) {
+  let want_override = 0;
+  if (seed < 0 && !(Array.isArray(ownCells) && ownCells.length)) {
     const comp = new Int32Array(n).fill(-1);
     const sizes = [];
     for (let i = 0; i < n; i++) {
@@ -78,24 +79,52 @@ export function pickAutoTerritory(map, { kind = "state", size = "m", rnd, seedCe
     }
   }
 
+  // ---- 広げ方：地形のコスト付きで、まとまりよく広げる ----
+  //   ・山（高い所）は越えにくく、平地・低地へ先に広がる（実際の国の広がりに近い）
+  //   ・すでに自分の土地に囲まれたセルを優先し、飛び地や虫食いのギザギザを作らない
+  //   ・既存の領土を広げるとき（ownCells）は、必ずその領土に接した空き地から始める（離れた所に飛ばない）
+  const H = map.geometry.pack.h;
+  const stepCost = (j) => 1 + (H ? Math.max(0, H[j] - 45) / 25 : 0);
+  const expanding = Array.isArray(ownCells) && ownCells.length > 0;
   const inSet = new Uint8Array(n);
-  const cells = [seed];
-  inSet[seed] = 1;
-  const frontier = new Set(geom.c[seed].filter((j) => free(j) && !inSet[j]));
-  const [sx, sy] = p[seed];
-
-  while (cells.length < want && frontier.size) {
+  const cells = [];
+  const dist = new Map();           // 空き地セル → 起点からの累積コスト
+  const frontier = new Set();
+  const offer = (from, fromDist) => {
+    for (const j of geom.c[from]) {
+      if (!free(j) || inSet[j]) continue;
+      const d = fromDist + stepCost(j);
+      if (!dist.has(j) || d < dist.get(j)) dist.set(j, d);
+      frontier.add(j);
+    }
+  };
+  if (expanding) {
+    const mine = new Uint8Array(n);
+    for (const i of ownCells) mine[i] = 1;
+    for (const i of ownCells) offer(i, 0);
+    if (!frontier.size) return { cells: [], seed: -1, reason: "no-adjacent-free-land" };
+    seed = ownCells[0];
+    // 領土の何割を足すか。小さい国はそれなりに、大きい国は割合で。最低 MIN_CELLS
+    const grow = Math.max(MIN_CELLS, Math.round(Math.max(ownCells.length * ratio * 2, landCount * ratio * 0.5)));
+    want_override = grow;
+  } else {
+    inSet[seed] = 1; cells.push(seed); dist.set(seed, 0); offer(seed, 0);
+  }
+  const target = expanding ? want_override : want;
+  const near = (j) => { let c = 0; for (const k of geom.c[j]) if (inSet[k] || (expanding && ownMask(k))) c++; return c; };
+  const ownSet = expanding ? new Set(ownCells) : null;
+  const ownMask = (k) => ownSet.has(k);
+  while (cells.length < target && frontier.size) {
     let best = -1, bestKey = Infinity;
     for (const j of frontier) {
-      const d = Math.hypot(p[j][0] - sx, p[j][1] - sy);
-      const key = d * (0.75 + 0.5 * rnd.next());
+      const compact = 1 - 0.07 * Math.min(4, Math.max(0, near(j) - 1)); // 周りを囲まれているほど先に埋める
+      const key = (dist.get(j) ?? 1) * (0.85 + 0.3 * rnd.next()) * compact;
       if (key < bestKey) { bestKey = key; best = j; }
     }
     frontier.delete(best);
     if (inSet[best]) continue;
-    inSet[best] = 1;
-    cells.push(best);
-    for (const j of geom.c[best]) if (free(j) && !inSet[j]) frontier.add(j);
+    inSet[best] = 1; cells.push(best);
+    offer(best, dist.get(best) ?? 0);
   }
   return { cells, seed };
 }

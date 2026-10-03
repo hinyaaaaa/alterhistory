@@ -13,13 +13,22 @@
 // 純粋データ + 純粋関数。DOM に依存しない。
 
 export const UNIT_TYPES = Object.freeze([
-  { key: "infantry", label: "歩兵", unit: "人", icon: "⚔️", soft: 1, hard: 0.1, hardness: 0, rural: 0.9, urban: 0.5, industryShare: 0 },
-  { key: "armor", label: "機甲", unit: "台", icon: "🛡️", soft: 3, hard: 10, hardness: 0.9, rural: 0, urban: 0, industryShare: 0.35 },
-  { key: "air", label: "航空", unit: "機", icon: "✈️", soft: 5, hard: 6, hardness: 0, rural: 0, urban: 0, industryShare: 0.25 },
-  { key: "navy", label: "海軍", unit: "隻", icon: "🚢", soft: 8, hard: 14, hardness: 0.6, rural: 0, urban: 0, industryShare: 0.2, naval: true },
-  { key: "special", label: "特殊部隊", unit: "人", icon: "🎖️", soft: 1.5, hard: 0.5, hardness: 0.1, rural: 0.02, urban: 0.03, industryShare: 0.05 },
-  { key: "advanced", label: "先端技術", unit: "人", icon: "🔬", soft: 2, hard: 6, hardness: 0.5, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6 },
-  { key: "nuclear", label: "核", unit: "発", icon: "☢️", soft: 500, hard: 500, hardness: 0, rural: 0, urban: 0, industryShare: 0, minTech: 9 },
+  { key: "infantry", label: "歩兵", unit: "人", icon: "⚔️", soft: 1, hard: 0.1, hardness: 0, rural: 0.9, urban: 0.5, industryShare: 0,
+    desc: "軍の主力。安価で数が出せるが、戦車には弱い。" },
+  { key: "artillery", label: "砲兵", unit: "門", icon: "💥", soft: 4, hard: 1.5, hardness: 0.05, rural: 0.05, urban: 0.04, industryShare: 0.08, minTech: 2,
+    desc: "歩兵の支援火力。人に対して強く、歩兵が多い軍ほど効果が出る。" },
+  { key: "armor", label: "機甲", unit: "台", icon: "🛡️", soft: 3, hard: 10, hardness: 0.9, rural: 0, urban: 0, industryShare: 0.35, minTech: 4,
+    desc: "戦車・装甲車。突破力が高いが高価で、整備できる産業が要る。" },
+  { key: "air", label: "航空", unit: "機", icon: "✈️", soft: 5, hard: 6, hardness: 0, rural: 0, urban: 0, industryShare: 0.25, minTech: 4,
+    desc: "戦闘機・爆撃機。制空権を取ると陸軍の損害が減る。" },
+  { key: "navy", label: "海軍", unit: "隻", icon: "🚢", soft: 8, hard: 14, hardness: 0.6, rural: 0, urban: 0, industryShare: 0.2, naval: true, minTech: 2, needsCoast: true,
+    desc: "艦艇。制海権を取れる。海に面していない国は持てない。" },
+  { key: "special", label: "特殊部隊", unit: "人", icon: "🎖️", soft: 1.5, hard: 0.5, hardness: 0.1, rural: 0.02, urban: 0.03, industryShare: 0.05, minTech: 3,
+    desc: "空挺・山岳・特殊作戦。少数精鋭で、地形の悪い所に強い。" },
+  { key: "advanced", label: "先端技術", unit: "基", icon: "🔬", soft: 2, hard: 6, hardness: 0.5, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6,
+    desc: "ミサイル・電子戦・無人機。技術水準が高い国だけが持てる。" },
+  { key: "nuclear", label: "核", unit: "発", icon: "☢️", soft: 500, hard: 500, hardness: 0, rural: 0, urban: 0, industryShare: 0, minTech: 9,
+    desc: "通常の戦争では使われない。作戦として立案・実行する。年次では増えない。" },
 ]);
 export const UNIT_KEYS = UNIT_TYPES.map((u) => u.key);
 export const UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]));
@@ -28,11 +37,16 @@ export const UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]))
 //   部隊ごとではなく state.doctrine として国家に紐づく。soft/hard 双方への倍率と、
 //   士気（組織率）の減りにくさ morale（1が標準、小さいほど崩れにくい）を持つ。
 export const DOCTRINES = Object.freeze([
-  { key: "balanced", label: "均衡", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-  { key: "mobile", label: "機動戦", mult: { infantry: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 0.85 },
-  { key: "firepower", label: "火力主義", mult: { infantry: 1.15, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-  { key: "battleplan", label: "計画防御", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1, defenseBonus: 0.15 },
-  { key: "massassault", label: "人海戦術", mult: { infantry: 1.3, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 }, moraleLoss: 1.25, conscriptBonus: 0.3 },
+  { key: "balanced", label: "均衡", mult: { infantry: 1, artillery: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1,
+    desc: "偏りのない標準的な軍。得意も苦手もない。" },
+  { key: "mobile", label: "機動戦", mult: { infantry: 0.9, artillery: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 0.85,
+    desc: "戦車と航空機で敵の後方へ突破する。機甲・航空が強く、士気が崩れにくい。歩兵・砲兵は少し弱い。" },
+  { key: "firepower", label: "火力主義", mult: { infantry: 1.15, artillery: 1.3, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 }, moraleLoss: 1,
+    desc: "大量の砲撃で押しつぶす。歩兵と砲兵が強い。突破力はない。" },
+  { key: "battleplan", label: "計画防御", mult: { infantry: 1, artillery: 1.1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1, defenseBonus: 0.15,
+    desc: "陣地を固めて守る。守る側のとき戦力が15%上がる。攻めは普通。" },
+  { key: "massassault", label: "人海戦術", mult: { infantry: 1.3, artillery: 1, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 }, moraleLoss: 1.25, conscriptBonus: 0.3,
+    desc: "数で押す。歩兵が強く徴兵も多い。損害が出ると士気が崩れやすい。機甲・航空は弱い。" },
 ]);
 export const DOCTRINE_BY_KEY = Object.fromEntries(DOCTRINES.map((d) => [d.key, d]));
 export const DEFAULT_DOCTRINE = "balanced";
@@ -41,13 +55,13 @@ export const DEFAULT_DOCTRINE = "balanced";
 //   HOI4の「国家タイプ×兵科」補正マトリクスと同じ考え方を、このプロジェクトの兵科体系に翻訳したもの。
 //   soft/hard の両方に同じ倍率をかける（装備の質ではなく「その兵科をどれだけ揃えやすい社会か」の表現）。
 export const STATE_TYPE_MULT = Object.freeze({
-  Generic: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
-  Naval: { infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
-  Nomadic: { infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
-  Highland: { infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
-  Hunting: { infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
-  Lake: { infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
-  River: { infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 },
+  Generic: { artillery: 1, infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
+  Naval: { artillery: 1, infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
+  Nomadic: { artillery: 1, infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
+  Highland: { artillery: 1, infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
+  Hunting: { artillery: 1, infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
+  Lake: { artillery: 1, infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
+  River: { artillery: 1, infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 },
 });
 /** 国家タイプ（未知/未設定なら Generic 扱い）に対応する兵科補正マップを返す */
 export function stateTypeMult(type) {
