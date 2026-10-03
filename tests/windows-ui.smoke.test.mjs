@@ -72,11 +72,9 @@ declare().click();
 check("宣戦布告できる", simActions.listWars().length === 1);
 newBtn().click(); pick(0, 1); declare().click();
 const names = simActions.listWars().map((w) => w.name);
-check("同じ国どうしの2回目も、戦争名が重ならない", new Set(names).size === 2 && names[1].includes("第2次"), names.join(" / "));
-newBtn().click(); pick(0, 1);
-const nameInput = q("#tab-wars input[placeholder^=\"戦争の名前\"]");
-nameInput.value = names[0]; nameInput.dispatchEvent(new window.Event("input", { bubbles: true }));
-check("既にある戦争名を入れると警告が出て、宣戦布告できない", declare().disabled && q("#tab-wars").textContent.includes("既に使われています"));
+check("同じ国どうしの2回目も、自動で付く戦争名が重ならない", new Set(names).size === 2 && names.every((n) => n.length > 0), names.join(" / "));
+check("宣戦布告の瞬間に結果が判定される", simActions.listWars().every((w) => w.result && ["attacker", "defender", "stalemate"].includes(w.result.winner)));
+check("結果ウィンドウと講和ウィンドウが開く", !!q(".wo-battle"));
 
 console.log("=== 戦争：召集する部隊にチェック ===");
 const st = store.getState().map.pack.states.filter((s) => s && s.i > 0 && !s.removed);

@@ -662,3 +662,26 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .win-table tr.clickable:hover { background: var(--panel-3); }
 @media (max-width: 720px) { .win-split { grid-template-columns: 1fr; } .float-win { left: 6px !important; right: 6px; width: auto !important; } }
 .win-table tr.active { background: rgba(212,175,90,.16); }
+
+/* ---- 戦争の結果／講和条約ウィンドウ ---- */
+.wo-overlay { position: absolute; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; background: rgba(5, 6, 8, 0.6); }
+.wo-overlay.wo-peace { z-index: 70; background: rgba(5, 6, 8, 0.45); }
+.wo-box { width: min(760px, calc(100% - 24px)); max-height: calc(100% - 24px); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 20px; box-sizing: border-box; }
+.wo-peace .wo-box { width: min(560px, calc(100% - 24px)); }
+.wo-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.wo-head h2 { margin: 0; font-size: 20px; }
+.wo-sides { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: center; margin-bottom: 16px; text-align: center; font-size: 15px; }
+.wo-side.a { color: #e07a6a; } .wo-side.d { color: #6aa5e0; } .wo-vs { color: var(--muted); letter-spacing: .2em; }
+.wo-bar-wrap { margin-bottom: 12px; }
+.wo-bar-row { display: grid; grid-template-columns: 1fr auto 1fr; font-size: 12px; margin-bottom: 3px; }
+.wo-bar-label { color: var(--brass-bright); padding: 0 12px; } .wo-bar-val.d { text-align: right; }
+.wo-bar { display: flex; height: 12px; border-radius: 6px; overflow: hidden; background: var(--panel-2); }
+.wo-bar-a { background: linear-gradient(90deg, #8c2f24, #e07a6a); transition: width .8s ease; }
+.wo-bar-d { background: linear-gradient(90deg, #6aa5e0, #2f5f8c); transition: width .8s ease; }
+.wo-verdict { text-align: center; font-size: 18px; padding: 10px; border-top: 1px solid var(--line); margin-top: 8px; font-family: var(--font-serif); }
+.wo-box input, .wo-box select, .wo-box textarea { width: 100%; box-sizing: border-box; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 7px 9px; color: var(--text); margin: 4px 0 10px; }
+.wo-box h4 { margin: 12px 0 4px; color: var(--brass-bright); }
+.wo-cess { max-height: 160px; overflow: auto; margin-bottom: 8px; }
+.wo-cess-row { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
+.wo-cess-row input { width: auto; margin: 0; }
+.cur-body input, .cur-body select { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 6px; color: var(--text); }
