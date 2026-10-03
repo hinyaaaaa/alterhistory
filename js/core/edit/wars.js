@@ -15,6 +15,10 @@
 
 import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
+import { resolveWar, nameWar, applyLossFraction } from "../sim/war-engine.js";
+import { regimentsOf } from "../sim/military.js";
+import { convert, getCurrency } from "../sim/currency.js";
+import { getFinance } from "../sim/trade.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
@@ -61,6 +65,33 @@ export function planDeclareWar(map, { name, attackers, defenders, date }) {
   };
   const before = listWars(map);
   return { command: makeCommand(`宣戦布告（${war.name}）`, [], [{ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) }]), id: war.id };
+}
+
+/**
+ * 宣戦布告と同時に、戦争を即時判定する。名前は自動で付き、両陣営の全部隊が消耗する。
+ * 結果（勝敗・制海/制空/陸軍/士気の比較）は war.result に保存され、講和ウィンドウが読む。
+ * @returns {{command, id, result}}
+ */
+export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd }) {
+  const a = [...new Set(attackers)], d = [...new Set(defenders)];
+  if (!a.length || !d.length) throw new Error("攻撃側・防御側とも1カ国以上必要です");
+  for (const id of [...a, ...d]) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
+  if (a.some((id) => d.includes(id))) throw new Error("同じ国家が両陣営に入っています");
+  const result = resolveWar(map, a, d, rnd);
+  const name = nameWar(map, { attackers: a, defenders: d, winner: result.winner, rnd, existingNames: listWars(map).map((w) => w.name) });
+  const war = {
+    id: nextWarId(map), name, attackers: a, defenders: d, startedAt: date, endedAt: null,
+    battles: [], advantage: {}, muster: {},
+    result: { winner: result.winner, decisiveness: result.decisiveness, compare: result.compare, aStrength: result.aStrength, dStrength: result.dStrength },
+  };
+  const parts = [];
+  for (const [sid, frac] of Object.entries(result.losses)) {
+    const st = map.pack.states[Number(sid)];
+    for (const r of regimentsOf(st)) parts.push(setProps(r, { u: applyLossFraction(r.u, frac) }));
+  }
+  const before = listWars(map);
+  parts.push({ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) });
+  return { command: makeCommand(`宣戦布告（${war.name}）`, ["places"], parts), id: war.id, result: war.result, name };
 }
 
 /** 召集する部隊を保存する。muster は { [国家ID]: [部隊ID, ...] }。参戦国以外・存在しない部隊は取り除く */
@@ -154,7 +185,15 @@ export function suggestCessions(map, attackerId, defenderId, { maxDepth = 3 } = 
   }
   const byRegion = regions.map((cells, idx) => ({ type: "region", regionCells: cells, name: `未編入地域${idx + 1}（${cells.length}セル）`, cells: cells.length }));
 
-  return [...byProvince, ...byRegion].sort((a, b) => b.cells - a.cells);
+  // 首都を含む候補は提示しない（首都は割譲できない）
+  const capCells = new Set();
+  for (const st of map.pack.states) {
+    const cap = isLive(st) ? map.pack.burgs[st.capital] : null;
+    if (cap && !cap.removed) capCells.add(cap.cell);
+  }
+  const provHasCapital = (pid) => { for (let i = 0; i < c.province.length; i++) if (c.province[i] === pid && capCells.has(i)) return true; return false; };
+  return [...byProvince.filter((x) => !provHasCapital(x.provinceId)), ...byRegion.filter((x) => !x.regionCells.some((i) => capCells.has(i)))]
+    .sort((a, b) => b.cells - a.cells);
 }
 
 /**
@@ -173,6 +212,18 @@ export function planSignPeace(map, warId, terms, date) {
 
   const parts = [];
   const c = map.pack.cells;
+  // 首都は割譲できない（首都のあるセル・属州を含む指定は拒否する）
+  const capitalCells = new Set();
+  for (const sid of [...war.attackers, ...war.defenders]) {
+    const cap = map.pack.burgs[map.pack.states[sid]?.capital];
+    if (cap && !cap.removed) capitalCells.add(cap.cell);
+  }
+  const touchesCapital = (cells) => cells.some((i) => capitalCells.has(i));
+  for (const pid of terms.provinceIds ?? []) {
+    const cells = []; for (let i = 0; i < c.province.length; i++) if (c.province[i] === pid) cells.push(i);
+    if (touchesCapital(cells)) throw new Error("首都を含む地域は割譲できません");
+  }
+  for (const cells of terms.regionCells ?? []) if (touchesCapital(cells)) throw new Error("首都を含む地域は割譲できません");
   const moveCells = (cells) => {
     if (!cells.length) return;
     const changes = cells.map((i) => [i, c.state[i], terms.toStateId]);
@@ -190,12 +241,19 @@ export function planSignPeace(map, warId, terms, date) {
   }
   for (const cells of terms.regionCells ?? []) moveCells(cells);
   if (terms.reparations) {
-    // 賠償金は簡易的に産業力(industry)の一時的な移転として記録する（貨幣単位は持たないため）
-    const from = map.pack.states[war.defenders.includes(terms.toStateId) ? war.attackers[0] : war.defenders[0]];
-    if (from && typeof from.industry === "number") parts.push(setProps(from, { industry: Math.max(0, from.industry - terms.reparations) }));
+    // 賠償金は敗者（割譲を受ける側の相手）の国庫から勝者の国庫へ。額は支払国の通貨で指定し、受取国の通貨に換算する
+    const payerId = war.defenders.includes(terms.toStateId) ? war.attackers[0] : war.defenders[0];
+    const payer = map.pack.states[payerId], payee = map.pack.states[terms.toStateId];
+    if (payer && payee) {
+      const received = convert(map, payerId, terms.toStateId, terms.reparations);
+      const fin = (st) => getFinance(st).treasury;
+      parts.push(setProps(payer, { treasury: Math.round((fin(payer) - terms.reparations) * 100) / 100 }));
+      parts.push(setProps(payee, { treasury: Math.round((fin(payee) + received) * 100) / 100 }));
+      terms = { ...terms, reparationsCurrency: getCurrency(payer).name, reparationsReceived: Math.round(received * 100) / 100 };
+    }
   }
   const before = list;
-  const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: date, terms });
+  const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: date, terms, treatyName: terms.treatyName || `${w.name}の講和条約` });
   parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, before) });
 
   return makeCommand(`講和条約（${war.name}）`, ["politics"], parts);

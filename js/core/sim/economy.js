@@ -19,14 +19,33 @@ const GROWTH_RATE_BY_TECH = (tech) => 0.006 + (tech - 1) * 0.0016; // tech1:0.6%
 /** 技術水準ごとの産業係数（人口1000人あたりの産業力） */
 const INDUSTRY_PER_CAPITA_BY_TECH = (tech) => 0.05 + (tech - 1) * 0.09; // tech1:0.05 〜 tech10:0.86
 
+/** 人口支持上限。領土(cells)が分かればそれに比例、分からない旧データは現人口の1.5倍を下限にする */
+export function carryingCapacity(state) {
+  const tech = clampTech(state.techLevel ?? 3);
+  const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
+  const techFactor = 1 + (tech - 1) * 0.18; // 技術が高いほど同じ土地でも多くを養える
+  const cells = Number(state.cells) || 0;
+  if (cells > 0) {
+    // 初回は現人口が上限の約8割になる密度を基準にし、その後は面積と技術だけで決まる
+    const density = state.carryDensity ?? (pop > 0 ? (pop / cells) / 0.8 / techFactor : 1);
+    return Math.max(1, cells * density * techFactor);
+  }
+  return Math.max(1, pop * 1.5);
+}
+
 /** 国家に経済フィールドが無ければ既定値を補う（読み込んだ地図が旧データのままでも動くように） */
 export function ensureEconomy(state) {
   if (typeof state.techLevel !== "number") state.techLevel = 3;
   if (typeof state.industry !== "number") state.industry = 0;
-  if (typeof state.popCarryCap !== "number") {
-    // 支持上限は「現在の人口の3倍」を既定にする（際限ない成長を防ぎつつ、当面は伸びしろを持たせる）
-    state.popCarryCap = Math.max(1, (state.rural ?? 0) + (state.urban ?? 0)) * 3;
+  // 人口支持上限は領土の広さと技術水準から毎回求める（割譲・併合で領土が変わっても追従する）。
+  // 保存値 popCarryCap は表示・互換のために更新するだけで、計算の元にはしない。
+  // 初回に「領土1セルあたりの支持人口」を固定する。以後は面積と技術だけで上限が動く
+  if (typeof state.carryDensity !== "number" && Number(state.cells) > 0) {
+    const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
+    const techFactor = 1 + (clampTech(state.techLevel ?? 3) - 1) * 0.18;
+    state.carryDensity = pop > 0 ? (pop / state.cells) / 0.8 / techFactor : 1;
   }
+  state.popCarryCap = carryingCapacity(state);
   return state;
 }
 
@@ -37,12 +56,13 @@ export function ensureEconomy(state) {
 export function computeAnnualUpdate(state) {
   const tech = clampTech(state.techLevel ?? 3);
   const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
-  const cap = Math.max(1, state.popCarryCap ?? (pop * 3 || 1));
+  const cap = carryingCapacity(state);
   const r = GROWTH_RATE_BY_TECH(tech);
 
   // ロジスティック成長: 上限に近づくほど増加率が下がる
   const growth = pop > 0 ? r * pop * (1 - pop / cap) : 0;
-  const newPop = Math.max(0, pop + growth);
+  // 人口は支持上限を超えない（領土を失って上限が下がった国は、次の年次更新で上限まで下がる）
+  const newPop = Math.max(0, Math.min(pop + growth, cap));
 
   // rural/urban の比率は維持したまま増分を配分する（片方が0の国での0除算を避ける）
   const ratio = pop > 0 ? (state.urban ?? 0) / pop : 0.3;

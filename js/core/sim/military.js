@@ -31,6 +31,7 @@ export function planCreateRegiment(map, stateId, cell, { name, icon = "🛡️" 
   const state = map.pack.states[stateId];
   if (!isLive(state)) throw new Error("その国家は存在しません");
   if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("地図の外には配置できません");
+  if (map.pack.cells.state[cell] !== stateId) throw new Error("部隊は自国の領土内にしか設置できません");
   const { p } = map.geometry.pack;
   const reg = {
     i: nextRegimentId(state), name: name || `${state.name}軍`, icon, state: stateId,

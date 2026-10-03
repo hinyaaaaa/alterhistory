@@ -5,6 +5,7 @@
 
 import { setProps, makeCommand } from "../edit/commands.js";
 import { ensureEconomy, computeAnnualUpdate } from "./economy.js";
+import { ratesParts } from "./currency.js";
 import { planAnnualConscription, regimentsOf } from "./military.js";
 import { UNIT_BY_KEY } from "./units.js";
 import { computeTrade, annualRevenue, getFinance } from "./trade.js";
@@ -29,7 +30,7 @@ const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
  * 全ての実在国家に対して、年次更新（人口・産業・徴兵）を1つのコマンドにまとめて返す。
  * 変化が無い国家（人口0など）はスキップされる。
  */
-export function planAnnualUpdate(map) {
+export function planAnnualUpdate(map, rnd = null) {
   const parts = [];
   // 税収: 今年の人口・取引で計算し、軍の維持費を引いて国庫に足す（Azgaar 本家は毎回リセットするが、ここは年々ためる）
   const trade = computeTrade(map);
@@ -48,6 +49,7 @@ export function planAnnualUpdate(map) {
     const conscription = planAnnualConscription(map, state.i);
     if (conscription) parts.push(...conscription.parts);
   }
+  if (rnd) parts.push(...ratesParts(map, rnd)); // 為替レートも年ごとに動く
   if (!parts.length) return null;
-  return makeCommand("年次更新（人口・産業・徴兵・税収）", ["politics", "places"], parts);
+  return makeCommand("年次更新（人口・産業・徴兵・税収・為替）", ["politics", "places"], parts);
 }

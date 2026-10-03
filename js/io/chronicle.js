@@ -97,7 +97,9 @@ function makeNamer(map) {
     const e = list?.[id];
     if (!e || typeof e !== "object") return `${fallbackLabel}#${id}（存在しない）`;
     const base = e.fullName ?? e.name ?? `${fallbackLabel}#${id}`;
-    return e.removed ? `${base}（消滅）` : base;
+    // 名前にすでに「（消滅）」が付いている場合は二重に付けない（同一IDの表記ゆれ防止）
+    const clean = String(base).replace(/[（(]消滅[）)]/g, "").trim();
+    return e.removed ? `${clean}（消滅）` : clean;
   };
   return {
     state: (id) => (id === 0 ? "無所属" : nm(P.states, id, "国家")),
