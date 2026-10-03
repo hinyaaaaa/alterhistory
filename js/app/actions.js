@@ -4,17 +4,19 @@
 
 import { planKatakanaBurgs } from "../core/edit/katakana.js";
 import { createRandom as createKanaRandom } from "../core/random.js";
-import { entityPosition } from "../core/query.js";
+import { entityPosition, ENTITY_KINDS } from "../core/query.js";
+import { entityOutlineSegments, segmentsBounds } from "../render/edges.js";
 import { serializeAzgaar } from "../io/azgaar-writer.js";
 import { renderMapToCanvas, renderMapToSvg, canvasToPngBlob, exportFileName, todayString } from "../io/exporter.js";
 import { viewToRenderOptions } from "../render/options.js";
 import { DEFAULT_ANNOTATIONS } from "../render/layers/annotations.js";
 import { buildChronicle, serializeChronicle, chronicleToMarkdown } from "../io/chronicle.js";
+import { LAYERS, PRESETS, FILL_KEY, FILL_KINDS, isLayerOn, exclusiveFillPatch, snapshotFills } from "./layers.js";
 
 const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
-export const OVERLAYS = ["none", "state", "culture", "religion", "province"];
-export const TOGGLES = ["coast", "rivers", "routes", "burgs", "labels"];
+export const OVERLAYS = ["none", ...FILL_KINDS];
+const LAYER_KEYS = new Set(LAYERS.map((l) => l.key));
 
 const NOTICE_MS = 5000;
 const PNG_SCALE = 2;
@@ -23,10 +25,6 @@ const PNG_SCALE = 2;
  * @param deps.download      (blob, fileName) => void   ブラウザのダウンロード
  * @param deps.createCanvas  (w, h) => Canvas            PNG 書き出し用
  */
-/** 「開くとき英語の都市名をカタカナにする」設定（既定はオン） */
-export const katakanaOnLoad = () => { try { return localStorage.getItem("alterhistory.katakanaBurgs") !== "0"; } catch { return true; } };
-export const setKatakanaOnLoad = (on) => { try { localStorage.setItem("alterhistory.katakanaBurgs", on ? "1" : "0"); } catch { /* 保存できなくても動作に支障はない */ } };
-
 export function createActions({ store, viewport, renderer, load, Delaunator, download, createCanvas }) {
   const rerender = () => renderer.requestRender();
   let noticeTimer = 0;
@@ -73,16 +71,15 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
         store.replace({ ...prev, map, fileName: file.name, warnings, error: null, notice: null, busy: null, hover: null });
         viewport.fit();
         rerender();
-        if (katakanaOnLoad()) {
-          const n = this.katakanaBurgs(file.name);
-          if (n) showNotice(`英語名の都市 ${n} 件をカタカナにしました（「元に戻す」で英語名に戻せます）`);
-        }
+        // 英語の都市名のカタカナ化は必須の自動処理（切り替えは無い）。1回の操作として Undo で戻せる
+        const n = this.katakanaBurgs(file.name);
+        if (n) showNotice(`英語名の都市 ${n} 件をカタカナにしました（「元に戻す」で英語名に戻せます）`);
       } catch (e) {
         store.update((s) => { s.busy = null; s.error = e.message; });
       }
     },
 
-    /** 英語名の都市をカタカナにする。付け替えた件数を返す（Undo 1回で戻る） */
+    /** 英語名の都市をカタカナにする（地図を開くたびに自動で呼ばれる）。付け替えた件数を返す（Undo 1回で戻る） */
     katakanaBurgs(seedText = "katakana") {
       const map = store.getState().map;
       if (!map) return 0;
@@ -103,12 +100,29 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
     pan(dx, dy) { viewport.pan(dx, dy); renderer.interact(); },
 
     setView(patch) { store.update((s) => Object.assign(s.view, patch)); rerender(); },
-    setOverlay(kind) { if (OVERLAYS.includes(kind)) this.setView({ overlay: kind }); },
+    /** 色分けを1種類だけにする（"none" なら全部消す）。絵を塗る間の切り替えなどに使う */
+    setOverlay(kind) { if (OVERLAYS.includes(kind)) this.setView(exclusiveFillPatch(kind === "none" ? null : kind)); },
+    /** 色分けの on/off と凡例の種類をまとめて取り出す／戻す */
+    getFills() { return snapshotFills(store.getState().view); },
+    restoreFills(snap) { if (snap) this.setView({ ...snap }); },
+    /** レイヤー（地形・標高・国家・文化・宗教・属州・国境・海岸線・河川・道路・都市・ゾーン・旅の線・名前）を1つ切り替える。独立なので、他は変わらない */
     toggle(name) {
-      if (!TOGGLES.includes(name)) return;
-      this.setView({ [name]: !store.getState().view[name] });
+      if (!LAYER_KEYS.has(name)) return;
+      const view = store.getState().view;
+      const on = !isLayerOn(view, name);
+      const patch = { [name]: on };
+      // 色分けをオンにしたら、凡例もその種類に切り替える（いま見たいのはそれ）
+      const kind = FILL_KINDS.find((k) => FILL_KEY[k] === name);
+      if (kind && on) patch.legendKind = kind;
+      this.setView(patch);
     },
-    toggleBase() { this.setView({ base: store.getState().view.base === "biome" ? "height" : "biome" }); },
+    /** プリセット（政治・文化・宗教・属州・地形・標高）。そのプリセットが決めるレイヤーだけを一度に切り替える */
+    applyPreset(id) {
+      const p = PRESETS.find((x) => x.id === id);
+      if (p) this.setView({ ...p.set });
+    },
+    /** 凡例に出す色分けの種類を選ぶ（オンの色分けの中から） */
+    setLegendKind(kind) { if (FILL_KINDS.includes(kind)) this.setView({ legendKind: kind }); },
 
     /** 凡例の項目を選んだとき、その場所へ移動する */
     locate(entity) {
@@ -117,6 +131,27 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
       if (!pos) return;
       viewport.centerOn(pos[0], pos[1], Math.max(viewport.k, viewport.fitK * 3));
       rerender();
+    },
+
+    /**
+     * 凡例の項目を選んだとき、その実体の外周がちょうど画面に収まるように移動・拡大縮小する。
+     * （固定倍率で中心へ寄せるだけだと、大きな国では境界線が画面の外に出てしまい、強調が見えない）
+     * 小さな実体は、見失わない程度（全体表示の8倍まで）に拡大する。外周が求まらなければ locate と同じ動き。
+     * @returns {boolean} 外周に合わせて動かせたか
+     */
+    focusEntity(kind, entity) {
+      const map = store.getState().map;
+      const def = ENTITY_KINDS[kind];
+      if (!map?.geometry || !def) return false;
+      const box = segmentsBounds(entityOutlineSegments(map.geometry, def.cells(map), entity.id, map.pack.cells.biome));
+      if (!box) { this.locate(entity); return false; }
+      const margin = 56; // 画面の端と外周のあいだの余白(px)
+      const bw = Math.max(1, box.x1 - box.x0), bh = Math.max(1, box.y1 - box.y0);
+      const kFit = Math.min((viewport.screenWidth - margin * 2) / bw, (viewport.screenHeight - margin * 2) / bh);
+      const k = Math.max(viewport.fitK, Math.min(kFit, viewport.fitK * 8, viewport.maxK));
+      viewport.centerOn((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, k);
+      rerender();
+      return true;
     },
 
     /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */

@@ -396,7 +396,7 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
     d.append(terr);
 
     const foot = el("div", "b-actions");
-    foot.append(btn("", "全設定を開く ↗", "属性・文章・外交など、すべての設定を左のパネルで開く", () => panels.openEntity(kind, e.i)));
+    foot.append(btn("", "全設定を開く ↗", "文章・外交など、すべての設定を左のパネルで開く", () => panels.openEntity(kind, e.i)));
     d.append(foot);
     return d;
   }

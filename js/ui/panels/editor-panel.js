@@ -13,8 +13,6 @@ const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls)
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
 const STATE_SUBTABS = [
   { key: "info", label: "基本情報", icon: "⛭" },
-  { key: "diplomacy", label: "外交", icon: "⛨" },
-  { key: "military", label: "軍事", icon: "⚔" },
   { key: "provinces", label: "属州", icon: "▦" },
 ];
 
@@ -26,25 +24,13 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   // panels（wars/alliances/military）は循環importを避けるため main.js から後付けで渡す
   let panels = initialPanels ?? null;
 
-  // 軍事・戦争・同盟の各パネルは、index.html の #panel-mounts に1つずつ実体がある。
-  // 国家タブのサブタブを開くとこの実体を editor-panel の中へ「移動」して見せるが、render() は
-  // 毎回 root の中身を丸ごと消すため、移動したままだと実体が文書から外れて二度と見つからなくなる。
-  // そこで参照を起動時に握っておき、再描画の直前に必ず元の置き場へ戻す。
-  const mountHome = byId("panel-mounts");
-  const mounts = { regiments: byId("tab-regiments"), wars: byId("tab-wars"), alliances: byId("tab-alliances") };
-  function reclaimMounts() {
-    for (const m of Object.values(mounts)) { m.hidden = true; mountHome.append(m); }
-  }
-
   function open(kind, id) { current = { kind, id }; if (kind === "state") stateSubtab = "info"; render(); }
   function close() {
     current = null;
-    panels?.military?.unlock?.();
     render();
   }
 
   function render() {
-    reclaimMounts(); // 中身を消す前に、持ち出していたパネルを元の置き場へ戻す
     root.replaceChildren();
     if (!current) { root.hidden = true; return; }
     root.hidden = false;
@@ -72,10 +58,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     if (!isLive(e)) { close(); return; }
     title.textContent = `🏳 ${e.fullName ?? e.name}`;
 
-    // 選択中でないサブタブの持ち出しパネル（軍事・戦争・同盟）は、
-    // DOMツリーから外れて孤立するだけで実害は無いが、hidden を戻して一貫させる
-    if (stateSubtab !== "military") panels?.military?.unlock?.();
-
     const tabs = el("div", "dialog-tabs");
     tabs.setAttribute("role", "tablist");
     for (const t of STATE_SUBTABS) {
@@ -92,8 +74,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     root.append(body);
 
     if (stateSubtab === "info") renderStateInfo(map, e, body);
-    else if (stateSubtab === "diplomacy") renderStateDiplomacy(map, e, body);
-    else if (stateSubtab === "military") renderStateMilitary(map, e, body);
     else if (stateSubtab === "provinces") renderStateProvinces(map, e, body);
   }
 
@@ -104,8 +84,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(...provisionalNote("state", e.i));
     form.append(techLevelSection(e.i));
     form.append(doctrineSection(e.i));
-    form.append(growthRateSection(e.i));
-    form.append(attributesField("state", e.i));
     form.append(noteField(map, "state", e.i));
     body.append(form);
   }
@@ -133,31 +111,12 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     return wrap;
   }
 
-  function renderStateDiplomacy(map, e, body) {
+  /** 外交ウィンドウ用：外交の一覧表と、国ごとの関係の設定（戦争・同盟は専用の場所にある） */
+  function buildDiplomacy(map, focusId) {
     const form = el("div", "editor-form");
-    form.append(diplomacyMatrix(map, e.i));
-    form.append(diplomacySection(map, e.i));
-    body.append(form);
-
-    // 戦争・同盟は国をまたぐ全体管理なので、外交サブタブの下に続けて表示する
-    if (panels?.wars) {
-      const warsWrap = el("div", "editor-section");
-      warsWrap.append(el("h4", "", "戦争"));
-      const warsMount = mounts.wars;
-      warsWrap.append(warsMount);
-      warsMount.hidden = false;
-      body.append(warsWrap);
-      panels.wars.render();
-    }
-    if (panels?.alliances) {
-      const alliancesWrap = el("div", "editor-section");
-      alliancesWrap.append(el("h4", "", "同盟"));
-      const alliancesMount = mounts.alliances;
-      alliancesWrap.append(alliancesMount);
-      alliancesMount.hidden = false;
-      body.append(alliancesWrap);
-      panels.alliances.render();
-    }
+    form.append(diplomacyMatrix(map, focusId));
+    form.append(diplomacySection(map, focusId));
+    return form;
   }
 
   /** 全国家×全国家の関係を一覧できるマトリクス表（Azgaarの外交表に相当）。
@@ -227,14 +186,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     sel.addEventListener("blur", restore);
     td.append(sel);
     sel.focus();
-  }
-
-  function renderStateMilitary(map, e, body) {
-    if (!panels?.military) { body.append(el("p", "muted", "軍事パネルが利用できません")); return; }
-    panels.military.lockToState(e.i);
-    const mount = mounts.regiments;
-    body.append(mount);
-    mount.hidden = false;
   }
 
   function renderStateProvinces(map, e, body) {
@@ -339,24 +290,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     return wrap;
   }
 
-  function growthRateSection(stateId) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "人口増加率"));
-    const attrs = editActions.getAttributes("state", stateId);
-    const existing = attrs.find(([k]) => k === "人口増加率");
-    const row = el("label", "field");
-    const input = document.createElement("input");
-    input.type = "number"; input.step = "0.1"; input.value = existing ? existing[1] : "1.0";
-    input.addEventListener("change", () => {
-      const next = attrs.filter(([k]) => k !== "人口増加率");
-      next.push(["人口増加率", input.value]);
-      editActions.setAttributes("state", stateId, next);
-    });
-    row.append(el("span", "field-label", "年あたりの倍率（例：1.0＝現状維持）"), input);
-    wrap.append(row);
-    return wrap;
-  }
-
   function renderCell(map, title, body) {
     const info = describeCell(map, current.id);
     title.textContent = `セル #${current.id}`;
@@ -439,7 +372,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(textField("名前", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v), () => editActions.suggestName(kind, { id: e.i })));
     form.append(...provisionalNote(kind, e.i));
     if (kind === "culture") form.append(nameStyleSection(e.i));
-    form.append(attributesField(kind, e.i));
     form.append(noteField(map, kind, e.i));
     body.append(form);
   }
@@ -494,34 +426,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
       row.append(sel);
       wrap.append(row);
     }
-    return wrap;
-  }
-
-  function attributesField(kind, id) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "追加の属性"));
-    const list = el("div", "attr-list");
-    const entries = editActions.getAttributes(kind, id);
-    const rowsState = entries.length ? entries.slice() : [["", ""]];
-
-    const renderRows = () => {
-      list.replaceChildren();
-      rowsState.forEach((pair, i) => {
-        const row = el("div", "attr-row");
-        const k = document.createElement("input"); k.placeholder = "項目名（例：技術水準）"; k.value = pair[0];
-        const v = document.createElement("input"); v.placeholder = "値（例：中世）"; v.value = pair[1];
-        const commit = () => { rowsState[i] = [k.value, v.value]; editActions.setAttributes(kind, id, rowsState.filter(([kk]) => kk.trim())); };
-        k.addEventListener("change", commit); v.addEventListener("change", commit);
-        const rm = el("button", "attr-remove", "−"); rm.type = "button";
-        rm.addEventListener("click", () => { rowsState.splice(i, 1); editActions.setAttributes(kind, id, rowsState.filter(([kk]) => kk.trim())); renderRows(); });
-        row.append(k, v, rm);
-        list.append(row);
-      });
-    };
-    renderRows();
-    const add = el("button", "", "＋ 項目を追加"); add.type = "button";
-    add.addEventListener("click", () => { rowsState.push(["", ""]); renderRows(); });
-    wrap.append(list, add);
     return wrap;
   }
 
@@ -606,6 +510,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     openMarker: (id) => open("marker", id),
     openEntity: (kind, id) => open(kind, id),
     close,
+    buildDiplomacy,
     promptBurgName(cb, cell) {
       promptDialog("新しい都市の名前", "", {
         suggest: () => editActions.suggestName("burg", { cell }),

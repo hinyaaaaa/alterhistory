@@ -18,15 +18,14 @@ export function createBuilderActions({ store, editActions, editMode, actions }) 
 
   // 塗っている間だけ、塗る対象の色分けに切り替える（宗教を塗るのに国家の色分けのままだと、
   // 塗った結果が見えない）。終わったら元の色分けに戻す。
-  let savedOverlay = null;
+  let savedFills = null;
   function showOverlay(kind) {
-    const cur = store.getState().view.overlay;
-    if (savedOverlay == null) savedOverlay = cur;
-    if (cur !== kind) actions.setOverlay(kind);
+    if (savedFills == null) savedFills = actions.getFills();
+    actions.setOverlay(kind);
   }
   function restoreOverlay() {
-    if (savedOverlay != null && store.getState().view.overlay !== savedOverlay) actions.setOverlay(savedOverlay);
-    savedOverlay = null;
+    if (savedFills != null) actions.restoreFills(savedFills);
+    savedFills = null;
   }
 
   /** 塗るツールに切り替え、塗り先を id に合わせる（地図編集パネルの選択欄も同期する） */

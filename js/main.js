@@ -14,6 +14,9 @@ import { initLegend } from "./ui/legend.js";
 import { initFontsSync } from "./ui/fonts-sync.js";
 import { initChrome } from "./ui/chrome.js";
 import { initSidebarToggle } from "./ui/sidebar-toggle.js";
+import { initPanelDock } from "./ui/panel-dock.js";
+import { initSettingsWindows } from "./ui/settings-windows.js";
+import { initHighlight } from "./ui/highlight.js";
 import { initToolbar } from "./ui/toolbar.js";
 import { initStatusBar } from "./ui/status-bar.js";
 import { initBanner } from "./ui/banner.js";
@@ -44,7 +47,7 @@ function start() {
 
   const store = createStore({
     map: null, fileName: "", warnings: [], error: null, notice: null, busy: null, hover: null,
-    view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto" },
+    view: { biomes: true, heights: false, states: true, cultures: false, religions: false, provinces: false, borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto", legendKind: "state" },
     editTool: "select", brushRadius: 40,
     timeRunning: false, timeSpeed: 120000, hint: null,
     exportOpts: { title: true, legend: true, scaleBar: true },
@@ -83,8 +86,10 @@ function start() {
     consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell),
   };
   editorPanel.setPanels?.(panels); // editor-panel.js 内で使う panels（wars/alliances/military）を後から渡す
+  initSettingsWindows({ store, panels, editorPanel, editActions, actions }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
 
+  deps.highlight = initHighlight(deps); // 凡例の項目を押したとき、境界線を赤く光らせる
   initBanner(deps);
   initToolbar(deps);
   initStatusBar(deps);
@@ -97,6 +102,11 @@ function start() {
   editModeRef = editMode;
   const editToolbar = initEditToolbar({ store, editMode, editActions });
   const editPanel = initEditPanel();
+  // 右のパネルは × で小さくでき、元の場所（右端）の小さなボタンで開き直せる
+  initPanelDock([
+    { panel: "edit-panel", close: "edit-panel-close", tab: "tab-edit-panel", open: "btn-edit-mode" },
+    { panel: "builder-panel", close: "builder-close", tab: "tab-builder-panel", open: "btn-builder" },
+  ]);
   const builderActions = createBuilderActions({ store, editActions, editMode, actions });
   const economyView = createEconomyView({ store, editActions, builderActions });
   const travelView = createTravelView({ store, editActions, editMode, viewport, actions });
@@ -117,7 +127,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions, editorPanel, builderActions, historyBuilder };
+  globalThis.alterhistory = { store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions, historyBuilder };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

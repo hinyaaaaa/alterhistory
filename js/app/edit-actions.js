@@ -5,7 +5,6 @@ import { PAINT_KINDS, planPaint, planBiomePaint } from "../core/edit/paint.js";
 import { planAddMarker, planMoveMarker, planEditMarker, planRemoveMarker } from "../core/edit/markers.js";
 import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapital, whyCannotRemoveBurg } from "../core/edit/burgs.js";
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
-import { planSetAttributes, getAttributes } from "../core/edit/attributes.js";
 import { planSetDiplomacy, getRelation } from "../core/edit/diplomacy.js";
 import { planRenameEntity, planAddEntity, planAddProvince } from "../core/edit/entities.js";
 import { planDeclareIndependence, planMergeStates } from "../core/edit/sovereignty.js";
@@ -120,9 +119,6 @@ export function createEditActions({ store, renderer }) {
     getNote(type, id) { return withMap((map) => getNote(map, type, id)) ?? ""; },
     setNote(type, id, text) { withMap((map) => safeRun("文章の保存", () => commitOrThrow(planSetNote(map, type, id, text)))); },
     noteTarget(type, id) { return withMap((map) => noteTarget(map, type, id)) ?? null; },
-
-    getAttributes(kind, id) { return withMap((map) => getAttributes(map, kind, id)) ?? []; },
-    setAttributes(kind, id, entries) { withMap((map) => safeRun("属性の保存", () => commitOrThrow(planSetAttributes(map, kind, id, entries)))); },
 
     getRelation(a, b) { return withMap((map) => getRelation(map, a, b)) ?? null; },
     setDiplomacy(a, b, relation) { withMap((map) => safeRun("外交関係の変更", () => commitOrThrow(planSetDiplomacy(map, a, b, relation, currentDate())))); },

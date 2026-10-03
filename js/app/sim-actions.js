@@ -4,7 +4,8 @@
 import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegiment, regimentsOf } from "../core/sim/military.js";
 import { planResolveBattle, planResolveMuster } from "../core/sim/battle.js";
 import { planCreateAlliance, planEditAlliance, planDissolveAlliance, listAlliances, alliancesOf } from "../core/edit/alliances.js";
-import { planDeclareWar, planRecordBattle, suggestCessions, planSignPeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
+import { planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, planSignPeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
+import { forcePower } from "../core/sim/units.js";
 import { planAddMarker } from "../core/edit/markers.js";
 import { createRandom } from "../core/random.js";
 
@@ -106,6 +107,25 @@ export function createSimActions({ store, renderer }) {
         } finally { store.endBatch(); }
         rerender();
         return r.id;
+      }));
+    },
+    warNameTaken(name, exceptId) { return withMap((map) => warNameTaken(map, name, exceptId)) ?? false; },
+    /** 召集する部隊（{ [国家ID]: [部隊ID...] }）を保存する */
+    setMuster(warId, muster) { withMap((map) => safeRun("部隊の召集", () => { store.commit(planSetMuster(map, warId, muster)); rerender(); })); },
+    /** ある国の、その戦争に召集された部隊の合計戦力 */
+    musterPower(war, stateId) {
+      return withMap((map) => {
+        const ids = new Set(war.muster?.[stateId] ?? []);
+        return Math.round(regimentsOf(map.pack.states[stateId] ?? {}).filter((r) => ids.has(r.i)).reduce((n, r) => n + forcePower(r.u), 0));
+      }) ?? 0;
+    },
+    /** 戦闘を戦争に記録する（勝敗は利用者が決める。戦力は召集した部隊の合計を一緒に残す） */
+    recordBattle(warId, { attackerState, defenderState, winner }) {
+      withMap((map) => safeRun("戦闘の記録", () => {
+        const war = listWars(map).find((w) => w.id === warId);
+        const result = { winner, aPower: this.musterPower(war, attackerState), dPower: this.musterPower(war, defenderState) };
+        store.commit(planRecordBattle(map, warId, { attackerState, defenderState, result, date: currentDate() }));
+        rerender();
       }));
     },
     suggestCessions(attackerId, defenderId) { return withMap((map) => suggestCessions(map, attackerId, defenderId)) ?? []; },
