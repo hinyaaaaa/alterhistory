@@ -54,15 +54,20 @@ export function openTimeSettingsDialog({ store, timeActions, editActions }) {
   const fromSuffix = el("span", "", "年から");
   newRow.append(nameInput, fromInput, fromSuffix);
   dialog.append(newRow);
-  const addEraBtn = el("button", "", "時代を追加");
+  const eraMsg = el("p", "hint era-msg", ""); // 入力不足などを、押したその場で見える位置に出す
+  let editingId = null; // null=新規追加 / 数値=その時代を更新
+  const addEraBtn = el("button", "primary", "時代を追加");
   addEraBtn.type = "button";
   addEraBtn.addEventListener("click", () => {
-    if (!nameInput.value.trim() || !fromInput.value) return;
-    editActions.setEra({ name: nameInput.value, fromYear: fromInput.value });
-    nameInput.value = ""; fromInput.value = "";
+    if (!nameInput.value.trim()) { eraMsg.textContent = "時代の名前を入力してください"; nameInput.focus(); return; }
+    if (!fromInput.value || Number(fromInput.value) < 1) { eraMsg.textContent = "開始年を1以上の数字で入力してください"; fromInput.focus(); return; }
+    editActions.setEra({ id: editingId ?? undefined, name: nameInput.value, fromYear: fromInput.value });
+    // 操作が失敗した場合（画面上部のエラー欄に出る）でも、ここで気づけるよう一覧を再描画する
+    nameInput.value = ""; fromInput.value = ""; eraMsg.textContent = "";
+    editingId = null; addEraBtn.textContent = "時代を追加";
     renderEraList();
   });
-  dialog.append(addEraBtn);
+  dialog.append(addEraBtn, eraMsg);
 
   function renderEraList() {
     eraList.replaceChildren();
@@ -75,15 +80,7 @@ export function openTimeSettingsDialog({ store, timeActions, editActions }) {
       editBtn.type = "button";
       editBtn.addEventListener("click", () => {
         nameInput.value = e.name; fromInput.value = String(e.fromYear);
-        addEraBtn.textContent = "この内容で更新";
-        addEraBtn.onclick = () => {
-          if (!nameInput.value.trim() || !fromInput.value) return;
-          editActions.setEra({ id: e.id, name: nameInput.value, fromYear: fromInput.value });
-          nameInput.value = ""; fromInput.value = "";
-          addEraBtn.textContent = "時代を追加";
-          addEraBtn.onclick = null;
-          renderEraList();
-        };
+        editingId = e.id; addEraBtn.textContent = "この内容で更新"; eraMsg.textContent = "";
       });
       const delBtn = el("button", "danger", "削除");
       delBtn.type = "button";

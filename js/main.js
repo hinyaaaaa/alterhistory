@@ -36,6 +36,7 @@ import { createTimeActions } from "./app/time-actions.js";
 import { initTimeBar } from "./ui/time-bar.js";
 import { initMilitaryPanel } from "./ui/panels/military-panel.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
+import { initWarOutcome } from "./ui/war-outcome-window.js";
 import { initAlliancesPanel } from "./ui/panels/alliances-panel.js";
 
 function start() {
@@ -70,7 +71,8 @@ function start() {
   const simActions = createSimActions({ store, renderer });
   const timeActions = createTimeActions({ store, renderer });
   const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
-  const warsPanel = initWarsPanel({ store, simActions });
+  const warOutcome = initWarOutcome({ store, simActions });
+  const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome });
   const alliancesPanel = initAlliancesPanel({ store, simActions });
   // editMode は editorPanel より後に作るが、editorPanel（国家タブの属州サブタブ）から
   // 「属州を塗るツールに切り替える」ために参照したいので、後で編集パネルに差し込む
@@ -86,7 +88,7 @@ function start() {
     consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell),
   };
   editorPanel.setPanels?.(panels); // editor-panel.js 内で使う panels（wars/alliances/military）を後から渡す
-  initSettingsWindows({ store, panels, editorPanel, editActions, actions }); // 設定メニューと、戦争・外交・軍事のウィンドウ
+  initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
 
   deps.highlight = initHighlight(deps); // 凡例の項目を押したとき、境界線を赤く光らせる

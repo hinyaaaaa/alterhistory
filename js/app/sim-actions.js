@@ -4,10 +4,11 @@
 import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegiment, regimentsOf } from "../core/sim/military.js";
 import { planResolveBattle, planResolveMuster } from "../core/sim/battle.js";
 import { planCreateAlliance, planEditAlliance, planDissolveAlliance, listAlliances, alliancesOf } from "../core/edit/alliances.js";
-import { planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, planSignPeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
+import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, planSignPeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
 import { forcePower } from "../core/sim/units.js";
 import { planAddMarker } from "../core/edit/markers.js";
 import { createRandom } from "../core/random.js";
+import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
 
 export function createSimActions({ store, renderer }) {
   const rnd = createRandom(Date.now());
@@ -109,6 +110,27 @@ export function createSimActions({ store, renderer }) {
         return r.id;
       }));
     },
+    /** 宣戦布告と同時に即判定する。名前は自動。結果 { id, name, result } を返す（失敗時は undefined） */
+    declareWarInstant(attackers, defenders) {
+      return withMap((map) => {
+        let out;
+        safeRun("宣戦布告", () => {
+          const r = planDeclareAndResolveWar(map, { attackers, defenders, date: currentDate(), rnd });
+          store.beginBatch(r.command.label ?? "宣戦布告");
+          try {
+            store.commit(r.command);
+            putMarker("war", "⚔️", capitalCell(store.getState().map, attackers[0]), `${dateLabel()} ${r.name}`);
+          } finally { store.endBatch(); }
+          rerender();
+          out = { id: r.id, name: r.name, result: r.result };
+        });
+        return out;
+      });
+    },
+    getCurrency(stateId) { return withMap((map) => getCurrency(map.pack.states[stateId])); },
+    /** 1 from通貨 = ? to通貨 */
+    exchangeRate(fromId, toId) { return withMap((map) => exchangeRate(map, fromId, toId)) ?? 1; },
+    setCurrency(stateId, patch) { withMap((map) => safeRun("通貨の設定", () => { store.commit(planSetCurrency(map, stateId, patch)); rerender(); })); },
     warNameTaken(name, exceptId) { return withMap((map) => warNameTaken(map, name, exceptId)) ?? false; },
     /** 召集する部隊（{ [国家ID]: [部隊ID...] }）を保存する */
     setMuster(warId, muster) { withMap((map) => safeRun("部隊の召集", () => { store.commit(planSetMuster(map, warId, muster)); rerender(); })); },

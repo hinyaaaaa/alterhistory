@@ -9,10 +9,12 @@
 
 import { advanceMonth, createWorldTime } from "../core/sim/time.js";
 import { planAnnualUpdate } from "../core/sim/world.js";
+import { createRandom } from "../core/random.js";
 
 const DEFAULT_MS_PER_MONTH = (2 * 60 * 1000) / 12; // 既定: 1年=2分 → 1ヶ月=10秒
 
 export function createTimeActions({ store, renderer }) {
+  const rates = createRandom(Date.now() ^ 0x5eed);
   let timer = null;
   let msPerMonth = DEFAULT_MS_PER_MONTH;
 
@@ -22,7 +24,7 @@ export function createTimeActions({ store, renderer }) {
     const { time, yearChanged } = advanceMonth(map.worldTime);
     store.update((s) => { s.map.worldTime = time; });
     if (yearChanged) {
-      const cmd = planAnnualUpdate(map);
+      const cmd = planAnnualUpdate(map, rates);
       if (cmd) store.commit(cmd);
     }
     renderer.requestRender();

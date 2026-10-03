@@ -10,7 +10,7 @@ import { alertDialog } from "../dialogs.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 
-export function initWarsPanel({ store, simActions }) {
+export function initWarsPanel({ store, simActions, getOutcome = () => null }) {
   const root = byId("tab-wars");
   let selected = null;   // 選択中の戦争ID（null のときは一覧だけ）
   let creating = false;  // 宣戦布告フォームを開いているか
@@ -52,9 +52,7 @@ export function initWarsPanel({ store, simActions }) {
   function declareForm(map, states) {
     const wrap = el("div", "editor-section");
     wrap.append(el("h4", "", "宣戦布告"));
-    const nameInput = document.createElement("input");
-    nameInput.placeholder = "戦争の名前（省略すると自動で付きます）"; nameInput.value = draft.name;
-    const warn = el("p", "muted", "");
+    const warn = el("p", "muted", "宣戦布告すると、その場で戦争の勝敗が判定されます。戦争の名前は自動で付きます。");
     const go = el("button", "danger", "宣戦布告する"); go.type = "button";
     const sideBox = (label, key, other) => {
       const box = el("div", "member-picker");
@@ -62,23 +60,17 @@ export function initWarsPanel({ store, simActions }) {
       for (const s of states) {
         const l = el("label", ""); const cb = document.createElement("input"); cb.type = "checkbox";
         cb.checked = draft[key].has(s.i); cb.disabled = draft[other].has(s.i);
-        cb.addEventListener("change", () => { if (cb.checked) draft[key].add(s.i); else draft[key].delete(s.i); draft.name = nameInput.value; render(); });
+        cb.addEventListener("change", () => { if (cb.checked) draft[key].add(s.i); else draft[key].delete(s.i); render(); });
         l.append(cb, document.createTextNode(s.name)); box.append(l);
       }
       return box;
     };
-    const sync = () => {
-      const taken = nameInput.value.trim() && simActions.warNameTaken(nameInput.value);
-      warn.textContent = taken ? `「${nameInput.value.trim()}」という戦争名は既に使われています` : "";
-      go.disabled = !!taken || !draft.attackers.size || !draft.defenders.size;
-    };
-    nameInput.addEventListener("input", () => { draft.name = nameInput.value; sync(); });
-    go.addEventListener("click", async () => {
-      if (simActions.warNameTaken(nameInput.value)) { await alertDialog("その戦争名は既に使われています"); return; }
-      const id = simActions.declareWar([...draft.attackers], [...draft.defenders], nameInput.value.trim() || undefined);
-      if (id != null) { selected = id; creating = false; draft = { name: "", attackers: new Set(), defenders: new Set() }; render(); }
+    const sync = () => { go.disabled = !draft.attackers.size || !draft.defenders.size; };
+    go.addEventListener("click", () => {
+      const out = simActions.declareWarInstant([...draft.attackers], [...draft.defenders]);
+      if (out) { selected = out.id; creating = false; draft = { name: "", attackers: new Set(), defenders: new Set() }; render(); getOutcome()?.show(out.id); }
     });
-    wrap.append(nameInput, warn, sideBox("攻撃側", "attackers", "defenders"), sideBox("防御側", "defenders", "attackers"), go);
+    wrap.append(warn, sideBox("攻撃側", "attackers", "defenders"), sideBox("防御側", "defenders", "attackers"), go);
     sync();
     return wrap;
   }

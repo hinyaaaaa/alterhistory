@@ -11,7 +11,7 @@ import { FILL_KEY } from "../app/layers.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 
-export function initSettingsWindows({ store, panels, editorPanel, editActions, actions }) {
+export function initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }) {
   const wins = initWindows();
   const noMap = () => el("p", "muted", "地図を開いてください");
 
@@ -71,6 +71,9 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
     overview.append(t);
   }
   wins.register("military", { title: "🛡 軍事", width: 900, body: milBody, onOpen: () => { renderMil(); panels.military.render(); } });
+
+  // ---- 通貨・為替 ----
+  if (warOutcome) wins.register("currency", { title: "💱 通貨・為替", width: 760, body: warOutcome.currencyBody, onOpen: () => warOutcome.renderCurrency() });
 
   // 開いている間は、編集のたびに表を最新にする（戦争・同盟の中身は各パネルが自分で更新する）
   store.subscribe((_s, change) => {
