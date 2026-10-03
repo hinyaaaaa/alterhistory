@@ -44,26 +44,34 @@
 
     <!-- 地図を開いたあとの主な作業場所。ここから右のパネルを開く -->
     <div class="topbar-group topbar-modes" role="group" aria-label="作業の種類">
-      <button id="btn-builder" class="builder-fab" title="歴史をつくる — 国・宗教・文化をかんたんに作る" aria-expanded="false" aria-controls="builder-panel">
+      <button id="btn-builder" class="builder-fab" hidden title="歴史をつくる — 国・宗教・文化をかんたんに作る" aria-expanded="false" aria-controls="builder-panel">
         <span class="tool-icon">🏛</span> 歴史をつくる
       </button>
-      <button id="btn-edit-mode" class="edit-mode-fab" title="地図編集モード — レイヤー・文化・宗教・地形・都市建設・目印" aria-expanded="false" aria-controls="edit-panel">
+      <button id="btn-edit-mode" class="edit-mode-fab" hidden title="地図編集モード — レイヤー・文化・宗教・地形・都市建設・目印" aria-expanded="false" aria-controls="edit-panel">
         <span class="tool-icon">✎</span> 地図編集
       </button>
       <!-- 設定：各設定のウィンドウへ飛ぶ入口（Azgaar の Overview に相当）。地図の上に重ねて開く -->
       <details id="settings-menu" class="menu">
         <summary title="国家・戦争・外交・軍事などの設定画面を開く">設定 ▾</summary>
         <div class="menu-list settings-pop" role="menu" aria-label="設定">
-          <span class="lp-group">一覧（左のパネル）</span>
-          <button type="button" role="menuitem" data-open-list="state">🏳 国家</button>
-          <button type="button" role="menuitem" data-open-list="culture">🎭 文化</button>
-          <button type="button" role="menuitem" data-open-list="religion">✦ 宗教</button>
-          <button type="button" role="menuitem" data-open-list="province">▦ 属州</button>
-          <span class="lp-group">ウィンドウ（地図の上に開く）</span>
+          <span class="lp-group">つくる・編集する</span>
+          <button type="button" role="menuitem" data-click="btn-builder">🏛 歴史をつくる</button>
+          <button type="button" role="menuitem" data-click="btn-edit-mode">✎ 地図編集</button>
+          <span class="lp-group">一覧（開いて各要素を設定）</span>
+          <button type="button" role="menuitem" data-open-win="list-state">🏳 国家</button>
+          <button type="button" role="menuitem" data-open-win="list-culture">🎭 文化</button>
+          <button type="button" role="menuitem" data-open-win="list-religion">✦ 宗教</button>
+          <button type="button" role="menuitem" data-open-win="list-province">▦ 属州</button>
+          <button type="button" role="menuitem" data-open-win="genealogy-religion">🌳 宗教の系譜図</button>
+          <button type="button" role="menuitem" data-open-win="genealogy-culture">🌳 文化の系譜図</button>
+          <span class="lp-group">国家どうし・世界</span>
           <button type="button" role="menuitem" data-open-win="war">⚔ 戦争</button>
+          <button type="button" role="menuitem" data-open-win="treaty">📜 講和条約</button>
           <button type="button" role="menuitem" data-open-win="diplomacy">🤝 外交・同盟</button>
           <button type="button" role="menuitem" data-open-win="military">🛡 軍事</button>
+          <button type="button" role="menuitem" data-open-win="nuclear">☢ 核作戦</button>
           <button type="button" role="menuitem" data-open-win="currency">💱 通貨・為替</button>
+          <button type="button" role="menuitem" data-click="world-date">⏳ 時間・時代区分</button>
         </div>
       </details>
     </div>
@@ -85,10 +93,6 @@
       <details id="layers-menu" class="menu menu-right">
         <summary title="地図に何を重ねるか。1つずつオン/オフでき、複数を同時に重ねられます">レイヤー ▾</summary>
         <div class="menu-list layers-pop" role="group" aria-label="レイヤー">
-          <div class="lp-sec">
-            <span class="lp-title">プリセット <span class="lp-sub">よく使う組み合わせ</span></span>
-            <div id="layer-presets" class="lp-presets"></div>
-          </div>
           <div class="lp-sec">
             <span class="lp-title">レイヤー <span class="lp-sub">押すとオン/オフ。重ねられます</span></span>
             <div id="layer-toggles" class="lp-toggles"></div>
@@ -113,7 +117,7 @@
   <main>
     <aside id="sidebar" aria-label="国家・都市の編集">
       <div id="editor-panel" hidden></div>
-      <div id="legend" class="legend">
+      <div id="legend" class="legend" hidden>
         <div class="legend-head">
           <h3 id="legend-title">凡例</h3>
           <button id="legend-close" class="panel-close" aria-label="凡例パネルを小さくする" title="小さくする（左上の ☰ で元に戻せます）">×</button>
@@ -124,7 +128,7 @@
     </aside>
 
     <!-- 凡例・国家パネルを × で小さくしたあと、元の場所（左上）に出る展開ボタン。畳んでいるときだけ見える -->
-    <button id="btn-sidebar-toggle" class="sidebar-fab" aria-expanded="true" aria-controls="sidebar" title="凡例・国家パネルを開く" aria-label="凡例・国家パネルを開く" hidden>☰</button>
+    <button id="btn-sidebar-toggle" class="sidebar-fab" hidden style="display:none" aria-expanded="true" aria-controls="sidebar" title="凡例・国家パネルを開く" aria-label="凡例・国家パネルを開く" hidden>☰</button>
 
     <section id="stage" aria-label="地図">
       <canvas id="map-canvas" tabindex="0" aria-label="地図の表示領域"></canvas>
@@ -152,7 +156,7 @@
         <button id="banner-close" aria-label="閉じる">×</button>
       </div>
       <!-- 右のパネル（地図編集・歴史をつくる）を × で小さくしたあと、元の場所（右端）に出る展開ボタン -->
-      <div id="panel-tabs" class="panel-tabs">
+      <div id="panel-tabs" class="panel-tabs" hidden>
         <button id="tab-edit-panel" class="panel-tab" title="地図編集を開く" aria-label="地図編集を開く" hidden>✎</button>
         <button id="tab-builder-panel" class="panel-tab" title="歴史をつくるを開く" aria-label="歴史をつくるを開く" hidden>🏛</button>
       </div>
@@ -163,7 +167,7 @@
     <!-- 右側スライドパネル：地図編集モード。ボタンを押した時だけ表示。 -->
     <aside id="edit-panel" class="edit-panel" aria-label="地図編集" hidden>
       <div class="editor-header">
-        <h3>地図編集モード</h3>
+        <h3>✎ 地図編集</h3>
         <button id="edit-panel-close" class="editor-close" aria-label="閉じる">×</button>
       </div>
       <div class="edit-panel-body">
@@ -198,7 +202,7 @@
     <!-- 右側スライドパネル：歴史ビルダー。ボタンを押した時だけ表示。 -->
     <aside id="builder-panel" class="builder-panel" aria-label="歴史をつくる" hidden>
       <div class="editor-header">
-        <h3>歴史をつくる</h3>
+        <h3>🏛 歴史をつくる</h3>
         <button id="builder-close" class="editor-close" aria-label="閉じる">×</button>
       </div>
       <div id="builder-body" class="builder-body"></div>

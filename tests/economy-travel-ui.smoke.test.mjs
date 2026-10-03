@@ -159,8 +159,11 @@ check("Undo で戻る", M().zones.length === 1);
 
 console.log("=== 政治・文化の深さ（つくる→詳しく） ===");
 modeBtn("つくる").click();
-await waitFor(() => window.document.querySelector(".b-tabs .b-tab"), 1000, "つくる");
-const tabBtn = (label) => [...window.document.querySelectorAll(".b-tabs .b-tab")].find((b) => b.textContent.startsWith(label));
+await waitFor(() => window.document.querySelector(".b-kind-select"), 1000, "つくる");
+const tabBtn = (label) => {
+  const sel = window.document.querySelector(".b-kind-select"); const opt = sel && [...sel.options].find((o) => o.textContent.startsWith(label));
+  return opt ? { click() { sel.value = opt.value; sel.dispatchEvent(new window.Event("change", { bubbles: true })); } } : undefined;
+};
 check("都市タブがある", !!tabBtn("都市"));
 tabBtn("国家").click();
 await waitFor(() => q(".b-card .b-more-btn"), 1000, "国家");

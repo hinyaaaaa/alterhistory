@@ -67,25 +67,14 @@ console.log("=== 上部・下部バー（隠せない）と、パネルの × ==
 check("上部バーを隠す設定（表示・設定メニュー）は無い", !q("#view-menu") && !q("[data-chrome]") && !$("btn-chrome-restore"));
 key("h");
 check("H キーで枠が隠れたりしない", !app.className.includes("hide-"));
-check("初めは凡例パネルが開いていて、☰ は出ていない", !mainEl.classList.contains("side-collapsed") && $("btn-sidebar-toggle").hidden);
-$("legend-close").click();
-check("凡例の × でサイドバーが畳まれ、☰ が出る", mainEl.classList.contains("side-collapsed") && !$("btn-sidebar-toggle").hidden);
-$("btn-sidebar-toggle").click();
-check("☰ で元に戻り、☰ は消える", !mainEl.classList.contains("side-collapsed") && $("btn-sidebar-toggle").hidden);
-$("legend-close").click();
-window.alterhistory.editorPanel.openEntity?.("state", 1);
-await sleep(50);
-check("国家を開くと、畳んでいたサイドバーが自動で開く", !mainEl.classList.contains("side-collapsed"));
-for (const [panel, close, tab, open] of [["builder-panel", "builder-close", "tab-builder-panel", "btn-builder"], ["edit-panel", "edit-panel-close", "tab-edit-panel", "btn-edit-mode"]]) {
+check("サイドバー（凡例・☰・横の展開ボタン）は廃止されている", !!$("btn-sidebar-toggle").hidden && !!$("legend").hidden && !!$("panel-tabs").hidden);
+for (const [panel, close, open] of [["builder-panel", "builder-close", "btn-builder"], ["edit-panel", "edit-panel-close", "btn-edit-mode"]]) {
   $(open).click();
-  check(`${panel}: 開くと展開ボタンは出ない`, !$(panel).hidden && $(tab).hidden);
+  check(`${panel}: 開くとウィンドウとして表示される`, !$(panel).hidden);
   $(close).click(); await sleep(20);
-  check(`${panel}: × で閉じ、元の場所の展開ボタンが出る`, $(panel).hidden && !$(tab).hidden);
-  $(tab).click(); await sleep(20);
-  check(`${panel}: 展開ボタンで開き直せて、ボタンは消える`, !$(panel).hidden && $(tab).hidden);
-  $(open).click(); await sleep(20);
-  check(`${panel}: 上部バーのボタンで閉じたときは展開ボタンを出さない`, $(panel).hidden && $(tab).hidden);
+  check(`${panel}: × で閉じる`, $(panel).hidden);
 }
+check("設定メニューから一覧ウィンドウ（国家）が開く", (() => { q('[data-open-win="list-state"]').click(); return !!q(".float-win:not([hidden])"); })());
 
 console.log("=== 速度ラベル ===");
 check("速度ラベルが年数で書かれている", [...$("sel-time-speed").options].every((o) => /^1年=/.test(o.textContent)));

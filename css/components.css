@@ -685,3 +685,53 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .wo-cess-row { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
 .wo-cess-row input { width: auto; margin: 0; }
 .cur-body input, .cur-body select { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 6px; color: var(--text); }
+
+/* ---- 一覧ウィンドウ ---- */
+.ent-list { display: flex; flex-direction: column; gap: 2px; }
+.ent-row { display: flex; align-items: center; gap: 8px; padding: 3px 4px; border-radius: var(--radius); }
+.ent-row:hover { background: var(--panel-2); }
+.ent-main { flex: 1; text-align: left; background: none; border: 0; color: var(--text); padding: 4px 2px; cursor: pointer; }
+.ent-meta { color: var(--muted); font-size: 11px; min-width: 56px; text-align: right; }
+.ent-btn { padding: 2px 8px; }
+
+/* ---- 相場表・戦況・講和 ---- */
+.cur-top { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.cur-board th { text-align: left; font-size: 11px; color: var(--muted); }
+.cur-board td { padding: 3px 8px; white-space: nowrap; }
+.cur-code { font-family: var(--font-mono, monospace); font-weight: 700; letter-spacing: .06em; color: var(--brass-bright); }
+.cur-rate { font-family: var(--font-mono, monospace); text-align: right; }
+.cur-chg { font-family: var(--font-mono, monospace); text-align: right; color: var(--muted); }
+.cur-chg.up { color: #4fb477; } .cur-chg.down { color: #d9594c; }
+.cur-conv { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--line); }
+.cur-conv h4 { width: 100%; margin: 0; color: var(--brass-bright); }
+.wo-situation { margin: 8px 0; } .wo-impact table th { text-align: left; font-weight: 400; color: var(--muted); padding-right: 14px; }
+.wo-impact { background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 12px; margin: 10px 0; }
+
+/* ---- 部隊カード（ミニマム） ---- */
+.regiment-card.mini { padding: 6px 8px; margin-bottom: 4px; }
+.regiment-card.mini .regiment-card-head { display: flex; gap: 4px; align-items: center; }
+.mini-name { flex: 1; min-width: 0; background: transparent; border: 0; font-weight: 600; }
+.mini-btn { padding: 1px 7px; font-size: 12px; }
+.regiment-card.mini .regiment-power { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.mini-more > summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-top: 4px; }
+.regiment-card.mini .regiment-units { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 6px; }
+
+/* ---- 戦術ドクトリン ---- */
+.doctrine-list { display: flex; flex-direction: column; gap: 6px; }
+.doctrine-card { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+.doctrine-card.on { border-color: var(--brass); background: var(--panel-2); }
+.doctrine-body p { margin: 2px 0 4px; }
+.doctrine-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.doctrine-chip { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
+.doctrine-chip.up { color: #4fb477; border-color: #2f6b49; } .doctrine-chip.down { color: #d9594c; border-color: #7a3a33; }
+
+/* ---- 系譜図 ---- */
+.gen-scroll { overflow: auto; max-height: 420px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); }
+.gen-edit { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.gen-row { display: flex; gap: 8px; align-items: center; }
+.gen-svg text { user-select: none; }
+
+/* ---- 横タブ廃止後 ---- */
+.b-kind-select { width: 100%; margin: 4px 0 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; color: var(--text); }
+.b-random > summary, .state-prov-fold > summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 6px 0; }
+.state-prov-fold { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 4px; }

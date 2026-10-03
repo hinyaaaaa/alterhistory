@@ -97,12 +97,7 @@ check("文化をオンにしても国家は消えない（重ねられる）", s
 check("オンのボタンは選択状態になる", layer("cultures").classList.contains("active") && layer("states").classList.contains("active"));
 layer("cultures").click();
 check("もう一度押すとオフ", store.getState().view.cultures === false && !layer("cultures").classList.contains("active"));
-q('[data-preset="height"]').click();
-const v = store.getState().view;
-check("「標高」プリセットで色分けなし・標高・記号と名前が消える", !v.states && !v.cultures && v.heights === true && v.biomes === false && v.burgs === false && v.labels === false);
-check("プリセットのボタンが選択状態になる", q('[data-preset="height"]').classList.contains("active") && !q('[data-preset="politics"]').classList.contains("active"));
-q('[data-preset="politics"]').click();
-check("「政治」プリセットで元の見た目に戻る", store.getState().view.states === true && store.getState().view.heights === false && store.getState().view.labels === true);
+check("レイヤープリセットのボタンは廃止されている", !q("[data-preset]") && !q("#layer-presets"));
 layer("zones").click();
 check("ゾーンの表示を切り替えられる", store.getState().view.zones === false);
 layer("zones").click();

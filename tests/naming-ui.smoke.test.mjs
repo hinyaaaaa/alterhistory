@@ -78,7 +78,7 @@ check("都市が1つ増える", liveBurgs().length === n0 + 1);
 const nb = liveBurgs().at(-1);
 check("空欄でも名前が付く（カタカナ）", KANA.test(nb.name), nb.name);
 const panel = $("editor-panel");
-check("パネルに「仮の名前」と確定ボタンが出る", panel.textContent.includes("仮の名前です") && [...panel.querySelectorAll("button")].some((b) => b.textContent === "この名前で確定"));
+check("仮決定は廃止：「仮の名前」の表示も確定ボタンも出ない", !panel.textContent.includes("仮の名前です"));
 
 console.log("=== 🎲 で再生成 → 確定 ===");
 const before = liveBurgs().at(-1).name;
@@ -88,10 +88,7 @@ dice.click();
 await sleep(30);
 const after = liveBurgs().at(-1).name;
 check("🎲で名前が変わり、入力欄にも反映", after !== before && KANA.test(after) && panel.querySelector(".name-row input").value === after, `${before}→${after}`);
-check("生成した名前も仮のまま", store.getState().map.ext?.data?.provisionalNames?.[`burg:${nb.i}`] === 1);
-[...panel.querySelectorAll("button")].find((b) => b.textContent === "この名前で確定").click();
-await sleep(30);
-check("確定すると仮の表示が消える", !panel.textContent.includes("仮の名前です") && !store.getState().map.ext?.data?.provisionalNames);
+check("仮決定の表示・確定ボタンは出ない", !panel.textContent.includes("仮の名前です") && ![...panel.querySelectorAll("button")].some((b) => b.textContent === "この名前で確定"));
 check("確定しても名前は残る", liveBurgs().at(-1).name === after);
 
 console.log("=== 手で付けた名前は仮にならない ===");

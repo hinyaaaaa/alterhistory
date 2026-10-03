@@ -259,9 +259,9 @@
       for (const j of cells.c[i]) {
         if (j < i || !include(j)) continue;
         if (!differs(values[i], values[j])) continue;
-        const sv = sharedVertices(cells.v, i, j);
-        if (sv.length < 2) continue;
-        const p = vertices.p[sv[0]], q = vertices.p[sv[1]];
+        const sv2 = sharedVertices(cells.v, i, j);
+        if (sv2.length < 2) continue;
+        const p = vertices.p[sv2[0]], q = vertices.p[sv2[1]];
         out.push(p[0], p[1], q[0], q[1]);
       }
     }
@@ -287,18 +287,6 @@
     if (!any) return new Float32Array(0);
     return buildBoundarySegments(geometry, inside);
   }
-  function segmentsBounds(segs) {
-    if (!segs || segs.length < 4) return null;
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (let i = 0; i < segs.length; i += 2) {
-      const x = segs[i], y = segs[i + 1];
-      if (x < x0) x0 = x;
-      if (x > x1) x1 = x;
-      if (y < y0) y0 = y;
-      if (y > y1) y1 = y;
-    }
-    return { x0, y0, x1, y1 };
-  }
 
   // js/render/layers/politics.js
   var SOURCES = {
@@ -307,6 +295,35 @@
     religion: { cells: (m) => m.pack.cells.religion, entities: (m) => m.pack.religions },
     province: { cells: (m) => m.pack.cells.province, entities: (m) => m.pack.provinces }
   };
+  function parseColor(c) {
+    if (typeof c !== "string") return null;
+    let m = /^#([0-9a-f]{6})$/i.exec(c.trim());
+    if (m) {
+      const n = parseInt(m[1], 16);
+      return [n >> 16 & 255, n >> 8 & 255, n & 255];
+    }
+    m = /^#([0-9a-f]{3})$/i.exec(c.trim());
+    if (m) return [...m[1]].map((x) => parseInt(x + x, 16));
+    m = /^rgba?\(\s*(\d+)[,\s]+(\d+)[,\s]+(\d+)/i.exec(c);
+    if (m) return [+m[1], +m[2], +m[3]];
+    m = /^hsla?\(\s*([\d.]+)[,\s]+([\d.]+)%[,\s]+([\d.]+)%/i.exec(c);
+    if (m) {
+      const h = +m[1] / 360, sat = +m[2] / 100, l = +m[3] / 100, q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q;
+      const f = (t) => {
+        t = (t + 1) % 1;
+        return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p;
+      };
+      return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
+    }
+    return null;
+  }
+  function shadeOf(color, step) {
+    const rgb = parseColor(color);
+    if (!rgb) return color;
+    const k = [0, 0.14, -0.14, 0.26, -0.24, 0.07, -0.07][step % 7];
+    const mix2 = k >= 0 ? 255 : 0, a = Math.abs(k);
+    return `rgb(${rgb.map((v) => Math.round(v + (mix2 - v) * a)).join(",")})`;
+  }
   var edgeCache = /* @__PURE__ */ new WeakMap();
   function cachedBoundary(geometry, values, include, tag) {
     let byTag = edgeCache.get(values);
@@ -341,6 +358,24 @@
       }
       list.push(i);
     }
+    const provOf = kind === "state" ? map.pack.cells.province : null;
+    const provinces = kind === "state" ? map.pack.provinces : null;
+    const shadeGroups = /* @__PURE__ */ new Map();
+    if (provOf) {
+      for (const [id, list] of groups) {
+        for (const i of list) {
+          const pid = provOf[i], p = provinces?.[pid];
+          if (!pid || !p || p.removed || p.state !== id) continue;
+          const key = `${id}:${pid}`;
+          let g = shadeGroups.get(key);
+          if (!g) {
+            g = { id, pid, list: [] };
+            shadeGroups.set(key, g);
+          }
+          g.list.push(i);
+        }
+      }
+    }
     if (fill) {
       ctx.globalAlpha = alpha;
       for (const [id, list] of groups) {
@@ -349,9 +384,31 @@
         for (const i of list) addCellPath(ctx, cells, vertices, i);
         ctx.fill();
       }
+      const byState = /* @__PURE__ */ new Map();
+      for (const g of shadeGroups.values()) {
+        const n = byState.get(g.id) ?? 0;
+        byState.set(g.id, n + 1);
+        g.step = n + 1;
+      }
+      for (const g of shadeGroups.values()) {
+        if ((byState.get(g.id) ?? 0) < 1) continue;
+        ctx.fillStyle = shadeOf(entities[g.id].color ?? NEUTRAL_COLOR, g.step);
+        ctx.beginPath();
+        for (const i of g.list) addCellPath(ctx, cells, vertices, i);
+        ctx.fill();
+      }
       ctx.globalAlpha = 1;
     }
     if (!lines) return;
+    if (provOf && shadeGroups.size) {
+      const psegs = cachedBoundary(map.geometry, provOf, isLand2, "land:province");
+      ctx.strokeStyle = "rgba(40,30,20,0.35)";
+      ctx.lineWidth = 0.6 / vp.k;
+      ctx.lineCap = "round";
+      ctx.setLineDash([2 / vp.k, 2 / vp.k]);
+      strokeSegments(ctx, psegs);
+      ctx.setLineDash([]);
+    }
     const segs = cachedBoundary(map.geometry, ids2, isLand2, "land:" + kind);
     ctx.strokeStyle = "rgba(40,30,20,0.75)";
     ctx.lineWidth = (kind === "state" ? 1.4 : 0.9) / vp.k;
@@ -430,33 +487,171 @@
 
   // js/core/sim/units.js
   var UNIT_TYPES = Object.freeze([
-    { key: "infantry", label: "\u6B69\u5175", unit: "\u4EBA", icon: "\u2694\uFE0F", soft: 1, hard: 0.1, hardness: 0, rural: 0.9, urban: 0.5, industryShare: 0 },
-    { key: "armor", label: "\u6A5F\u7532", unit: "\u53F0", icon: "\u{1F6E1}\uFE0F", soft: 3, hard: 10, hardness: 0.9, rural: 0, urban: 0, industryShare: 0.35 },
-    { key: "air", label: "\u822A\u7A7A", unit: "\u6A5F", icon: "\u2708\uFE0F", soft: 5, hard: 6, hardness: 0, rural: 0, urban: 0, industryShare: 0.25 },
-    { key: "navy", label: "\u6D77\u8ECD", unit: "\u96BB", icon: "\u{1F6A2}", soft: 8, hard: 14, hardness: 0.6, rural: 0, urban: 0, industryShare: 0.2, naval: true },
-    { key: "special", label: "\u7279\u6B8A\u90E8\u968A", unit: "\u4EBA", icon: "\u{1F396}\uFE0F", soft: 1.5, hard: 0.5, hardness: 0.1, rural: 0.02, urban: 0.03, industryShare: 0.05 },
-    { key: "advanced", label: "\u5148\u7AEF\u6280\u8853", unit: "\u4EBA", icon: "\u{1F52C}", soft: 2, hard: 6, hardness: 0.5, rural: 0, urban: 0.02, industryShare: 0.15, minTech: 6 },
-    { key: "nuclear", label: "\u6838", unit: "\u767A", icon: "\u2622\uFE0F", soft: 500, hard: 500, hardness: 0, rural: 0, urban: 0, industryShare: 0, minTech: 9 }
+    {
+      key: "infantry",
+      label: "\u6B69\u5175",
+      unit: "\u4EBA",
+      icon: "\u2694\uFE0F",
+      soft: 1,
+      hard: 0.1,
+      hardness: 0,
+      rural: 0.9,
+      urban: 0.5,
+      industryShare: 0,
+      desc: "\u8ECD\u306E\u4E3B\u529B\u3002\u5B89\u4FA1\u3067\u6570\u304C\u51FA\u305B\u308B\u304C\u3001\u6226\u8ECA\u306B\u306F\u5F31\u3044\u3002"
+    },
+    {
+      key: "artillery",
+      label: "\u7832\u5175",
+      unit: "\u9580",
+      icon: "\u{1F4A5}",
+      soft: 4,
+      hard: 1.5,
+      hardness: 0.05,
+      rural: 0.05,
+      urban: 0.04,
+      industryShare: 0.08,
+      minTech: 2,
+      desc: "\u6B69\u5175\u306E\u652F\u63F4\u706B\u529B\u3002\u4EBA\u306B\u5BFE\u3057\u3066\u5F37\u304F\u3001\u6B69\u5175\u304C\u591A\u3044\u8ECD\u307B\u3069\u52B9\u679C\u304C\u51FA\u308B\u3002"
+    },
+    {
+      key: "armor",
+      label: "\u6A5F\u7532",
+      unit: "\u53F0",
+      icon: "\u{1F6E1}\uFE0F",
+      soft: 3,
+      hard: 10,
+      hardness: 0.9,
+      rural: 0,
+      urban: 0,
+      industryShare: 0.35,
+      minTech: 4,
+      desc: "\u6226\u8ECA\u30FB\u88C5\u7532\u8ECA\u3002\u7A81\u7834\u529B\u304C\u9AD8\u3044\u304C\u9AD8\u4FA1\u3067\u3001\u6574\u5099\u3067\u304D\u308B\u7523\u696D\u304C\u8981\u308B\u3002"
+    },
+    {
+      key: "air",
+      label: "\u822A\u7A7A",
+      unit: "\u6A5F",
+      icon: "\u2708\uFE0F",
+      soft: 5,
+      hard: 6,
+      hardness: 0,
+      rural: 0,
+      urban: 0,
+      industryShare: 0.25,
+      minTech: 4,
+      desc: "\u6226\u95D8\u6A5F\u30FB\u7206\u6483\u6A5F\u3002\u5236\u7A7A\u6A29\u3092\u53D6\u308B\u3068\u9678\u8ECD\u306E\u640D\u5BB3\u304C\u6E1B\u308B\u3002"
+    },
+    {
+      key: "navy",
+      label: "\u6D77\u8ECD",
+      unit: "\u96BB",
+      icon: "\u{1F6A2}",
+      soft: 8,
+      hard: 14,
+      hardness: 0.6,
+      rural: 0,
+      urban: 0,
+      industryShare: 0.2,
+      naval: true,
+      minTech: 2,
+      needsCoast: true,
+      desc: "\u8266\u8247\u3002\u5236\u6D77\u6A29\u3092\u53D6\u308C\u308B\u3002\u6D77\u306B\u9762\u3057\u3066\u3044\u306A\u3044\u56FD\u306F\u6301\u3066\u306A\u3044\u3002"
+    },
+    {
+      key: "special",
+      label: "\u7279\u6B8A\u90E8\u968A",
+      unit: "\u4EBA",
+      icon: "\u{1F396}\uFE0F",
+      soft: 1.5,
+      hard: 0.5,
+      hardness: 0.1,
+      rural: 0.02,
+      urban: 0.03,
+      industryShare: 0.05,
+      minTech: 3,
+      desc: "\u7A7A\u633A\u30FB\u5C71\u5CB3\u30FB\u7279\u6B8A\u4F5C\u6226\u3002\u5C11\u6570\u7CBE\u92ED\u3067\u3001\u5730\u5F62\u306E\u60AA\u3044\u6240\u306B\u5F37\u3044\u3002"
+    },
+    {
+      key: "advanced",
+      label: "\u5148\u7AEF\u6280\u8853",
+      unit: "\u57FA",
+      icon: "\u{1F52C}",
+      soft: 2,
+      hard: 6,
+      hardness: 0.5,
+      rural: 0,
+      urban: 0.02,
+      industryShare: 0.15,
+      minTech: 6,
+      desc: "\u30DF\u30B5\u30A4\u30EB\u30FB\u96FB\u5B50\u6226\u30FB\u7121\u4EBA\u6A5F\u3002\u6280\u8853\u6C34\u6E96\u304C\u9AD8\u3044\u56FD\u3060\u3051\u304C\u6301\u3066\u308B\u3002"
+    },
+    {
+      key: "nuclear",
+      label: "\u6838",
+      unit: "\u767A",
+      icon: "\u2622\uFE0F",
+      soft: 500,
+      hard: 500,
+      hardness: 0,
+      rural: 0,
+      urban: 0,
+      industryShare: 0,
+      minTech: 9,
+      desc: "\u901A\u5E38\u306E\u6226\u4E89\u3067\u306F\u4F7F\u308F\u308C\u306A\u3044\u3002\u4F5C\u6226\u3068\u3057\u3066\u7ACB\u6848\u30FB\u5B9F\u884C\u3059\u308B\u3002\u5E74\u6B21\u3067\u306F\u5897\u3048\u306A\u3044\u3002"
+    }
   ]);
   var UNIT_KEYS = UNIT_TYPES.map((u) => u.key);
   var UNIT_BY_KEY = Object.fromEntries(UNIT_TYPES.map((u) => [u.key, u]));
   var DOCTRINES = Object.freeze([
-    { key: "balanced", label: "\u5747\u8861", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-    { key: "mobile", label: "\u6A5F\u52D5\u6226", mult: { infantry: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 0.85 },
-    { key: "firepower", label: "\u706B\u529B\u4E3B\u7FA9", mult: { infantry: 1.15, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 }, moraleLoss: 1 },
-    { key: "battleplan", label: "\u8A08\u753B\u9632\u5FA1", mult: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 }, moraleLoss: 1, defenseBonus: 0.15 },
-    { key: "massassault", label: "\u4EBA\u6D77\u6226\u8853", mult: { infantry: 1.3, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 }, moraleLoss: 1.25, conscriptBonus: 0.3 }
+    {
+      key: "balanced",
+      label: "\u5747\u8861",
+      mult: { infantry: 1, artillery: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 },
+      moraleLoss: 1,
+      desc: "\u504F\u308A\u306E\u306A\u3044\u6A19\u6E96\u7684\u306A\u8ECD\u3002\u5F97\u610F\u3082\u82E6\u624B\u3082\u306A\u3044\u3002"
+    },
+    {
+      key: "mobile",
+      label: "\u6A5F\u52D5\u6226",
+      mult: { infantry: 0.9, artillery: 0.9, armor: 1.3, air: 1.15, navy: 1, special: 1, advanced: 1, nuclear: 1 },
+      moraleLoss: 0.85,
+      desc: "\u6226\u8ECA\u3068\u822A\u7A7A\u6A5F\u3067\u6575\u306E\u5F8C\u65B9\u3078\u7A81\u7834\u3059\u308B\u3002\u6A5F\u7532\u30FB\u822A\u7A7A\u304C\u5F37\u304F\u3001\u58EB\u6C17\u304C\u5D29\u308C\u306B\u304F\u3044\u3002\u6B69\u5175\u30FB\u7832\u5175\u306F\u5C11\u3057\u5F31\u3044\u3002"
+    },
+    {
+      key: "firepower",
+      label: "\u706B\u529B\u4E3B\u7FA9",
+      mult: { infantry: 1.15, artillery: 1.3, armor: 1, air: 1, navy: 1, special: 1.15, advanced: 1, nuclear: 1 },
+      moraleLoss: 1,
+      desc: "\u5927\u91CF\u306E\u7832\u6483\u3067\u62BC\u3057\u3064\u3076\u3059\u3002\u6B69\u5175\u3068\u7832\u5175\u304C\u5F37\u3044\u3002\u7A81\u7834\u529B\u306F\u306A\u3044\u3002"
+    },
+    {
+      key: "battleplan",
+      label: "\u8A08\u753B\u9632\u5FA1",
+      mult: { infantry: 1, artillery: 1.1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1, nuclear: 1 },
+      moraleLoss: 1,
+      defenseBonus: 0.15,
+      desc: "\u9663\u5730\u3092\u56FA\u3081\u3066\u5B88\u308B\u3002\u5B88\u308B\u5074\u306E\u3068\u304D\u6226\u529B\u304C15%\u4E0A\u304C\u308B\u3002\u653B\u3081\u306F\u666E\u901A\u3002"
+    },
+    {
+      key: "massassault",
+      label: "\u4EBA\u6D77\u6226\u8853",
+      mult: { infantry: 1.3, artillery: 1, armor: 0.85, air: 0.85, navy: 1, special: 1, advanced: 0.85, nuclear: 1 },
+      moraleLoss: 1.25,
+      conscriptBonus: 0.3,
+      desc: "\u6570\u3067\u62BC\u3059\u3002\u6B69\u5175\u304C\u5F37\u304F\u5FB4\u5175\u3082\u591A\u3044\u3002\u640D\u5BB3\u304C\u51FA\u308B\u3068\u58EB\u6C17\u304C\u5D29\u308C\u3084\u3059\u3044\u3002\u6A5F\u7532\u30FB\u822A\u7A7A\u306F\u5F31\u3044\u3002"
+    }
   ]);
   var DOCTRINE_BY_KEY = Object.fromEntries(DOCTRINES.map((d) => [d.key, d]));
   var DEFAULT_DOCTRINE = "balanced";
   var STATE_TYPE_MULT = Object.freeze({
-    Generic: { infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
-    Naval: { infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
-    Nomadic: { infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
-    Highland: { infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
-    Hunting: { infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
-    Lake: { infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
-    River: { infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 }
+    Generic: { artillery: 1, infantry: 1, armor: 1, air: 1, navy: 1, special: 1, advanced: 1 },
+    Naval: { artillery: 1, infantry: 0.85, armor: 0.9, air: 1.05, navy: 1.8, special: 1.05, advanced: 1 },
+    Nomadic: { artillery: 1, infantry: 0.75, armor: 1.15, air: 0.6, navy: 0.3, special: 1.25, advanced: 0.9 },
+    Highland: { artillery: 1, infantry: 1.15, armor: 0.6, air: 0.6, navy: 0.3, special: 1.35, advanced: 1 },
+    Hunting: { artillery: 1, infantry: 1.1, armor: 0.5, air: 0.5, navy: 0.6, special: 1.4, advanced: 0.9 },
+    Lake: { artillery: 1, infantry: 1, armor: 1, air: 1, navy: 1.2, special: 1, advanced: 1 },
+    River: { artillery: 1, infantry: 1.05, armor: 1, air: 1, navy: 1.15, special: 1, advanced: 1 }
   });
   function stateTypeMult(type) {
     return STATE_TYPE_MULT[type] ?? STATE_TYPE_MULT.Generic;
@@ -1640,15 +1835,6 @@
   }
   var ALL_FILLS_OFF = { states: false, cultures: false, religions: false, provinces: false };
   var fillsOnly = (kind) => ({ ...ALL_FILLS_OFF, [FILL_KEY[kind]]: true });
-  var PRESETS = Object.freeze([
-    { id: "politics", label: "\u653F\u6CBB", title: "\u56FD\u5BB6\u306E\u8272\u5206\u3051\u3068\u56FD\u5883\u3002\u9053\u8DEF\u30FB\u5DDD\u30FB\u540D\u524D\u3082\u8868\u793A", set: { biomes: true, heights: false, ...fillsOnly("state"), borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto", legendKind: "state" } },
-    { id: "culture", label: "\u6587\u5316", title: "\u6587\u5316\u306E\u8272\u5206\u3051", set: { biomes: true, heights: false, ...fillsOnly("culture"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "culture" } },
-    { id: "religion", label: "\u5B97\u6559", title: "\u5B97\u6559\u306E\u8272\u5206\u3051", set: { biomes: true, heights: false, ...fillsOnly("religion"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "religion" } },
-    { id: "province", label: "\u5C5E\u5DDE", title: "\u5C5E\u5DDE\u306E\u8272\u5206\u3051", set: { biomes: true, heights: false, ...fillsOnly("province"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "province" } },
-    { id: "terrain", label: "\u5730\u5F62", title: "\u8272\u5206\u3051\u306A\u3057\u306E\u5730\u5F62\u56F3\u3002\u9996\u90FD\u3060\u3051\u540D\u524D\u3092\u8868\u793A", set: { biomes: true, heights: false, ...ALL_FILLS_OFF, borders: false, coast: true, rivers: true, routes: false, burgs: true, labels: true, burgLabels: "capitals" } },
-    { id: "height", label: "\u6A19\u9AD8", title: "\u6A19\u9AD8\u3060\u3051\u3092\u898B\u308B\uFF08\u8A18\u53F7\u30FB\u6587\u5B57\u306F\u6D88\u3059\uFF09", set: { biomes: false, heights: true, ...ALL_FILLS_OFF, borders: false, coast: true, rivers: true, routes: false, burgs: false, labels: false } }
-  ]);
-  var presetMatches = (view, preset) => Object.entries(preset.set).every(([k, v]) => k === "legendKind" || k === "burgLabels" ? true : isLayerOn(view, k) === v);
   var exclusiveFillPatch = (kind) => kind && FILL_KEY[kind] ? { ...fillsOnly(kind), legendKind: kind } : { ...ALL_FILLS_OFF };
   var snapshotFills = (view) => ({ ...Object.fromEntries(FILL_KINDS.map((k) => [FILL_KEY[k], isLayerOn(view, FILL_KEY[k])])), legendKind: view?.legendKind });
 
@@ -2777,7 +2963,7 @@
   // js/render/svg-context.js
   var num = (v) => (Math.round(v * 100) / 100).toString();
   var esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-  function parseColor(input) {
+  function parseColor2(input) {
     const s = String(input).trim();
     let m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(s);
     if (m) {
@@ -2827,12 +3013,12 @@
       body.push(s);
     };
     const fillAttrs = () => {
-      const { color, alpha } = parseColor(st.fillStyle);
+      const { color, alpha } = parseColor2(st.fillStyle);
       const a = alpha * st.globalAlpha;
       return `fill="${color}"${a < 1 ? ` fill-opacity="${num(a * 1e3) / 1e3}"` : ""}`;
     };
     const strokeAttrs = () => {
-      const { color, alpha } = parseColor(st.strokeStyle);
+      const { color, alpha } = parseColor2(st.strokeStyle);
       const a = alpha * st.globalAlpha;
       let s = `stroke="${color}" stroke-width="${num(st.lineWidth * 1e3) / 1e3}"`;
       if (a < 1) s += ` stroke-opacity="${num(a * 1e3) / 1e3}"`;
@@ -3107,6 +3293,7 @@
     const reg = regimentsOf(state).find((r) => r.i === regId);
     if (!reg) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
+    if (map.pack.cells.state[cell] !== stateId) throw new Error("\u90E8\u968A\u306F\u81EA\u56FD\u306E\u9818\u571F\u5185\u306B\u3057\u304B\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
     if (reg.cell === cell) return null;
     const { p } = map.geometry.pack;
     return makeCommand("\u90E8\u968A\u3092\u79FB\u52D5", ["places"], [setProps(reg, { cell, x: p[cell][0], y: p[cell][1] })]);
@@ -3135,6 +3322,17 @@
       m.pack.states[stateId].military = v;
     }, next)]);
   }
+  function isCoastalState(map, stateId) {
+    const c = map.pack.cells, nb = map.geometry?.pack?.cells?.c;
+    if (!nb) return true;
+    for (let i = 0; i < c.state.length; i++) {
+      if (c.state[i] !== stateId) continue;
+      for (const j of nb[i] ?? []) if (c.biome[j] === 0) return true;
+    }
+    return false;
+  }
+  var CREW = { infantry: 1, artillery: 6, armor: 20, air: 25, navy: 150, special: 1, advanced: 30 };
+  var BASE_SHARE = { infantry: 1, artillery: 0.14, armor: 0.1, air: 0.06, navy: 0.05, special: 0.02, advanced: 0.02 };
   function planAnnualConscription(map, stateId) {
     const state = map.pack.states[stateId];
     if (!isLive2(state)) return null;
@@ -3142,23 +3340,39 @@
     const capital = map.pack.burgs[state.capital];
     if (!capital) return null;
     const pop = (state.rural ?? 0) + (state.urban ?? 0);
+    const tech = state.techLevel ?? 3;
     const industry = state.industry ?? 0;
     const doctrine = DOCTRINE_BY_KEY[state.doctrine] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
-    const conscriptBonus = 1 + (doctrine.conscriptBonus ?? 0);
-    let list = regimentsOf(state);
-    let home = list.find((r) => r.i === 0) ?? null;
+    const tmult = stateTypeMult(state.type);
+    const coastal = isCoastalState(map, stateId);
+    const list = regimentsOf(state);
+    const home = list.find((r) => r.i === 0) ?? null;
+    const cur = emptyForce();
+    for (const r of list) for (const k of UNIT_KEYS) cur[k] += r.u?.[k] ?? 0;
+    const industrial = Math.min(1, industry / 300);
+    const shares = {};
+    let sum = 0;
+    for (const k of Object.keys(BASE_SHARE)) {
+      const def = UNIT_BY_KEY[k];
+      const allowed = tech >= (def.minTech ?? 1) && !(def.needsCoast && !coastal);
+      let v = allowed ? BASE_SHARE[k] * (doctrine.mult[k] ?? 1) * (tmult[k] ?? 1) : 0;
+      if (def.industryShare > 0) v *= 0.2 + 0.8 * industrial;
+      shares[k] = v;
+      sum += v;
+    }
+    const totalTarget = pop * 6;
     const delta = emptyForce();
     let any = false;
-    for (const key of UNIT_KEYS) {
-      const def = UNIT_BY_KEY[key];
-      if (def.minTech && (state.techLevel ?? 3) < def.minTech) continue;
-      const manpowerBonus = key === "infantry" || key === "special" ? conscriptBonus : 1;
-      const fromPop = pop / 1e3 * (def.rural + def.urban) * 0.15 * manpowerBonus;
-      const unitCost = (def.soft + def.hard) / 2;
-      const fromIndustry = def.industryShare > 0 ? industry * def.industryShare / (unitCost / 4) : 0;
-      const add = Math.round(fromPop + fromIndustry);
-      if (add > 0) {
-        delta[key] = add;
+    for (const k of Object.keys(BASE_SHARE)) {
+      const target = sum > 0 ? totalTarget * shares[k] / sum / CREW[k] : 0;
+      const have = cur[k];
+      let d;
+      if (shares[k] === 0) d = -Math.ceil(have * 0.05);
+      else if (have === 0) d = target >= 1 ? Math.max(1, Math.round(target * 0.03)) : 0;
+      else d = Math.max(-0.04 * have, Math.min(0.08 * have, (target - have) * 0.12));
+      d = Math.round(d);
+      if (d !== 0) {
+        delta[k] = d;
         any = true;
       }
     }
@@ -3166,23 +3380,25 @@
     const parts = [];
     if (home) {
       const u = { ...home.u };
-      for (const k of UNIT_KEYS) u[k] = (u[k] ?? 0) + delta[k];
+      for (const k of UNIT_KEYS) u[k] = Math.max(0, (u[k] ?? 0) + delta[k]);
       parts.push(setProps(home, { u }));
     } else {
       const { p } = map.geometry.pack;
       const cell = capital.cell;
-      const reg = { i: 0, name: `${state.name}\u56FD\u9632\u672C\u968A`, icon: "\u{1F6E1}\uFE0F", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u: delta };
+      const u = emptyForce();
+      for (const k of UNIT_KEYS) u[k] = Math.max(0, delta[k]);
+      const reg = { i: 0, name: `${state.name}\u56FD\u9632\u672C\u968A`, icon: "\u{1F6E1}\uFE0F", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u };
       parts.push(setList((m) => m.pack.states[stateId].military, (m, v) => {
         m.pack.states[stateId].military = v;
       }, [reg, ...list]));
     }
-    return makeCommand("\u5E74\u6B21\u5FB4\u5175", [], parts);
+    return makeCommand("\u5E74\u6B21\u306E\u5175\u529B\u5909\u52D5", [], parts);
   }
 
   // js/core/sim/war-engine.js
   var clamp2 = (v, a, b) => Math.min(b, Math.max(a, v));
   var isLive3 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var LAND = ["infantry", "armor", "special", "advanced"];
+  var LAND = ["infantry", "artillery", "armor", "special", "advanced"];
   var AIR = ["air"];
   var SEA = ["navy"];
   function sumUnits(state, keys) {
@@ -3277,11 +3493,6 @@
     const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && b.state === stateId);
     return burgs.length ? rnd.pick(burgs).name : null;
   }
-  function isCoastalState(map, stateId) {
-    const c = map.pack.cells;
-    for (let i = 0; i < c.state.length; i++) if (c.state[i] === stateId && c.t?.[i] === 1) return true;
-    return false;
-  }
 
   // js/core/sim/currency.js
   var isLive4 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
@@ -3336,7 +3547,10 @@
       const c = getCurrency(s);
       let rate = next.get(s.i);
       if (c.regime === "pegged") rate = next.get(c.pegTo) ?? getCurrency(map.pack.states[c.pegTo] ?? s).rate;
-      if (rate != null && rate !== c.rate) parts.push(setProps(s, { currency: { ...c, rate } }));
+      if (rate != null) {
+        const hist = [...c.hist ?? [c.rate], rate].slice(-24);
+        parts.push(setProps(s, { currency: { ...c, rate, prev: c.rate, hist } }));
+      }
     }
     return parts;
   }
@@ -3401,6 +3615,154 @@
     }
     return makeCommand(`\u5916\u4EA4\u95A2\u4FC2\u306E\u5909\u66F4\uFF08${A.name}\u3068${B.name}\uFF09`, [], parts);
   }
+  function diplomacyParts(map, pairs, relation) {
+    const rows = /* @__PURE__ */ new Map();
+    const rowOf = (id) => {
+      if (!rows.has(id)) rows.set(id, (map.pack.states[id].diplomacy ?? []).slice());
+      return rows.get(id);
+    };
+    for (const [a, b] of pairs) {
+      if (a === b || !isLive5(map.pack.states[a]) || !isLive5(map.pack.states[b])) continue;
+      const ra = rowOf(a), rb = rowOf(b);
+      while (ra.length <= b) ra.push("x");
+      while (rb.length <= a) rb.push("x");
+      ra[b] = relation;
+      rb[a] = relation;
+    }
+    return [...rows].map(([id, row]) => setProps(map.pack.states[id], { diplomacy: row }));
+  }
+  function crossPairs(listA, listB) {
+    const out = [];
+    for (const a of listA) for (const b of listB) out.push([a, b]);
+    return out;
+  }
+  function simpleRelation(map, a, b) {
+    const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt);
+    if (wars.some((w) => w.attackers.includes(a) && w.defenders.includes(b) || w.attackers.includes(b) && w.defenders.includes(a))) return "hostile";
+    if ((map.ext?.data?.alliances ?? []).some((al) => !al.dissolvedAt && al.members.includes(a) && al.members.includes(b))) return "alliance";
+    return "none";
+  }
+  var SIMPLE_LABEL = Object.freeze({ alliance: "\u540C\u76DF", hostile: "\u6575\u5BFE", none: "\u4E2D\u7ACB" });
+
+  // js/core/sim/war-flow.js
+  var isLive6 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var clamp4 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var BONDS = Object.freeze([
+    { key: "loose", label: "\u7DE9\u3084\u304B", desc: "\u6226\u4E89\u306B\u5DFB\u304D\u8FBC\u307E\u308C\u306A\u3044\u3002\u8CBF\u6613\u306E\u5C01\u9396\u3082\u5404\u56FD\u306E\u81EA\u7531\u3002" },
+    { key: "standard", label: "\u6A19\u6E96", desc: "\u540C\u76DF\u56FD\u304C\u653B\u3081\u3089\u308C\u305F\u3089\u53C2\u6226\u3059\u308B\uFF08\u9632\u885B\u7FA9\u52D9\uFF09\u3002\u653B\u3081\u308B\u6226\u4E89\u306B\u306F\u52A0\u308F\u3089\u306A\u3044\u3002\u76DF\u4E3B\u306E\u6575\u56FD\u3068\u306E\u8CBF\u6613\u3092\u5C01\u9396\u3059\u308B\u3002" },
+    { key: "strict", label: "\u5F37\u56FA", desc: "\u653B\u3081\u308B\u6226\u4E89\u306B\u3082\u5B88\u308B\u6226\u4E89\u306B\u3082\u3001\u540C\u76DF\u56FD\u306F\u5FC5\u305A\u53C2\u6226\u3059\u308B\u3002\u8CBF\u6613\u306E\u5C01\u9396\u306B\u3082\u540C\u8ABF\u3059\u308B\u3002" }
+  ]);
+  var BOND_BY_KEY = Object.fromEntries(BONDS.map((b) => [b.key, b]));
+  var bondOf = (a) => BOND_BY_KEY[a?.bond] ? a.bond : "standard";
+  var liveAlliances = (map) => (map.ext?.data?.alliances ?? []).filter((a) => !a.dissolvedAt);
+  function expandWithAllies(map, attackers, defenders) {
+    const A = new Set(attackers), D = new Set(defenders), joined = [];
+    for (let round3 = 0; round3 < 4; round3++) {
+      let changed = false;
+      for (const al of liveAlliances(map)) {
+        const bond = bondOf(al);
+        if (bond === "loose") continue;
+        const members = al.members.filter((m) => isLive6(map.pack.states[m]));
+        const inA = members.some((m) => A.has(m)), inD = members.some((m) => D.has(m));
+        if (inA && inD) continue;
+        const join = (set, side) => {
+          for (const m of members) if (!A.has(m) && !D.has(m)) {
+            set.add(m);
+            joined.push({ id: m, side, alliance: al.name });
+            changed = true;
+          }
+        };
+        if (inD) join(D, "defender");
+        if (inA && bond === "strict") join(A, "attacker");
+      }
+      if (!changed) break;
+    }
+    return { attackers: [...A], defenders: [...D], joined };
+  }
+  function addMonths(date, n) {
+    const t = date.year * 12 + (date.month - 1) + n;
+    return { year: Math.floor(t / 12), month: t % 12 + 1 };
+  }
+  function estimateDurationMonths(map, attackers, defenders, result, rnd) {
+    const ids2 = [...attackers, ...defenders];
+    let men = 0;
+    for (const id of ids2) for (const r of regimentsOf(map.pack.states[id])) men += forceHeadcount({ ...r.u, nuclear: 0 });
+    const scale = Math.log10(1 + men);
+    const c = map.pack.cells, h = map.geometry?.pack?.h;
+    let total = 0, rough = 0;
+    if (h) {
+      for (let i = 0; i < c.state.length; i++) if (defenders.includes(c.state[i])) {
+        total++;
+        if (h[i] >= 55) rough++;
+      }
+    }
+    const terrain = 1 + (total ? rough / total : 0) * 0.8;
+    const closeness = 1 + (1 - clamp4(result.decisiveness ?? 0.5, 0, 1)) * 1.2;
+    const world = ids2.length >= 5 ? 1.6 : 1;
+    const base = (2 + scale * 2.5) * terrain * closeness * world;
+    return clamp4(Math.round(base * rnd.float(0.75, 1.25)), 1, 96);
+  }
+  function stateRelationNone(map, a, b) {
+    if (liveAlliances(map).some((al) => al.members.includes(a) && al.members.includes(b))) return false;
+    const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt);
+    return !wars.some((w) => w.attackers.includes(a) && w.defenders.includes(b) || w.attackers.includes(b) && w.defenders.includes(a));
+  }
+  function proposePeaceVenue(map, war, rnd) {
+    const belligerents = [...war.attackers, ...war.defenders];
+    const burgs = map.pack.burgs.filter((b2) => b2 && b2.i && !b2.removed && isLive6(map.pack.states[b2.state]));
+    const neutralStates = new Set(map.pack.states.filter((s) => isLive6(s) && !belligerents.includes(s.i) && belligerents.every((x) => stateRelationNone(map, s.i, x))).map((s) => s.i));
+    let pool = burgs.filter((b2) => neutralStates.has(b2.state));
+    let neutral = true;
+    if (!pool.length) {
+      pool = burgs.filter((b2) => belligerents.includes(b2.state));
+      neutral = false;
+    }
+    if (!pool.length) return null;
+    const b = rnd.pick(pool);
+    return { burgId: b.i, place: b.name, stateId: b.state, neutral, treatyName: `${b.name}\u6761\u7D04` };
+  }
+  function peaceImpact(map, loserId, cellGroups, reparations = 0, payerTreasury = null) {
+    const loser = map.pack.states[loserId];
+    const cells = new Set(cellGroups.flat());
+    const total = Math.max(1, loser?.cells ?? 1);
+    const share = clamp4(cells.size / total, 0, 1);
+    const pop = ((loser?.rural ?? 0) + (loser?.urban ?? 0)) * share;
+    const industry = (loser?.industry ?? 0) * share;
+    const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && b.state === loserId && cells.has(b.cell)).length;
+    return {
+      cells: cells.size,
+      share,
+      population: pop,
+      industry,
+      burgs,
+      reparations,
+      reparationsShare: payerTreasury > 0 ? reparations / payerTreasury : null
+    };
+  }
+
+  // js/core/sim/sanctions.js
+  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function blockedPairs(map) {
+    const set = /* @__PURE__ */ new Set();
+    const add = (x, y) => set.add(x < y ? `${x}-${y}` : `${y}-${x}`);
+    const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt);
+    const alliances = (map.ext?.data?.alliances ?? []).filter((a) => !a.dissolvedAt && bondOf(a) !== "loose");
+    for (const w of wars) {
+      for (const x of w.attackers) for (const y of w.defenders) add(x, y);
+      for (const al of alliances) {
+        const M = al.members.filter((m) => isLive7(map.pack.states[m]));
+        for (const [mine, theirs] of [[w.attackers, w.defenders], [w.defenders, w.attackers]]) {
+          if (!M.some((m) => mine.includes(m))) continue;
+          for (const m of M) if (!w.attackers.includes(m) && !w.defenders.includes(m)) for (const y of theirs) add(m, y);
+        }
+      }
+    }
+    return set;
+  }
+  function isBlockaded(map, a, b, cache = null) {
+    const set = cache ?? blockedPairs(map);
+    return set.has(a < b ? `${a}-${b}` : `${b}-${a}`);
+  }
 
   // js/core/sim/trade.js
   var GOODS = Object.freeze([
@@ -3423,7 +3785,7 @@
     Anarchy: { salesTax: 0, pollTax: 0 }
   });
   var FALLBACK_TAX = TAX_BASE.Monarchy;
-  var isLive6 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var round22 = (v) => Math.round(v * 100) / 100;
   var clamp012 = (v) => Math.min(1, Math.max(0, Number.isFinite(+v) ? +v : 0));
   function getFinance(state) {
@@ -3447,7 +3809,7 @@
     const { biome, state, pop } = map.pack.cells;
     const isCoast = coastalTest(map);
     const sums = /* @__PURE__ */ new Map(), prod = /* @__PURE__ */ new Map();
-    for (const s of map.pack.states) if (isLive6(s)) {
+    for (const s of map.pack.states) if (isLive8(s)) {
       prod.set(s.i, Object.fromEntries(GOODS.map((g) => [g.id, 0])));
       sums.set(s.i, 0);
     }
@@ -3504,7 +3866,7 @@
     return wars.some((w) => w.attackers.includes(a) && w.defenders.includes(b) || w.attackers.includes(b) && w.defenders.includes(a));
   }
   function tradeAffinity(map, a, b, ctx) {
-    if (atWar(ctx.wars, a, b)) return 0;
+    if (atWar(ctx.wars, a, b) || isBlockaded(map, a, b, ctx.blocked)) return 0;
     const key = a < b ? `${a}:${b}` : `${b}:${a}`;
     const near = ctx.adjacent.has(key);
     const pa = map.pack.states[a].pole ?? [0, 0], pb = map.pack.states[b].pole ?? [0, 0];
@@ -3515,10 +3877,11 @@
   }
   function computeTrade(map) {
     const wars = activeWars(map);
+    const blocked = blockedPairs(map);
     const adjacent = stateAdjacency(map);
     const diag = Math.hypot(map.meta.width || 1280, map.meta.height || 774);
-    const ctx = { wars, adjacent, diag };
-    const live3 = map.pack.states.filter(isLive6);
+    const ctx = { wars, adjacent, diag, blocked };
+    const live3 = map.pack.states.filter(isLive8);
     const production = computeProduction(map);
     const info = /* @__PURE__ */ new Map();
     for (const s of live3) {
@@ -3581,7 +3944,7 @@
   }
 
   // js/core/edit/wars.js
-  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive9 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listWars(map) {
     return map.ext?.data?.wars ?? [];
   }
@@ -3614,7 +3977,7 @@
   function planDeclareWar(map, { name, attackers, defenders, date }) {
     const a = [...new Set(attackers)], d = [...new Set(defenders)];
     if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
-    for (const id of [...a, ...d]) if (!isLive7(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of [...a, ...d]) if (!isLive9(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
     const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
     const explicit = String(name ?? "").trim();
@@ -3635,19 +3998,24 @@
     return { command: makeCommand(`\u5BA3\u6226\u5E03\u544A\uFF08${war.name}\uFF09`, [], [{ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) }]), id: war.id };
   }
   function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd }) {
-    const a = [...new Set(attackers)], d = [...new Set(defenders)];
-    if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
-    for (const id of [...a, ...d]) if (!isLive7(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
-    if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
+    const a0 = [...new Set(attackers)], d0 = [...new Set(defenders)];
+    if (!a0.length || !d0.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
+    for (const id of [...a0, ...d0]) if (!isLive9(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    if (a0.some((id) => d0.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
+    const { attackers: a, defenders: d, joined } = expandWithAllies(map, a0, d0);
     const result = resolveWar(map, a, d, rnd);
     const name = nameWar(map, { attackers: a, defenders: d, winner: result.winner, rnd, existingNames: listWars(map).map((w) => w.name) });
+    const months = estimateDurationMonths(map, a, d, result, rnd);
     const war = {
       id: nextWarId(map),
       name,
       attackers: a,
       defenders: d,
       startedAt: date,
+      endsAt: addMonths(date, months),
+      durationMonths: months,
       endedAt: null,
+      joinedAllies: joined,
       battles: [],
       advantage: {},
       muster: {},
@@ -3658,9 +4026,36 @@
       const st = map.pack.states[Number(sid)];
       for (const r of regimentsOf(st)) parts.push(setProps(r, { u: applyLossFraction(r.u, frac) }));
     }
+    parts.push(...diplomacyParts(map, crossPairs(a, d), "Enemy"));
     const before = listWars(map);
     parts.push({ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) });
-    return { command: makeCommand(`\u5BA3\u6226\u5E03\u544A\uFF08${war.name}\uFF09`, ["places"], parts), id: war.id, result: war.result, name };
+    return { command: makeCommand(`\u5BA3\u6226\u5E03\u544A\uFF08${war.name}\uFF09`, ["places"], parts), id: war.id, result: war.result, name, joined, endsAt: war.endsAt };
+  }
+  function planRenameWar(map, warId, name) {
+    const list = listWars(map);
+    const w = list.find((x) => x.id === warId);
+    if (!w) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const n = (name ?? "").trim();
+    if (!n) throw new Error("\u6226\u4E89\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
+    if (n === w.name) return null;
+    if (warNameTaken(map, n, warId)) throw new Error(`\u300C${n}\u300D\u3068\u3044\u3046\u6226\u4E89\u306F\u3059\u3067\u306B\u3042\u308A\u307E\u3059`);
+    const after = list.map((x) => x.id === warId ? { ...x, name: n } : x);
+    return makeCommand("\u6226\u4E89\u540D\u306E\u5909\u66F4", [], [{ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) }]);
+  }
+  function warsAwaitingTreaty(map) {
+    return listWars(map).filter((w) => w.result && !w.endedAt);
+  }
+  function planPeaceVenue(map, warId, rnd) {
+    const w = listWars(map).find((x) => x.id === warId);
+    return w ? proposePeaceVenue(map, w, rnd) : null;
+  }
+  function peaceSides(war) {
+    const winnerSide = war.result?.winner === "defender" ? "defenders" : "attackers";
+    return { winners: war[winnerSide], losers: war[winnerSide === "attackers" ? "defenders" : "attackers"], stalemate: war.result?.winner === "stalemate" };
+  }
+  function estimatePeace(map, warId, { loserId, cellGroups, reparations = 0 }) {
+    const loser = map.pack.states[loserId];
+    return peaceImpact(map, loserId, cellGroups, reparations, loser ? getFinance(loser).treasury : null);
   }
   function planSetMuster(map, warId, muster) {
     const list = listWars(map);
@@ -3747,7 +4142,7 @@
     const byRegion = regions.map((cells, idx) => ({ type: "region", regionCells: cells, name: `\u672A\u7DE8\u5165\u5730\u57DF${idx + 1}\uFF08${cells.length}\u30BB\u30EB\uFF09`, cells: cells.length }));
     const capCells = /* @__PURE__ */ new Set();
     for (const st of map.pack.states) {
-      const cap = isLive7(st) ? map.pack.burgs[st.capital] : null;
+      const cap = isLive9(st) ? map.pack.burgs[st.capital] : null;
       if (cap && !cap.removed) capCells.add(cap.cell);
     }
     const provHasCapital = (pid) => {
@@ -3761,7 +4156,10 @@
     const war = list.find((w) => w.id === warId);
     if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (war.endedAt) throw new Error("\u65E2\u306B\u7D42\u7D50\u3057\u3066\u3044\u307E\u3059");
-    if (!isLive7(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive9(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const endDate = war.endsAt ?? date;
+    const { winners, losers } = peaceSides(war);
+    if (!winners.includes(terms.toStateId) && !losers.includes(terms.toStateId)) throw new Error("\u53D7\u3051\u53D6\u308B\u56FD\u306F\u4EA4\u6226\u56FD\u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
     const parts = [];
     const c = map.pack.cells;
     const capitalCells = /* @__PURE__ */ new Set();
@@ -3793,7 +4191,7 @@
     }
     for (const cells of terms.regionCells ?? []) moveCells(cells);
     if (terms.reparations) {
-      const payerId = war.defenders.includes(terms.toStateId) ? war.attackers[0] : war.defenders[0];
+      const payerId = terms.fromStateId ?? (winners.includes(terms.toStateId) ? losers[0] : winners[0]);
       const payer = map.pack.states[payerId], payee = map.pack.states[terms.toStateId];
       if (payer && payee) {
         const received = convert(map, payerId, terms.toStateId, terms.reparations);
@@ -3804,13 +4202,18 @@
       }
     }
     const before = list;
-    const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: date, terms, treatyName: terms.treatyName || `${w.name}\u306E\u8B1B\u548C\u6761\u7D04` });
+    const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: endDate, terms, treatyName: terms.treatyName || `${w.name}\u306E\u8B1B\u548C\u6761\u7D04` });
     parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, before) });
+    const stillHostile = /* @__PURE__ */ new Set();
+    for (const w of list) if (w.id !== warId && !w.endedAt) for (const x of w.attackers) for (const y of w.defenders) stillHostile.add(x < y ? `${x}-${y}` : `${y}-${x}`);
+    const toNeutral = crossPairs(war.attackers, war.defenders).filter(([x, y]) => !stillHostile.has(x < y ? `${x}-${y}` : `${y}-${x}`));
+    parts.push(...diplomacyParts(map, toNeutral, "Neutral"));
     return makeCommand(`\u8B1B\u548C\u6761\u7D04\uFF08${war.name}\uFF09`, ["politics"], parts);
   }
 
   // js/core/edit/alliances.js
-  var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var bondKey = (a) => BOND_BY_KEY[a?.bond] ? a.bond : "standard";
   function listAlliances(map) {
     return map.ext?.data?.alliances ?? [];
   }
@@ -3818,11 +4221,14 @@
     const list = listAlliances(map);
     return list.length ? Math.max(...list.map((a) => a.id)) + 1 : 1;
   }
-  function planCreateAlliance(map, name, memberIds, date) {
+  function planCreateAlliance(map, name, memberIds, date, bond = "standard") {
     const uniq = [...new Set(memberIds)];
     if (uniq.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
-    for (const id of uniq) if (!isLive8(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
-    const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq, formedAt: date ?? null, dissolvedAt: null };
+    for (const id of uniq) if (!isLive10(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    if (!BOND_BY_KEY[bond]) throw new Error("\u540C\u76DF\u306E\u62D8\u675F\u529B\u306F \u7DE9\u3084\u304B\u30FB\u6A19\u6E96\u30FB\u5F37\u56FA \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq, bond, formedAt: date ?? null, dissolvedAt: null };
+    const pairs = [];
+    for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) pairs.push([uniq[i], uniq[j]]);
     const before = listAlliances(map);
     const write = (m, list) => {
       const ext = ensureExt(m);
@@ -3830,7 +4236,7 @@
       if (!list.length) delete ext.data.alliances;
     };
     return {
-      command: makeCommand(`\u540C\u76DF\u3092\u7D50\u6210\uFF08${alliance.name}\uFF09`, [], [{ apply: (m) => write(m, [...before, alliance]), revert: (m) => write(m, before) }]),
+      command: makeCommand(`\u540C\u76DF\u3092\u7D50\u6210\uFF08${alliance.name}\uFF09`, [], [{ apply: (m) => write(m, [...before, alliance]), revert: (m) => write(m, before) }, ...diplomacyParts(map, pairs, "Ally")]),
       id: alliance.id
     };
   }
@@ -3841,9 +4247,11 @@
     const nextMembers = patch.members ? [...new Set(patch.members)] : a.members;
     if (nextMembers.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
     const nextName = patch.name !== void 0 ? patch.name : a.name;
-    if (nextName === a.name && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
+    const nextBond = patch.bond ?? bondKey(a);
+    if (!BOND_BY_KEY[nextBond]) throw new Error("\u540C\u76DF\u306E\u62D8\u675F\u529B\u306F \u7DE9\u3084\u304B\u30FB\u6A19\u6E96\u30FB\u5F37\u56FA \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if (nextName === a.name && nextBond === bondKey(a) && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
     const before = list;
-    const after = list.map((x) => x.id === allianceId ? { ...x, name: nextName, members: nextMembers } : x);
+    const after = list.map((x) => x.id === allianceId ? { ...x, name: nextName, members: nextMembers, bond: nextBond } : x);
     const write = (m, v) => {
       ensureExt(m).data.alliances = v;
     };
@@ -3986,20 +4394,20 @@
     province: { list: "provinces", label: "\u5C5E\u5DDE" }
   });
   var round6 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive9 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive11 = (e) => !!e && typeof e === "object" && !e.removed;
   var liveBurg = (map, id) => {
     const b = id > 0 ? map.pack.burgs[id] : null;
-    return isLive9(b) && b.i ? b : null;
+    return isLive11(b) && b.i ? b : null;
   };
   function protectedCells(map) {
     const capital = /* @__PURE__ */ new Set(), provinceCenter = /* @__PURE__ */ new Set();
     for (const s of map.pack.states) {
-      if (!isLive9(s) || !s.i) continue;
+      if (!isLive11(s) || !s.i) continue;
       const b = liveBurg(map, s.capital);
       if (b) capital.add(b.cell);
     }
     for (const pr of map.pack.provinces) {
-      if (!isLive9(pr) || !pr.i) continue;
+      if (!isLive11(pr) || !pr.i) continue;
       const b = liveBurg(map, pr.burg);
       if (b) provinceCenter.add(b.cell);
     }
@@ -4023,7 +4431,7 @@
     if (!def) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
     const list = map.pack[def.list];
     const entity = target > 0 ? list[target] : null;
-    if (target > 0 && !isLive9(entity)) throw new Error(`${def.label}#${target} \u306F\u5B58\u5728\u3057\u306A\u3044\u304B\u3001\u524A\u9664\u3055\u308C\u3066\u3044\u307E\u3059`);
+    if (target > 0 && !isLive11(entity)) throw new Error(`${def.label}#${target} \u306F\u5B58\u5728\u3057\u306A\u3044\u304B\u3001\u524A\u9664\u3055\u308C\u3066\u3044\u307E\u3059`);
     const c = map.pack.cells;
     const arr = c[kind];
     const burgs = map.pack.burgs;
@@ -4158,18 +4566,18 @@
   // js/core/edit/notes.js
   var NOTE_TYPES = ["state", "province", "culture", "religion", "burg", "marker"];
   var MAX_NOTE = 2e4;
-  var isLive10 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive12 = (e) => !!e && typeof e === "object" && !e.removed;
   var isLegacy = (map) => map.settings.format === "legacy";
   function noteTarget(map, type, id) {
     if (type === "marker") return map.markers.find((m) => m.i === id) ?? null;
     if (type === "burg") {
       const b = map.pack.burgs[id];
-      return isLive10(b) && b.i ? b : null;
+      return isLive12(b) && b.i ? b : null;
     }
     const def = PAINT_KINDS[type];
     if (!def) return null;
     const e = map.pack[def.list][id];
-    return isLive10(e) && e.i ? e : null;
+    return isLive12(e) && e.i ? e : null;
   }
   var legacyIds = (type, id) => {
     const ids2 = [`${type}${id}`];
@@ -4296,11 +4704,11 @@
 
   // js/core/edit/sovereignty.js
   var round62 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive11 = (e) => !!e && typeof e === "object" && !e.removed;
-  var isLiveState2 = (s) => isLive11(s) && s.i > 0;
+  var isLive13 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLiveState2 = (s) => isLive13(s) && s.i > 0;
   var liveBurg2 = (map, id) => {
     const b = id > 0 ? map.pack.burgs[id] : null;
-    return isLive11(b) && b.i ? b : null;
+    return isLive13(b) && b.i ? b : null;
   };
   function pickColor(existingCount, rnd) {
     const golden = 137.508;
@@ -4354,7 +4762,7 @@
   }
   function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
     const province = map.pack.provinces[provinceId];
-    if (!isLive11(province) || !province.i) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive13(province) || !province.i) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const fromState = map.pack.states[province.state];
     if (!isLiveState2(fromState)) throw new Error("\u5C5E\u5DDE\u306E\u6240\u5C5E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
@@ -4466,14 +4874,14 @@
     }
     const movedBurgIds = [];
     for (const b of map.pack.burgs) {
-      if (!isLive11(b) || !b.i || b.state !== from) continue;
+      if (!isLive13(b) || !b.i || b.state !== from) continue;
       const patch = { state: to };
       if (b.capital) patch.capital = 0;
       parts.push(setProps(b, patch));
       movedBurgIds.push(b.i);
     }
     for (const pr of map.pack.provinces) {
-      if (isLive11(pr) && pr.i && pr.state === from) parts.push(setProps(pr, { state: to }));
+      if (isLive13(pr) && pr.i && pr.state === from) parts.push(setProps(pr, { state: to }));
     }
     const toPatch = {};
     if (typeof toState.cells === "number" && typeof fromState.cells === "number") toPatch.cells = toState.cells + fromState.cells;
@@ -5235,11 +5643,6 @@
         if (kind && on) patch.legendKind = kind;
         this.setView(patch);
       },
-      /** プリセット（政治・文化・宗教・属州・地形・標高）。そのプリセットが決めるレイヤーだけを一度に切り替える */
-      applyPreset(id) {
-        const p = PRESETS.find((x) => x.id === id);
-        if (p) this.setView({ ...p.set });
-      },
       /** 凡例に出す色分けの種類を選ぶ（オンの色分けの中から） */
       setLegendKind(kind) {
         if (FILL_KINDS.includes(kind)) this.setView({ legendKind: kind });
@@ -5258,22 +5661,11 @@
        * 小さな実体は、見失わない程度（全体表示の8倍まで）に拡大する。外周が求まらなければ locate と同じ動き。
        * @returns {boolean} 外周に合わせて動かせたか
        */
+      /** 国・州・文化・宗教を選んだとき。ズームや移動はせず、今の地図の状態のまま強調だけする
+       *  （強調は ui/highlight.js が行うので、ここでは対象が存在するかだけ返す） */
       focusEntity(kind, entity) {
         const map = store.getState().map;
-        const def = ENTITY_KINDS[kind];
-        if (!map?.geometry || !def) return false;
-        const box = segmentsBounds(entityOutlineSegments(map.geometry, def.cells(map), entity.id, map.pack.cells.biome));
-        if (!box) {
-          this.locate(entity);
-          return false;
-        }
-        const margin = 56;
-        const bw = Math.max(1, box.x1 - box.x0), bh = Math.max(1, box.y1 - box.y0);
-        const kFit = Math.min((viewport.screenWidth - margin * 2) / bw, (viewport.screenHeight - margin * 2) / bh);
-        const k = Math.max(viewport.fitK, Math.min(kFit, viewport.fitK * 8, viewport.maxK));
-        viewport.centerOn((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, k);
-        rerender();
-        return true;
+        return !!(map?.geometry && ENTITY_KINDS[kind] && entity);
       },
       /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */
       saveNative() {
@@ -5346,9 +5738,9 @@
 
   // js/ui/dom.js
   function byId(id) {
-    const el12 = document.getElementById(id);
-    if (!el12) throw new Error(`\u8981\u7D20 #${id} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08index.html \u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
-    return el12;
+    const el15 = document.getElementById(id);
+    if (!el15) throw new Error(`\u8981\u7D20 #${id} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08index.html \u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
+    return el15;
   }
 
   // js/ui/download.js
@@ -5492,7 +5884,7 @@
         count.className = "legend-count";
         count.textContent = String(it.cells);
         btn3.append(chip, name);
-        if (isProvisional(map, kind, it.id)) {
+        if (false) {
           const tag = document.createElement("span");
           tag.className = "legend-prov";
           tag.textContent = "\u4EEE";
@@ -5603,61 +5995,6 @@
     });
   }
 
-  // js/ui/sidebar-toggle.js
-  var isNarrow = () => typeof matchMedia === "function" && matchMedia("(max-width: 720px)").matches;
-  function initSidebarToggle({ store }) {
-    const btn3 = byId("btn-sidebar-toggle");
-    const main = document.querySelector("main");
-    const sidebar = byId("sidebar");
-    const set = (open) => {
-      main.classList.toggle("side-collapsed", !open);
-      btn3.hidden = open;
-      btn3.setAttribute("aria-expanded", String(open));
-      sidebar.inert = !open;
-    };
-    const isOpen = () => !main.classList.contains("side-collapsed");
-    btn3.addEventListener("click", () => set(true));
-    byId("legend-close").addEventListener("click", () => set(false));
-    store.subscribe((_s, change) => {
-      if (change.type === "replace" && isNarrow()) set(false);
-    });
-    window.addEventListener("request-edit-panel-open", () => set(true));
-    new MutationObserver(() => {
-      if (!byId("editor-panel").hidden) set(true);
-    }).observe(byId("editor-panel"), { attributes: true, attributeFilter: ["hidden"] });
-    set(!isNarrow());
-    return { open: () => set(true), close: () => set(false), isOpen };
-  }
-
-  // js/ui/panel-dock.js
-  function initPanelDock(defs) {
-    for (const d of defs) {
-      const panel2 = byId(d.panel), tab = byId(d.tab);
-      let minimized = false;
-      const sync = () => {
-        tab.hidden = !(minimized && panel2.hidden);
-      };
-      byId(d.close).addEventListener("click", () => {
-        minimized = true;
-        sync();
-      });
-      byId(d.open).addEventListener("click", () => {
-        minimized = false;
-        sync();
-      }, true);
-      new MutationObserver(() => {
-        if (!panel2.hidden) minimized = false;
-        sync();
-      }).observe(panel2, { attributes: true, attributeFilter: ["hidden"] });
-      tab.addEventListener("click", () => {
-        minimized = false;
-        sync();
-        byId(d.open).click();
-      });
-      sync();
-    }
-  }
-
   // js/ui/windows.js
   var el = (tag, cls, text2) => {
     const e = document.createElement(tag);
@@ -5665,6 +6002,29 @@
     if (text2 != null) e.textContent = text2;
     return e;
   };
+  function makeDraggable(root, handle, stage, only = null) {
+    handle.style.cursor = "move";
+    handle.style.touchAction = "none";
+    handle.addEventListener("pointerdown", (e) => {
+      if (e.target instanceof HTMLElement && e.target.closest("button, input, select, textarea")) return;
+      if (only && !(e.target instanceof HTMLElement && e.target.closest(only))) return;
+      const sr = stage.getBoundingClientRect(), r = root.getBoundingClientRect();
+      const dx = e.clientX - r.left, dy = e.clientY - r.top;
+      root.style.right = "auto";
+      root.style.bottom = "auto";
+      handle.setPointerCapture?.(e.pointerId);
+      const move = (ev) => {
+        root.style.left = `${Math.min(Math.max(0, ev.clientX - dx - sr.left), Math.max(0, sr.width - 80))}px`;
+        root.style.top = `${Math.min(Math.max(0, ev.clientY - dy - sr.top), Math.max(0, sr.height - 40))}px`;
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+    });
+  }
   function initWindows() {
     const stage = byId("stage");
     const wins = /* @__PURE__ */ new Map();
@@ -5749,7 +6109,7 @@
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive12 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }) {
     const wins = initWindows();
     const noMap = () => el2("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044");
@@ -5767,7 +6127,7 @@
         dipHost.append(noMap());
         return;
       }
-      const states = map.pack.states.filter(isLive12);
+      const states = map.pack.states.filter(isLive14);
       if (focus == null || !states.some((s) => s.i === focus)) focus = states[0]?.i ?? null;
       if (focus == null) {
         dipHost.append(el2("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
@@ -5804,7 +6164,7 @@
         overview.append(noMap());
         return;
       }
-      const states = map.pack.states.filter(isLive12);
+      const states = map.pack.states.filter(isLive14);
       const t = el2("table", "win-table");
       const head = el2("tr");
       head.append(el2("th", "", "\u56FD\u5BB6"), el2("th", "", "\u90E8\u968A"));
@@ -5835,7 +6195,8 @@
       renderMil();
       panels.military.render();
     } });
-    if (warOutcome) wins.register("currency", { title: "\u{1F4B1} \u901A\u8CA8\u30FB\u70BA\u66FF", width: 760, body: warOutcome.currencyBody, onOpen: () => warOutcome.renderCurrency() });
+    if (warOutcome) wins.register("treaty", { title: "\u{1F4DC} \u8B1B\u548C\u6761\u7D04", width: 860, body: warOutcome.treatyBody, onOpen: () => warOutcome.renderTreaty() });
+    if (warOutcome) wins.register("currency", { title: "\u{1F4B1} \u901A\u8CA8\u30FB\u70BA\u66FF", width: 900, body: warOutcome.currencyBody, onOpen: () => warOutcome.renderCurrency() });
     store.subscribe((_s, change) => {
       if (!["replace", "commit", "undo", "redo"].includes(change.type)) return;
       if (wins.isOpen("diplomacy")) renderDip();
@@ -5846,16 +6207,502 @@
       const b = e.target instanceof HTMLElement ? e.target.closest("button") : null;
       if (!b) return;
       if (b.dataset.openWin) wins.open(b.dataset.openWin);
-      else if (b.dataset.openList) {
-        actions.setView({ [FILL_KEY[b.dataset.openList]]: true, legendKind: b.dataset.openList });
-        window.dispatchEvent(new Event("request-edit-panel-open"));
-      }
+      else if (b.dataset.click) byId(b.dataset.click)?.click();
       menu.open = false;
     });
     const sync = (s) => menu.classList.toggle("disabled", !s.map);
     store.subscribe(sync);
     sync(store.getState());
     return wins;
+  }
+
+  // js/ui/entity-list-window.js
+  var el3 = (tag, cls, text2) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  };
+  var LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+  var CELL_KEY = { state: "state", culture: "culture", religion: "religion", province: "province" };
+  var KIND_LABEL = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" };
+  var KIND_ICON = { state: "\u{1F3F3}", culture: "\u{1F3AD}", religion: "\u2726", province: "\u25A6" };
+  function initEntityLists({ store, wins, panels, editActions, highlight }) {
+    function onMerge(fromId) {
+      const map = store.getState().map;
+      if (!map) return;
+      const others = map.pack.states.filter((s) => s && s.i > 0 && !s.removed && s.i !== fromId);
+      if (!others.length) {
+        window.alert("\u7D71\u5408\u5148\u306B\u306A\u308B\u56FD\u304C\u3042\u308A\u307E\u305B\u3093");
+        return;
+      }
+      const from = map.pack.states[fromId];
+      const sel = document.createElement("select");
+      for (const s of others) {
+        const o = document.createElement("option");
+        o.value = s.i;
+        o.textContent = s.fullName ?? s.name;
+        sel.append(o);
+      }
+      const body = el3("div", "merge-body");
+      body.append(el3("p", "", `\u300C${from.fullName ?? from.name}\u300D\u3092\u3001\u3069\u306E\u56FD\u306B\u7D71\u5408\u3057\u307E\u3059\u304B\uFF1F`), sel, el3("p", "hint", "\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u306F\u7D71\u5408\u5148\u3078\u79FB\u308A\u3001\u3053\u306E\u56FD\u306F\u6D88\u6EC5\u3057\u307E\u3059\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09\u3002"));
+      const go = el3("button", "primary", "\u7D71\u5408\u3059\u308B");
+      go.type = "button";
+      go.addEventListener("click", () => {
+        editActions.mergeStates(fromId, Number(sel.value));
+        wins.close("merge");
+        render("state");
+      });
+      body.append(go);
+      mergeHost.replaceChildren(body);
+      wins.open("merge");
+    }
+    const mergeHost = el3("div", "merge-host");
+    wins.register("merge", { title: "\u{1F3F3} \u56FD\u5BB6\u306E\u7D71\u5408", width: 420, body: mergeHost });
+    const bodies = {};
+    function render(kind) {
+      const body = bodies[kind];
+      body.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        body.append(el3("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const arr = map.pack.cells[CELL_KEY[kind]], counts = /* @__PURE__ */ new Map();
+      for (let i = 0; i < arr.length; i++) if (map.pack.cells.biome[i] !== 0) counts.set(arr[i], (counts.get(arr[i]) ?? 0) + 1);
+      const items = map.pack[LIST_KEY[kind]].filter((e) => e && e.i > 0 && !e.removed).map((e) => ({ e, cells: counts.get(e.i) ?? 0 })).sort((a, b) => b.cells - a.cells);
+      body.append(el3("p", "hint", `${KIND_LABEL[kind]}\u306F ${items.length} \u4EF6\u3002\u540D\u524D\u3092\u62BC\u3059\u3068\u8A73\u7D30\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002`));
+      if (!items.length) {
+        body.append(el3("p", "muted", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      const ul = el3("div", "ent-list");
+      for (const { e, cells } of items) {
+        const row = el3("div", "ent-row");
+        const chip = el3("span", "chip");
+        chip.style.background = e.color ?? "#888";
+        const main = el3("button", "ent-main", e.fullName ?? e.name);
+        main.type = "button";
+        main.title = "\u8A73\u7D30\u3092\u8A2D\u5B9A\u3059\u308B";
+        main.addEventListener("click", () => panels.openEntity(kind, e.i));
+        const meta = el3("span", "ent-meta", `${cells}\u30BB\u30EB`);
+        const look = el3("button", "ent-btn", "\u{1F50D}");
+        look.type = "button";
+        look.title = "\u5730\u56F3\u4E0A\u3067\u5F37\u8ABF\u3059\u308B\uFF08\u30BA\u30FC\u30E0\u3057\u307E\u305B\u3093\uFF09";
+        look.addEventListener("click", () => highlight?.show(kind, e.i));
+        row.append(chip, main, meta, look);
+        if (kind === "state" && onMerge) {
+          const mg = el3("button", "ent-btn", "\u7D71\u5408");
+          mg.type = "button";
+          mg.title = "\u4ED6\u306E\u56FD\u306B\u7D71\u5408\u3059\u308B";
+          mg.addEventListener("click", () => onMerge(e.i));
+          row.append(mg);
+        }
+        const del = el3("button", "ent-btn danger", "\u{1F5D1}");
+        del.type = "button";
+        del.title = "\u524A\u9664\u3059\u308B\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09";
+        del.addEventListener("click", async () => {
+          if (!window.confirm(`${KIND_LABEL[kind]}\u300C${e.fullName ?? e.name}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u3002\u5C5E\u3057\u3066\u3044\u305F\u571F\u5730\u306F\u7121\u6240\u5C5E\u306B\u306A\u308A\u307E\u3059\u3002
+\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`)) return;
+          if (editActions.removeEntity(kind, e.i)) render(kind);
+        });
+        row.append(del);
+        ul.append(row);
+      }
+      body.append(ul);
+    }
+    for (const kind of Object.keys(LIST_KEY)) {
+      bodies[kind] = el3("div", "ent-body");
+      wins.register(`list-${kind}`, { title: `${KIND_ICON[kind]} ${KIND_LABEL[kind]}\u4E00\u89A7`, width: 520, body: bodies[kind], onOpen: () => render(kind) });
+    }
+    store.subscribe((_s, ch) => {
+      if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
+      for (const kind of Object.keys(LIST_KEY)) if (wins.isOpen(`list-${kind}`)) render(kind);
+    });
+    return { render };
+  }
+
+  // js/ui/dialogs.js
+  function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLabel, danger, suggest, hint }) {
+    const dialog = document.createElement("dialog");
+    dialog.className = "confirm-dialog";
+    if (title) dialog.append(el4("h2", null, title));
+    if (bodyText) dialog.append(el4("p", null, bodyText));
+    let input = null;
+    if (showInput) {
+      input = document.createElement("input");
+      input.type = "text";
+      input.className = "confirm-dialog-input";
+      input.value = inputValue ?? "";
+      dialog.append(input);
+    }
+    let suggestBtn = null;
+    if (input && suggest) {
+      suggestBtn = el4("button", "suggest-btn", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3092\u751F\u6210");
+      suggestBtn.type = "button";
+      suggestBtn.addEventListener("click", () => {
+        const v = suggest();
+        if (v) {
+          input.value = v;
+          input.focus();
+          input.select();
+        }
+      });
+      dialog.append(suggestBtn);
+    }
+    if (hint) dialog.append(el4("p", "hint", hint));
+    const actions = el4("div", "confirm-dialog-actions");
+    let cancelBtn = null;
+    if (cancelLabel !== null) {
+      cancelBtn = el4("button", "", cancelLabel ?? "\u30AD\u30E3\u30F3\u30BB\u30EB");
+      cancelBtn.type = "button";
+      cancelBtn.value = "cancel";
+      actions.append(cancelBtn);
+    }
+    const okBtn = el4("button", danger ? "danger" : "primary", okLabel ?? "OK");
+    okBtn.type = "button";
+    actions.append(okBtn);
+    dialog.append(actions);
+    document.body.append(dialog);
+    return { dialog, input, okBtn, cancelBtn, suggestBtn };
+  }
+  function el4(tag, cls, text2) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  }
+  function confirmDialog(message, opts = {}) {
+    return new Promise((resolve) => {
+      const { dialog, okBtn, cancelBtn } = buildDialog({ bodyText: message, okLabel: opts.okLabel, cancelLabel: opts.cancelLabel, danger: opts.danger });
+      const finish = (result) => {
+        dialog.close();
+        dialog.remove();
+        resolve(result);
+      };
+      okBtn.addEventListener("click", () => finish(true));
+      cancelBtn.addEventListener("click", () => finish(false));
+      dialog.addEventListener("cancel", () => finish(false));
+      dialog.showModal();
+      okBtn.focus();
+    });
+  }
+  function alertDialog(message, opts = {}) {
+    return new Promise((resolve) => {
+      const { dialog, okBtn } = buildDialog({ bodyText: message, okLabel: opts.okLabel ?? "OK", cancelLabel: null });
+      const finish = () => {
+        dialog.close();
+        dialog.remove();
+        resolve();
+      };
+      okBtn.addEventListener("click", finish);
+      dialog.addEventListener("cancel", finish);
+      dialog.showModal();
+      okBtn.focus();
+    });
+  }
+  function promptDialog(message, defaultValue = "", opts = {}) {
+    return new Promise((resolve) => {
+      const { dialog, input, okBtn, cancelBtn } = buildDialog({
+        bodyText: message,
+        showInput: true,
+        inputValue: defaultValue,
+        okLabel: opts.okLabel,
+        cancelLabel: opts.cancelLabel,
+        suggest: opts.suggest,
+        hint: opts.hint
+      });
+      const finish = (result) => {
+        dialog.close();
+        dialog.remove();
+        resolve(result);
+      };
+      okBtn.addEventListener("click", () => finish(input.value));
+      cancelBtn.addEventListener("click", () => finish(null));
+      dialog.addEventListener("cancel", () => finish(null));
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(input.value);
+        }
+      });
+      dialog.showModal();
+      input.focus();
+      input.select();
+    });
+  }
+
+  // js/ui/genealogy-window.js
+  var NS = "http://www.w3.org/2000/svg";
+  var el5 = (tag, cls, text2) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  };
+  var sv = (tag, attrs = {}, text2) => {
+    const e = document.createElementNS(NS, tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text2 != null) e.textContent = text2;
+    return e;
+  };
+  var LIST_KEY2 = { religion: "religions", culture: "cultures" };
+  var LABEL2 = { religion: "\u5B97\u6559", culture: "\u6587\u5316" };
+  var ROOT_LABEL = { religion: "\u5171\u901A\u306E\u7956\uFF08\u539F\u59CB\u4FE1\u4EF0\uFF09", culture: "\u5171\u901A\u306E\u7956" };
+  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function initGenealogy({ store, wins, editActions }) {
+    const bodies = {}, selected = {};
+    const NODE_W = 150, NODE_H = 28, GAP_X = 50, GAP_Y = 14;
+    function layout(map, kind) {
+      const list = map.pack[LIST_KEY2[kind]];
+      const live3 = list.filter(isLive15);
+      const children = /* @__PURE__ */ new Map([[0, []]]);
+      for (const e of live3) children.set(e.i, []);
+      for (const e of live3) {
+        let p = Array.isArray(e.origins) && Number.isInteger(e.origins[0]) ? e.origins[0] : 0;
+        if (p !== 0 && !isLive15(list[p])) p = 0;
+        children.get(p).push(e.i);
+      }
+      const pos = /* @__PURE__ */ new Map();
+      let row = 0;
+      const visit = (id, depth, seen) => {
+        if (seen.has(id)) return;
+        seen.add(id);
+        const kids = children.get(id) ?? [];
+        if (!kids.length) {
+          pos.set(id, { depth, y: row++ });
+          return;
+        }
+        const start2 = row;
+        for (const k of kids) visit(k, depth + 1, seen);
+        pos.set(id, { depth, y: (start2 + row - 1) / 2 });
+      };
+      visit(0, 0, /* @__PURE__ */ new Set());
+      const edges = [];
+      for (const [p, kids] of children) for (const k of kids) if (pos.has(p) && pos.has(k)) edges.push([p, k]);
+      return { pos, edges, rows: Math.max(1, row), depth: Math.max(...[...pos.values()].map((v) => v.depth)) };
+    }
+    function render(kind) {
+      const body = bodies[kind];
+      body.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        body.append(el5("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const list = map.pack[LIST_KEY2[kind]];
+      const { pos, edges, rows, depth } = layout(map, kind);
+      body.append(el5("p", "hint", `${LABEL2[kind]}\u306E\u7CFB\u8B5C\u56F3\u3002\u30CE\u30FC\u30C9\u3092\u5225\u306E\u30CE\u30FC\u30C9\u3078\u30C9\u30E9\u30C3\u30B0\u3059\u308B\u3068\u3001\u305D\u306E\u5B50\uFF08\u5206\u6D3E\uFF09\u306B\u306A\u308A\u307E\u3059\u3002\u300C\u5171\u901A\u306E\u7956\u300D\u306B\u843D\u3068\u3059\u3068\u72EC\u7ACB\u3057\u305F\u7CFB\u7D71\u306B\u306A\u308A\u307E\u3059\u3002`));
+      const W = (depth + 1) * (NODE_W + GAP_X) + 10, H = rows * (NODE_H + GAP_Y) + 10;
+      const svg = sv("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: "gen-svg" });
+      const X = (d) => 5 + d * (NODE_W + GAP_X), Y = (y) => 5 + y * (NODE_H + GAP_Y);
+      for (const [p, k] of edges) {
+        const a = pos.get(p), b = pos.get(k);
+        const x1 = X(a.depth) + NODE_W, y1 = Y(a.y) + NODE_H / 2, x2 = X(b.depth), y2 = Y(b.y) + NODE_H / 2, mx = (x1 + x2) / 2;
+        svg.append(sv("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, fill: "none", stroke: "var(--line, #555)", "stroke-width": 1.5 }));
+      }
+      const nodeG = /* @__PURE__ */ new Map();
+      for (const [id, p] of pos) {
+        const e = id === 0 ? null : list[id];
+        const g = sv("g", { "data-id": id, class: `gen-node${selected[kind] === id ? " sel" : ""}${id === 0 ? " root" : ""}`, transform: `translate(${X(p.depth)},${Y(p.y)})`, style: "cursor:grab" });
+        g.append(sv("rect", { width: NODE_W, height: NODE_H, rx: 6, fill: "var(--panel-2, #2a2a2a)", stroke: selected[kind] === id ? "var(--brass-bright, #d9b45a)" : "var(--brass-dim, #7a6a3a)", "stroke-width": selected[kind] === id ? 2 : 1 }));
+        if (e) g.append(sv("rect", { x: 6, y: 8, width: 12, height: 12, rx: 2, fill: e.color ?? "#888" }));
+        const label = id === 0 ? ROOT_LABEL[kind] : e.fullName ?? e.name;
+        g.append(sv("text", { x: e ? 24 : 8, y: 19, fill: "var(--text, #eee)", "font-size": 12 }, label.length > 11 ? `${label.slice(0, 10)}\u2026` : label));
+        g.append(sv("title", {}, label));
+        nodeG.set(id, g);
+        svg.append(g);
+        g.addEventListener("click", () => {
+          selected[kind] = id;
+          render(kind);
+        });
+        if (id !== 0) enableDrag(kind, g, svg, id);
+      }
+      const scroller = el5("div", "gen-scroll");
+      scroller.append(svg);
+      body.append(scroller, editPanel(map, kind, list));
+    }
+    function enableDrag(kind, g, svg, id) {
+      g.addEventListener("pointerdown", (ev) => {
+        if (ev.button !== 0) return;
+        const start2 = { x: ev.clientX, y: ev.clientY };
+        let moved = false;
+        const ghost = g.cloneNode(true);
+        ghost.setAttribute("opacity", "0.6");
+        ghost.style.pointerEvents = "none";
+        const onMove = (e2) => {
+          if (!moved && Math.hypot(e2.clientX - start2.x, e2.clientY - start2.y) < 5) return;
+          if (!moved) {
+            moved = true;
+            svg.append(ghost);
+          }
+          const r = svg.getBoundingClientRect();
+          ghost.setAttribute("transform", `translate(${e2.clientX - r.left - NODE_W / 2},${e2.clientY - r.top - NODE_H / 2})`);
+        };
+        const onUp = (e2) => {
+          window.removeEventListener("pointermove", onMove);
+          window.removeEventListener("pointerup", onUp);
+          if (!moved) return;
+          ghost.remove();
+          const target = document.elementFromPoint(e2.clientX, e2.clientY)?.closest?.("[data-id]");
+          if (target) {
+            const pid = Number(target.getAttribute("data-id"));
+            if (pid !== id) {
+              editActions.setOrigin(kind, id, pid);
+              selected[kind] = id;
+            }
+          }
+          render(kind);
+        };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+      });
+    }
+    function editPanel(map, kind, list) {
+      const box = el5("div", "gen-edit");
+      const id = selected[kind];
+      if (!id || !isLive15(list[id])) {
+        box.append(el5("p", "muted", "\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u89AA\u306E\u5909\u66F4\u30FB\u540D\u524D\u306E\u5909\u66F4\u30FB\u524A\u9664\u304C\u3067\u304D\u307E\u3059"));
+        return box;
+      }
+      const e = list[id];
+      box.append(el5("h4", "", `\u300C${e.fullName ?? e.name}\u300D`));
+      const sel = document.createElement("select");
+      const banned = /* @__PURE__ */ new Set([id, ...editActions.descendantsOf(kind, id)]);
+      const root = document.createElement("option");
+      root.value = 0;
+      root.textContent = ROOT_LABEL[kind];
+      sel.append(root);
+      for (const o of list) if (isLive15(o) && !banned.has(o.i)) {
+        const op = document.createElement("option");
+        op.value = o.i;
+        op.textContent = o.fullName ?? o.name;
+        sel.append(op);
+      }
+      sel.value = String(editActions.originOf(kind, id));
+      sel.addEventListener("change", () => {
+        editActions.setOrigin(kind, id, Number(sel.value));
+        render(kind);
+      });
+      const row = el5("div", "gen-row");
+      row.append(el5("span", "", "\u3069\u3053\u304B\u3089\u5206\u304B\u308C\u305F\u304B"), sel);
+      const rename = el5("button", "", "\u540D\u524D\u3092\u5909\u3048\u308B");
+      rename.type = "button";
+      rename.addEventListener("click", async () => {
+        const n = await promptDialog(`${LABEL2[kind]}\u306E\u65B0\u3057\u3044\u540D\u524D`, e.fullName ?? e.name);
+        if (n) {
+          editActions.renameEntity(kind, id, n);
+          render(kind);
+        }
+      });
+      const del = el5("button", "danger", "\u524A\u9664");
+      del.type = "button";
+      del.addEventListener("click", () => {
+        if (!window.confirm(`${LABEL2[kind]}\u300C${e.fullName ?? e.name}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u3002\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`)) return;
+        if (editActions.removeEntity(kind, id)) {
+          selected[kind] = null;
+          render(kind);
+        }
+      });
+      box.append(row, rename, del);
+      return box;
+    }
+    for (const kind of Object.keys(LIST_KEY2)) {
+      bodies[kind] = el5("div", "gen-body");
+      wins.register(`genealogy-${kind}`, { title: `\u{1F333} ${LABEL2[kind]}\u306E\u7CFB\u8B5C\u56F3`, width: 760, body: bodies[kind], onOpen: () => render(kind) });
+    }
+    store.subscribe((_s, ch) => {
+      if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
+      for (const kind of Object.keys(LIST_KEY2)) if (wins.isOpen(`genealogy-${kind}`)) render(kind);
+    });
+  }
+
+  // js/ui/nuclear-window.js
+  var el6 = (tag, cls, text2) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  };
+  var isLive16 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function initNuclearWindow({ store, simActions, wins }) {
+    const body = el6("div", "nuc-body");
+    let atk = null, tgt = null, heads = 1;
+    const nm = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
+    function render() {
+      body.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        body.append(el6("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const states = map.pack.states.filter(isLive16);
+      body.append(el6("p", "hint", "\u6838\u5175\u5668\u306F\u901A\u5E38\u306E\u6226\u4E89\u3067\u306F\u4F7F\u308F\u308C\u307E\u305B\u3093\u3002\u4EA4\u6226\u4E2D\u306E\u76F8\u624B\u306B\u5BFE\u3057\u3066\u4F5C\u6226\u3092\u7ACB\u6848\u3057\u3001\u78BA\u8A8D\u3057\u305F\u3046\u3048\u3067\u5B9F\u884C\u3057\u307E\u3059\u3002\u5B9F\u884C\u3059\u308B\u3068\u6A19\u7684\u56FD\u306E\u4EBA\u53E3\u30FB\u7523\u696D\u30FB\u58EB\u6C17\u306B\u58CA\u6EC5\u7684\u306A\u6253\u6483\u3092\u4E0E\u3048\u307E\u3059\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09\u3002"));
+      const holders = states.filter((s) => simActions.nuclearStock(s.i) > 0);
+      if (!holders.length) body.append(el6("p", "muted", "\u6838\u3092\u4FDD\u6709\u3059\u308B\u56FD\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u8ECD\u4E8B\u30A6\u30A3\u30F3\u30C9\u30A6\u3067\u3001\u6280\u8853\u6C34\u6E969\u4EE5\u4E0A\u306E\u56FD\u306E\u90E8\u968A\u306B\u6838\u3092\u914D\u5099\u3067\u304D\u307E\u3059\uFF09"));
+      else {
+        if (!holders.some((s) => s.i === atk)) atk = holders[0].i;
+        const targets = states.filter((s) => s.i !== atk);
+        if (!targets.some((s) => s.i === tgt)) tgt = targets[0]?.i ?? null;
+        const mk = (list, cur, on) => {
+          const s = document.createElement("select");
+          for (const x of list) {
+            const o = document.createElement("option");
+            o.value = x.i;
+            o.textContent = nm(map, x.i);
+            o.selected = x.i === cur;
+            s.append(o);
+          }
+          s.addEventListener("change", () => {
+            on(Number(s.value));
+            render();
+          });
+          return s;
+        };
+        const form = el6("div", "member-picker");
+        const n = document.createElement("input");
+        n.type = "number";
+        n.min = "1";
+        n.value = String(heads);
+        n.addEventListener("input", () => {
+          heads = Math.max(1, Math.floor(Number(n.value) || 1));
+        });
+        form.append(el6("span", "", "\u4F7F\u3046\u56FD"), mk(holders, atk, (x) => {
+          atk = x;
+        }), el6("span", "", `\uFF08\u4FDD\u6709 ${simActions.nuclearStock(atk)} \u767A\uFF09\u3000\u6A19\u7684\u306E\u56FD`), mk(targets, tgt, (x) => {
+          tgt = x;
+        }), el6("span", "", "\u767A\u6570"), n);
+        const go = el6("button", "primary", "\u4F5C\u6226\u3092\u7ACB\u6848\u3059\u308B");
+        go.type = "button";
+        go.addEventListener("click", () => {
+          simActions.draftNuclearOp(atk, tgt, heads);
+        });
+        body.append(form, go);
+      }
+      body.append(el6("h4", "", "\u4F5C\u6226\u306E\u4E00\u89A7"));
+      const ops = simActions.nuclearOps().slice().reverse();
+      if (!ops.length) body.append(el6("p", "muted", "\u7ACB\u6848\u3055\u308C\u305F\u4F5C\u6226\u306F\u3042\u308A\u307E\u305B\u3093"));
+      for (const o of ops) {
+        const row = el6("div", "ent-row");
+        row.append(el6("span", "ent-main", `${o.status === "executed" ? "\u2622 \u5B9F\u884C\u6E08\u307F" : "\u{1F4DD} \u7ACB\u6848\u4E2D"}\u3000${o.name}\u3000${nm(map, o.attackerId)} \u2192 ${nm(map, o.targetId)}\u3000${o.warheads}\u767A`));
+        if (o.status === "planned") {
+          const run = el6("button", "danger", "\u5B9F\u884C\u3059\u308B");
+          run.type = "button";
+          run.addEventListener("click", () => {
+            if (window.confirm(`\u300C${o.name}\u300D\u3092\u5B9F\u884C\u3057\u307E\u3059\u3002${nm(map, o.targetId)}\u306F\u58CA\u6EC5\u7684\u306A\u88AB\u5BB3\u3092\u53D7\u3051\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`)) simActions.executeNuclearOp(o.id);
+          });
+          const cancel = el6("button", "ent-btn", "\u53D6\u308A\u6D88\u3057");
+          cancel.type = "button";
+          cancel.addEventListener("click", () => simActions.cancelNuclearOp(o.id));
+          row.append(run, cancel);
+        } else if (o.result) row.append(el6("span", "ent-meta", `\u4EBA\u53E3 \u2212${o.result.populationLoss.toLocaleString()}\u5343\u4EBA / \u7523\u696D \u2212${Math.round(o.result.industryLossShare * 100)}%`));
+        body.append(row);
+      }
+    }
+    wins.register("nuclear", { title: "\u2622 \u6838\u4F5C\u6226", width: 720, body, onOpen: render });
+    store.subscribe((_s, ch) => {
+      if (["replace", "commit", "undo", "redo"].includes(ch.type) && wins.isOpen("nuclear")) render();
+    });
   }
 
   // js/ui/highlight.js
@@ -5969,19 +6816,7 @@
     });
     const annotBoxes = [...menu.querySelectorAll("[data-annot]")];
     for (const box of annotBoxes) box.addEventListener("change", () => actions.setExportOption(box.dataset.annot, box.checked));
-    const presetBox = byId("layer-presets");
     const toggleBox = byId("layer-toggles");
-    const presetBtns = /* @__PURE__ */ new Map();
-    for (const p of PRESETS) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = p.label;
-      b.title = p.title;
-      b.dataset.preset = p.id;
-      b.addEventListener("click", () => actions.applyPreset(p.id));
-      presetBox.append(b);
-      presetBtns.set(p.id, b);
-    }
     const layerBtns = /* @__PURE__ */ new Map();
     let lastGroup = null;
     for (const l of LAYERS) {
@@ -6033,11 +6868,6 @@
           b.classList.toggle("active", on);
           b.setAttribute("aria-pressed", String(on));
         }
-      }
-      for (const p of PRESETS) {
-        const on = presetMatches(v, p), btn3 = presetBtns.get(p.id);
-        btn3.classList.toggle("active", on);
-        btn3.setAttribute("aria-pressed", String(on));
       }
       byId("layers-menu").classList.toggle("disabled", !hasMap);
       const eo = state.exportOpts ?? {};
@@ -6492,11 +7322,11 @@ ${shown}${more}`;
   }
 
   // js/core/edit/burgs.js
-  var isLive13 = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
+  var isLive17 = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
   var round63 = (v) => Math.round(v * 1e6) / 1e6;
   function estimatePopulation(map, cell, rnd) {
     const idx = cellIndexOf(map);
-    const near = idx.findWithin(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1], map.grid.spacing * 6).map((i) => map.pack.cells.burg[i]).filter((id) => id > 0).map((id) => map.pack.burgs[id]).filter(isLive13);
+    const near = idx.findWithin(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1], map.grid.spacing * 6).map((i) => map.pack.cells.burg[i]).filter((id) => id > 0).map((id) => map.pack.burgs[id]).filter(isLive17);
     const base = near.length ? near.map((b) => b.population).sort((a, b) => a - b)[near.length >> 1] : Math.max(0.05, (map.pack.cells.pop[cell] ?? 1) * 0.25);
     const jitter = rnd ? rnd.float(0.6, 1.4) : 1;
     return Math.max(0.01, Math.round(base * jitter * 1e3) / 1e3);
@@ -6547,7 +7377,7 @@ ${shown}${more}`;
     if (religion1 && typeof religion1.urban === "number") parts.push(setProps(religion1, { urban: round63(religion1.urban + burg.population) }));
     if (capital && state1) {
       const oldCapital = map.pack.burgs[state1.capital];
-      if (isLive13(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
+      if (isLive17(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
       parts.push({ apply: (m) => {
         m.pack.burgs[id].capital = 1;
       }, revert: (m) => {
@@ -6559,7 +7389,7 @@ ${shown}${more}`;
   }
   function planMoveBurg(map, id, cell) {
     const burg = map.pack.burgs[id];
-    if (!isLive13(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive17(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const c = map.pack.cells;
     if (burg.cell === cell) return null;
     if (cell < 0 || cell >= c.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
@@ -6603,7 +7433,7 @@ ${shown}${more}`;
   }
   function planRenameBurg(map, id, name) {
     const burg = map.pack.burgs[id];
-    if (!isLive13(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive17(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u90FD\u5E02\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (trimmed === burg.name) return null;
@@ -6611,7 +7441,7 @@ ${shown}${more}`;
   }
   function whyCannotRemoveBurg(map, id) {
     const burg = map.pack.burgs[id];
-    if (!isLive13(burg)) return "\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093";
+    if (!isLive17(burg)) return "\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093";
     if (burg.capital) return "\u9996\u90FD\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B\u5225\u306E\u90FD\u5E02\u3092\u9996\u90FD\u306B\u3057\u3066\u304F\u3060\u3055\u3044";
     if (map.markets?.some((m) => m.centerBurgId === id)) return "\u5E02\u5834\u306E\u4E2D\u5FC3\u90FD\u5E02\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093";
     return null;
@@ -6646,24 +7476,24 @@ ${shown}${more}`;
     const state = map.pack.states[stateId];
     if (!state || !state.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const burg = map.pack.burgs[burgId];
-    if (!isLive13(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive17(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (burg.state !== stateId) throw new Error("\u9996\u90FD\u306F\u81EA\u56FD\u5185\u306E\u90FD\u5E02\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (state.capital === burgId) return null;
     const parts = [];
     const oldCapital = map.pack.burgs[state.capital];
-    if (isLive13(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
+    if (isLive17(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
     parts.push(setProps(burg, { capital: 1 }), setProps(state, { capital: burgId, center: burg.cell }));
     return makeCommand("\u9996\u90FD\u3092\u5909\u66F4", ["places"], parts);
   }
 
   // js/core/edit/entities.js
-  var LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed;
+  var LIST_KEY3 = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+  var isLive18 = (e) => !!e && typeof e === "object" && !e.removed;
   function planRenameEntity(map, kind, id, name) {
-    const listKey = LIST_KEY[kind];
+    const listKey = LIST_KEY3[kind];
     if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306E\u540D\u524D\u306F\u5909\u66F4\u3067\u304D\u307E\u305B\u3093");
     const e = map.pack[listKey]?.[id];
-    if (!isLive14(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive18(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const field = "fullName" in e ? "fullName" : "name";
@@ -6691,13 +7521,13 @@ ${shown}${more}`;
   var LABEL_OF = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" };
   function planAddEntity(map, { kind, name, rnd, extra }) {
     if (kind === "province") throw new Error("\u5C5E\u5DDE\u306F\u6240\u5C5E\u3059\u308B\u56FD\u5BB6\u304C\u5FC5\u8981\u3067\u3059\u3002planAddProvince \u3092\u4F7F\u3063\u3066\u304F\u3060\u3055\u3044");
-    const listKey = LIST_KEY[kind];
+    const listKey = LIST_KEY3[kind];
     if (!listKey) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error(`${LABEL_OF[kind]}\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044`);
     const existing = map.pack[listKey];
     const id = existing.length || 1;
-    const liveCount = existing.filter(isLive14).length;
+    const liveCount = existing.filter(isLive18).length;
     const entity = {
       i: id,
       name: trimmed,
@@ -6723,12 +7553,12 @@ ${shown}${more}`;
   }
   function planAddProvince(map, { state, name, rnd }) {
     const owner = map.pack.states[state];
-    if (!isLive14(owner) || !owner.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive18(owner) || !owner.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u5C5E\u5DDE\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const existing = map.pack.provinces;
     const id = existing.length || 1;
-    const liveCount = existing.filter(isLive14).length;
+    const liveCount = existing.filter(isLive18).length;
     const entity = {
       i: id,
       state,
@@ -6748,12 +7578,49 @@ ${shown}${more}`;
     }, list)];
     return { command: makeCommand("\u5C5E\u5DDE\u3092\u65B0\u898F\u4F5C\u6210", ["politics"], parts), id };
   }
+  function planRemoveEntity(map, kind, id) {
+    const listKey = LIST_KEY3[kind];
+    if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093");
+    const e = map.pack[listKey]?.[id];
+    if (!isLive18(e) || !e.i) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const label = LABEL_OF[kind], nm = e.fullName ?? e.name;
+    const c = map.pack.cells;
+    const parts = [];
+    const clearCells = (field, ids2) => {
+      const arr = c[field], changes = [];
+      for (let i = 0; i < arr.length; i++) if (ids2.has(arr[i])) changes.push([i, arr[i], 0]);
+      if (changes.length) parts.push(setIndexed((m) => m.pack.cells[field], changes));
+    };
+    const zero = { cells: 0, area: 0, rural: 0, urban: 0 };
+    if (kind === "state") {
+      const wars = map.ext?.data?.wars ?? [];
+      if (wars.some((w) => !w.endedAt && (w.attackers.includes(id) || w.defenders.includes(id)))) throw new Error(`\u300C${nm}\u300D\u306F\u6226\u4E89\u4E2D\u306E\u305F\u3081\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B\u8B1B\u548C\u3057\u3066\u304F\u3060\u3055\u3044`);
+      const provIds = new Set(map.pack.provinces.filter((p) => isLive18(p) && p.i && p.state === id).map((p) => p.i));
+      clearCells("state", /* @__PURE__ */ new Set([id]));
+      if (provIds.size) clearCells("province", provIds);
+      for (const p of map.pack.provinces) if (provIds.has(p.i)) parts.push(setProps(p, { removed: true, ...zero }));
+      for (const b of map.pack.burgs) if (isLive18(b) && b.i && b.state === id) parts.push(setProps(b, { state: 0, ...b.capital ? { capital: 0 } : {} }));
+      parts.push(setProps(e, { removed: true, ...zero, burgs: 0, capital: 0, military: [] }));
+    } else if (kind === "culture") {
+      clearCells("culture", /* @__PURE__ */ new Set([id]));
+      for (const b of map.pack.burgs) if (isLive18(b) && b.i && b.culture === id) parts.push(setProps(b, { culture: 0 }));
+      parts.push(setProps(e, { removed: true, ...zero }));
+    } else if (kind === "religion") {
+      clearCells("religion", /* @__PURE__ */ new Set([id]));
+      parts.push(setProps(e, { removed: true, ...zero }));
+    } else {
+      clearCells("province", /* @__PURE__ */ new Set([id]));
+      for (const b of map.pack.burgs) if (isLive18(b) && b.i && b.province === id) parts.push(setProps(b, { province: 0 }));
+      parts.push(setProps(e, { removed: true, ...zero }));
+    }
+    return makeCommand(`${label}\u300C${nm}\u300D\u3092\u524A\u9664`, ["politics", "places"], parts);
+  }
 
   // js/core/edit/finance.js
-  var isLive15 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive19 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planSetFinance(map, stateId, patch) {
     const s = map.pack.states[stateId];
-    if (!isLive15(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive19(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const before = getFinance(s);
     const after = {};
     if (patch.salesTax !== void 0) after.salesTax = Math.round(clampRate(patch.salesTax) * 100) / 100;
@@ -6771,7 +7638,7 @@ ${shown}${more}`;
 
   // js/core/edit/profile.js
   var round64 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive16 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive20 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   var CULTURE_TYPES = Object.freeze([
     { id: "Generic", label: "\u6A19\u6E96" },
     { id: "River", label: "\u6CB3\u5DDD" },
@@ -6813,13 +7680,13 @@ ${shown}${more}`;
     { id: "shanty", label: "\u30B9\u30E9\u30E0", icon: "\u{1F3DA}" }
   ]);
   var ENTITY_LIST = { state: "states", culture: "cultures", religion: "religions" };
-  var KIND_LABEL = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559" };
+  var KIND_LABEL2 = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559" };
   var ids = (list) => list.map((x) => x.id);
   function planSetEntityProfile(map, kind, id, patch) {
     const list = map.pack[ENTITY_LIST[kind]];
     if (!list) throw new Error("\u3053\u306E\u7A2E\u985E\u306F\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093");
     const e = list[id];
-    if (!isLive16(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive20(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const next = {};
     const text2 = (k, v, max = 60) => {
       const t = String(v ?? "").trim();
@@ -6837,18 +7704,18 @@ ${shown}${more}`;
         next.form = v;
       } else if (k === "formName" && kind === "state") text2("formName", v);
       else if ((k === "deity" || k === "form") && kind === "religion") text2(k, v);
-      else throw new Error(`${KIND_LABEL[kind]}\u3067\u306F\u300C${k}\u300D\u3092\u5909\u66F4\u3067\u304D\u307E\u305B\u3093`);
+      else throw new Error(`${KIND_LABEL2[kind]}\u3067\u306F\u300C${k}\u300D\u3092\u5909\u66F4\u3067\u304D\u307E\u305B\u3093`);
     }
     const changed = Object.fromEntries(Object.entries(next).filter(([k, v]) => e[k] !== v));
     if (!Object.keys(changed).length) return null;
-    return makeCommand(`${KIND_LABEL[kind]}\u306E\u8A2D\u5B9A\u3092\u5909\u66F4\uFF08${e.name}\uFF09`, ["politics"], [setProps(e, changed)]);
+    return makeCommand(`${KIND_LABEL2[kind]}\u306E\u8A2D\u5B9A\u3092\u5909\u66F4\uFF08${e.name}\uFF09`, ["politics"], [setProps(e, changed)]);
   }
   var parentOf = (e) => Array.isArray(e?.origins) && Number.isInteger(e.origins[0]) ? e.origins[0] : 0;
   function originTree(map, kind) {
     const list = map.pack[ENTITY_LIST[kind]] ?? [];
     const parent = /* @__PURE__ */ new Map(), children = /* @__PURE__ */ new Map();
     for (const e of list) {
-      if (!isLive16(e)) continue;
+      if (!isLive20(e)) continue;
       const p = parentOf(e);
       parent.set(e.i, p);
       if (!children.has(p)) children.set(p, []);
@@ -6870,12 +7737,12 @@ ${shown}${more}`;
     if (kind !== "culture" && kind !== "religion") throw new Error("\u8D77\u6E90\u3092\u6301\u3064\u306E\u306F\u6587\u5316\u3068\u5B97\u6559\u3060\u3051\u3067\u3059");
     const list = map.pack[ENTITY_LIST[kind]];
     const e = list[id];
-    if (!isLive16(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    if (parentId !== 0 && !isLive16(list[parentId])) throw new Error("\u8D77\u6E90\u306B\u6307\u5B9A\u3057\u305F\u5BFE\u8C61\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive20(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (parentId !== 0 && !isLive20(list[parentId])) throw new Error("\u8D77\u6E90\u306B\u6307\u5B9A\u3057\u305F\u5BFE\u8C61\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (parentId === id) throw new Error("\u81EA\u5206\u81EA\u8EAB\u3092\u8D77\u6E90\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
     if (descendantsOf(map, kind, id).includes(parentId)) throw new Error("\u81EA\u5206\u306E\u5B50\u5B6B\u3092\u8D77\u6E90\u306B\u306F\u3067\u304D\u307E\u305B\u3093\uFF08\u7CFB\u7D71\u304C\u8F2A\u306B\u306A\u308A\u307E\u3059\uFF09");
     if (parentOf(e) === parentId && Array.isArray(e.origins) && e.origins.length === 1) return null;
-    return makeCommand(`${KIND_LABEL[kind]}\u306E\u8D77\u6E90\u3092\u5909\u66F4\uFF08${e.name}\uFF09`, ["politics"], [setProps(e, { origins: [parentId] })]);
+    return makeCommand(`${KIND_LABEL2[kind]}\u306E\u8D77\u6E90\u3092\u5909\u66F4\uFF08${e.name}\uFF09`, ["politics"], [setProps(e, { origins: [parentId] })]);
   }
   function planSetBurgProfile(map, burgId, patch) {
     const b = map.pack.burgs[burgId];
@@ -6913,15 +7780,15 @@ ${shown}${more}`;
   }
 
   // js/core/edit/economy.js
-  var isLive17 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive21 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getTechLevel(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive17(s)) return null;
+    if (!isLive21(s)) return null;
     return typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
   }
   function planSetTechLevel(map, stateId, value) {
     const s = map.pack.states[stateId];
-    if (!isLive17(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive21(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const after = clampTech(value);
     const before = typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
     if (before === after) return null;
@@ -6929,15 +7796,15 @@ ${shown}${more}`;
   }
 
   // js/core/edit/military-doctrine.js
-  var isLive18 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive22 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getDoctrine(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive18(s)) return null;
+    if (!isLive22(s)) return null;
     return DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
   }
   function planSetDoctrine(map, stateId, doctrineKey) {
     const s = map.pack.states[stateId];
-    if (!isLive18(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive22(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (!DOCTRINE_BY_KEY[doctrineKey]) throw new Error("\u4E0D\u660E\u306A\u30C9\u30AF\u30C8\u30EA\u30F3\u3067\u3059");
     const before = DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
     if (before === doctrineKey) return null;
@@ -7099,6 +7966,17 @@ ${shown}${more}`;
           const plan = planRenameEntity(map, kind, id, name);
           commitOrThrow(withProvisional(map, plan, kind, id, !!takeSuggested(name, kind)));
         }));
+      },
+      /** 国家・文化・宗教・属州を削除する（Undo で戻せる）。成功したら true */
+      removeEntity(kind, id) {
+        return withMap((map) => {
+          let ok = false;
+          safeRun("\u524A\u9664", () => {
+            commitOrThrow(planRemoveEntity(map, kind, id));
+            ok = true;
+          });
+          return ok;
+        }) ?? false;
       },
       /** 国家・文化・宗教を新規作成する。まだどのセルも持たない状態で作られるので、
        *  続けて「塗る」ツールでセルに塗って地図上に反映する必要がある */
@@ -7289,119 +8167,9 @@ ${shown}${more}`;
     };
   }
 
-  // js/ui/dialogs.js
-  function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLabel, danger, suggest, hint }) {
-    const dialog = document.createElement("dialog");
-    dialog.className = "confirm-dialog";
-    if (title) dialog.append(el3("h2", null, title));
-    if (bodyText) dialog.append(el3("p", null, bodyText));
-    let input = null;
-    if (showInput) {
-      input = document.createElement("input");
-      input.type = "text";
-      input.className = "confirm-dialog-input";
-      input.value = inputValue ?? "";
-      dialog.append(input);
-    }
-    let suggestBtn = null;
-    if (input && suggest) {
-      suggestBtn = el3("button", "suggest-btn", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3092\u751F\u6210");
-      suggestBtn.type = "button";
-      suggestBtn.addEventListener("click", () => {
-        const v = suggest();
-        if (v) {
-          input.value = v;
-          input.focus();
-          input.select();
-        }
-      });
-      dialog.append(suggestBtn);
-    }
-    if (hint) dialog.append(el3("p", "hint", hint));
-    const actions = el3("div", "confirm-dialog-actions");
-    let cancelBtn = null;
-    if (cancelLabel !== null) {
-      cancelBtn = el3("button", "", cancelLabel ?? "\u30AD\u30E3\u30F3\u30BB\u30EB");
-      cancelBtn.type = "button";
-      cancelBtn.value = "cancel";
-      actions.append(cancelBtn);
-    }
-    const okBtn = el3("button", danger ? "danger" : "primary", okLabel ?? "OK");
-    okBtn.type = "button";
-    actions.append(okBtn);
-    dialog.append(actions);
-    document.body.append(dialog);
-    return { dialog, input, okBtn, cancelBtn, suggestBtn };
-  }
-  function el3(tag, cls, text2) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text2 != null) e.textContent = text2;
-    return e;
-  }
-  function confirmDialog(message, opts = {}) {
-    return new Promise((resolve) => {
-      const { dialog, okBtn, cancelBtn } = buildDialog({ bodyText: message, okLabel: opts.okLabel, cancelLabel: opts.cancelLabel, danger: opts.danger });
-      const finish = (result) => {
-        dialog.close();
-        dialog.remove();
-        resolve(result);
-      };
-      okBtn.addEventListener("click", () => finish(true));
-      cancelBtn.addEventListener("click", () => finish(false));
-      dialog.addEventListener("cancel", () => finish(false));
-      dialog.showModal();
-      okBtn.focus();
-    });
-  }
-  function alertDialog(message, opts = {}) {
-    return new Promise((resolve) => {
-      const { dialog, okBtn } = buildDialog({ bodyText: message, okLabel: opts.okLabel ?? "OK", cancelLabel: null });
-      const finish = () => {
-        dialog.close();
-        dialog.remove();
-        resolve();
-      };
-      okBtn.addEventListener("click", finish);
-      dialog.addEventListener("cancel", finish);
-      dialog.showModal();
-      okBtn.focus();
-    });
-  }
-  function promptDialog(message, defaultValue = "", opts = {}) {
-    return new Promise((resolve) => {
-      const { dialog, input, okBtn, cancelBtn } = buildDialog({
-        bodyText: message,
-        showInput: true,
-        inputValue: defaultValue,
-        okLabel: opts.okLabel,
-        cancelLabel: opts.cancelLabel,
-        suggest: opts.suggest,
-        hint: opts.hint
-      });
-      const finish = (result) => {
-        dialog.close();
-        dialog.remove();
-        resolve(result);
-      };
-      okBtn.addEventListener("click", () => finish(input.value));
-      cancelBtn.addEventListener("click", () => finish(null));
-      dialog.addEventListener("cancel", () => finish(null));
-      input.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          finish(input.value);
-        }
-      });
-      dialog.showModal();
-      input.focus();
-      input.select();
-    });
-  }
-
   // js/ui/edit-toolbar.js
   var TARGET_LIST = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive19 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive23 = (e) => !!e && typeof e === "object" && !e.removed;
   var NEW_VALUE = "__new__";
   function initEditToolbar({ store, editMode, editActions }) {
     const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
@@ -7444,7 +8212,7 @@ ${shown}${more}`;
       erase.value = "0";
       erase.textContent = `\uFF08${PAINT_KINDS[kind].label}\u306A\u3057\u306B\u3059\u308B\uFF09`;
       targetSel.append(erase);
-      const list = map.pack[TARGET_LIST[kind]].filter(isLive19);
+      const list = map.pack[TARGET_LIST[kind]].filter(isLive23);
       for (const e of list) {
         const o = document.createElement("option");
         o.value = e.i;
@@ -7564,7 +8332,7 @@ ${shown}${more}`;
     for (let i = 0; i < owner.length; i++) if (biome[i] !== 0 && owner[i] === 0) n++;
     return n;
   }
-  function pickAutoTerritory(map, { kind = "state", size = "m", rnd, seedCell = -1 }) {
+  function pickAutoTerritory(map, { kind = "state", size = "m", rnd, seedCell = -1, ownCells = null }) {
     if (!KINDS.includes(kind)) throw new Error(`\u304A\u307E\u304B\u305B\u9818\u571F\u306B\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
     const owner = map.pack.cells[kind], { biome } = map.pack.cells;
     const { cells: geom, p } = map.geometry.pack;
@@ -7579,7 +8347,8 @@ ${shown}${more}`;
     const ratio = (TERRITORY_SIZES[size] ?? TERRITORY_SIZES.m).ratio;
     const want = Math.max(MIN_CELLS, Math.round(landCount * ratio));
     let seed = seedCell >= 0 && free(seedCell) ? seedCell : -1;
-    if (seed < 0) {
+    let want_override = 0;
+    if (seed < 0 && !(Array.isArray(ownCells) && ownCells.length)) {
       const comp = new Int32Array(n).fill(-1);
       const sizes = [];
       for (let i = 0; i < n; i++) {
@@ -7612,16 +8381,48 @@ ${shown}${more}`;
         }
       }
     }
+    const H = map.geometry.pack.h;
+    const stepCost = (j) => 1 + (H ? Math.max(0, H[j] - 45) / 25 : 0);
+    const expanding = Array.isArray(ownCells) && ownCells.length > 0;
     const inSet = new Uint8Array(n);
-    const cells = [seed];
-    inSet[seed] = 1;
-    const frontier = new Set(geom.c[seed].filter((j) => free(j) && !inSet[j]));
-    const [sx, sy] = p[seed];
-    while (cells.length < want && frontier.size) {
+    const cells = [];
+    const dist = /* @__PURE__ */ new Map();
+    const frontier = /* @__PURE__ */ new Set();
+    const offer = (from, fromDist) => {
+      for (const j of geom.c[from]) {
+        if (!free(j) || inSet[j]) continue;
+        const d = fromDist + stepCost(j);
+        if (!dist.has(j) || d < dist.get(j)) dist.set(j, d);
+        frontier.add(j);
+      }
+    };
+    if (expanding) {
+      const mine = new Uint8Array(n);
+      for (const i of ownCells) mine[i] = 1;
+      for (const i of ownCells) offer(i, 0);
+      if (!frontier.size) return { cells: [], seed: -1, reason: "no-adjacent-free-land" };
+      seed = ownCells[0];
+      const grow = Math.max(MIN_CELLS, Math.round(Math.max(ownCells.length * ratio * 2, landCount * ratio * 0.5)));
+      want_override = grow;
+    } else {
+      inSet[seed] = 1;
+      cells.push(seed);
+      dist.set(seed, 0);
+      offer(seed, 0);
+    }
+    const target = expanding ? want_override : want;
+    const near = (j) => {
+      let c = 0;
+      for (const k of geom.c[j]) if (inSet[k] || expanding && ownMask(k)) c++;
+      return c;
+    };
+    const ownSet = expanding ? new Set(ownCells) : null;
+    const ownMask = (k) => ownSet.has(k);
+    while (cells.length < target && frontier.size) {
       let best = -1, bestKey = Infinity;
       for (const j of frontier) {
-        const d = Math.hypot(p[j][0] - sx, p[j][1] - sy);
-        const key = d * (0.75 + 0.5 * rnd.next());
+        const compact = 1 - 0.07 * Math.min(4, Math.max(0, near(j) - 1));
+        const key = (dist.get(j) ?? 1) * (0.85 + 0.3 * rnd.next()) * compact;
         if (key < bestKey) {
           bestKey = key;
           best = j;
@@ -7631,7 +8432,7 @@ ${shown}${more}`;
       if (inSet[best]) continue;
       inSet[best] = 1;
       cells.push(best);
-      for (const j of geom.c[best]) if (free(j) && !inSet[j]) frontier.add(j);
+      offer(best, dist.get(best) ?? 0);
     }
     return { cells, seed };
   }
@@ -7662,7 +8463,7 @@ ${shown}${more}`;
   }
 
   // js/app/builder-actions.js
-  var KIND_LABEL2 = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559" };
+  var KIND_LABEL3 = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559" };
   var BUILDABLE = Object.freeze(["state", "religion", "culture"]);
   function createBuilderActions({ store, editActions, editMode, actions }) {
     const rnd = createRandom((Date.now() ^ 1540483477) >>> 0);
@@ -7692,7 +8493,7 @@ ${shown}${more}`;
       window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "select" } }));
     }
     return {
-      KIND_LABEL: KIND_LABEL2,
+      KIND_LABEL: KIND_LABEL3,
       BUILDABLE,
       TERRITORY_SIZES,
       beginPaint,
@@ -7716,7 +8517,11 @@ ${shown}${more}`;
       /** 空き地から領土を自動で決めて塗る。{ok, count, reason} */
       autoClaim(kind, id, size = "m") {
         return withMap((map) => {
-          const r = pickAutoTerritory(map, { kind, size, rnd });
+          const arr = map.pack.cells[kind], own = [];
+          if (id) {
+            for (let i = 0; i < arr.length; i++) if (arr[i] === id) own.push(i);
+          }
+          const r = pickAutoTerritory(map, { kind, size, rnd, ownCells: own });
           if (!r.cells.length) return { ok: false, count: 0, reason: r.reason ?? "no-free-land" };
           editActions.paintCells(kind, id, r.cells);
           return { ok: true, count: r.cells.length, reason: null };
@@ -7781,28 +8586,28 @@ ${shown}${more}`;
   }
 
   // js/ui/kit.js
-  function el4(tag, cls, text2) {
+  function el7(tag, cls, text2) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   }
   function btn(cls, text2, title, onClick) {
-    const b = el4("button", cls, text2);
+    const b = el7("button", cls, text2);
     b.type = "button";
     if (title) b.title = title;
     b.addEventListener("click", onClick);
     return b;
   }
   function swatch(color, tall = true) {
-    const s = el4("span", "b-swatch");
+    const s = el7("span", "b-swatch");
     s.style.background = color ?? "#888";
     if (!tall) s.style.height = "14px";
     return s;
   }
   function slider({ label, min, max, step, value, format, onCommit }) {
-    const wrap = el4("label", "b-field");
-    const val = el4("span", "b-mini", `${label} ${format(value)}`);
+    const wrap = el7("label", "b-field");
+    const val = el7("span", "b-mini", `${label} ${format(value)}`);
     const r = document.createElement("input");
     r.type = "range";
     r.min = String(min);
@@ -7816,14 +8621,14 @@ ${shown}${more}`;
     wrap.append(val, r);
     return wrap;
   }
-  var isLive20 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive24 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 
   // js/ui/profile-fields.js
-  var LIST_KEY2 = { state: "states", culture: "cultures", religion: "religions" };
+  var LIST_KEY4 = { state: "states", culture: "cultures", religion: "religions" };
   var live2 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function selectField(label, options, value, onChange, hint) {
-    const f = el4("label", "b-field");
-    f.append(el4("span", "b-mini", label));
+    const f = el7("label", "b-field");
+    f.append(el7("span", "b-mini", label));
     const sel = document.createElement("select");
     for (const o of options) sel.append(new Option(o.label, String(o.id)));
     if (!options.some((o) => String(o.id) === String(value))) sel.append(new Option(String(value ?? "\uFF08\u672A\u8A2D\u5B9A\uFF09"), String(value ?? "")));
@@ -7834,8 +8639,8 @@ ${shown}${more}`;
     return f;
   }
   function textField(label, value, onChange) {
-    const f = el4("label", "b-field");
-    f.append(el4("span", "b-mini", label));
+    const f = el7("label", "b-field");
+    f.append(el7("span", "b-mini", label));
     const inp = document.createElement("input");
     inp.value = value ?? "";
     inp.addEventListener("change", () => {
@@ -7857,21 +8662,21 @@ ${shown}${more}`;
     if (kind === "religion") d.append(textField("\u795E\u30FB\u4FE1\u4EF0\u306E\u5BFE\u8C61", e.deity, (v) => editActions.setEntityProfile("religion", e.i, { deity: v })));
     const banned = /* @__PURE__ */ new Set([e.i, ...editActions.descendantsOf(kind, e.i)]);
     const opts = [{ id: 0, label: kind === "religion" ? "\u306A\u3057\uFF08\u5171\u901A\u306E\u7956\u30FB\u539F\u59CB\u4FE1\u4EF0\uFF09" : "\u306A\u3057\uFF08\u5171\u901A\u306E\u7956\uFF09" }];
-    for (const x of map.pack[LIST_KEY2[kind]]) if (live2(x) && !banned.has(x.i)) opts.push({ id: x.i, label: x.name });
+    for (const x of map.pack[LIST_KEY4[kind]]) if (live2(x) && !banned.has(x.i)) opts.push({ id: x.i, label: x.name });
     d.append(selectField("\u8D77\u6E90\uFF08\u3069\u3053\u304B\u3089\u5206\u304B\u308C\u305F\u304B\uFF09", opts, editActions.originOf(kind, e.i), (v) => editActions.setOrigin(kind, e.i, Number(v))));
-    const kids = editActions.descendantsOf(kind, e.i).map((i) => map.pack[LIST_KEY2[kind]][i]).filter(live2);
+    const kids = editActions.descendantsOf(kind, e.i).map((i) => map.pack[LIST_KEY4[kind]][i]).filter(live2);
     if (kids.length) {
-      const row = el4("div", "b-kids");
-      row.append(el4("span", "b-mini", "\u3053\u3053\u304B\u3089\u5206\u304B\u308C\u305F"));
+      const row = el7("div", "b-kids");
+      row.append(el7("span", "b-mini", "\u3053\u3053\u304B\u3089\u5206\u304B\u308C\u305F"));
       for (const k of kids.slice(0, 8)) row.append(btn("b-chip", k.name, "\u3053\u306E\u9805\u76EE\u3092\u958B\u304F", () => openEntity?.(kind, k.i)));
-      if (kids.length > 8) row.append(el4("span", "b-mini", `\u307B\u304B${kids.length - 8}`));
+      if (kids.length > 8) row.append(el7("span", "b-mini", `\u307B\u304B${kids.length - 8}`));
       d.append(row);
     }
   }
   function burgDetails(b, { editActions, map }) {
-    const d = el4("div", "b-details");
-    const pop = el4("label", "b-field");
-    pop.append(el4("span", "b-mini", "\u4EBA\u53E3\uFF08\u5343\u4EBA\u3002\u56FD\u306E\u90FD\u5E02\u4EBA\u53E3\u306B\u3082\u53CD\u6620\uFF09"));
+    const d = el7("div", "b-details");
+    const pop = el7("label", "b-field");
+    pop.append(el7("span", "b-mini", "\u4EBA\u53E3\uFF08\u5343\u4EBA\u3002\u56FD\u306E\u90FD\u5E02\u4EBA\u53E3\u306B\u3082\u53CD\u6620\uFF09"));
     const inp = document.createElement("input");
     inp.type = "number";
     inp.min = "0";
@@ -7883,20 +8688,20 @@ ${shown}${more}`;
     d.append(selectField("\u533A\u5206", BURG_GROUPS, b.group, (v) => editActions.setBurgProfile(b.i, { group: v }), b.capital ? "\u9996\u90FD\u306E\u533A\u5206\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093" : ""));
     d.querySelector("select:last-of-type")?.toggleAttribute("disabled", !!b.capital);
     d.append(selectField("\u7A2E\u985E", CULTURE_TYPES, b.type ?? "Generic", (v) => editActions.setBurgProfile(b.i, { type: v })));
-    const feats = el4("div", "b-feats");
-    feats.append(el4("span", "b-mini", "\u8A2D\u5099"));
+    const feats = el7("div", "b-feats");
+    feats.append(el7("span", "b-mini", "\u8A2D\u5099"));
     for (const f of BURG_FEATURES) {
-      const lab = el4("label", "b-feat");
+      const lab = el7("label", "b-feat");
       const cb = document.createElement("input");
       cb.type = "checkbox";
       cb.checked = !!b[f.id];
       cb.addEventListener("change", () => editActions.setBurgProfile(b.i, { [f.id]: cb.checked }));
-      lab.append(cb, el4("span", "", `${f.icon} ${f.label}`));
+      lab.append(cb, el7("span", "", `${f.icon} ${f.label}`));
       feats.append(lab);
     }
     d.append(feats);
-    if (b.port) d.append(el4("p", "b-hint", "\u2693 \u6E2F\u304C\u3042\u308A\u307E\u3059\uFF08\u6E2F\u306E\u6709\u7121\u306F\u3001\u3053\u3053\u3067\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093\uFF09"));
-    const foot = el4("div", "b-actions");
+    if (b.port) d.append(el7("p", "b-hint", "\u2693 \u6E2F\u304C\u3042\u308A\u307E\u3059\uFF08\u6E2F\u306E\u6709\u7121\u306F\u3001\u3053\u3053\u3067\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093\uFF09"));
+    const foot = el7("div", "b-actions");
     const st = map.pack.states[b.state];
     if (!b.capital && st && st.i) foot.append(btn("", "\u9996\u90FD\u306B\u3059\u308B", `${st.name}\u306E\u9996\u90FD\u3092\u3053\u306E\u90FD\u5E02\u306B\u3059\u308B`, () => editActions.setCapital(b.state, b.i)));
     d.append(foot);
@@ -7905,17 +8710,17 @@ ${shown}${more}`;
   var featureIcons = (b) => BURG_FEATURES.filter((f) => b[f.id]).map((f) => f.icon).join("") + (b.port ? "\u2693" : "");
 
   // js/ui/history-builder.js
-  var LIST_KEY3 = { state: "states", culture: "cultures", religion: "religions" };
+  var LIST_KEY5 = { state: "states", culture: "cultures", religion: "religions" };
   var ICON = { state: "\u{1F3F3}", religion: "\u2628", culture: "\u2616" };
-  var isLive21 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  function el5(tag, cls, text2) {
+  var isLive25 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function el8(tag, cls, text2) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   }
   function btn2(cls, text2, title, onClick) {
-    const b = el5("button", cls, text2);
+    const b = el8("button", cls, text2);
     b.type = "button";
     if (title) b.title = title;
     b.addEventListener("click", onClick);
@@ -7934,7 +8739,7 @@ ${shown}${more}`;
     let mode = "build";
     let cellCounts = /* @__PURE__ */ new Map();
     const getMap = () => store.getState().map;
-    const ent = (kind, id) => getMap()?.pack[LIST_KEY3[kind]]?.[id];
+    const ent = (kind, id) => getMap()?.pack[LIST_KEY5[kind]]?.[id];
     const nameOf2 = (e) => e.fullName ?? e.name;
     const styleOpt = () => nameStyle ? { style: nameStyle } : {};
     const MODES = [["build", "\u3064\u304F\u308B"], ["economy", "\u7D4C\u6E08\u30FB\u4EA4\u6613"], ["travel", "\u65C5\u30FB\u30BE\u30FC\u30F3"]];
@@ -7946,7 +8751,7 @@ ${shown}${more}`;
       render();
     }
     function modeTabs() {
-      const bar = el5("div", "b-modes");
+      const bar = el8("div", "b-modes");
       for (const [key, label] of MODES) {
         if (key !== "build" && !views[key]) continue;
         bar.append(btn2(`b-mode${mode === key ? " on" : ""}`, label, "", () => setMode(key)));
@@ -7987,12 +8792,12 @@ ${shown}${more}`;
       if (isOpen() && editFab.getAttribute("aria-expanded") !== "true") close();
     }, true);
     function swatch2(e) {
-      const s = el5("span", "b-swatch");
+      const s = el8("span", "b-swatch");
       s.style.background = e.color ?? "#888";
       return s;
     }
-    function provBadge(kind, id) {
-      return editActions.isProvisional(kind, id) ? el5("span", "b-badge", "\u4EEE") : null;
+    function provBadge() {
+      return null;
     }
     function startPaint(kind, id) {
       task = { kind, id, size: task?.size ?? "m", autoCapital: task?.autoCapital ?? true, status: "\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u3001\u9818\u571F\u3092\u5857\u3063\u3066\u304F\u3060\u3055\u3044" };
@@ -8005,6 +8810,7 @@ ${shown}${more}`;
       task.size = size;
       task.mode = r.ok ? "auto" : "drag";
       if (r.ok) task.status = `\u304A\u307E\u304B\u305B\u3067 ${r.count} \u30BB\u30EB\u3092\u9818\u571F\u306B\u3057\u307E\u3057\u305F\uFF08Ctrl+Z \u3067\u53D6\u308A\u6D88\u3057\uFF09`;
+      else if (r.reason === "no-adjacent-free-land") task.status = "\u96A3\u308A\u5408\u3046\u7A7A\u304D\u5730\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5857\u308A\u8DB3\u3057\u3066\u304F\u3060\u3055\u3044";
       else if (r.reason === "no-free-land") task.status = "\u7A7A\u304D\u5730\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5857\u3063\u3066\u304F\u3060\u3055\u3044";
       else task.status = "\u9818\u571F\u3092\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3067\u3057\u305F";
       if (!r.ok) builderActions.beginPaint(kind, id);
@@ -8025,19 +8831,19 @@ ${shown}${more}`;
       render();
     }
     function quickSection() {
-      const sec = el5("section", "b-sec");
-      sec.append(el5("h4", "b-title", "\u304B\u3093\u305F\u3093\u4F5C\u6210"));
-      const grid = el5("div", "b-quick");
+      const sec = el8("section", "b-sec");
+      sec.append(el8("h4", "b-title", "\u304B\u3093\u305F\u3093\u4F5C\u6210"));
+      const grid = el8("div", "b-quick");
       const defs = [
         ["state", "\u56FD\u3092\u5EFA\u3066\u308B", "\u4EEE\u306E\u540D\u524D\u3067\u56FD\u3092\u4F5C\u308A\u3001\u9818\u571F\u3092\u6C7A\u3081\u308B"],
         ["religion", "\u5B97\u6559\u3092\u8208\u3059", "\u4EEE\u306E\u540D\u524D\u3067\u5B97\u6559\u3092\u4F5C\u308A\u3001\u4FE1\u8005\u306E\u571F\u5730\u3092\u6C7A\u3081\u308B"],
         ["culture", "\u6587\u5316\u3092\u52A0\u3048\u308B", "\u4EEE\u306E\u540D\u524D\u3067\u6587\u5316\u3092\u4F5C\u308A\u3001\u305D\u306E\u571F\u5730\u3092\u6C7A\u3081\u308B"]
       ];
       for (const [kind, label, tip] of defs) {
-        const b = el5("button", "b-quick-btn");
+        const b = el8("button", "b-quick-btn");
         b.type = "button";
         b.title = tip;
-        b.append(el5("span", "b-quick-icon", ICON[kind]), el5("span", "b-quick-label", label));
+        b.append(el8("span", "b-quick-icon", ICON[kind]), el8("span", "b-quick-label", label));
         b.addEventListener("click", () => {
           const id = builderActions.create(kind, styleOpt());
           if (id == null) return;
@@ -8047,9 +8853,9 @@ ${shown}${more}`;
         grid.append(b);
       }
       sec.append(grid);
-      const more = el5("details", "b-more");
+      const more = el8("details", "b-more");
       if (nameStyle) more.open = true;
-      more.append(el5("summary", "", nameStyle ? `\u540D\u524D\u306E\u96F0\u56F2\u6C17\uFF1A${NAME_STYLES[nameStyle].label}` : "\u540D\u524D\u306E\u96F0\u56F2\u6C17\u3092\u6307\u5B9A\u3059\u308B\uFF08\u4EFB\u610F\uFF09"));
+      more.append(el8("summary", "", nameStyle ? `\u540D\u524D\u306E\u96F0\u56F2\u6C17\uFF1A${NAME_STYLES[nameStyle].label}` : "\u540D\u524D\u306E\u96F0\u56F2\u6C17\u3092\u6307\u5B9A\u3059\u308B\uFF08\u4EFB\u610F\uFF09"));
       const sel = document.createElement("select");
       sel.append(new Option("\u304A\u307E\u304B\u305B\uFF08\u6BCE\u56DE\u3070\u3089\u3070\u3089\uFF09", ""));
       for (const k of STYLE_KEYS) sel.append(new Option(NAME_STYLES[k].label, k));
@@ -8058,23 +8864,23 @@ ${shown}${more}`;
         nameStyle = sel.value;
         render();
       });
-      more.append(sel, el5("p", "b-hint", "\u6307\u5B9A\u3059\u308B\u3068\u3001\u3053\u308C\u304B\u3089\u4F5C\u308B\u540D\u524D\u3068\u{1F3B2}\u304C\u305D\u306E\u96F0\u56F2\u6C17\u306B\u306A\u308A\u307E\u3059\u3002"));
+      more.append(sel, el8("p", "b-hint", "\u6307\u5B9A\u3059\u308B\u3068\u3001\u3053\u308C\u304B\u3089\u4F5C\u308B\u540D\u524D\u3068\u{1F3B2}\u304C\u305D\u306E\u96F0\u56F2\u6C17\u306B\u306A\u308A\u307E\u3059\u3002"));
       sec.append(more);
       return sec;
     }
     function taskSection() {
       if (!task) return null;
       const e = ent(task.kind, task.id);
-      if (!isLive21(e)) {
+      if (!isLive25(e)) {
         task = null;
         return null;
       }
       const label = builderActions.KIND_LABEL[task.kind];
-      const sec = el5("section", "b-task");
-      const head = el5("div", "b-task-head");
-      head.append(swatch2(e), el5("span", "b-task-kind", `${label}\u3092\u4F5C\u6210\u4E2D`));
+      const sec = el8("section", "b-task");
+      const head = el8("div", "b-task-head");
+      head.append(swatch2(e), el8("span", "b-task-kind", `${label}\u3092\u4F5C\u6210\u4E2D`));
       sec.append(head);
-      const nameRow = el5("div", "b-namerow");
+      const nameRow = el8("div", "b-namerow");
       const input = document.createElement("input");
       input.value = nameOf2(e);
       input.setAttribute("aria-label", `${label}\u306E\u540D\u524D`);
@@ -8087,9 +8893,9 @@ ${shown}${more}`;
       const badge = provBadge(task.kind, task.id);
       if (badge) nameRow.append(badge);
       sec.append(nameRow);
-      sec.append(el5("p", "b-status", task.status));
+      sec.append(el8("p", "b-status", task.status));
       const free = builderActions.freeLand(task.kind);
-      const how = el5("div", "b-how");
+      const how = el8("div", "b-how");
       const drag = btn2(`b-seg${task.mode === "auto" ? "" : " active"}`, "\u270B \u30C9\u30E9\u30C3\u30B0\u3067\u5857\u308B", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u9818\u571F\u3092\u6C7A\u3081\u308B", () => {
         task.mode = "drag";
         task.status = "\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u3001\u9818\u571F\u3092\u5857\u3063\u3066\u304F\u3060\u3055\u3044";
@@ -8100,8 +8906,8 @@ ${shown}${more}`;
       auto.disabled = !free;
       how.append(drag, auto);
       sec.append(how);
-      const sizeRow = el5("div", "b-sizes");
-      sizeRow.append(el5("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5927\u304D\u3055"));
+      const sizeRow = el8("div", "b-sizes");
+      sizeRow.append(el8("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5927\u304D\u3055"));
       for (const [k, v] of Object.entries(builderActions.TERRITORY_SIZES)) {
         sizeRow.append(btn2(`b-chip${task.size === k ? " on" : ""}`, v.label, "", () => {
           task.size = k;
@@ -8109,8 +8915,8 @@ ${shown}${more}`;
         }));
       }
       sec.append(sizeRow);
-      const brush = el5("label", "b-brush");
-      brush.append(el5("span", "b-mini", "\u30D6\u30E9\u30B7"));
+      const brush = el8("label", "b-brush");
+      brush.append(el8("span", "b-mini", "\u30D6\u30E9\u30B7"));
       const rng = document.createElement("input");
       rng.type = "range";
       rng.min = "10";
@@ -8120,17 +8926,17 @@ ${shown}${more}`;
       brush.append(rng);
       sec.append(brush);
       if (task.kind === "state") {
-        const lab = el5("label", "b-check");
+        const lab = el8("label", "b-check");
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = task.autoCapital;
         cb.addEventListener("change", () => {
           task.autoCapital = cb.checked;
         });
-        lab.append(cb, el5("span", "", "\u5B8C\u4E86\u3057\u305F\u3089\u9996\u90FD\u3092\u81EA\u52D5\u3067\u7F6E\u304F\uFF08\u4EEE\u306E\u540D\u524D\uFF09"));
+        lab.append(cb, el8("span", "", "\u5B8C\u4E86\u3057\u305F\u3089\u9996\u90FD\u3092\u81EA\u52D5\u3067\u7F6E\u304F\uFF08\u4EEE\u306E\u540D\u524D\uFF09"));
         sec.append(lab);
       }
-      const actions = el5("div", "b-actions");
+      const actions = el8("div", "b-actions");
       const fresh = e.cells === 0 && store.peekUndoLabel() === `${label}\u3092\u65B0\u898F\u4F5C\u6210`;
       if (fresh) actions.append(btn2("", "\u3084\u3081\u308B", "\u4F5C\u6210\u3092\u53D6\u308A\u6D88\u3059", cancelFresh));
       actions.append(btn2("primary", "\u5B8C\u4E86", "\u3053\u306E\u5185\u5BB9\u3067\u78BA\u5B9A\u3057\u3066\u3001\u30C4\u30FC\u30EB\u3092\u7D42\u3048\u308B", finishTask));
@@ -8139,52 +8945,60 @@ ${shown}${more}`;
     }
     function listSection() {
       const map = getMap();
-      const sec = el5("section", "b-sec");
-      sec.append(el5("h4", "b-title", "\u3064\u304F\u3063\u305F\u6B74\u53F2"));
-      const tabs = el5("div", "b-tabs");
+      const sec = el8("section", "b-sec");
+      sec.append(el8("h4", "b-title", "\u3064\u304F\u3063\u305F\u6B74\u53F2"));
+      const kindSel = document.createElement("select");
+      kindSel.className = "b-kind-select";
       for (const k of ["state", "religion", "culture"]) {
-        const n = map.pack[LIST_KEY3[k]].filter(isLive21).length;
-        tabs.append(btn2(`b-tab${tab === k ? " on" : ""}`, `${builderActions.KIND_LABEL[k]} ${n}`, "", () => {
-          tab = k;
-          render();
-        }));
+        const n = map.pack[LIST_KEY5[k]].filter(isLive25).length;
+        const o = document.createElement("option");
+        o.value = k;
+        o.textContent = `${builderActions.KIND_LABEL[k]}\uFF08${n}\uFF09`;
+        kindSel.append(o);
       }
       const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed);
-      tabs.append(btn2(`b-tab${tab === "burg" ? " on" : ""}`, `\u90FD\u5E02 ${burgs.length}`, "", () => {
-        tab = "burg";
+      {
+        const o = document.createElement("option");
+        o.value = "burg";
+        o.textContent = `\u90FD\u5E02\uFF08${burgs.length}\uFF09`;
+        kindSel.append(o);
+      }
+      kindSel.value = tab;
+      kindSel.addEventListener("change", () => {
+        tab = kindSel.value;
         render();
-      }));
-      sec.append(tabs);
+      });
+      sec.append(kindSel);
       if (tab === "burg") {
-        const list2 = el5("div", "b-cards");
+        const list2 = el8("div", "b-cards");
         for (const b of burgs.sort((a, c) => (c.population ?? 0) - (a.population ?? 0)).slice(0, 80)) list2.append(burgCard(b));
-        if (!burgs.length) sec.append(el5("p", "b-hint", "\u307E\u3060\u90FD\u5E02\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u7DE8\u96C6\u306E\u300C\u90FD\u5E02\u300D\u3067\u7F6E\u3051\u307E\u3059\u3002"));
+        if (!burgs.length) sec.append(el8("p", "b-hint", "\u307E\u3060\u90FD\u5E02\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u7DE8\u96C6\u306E\u300C\u90FD\u5E02\u300D\u3067\u7F6E\u3051\u307E\u3059\u3002"));
         sec.append(list2);
-        if (burgs.length > 80) sec.append(el5("p", "b-hint", `\u4EBA\u53E3\u306E\u591A\u304480\u4EF6\u3092\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF08\u5168${burgs.length}\u4EF6\uFF09\u3002`));
+        if (burgs.length > 80) sec.append(el8("p", "b-hint", `\u4EBA\u53E3\u306E\u591A\u304480\u4EF6\u3092\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF08\u5168${burgs.length}\u4EF6\uFF09\u3002`));
         return sec;
       }
       cellCounts = new Map(listEntities(map, tab).map((x) => [x.id, x.cells]));
-      const items = map.pack[LIST_KEY3[tab]].filter(isLive21).sort((a, b) => b.i - a.i);
-      if (!items.length) sec.append(el5("p", "b-hint", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u30DC\u30BF\u30F3\u3067\u4F5C\u308C\u307E\u3059\u3002"));
-      const list = el5("div", "b-cards");
+      const items = map.pack[LIST_KEY5[tab]].filter(isLive25).sort((a, b) => b.i - a.i);
+      if (!items.length) sec.append(el8("p", "b-hint", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u30DC\u30BF\u30F3\u3067\u4F5C\u308C\u307E\u3059\u3002"));
+      const list = el8("div", "b-cards");
       for (const e of items) list.append(card(tab, e));
       sec.append(list);
       return sec;
     }
     function burgCard(b) {
       const key = `burg:${b.i}`;
-      const wrap = el5("div", "b-card");
-      const row = el5("div", "b-row b-click");
+      const wrap = el8("div", "b-card");
+      const row = el8("div", "b-row b-click");
       const st = getMap().pack.states[b.state];
       row.append(swatch2({ color: st?.color ?? "#888" }));
-      const main = el5("div", "b-row-main");
-      const nm = el5("div", "b-row-name");
-      nm.append(el5("span", "", `${b.capital ? "\u{1F3F0} " : ""}${b.name}`));
+      const main = el8("div", "b-row-main");
+      const nm = el8("div", "b-row-name");
+      nm.append(el8("span", "", `${b.capital ? "\u{1F3F0} " : ""}${b.name}`));
       const badge = provBadge("burg", b.i);
       if (badge) nm.append(badge);
-      main.append(nm, el5("div", "b-row-meta", `${st?.name ?? "\u7121\u6240\u5C5E"}\u30FB\u4EBA\u53E3 ${Math.round((b.population ?? 0) * 10) / 10}${featureIcons(b) ? "\u30FB" + featureIcons(b) : ""}`));
+      main.append(nm, el8("div", "b-row-meta", `${st?.name ?? "\u7121\u6240\u5C5E"}\u30FB\u4EBA\u53E3 ${Math.round((b.population ?? 0) * 10) / 10}${featureIcons(b) ? "\u30FB" + featureIcons(b) : ""}`));
       const open2 = openCards.has(key);
-      row.append(main, el5("span", "b-chev", open2 ? "\u25B4" : "\u25BE"));
+      row.append(main, el8("span", "b-chev", open2 ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         if (open2) openCards.delete(key);
         else openCards.add(key);
@@ -8196,20 +9010,19 @@ ${shown}${more}`;
     }
     function card(kind, e) {
       const key = `${kind}:${e.i}`;
-      const wrap = el5("div", "b-card");
+      const wrap = el8("div", "b-card");
       const active = task && task.kind === kind && task.id === e.i;
       if (active) wrap.classList.add("active");
-      const row = el5("div", "b-row");
+      const row = el8("div", "b-row");
       row.append(swatch2(e));
-      const main = el5("div", "b-row-main");
-      const nm = el5("div", "b-row-name");
-      nm.append(el5("span", "", nameOf2(e)));
+      const main = el8("div", "b-row-main");
+      const nm = el8("div", "b-row-name");
+      nm.append(el8("span", "", nameOf2(e)));
       const badge = provBadge(kind, e.i);
       if (badge) nm.append(badge);
-      main.append(nm, el5("div", "b-row-meta", metaText(kind, e)));
+      main.append(nm, el8("div", "b-row-meta", metaText(kind, e)));
       row.append(main);
-      const ops = el5("div", "b-row-ops");
-      ops.append(btn2("suggest-mini", "\u{1F3B2}", "\u540D\u524D\u3092\u5F15\u304D\u76F4\u3059", () => builderActions.rerollName(kind, e.i, styleOpt())));
+      const ops = el8("div", "b-row-ops");
       if (badge) ops.append(btn2("suggest-mini", "\u2713", "\u3053\u306E\u540D\u524D\u3067\u78BA\u5B9A", () => editActions.confirmName(kind, e.i)));
       const isOpenCard = openCards.has(key);
       ops.append(btn2("suggest-mini b-more-btn", isOpenCard ? "\u25B4" : "\u25BE", "\u8A73\u3057\u304F\u8A2D\u5B9A", () => {
@@ -8231,9 +9044,9 @@ ${shown}${more}`;
       return parts.join("\u30FB");
     }
     function details(kind, e) {
-      const d = el5("div", "b-details");
-      const nameF = el5("label", "b-field");
-      nameF.append(el5("span", "b-mini", "\u540D\u524D"));
+      const d = el8("div", "b-details");
+      const nameF = el8("label", "b-field");
+      nameF.append(el8("span", "b-mini", "\u540D\u524D"));
       const input = document.createElement("input");
       input.value = nameOf2(e);
       input.addEventListener("change", () => {
@@ -8242,8 +9055,8 @@ ${shown}${more}`;
       nameF.append(input);
       d.append(nameF);
       if (kind === "state") {
-        const tech = el5("label", "b-field");
-        const val = el5("span", "b-mini", `\u6280\u8853\u6C34\u6E96 ${editActions.getTechLevel(e.i) ?? 3}`);
+        const tech = el8("label", "b-field");
+        const val = el8("span", "b-mini", `\u6280\u8853\u6C34\u6E96 ${editActions.getTechLevel(e.i) ?? 3}`);
         const r = document.createElement("input");
         r.type = "range";
         r.min = String(editActions.TECH_MIN);
@@ -8255,8 +9068,8 @@ ${shown}${more}`;
         r.addEventListener("change", () => editActions.setTechLevel(e.i, Number(r.value)));
         tech.append(val, r);
         d.append(tech);
-        const doc = el5("label", "b-field");
-        doc.append(el5("span", "b-mini", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
+        const doc = el8("label", "b-field");
+        doc.append(el8("span", "b-mini", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
         const sel = document.createElement("select");
         for (const x of editActions.DOCTRINES) sel.append(new Option(x.label, x.key));
         sel.value = editActions.getDoctrine(e.i);
@@ -8265,8 +9078,8 @@ ${shown}${more}`;
         d.append(doc);
         const burgs = getMap().pack.burgs.filter((b) => b && b.i && !b.removed && b.state === e.i);
         if (burgs.length) {
-          const cap = el5("label", "b-field");
-          cap.append(el5("span", "b-mini", "\u9996\u90FD"));
+          const cap = el8("label", "b-field");
+          cap.append(el8("span", "b-mini", "\u9996\u90FD"));
           const cs = document.createElement("select");
           for (const b of burgs) cs.append(new Option(b.name, String(b.i)));
           cs.value = String(e.capital);
@@ -8276,8 +9089,8 @@ ${shown}${more}`;
         }
       }
       if (kind === "culture") {
-        const f = el5("label", "b-field");
-        f.append(el5("span", "b-mini", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u3053\u306E\u6587\u5316\u306E\u5730\u540D\u306E\u96F0\u56F2\u6C17\uFF09"));
+        const f = el8("label", "b-field");
+        f.append(el8("span", "b-mini", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u3053\u306E\u6587\u5316\u306E\u5730\u540D\u306E\u96F0\u56F2\u6C17\uFF09"));
         const sel = document.createElement("select");
         for (const k of STYLE_KEYS) sel.append(new Option(NAME_STYLES[k].label, k));
         sel.value = editActions.effectiveNameStyle(e.i);
@@ -8290,13 +9103,20 @@ ${shown}${more}`;
         openCards.add(`${k}:${i}`);
         render();
       } });
-      const terr = el5("div", "b-how");
-      terr.append(
-        btn2("b-seg", "\u270B \u5857\u308A\u8DB3\u3059", "\u3053\u306E\u571F\u5730\u3092\u5730\u56F3\u3067\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5E83\u3052\u308B\u30FB\u76F4\u3059", () => startPaint(kind, e.i)),
-        btn2("b-seg", "\u{1F3B2} \u304A\u307E\u304B\u305B\u3067\u5E83\u3052\u308B", "\u7A7A\u304D\u5730\u304B\u3089\u81EA\u52D5\u3067\u8FFD\u52A0\u3059\u308B", () => runAuto(kind, e.i, task?.size ?? "m"))
-      );
+      const terr = el8("div", "b-how");
+      terr.append(btn2("b-seg", "\u270B \u5857\u308A\u8DB3\u3059", "\u3053\u306E\u571F\u5730\u3092\u5730\u56F3\u3067\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5E83\u3052\u308B\u30FB\u76F4\u3059", () => startPaint(kind, e.i)));
       d.append(terr);
-      const foot = el5("div", "b-actions");
+      const rnd = document.createElement("details");
+      rnd.className = "b-random";
+      rnd.append(el8("summary", "", "\u{1F3B2} \u30E9\u30F3\u30C0\u30E0\u8A2D\u5B9A"));
+      const rndRow = el8("div", "b-how");
+      rndRow.append(
+        btn2("b-seg", "\u{1F3B2} \u540D\u524D\u3092\u5F15\u304D\u76F4\u3059", "\u540D\u524D\u3092\u65B0\u3057\u304F\u30E9\u30F3\u30C0\u30E0\u306B\u6C7A\u3081\u308B\uFF08\u4ECA\u306E\u540D\u524D\u306F\u7F6E\u304D\u63DB\u308F\u308A\u307E\u3059\uFF09", () => builderActions.rerollName(kind, e.i, styleOpt())),
+        btn2("b-seg", "\u{1F3B2} \u96A3\u306E\u7A7A\u304D\u5730\u3078\u5E83\u3052\u308B", "\u3053\u306E\u571F\u5730\u306B\u63A5\u3057\u305F\u7A7A\u304D\u5730\u3078\u3001\u5730\u5F62\u306B\u6CBF\u3063\u3066\u81EA\u52D5\u3067\u5E83\u3052\u308B", () => runAuto(kind, e.i, task?.size ?? "m"))
+      );
+      rnd.append(rndRow);
+      d.append(rnd);
+      const foot = el8("div", "b-actions");
       foot.append(btn2("", "\u5168\u8A2D\u5B9A\u3092\u958B\u304F \u2197", "\u6587\u7AE0\u30FB\u5916\u4EA4\u306A\u3069\u3001\u3059\u3079\u3066\u306E\u8A2D\u5B9A\u3092\u5DE6\u306E\u30D1\u30CD\u30EB\u3067\u958B\u304F", () => panels.openEntity(kind, e.i)));
       d.append(foot);
       return d;
@@ -8304,11 +9124,12 @@ ${shown}${more}`;
     const PROV_KINDS = { state: ["states", "\u56FD\u5BB6"], culture: ["cultures", "\u6587\u5316"], religion: ["religions", "\u5B97\u6559"], province: ["provinces", "\u5C5E\u5DDE"], burg: ["burgs", "\u90FD\u5E02"] };
     let provOpen = false;
     function provisionalSection() {
+      return null;
       const list = builderActions.provisional();
       if (!list.length) return null;
-      const box = el5("section", "b-tray b-tray-col");
-      const head = el5("div", "b-tray-head");
-      head.append(el5("span", "b-tray-text", `\u{1F3B2} \u4EEE\u306E\u540D\u524D\u304C ${list.length} \u4EF6\u3042\u308A\u307E\u3059`));
+      const box = el8("section", "b-tray b-tray-col");
+      const head = el8("div", "b-tray-head");
+      head.append(el8("span", "b-tray-text", `\u{1F3B2} \u4EEE\u306E\u540D\u524D\u304C ${list.length} \u4EF6\u3042\u308A\u307E\u3059`));
       head.append(btn2("", provOpen ? "\u4E00\u89A7\u3092\u9589\u3058\u308B" : "\u4E00\u89A7\u3092\u898B\u308B", "\u3069\u308C\u304C\u4EEE\u306E\u540D\u524D\u304B\u78BA\u8A8D\u3059\u308B", () => {
         provOpen = !provOpen;
         schedule();
@@ -8319,12 +9140,12 @@ ${shown}${more}`;
       box.append(head);
       if (provOpen) {
         const map = getMap();
-        const ul = el5("ul", "b-prov-list");
+        const ul = el8("ul", "b-prov-list");
         for (const { kind, id } of list) {
           const [key, label] = PROV_KINDS[kind] ?? [null, kind];
           const name = key && map?.pack?.[key]?.[id]?.name || `#${id}`;
-          const li = el5("li", "b-prov-item");
-          li.append(el5("span", "b-prov-kind", label), el5("span", "b-prov-name", name));
+          const li = el8("li", "b-prov-item");
+          li.append(el8("span", "b-prov-kind", label), el8("span", "b-prov-name", name));
           li.append(btn2("", "\u2713 \u78BA\u5B9A", `${name} \u306E\u300C\u4EEE\u300D\u306E\u5370\u3092\u5916\u3059`, () => {
             editActions.confirmName(kind, id);
           }));
@@ -8341,18 +9162,18 @@ ${shown}${more}`;
       const scrollTop = panel2.scrollTop;
       body.replaceChildren();
       if (!map) {
-        body.append(el5("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        body.append(el8("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
       body.append(modeTabs());
       if (mode !== "build" && views[mode]) {
-        const c = el5("div", "b-modebody");
+        const c = el8("div", "b-modebody");
         body.append(c);
         views[mode].render(c);
         panel2.scrollTop = scrollTop;
         return;
       }
-      body.append(el5("p", "b-lead", "\u30DC\u30BF\u30F31\u3064\u3067\u3001\u307E\u305A\u5F62\u306B\u306A\u308A\u307E\u3059\u3002\u540D\u524D\u30FB\u9818\u571F\u30FB\u8A2D\u5B9A\u306F\u3001\u3044\u3064\u3067\u3082\u81EA\u7531\u306B\u76F4\u305B\u307E\u3059\u3002"));
+      body.append(el8("p", "b-lead", "\u30DC\u30BF\u30F31\u3064\u3067\u3001\u307E\u305A\u5F62\u306B\u306A\u308A\u307E\u3059\u3002\u540D\u524D\u30FB\u9818\u571F\u30FB\u8A2D\u5B9A\u306F\u3001\u3044\u3064\u3067\u3082\u81EA\u7531\u306B\u76F4\u305B\u307E\u3059\u3002"));
       body.append(quickSection());
       const t = taskSection();
       if (t) body.append(t);
@@ -8392,12 +9213,12 @@ ${shown}${more}`;
     const popK = Math.max(1, ((state.rural ?? 0) + (state.urban ?? 0)) / 1e3);
     return Math.min(UPKEEP_MAX, weighted / popK * UPKEEP_FACTOR);
   }
-  var isLive22 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive26 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planAnnualUpdate(map, rnd = null) {
     const parts = [];
     const trade = computeTrade(map);
     for (const state of map.pack.states) {
-      if (!isLive22(state)) continue;
+      if (!isLive26(state)) continue;
       ensureEconomy(state);
       const revenue = annualRevenue(trade.states.get(state.i));
       if (revenue > 0) {
@@ -8423,7 +9244,7 @@ ${shown}${more}`;
     let selected = null;
     function summary(eco, states) {
       const total = eco.trade.deals.reduce((a, d) => a + d.value, 0);
-      const box = el4("div", "b-eco-sum");
+      const box = el7("div", "b-eco-sum");
       box.append(
         stat("\u53D6\u5F15", `${eco.trade.deals.length}\u4EF6`),
         stat("\u53D6\u5F15\u984D", fmt2(total)),
@@ -8432,23 +9253,23 @@ ${shown}${more}`;
       return box;
     }
     const stat = (k, v) => {
-      const d = el4("div", "b-stat");
-      d.append(el4("div", "b-stat-v", v), el4("div", "b-mini", k));
+      const d = el7("div", "b-stat");
+      d.append(el7("div", "b-stat-v", v), el7("div", "b-mini", k));
       return d;
     };
     function stateRow(map, eco, s) {
       const f = editActions.getFinance(s.i);
       const info = eco.trade.states.get(s.i);
-      const card = el4("div", `b-card${selected === s.i ? " active" : ""}`);
-      const row = el4("div", "b-row b-click");
+      const card = el7("div", `b-card${selected === s.i ? " active" : ""}`);
+      const row = el7("div", "b-row b-click");
       row.append(swatch(s.color));
-      const main = el4("div", "b-row-main");
-      main.append(el4("div", "b-row-name", s.fullName ?? s.name));
+      const main = el7("div", "b-row-main");
+      main.append(el7("div", "b-row-name", s.fullName ?? s.name));
       const rev = eco.revenue(s.i);
       const burden = militaryBurden(s);
       const upkeep = burden > 0 ? `\uFF08\u8ECD\u4E8B\u8CBB ${Math.round(burden * 100)}% \u2192 \u624B\u53D6\u308A +${fmt2(rev * (1 - burden))}\uFF09` : "";
-      main.append(el4("div", "b-row-meta", `\u56FD\u5EAB ${fmt2(f.treasury)}\u30FB\u5E74\u53CE +${fmt2(rev)}${upkeep}\u30FB\u8CBF\u6613 ${signed(info.exportValue - info.importValue)}`));
-      row.append(main, el4("span", "b-chev", selected === s.i ? "\u25B4" : "\u25BE"));
+      main.append(el7("div", "b-row-meta", `\u56FD\u5EAB ${fmt2(f.treasury)}\u30FB\u5E74\u53CE +${fmt2(rev)}${upkeep}\u30FB\u8CBF\u6613 ${signed(info.exportValue - info.importValue)}`));
+      row.append(main, el7("span", "b-chev", selected === s.i ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         selected = selected === s.i ? null : s.i;
         if (selected == null) builderActions.showTradeLines(null);
@@ -8459,16 +9280,16 @@ ${shown}${more}`;
       return card;
     }
     function detail(map, eco, s, f, info) {
-      const d = el4("div", "b-details");
-      const rates = el4("div", "b-tax");
+      const d = el7("div", "b-details");
+      const rates = el7("div", "b-tax");
       rates.append(
         slider({ label: "\u58F2\u4E0A\u7A0E\uFF08\u8F38\u51FA\u306B\u304B\u304B\u308B\uFF09", min: 0, max: 0.6, step: 0.01, value: f.salesTax, format: (v) => `${Math.round(v * 100)}%`, onCommit: (v) => editActions.setFinance(s.i, { salesTax: v }) }),
         slider({ label: "\u4EBA\u982D\u7A0E\uFF08\u4EBA\u53E3\u306B\u304B\u304B\u308B\uFF09", min: 0, max: 0.5, step: 0.01, value: f.pollTax, format: (v) => `${Math.round(v * 100)}%`, onCommit: (v) => editActions.setFinance(s.i, { pollTax: v }) })
       );
       d.append(rates);
-      d.append(el4("p", "b-hint", `\u5E74\u53CE\u306E\u898B\u8FBC\u307F: \u4EBA\u982D\u7A0E ${fmt2(info.pollTaxRevenue)} + \u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E ${fmt2(info.salesTaxRevenue)} = ${fmt2(eco.revenue(s.i))}`));
-      const tre = el4("label", "b-field");
-      tre.append(el4("span", "b-mini", "\u56FD\u5EAB\uFF08\u76F4\u63A5\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u3059\uFF09"));
+      d.append(el7("p", "b-hint", `\u5E74\u53CE\u306E\u898B\u8FBC\u307F: \u4EBA\u982D\u7A0E ${fmt2(info.pollTaxRevenue)} + \u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E ${fmt2(info.salesTaxRevenue)} = ${fmt2(eco.revenue(s.i))}`));
+      const tre = el7("label", "b-field");
+      tre.append(el7("span", "b-mini", "\u56FD\u5EAB\uFF08\u76F4\u63A5\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u3059\uFF09"));
       const inp = document.createElement("input");
       inp.type = "number";
       inp.min = "0";
@@ -8477,34 +9298,34 @@ ${shown}${more}`;
       inp.addEventListener("change", () => editActions.setFinance(s.i, { treasury: inp.value }));
       tre.append(inp);
       d.append(tre);
-      const tbl = el4("div", "b-goods");
-      const head = el4("div", "b-goods-row b-goods-head");
-      head.append(el4("span", "", "\u7523\u7269"), el4("span", "", "\u7523"), el4("span", "", "\u9700"), el4("span", "", "\u5DEE"));
+      const tbl = el7("div", "b-goods");
+      const head = el7("div", "b-goods-row b-goods-head");
+      head.append(el7("span", "", "\u7523\u7269"), el7("span", "", "\u7523"), el7("span", "", "\u9700"), el7("span", "", "\u5DEE"));
       tbl.append(head);
       for (const g of eco.goods) {
         const p = info.production[g.id], dm = info.demand[g.id], net = info.net[g.id];
         if (p < 0.05 && dm < 0.05) continue;
-        const r = el4("div", "b-goods-row");
-        const diff = el4("span", net >= 0 ? "pos" : "neg", signed(net));
-        r.append(el4("span", "", `${g.icon} ${g.label}`), el4("span", "", fmt2(p)), el4("span", "", fmt2(dm)), diff);
+        const r = el7("div", "b-goods-row");
+        const diff = el7("span", net >= 0 ? "pos" : "neg", signed(net));
+        r.append(el7("span", "", `${g.icon} ${g.label}`), el7("span", "", fmt2(p)), el7("span", "", fmt2(dm)), diff);
         tbl.append(r);
       }
       d.append(tbl);
       const partners = eco.partners(s.i);
-      d.append(el4("h5", "b-sub", "\u8CBF\u6613\u76F8\u624B"));
-      if (!partners.length) d.append(el4("p", "b-hint", "\u53D6\u5F15\u76F8\u624B\u304C\u3044\u307E\u305B\u3093\uFF08\u6226\u4E89\u4E2D\u30FB\u5B64\u7ACB\u30FB\u4F59\u5270\u306A\u3057\uFF09\u3002"));
+      d.append(el7("h5", "b-sub", "\u8CBF\u6613\u76F8\u624B"));
+      if (!partners.length) d.append(el7("p", "b-hint", "\u53D6\u5F15\u76F8\u624B\u304C\u3044\u307E\u305B\u3093\uFF08\u6226\u4E89\u4E2D\u30FB\u5B64\u7ACB\u30FB\u4F59\u5270\u306A\u3057\uFF09\u3002"));
       for (const p of partners.slice(0, 5)) {
         const ps = map.pack.states[p.partner];
-        const r = el4("div", "b-partner");
+        const r = el7("div", "b-partner");
         r.append(
           swatch(ps.color, false),
-          el4("span", "b-partner-name", ps.name),
-          el4("span", "b-mini", `\u8F38\u51FA ${fmt2(p.exportValue)} / \u8F38\u5165 ${fmt2(p.importValue)}`),
-          el4("span", "b-partner-goods", p.goods.map((id) => eco.goods.find((g) => g.id === id)?.icon ?? "").join(""))
+          el7("span", "b-partner-name", ps.name),
+          el7("span", "b-mini", `\u8F38\u51FA ${fmt2(p.exportValue)} / \u8F38\u5165 ${fmt2(p.importValue)}`),
+          el7("span", "b-partner-goods", p.goods.map((id) => eco.goods.find((g) => g.id === id)?.icon ?? "").join(""))
         );
         d.append(r);
       }
-      d.append(el4("p", "b-hint", "\u5730\u56F3\u306E\u91D1\u306E\u7DDA\u306F\u8F38\u51FA\u8D85\u904E\u3001\u9752\u7DD1\u306E\u7DDA\u306F\u8F38\u5165\u8D85\u904E\u306E\u76F8\u624B\u3067\u3059\u3002"));
+      d.append(el7("p", "b-hint", "\u5730\u56F3\u306E\u91D1\u306E\u7DDA\u306F\u8F38\u51FA\u8D85\u904E\u3001\u9752\u7DD1\u306E\u7DDA\u306F\u8F38\u5165\u8D85\u904E\u306E\u76F8\u624B\u3067\u3059\u3002"));
       return d;
     }
     function render(container) {
@@ -8514,19 +9335,19 @@ ${shown}${more}`;
       c.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        c.append(el4("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        c.append(el7("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
       const eco = builderActions.economy();
-      const states = map.pack.states.filter(isLive20).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
+      const states = map.pack.states.filter(isLive24).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
       if (selected != null && !states.some((s) => s.i === selected)) selected = null;
       if (selected != null) builderActions.showTradeLines(selected, eco);
-      c.append(el4("p", "b-lead", "\u56FD\u306E\u8CA1\u653F\u3068\u4EA4\u6613\u3092\u898B\u307E\u3059\u3002\u5E74\u304C\u5909\u308F\u308B\u305F\u3073\u306B\u3001\u4EBA\u982D\u7A0E\u3068\u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E\u304B\u3089\u8ECD\u306E\u7DAD\u6301\u8CBB\u3092\u5F15\u3044\u305F\u5206\u304C\u56FD\u5EAB\u306B\u305F\u307E\u308A\u307E\u3059\u3002"));
+      c.append(el7("p", "b-lead", "\u56FD\u306E\u8CA1\u653F\u3068\u4EA4\u6613\u3092\u898B\u307E\u3059\u3002\u5E74\u304C\u5909\u308F\u308B\u305F\u3073\u306B\u3001\u4EBA\u982D\u7A0E\u3068\u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E\u304B\u3089\u8ECD\u306E\u7DAD\u6301\u8CBB\u3092\u5F15\u3044\u305F\u5206\u304C\u56FD\u5EAB\u306B\u305F\u307E\u308A\u307E\u3059\u3002"));
       c.append(summary(eco, states));
-      const list = el4("div", "b-cards");
+      const list = el7("div", "b-cards");
       for (const s of states) list.append(stateRow(map, eco, s));
       c.append(list);
-      c.append(el4("p", "b-hint", "\u7523\u7269\u306F\u5730\u56F3\uFF08\u30D0\u30A4\u30AA\u30FC\u30E0\u30FB\u4EBA\u53E3\u30FB\u6D77\u5CB8\uFF09\u304B\u3089\u8A08\u7B97\u3057\u305F\u7C21\u6613\u30E2\u30C7\u30EB\u3067\u3059\u3002\u6226\u4E89\u4E2D\u306E\u56FD\u3069\u3046\u3057\u306F\u53D6\u5F15\u3057\u307E\u305B\u3093\u3002"));
+      c.append(el7("p", "b-hint", "\u7523\u7269\u306F\u5730\u56F3\uFF08\u30D0\u30A4\u30AA\u30FC\u30E0\u30FB\u4EBA\u53E3\u30FB\u6D77\u5CB8\uFF09\u304B\u3089\u8A08\u7B97\u3057\u305F\u7C21\u6613\u30E2\u30C7\u30EB\u3067\u3059\u3002\u6226\u4E89\u4E2D\u306E\u56FD\u3069\u3046\u3057\u306F\u53D6\u5F15\u3057\u307E\u305B\u3093\u3002"));
     }
     return { render, leave() {
       selected = null;
@@ -8555,7 +9376,7 @@ ${shown}${more}`;
       actions.setView({ journeySelected: selJourney, zoneSelected: selZone });
     }
     function journeySection(map) {
-      const sec = el4("section", "b-sec");
+      const sec = el7("section", "b-sec");
       sec.append(btn("b-quick-btn b-wide", "\uFF0B \u65C5\u3092\u3064\u304F\u308B", "\u7A7A\u306E\u65C5\u3092\u4F5C\u308B\u3002\u305D\u306E\u3042\u3068\u533A\u9593\u3092\u8DB3\u3059", () => {
         const id = editActions.addJourney({});
         if (id != null) {
@@ -8565,26 +9386,26 @@ ${shown}${more}`;
         }
       }));
       const sc = travelScale(map);
-      if (sc.usedDefault) sec.append(el4("p", "b-hint", "\u3053\u306E\u5730\u56F3\u306B\u306F\u7E2E\u5C3A\u306E\u60C5\u5831\u304C\u306A\u3044\u305F\u3081\u3001\u6A19\u6E96\uFF081\u753B\u7D20\uFF1D3km\uFF09\u3067\u8A08\u7B97\u3057\u307E\u3059\u3002"));
+      if (sc.usedDefault) sec.append(el7("p", "b-hint", "\u3053\u306E\u5730\u56F3\u306B\u306F\u7E2E\u5C3A\u306E\u60C5\u5831\u304C\u306A\u3044\u305F\u3081\u3001\u6A19\u6E96\uFF081\u753B\u7D20\uFF1D3km\uFF09\u3067\u8A08\u7B97\u3057\u307E\u3059\u3002"));
       const list = listJourneys(map);
-      if (!list.length) sec.append(el4("p", "b-hint", "\u307E\u3060\u65C5\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8ECD\u306E\u9060\u5F81\u3001\u5546\u4EBA\u306E\u884C\u304D\u6765\u3001\u5192\u967A\u8005\u306E\u9053\u306E\u308A\u306A\u3069\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
-      const cards = el4("div", "b-cards");
+      if (!list.length) sec.append(el7("p", "b-hint", "\u307E\u3060\u65C5\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8ECD\u306E\u9060\u5F81\u3001\u5546\u4EBA\u306E\u884C\u304D\u6765\u3001\u5192\u967A\u8005\u306E\u9053\u306E\u308A\u306A\u3069\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
+      const cards = el7("div", "b-cards");
       for (const j of list.slice().reverse()) cards.append(journeyCard(map, j));
       sec.append(cards);
       return sec;
     }
     function journeyCard(map, j) {
       const open = selJourney === j.id;
-      const card = el4("div", `b-card${open ? " active" : ""}`);
-      const row = el4("div", "b-row b-click");
+      const card = el7("div", `b-card${open ? " active" : ""}`);
+      const row = el7("div", "b-row b-click");
       const sw = swatch(j.color);
-      const main = el4("div", "b-row-main");
+      const main = el7("div", "b-row-main");
       const tot = journeyTotals(map, j);
       main.append(
-        el4("div", "b-row-name", j.name),
-        el4("div", "b-row-meta", j.legs.length ? `${j.type}\u30FB${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}` : `${j.type}\u30FB\u533A\u9593\u306A\u3057`)
+        el7("div", "b-row-name", j.name),
+        el7("div", "b-row-meta", j.legs.length ? `${j.type}\u30FB${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}` : `${j.type}\u30FB\u533A\u9593\u306A\u3057`)
       );
-      row.append(sw, main, el4("span", "b-chev", open ? "\u25B4" : "\u25BE"));
+      row.append(sw, main, el7("span", "b-chev", open ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         selJourney = open ? null : j.id;
         setHighlight();
@@ -8595,9 +9416,9 @@ ${shown}${more}`;
       return card;
     }
     function journeyDetail(map, j) {
-      const d = el4("div", "b-details");
-      const nameF = el4("label", "b-field");
-      nameF.append(el4("span", "b-mini", "\u540D\u524D"));
+      const d = el7("div", "b-details");
+      const nameF = el7("label", "b-field");
+      nameF.append(el7("span", "b-mini", "\u540D\u524D"));
       const input = document.createElement("input");
       input.value = j.name;
       input.addEventListener("change", () => {
@@ -8605,20 +9426,20 @@ ${shown}${more}`;
       });
       nameF.append(input);
       d.append(nameF);
-      d.append(el4("h5", "b-sub", "\u533A\u9593"));
-      if (!j.legs.length) d.append(el4("p", "b-hint", "\u307E\u3060\u533A\u9593\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u3067\u624B\u6BB5\u3092\u9078\u3093\u3067\u300C\u533A\u9593\u3092\u8DB3\u3059\u300D\u3092\u62BC\u3057\u3001\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3073\u307E\u3059\u3002"));
+      d.append(el7("h5", "b-sub", "\u533A\u9593"));
+      if (!j.legs.length) d.append(el7("p", "b-hint", "\u307E\u3060\u533A\u9593\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u3067\u624B\u6BB5\u3092\u9078\u3093\u3067\u300C\u533A\u9593\u3092\u8DB3\u3059\u300D\u3092\u62BC\u3057\u3001\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3073\u307E\u3059\u3002"));
       j.legs.forEach((leg, idx) => {
         const t = TRANSPORT_BY_ID[leg.transport];
         const st = t ? legStats(map, leg, t) : { distance: 0, days: 0, unit: "" };
-        const row = el4("div", "b-leg");
-        const head = el4("div", "b-leg-head");
+        const row = el7("div", "b-leg");
+        const head = el7("div", "b-leg-head");
         head.append(
-          el4("span", "b-leg-ico", t?.icon ?? "?"),
-          el4("span", "b-leg-route", t?.domain === "stay" ? `${placeName(map, leg.from)}\u3067\u6EDE\u5728` : `${placeName(map, leg.from)} \u2192 ${placeName(map, leg.to)}`),
+          el7("span", "b-leg-ico", t?.icon ?? "?"),
+          el7("span", "b-leg-route", t?.domain === "stay" ? `${placeName(map, leg.from)}\u3067\u6EDE\u5728` : `${placeName(map, leg.from)} \u2192 ${placeName(map, leg.to)}`),
           btn("suggest-mini", "\xD7", "\u3053\u306E\u533A\u9593\u3092\u524A\u9664", () => editActions.removeLeg(j.id, idx))
         );
         row.append(head);
-        const meta = el4("div", "b-row-meta", t?.domain === "stay" ? formatDuration(st.days) : `${fmt3(st.distance)}${st.unit}\u30FB${formatDuration(st.days)}`);
+        const meta = el7("div", "b-row-meta", t?.domain === "stay" ? formatDuration(st.days) : `${fmt3(st.distance)}${st.unit}\u30FB${formatDuration(st.days)}`);
         const sel = document.createElement("select");
         sel.title = "\u79FB\u52D5\u624B\u6BB5\u3092\u5909\u3048\u308B\u3068\u3001\u7D4C\u8DEF\u3092\u5F15\u304D\u76F4\u3057\u307E\u3059";
         for (const x of TRANSPORTS) sel.append(new Option(`${x.icon} ${x.label}`, x.id));
@@ -8627,7 +9448,7 @@ ${shown}${more}`;
         row.append(meta, sel);
         d.append(row);
       });
-      const add = el4("div", "b-addleg");
+      const add = el7("div", "b-addleg");
       const tsel = document.createElement("select");
       for (const x of TRANSPORTS) tsel.append(new Option(`${x.icon} ${x.label}`, x.id));
       tsel.value = transport;
@@ -8636,10 +9457,10 @@ ${shown}${more}`;
       });
       add.append(tsel, btn("b-seg", picking ? "\u9078\u629E\u4E2D\u2026\uFF08Esc \u3067\u53D6\u6D88\uFF09" : "\uFF0B \u533A\u9593\u3092\u8DB3\u3059", "\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3076", () => startPick(map, j)));
       d.append(add);
-      if (picking) d.append(el4("p", "b-status", picking.text));
+      if (picking) d.append(el7("p", "b-status", picking.text));
       const tot = journeyTotals(map, j);
-      if (j.legs.length) d.append(el4("p", "b-hint", `\u5408\u8A08 ${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}`));
-      const foot = el4("div", "b-actions");
+      if (j.legs.length) d.append(el7("p", "b-hint", `\u5408\u8A08 ${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}`));
+      const foot = el7("div", "b-actions");
       foot.append(btn("", "\u65C5\u3092\u524A\u9664", "\u3053\u306E\u65C5\u3092\u3059\u3079\u3066\u6D88\u3059\uFF08Undo\u3067\u623B\u305B\u307E\u3059\uFF09", () => {
         selJourney = null;
         editActions.removeJourney(j.id);
@@ -8700,8 +9521,8 @@ ${shown}${more}`;
       renderOnce();
     }
     function zoneSection(map) {
-      const sec = el4("section", "b-sec");
-      const row = el4("div", "b-addleg");
+      const sec = el7("section", "b-sec");
+      const row = el7("div", "b-addleg");
       const tsel = document.createElement("select");
       for (const t of ZONE_TYPES) tsel.append(new Option(t.label, t.id));
       tsel.value = zoneType;
@@ -8710,7 +9531,7 @@ ${shown}${more}`;
       });
       row.append(tsel);
       sec.append(row);
-      const how = el4("div", "b-how");
+      const how = el7("div", "b-how");
       how.append(
         btn("b-seg", "\u270B \u5857\u3063\u3066\u4F5C\u308B", "\u7A7A\u306E\u30BE\u30FC\u30F3\u3092\u4F5C\u308A\u3001\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u6C7A\u3081\u308B", () => {
           const idx = editActions.addZone({ type: zoneType });
@@ -8740,17 +9561,17 @@ ${shown}${more}`;
         })
       );
       sec.append(how);
-      if (picking) sec.append(el4("p", "b-status", picking.text));
-      const sizeRow = el4("div", "b-sizes");
-      sizeRow.append(el4("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5E83\u3055"));
+      if (picking) sec.append(el7("p", "b-status", picking.text));
+      const sizeRow = el7("div", "b-sizes");
+      sizeRow.append(el7("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5E83\u3055"));
       for (const [n, label] of [[10, "\u5C0F"], [24, "\u4E2D"], [60, "\u5927"]]) sizeRow.append(btn(`b-chip${zoneSize === n ? " on" : ""}`, label, `${n}\u30BB\u30EB`, () => {
         zoneSize = n;
         renderOnce();
       }));
       sec.append(sizeRow);
       const zones = (map.zones ?? []).map((z, index) => ({ z, index })).filter((x) => x.z && Array.isArray(x.z.cells));
-      if (!zones.length) sec.append(el4("p", "b-hint", "\u307E\u3060\u30BE\u30FC\u30F3\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4FB5\u653B\u30FB\u53CD\u4E71\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\u306E\u7BC4\u56F2\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
-      const cards = el4("div", "b-cards");
+      if (!zones.length) sec.append(el7("p", "b-hint", "\u307E\u3060\u30BE\u30FC\u30F3\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4FB5\u653B\u30FB\u53CD\u4E71\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\u306E\u7BC4\u56F2\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
+      const cards = el7("div", "b-cards");
       for (const { z, index } of zones.slice().reverse()) cards.append(zoneCard(map, z, index));
       sec.append(cards);
       return sec;
@@ -8772,11 +9593,11 @@ ${shown}${more}`;
     }
     function zoneCard(map, z, index) {
       const open = selZone === index;
-      const card = el4("div", `b-card${open ? " active" : ""}`);
-      const row = el4("div", "b-row b-click");
-      const main = el4("div", "b-row-main");
-      main.append(el4("div", "b-row-name", z.name), el4("div", "b-row-meta", `${zoneLabel(z)}\u30FB${z.cells.length}\u30BB\u30EB${z.hidden ? "\u30FB\u975E\u8868\u793A" : ""}`));
-      row.append(swatch(zoneColor(z)), main, el4("span", "b-chev", open ? "\u25B4" : "\u25BE"));
+      const card = el7("div", `b-card${open ? " active" : ""}`);
+      const row = el7("div", "b-row b-click");
+      const main = el7("div", "b-row-main");
+      main.append(el7("div", "b-row-name", z.name), el7("div", "b-row-meta", `${zoneLabel(z)}\u30FB${z.cells.length}\u30BB\u30EB${z.hidden ? "\u30FB\u975E\u8868\u793A" : ""}`));
+      row.append(swatch(zoneColor(z)), main, el7("span", "b-chev", open ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         if (open) endPaint();
         selZone = open ? null : index;
@@ -8785,9 +9606,9 @@ ${shown}${more}`;
       });
       card.append(row);
       if (open) {
-        const d = el4("div", "b-details");
-        const nameF = el4("label", "b-field");
-        nameF.append(el4("span", "b-mini", "\u540D\u524D"));
+        const d = el7("div", "b-details");
+        const nameF = el7("label", "b-field");
+        nameF.append(el7("span", "b-mini", "\u540D\u524D"));
         const input = document.createElement("input");
         input.value = z.name;
         input.addEventListener("change", () => {
@@ -8795,8 +9616,8 @@ ${shown}${more}`;
         });
         nameF.append(input);
         d.append(nameF);
-        const tf = el4("label", "b-field");
-        tf.append(el4("span", "b-mini", "\u7A2E\u985E"));
+        const tf = el7("label", "b-field");
+        tf.append(el7("span", "b-mini", "\u7A2E\u985E"));
         const tsel = document.createElement("select");
         for (const t of ZONE_TYPES) tsel.append(new Option(t.label, t.id));
         if (!ZONE_TYPES.some((t) => t.id === z.type)) tsel.append(new Option(z.type, z.type));
@@ -8804,14 +9625,14 @@ ${shown}${more}`;
         tsel.addEventListener("change", () => editActions.editZone(index, { type: tsel.value }));
         tf.append(tsel);
         d.append(tf);
-        const ops = el4("div", "b-how");
+        const ops = el7("div", "b-how");
         const painting = paintingZone === index;
         ops.append(
           btn(`b-seg${painting ? " active" : ""}`, painting ? "\u270B \u5857\u3063\u3066\u3044\u307E\u3059\uFF08\u5B8C\u4E86\u3067\u7D42\u4E86\uFF09" : "\u270B \u5857\u308A\u8DB3\u3059", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u5E83\u3052\u308B", () => painting ? (endPaint(), renderOnce()) : startPaint(index, "add")),
           btn("b-seg", "\u{1F9FD} \u6D88\u3059", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u6E1B\u3089\u3059", () => startPaint(index, "erase"))
         );
         d.append(ops);
-        const foot = el4("div", "b-actions");
+        const foot = el7("div", "b-actions");
         foot.append(
           btn("", z.hidden ? "\u8868\u793A\u3059\u308B" : "\u96A0\u3059", "\u5730\u56F3\u306B\u51FA\u3059\u304B\u3069\u3046\u304B", () => editActions.editZone(index, { hidden: !z.hidden })),
           btn("", "\u524A\u9664", "\u3053\u306E\u30BE\u30FC\u30F3\u3092\u6D88\u3059\uFF08Undo\u3067\u623B\u305B\u307E\u3059\uFF09", () => {
@@ -8836,11 +9657,11 @@ ${shown}${more}`;
       c.replaceChildren();
       const map = getMap();
       if (!map) {
-        c.append(el4("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        c.append(el7("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
-      c.append(el4("p", "b-lead", "\u65C5\u306E\u9053\u306E\u308A\u3068\u3001\u30BE\u30FC\u30F3\uFF08\u4FB5\u653B\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\uFF09\u3092\u8A18\u9332\u3057\u307E\u3059\u3002"));
-      const tabs = el4("div", "b-tabs");
+      c.append(el7("p", "b-lead", "\u65C5\u306E\u9053\u306E\u308A\u3068\u3001\u30BE\u30FC\u30F3\uFF08\u4FB5\u653B\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\uFF09\u3092\u8A18\u9332\u3057\u307E\u3059\u3002"));
+      const tabs = el7("div", "b-tabs");
       for (const [k, label] of [["journey", "\u65C5"], ["zone", "\u30BE\u30FC\u30F3"]]) {
         tabs.append(btn(`b-tab${section === k ? " on" : ""}`, label, "", () => {
           if (section !== k) {
@@ -8867,17 +9688,13 @@ ${shown}${more}`;
   }
 
   // js/ui/panels/editor-panel.js
-  var el6 = (tag, cls, text2) => {
+  var el9 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive23 = (e) => !!e && typeof e === "object" && !e.removed;
-  var STATE_SUBTABS = [
-    { key: "info", label: "\u57FA\u672C\u60C5\u5831", icon: "\u26ED" },
-    { key: "provinces", label: "\u5C5E\u5DDE", icon: "\u25A6" }
-  ];
+  var isLive27 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initEditorPanel({ store, editActions, editMode, panels: initialPanels }) {
     const root = byId("editor-panel");
     const sidebar = byId("sidebar");
@@ -8905,28 +9722,28 @@ ${shown}${more}`;
         close();
         return;
       }
-      const header = el6("div", "editor-header");
-      const title = el6("h3");
-      const closeBtn = el6("button", "editor-close", "\xD7");
+      const header = el9("div", "editor-header");
+      const title = el9("h3");
+      const closeBtn = el9("button", "editor-close", "\xD7");
       closeBtn.type = "button";
       closeBtn.setAttribute("aria-label", "\u9589\u3058\u308B");
       closeBtn.addEventListener("click", close);
       header.append(title, closeBtn);
       root.append(header);
       if (current.kind === "cell") {
-        const body2 = el6("div", "editor-body");
+        const body2 = el9("div", "editor-body");
         root.append(body2);
         renderCell(map, title, body2);
         return;
       }
       if (current.kind === "burg") {
-        const body2 = el6("div", "editor-body");
+        const body2 = el9("div", "editor-body");
         root.append(body2);
         renderBurg(map, title, body2);
         return;
       }
       if (current.kind === "marker") {
-        const body2 = el6("div", "editor-body");
+        const body2 = el9("div", "editor-body");
         root.append(body2);
         renderMarker(map, title, body2);
         return;
@@ -8935,39 +9752,34 @@ ${shown}${more}`;
         renderStateTabs(map, title, root);
         return;
       }
-      const body = el6("div", "editor-body");
+      const body = el9("div", "editor-body");
       root.append(body);
       renderEntity(map, current.kind, title, body);
     }
     function renderStateTabs(map, title, root2) {
       const e = map.pack.states[current.id];
-      if (!isLive23(e)) {
+      if (!isLive27(e)) {
         close();
         return;
       }
       title.textContent = `\u{1F3F3} ${e.fullName ?? e.name}`;
-      const tabs = el6("div", "dialog-tabs");
-      tabs.setAttribute("role", "tablist");
-      for (const t of STATE_SUBTABS) {
-        const b = el6("button", `tab-btn${stateSubtab === t.key ? " active" : ""}`);
-        b.type = "button";
-        b.setAttribute("role", "tab");
-        const icon = el6("span", "tab-icon", t.icon);
-        b.append(icon, document.createTextNode(t.label));
-        b.addEventListener("click", () => {
-          stateSubtab = t.key;
-          render();
-        });
-        tabs.append(b);
-      }
-      root2.append(tabs);
-      const body = el6("div", "editor-body tab-panel");
+      const body = el9("div", "editor-body");
       root2.append(body);
-      if (stateSubtab === "info") renderStateInfo(map, e, body);
-      else if (stateSubtab === "provinces") renderStateProvinces(map, e, body);
+      renderStateInfo(map, e, body);
+      const prov = document.createElement("details");
+      prov.className = "state-prov-fold";
+      prov.open = stateSubtab === "provinces";
+      prov.addEventListener("toggle", () => {
+        stateSubtab = prov.open ? "provinces" : "info";
+      });
+      prov.append(el9("summary", "", "\u25A6 \u5C5E\u5DDE"));
+      const provBody = el9("div", "state-prov-body");
+      prov.append(provBody);
+      renderStateProvinces(map, e, provBody);
+      body.append(prov);
     }
     function renderStateInfo(map, e, body) {
-      const form = el6("div", "editor-form");
+      const form = el9("div", "editor-form");
       form.append(basicStatsSection(map, e));
       form.append(textField2("\u56FD\u5BB6\u540D", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v), () => editActions.suggestName("state", { id: e.i })));
       form.append(...provisionalNote("state", e.i));
@@ -8977,8 +9789,8 @@ ${shown}${more}`;
       body.append(form);
     }
     function basicStatsSection(map, e) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u56FD\u529B"));
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u56FD\u529B"));
       const pop = statePopulation(e);
       const power = stateMilitaryPower(e);
       const headcount = stateHeadcount(e);
@@ -8998,17 +9810,16 @@ ${shown}${more}`;
       return wrap;
     }
     function buildDiplomacy(map, focusId) {
-      const form = el6("div", "editor-form");
+      const form = el9("div", "editor-form");
       form.append(diplomacyMatrix(map, focusId));
-      form.append(diplomacySection(map, focusId));
       return form;
     }
     function diplomacyMatrix(map, focusId) {
-      const wrap = el6("div", "editor-section diplomacy-matrix-wrap");
-      wrap.append(el6("h4", "", "\u5916\u4EA4\u4E00\u89A7\uFF08\u5168\u56FD\u5BB6\uFF09"));
-      const states = map.pack.states.filter(isLive23).sort((a, b) => a.i - b.i);
+      const wrap = el9("div", "editor-section diplomacy-matrix-wrap");
+      wrap.append(el9("h4", "", "\u5916\u4EA4\u4E00\u89A7\uFF08\u5168\u56FD\u5BB6\uFF09"), el9("p", "hint", "\u540C\u76DF\u3092\u7D50\u3076\u3068\u300C\u540C\u76DF\u300D\u3001\u6226\u4E89\u3092\u3059\u308B\u3068\u300C\u6575\u5BFE\u300D\u306B\u306A\u308A\u3001\u8B1B\u548C\u3059\u308B\u3068\u4E2D\u7ACB\u306B\u623B\u308A\u307E\u3059\u3002\u3053\u3053\u3067\u306F\u8A2D\u5B9A\u3057\u307E\u305B\u3093\u3002"));
+      const states = map.pack.states.filter(isLive27).sort((a, b) => a.i - b.i);
       if (states.length < 2) {
-        wrap.append(el6("p", "hint", "\u56FD\u5BB6\u304C2\u3064\u4EE5\u4E0A\u306A\u3044\u3068\u8868\u306B\u306A\u308A\u307E\u305B\u3093\u3002"));
+        wrap.append(el9("p", "hint", "\u56FD\u5BB6\u304C2\u3064\u4EE5\u4E0A\u306A\u3044\u3068\u8868\u306B\u306A\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
       }
       const table2 = document.createElement("table");
@@ -9040,59 +9851,33 @@ ${shown}${more}`;
             tr.append(td);
             continue;
           }
-          const rel2 = editActions.getRelation(map, rowState.i, colState.i) ?? "Neutral";
-          td.className = `rel-${rel2}`;
-          td.textContent = relationLabel(rel2);
-          td.title = `${rowState.fullName ?? rowState.name} \u2192 ${colState.fullName ?? colState.name}: ${relationLabel(rel2)}\uFF08\u30AF\u30EA\u30C3\u30AF\u3067\u5909\u66F4\uFF09`;
+          const rel2 = simpleRelation(map, rowState.i, colState.i);
+          td.className = `rel-${rel2 === "alliance" ? "Ally" : rel2 === "hostile" ? "Enemy" : "Neutral"}`;
+          td.textContent = SIMPLE_LABEL[rel2];
+          td.title = `${rowState.fullName ?? rowState.name} \u3068 ${colState.fullName ?? colState.name}: ${SIMPLE_LABEL[rel2]}`;
           if (rowState.i === focusId || colState.i === focusId) td.classList.add("focus-row-col");
-          td.addEventListener("click", () => openRelationPicker(td, rowState.i, colState.i, rel2));
           tr.append(td);
         }
         tbody.append(tr);
       }
       table2.append(tbody);
-      const scroller = el6("div", "diplomacy-matrix-scroll");
+      const scroller = el9("div", "diplomacy-matrix-scroll");
       scroller.append(table2);
       wrap.append(scroller);
       return wrap;
     }
-    function openRelationPicker(td, a, b, current2) {
-      document.querySelector(".diplomacy-matrix select.rel-picker")?.blur();
-      if (td.querySelector("select")) return;
-      const text2 = td.textContent;
-      td.replaceChildren();
-      const sel = document.createElement("select");
-      sel.className = "rel-picker";
-      for (const r of RELATIONS) {
-        const o = document.createElement("option");
-        o.value = r.id;
-        o.textContent = r.label;
-        if (r.id === current2) o.selected = true;
-        sel.append(o);
-      }
-      const restore = () => {
-        td.replaceChildren();
-        td.textContent = text2;
-      };
-      sel.addEventListener("change", () => {
-        editActions.setDiplomacy(a, b, sel.value);
-      });
-      sel.addEventListener("blur", restore);
-      td.append(sel);
-      sel.focus();
-    }
     function renderStateProvinces(map, e, body) {
-      const form = el6("div", "editor-form");
+      const form = el9("div", "editor-form");
       form.append(newProvinceSection(e));
-      const provinces = map.pack.provinces.filter((p) => isLive23(p) && p.state === e.i);
+      const provinces = map.pack.provinces.filter((p) => isLive27(p) && p.state === e.i);
       if (!provinces.length) {
-        form.append(el6("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u300C\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3057\u3001\u300C\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u9818\u571F\u3092\u5272\u308A\u5F53\u3066\u3089\u308C\u307E\u3059\u3002"));
+        form.append(el9("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u300C\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3057\u3001\u300C\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u9818\u571F\u3092\u5272\u308A\u5F53\u3066\u3089\u308C\u307E\u3059\u3002"));
       } else {
-        const list = el6("div", "attr-list");
+        const list = el9("div", "attr-list");
         for (const p of provinces) {
-          const row = el6("div", "diplomacy-row");
-          row.append(el6("span", "diplomacy-name", `${p.fullName ?? p.name}\uFF08${p.cells ?? 0}\u30BB\u30EB\uFF09`));
-          const repaint = el6("button", "", "\u3053\u306E\u5C5E\u5DDE\u3092\u5857\u308A\u76F4\u3059");
+          const row = el9("div", "diplomacy-row");
+          row.append(el9("span", "diplomacy-name", `${p.fullName ?? p.name}\uFF08${p.cells ?? 0}\u30BB\u30EB\uFF09`));
+          const repaint = el9("button", "", "\u3053\u306E\u5C5E\u5DDE\u3092\u5857\u308A\u76F4\u3059");
           repaint.type = "button";
           repaint.title = "\u5730\u56F3\u7DE8\u96C6\u30D1\u30CD\u30EB\u306E\u300C\u5C5E\u5DDE\u3092\u5857\u308B\u300D\u30C4\u30FC\u30EB\u306B\u5207\u308A\u66FF\u3048\u3066\u3001\u3053\u306E\u5C5E\u5DDE\u3092\u5BFE\u8C61\u306B\u3057\u307E\u3059";
           repaint.addEventListener("click", () => {
@@ -9101,7 +9886,7 @@ ${shown}${more}`;
             window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
           });
           row.append(repaint);
-          const independence = el6("button", "", "\u72EC\u7ACB\u3055\u305B\u308B");
+          const independence = el9("button", "", "\u72EC\u7ACB\u3055\u305B\u308B");
           independence.type = "button";
           independence.title = "\u3053\u306E\u5C5E\u5DDE\u306E\u9818\u571F\u3092\u5207\u308A\u96E2\u3057\u3001\u65B0\u3057\u3044\u72EC\u7ACB\u56FD\u5BB6\u306B\u3057\u307E\u3059";
           independence.addEventListener("click", async () => {
@@ -9122,20 +9907,20 @@ ${shown}${more}`;
       body.append(form);
     }
     function newProvinceSection(e) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u65B0\u3057\u3044\u5C5E\u5DDE"));
-      const row = el6("div", "diplomacy-row");
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u65B0\u3057\u3044\u5C5E\u5DDE"));
+      const row = el9("div", "diplomacy-row");
       const input = document.createElement("input");
       input.placeholder = "\u5C5E\u5DDE\u306E\u540D\u524D\uFF08\u7A7A\u6B04\u306A\u3089\u4EEE\u306E\u540D\u524D\uFF09";
       row.append(input);
-      const dice = el6("button", "suggest-mini", "\u{1F3B2}");
+      const dice = el9("button", "suggest-mini", "\u{1F3B2}");
       dice.type = "button";
       dice.title = "\u4EEE\u306E\u540D\u524D\u3092\u751F\u6210";
       dice.addEventListener("click", () => {
         input.value = editActions.suggestName("province", { stateId: e.i });
       });
       row.append(dice);
-      const btn3 = el6("button", "", "\u4F5C\u308B");
+      const btn3 = el9("button", "", "\u4F5C\u308B");
       btn3.type = "button";
       btn3.addEventListener("click", () => {
         const newId = editActions.addProvince(e.i, input.value);
@@ -9151,14 +9936,14 @@ ${shown}${more}`;
       return wrap;
     }
     function mergeSection(map, e) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u56FD\u5BB6\u306E\u7D71\u5408"));
-      const others = map.pack.states.filter((s) => isLive23(s) && s.i !== e.i && s.i > 0);
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u56FD\u5BB6\u306E\u7D71\u5408"));
+      const others = map.pack.states.filter((s) => isLive27(s) && s.i !== e.i && s.i > 0);
       if (!others.length) {
-        wrap.append(el6("p", "hint", "\u7D71\u5408\u3067\u304D\u308B\u4ED6\u306E\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
+        wrap.append(el9("p", "hint", "\u7D71\u5408\u3067\u304D\u308B\u4ED6\u306E\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
       }
-      const row = el6("div", "diplomacy-row");
+      const row = el9("div", "diplomacy-row");
       const sel = document.createElement("select");
       for (const s of others) {
         const o = document.createElement("option");
@@ -9167,7 +9952,7 @@ ${shown}${more}`;
         sel.append(o);
       }
       row.append(sel);
-      const btn3 = el6("button", "danger", "\u3053\u306E\u56FD\u5BB6\u3092\u7D71\u5408\u3055\u305B\u308B\uFF08\u89E3\u6563\uFF09");
+      const btn3 = el9("button", "danger", "\u3053\u306E\u56FD\u5BB6\u3092\u7D71\u5408\u3055\u305B\u308B\uFF08\u89E3\u6563\uFF09");
       btn3.type = "button";
       btn3.addEventListener("click", async () => {
         const target = map.pack.states[Number(sel.value)];
@@ -9180,14 +9965,14 @@ ${shown}${more}`;
       });
       row.append(btn3);
       wrap.append(row);
-      wrap.append(el6("p", "hint", "\u3053\u306E\u56FD\u5BB6\u306E\u5168\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u30FB\u90E8\u968A\u3092\u9078\u3093\u3060\u56FD\u5BB6\u306B\u7D71\u5408\u3057\u3001\u3053\u306E\u56FD\u5BB6\u81EA\u4F53\u306F\u89E3\u6563\u3057\u307E\u3059\u3002"));
+      wrap.append(el9("p", "hint", "\u3053\u306E\u56FD\u5BB6\u306E\u5168\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u30FB\u90E8\u968A\u3092\u9078\u3093\u3060\u56FD\u5BB6\u306B\u7D71\u5408\u3057\u3001\u3053\u306E\u56FD\u5BB6\u81EA\u4F53\u306F\u89E3\u6563\u3057\u307E\u3059\u3002"));
       return wrap;
     }
     function renderCell(map, title, body) {
       const info = describeCell(map, current.id);
       title.textContent = `\u30BB\u30EB #${current.id}`;
       if (!info) {
-        body.append(el6("p", "muted", "\u60C5\u5831\u304C\u3042\u308A\u307E\u305B\u3093"));
+        body.append(el9("p", "muted", "\u60C5\u5831\u304C\u3042\u308A\u307E\u305B\u3093"));
         return;
       }
       const rows = [
@@ -9201,13 +9986,13 @@ ${shown}${more}`;
       ];
       body.append(table(rows.filter(([, v]) => v != null)));
       if (info.burg) {
-        const b = el6("button", "link", `\u90FD\u5E02\u300C${info.burg}\u300D\u3092\u958B\u304F`);
+        const b = el9("button", "link", `\u90FD\u5E02\u300C${info.burg}\u300D\u3092\u958B\u304F`);
         b.addEventListener("click", () => open("burg", map.pack.cells.burg[current.id]));
         body.append(b);
       }
       const stateId = map.pack.cells.state[current.id];
       if (stateId) {
-        const b = el6("button", "link", `\u56FD\u5BB6\u300C${info.state}\u300D\u3092\u958B\u304F`);
+        const b = el9("button", "link", `\u56FD\u5BB6\u300C${info.state}\u300D\u3092\u958B\u304F`);
         b.addEventListener("click", () => open("state", stateId));
         body.append(b);
       }
@@ -9219,9 +10004,9 @@ ${shown}${more}`;
         return;
       }
       title.textContent = `${m.icon} ${m.name ?? defaultMarkerName(m.type)}`;
-      const form = el6("div", "editor-form");
-      const typeRow = el6("label", "field");
-      typeRow.append(el6("span", "field-label", "\u7A2E\u985E"));
+      const form = el9("div", "editor-form");
+      const typeRow = el9("label", "field");
+      typeRow.append(el9("span", "field-label", "\u7A2E\u985E"));
       const sel = document.createElement("select");
       for (const t of DEFAULT_MARKER_TYPES) {
         const o = document.createElement("option");
@@ -9245,7 +10030,7 @@ ${shown}${more}`;
       form.append(typeRow);
       form.append(textField2("\u540D\u524D", m.name ?? defaultMarkerName(m.type), (v) => editActions.editMarker(m.i, { name: v })));
       form.append(noteField(map, "marker", m.i));
-      const del = el6("button", "danger", "\u3053\u306E\u30DE\u30FC\u30AB\u30FC\u3092\u524A\u9664");
+      const del = el9("button", "danger", "\u3053\u306E\u30DE\u30FC\u30AB\u30FC\u3092\u524A\u9664");
       del.type = "button";
       del.addEventListener("click", async () => {
         if (await confirmDialog("\u3053\u306E\u30DE\u30FC\u30AB\u30FC\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F", { danger: true, okLabel: "\u524A\u9664" })) {
@@ -9258,28 +10043,28 @@ ${shown}${more}`;
     }
     function renderBurg(map, title, body) {
       const b = map.pack.burgs[current.id];
-      if (!isLive23(b)) {
+      if (!isLive27(b)) {
         close();
         return;
       }
       title.textContent = `${b.capital ? "\u{1F3F0} " : "\u{1F3D8}\uFE0F "}${b.name}`;
-      const form = el6("div", "editor-form");
+      const form = el9("div", "editor-form");
       form.append(table([
-        ["\u56FD\u5BB6", isLive23(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
+        ["\u56FD\u5BB6", isLive27(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
         ["\u6587\u5316", map.pack.cultures[b.culture]?.name ?? ""],
         ["\u4EBA\u53E3(\u6982\u7B97)", (b.population ?? 0).toFixed(2)]
       ]));
       form.append(textField2("\u540D\u524D", b.name, (v) => editActions.renameBurg(b.i, v), () => editActions.suggestName("burg", { id: b.i })));
       form.append(...provisionalNote("burg", b.i));
       if (!b.capital) {
-        const cap = el6("button", "", "\u3053\u306E\u90FD\u5E02\u3092\u9996\u90FD\u306B\u3059\u308B");
+        const cap = el9("button", "", "\u3053\u306E\u90FD\u5E02\u3092\u9996\u90FD\u306B\u3059\u308B");
         cap.type = "button";
         cap.addEventListener("click", () => editActions.setCapital(b.state, b.i));
         form.append(cap);
       }
       form.append(noteField(map, "burg", b.i));
       const reason = editActions.whyCannotRemoveBurg(b.i);
-      const del = el6("button", "danger", "\u3053\u306E\u90FD\u5E02\u3092\u524A\u9664");
+      const del = el9("button", "danger", "\u3053\u306E\u90FD\u5E02\u3092\u524A\u9664");
       del.type = "button";
       del.disabled = !!reason;
       if (reason) del.title = reason;
@@ -9290,19 +10075,19 @@ ${shown}${more}`;
         }
       });
       form.append(del);
-      if (reason) form.append(el6("p", "hint", reason));
+      if (reason) form.append(el9("p", "hint", reason));
       body.append(form);
     }
     function renderEntity(map, kind, title, body) {
       const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
       const e = list?.[current.id];
-      if (!isLive23(e)) {
+      if (!isLive27(e)) {
         close();
         return;
       }
       const labelOf = { culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
       title.textContent = `${labelOf}\u300C${e.fullName ?? e.name}\u300D`;
-      const form = el6("div", "editor-form");
+      const form = el9("div", "editor-form");
       const stats = [["\u30BB\u30EB\u6570", e.cells], ["\u9762\u7A4D", e.area], ["\u90FD\u5E02\u6570", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
       form.append(table(stats));
       form.append(textField2("\u540D\u524D", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v), () => editActions.suggestName(kind, { id: e.i })));
@@ -9312,70 +10097,69 @@ ${shown}${more}`;
       body.append(form);
     }
     function techLevelSection(stateId) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u6280\u8853\u6C34\u6E96"));
-      const row = el6("div", "tech-level-row");
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u6280\u8853\u6C34\u6E96"));
+      const row = el9("div", "tech-level-row");
       const slider2 = document.createElement("input");
       slider2.type = "range";
       slider2.min = String(editActions.TECH_MIN);
       slider2.max = String(editActions.TECH_MAX);
       slider2.step = "1";
       slider2.value = String(editActions.getTechLevel(stateId) ?? 3);
-      const value = el6("span", "tech-level-value", slider2.value);
+      const value = el9("span", "tech-level-value", slider2.value);
       slider2.addEventListener("input", () => {
         value.textContent = slider2.value;
       });
       slider2.addEventListener("change", () => editActions.setTechLevel(stateId, Number(slider2.value)));
       row.append(slider2, value);
       wrap.append(row);
-      wrap.append(el6("p", "hint", "1\uFF08\u4F4E\u3044\uFF09\u301C10\uFF08\u9AD8\u3044\uFF09\u3002\u4EBA\u53E3\u6210\u9577\u7387\u30FB\u7523\u696D\u529B\u306E\u8A08\u7B97\u306B\u4F7F\u308F\u308C\u307E\u3059\u3002"));
+      wrap.append(el9("p", "hint", "1\uFF08\u4F4E\u3044\uFF09\u301C10\uFF08\u9AD8\u3044\uFF09\u3002\u4EBA\u53E3\u6210\u9577\u7387\u30FB\u7523\u696D\u529B\u306E\u8A08\u7B97\u306B\u4F7F\u308F\u308C\u307E\u3059\u3002"));
       return wrap;
+    }
+    const UNIT_LABEL2 = { infantry: "\u6B69\u5175", artillery: "\u7832\u5175", armor: "\u6A5F\u7532", air: "\u822A\u7A7A", navy: "\u6D77\u8ECD", special: "\u7279\u6B8A\u90E8\u968A", advanced: "\u5148\u7AEF\u6280\u8853" };
+    function doctrineEffects(d) {
+      const out = [];
+      for (const [k, label] of Object.entries(UNIT_LABEL2)) {
+        const m = d.mult?.[k] ?? 1;
+        if (Math.abs(m - 1) > 1e-3) out.push({ text: `${label} \xD7${m}`, up: m > 1 });
+      }
+      if (d.defenseBonus) out.push({ text: `\u5B88\u308B\u3068\u304D\u6226\u529B +${Math.round(d.defenseBonus * 100)}%`, up: true });
+      if (d.moraleLoss && d.moraleLoss < 1) out.push({ text: "\u58EB\u6C17\u304C\u5D29\u308C\u306B\u304F\u3044", up: true });
+      if (d.moraleLoss && d.moraleLoss > 1) out.push({ text: "\u58EB\u6C17\u304C\u5D29\u308C\u3084\u3059\u3044", up: false });
+      if (d.conscriptBonus) out.push({ text: `\u5FB4\u5175 +${Math.round(d.conscriptBonus * 100)}%`, up: true });
+      return out;
     }
     function doctrineSection(stateId) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
-      const sel = document.createElement("select");
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u6226\u8853\u30C9\u30AF\u30C8\u30EA\u30F3"));
+      wrap.append(el9("p", "hint", "\u56FD\u5168\u4F53\u306E\u6226\u3044\u65B9\u306E\u65B9\u91DD\uFF08\u90E8\u968A\u3054\u3068\u3067\u306F\u306A\u304F\u56FD\u3054\u3068\u306B1\u3064\uFF09\u3002\u5F97\u610F\u306A\u5175\u79D1\u304C\u5F37\u304F\u306A\u308B\u4EE3\u308F\u308A\u306B\u3001\u5225\u306E\u5175\u79D1\u304C\u5C11\u3057\u5F31\u304F\u306A\u308A\u307E\u3059\u3002"));
       const current2 = editActions.getDoctrine(stateId);
+      const list = el9("div", "doctrine-list");
       for (const d of editActions.DOCTRINES) {
-        const o = document.createElement("option");
-        o.value = d.key;
-        o.textContent = d.label;
-        if (d.key === current2) o.selected = true;
-        sel.append(o);
+        const card = el9("label", `doctrine-card${d.key === current2 ? " on" : ""}`);
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = `doctrine-${stateId}`;
+        radio.checked = d.key === current2;
+        radio.addEventListener("change", () => editActions.setDoctrine(stateId, d.key));
+        const body = el9("div", "doctrine-body");
+        body.append(el9("strong", "", d.label), el9("p", "hint", d.desc ?? ""));
+        const chips = el9("div", "doctrine-chips");
+        for (const e of doctrineEffects(d)) chips.append(el9("span", `doctrine-chip ${e.up ? "up" : "down"}`, e.text));
+        if (!chips.children.length) chips.append(el9("span", "doctrine-chip", "\u52B9\u679C\u306E\u504F\u308A\u306A\u3057"));
+        body.append(chips);
+        card.append(radio, body);
+        list.append(card);
       }
-      sel.addEventListener("change", () => editActions.setDoctrine(stateId, sel.value));
-      wrap.append(sel);
-      wrap.append(el6("p", "hint", "\u56FD\u5168\u4F53\u306E\u6226\u3044\u65B9\u306E\u65B9\u91DD\u3002\u5168\u90E8\u968A\u306E\u6226\u95D8\u529B\u306B\u4E00\u5F8B\u3067\u5F71\u97FF\u3057\u307E\u3059\uFF08\u90E8\u968A\u3054\u3068\u306B\u306F\u8A2D\u5B9A\u3057\u307E\u305B\u3093\uFF09\u3002"));
-      return wrap;
-    }
-    function diplomacySection(map, stateId) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u5916\u4EA4\u95A2\u4FC2"));
-      const others = map.pack.states.filter((s) => isLive23(s) && s.i !== stateId);
-      for (const s of others) {
-        const row = el6("div", "diplomacy-row");
-        row.append(el6("span", "diplomacy-name", s.name));
-        const sel = document.createElement("select");
-        const current2 = editActions.getRelation(map, stateId, s.i) ?? "Neutral";
-        for (const r of RELATIONS) {
-          const o = document.createElement("option");
-          o.value = r.id;
-          o.textContent = r.label;
-          if (r.id === current2) o.selected = true;
-          sel.append(o);
-        }
-        sel.addEventListener("change", () => editActions.setDiplomacy(stateId, s.i, sel.value));
-        row.append(sel);
-        wrap.append(row);
-      }
+      wrap.append(list);
       return wrap;
     }
     function noteField(map, type, id) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u6587\u7AE0"));
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u6587\u7AE0"));
       const { text: text2, rich } = htmlToEditable(editActions.getNote(type, id));
       if (rich) {
-        wrap.append(el6("p", "hint", "\u66F8\u5F0F\uFF08HTML\uFF09\u3092\u542B\u3080\u6587\u7AE0\u306E\u305F\u3081\u3001\u66F8\u5F0F\u3092\u4FDD\u3063\u305F\u307E\u307E\u6B21\u306E\u3068\u304A\u308A\u4FDD\u5B58\u3055\u308C\u307E\u3059\u3002\u30D7\u30EC\u30FC\u30F3\u30C6\u30AD\u30B9\u30C8\u3068\u3057\u3066\u7DE8\u96C6\u3059\u308B\u3068\u66F8\u5F0F\u306F\u5931\u308F\u308C\u307E\u3059\u3002"));
+        wrap.append(el9("p", "hint", "\u66F8\u5F0F\uFF08HTML\uFF09\u3092\u542B\u3080\u6587\u7AE0\u306E\u305F\u3081\u3001\u66F8\u5F0F\u3092\u4FDD\u3063\u305F\u307E\u307E\u6B21\u306E\u3068\u304A\u308A\u4FDD\u5B58\u3055\u308C\u307E\u3059\u3002\u30D7\u30EC\u30FC\u30F3\u30C6\u30AD\u30B9\u30C8\u3068\u3057\u3066\u7DE8\u96C6\u3059\u308B\u3068\u66F8\u5F0F\u306F\u5931\u308F\u308C\u307E\u3059\u3002"));
       }
       const ta = document.createElement("textarea");
       ta.className = "note-field";
@@ -9386,8 +10170,8 @@ ${shown}${more}`;
       return wrap;
     }
     function textField2(label, value, onChange, suggest) {
-      const row = el6("label", "field");
-      row.append(el6("span", "field-label", label));
+      const row = el9("label", "field");
+      row.append(el9("span", "field-label", label));
       const input = document.createElement("input");
       input.value = value ?? "";
       input.addEventListener("change", () => onChange(input.value));
@@ -9395,8 +10179,8 @@ ${shown}${more}`;
         row.append(input);
         return row;
       }
-      const box = el6("span", "name-row");
-      const dice = el6("button", "suggest-mini", "\u{1F3B2}");
+      const box = el9("span", "name-row");
+      const dice = el9("button", "suggest-mini", "\u{1F3B2}");
       dice.type = "button";
       dice.title = "\u4EEE\u306E\u540D\u524D\u3092\u751F\u6210\uFF08\u62BC\u3059\u305F\u3073\u306B\u5909\u308F\u308A\u307E\u3059\u3002Undo \u3067\u623B\u305B\u307E\u3059\uFF09";
       dice.addEventListener("click", (ev) => {
@@ -9412,18 +10196,19 @@ ${shown}${more}`;
       return row;
     }
     function provisionalNote(kind, id) {
+      return [];
       if (!editActions.isProvisional(kind, id)) return [];
-      const box = el6("div", "provisional-note");
-      box.append(el6("span", "", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3067\u3059\u3002"));
-      const ok = el6("button", "", "\u3053\u306E\u540D\u524D\u3067\u78BA\u5B9A");
+      const box = el9("div", "provisional-note");
+      box.append(el9("span", "", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3067\u3059\u3002"));
+      const ok = el9("button", "", "\u3053\u306E\u540D\u524D\u3067\u78BA\u5B9A");
       ok.type = "button";
       ok.addEventListener("click", () => editActions.confirmName(kind, id));
       box.append(ok);
       return [box];
     }
     function nameStyleSection(cultureId) {
-      const wrap = el6("div", "editor-section");
-      wrap.append(el6("h4", "", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u4EEE\u751F\u6210\u7528\uFF09"));
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u4EEE\u751F\u6210\u7528\uFF09"));
       const sel = document.createElement("select");
       const explicit = editActions.getNameStyle(cultureId);
       const auto = editActions.effectiveNameStyle(cultureId);
@@ -9440,7 +10225,7 @@ ${shown}${more}`;
       sel.value = explicit ?? "";
       sel.addEventListener("change", () => editActions.setNameStyle(cultureId, sel.value || null));
       wrap.append(sel);
-      wrap.append(el6("p", "hint", "\u3053\u306E\u6587\u5316\u306E\u9818\u57DF\u306B\u4F5C\u308B\u90FD\u5E02\u30FB\u5C5E\u5DDE\u306E\u4EEE\u306E\u540D\u524D\u304C\u3001\u3053\u306E\u7CFB\u7D71\u306E\u97FF\u304D\u306B\u306A\u308A\u307E\u3059\u3002"));
+      wrap.append(el9("p", "hint", "\u3053\u306E\u6587\u5316\u306E\u9818\u57DF\u306B\u4F5C\u308B\u90FD\u5E02\u30FB\u5C5E\u5DDE\u306E\u4EEE\u306E\u540D\u524D\u304C\u3001\u3053\u306E\u7CFB\u7D71\u306E\u97FF\u304D\u306B\u306A\u308A\u307E\u3059\u3002"));
       return wrap;
     }
     function table(rows) {
@@ -9448,7 +10233,7 @@ ${shown}${more}`;
       t.className = "editor-table";
       for (const [k, v] of rows) {
         const tr = document.createElement("tr");
-        tr.append(el6("th", "", k), el6("td", "", String(v)));
+        tr.append(el9("th", "", k), el9("td", "", String(v)));
         t.append(tr);
       }
       return t;
@@ -9483,7 +10268,7 @@ ${shown}${more}`;
     for (const k of UNIT_KEYS) out[k] = Math.max(0, Math.floor((out[k] ?? 0) * (1 - fraction)));
     return out;
   }
-  function clamp4(v, min, max) {
+  function clamp5(v, min, max) {
     return Math.min(max, Math.max(min, v));
   }
   function round(v) {
@@ -9499,8 +10284,8 @@ ${shown}${more}`;
     const dRoll = dPower * noise();
     const winner = aRoll >= dRoll ? "attacker" : "defender";
     const ratio = Math.max(aRoll, dRoll) / Math.max(1e-9, Math.min(aRoll, dRoll));
-    let winnerLoss = clamp4(0.03 + 0.09 / ratio, 0.03, 0.12);
-    let loserLoss = clamp4(0.4 - 0.25 / ratio, 0.15, 0.4);
+    let winnerLoss = clamp5(0.03 + 0.09 / ratio, 0.03, 0.12);
+    let loserLoss = clamp5(0.4 - 0.25 / ratio, 0.15, 0.4);
     const defBonusOf = (doctrineKey) => DOCTRINE_BY_KEY[doctrineKey]?.defenseBonus ?? 0;
     const defenderBonus = defBonusOf(defender.doctrine);
     if (winner === "attacker") loserLoss *= 1 - defenderBonus;
@@ -9559,8 +10344,8 @@ ${shown}${more}`;
     const dRoll = dPower * noise();
     const winner = aRoll >= dRoll ? "attacker" : "defender";
     const ratio = Math.max(aRoll, dRoll) / Math.max(1e-9, Math.min(aRoll, dRoll));
-    let winnerLoss = clamp4(0.03 + 0.09 / ratio, 0.03, 0.12);
-    let loserLoss = clamp4(0.4 - 0.25 / ratio, 0.15, 0.4);
+    let winnerLoss = clamp5(0.03 + 0.09 / ratio, 0.03, 0.12);
+    let loserLoss = clamp5(0.4 - 0.25 / ratio, 0.15, 0.4);
     const defenderBonus = DOCTRINE_BY_KEY[defenderProfile.doctrine]?.defenseBonus ?? 0;
     if (winner === "attacker") loserLoss *= 1 - defenderBonus;
     else winnerLoss *= 1 - defenderBonus;
@@ -9599,6 +10384,70 @@ ${shown}${more}`;
     const label = `\u4F1A\u6226\uFF08${aState.name}\u8ECD ${attackerRegs.length}\u90E8\u968A vs ${bState.name}\u8ECD ${defenderRegs.length}\u90E8\u968A\uFF09`;
     const command = makeCommand(label, [], parts);
     return { command, result };
+  }
+
+  // js/core/sim/nuclear.js
+  var isLive28 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var NUCLEAR_MIN_TECH = 9;
+  var listNuclearOps = (map) => map.ext?.data?.nuclearOps ?? [];
+  var writeOps = (m, list) => {
+    const ext = ensureExt(m);
+    ext.data.nuclearOps = list;
+    if (!list.length) delete ext.data.nuclearOps;
+  };
+  var nextId2 = (map) => {
+    const l = listNuclearOps(map);
+    return l.length ? Math.max(...l.map((o) => o.id)) + 1 : 1;
+  };
+  function nuclearStock(state) {
+    return regimentsOf(state).reduce((n, r) => n + (r.u?.nuclear ?? 0), 0);
+  }
+  function atWar2(map, a, b) {
+    return (map.ext?.data?.wars ?? []).some((w) => !w.endedAt && (w.attackers.includes(a) && w.defenders.includes(b) || w.attackers.includes(b) && w.defenders.includes(a)));
+  }
+  function planDraftNuclearOp(map, { attackerId, targetId, warheads = 1 }) {
+    const A = map.pack.states[attackerId], T = map.pack.states[targetId];
+    if (!isLive28(A) || !isLive28(T)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (attackerId === targetId) throw new Error("\u81EA\u56FD\u3092\u6A19\u7684\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
+    if ((A.techLevel ?? 3) < NUCLEAR_MIN_TECH) throw new Error(`\u6838\u3092\u904B\u7528\u3067\u304D\u308B\u306E\u306F\u6280\u8853\u6C34\u6E96${NUCLEAR_MIN_TECH}\u4EE5\u4E0A\u306E\u56FD\u3060\u3051\u3067\u3059`);
+    if (!Number.isInteger(warheads) || warheads < 1) throw new Error("\u767A\u6570\u306F1\u4EE5\u4E0A\u306E\u6574\u6570\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
+    if (nuclearStock(A) < warheads) throw new Error(`\u4FDD\u6709\u3059\u308B\u6838\u304C\u8DB3\u308A\u307E\u305B\u3093\uFF08\u4FDD\u6709 ${nuclearStock(A)} \u767A\uFF09`);
+    if (!atWar2(map, attackerId, targetId)) throw new Error("\u6838\u4F5C\u6226\u306F\u3001\u4EA4\u6226\u4E2D\u306E\u76F8\u624B\u306B\u3060\u3051\u7ACB\u6848\u3067\u304D\u307E\u3059");
+    const op = { id: nextId2(map), attackerId, targetId, warheads, status: "planned", name: `${T.name}\u653B\u6483\u4F5C\u6226`, executedAt: null, result: null };
+    const before = listNuclearOps(map);
+    return { command: makeCommand(`\u6838\u4F5C\u6226\u3092\u7ACB\u6848\uFF08${op.name}\uFF09`, [], [{ apply: (m) => writeOps(m, [...before, op]), revert: (m) => writeOps(m, before) }]), id: op.id };
+  }
+  function planCancelNuclearOp(map, opId) {
+    const list = listNuclearOps(map), op = list.find((o) => o.id === opId);
+    if (!op) throw new Error("\u305D\u306E\u4F5C\u6226\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (op.status !== "planned") throw new Error("\u5B9F\u884C\u6E08\u307F\u306E\u4F5C\u6226\u306F\u53D6\u308A\u6D88\u305B\u307E\u305B\u3093");
+    return makeCommand("\u6838\u4F5C\u6226\u3092\u53D6\u308A\u6D88\u3057", [], [{ apply: (m) => writeOps(m, list.filter((o) => o.id !== opId)), revert: (m) => writeOps(m, list) }]);
+  }
+  function planExecuteNuclearOp(map, opId, date) {
+    const list = listNuclearOps(map), op = list.find((o) => o.id === opId);
+    if (!op) throw new Error("\u305D\u306E\u4F5C\u6226\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (op.status !== "planned") throw new Error("\u3059\u3067\u306B\u5B9F\u884C\u3055\u308C\u305F\u4F5C\u6226\u3067\u3059");
+    const A = map.pack.states[op.attackerId], T = map.pack.states[op.targetId];
+    if (!isLive28(A) || !isLive28(T)) throw new Error("\u95A2\u4FC2\u3059\u308B\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (nuclearStock(A) < op.warheads) throw new Error("\u4FDD\u6709\u3059\u308B\u6838\u304C\u8DB3\u308A\u307E\u305B\u3093");
+    if (!atWar2(map, op.attackerId, op.targetId)) throw new Error("\u76F8\u624B\u3068\u306E\u6226\u4E89\u304C\u7D42\u308F\u3063\u3066\u3044\u308B\u305F\u3081\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093");
+    const parts = [];
+    let left = op.warheads;
+    for (const r of regimentsOf(A)) {
+      if (left <= 0) break;
+      const have = r.u?.nuclear ?? 0, use = Math.min(have, left);
+      if (use > 0) {
+        parts.push(setProps(r, { u: { ...r.u, nuclear: have - use } }));
+        left -= use;
+      }
+    }
+    const surv = (f) => Math.pow(1 - f, op.warheads);
+    const pop0 = (T.rural ?? 0) + (T.urban ?? 0);
+    const result = { populationLoss: Math.round(pop0 * (1 - surv(0.12)) * 10) / 10, industryLossShare: Math.round((1 - surv(0.2)) * 100) / 100, moraleDrop: 15 * op.warheads };
+    parts.push(setProps(T, { rural: Math.round((T.rural ?? 0) * surv(0.12) * 10) / 10, urban: Math.round((T.urban ?? 0) * surv(0.12) * 10) / 10, industry: Math.round((T.industry ?? 0) * surv(0.2) * 10) / 10, morale: Math.max(0, (T.morale ?? 70) - result.moraleDrop) }));
+    const after = list.map((o) => o.id === opId ? { ...o, status: "executed", executedAt: date ?? null, result } : o);
+    parts.push({ apply: (m) => writeOps(m, after), revert: (m) => writeOps(m, list) });
+    return makeCommand(`\u6838\u4F5C\u6226\u3092\u5B9F\u884C\uFF08${op.name}\uFF09`, ["places"], parts);
   }
 
   // js/app/sim-actions.js
@@ -9709,9 +10558,9 @@ ${shown}${more}`;
       alliancesOf(stateId) {
         return withMap((map) => alliancesOf(map, stateId)) ?? [];
       },
-      createAlliance(name, memberIds) {
+      createAlliance(name, memberIds, bond = "standard") {
         return withMap((map) => safeRun("\u540C\u76DF\u306E\u7D50\u6210", () => {
-          const r = planCreateAlliance(map, name, memberIds, currentDate());
+          const r = planCreateAlliance(map, name, memberIds, currentDate(), bond);
           commitOrThrow(r.command);
           return r.id;
         }));
@@ -9762,10 +10611,45 @@ ${shown}${more}`;
               store.endBatch();
             }
             rerender();
-            out = { id: r.id, name: r.name, result: r.result };
+            out = { id: r.id, name: r.name, result: r.result, joined: r.joined, endsAt: r.endsAt };
           });
           return out;
         });
+      },
+      // --- 核作戦（立案→実行。通常の戦争では使われない） ---
+      nuclearOps() {
+        return withMap((map) => listNuclearOps(map)) ?? [];
+      },
+      nuclearStock(stateId) {
+        return withMap((map) => nuclearStock(map.pack.states[stateId])) ?? 0;
+      },
+      draftNuclearOp(attackerId, targetId, warheads) {
+        return withMap((map) => {
+          let id;
+          safeRun("\u6838\u4F5C\u6226\u306E\u7ACB\u6848", () => {
+            const r = planDraftNuclearOp(map, { attackerId, targetId, warheads });
+            commitOrThrow(r.command);
+            id = r.id;
+          });
+          return id;
+        });
+      },
+      cancelNuclearOp(id) {
+        withMap((map) => safeRun("\u6838\u4F5C\u6226\u306E\u53D6\u308A\u6D88\u3057", () => commitOrThrow(planCancelNuclearOp(map, id))));
+      },
+      executeNuclearOp(id) {
+        withMap((map) => safeRun("\u6838\u4F5C\u6226\u306E\u5B9F\u884C", () => {
+          const cmd = planExecuteNuclearOp(map, id, currentDate());
+          store.beginBatch(cmd.label ?? "\u6838\u4F5C\u6226\u306E\u5B9F\u884C");
+          try {
+            store.commit(cmd);
+            const op = listNuclearOps(store.getState().map).find((o) => o.id === id);
+            putMarker("nuclear", "\u2622\uFE0F", capitalCell(store.getState().map, op.targetId), `${dateLabel()} ${op.name}`);
+          } finally {
+            store.endBatch();
+          }
+          rerender();
+        }));
       },
       getCurrency(stateId) {
         return withMap((map) => getCurrency(map.pack.states[stateId]));
@@ -9805,6 +10689,21 @@ ${shown}${more}`;
           store.commit(planRecordBattle(map, warId, { attackerState, defenderState, result, date: currentDate() }));
           rerender();
         }));
+      },
+      renameWar(warId, name) {
+        withMap((map) => safeRun("\u6226\u4E89\u540D\u306E\u5909\u66F4", () => commitOrThrow(planRenameWar(map, warId, name))));
+      },
+      warsAwaitingTreaty() {
+        return withMap((map) => warsAwaitingTreaty(map)) ?? [];
+      },
+      peaceVenue(warId) {
+        return withMap((map) => planPeaceVenue(map, warId, rnd));
+      },
+      peaceSides(war) {
+        return peaceSides(war);
+      },
+      estimatePeace(warId, args) {
+        return withMap((map) => estimatePeace(map, warId, args));
       },
       suggestCessions(attackerId, defenderId) {
         return withMap((map) => suggestCessions(map, attackerId, defenderId)) ?? [];
@@ -9921,7 +10820,7 @@ ${shown}${more}`;
   }
 
   // js/ui/time-settings-dialog.js
-  var el7 = (tag, cls, text2) => {
+  var el10 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
@@ -9932,17 +10831,17 @@ ${shown}${more}`;
     if (!map) return;
     const dialog = document.createElement("dialog");
     dialog.className = "confirm-dialog time-settings-dialog";
-    dialog.append(el7("h2", null, "\u6642\u9593\u306E\u8A2D\u5B9A"));
-    dialog.append(el7("h3", "dialog-subhead", "\u73FE\u5728\u306E\u5E74\u6708"));
-    dialog.append(el7("p", "hint", "1\u30F6\u6708\u305A\u3064\u9032\u3081\u308B\u4EE5\u5916\u306B\u3001\u3053\u3053\u3067\u5E74\u6708\u3092\u76F4\u63A5\u6307\u5B9A\u3057\u3066\u305D\u306E\u6642\u70B9\u304B\u3089\u59CB\u3081\u308B\u3053\u3068\u3082\u3067\u304D\u307E\u3059\u3002"));
-    const dateRow = el7("div", "time-settings-row");
+    dialog.append(el10("h2", null, "\u6642\u9593\u306E\u8A2D\u5B9A"));
+    dialog.append(el10("h3", "dialog-subhead", "\u73FE\u5728\u306E\u5E74\u6708"));
+    dialog.append(el10("p", "hint", "1\u30F6\u6708\u305A\u3064\u9032\u3081\u308B\u4EE5\u5916\u306B\u3001\u3053\u3053\u3067\u5E74\u6708\u3092\u76F4\u63A5\u6307\u5B9A\u3057\u3066\u305D\u306E\u6642\u70B9\u304B\u3089\u59CB\u3081\u308B\u3053\u3068\u3082\u3067\u304D\u307E\u3059\u3002"));
+    const dateRow = el10("div", "time-settings-row");
     const yearInput = document.createElement("input");
     yearInput.type = "number";
     yearInput.min = "1";
     yearInput.step = "1";
     yearInput.value = String(map.worldTime.year);
     yearInput.setAttribute("aria-label", "\u5E74");
-    const yearSuffix = el7("span", "", "\u5E74");
+    const yearSuffix = el10("span", "", "\u5E74");
     const monthInput = document.createElement("input");
     monthInput.type = "number";
     monthInput.min = "1";
@@ -9950,21 +10849,21 @@ ${shown}${more}`;
     monthInput.step = "1";
     monthInput.value = String(map.worldTime.month);
     monthInput.setAttribute("aria-label", "\u6708");
-    const monthSuffix = el7("span", "", "\u6708");
+    const monthSuffix = el10("span", "", "\u6708");
     dateRow.append(yearInput, yearSuffix, monthInput, monthSuffix);
     dialog.append(dateRow);
-    const applyDateBtn = el7("button", "primary", "\u3053\u306E\u5E74\u6708\u306B\u8A2D\u5B9A\u3059\u308B");
+    const applyDateBtn = el10("button", "primary", "\u3053\u306E\u5E74\u6708\u306B\u8A2D\u5B9A\u3059\u308B");
     applyDateBtn.type = "button";
     applyDateBtn.addEventListener("click", () => {
       timeActions.setWorldTime(yearInput.value, monthInput.value);
       renderEraList();
     });
     dialog.append(applyDateBtn);
-    dialog.append(el7("h3", "dialog-subhead", "\u6642\u4EE3\u533A\u5206"));
-    dialog.append(el7("p", "hint", "\u300C\u25EF\u5E74\u304B\u3089\u25B3\u25B3\u6642\u4EE3\u300D\u3068\u3044\u3046\u5F62\u3067\u3001\u597D\u304D\u306A\u6570\u3060\u3051\u6642\u4EE3\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002\u5E74\u6708\u306E\u8868\u793A\u306B\u3001\u4ECA\u304C\u4F55\u6642\u4EE3\u304B\u304C\u6DFB\u3048\u3089\u308C\u307E\u3059\u3002"));
-    const eraList = el7("div", "era-list");
+    dialog.append(el10("h3", "dialog-subhead", "\u6642\u4EE3\u533A\u5206"));
+    dialog.append(el10("p", "hint", "\u300C\u25EF\u5E74\u304B\u3089\u25B3\u25B3\u6642\u4EE3\u300D\u3068\u3044\u3046\u5F62\u3067\u3001\u597D\u304D\u306A\u6570\u3060\u3051\u6642\u4EE3\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002\u5E74\u6708\u306E\u8868\u793A\u306B\u3001\u4ECA\u304C\u4F55\u6642\u4EE3\u304B\u304C\u6DFB\u3048\u3089\u308C\u307E\u3059\u3002"));
+    const eraList = el10("div", "era-list");
     dialog.append(eraList);
-    const newRow = el7("div", "time-settings-row");
+    const newRow = el10("div", "time-settings-row");
     const nameInput = document.createElement("input");
     nameInput.placeholder = "\u6642\u4EE3\u306E\u540D\u524D\uFF08\u4F8B: \u6C5F\u6238\u6642\u4EE3\uFF09";
     const fromInput = document.createElement("input");
@@ -9972,12 +10871,12 @@ ${shown}${more}`;
     fromInput.min = "1";
     fromInput.step = "1";
     fromInput.placeholder = "\u958B\u59CB\u5E74";
-    const fromSuffix = el7("span", "", "\u5E74\u304B\u3089");
+    const fromSuffix = el10("span", "", "\u5E74\u304B\u3089");
     newRow.append(nameInput, fromInput, fromSuffix);
     dialog.append(newRow);
-    const eraMsg = el7("p", "hint era-msg", "");
+    const eraMsg = el10("p", "hint era-msg", "");
     let editingId = null;
-    const addEraBtn = el7("button", "primary", "\u6642\u4EE3\u3092\u8FFD\u52A0");
+    const addEraBtn = el10("button", "primary", "\u6642\u4EE3\u3092\u8FFD\u52A0");
     addEraBtn.type = "button";
     addEraBtn.addEventListener("click", () => {
       if (!nameInput.value.trim()) {
@@ -10003,13 +10902,13 @@ ${shown}${more}`;
       eraList.replaceChildren();
       const list = editActions.listEras();
       if (!list.length) {
-        eraList.append(el7("p", "muted", "\u307E\u3060\u6642\u4EE3\u306F\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002"));
+        eraList.append(el10("p", "muted", "\u307E\u3060\u6642\u4EE3\u306F\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002"));
         return;
       }
       for (const e of list) {
-        const row = el7("div", "era-row");
-        row.append(el7("span", "era-row-name", `${e.name}\uFF08${e.fromYear}\u5E74\u301C\uFF09`));
-        const editBtn = el7("button", "", "\u7DE8\u96C6");
+        const row = el10("div", "era-row");
+        row.append(el10("span", "era-row-name", `${e.name}\uFF08${e.fromYear}\u5E74\u301C\uFF09`));
+        const editBtn = el10("button", "", "\u7DE8\u96C6");
         editBtn.type = "button";
         editBtn.addEventListener("click", () => {
           nameInput.value = e.name;
@@ -10018,7 +10917,7 @@ ${shown}${more}`;
           addEraBtn.textContent = "\u3053\u306E\u5185\u5BB9\u3067\u66F4\u65B0";
           eraMsg.textContent = "";
         });
-        const delBtn = el7("button", "danger", "\u524A\u9664");
+        const delBtn = el10("button", "danger", "\u524A\u9664");
         delBtn.type = "button";
         delBtn.addEventListener("click", () => {
           editActions.removeEra(e.id);
@@ -10029,8 +10928,8 @@ ${shown}${more}`;
       }
     }
     renderEraList();
-    const actions = el7("div", "confirm-dialog-actions");
-    const closeBtn = el7("button", "primary", "\u9589\u3058\u308B");
+    const actions = el10("div", "confirm-dialog-actions");
+    const closeBtn = el10("button", "primary", "\u9589\u3058\u308B");
     closeBtn.type = "button";
     actions.append(closeBtn);
     dialog.append(actions);
@@ -10089,13 +10988,13 @@ ${shown}${more}`;
   }
 
   // js/ui/panels/military-panel.js
-  var el8 = (tag, cls, text2) => {
+  var el11 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive24 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive29 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initMilitaryPanel({ store, simActions, editActions }) {
     const root = byId("tab-regiments");
     let selectedState = null;
@@ -10117,16 +11016,16 @@ ${shown}${more}`;
       const map = store.getState().map;
       if (!map) {
         root.replaceChildren();
-        root.append(el8("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        root.append(el11("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         cardCache.clear();
         return;
       }
-      const states = map.pack.states.filter(isLive24);
+      const states = map.pack.states.filter(isLive29);
       if (selectedState == null || !states.some((s) => s.i === selectedState)) selectedState = states[0]?.i ?? null;
       root.replaceChildren();
-      const picker = el8("div", "state-picker");
+      const picker = el11("div", "state-picker");
       if (!lockedToState) {
-        picker.append(el8("span", "field-label", "\u56FD\u5BB6"));
+        picker.append(el11("span", "field-label", "\u56FD\u5BB6"));
         const sel = document.createElement("select");
         for (const s of states) {
           const o = document.createElement("option");
@@ -10142,7 +11041,7 @@ ${shown}${more}`;
         });
         picker.append(sel);
       }
-      const addBtn = el8("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\u2026\uFF08\u30AF\u30EA\u30C3\u30AF\u3067\u53D6\u6D88\uFF09" : "\uFF0B \u65B0\u3057\u3044\u90E8\u968A\u3092\u7DE8\u6210\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\uFF09");
+      const addBtn = el11("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\u2026\uFF08\u30AF\u30EA\u30C3\u30AF\u3067\u53D6\u6D88\uFF09" : "\uFF0B \u90E8\u968A\u3092\u7DE8\u6210\uFF08\u81EA\u56FD\u306E\u9818\u571F\u3092\u30AF\u30EA\u30C3\u30AF\uFF09");
       addBtn.type = "button";
       addBtn.addEventListener("click", () => {
         if (pending?.type === "place") {
@@ -10162,13 +11061,13 @@ ${shown}${more}`;
       picker.append(addBtn);
       root.append(picker);
       if (!states.length) {
-        root.append(el8("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
+        root.append(el11("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
         cardCache.clear();
         return;
       }
-      const list = el8("div", "regiment-list");
+      const list = el11("div", "regiment-list");
       const regs = simActions.regimentsOf(selectedState);
-      if (!regs.length) list.append(el8("p", "muted", "\u3053\u306E\u56FD\u306B\u306F\u307E\u3060\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093"));
+      if (!regs.length) list.append(el11("p", "muted", "\u3053\u306E\u56FD\u306B\u306F\u307E\u3060\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093"));
       const liveIds = new Set(regs.map((r) => r.i));
       for (const id of [...cardCache.keys()]) if (!liveIds.has(id)) cardCache.delete(id);
       for (const r of regs) list.append(getOrBuildCard(map, selectedState, r));
@@ -10186,34 +11085,44 @@ ${shown}${more}`;
       return built;
     }
     function buildRegimentCard(map, stateId, reg) {
-      const card = el8("div", "regiment-card");
-      const head = el8("div", "regiment-card-head");
+      const card = el11("div", "regiment-card mini");
+      const head = el11("div", "regiment-card-head");
       const nameInput = document.createElement("input");
       nameInput.value = reg.name;
-      nameInput.style.fontWeight = "600";
-      nameInput.style.background = "transparent";
-      nameInput.style.border = "0";
-      nameInput.style.width = "auto";
-      nameInput.style.flex = "1";
       nameInput.dataset.field = "name";
+      nameInput.className = "mini-name";
       nameInput.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { name: nameInput.value }));
-      const disbandBtn = el8("button", "danger", "\u89E3\u6563");
+      const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
+      const moveBtn = el11("button", "mini-btn", isMovePicking ? "\u{1F4CD}\u2026" : "\u{1F4CD}");
+      moveBtn.dataset.field = "move-btn";
+      moveBtn.type = "button";
+      moveBtn.title = "\u79FB\u52D5\uFF1A\u62BC\u3057\u3066\u304B\u3089\u3001\u81EA\u56FD\u306E\u9818\u571F\u5185\u306E\u79FB\u52D5\u5148\u3092\u5730\u56F3\u3067\u30AF\u30EA\u30C3\u30AF";
+      moveBtn.addEventListener("click", () => {
+        pending = { type: "move", stateId, regId: reg.i };
+        store.update((s) => {
+          s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044\uFF08\u81EA\u56FD\u306E\u9818\u571F\u5185\uFF09";
+        });
+        render();
+      });
+      const disbandBtn = el11("button", "mini-btn danger", "\u89E3\u6563");
       disbandBtn.type = "button";
       disbandBtn.addEventListener("click", async () => {
         if (await confirmDialog(`\u300C${reg.name}\u300D\u3092\u89E3\u6563\u3057\u307E\u3059\u304B\uFF1F`, { danger: true, okLabel: "\u89E3\u6563" })) simActions.disbandRegiment(stateId, reg.i);
       });
-      head.append(nameInput, disbandBtn);
+      head.append(nameInput, moveBtn, disbandBtn);
       card.append(head);
-      const cellInfo = el8("p", "muted", `\u914D\u7F6E: \u30BB\u30EB#${reg.cell}`);
-      cellInfo.dataset.field = "cell";
-      card.append(cellInfo);
-      const doctrineRow = el8("p", "muted regiment-doctrine", `\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3: ${doctrineLabelOf(stateId)}\uFF08\u56FD\u5BB6\u30D1\u30CD\u30EB\u3067\u5909\u66F4\uFF09`);
-      doctrineRow.dataset.field = "doctrine-label";
-      card.append(doctrineRow);
-      const units = el8("div", "regiment-units");
+      const power = el11("p", "regiment-power", `\u6226\u529B ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}\u3000\u5175\u54E1 ${forceHeadcount(reg.u).toLocaleString()}`);
+      power.dataset.field = "power";
+      card.append(power);
+      const more = document.createElement("details");
+      more.className = "mini-more";
+      more.append(el11("summary", "", "\u5175\u529B\u3092\u7DE8\u96C6"));
+      const units = el11("div", "regiment-units");
       for (const u of UNIT_TYPES) {
-        const field = el8("div", "unit-field");
-        field.append(el8("span", "", `${u.icon} ${u.label}`));
+        if (u.key === "nuclear" && (map.pack.states[stateId]?.techLevel ?? 3) < 9) continue;
+        const field = el11("label", "unit-field");
+        field.title = u.desc ?? "";
+        field.append(el11("span", "", `${u.icon} ${u.label}\uFF08${u.unit}\uFF09`));
         const input = document.createElement("input");
         input.type = "number";
         input.min = "0";
@@ -10223,24 +11132,8 @@ ${shown}${more}`;
         field.append(input);
         units.append(field);
       }
-      card.append(units);
-      const power = el8("p", "regiment-power", `\u7DCF\u6226\u529B: ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}\u3000\u7DCF\u5175\u54E1/\u6A5F\u6570: ${forceHeadcount(reg.u).toLocaleString()}`);
-      power.dataset.field = "power";
-      card.append(power);
-      const actions = el8("div", "regiment-actions");
-      const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
-      const moveBtn = el8("button", "", isMovePicking ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3078\u2026" : "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09");
-      moveBtn.dataset.field = "move-btn";
-      moveBtn.type = "button";
-      moveBtn.addEventListener("click", () => {
-        pending = { type: "move", stateId, regId: reg.i };
-        store.update((s) => {
-          s.hint = "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044";
-        });
-        render();
-      });
-      actions.append(moveBtn);
-      card.append(actions);
+      more.append(units);
+      card.append(more);
       return card;
     }
     function patchRegimentCard(map, stateId, reg, cached) {
@@ -10249,19 +11142,15 @@ ${shown}${more}`;
       const isActive = (elm) => elm === active;
       const nameInput = card.querySelector('[data-field="name"]');
       if (nameInput && !isActive(nameInput)) nameInput.value = reg.name;
-      const cellInfo = card.querySelector('[data-field="cell"]');
-      if (cellInfo) cellInfo.textContent = `\u914D\u7F6E: \u30BB\u30EB#${reg.cell}`;
-      const doctrineLabel = card.querySelector('[data-field="doctrine-label"]');
-      if (doctrineLabel) doctrineLabel.textContent = `\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3: ${doctrineLabelOf(stateId)}\uFF08\u56FD\u5BB6\u30D1\u30CD\u30EB\u3067\u5909\u66F4\uFF09`;
       for (const u of UNIT_TYPES) {
         const input = card.querySelector(`[data-field="unit:${u.key}"]`);
         if (input && !isActive(input)) input.value = reg.u?.[u.key] ?? 0;
       }
       const power = card.querySelector('[data-field="power"]');
-      if (power) power.textContent = `\u7DCF\u6226\u529B: ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}\u3000\u7DCF\u5175\u54E1/\u6A5F\u6570: ${forceHeadcount(reg.u).toLocaleString()}`;
+      if (power) power.textContent = `\u6226\u529B ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}\u3000\u5175\u54E1 ${forceHeadcount(reg.u).toLocaleString()}`;
       const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
       const moveBtn = card.querySelector('[data-field="move-btn"]');
-      if (moveBtn) moveBtn.textContent = isMovePicking ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3078\u2026" : "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09";
+      if (moveBtn) moveBtn.textContent = isMovePicking ? "\u{1F4CD}\u2026" : "\u{1F4CD}";
     }
     store.subscribe((_s, change) => {
       if (["replace", "commit", "undo", "redo"].includes(change.type)) render();
@@ -10326,14 +11215,14 @@ ${shown}${more}`;
   }
 
   // js/ui/panels/wars-panel.js
-  var el9 = (tag, cls, text2) => {
+  var el12 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive25 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  function initWarsPanel({ store, simActions, getOutcome = () => null }) {
+  var isLive30 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function initWarsPanel({ store, simActions, getOutcome = () => null, getWins = () => null }) {
     const root = byId("tab-wars");
     let selected = null;
     let creating = false;
@@ -10343,15 +11232,15 @@ ${shown}${more}`;
       root.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        root.append(el9("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        root.append(el12("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive25);
+      const states = map.pack.states.filter(isLive30);
       const wars = simActions.listWars().slice().reverse();
       if (selected != null && !wars.some((w) => w.id === selected)) selected = null;
-      const split = el9("div", "win-split");
-      const list = el9("div", "win-list");
-      const add = el9("button", creating ? "primary" : "", "\uFF0B \u65B0\u3057\u3044\u6226\u4E89\uFF08\u5BA3\u6226\u5E03\u544A\uFF09");
+      const split = el12("div", "win-split");
+      const list = el12("div", "win-list");
+      const add = el12("button", creating ? "primary" : "", "\uFF0B \u65B0\u3057\u3044\u6226\u4E89\uFF08\u5BA3\u6226\u5E03\u544A\uFF09");
       add.type = "button";
       add.addEventListener("click", () => {
         creating = true;
@@ -10360,7 +11249,7 @@ ${shown}${more}`;
       });
       list.append(add);
       for (const w of wars) {
-        const b = el9("button", `${w.id === selected ? "active" : ""}${w.endedAt ? " ended" : ""}`, `${w.endedAt ? "\u{1F54A} " : "\u2694 "}${w.name}`);
+        const b = el12("button", `${w.id === selected ? "active" : ""}${w.endedAt ? " ended" : ""}`, `${w.endedAt ? "\u{1F54A} " : "\u2694 "}${w.name}`);
         b.type = "button";
         b.addEventListener("click", () => {
           selected = w.id;
@@ -10369,25 +11258,25 @@ ${shown}${more}`;
         });
         list.append(b);
       }
-      if (!wars.length) list.append(el9("p", "muted", "\u6226\u4E89\u306E\u8A18\u9332\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
-      const detail = el9("div", "win-detail");
+      if (!wars.length) list.append(el12("p", "muted", "\u6226\u4E89\u306E\u8A18\u9332\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+      const detail = el12("div", "win-detail");
       if (creating) detail.append(declareForm(map, states));
       else if (selected != null) detail.append(warDetail(map, states, wars.find((w) => w.id === selected)));
-      else detail.append(el9("p", "muted", "\u5DE6\u306E\u4E00\u89A7\u304B\u3089\u6226\u4E89\u3092\u9078\u3076\u304B\u3001\u300C\u65B0\u3057\u3044\u6226\u4E89\u300D\u3067\u5BA3\u6226\u5E03\u544A\u3057\u3066\u304F\u3060\u3055\u3044\u3002"));
+      else detail.append(el12("p", "muted", "\u5DE6\u306E\u4E00\u89A7\u304B\u3089\u6226\u4E89\u3092\u9078\u3076\u304B\u3001\u300C\u65B0\u3057\u3044\u6226\u4E89\u300D\u3067\u5BA3\u6226\u5E03\u544A\u3057\u3066\u304F\u3060\u3055\u3044\u3002"));
       split.append(list, detail);
       root.append(split);
     }
     function declareForm(map, states) {
-      const wrap = el9("div", "editor-section");
-      wrap.append(el9("h4", "", "\u5BA3\u6226\u5E03\u544A"));
-      const warn = el9("p", "muted", "\u5BA3\u6226\u5E03\u544A\u3059\u308B\u3068\u3001\u305D\u306E\u5834\u3067\u6226\u4E89\u306E\u52DD\u6557\u304C\u5224\u5B9A\u3055\u308C\u307E\u3059\u3002\u6226\u4E89\u306E\u540D\u524D\u306F\u81EA\u52D5\u3067\u4ED8\u304D\u307E\u3059\u3002");
-      const go = el9("button", "danger", "\u5BA3\u6226\u5E03\u544A\u3059\u308B");
+      const wrap = el12("div", "editor-section");
+      wrap.append(el12("h4", "", "\u5BA3\u6226\u5E03\u544A"));
+      const warn = el12("p", "muted", "\u5BA3\u6226\u5E03\u544A\u3059\u308B\u3068\u3001\u305D\u306E\u5834\u3067\u6226\u4E89\u306E\u52DD\u6557\u304C\u5224\u5B9A\u3055\u308C\u307E\u3059\u3002\u6226\u4E89\u306E\u540D\u524D\u306F\u81EA\u52D5\u3067\u4ED8\u304D\u307E\u3059\u3002");
+      const go = el12("button", "danger", "\u5BA3\u6226\u5E03\u544A\u3059\u308B");
       go.type = "button";
       const sideBox = (label, key, other) => {
-        const box = el9("div", "member-picker");
-        box.append(el9("span", "field-label", label));
+        const box = el12("div", "member-picker");
+        box.append(el12("span", "field-label", label));
         for (const s of states) {
-          const l = el9("label", "");
+          const l = el12("label", "");
           const cb = document.createElement("input");
           cb.type = "checkbox";
           cb.checked = draft[key].has(s.i);
@@ -10412,7 +11301,6 @@ ${shown}${more}`;
           creating = false;
           draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set() };
           render();
-          getOutcome()?.show(out.id);
         }
       });
       wrap.append(warn, sideBox("\u653B\u6483\u5074", "attackers", "defenders"), sideBox("\u9632\u5FA1\u5074", "defenders", "attackers"), go);
@@ -10420,168 +11308,23 @@ ${shown}${more}`;
       return wrap;
     }
     function warDetail(map, states, w) {
-      const box = el9("div", `war-card${w.endedAt ? " ended" : ""}`);
-      box.append(el9("div", "war-title", w.name));
-      const aNames = w.attackers.map((id) => stateName(map, id)).join("\u30FB");
-      const dNames = w.defenders.map((id) => stateName(map, id)).join("\u30FB");
-      box.append(el9("div", "war-meta", `${aNames} \u5BFE ${dNames}\u3000\u958B\u6226: ${formatWorldTime(w.startedAt)}${w.endedAt ? `\u3000\u7D42\u7D50: ${formatWorldTime(w.endedAt)}` : ""}`));
-      if (!w.endedAt) {
-        box.append(musterSection(map, w));
-        box.append(battleForm(map, w));
+      const box = el12("div", `war-card${w.endedAt ? " ended" : ""}`);
+      const nameIn = document.createElement("input");
+      nameIn.value = w.name;
+      nameIn.className = "war-name-input";
+      nameIn.addEventListener("change", () => simActions.renameWar(w.id, nameIn.value));
+      box.append(el12("label", "field-label", "\u6226\u4E89\u306E\u540D\u524D"), nameIn);
+      const sit = getOutcome()?.situation(map, w);
+      if (sit) box.append(sit);
+      if (w.endedAt) {
+        box.append(el12("p", "muted", `\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u307E\u3057\u305F\u3002${w.treatyName ? `\u8B1B\u548C\u6761\u7D04\uFF1A${w.treatyName}` : ""}`));
+      } else {
+        const go = el12("button", "primary", "\u8B1B\u548C\u6761\u7D04\u3092\u6C7A\u3081\u308B");
+        go.type = "button";
+        go.addEventListener("click", () => getWins()?.open("treaty"));
+        box.append(go);
       }
-      box.append(battleLog(map, w));
-      if (!w.endedAt) {
-        const adv = w.advantage[w.attackers[0]] ?? 0;
-        box.append(el9("p", "muted", `\u512A\u52E2\u5EA6\uFF08\u653B\u6483\u5074\u57FA\u6E96\uFF09: ${adv > 0 ? "+" : ""}${adv}`));
-        box.append(peaceForm(map, states, w));
-      } else box.append(el9("p", "muted", "\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u307E\u3057\u305F"));
       return box;
-    }
-    function musterSection(map, w) {
-      const wrap = el9("div", "editor-section");
-      wrap.append(el9("h4", "", "\u53EC\u96C6\u3059\u308B\u90E8\u968A"));
-      const current = w.muster ?? {};
-      const save = (sid, ids2) => simActions.setMuster(w.id, { ...current, [sid]: ids2 });
-      for (const [label, ids2] of [["\u653B\u6483\u5074", w.attackers], ["\u9632\u5FA1\u5074", w.defenders]]) {
-        for (const sid of ids2) {
-          const regs = simActions.regimentsOf(sid);
-          const picked = new Set(current[sid] ?? []);
-          const sec = el9("div", "muster-state");
-          sec.append(el9("h5", "", `${label}\uFF1A${stateName(map, sid)}\u3000\u53EC\u96C6\u4E2D\u306E\u6226\u529B ${simActions.musterPower(w, sid).toLocaleString()}`));
-          if (!regs.length) sec.append(el9("p", "muted", "\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u8ECD\u4E8B\u30A6\u30A3\u30F3\u30C9\u30A6\u3067\u7DE8\u6210\u3067\u304D\u307E\u3059\uFF09"));
-          for (const r of regs) {
-            const row = el9("label", "muster-row");
-            const cb = document.createElement("input");
-            cb.type = "checkbox";
-            cb.checked = picked.has(r.i);
-            cb.addEventListener("change", () => {
-              const n = new Set(picked);
-              if (cb.checked) n.add(r.i);
-              else n.delete(r.i);
-              save(sid, [...n]);
-            });
-            row.append(cb, document.createTextNode(`${r.icon ?? "\u{1F6E1}\uFE0F"} ${r.name ?? `\u90E8\u968A${r.i}`}`), el9("span", "muted", `\u6226\u529B ${Math.round(forcePower(r.u)).toLocaleString()}`));
-            sec.append(row);
-          }
-          wrap.append(sec);
-        }
-      }
-      return wrap;
-    }
-    function battleForm(map, w) {
-      const wrap = el9("div", "editor-section");
-      wrap.append(el9("h4", "", "\u6226\u95D8\u3092\u8A18\u9332\u3059\u308B"));
-      const mk = (ids2) => {
-        const s = document.createElement("select");
-        for (const id of ids2) {
-          const o = document.createElement("option");
-          o.value = id;
-          o.textContent = stateName(map, id);
-          s.append(o);
-        }
-        return s;
-      };
-      const aSel = mk(w.attackers), dSel = mk(w.defenders);
-      const win = document.createElement("select");
-      for (const [v, t] of [["attacker", "\u653B\u6483\u5074\u306E\u52DD\u5229"], ["defender", "\u9632\u5FA1\u5074\u306E\u52DD\u5229"]]) {
-        const o = document.createElement("option");
-        o.value = v;
-        o.textContent = t;
-        win.append(o);
-      }
-      const info = el9("p", "muted", "");
-      const sync = () => {
-        const ap = simActions.musterPower(w, Number(aSel.value)), dp = simActions.musterPower(w, Number(dSel.value));
-        info.textContent = `\u53EC\u96C6\u3057\u305F\u6226\u529B\uFF1A${ap.toLocaleString()} \u5BFE ${dp.toLocaleString()}\uFF08\u52DD\u6557\u306F\u81EA\u7531\u306B\u6C7A\u3081\u3089\u308C\u307E\u3059\uFF09`;
-      };
-      aSel.addEventListener("change", sync);
-      dSel.addEventListener("change", sync);
-      sync();
-      const go = el9("button", "primary", "\u8A18\u9332\u3059\u308B");
-      go.type = "button";
-      go.addEventListener("click", () => simActions.recordBattle(w.id, { attackerState: Number(aSel.value), defenderState: Number(dSel.value), winner: win.value }));
-      const row = el9("div", "member-picker");
-      row.append(el9("span", "", "\u653B\u6483\u5074"), aSel, el9("span", "", "\u9632\u5FA1\u5074"), dSel, win);
-      wrap.append(row, info, go);
-      return wrap;
-    }
-    function battleLog(map, w) {
-      const log = el9("div", "battle-log");
-      if (w.battles.length) {
-        for (const b of w.battles.slice(-12).reverse()) {
-          log.append(el9("div", "", `${b.year}\u5E74${b.month}\u6708 ${stateName(map, b.attackerState)} vs ${stateName(map, b.defenderState)} \u2192 ${b.winner === "attacker" ? "\u653B\u6483\u5074" : "\u9632\u5FA1\u5074"}\u306E\u52DD\u5229`));
-        }
-      } else log.append(el9("div", "", "\u307E\u3060\u6226\u95D8\u306E\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093"));
-      return log;
-    }
-    function peaceForm(map, states, w) {
-      const wrap = el9("div", "editor-section");
-      wrap.append(el9("h4", "", "\u8B1B\u548C\u6761\u7D04"));
-      const dirRow = el9("div", "member-picker");
-      const aTo = el9("button", "", `${stateName(map, w.attackers[0])}\u306B\u5272\u8B72`);
-      const dTo = el9("button", "", `${stateName(map, w.defenders[0])}\u306B\u5272\u8B72`);
-      let direction = "attacker";
-      const syncDir = () => {
-        aTo.classList.toggle("active", direction === "attacker");
-        dTo.classList.toggle("active", direction === "defender");
-        refreshList();
-      };
-      aTo.type = "button";
-      dTo.type = "button";
-      aTo.addEventListener("click", () => {
-        direction = "attacker";
-        syncDir();
-      });
-      dTo.addEventListener("click", () => {
-        direction = "defender";
-        syncDir();
-      });
-      dirRow.append(aTo, dTo);
-      wrap.append(dirRow);
-      const listEl = el9("div", "cession-list");
-      wrap.append(listEl);
-      const checks = [];
-      function refreshList() {
-        listEl.replaceChildren();
-        checks.length = 0;
-        const from = direction === "attacker" ? w.defenders[0] : w.attackers[0];
-        const to = direction === "attacker" ? w.attackers[0] : w.defenders[0];
-        const candidates = simActions.suggestCessions(to, from);
-        if (!candidates.length) {
-          listEl.append(el9("p", "muted", "\u5272\u8B72\u3067\u304D\u305D\u3046\u306A\u5730\u57DF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u56FD\u5883\u304C\u63A5\u3057\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF09"));
-          return;
-        }
-        for (const c of candidates) {
-          const row = el9("label", "cession-item");
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.dataset.type = c.type;
-          if (c.type === "province") cb.dataset.provinceId = c.provinceId;
-          else cb.__regionCells = c.regionCells;
-          row.append(cb, el9("span", "", `${c.name}\uFF08${c.cells}\u30BB\u30EB\uFF09`));
-          listEl.append(row);
-          checks.push(cb);
-        }
-      }
-      refreshList();
-      const repRow = el9("label", "field");
-      repRow.append(el9("span", "field-label", "\u8CE0\u511F\u91D1\uFF08\u76F8\u624B\u306E\u7523\u696D\u529B\u304B\u3089\u5DEE\u3057\u5F15\u304F\u30FB\u4EFB\u610F\uFF09"));
-      const repInput = document.createElement("input");
-      repInput.type = "number";
-      repInput.min = "0";
-      repInput.value = "0";
-      repRow.append(repInput);
-      wrap.append(repRow);
-      const signBtn = el9("button", "danger", "\u3053\u306E\u5185\u5BB9\u3067\u8B1B\u548C\u3059\u308B");
-      signBtn.type = "button";
-      signBtn.addEventListener("click", () => {
-        const provinceIds = checks.filter((c) => c.checked && c.dataset.type === "province").map((c) => Number(c.dataset.provinceId));
-        const regionCells = checks.filter((c) => c.checked && c.dataset.type === "region").map((c) => c.__regionCells);
-        const toStateId = direction === "attacker" ? w.attackers[0] : w.defenders[0];
-        simActions.signPeace(w.id, { provinceIds, regionCells, toStateId, reparations: Number(repInput.value) || 0 });
-      });
-      wrap.append(signBtn);
-      return wrap;
     }
     store.subscribe((_s, change) => {
       if (["replace", "commit", "undo", "redo"].includes(change.type)) render();
@@ -10590,186 +11333,308 @@ ${shown}${more}`;
   }
 
   // js/ui/war-outcome-window.js
-  var el10 = (tag, cls, text2) => {
+  var el13 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive26 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive31 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var pct = (v) => `${Math.round(v * 100)}%`;
+  var fmt4 = (n, d = 0) => Number(n).toLocaleString("ja-JP", { maximumFractionDigits: d, minimumFractionDigits: d });
+  var fmtDate2 = (d) => d ? `${d.year}\u5E74${d.month}\u6708` : "\u2014";
   function initWarOutcome({ store, simActions }) {
-    const stage = document.getElementById("stage");
     const sname = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     const names = (map, ids2) => ids2.map((i) => sname(map, i)).join("\u30FB");
     function bar(label, aShare, aText, dText) {
-      const row = el10("div", "wo-bar-row");
-      row.append(el10("span", "wo-bar-val a", aText), el10("span", "wo-bar-label", label), el10("span", "wo-bar-val d", dText));
-      const track = el10("div", "wo-bar");
-      const a = el10("div", "wo-bar-a");
+      const wrap = el13("div", "wo-bar-wrap");
+      const row = el13("div", "wo-bar-row");
+      row.append(el13("span", "wo-bar-val a", aText), el13("span", "wo-bar-label", label), el13("span", "wo-bar-val d", dText));
+      const track = el13("div", "wo-bar");
+      const a = el13("div", "wo-bar-a");
       a.style.width = pct(aShare);
-      const d = el10("div", "wo-bar-d");
+      const d = el13("div", "wo-bar-d");
       d.style.width = pct(1 - aShare);
       track.append(a, d);
-      const wrap = el10("div", "wo-bar-wrap");
       wrap.append(row, track);
       return wrap;
     }
-    function overlay(cls) {
-      const o = el10("div", `wo-overlay ${cls}`);
-      stage.append(o);
-      return o;
-    }
-    function show(warId) {
-      const map = store.getState().map;
-      if (!map) return;
-      const war = (map.ext?.data?.wars ?? []).find((w) => w.id === warId);
-      if (!war?.result) return;
-      const o = overlay("wo-battle");
-      const box = el10("div", "wo-box");
-      const head = el10("div", "wo-head");
-      head.append(el10("h2", "", war.name));
-      const close = el10("button", "panel-close", "\xD7");
-      close.type = "button";
-      close.setAttribute("aria-label", "\u9589\u3058\u308B");
-      close.addEventListener("click", () => o.remove());
-      head.append(close);
-      const sides = el10("div", "wo-sides");
-      sides.append(el10("div", "wo-side a", names(map, war.attackers)), el10("div", "wo-vs", "VS"), el10("div", "wo-side d", names(map, war.defenders)));
-      const r = war.result, A = r.aStrength, D = r.dStrength, c = r.compare;
-      const n = (v) => Math.round(v).toLocaleString();
-      const bars = el10("div", "wo-bars");
-      bars.append(
-        bar("\u9678\u8ECD\u529B", c.land, n(A.land), n(D.land)),
-        bar("\u5236\u6D77\u6A29", c.sea, n(A.sea), n(D.sea)),
-        bar("\u5236\u7A7A\u6A29", c.air, n(A.air), n(D.air)),
-        bar("\u58EB\u6C17", c.morale, Math.round(A.morale), Math.round(D.morale))
-      );
-      const verdict = el10(
-        "div",
-        `wo-verdict ${r.winner}`,
-        r.winner === "attacker" ? `\u653B\u6483\u5074\uFF08${names(map, war.attackers)}\uFF09\u306E\u52DD\u5229` : r.winner === "defender" ? `\u9632\u885B\u5074\uFF08${names(map, war.defenders)}\uFF09\u306E\u52DD\u5229` : "\u6C7A\u7740\u3064\u304B\u305A\uFF08\u81A0\u7740\uFF09"
-      );
-      box.append(head, sides, bars, verdict);
-      o.append(box);
-      setTimeout(() => peace(warId, o), 600);
-    }
-    function peace(warId, below) {
-      const map = store.getState().map;
-      if (!map) return;
-      const war = (map.ext?.data?.wars ?? []).find((w) => w.id === warId);
-      if (!war || war.endedAt) return;
-      const r = war.result ?? { winner: "stalemate" };
-      const o = overlay("wo-peace");
-      const box = el10("div", "wo-box");
-      const head = el10("div", "wo-head");
-      head.append(el10("h2", "", "\u8B1B\u548C\u6761\u7D04"));
-      const close = el10("button", "panel-close", "\xD7");
-      close.type = "button";
-      close.addEventListener("click", () => o.remove());
-      head.append(close);
-      box.append(head);
-      const winnersIds = r.winner === "defender" ? war.defenders : war.attackers;
-      const losersIds = r.winner === "defender" ? war.attackers : war.defenders;
-      const nameIn = document.createElement("input");
-      nameIn.value = `${war.name}\u306E\u8B1B\u548C\u6761\u7D04`;
-      box.append(el10("label", "field-label", "\u6761\u7D04\u306E\u540D\u524D"), nameIn);
-      const toSel = document.createElement("select");
-      for (const id of winnersIds) {
-        const op = document.createElement("option");
-        op.value = id;
-        op.textContent = sname(map, id);
-        toSel.append(op);
+    function situation(map, war) {
+      const box = el13("div", "wo-situation");
+      const sides = el13("div", "wo-sides");
+      sides.append(el13("div", "wo-side a", names(map, war.attackers)), el13("div", "wo-vs", "VS"), el13("div", "wo-side d", names(map, war.defenders)));
+      box.append(sides);
+      const r = war.result;
+      if (!r) {
+        box.append(el13("p", "muted", "\u6226\u6CC1\u306E\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u65E7\u30C7\u30FC\u30BF\u306E\u6226\u4E89\u3067\u3059\uFF09"));
+        return box;
       }
-      box.append(el10("label", "field-label", "\u5272\u8B72\u30FB\u8CE0\u511F\u3092\u53D7\u3051\u308B\u56FD"), toSel);
-      const cessBox = el10("div", "wo-cess");
-      const cands = [];
-      function loadCands() {
-        cands.length = 0;
-        cessBox.replaceChildren();
-        const to = Number(toSel.value);
-        for (const lid of losersIds) for (const cd of simActions.suggestCessions(to, lid)) cands.push({ ...cd, from: lid, checked: false });
-        if (!cands.length) cessBox.append(el10("p", "muted", "\u5272\u8B72\u3067\u304D\u308B\u5730\u57DF\u306F\u3042\u308A\u307E\u305B\u3093\uFF08\u9996\u90FD\u306F\u5272\u8B72\u3067\u304D\u307E\u305B\u3093\uFF09"));
-        cands.forEach((cd) => {
-          const l = el10("label", "wo-cess-row");
-          const cb = document.createElement("input");
-          cb.type = "checkbox";
-          cb.addEventListener("change", () => {
-            cd.checked = cb.checked;
-          });
-          l.append(cb, document.createTextNode(`${cd.name}\uFF08${cd.cells}\u30BB\u30EB\u30FB${sname(map, cd.from)}\uFF09`));
-          cessBox.append(l);
+      const A = r.aStrength, D = r.dStrength, c = r.compare, n = (v) => fmt4(v);
+      const bars = el13("div", "wo-bars");
+      bars.append(bar("\u9678\u8ECD\u529B", c.land, n(A.land), n(D.land)), bar("\u5236\u6D77\u6A29", c.sea, n(A.sea), n(D.sea)), bar("\u5236\u7A7A\u6A29", c.air, n(A.air), n(D.air)), bar("\u58EB\u6C17", c.morale, fmt4(A.morale), fmt4(D.morale)));
+      box.append(bars);
+      box.append(el13("div", `wo-verdict ${r.winner}`, r.winner === "attacker" ? `\u653B\u6483\u5074\u306E\u52DD\u5229\uFF08${names(map, war.attackers)}\uFF09` : r.winner === "defender" ? `\u9632\u885B\u5074\u306E\u52DD\u5229\uFF08${names(map, war.defenders)}\uFF09` : "\u6C7A\u7740\u3064\u304B\u305A\uFF08\u81A0\u7740\uFF09"));
+      const dates = `\u958B\u6226 ${fmtDate2(war.startedAt)}\u3000${war.endedAt ? `\u7D42\u6226 ${fmtDate2(war.endedAt)}` : `\u7D42\u6226\u4E88\u5B9A ${fmtDate2(war.endsAt)}\uFF08\u7D04${war.durationMonths ?? "?"}\u30F6\u6708\uFF09`}`;
+      box.append(el13("p", "hint", dates));
+      if (war.joinedAllies?.length) box.append(el13("p", "hint", `\u540C\u76DF\u306E\u62D8\u675F\u306B\u3088\u308A\u53C2\u6226: ${war.joinedAllies.map((j) => `${sname(map, j.id)}\uFF08${j.alliance}\u30FB${j.side === "attacker" ? "\u653B\u6483\u5074" : "\u9632\u885B\u5074"}\uFF09`).join("\u3001")}`));
+      return box;
+    }
+    const treatyBody = el13("div", "treaty-body");
+    let sel = null;
+    let draft = null;
+    const cellsOfProvince = (map, pid) => {
+      const out = [];
+      const c = map.pack.cells.province;
+      for (let i = 0; i < c.length; i++) if (c[i] === pid) out.push(i);
+      return out;
+    };
+    function renderTreaty() {
+      treatyBody.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        treatyBody.append(el13("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const pending = simActions.warsAwaitingTreaty();
+      if (!pending.length) {
+        treatyBody.append(el13("p", "muted", "\u8B1B\u548C\u5F85\u3061\u306E\u6226\u4E89\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u6226\u4E89\u30A6\u30A3\u30F3\u30C9\u30A6\u3067\u5BA3\u6226\u5E03\u544A\u3059\u308B\u3068\u3001\u3053\u3053\u3067\u8B1B\u548C\u6761\u7D04\u3092\u6C7A\u3081\u3089\u308C\u307E\u3059\u3002"));
+        sel = null;
+        draft = null;
+        return;
+      }
+      if (!pending.some((w) => w.id === sel)) {
+        sel = pending[0].id;
+        draft = null;
+      }
+      const split = el13("div", "win-split"), list = el13("div", "win-list");
+      for (const w of pending) {
+        const b = el13("button", w.id === sel ? "active" : "", `\u{1F4DC} ${w.name}`);
+        b.type = "button";
+        b.addEventListener("click", () => {
+          sel = w.id;
+          draft = null;
+          renderTreaty();
         });
+        list.append(b);
       }
-      toSel.addEventListener("change", () => {
-        loadCands();
-        updateMoney();
+      const detail = el13("div", "win-detail");
+      detail.append(treatyForm(map, pending.find((w) => w.id === sel)));
+      split.append(list, detail);
+      treatyBody.append(split);
+    }
+    function treatyForm(map, war) {
+      const { winners, losers, stalemate } = simActions.peaceSides(war);
+      if (!draft || draft.warId !== war.id) {
+        const venue = simActions.peaceVenue(war.id);
+        draft = { warId: war.id, venue, treatyName: venue?.treatyName ?? `${war.name}\u306E\u8B1B\u548C\u6761\u7D04`, toStateId: winners[0], fromStateId: losers[0], picked: /* @__PURE__ */ new Set(), reparations: 0, notes: "" };
+      }
+      const wrap = el13("div", "treaty-form");
+      const wn = document.createElement("input");
+      wn.value = war.name;
+      wn.addEventListener("change", () => {
+        simActions.renameWar(war.id, wn.value);
       });
-      box.append(el10("h4", "", "\u5272\u8B72\u3059\u308B\u5730\u57DF"), cessBox);
-      const payerId = losersIds[0];
-      const money = el10("div", "wo-money");
+      wrap.append(el13("label", "field-label", "\u6226\u4E89\u306E\u540D\u524D"), wn);
+      wrap.append(situation(map, war));
+      const v = draft.venue;
+      const venueLine = el13("p", "hint", v ? `\u8B1B\u548C\u5730\uFF1A${v.place}\uFF08${sname(map, v.stateId)}${v.neutral ? "\u30FB\u4E2D\u7ACB\u56FD" : "\u30FB\u4EA4\u6226\u56FD"}\uFF09` : "\u8B1B\u548C\u5730\u3092\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u90FD\u5E02\u304C\u3042\u308A\u307E\u305B\u3093\uFF09");
+      const again = el13("button", "", "\u5225\u306E\u5730\u3067\u958B\u304F");
+      again.type = "button";
+      again.addEventListener("click", () => {
+        const nv = simActions.peaceVenue(war.id);
+        if (nv) {
+          draft.venue = nv;
+          draft.treatyName = nv.treatyName;
+          renderTreaty();
+        }
+      });
+      const tn = document.createElement("input");
+      tn.value = draft.treatyName;
+      tn.addEventListener("input", () => {
+        draft.treatyName = tn.value;
+      });
+      wrap.append(el13("label", "field-label", "\u8B1B\u548C\u6761\u7D04\u306E\u540D\u524D\uFF08\u8B1B\u548C\u5730\u306E\u5730\u540D\u304B\u3089\uFF09"), tn, venueLine, again);
+      const mk = (ids2, cur, on) => {
+        const s = document.createElement("select");
+        for (const id of ids2) {
+          const o = document.createElement("option");
+          o.value = id;
+          o.textContent = sname(map, id);
+          o.selected = id === cur;
+          s.append(o);
+        }
+        s.addEventListener("change", () => {
+          on(Number(s.value));
+          renderTreaty();
+        });
+        return s;
+      };
+      const recvIds = stalemate ? [...war.attackers, ...war.defenders] : winners, payIds = stalemate ? [...war.attackers, ...war.defenders].filter((x) => x !== draft.toStateId) : losers;
+      if (!payIds.includes(draft.fromStateId)) draft.fromStateId = payIds[0];
+      const row = el13("div", "member-picker");
+      row.append(el13("span", "", "\u53D7\u3051\u53D6\u308B\u56FD"), mk(recvIds, draft.toStateId, (x) => {
+        draft.toStateId = x;
+        draft.picked.clear();
+      }), el13("span", "", "\u652F\u6255\u3046\u56FD"), mk(payIds, draft.fromStateId, (x) => {
+        draft.fromStateId = x;
+        draft.picked.clear();
+      }));
+      wrap.append(row);
+      const cands = simActions.suggestCessions(draft.toStateId, draft.fromStateId);
+      wrap.append(el13("h4", "", "\u5272\u8B72\u3059\u308B\u5730\u57DF"));
+      const cessBox = el13("div", "wo-cess");
+      if (!cands.length) cessBox.append(el13("p", "muted", "\u5272\u8B72\u3067\u304D\u308B\u5730\u57DF\u306F\u3042\u308A\u307E\u305B\u3093\uFF08\u9996\u90FD\u306F\u5272\u8B72\u3067\u304D\u307E\u305B\u3093\uFF09"));
+      const keyOf = (cd) => cd.type === "province" ? `p${cd.provinceId}` : `r${cd.regionCells[0]}`;
+      const groupsOf = (cd) => cd.type === "province" ? cellsOfProvince(map, cd.provinceId) : cd.regionCells;
+      for (const cd of cands) {
+        const l = el13("label", "wo-cess-row");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = draft.picked.has(keyOf(cd));
+        cb.addEventListener("change", () => {
+          if (cb.checked) draft.picked.add(keyOf(cd));
+          else draft.picked.delete(keyOf(cd));
+          renderImpact();
+        });
+        l.append(cb, document.createTextNode(`${cd.name}\uFF08${cd.cells}\u30BB\u30EB\uFF09`));
+        cessBox.append(l);
+      }
+      wrap.append(cessBox);
+      const pc = simActions.getCurrency(draft.fromStateId), rc = simActions.getCurrency(draft.toStateId);
       const amount = document.createElement("input");
       amount.type = "number";
       amount.min = "0";
-      amount.value = "0";
-      const rateLine = el10("p", "hint", "");
-      function updateMoney() {
-        const to = Number(toSel.value);
-        const pc = simActions.getCurrency(payerId), tc = simActions.getCurrency(to);
-        const rate = simActions.exchangeRate(payerId, to);
-        const v = Number(amount.value) || 0;
-        rateLine.textContent = `\u70BA\u66FF: 1 ${pc.name} = ${rate.toFixed(4)} ${tc.name}\uFF08${pc.regime === "pegged" ? "\u56FA\u5B9A" : "\u5909\u52D5"}\u76F8\u5834\uFF09\uFF0F \u53D7\u53D6\u984D ${(v * rate).toFixed(2)} ${tc.name}`;
+      amount.value = String(draft.reparations);
+      amount.addEventListener("input", () => {
+        draft.reparations = Number(amount.value) || 0;
+        renderImpact();
+      });
+      wrap.append(el13("h4", "", "\u8CE0\u511F\u91D1"), el13("label", "field-label", `${sname(map, draft.fromStateId)}\u304C ${pc.name} \u3067\u652F\u6255\u3046\u984D`), amount);
+      const impact = el13("div", "wo-impact");
+      function renderImpact() {
+        impact.replaceChildren();
+        const picked = cands.filter((cd) => draft.picked.has(keyOf(cd)));
+        const groups = picked.map(groupsOf);
+        const r = simActions.estimatePeace(war.id, { loserId: draft.fromStateId, cellGroups: groups, reparations: draft.reparations });
+        if (!r) return;
+        const rate = simActions.exchangeRate(draft.fromStateId, draft.toStateId);
+        const lines = [
+          ["\u5272\u8B72\u3055\u308C\u308B\u9818\u571F", `${fmt4(r.cells)}\u30BB\u30EB\uFF08${sname(map, draft.fromStateId)}\u306E\u9818\u571F\u306E ${pct(r.share)}\uFF09`],
+          ["\u79FB\u308B\u4EBA\u53E3\u306E\u76EE\u5B89", `\u7D04 ${fmt4(r.population, 1)} \u5343\u4EBA`],
+          ["\u79FB\u308B\u7523\u696D\u529B\u306E\u76EE\u5B89", fmt4(r.industry, 1)],
+          ["\u79FB\u308B\u90FD\u5E02", `${fmt4(r.burgs)} \u4EF6`],
+          ["\u8CE0\u511F\u91D1\uFF08\u652F\u6255\u984D\uFF09", `${fmt4(draft.reparations, 2)} ${pc.name}${r.reparationsShare != null ? `\uFF08\u652F\u6255\u56FD\u306E\u56FD\u5EAB\u306E ${pct(r.reparationsShare)}\uFF09` : ""}`],
+          ["\u8CE0\u511F\u91D1\uFF08\u53D7\u53D6\u984D\uFF09", `${fmt4(draft.reparations * rate, 2)} ${rc.name}\u3000\u70BA\u66FF 1 ${pc.name} = ${rate.toFixed(4)} ${rc.name}`]
+        ];
+        const t = el13("table", "win-table");
+        for (const [k, val] of lines) {
+          const tr = el13("tr");
+          tr.append(el13("th", "", k), el13("td", "", val));
+          t.append(tr);
+        }
+        impact.append(el13("h4", "", "\u3053\u306E\u6761\u7D04\u3067\u76F8\u624B\u304B\u3089\u6E21\u308B\u3082\u306E"), t);
       }
-      amount.addEventListener("input", updateMoney);
-      money.append(el10("label", "field-label", `\u8CE0\u511F\u91D1\uFF08${sname(map, payerId)}\u304C${simActions.getCurrency(payerId).name}\u3067\u652F\u6255\u3046\uFF09`), amount, rateLine);
-      box.append(el10("h4", "", "\u8CE0\u511F\u91D1"), money);
+      wrap.append(impact);
+      renderImpact();
       const notes = document.createElement("textarea");
       notes.rows = 3;
       notes.placeholder = "\u305D\u306E\u4ED6\u306E\u6761\u4EF6\uFF08\u975E\u6B66\u88C5\u5316\u30FB\u901A\u5546\u30FB\u99D0\u7559\u306A\u3069\u81EA\u7531\u8A18\u8FF0\uFF09";
-      box.append(el10("h4", "", "\u305D\u306E\u4ED6\u306E\u6761\u4EF6"), notes);
-      const sign = el10("button", "primary", "\u7DE0\u7D50\u3059\u308B");
+      notes.value = draft.notes;
+      notes.addEventListener("input", () => {
+        draft.notes = notes.value;
+      });
+      wrap.append(el13("h4", "", "\u305D\u306E\u4ED6\u306E\u6761\u4EF6"), notes);
+      const sign = el13("button", "primary", "\u8B1B\u548C\u6761\u7D04\u3092\u7DE0\u7D50\u3059\u308B");
       sign.type = "button";
       sign.addEventListener("click", () => {
-        const picked = cands.filter((x) => x.checked);
-        simActions.signPeace(warId, {
-          toStateId: Number(toSel.value),
+        const picked = cands.filter((cd) => draft.picked.has(keyOf(cd)));
+        simActions.signPeace(war.id, {
+          toStateId: draft.toStateId,
+          fromStateId: draft.fromStateId,
           provinceIds: picked.filter((x) => x.type === "province").map((x) => x.provinceId),
           regionCells: picked.filter((x) => x.type === "region").map((x) => x.regionCells),
-          reparations: Number(amount.value) || 0,
-          treatyName: nameIn.value.trim(),
-          notes: notes.value.trim()
+          reparations: draft.reparations,
+          treatyName: draft.treatyName.trim(),
+          notes: draft.notes.trim(),
+          venue: draft.venue ? { place: draft.venue.place, stateId: draft.venue.stateId } : null
         });
-        const now = (store.getState().map.ext?.data?.wars ?? []).find((w) => w.id === warId);
-        if (now?.endedAt) {
-          o.remove();
-          below?.remove();
-        }
+        draft = null;
+        renderTreaty();
       });
-      box.append(sign);
-      o.append(box);
-      loadCands();
-      updateMoney();
+      wrap.append(sign);
+      return wrap;
     }
-    const currencyBody = el10("div", "cur-body");
+    const currencyBody = el13("div", "cur-body");
+    let baseId = null, convFrom = null, convTo = null, convAmt = 100;
+    function spark(hist, up) {
+      const W = 90, H = 26;
+      if (!hist || hist.length < 2) return el13("span", "muted", "\u2014");
+      const mn = Math.min(...hist), mx = Math.max(...hist), span = mx - mn || 1;
+      const pts = hist.map((v, i) => `${(i / (hist.length - 1) * W).toFixed(1)},${(H - 2 - (v - mn) / span * (H - 4)).toFixed(1)}`).join(" ");
+      const NS2 = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(NS2, "svg");
+      svg.setAttribute("width", W);
+      svg.setAttribute("height", H);
+      svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+      const pl = document.createElementNS(NS2, "polyline");
+      pl.setAttribute("points", pts);
+      pl.setAttribute("fill", "none");
+      pl.setAttribute("stroke-width", "1.6");
+      pl.setAttribute("stroke", up ? "#4fb477" : "#d9594c");
+      svg.append(pl);
+      return svg;
+    }
     function renderCurrency() {
       currencyBody.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        currencyBody.append(el10("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        currencyBody.append(el13("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive26);
-      currencyBody.append(el10("p", "hint", "\u5404\u56FD\u306E\u901A\u8CA8\u540D\u3068\u3001\u56FA\u5B9A\u76F8\u5834\u304B\u5909\u52D5\u76F8\u5834\u304B\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002\u30EC\u30FC\u30C8\u306E\u5024\u306F\u30B7\u30B9\u30C6\u30E0\u304C\u7D4C\u6E08\u529B\u304B\u3089\u6C7A\u3081\u3001\u5E74\u3054\u3068\u306B\u5909\u52D5\u3057\u307E\u3059\u3002"));
-      const t = el10("table", "win-table");
-      const h = el10("tr");
-      for (const x of ["\u56FD\u5BB6", "\u901A\u8CA8\u540D", "\u76F8\u5834\u5236", "\u56FA\u5B9A\u306E\u57FA\u6E96\u56FD", "\u73FE\u5728\u306E\u4FA1\u5024"]) h.append(el10("th", "", x));
-      t.append(h);
+      const states = map.pack.states.filter(isLive31);
+      if (!states.length) {
+        currencyBody.append(el13("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      if (!states.some((s) => s.i === baseId)) baseId = states[0].i;
+      const base = simActions.getCurrency(baseId);
+      const top = el13("div", "cur-top");
+      const baseSel = document.createElement("select");
       for (const s of states) {
+        const o = document.createElement("option");
+        o.value = s.i;
+        o.textContent = `${simActions.getCurrency(s.i).name}\uFF08${sname(map, s.i)}\uFF09`;
+        o.selected = s.i === baseId;
+        baseSel.append(o);
+      }
+      baseSel.addEventListener("change", () => {
+        baseId = Number(baseSel.value);
+        renderCurrency();
+      });
+      top.append(el13("span", "", "\u57FA\u6E96\u901A\u8CA8"), baseSel);
+      currencyBody.append(top, el13("p", "hint", "\u30EC\u30FC\u30C8\u306E\u5024\u306F\u30B7\u30B9\u30C6\u30E0\u304C\u7D4C\u6E08\u529B\u304B\u3089\u6C7A\u3081\u3001\u5E74\u3054\u3068\u306B\u5909\u52D5\u3057\u307E\u3059\u3002\u3053\u3053\u3067\u9078\u3079\u308B\u306E\u306F\u3001\u5909\u52D5\u76F8\u5834\u304B\u56FA\u5B9A\u76F8\u5834\u304B\u3060\u3051\u3067\u3059\u3002"));
+      const rows = states.map((s) => {
         const c = simActions.getCurrency(s.i);
-        const tr = el10("tr");
+        const vsBase = simActions.exchangeRate(s.i, baseId);
+        const histBase = (c.hist ?? [c.rate]).map((r) => r / Math.max(1e-9, base.rate));
+        const prev = histBase.length > 1 ? histBase[histBase.length - 2] : vsBase;
+        return { s, c, vsBase, change: prev ? (vsBase - prev) / prev : 0, hist: histBase };
+      }).sort((a, b) => b.vsBase - a.vsBase);
+      const t = el13("table", "win-table cur-board");
+      const h = el13("tr");
+      for (const x of ["\u30B3\u30FC\u30C9", "\u901A\u8CA8", "\u56FD", `1\u901A\u8CA8 = ${base.name}`, "\u524D\u5E74\u6BD4", "\u63A8\u79FB", "\u76F8\u5834\u5236", "\u56FA\u5B9A\u306E\u57FA\u6E96\u56FD"]) h.append(el13("th", "", x));
+      t.append(h);
+      for (const { s, c, vsBase, change, hist } of rows) {
+        const tr = el13("tr");
+        const code = el13("td", "cur-code", c.code ?? String(s.name).slice(0, 3).toUpperCase());
         const nameIn = document.createElement("input");
         nameIn.value = c.name;
+        nameIn.size = 10;
         nameIn.addEventListener("change", () => simActions.setCurrency(s.i, { name: nameIn.value.trim() || c.name }));
+        const rate = el13("td", "cur-rate", vsBase.toFixed(4));
+        const chg = el13("td", `cur-chg ${change > 5e-5 ? "up" : change < -5e-5 ? "down" : ""}`, `${change > 5e-5 ? "\u25B2" : change < -5e-5 ? "\u25BC" : "\uFF0D"} ${(Math.abs(change) * 100).toFixed(2)}%`);
+        const sp = el13("td");
+        sp.append(spark(hist, change >= 0));
         const reg = document.createElement("select");
         for (const [v, l] of [["floating", "\u5909\u52D5"], ["pegged", "\u56FA\u5B9A"]]) {
           const o = document.createElement("option");
@@ -10794,47 +11659,82 @@ ${shown}${more}`;
         });
         peg.addEventListener("change", apply);
         const cell = (n) => {
-          const td = el10("td");
+          const td = el13("td");
           td.append(n);
           return td;
         };
-        tr.append(el10("td", "", sname(map, s.i)), cell(nameIn), cell(reg), cell(peg), el10("td", "", c.rate.toFixed(4)));
+        tr.append(code, cell(nameIn), el13("td", "", sname(map, s.i)), rate, chg, sp, cell(reg), cell(peg));
         t.append(tr);
       }
       currencyBody.append(t);
+      if (!states.some((s) => s.i === convFrom)) convFrom = states[0].i;
+      if (!states.some((s) => s.i === convTo)) convTo = (states[1] ?? states[0]).i;
+      const conv = el13("div", "cur-conv");
+      const amt = document.createElement("input");
+      amt.type = "number";
+      amt.value = String(convAmt);
+      amt.min = "0";
+      const sel2 = (cur, on) => {
+        const s = document.createElement("select");
+        for (const st of states) {
+          const o = document.createElement("option");
+          o.value = st.i;
+          o.textContent = simActions.getCurrency(st.i).name;
+          o.selected = st.i === cur;
+          s.append(o);
+        }
+        s.addEventListener("change", () => {
+          on(Number(s.value));
+          renderCurrency();
+        });
+        return s;
+      };
+      const out = el13("strong", "", `${fmt4((Number(amt.value) || 0) * simActions.exchangeRate(convFrom, convTo), 2)} ${simActions.getCurrency(convTo).name}`);
+      amt.addEventListener("input", () => {
+        convAmt = Number(amt.value) || 0;
+        out.textContent = `${fmt4(convAmt * simActions.exchangeRate(convFrom, convTo), 2)} ${simActions.getCurrency(convTo).name}`;
+      });
+      conv.append(el13("h4", "", "\u4E21\u66FF"), amt, sel2(convFrom, (x) => {
+        convFrom = x;
+      }), el13("span", "", "\uFF1D"), out, el13("span", "", "\uFF08"), sel2(convTo, (x) => {
+        convTo = x;
+      }), el13("span", "", "\u306B\uFF09"));
+      currencyBody.append(conv);
     }
     store.subscribe((_s, ch) => {
-      if (["replace", "commit", "undo", "redo"].includes(ch.type) && currencyBody.offsetParent) renderCurrency();
+      if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
+      if (currencyBody.offsetParent) renderCurrency();
+      if (treatyBody.offsetParent) renderTreaty();
     });
-    return { show, peace, currencyBody, renderCurrency };
+    return { situation, treatyBody, renderTreaty, currencyBody, renderCurrency };
   }
 
   // js/ui/panels/alliances-panel.js
-  var el11 = (tag, cls, text2) => {
+  var el14 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive27 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive32 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initAlliancesPanel({ store, simActions }) {
     const root = byId("tab-alliances");
     function render() {
       root.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        root.append(el11("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        root.append(el14("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive27);
+      const states = map.pack.states.filter(isLive32);
       root.append(createForm(map, states));
       const list = simActions.listAlliances();
       const active = list.filter((a) => !a.dissolvedAt);
       const dissolved = list.filter((a) => a.dissolvedAt);
-      if (!active.length) root.append(el11("p", "muted", "\u540C\u76DF\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+      if (!active.length) root.append(el14("p", "muted", "\u540C\u76DF\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
       else for (const a of active) root.append(allianceCard(map, states, a));
       if (dissolved.length) {
-        root.append(el11("h4", "", "\u89E3\u6D88\u6E08\u307F\u306E\u540C\u76DF\uFF08\u5C65\u6B74\uFF09"));
+        root.append(el14("h4", "", "\u89E3\u6D88\u6E08\u307F\u306E\u540C\u76DF\uFF08\u5C65\u6B74\uFF09"));
         for (const a of dissolved) root.append(allianceCard(map, states, a));
       }
     }
@@ -10842,10 +11742,10 @@ ${shown}${more}`;
       return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     }
     function memberPicker(states, checkedIds = []) {
-      const wrap = el11("div", "member-picker");
+      const wrap = el14("div", "member-picker");
       const boxes = [];
       for (const s of states) {
-        const label = el11("label", "");
+        const label = el14("label", "");
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.value = s.i;
@@ -10856,15 +11756,39 @@ ${shown}${more}`;
       }
       return { wrap, boxes };
     }
+    function bondPicker(current, onChange) {
+      const wrap = el14("div", "bond-picker");
+      wrap.append(el14("label", "field-label", "\u540C\u76DF\u306E\u62D8\u675F\u529B"));
+      const desc = el14("p", "hint", BOND_BY_KEY[current].desc);
+      const sel = document.createElement("select");
+      for (const b of BONDS) {
+        const o = document.createElement("option");
+        o.value = b.key;
+        o.textContent = b.label;
+        o.selected = b.key === current;
+        sel.append(o);
+      }
+      sel.addEventListener("change", () => {
+        desc.textContent = BOND_BY_KEY[sel.value].desc;
+        onChange(sel.value);
+      });
+      wrap.append(sel, desc);
+      return { wrap, get value() {
+        return sel.value;
+      } };
+    }
     function createForm(map, states) {
-      const wrap = el11("div", "editor-section");
-      wrap.append(el11("h4", "", "\u65B0\u3057\u3044\u540C\u76DF"));
+      const wrap = el14("div", "editor-section");
+      wrap.append(el14("h4", "", "\u65B0\u3057\u3044\u540C\u76DF"));
       const nameInput = document.createElement("input");
       nameInput.placeholder = "\u540C\u76DF\u306E\u540D\u524D";
       wrap.append(nameInput);
       const { wrap: picker, boxes } = memberPicker(states);
       wrap.append(picker);
-      const go = el11("button", "", "\u540C\u76DF\u3092\u7D50\u6210\uFF082\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u629E\uFF09");
+      const bp = bondPicker("standard", () => {
+      });
+      wrap.append(bp.wrap);
+      const go = el14("button", "", "\u540C\u76DF\u3092\u7D50\u6210\uFF082\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u629E\uFF09");
       go.type = "button";
       go.addEventListener("click", async () => {
         const ids2 = boxes.filter((b) => b.checked).map((b) => Number(b.value));
@@ -10872,15 +11796,15 @@ ${shown}${more}`;
           await alertDialog("2\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
           return;
         }
-        simActions.createAlliance(nameInput.value, ids2);
+        simActions.createAlliance(nameInput.value, ids2, bp.value);
       });
       wrap.append(go);
       return wrap;
     }
     function allianceCard(map, states, a) {
       const dissolved = !!a.dissolvedAt;
-      const card = el11("div", `alliance-card${dissolved ? " dissolved" : ""}`);
-      const head = el11("div", "regiment-card-head");
+      const card = el14("div", `alliance-card${dissolved ? " dissolved" : ""}`);
+      const head = el14("div", "regiment-card-head");
       const nameInput = document.createElement("input");
       nameInput.value = a.name;
       nameInput.style.fontWeight = "600";
@@ -10891,7 +11815,7 @@ ${shown}${more}`;
       nameInput.addEventListener("change", () => simActions.editAlliance(a.id, { name: nameInput.value }));
       head.append(nameInput);
       if (!dissolved) {
-        const delBtn = el11("button", "danger", "\u89E3\u6D88");
+        const delBtn = el14("button", "danger", "\u89E3\u6D88");
         delBtn.type = "button";
         delBtn.addEventListener("click", async () => {
           if (await confirmDialog(`\u300C${a.name}\u300D\u3092\u89E3\u6D88\u3057\u307E\u3059\u304B\uFF1F`, { danger: true, okLabel: "\u89E3\u6D88" })) simActions.dissolveAlliance(a.id);
@@ -10900,15 +11824,17 @@ ${shown}${more}`;
       }
       card.append(head);
       const dateLine = a.formedAt ? `\u7D50\u6210: ${formatWorldTime(a.formedAt)}${dissolved ? `\u3000\u89E3\u6D88: ${formatWorldTime(a.dissolvedAt)}` : ""}` : dissolved ? "\u89E3\u6D88\u6E08\u307F" : "";
-      if (dateLine) card.append(el11("p", "hint", dateLine));
-      const chips = el11("div", "member-chip-list");
-      for (const id of a.members) chips.append(el11("span", "member-chip", stateName(map, id)));
+      if (dateLine) card.append(el14("p", "hint", dateLine));
+      if (!dissolved) card.append(bondPicker(bondOf(a), (v) => simActions.editAlliance(a.id, { bond: v })).wrap);
+      else card.append(el14("p", "hint", `\u62D8\u675F\u529B\uFF1A${BOND_BY_KEY[bondOf(a)].label}`));
+      const chips = el14("div", "member-chip-list");
+      for (const id of a.members) chips.append(el14("span", "member-chip", stateName(map, id)));
       card.append(chips);
       if (!dissolved) {
         const { wrap: picker, boxes } = memberPicker(states, a.members);
-        card.append(el11("p", "muted", "\u52A0\u76DF\u56FD\u306E\u5909\u66F4:"));
+        card.append(el14("p", "muted", "\u52A0\u76DF\u56FD\u306E\u5909\u66F4:"));
         card.append(picker);
-        const update = el11("button", "", "\u30E1\u30F3\u30D0\u30FC\u3092\u66F4\u65B0");
+        const update = el14("button", "", "\u30E1\u30F3\u30D0\u30FC\u3092\u66F4\u65B0");
         update.type = "button";
         update.addEventListener("click", async () => {
           const ids2 = boxes.filter((b) => b.checked).map((b) => Number(b.value));
@@ -10974,7 +11900,8 @@ ${shown}${more}`;
     const timeActions = createTimeActions({ store, renderer });
     const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
     const warOutcome = initWarOutcome({ store, simActions });
-    const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome });
+    let winsRef = null;
+    const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome, getWins: () => winsRef });
     const alliancesPanel = initAlliancesPanel({ store, simActions });
     let editModeRef = null;
     const editorPanel = initEditorPanel({
@@ -10994,25 +11921,34 @@ ${shown}${more}`;
       consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell)
     };
     editorPanel.setPanels?.(panels);
-    initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome });
+    const highlight = initHighlight({ store, viewport, renderer });
+    const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome });
+    winsRef = wins;
+    initEntityLists({ store, wins, panels, editActions, highlight });
+    initGenealogy({ store, wins, editActions });
+    initNuclearWindow({ store, simActions, wins });
+    const rawOpen = panels.openEntity;
+    panels.openEntity = (kind, id) => {
+      if (["state", "culture", "religion", "province"].includes(kind)) highlight.show(kind, id);
+      return rawOpen(kind, id);
+    };
+    for (const [id, head] of [["sidebar", "#editor-panel"], ["edit-panel", ".editor-header"], ["builder-panel", ".editor-header"]]) {
+      const root = byId(id);
+      makeDraggable(root, id === "sidebar" ? root : root.querySelector(head), byId("stage"), id === "sidebar" ? ".editor-header" : null);
+    }
     const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
-    deps.highlight = initHighlight(deps);
+    deps.highlight = highlight;
     initBanner(deps);
     initToolbar(deps);
     initStatusBar(deps);
     initMapView(deps);
     initLegend(deps);
-    initSidebarToggle(deps);
     initChrome(deps);
     initFontsSync(deps);
     const editMode = initEditMode(deps);
     editModeRef = editMode;
     const editToolbar = initEditToolbar({ store, editMode, editActions });
     const editPanel = initEditPanel();
-    initPanelDock([
-      { panel: "edit-panel", close: "edit-panel-close", tab: "tab-edit-panel", open: "btn-edit-mode" },
-      { panel: "builder-panel", close: "builder-close", tab: "tab-builder-panel", open: "btn-builder" }
-    ]);
     const builderActions = createBuilderActions({ store, editActions, editMode, actions });
     const economyView = createEconomyView({ store, editActions, builderActions });
     const travelView = createTravelView({ store, editActions, editMode, viewport, actions });

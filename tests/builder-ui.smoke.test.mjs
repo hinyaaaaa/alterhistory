@@ -115,13 +115,9 @@ check("開くと技術水準・ドクトリン・首都が出る", !!q(".b-detai
 const tech = q(".b-details input[type=range]"); tech.value = "7"; tech.dispatchEvent(new window.Event("change"));
 check("技術水準を変えられる（これまでUIが無かった）", window.alterhistory.editActions.getTechLevel(made.i) === 7);
 
-console.log("=== 仮の名前をまとめて確定 ===");
-check("トレイに件数が出る", !!q(".b-tray"));
-q(".b-tray .primary").click();
-await waitFor(() => !q(".b-tray"), 1500, "トレイ");
-check("全て確定されトレイが消える", !q(".b-tray") && !window.alterhistory.editActions.isProvisional("state", made.i));
-store.undo();
-check("確定は Undo 1回で戻る", window.alterhistory.editActions.isProvisional("state", made.i));
+console.log("=== 仮決定は廃止 ===");
+check("仮の名前トレイは出ない", !q(".b-tray"));
+check("「仮」の印も確定ボタンも出ない", !q(".b-badge") && !q(".b-tray .primary"));
 
 console.log("=== やめる ===");
 const n0 = states().length;

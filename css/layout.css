@@ -151,3 +151,22 @@ main { grid-row: 2; }
 .empty-steps b { color: var(--text); }
 .menu-sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
 .topbar { position: relative; z-index: 40; } /* メニューの一覧は、地図の上のウィンドウ(z-index 20〜)より手前に出す */
+
+
+/* ==== すべてウィンドウ形式（サイドバー・横長パネルは廃止） ====
+   国家などの詳細(#sidebar)・地図編集・歴史をつくる は、地図の上に浮かぶ動かせるウィンドウにする。
+   地図は常に画面いっぱいを使う。 */
+main, main:has(#editor-panel:not([hidden])), main:has(.legend.has-map), main.side-collapsed,
+main.side-collapsed:has(#builder-panel:not([hidden])) { grid-template-columns: 1fr !important; }
+#stage { grid-column: 1; grid-row: 1; }
+#sidebar, .edit-panel, .builder-panel {
+  position: absolute !important; z-index: 22; grid-column: auto; grid-row: auto;
+  max-height: calc(100% - 24px); border: 1px solid var(--brass-dim); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); overflow-y: auto; transform: none; visibility: visible;
+}
+#sidebar { top: 12px; left: 24px; width: min(380px, calc(100% - 24px)); }
+#sidebar:has(#editor-panel[hidden]) { display: none !important; }
+.edit-panel { top: 12px; right: 24px; bottom: auto; left: auto; width: min(320px, calc(100% - 24px)); }
+.builder-panel { top: 12px; right: 24px; left: auto; width: min(360px, calc(100% - 24px)); }
+.edit-panel[hidden], .builder-panel[hidden] { display: none !important; }
+#legend, #btn-sidebar-toggle, #panel-tabs { display: none !important; }

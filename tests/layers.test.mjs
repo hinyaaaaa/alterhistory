@@ -1,5 +1,5 @@
 // レイヤー（Azgaar 方式）・外周の強調・赤い強調の明るさ・カタカナ自動化の純粋ロジック検査。
-import { LAYERS, PRESETS, isLayerOn, activeFills, terrainMode, legendKindOf, presetMatches, exclusiveFillPatch, snapshotFills } from "../js/app/layers.js";
+import { LAYERS, isLayerOn, activeFills, terrainMode, legendKindOf, exclusiveFillPatch, snapshotFills } from "../js/app/layers.js";
 import { viewToRenderOptions } from "../js/render/options.js";
 import { entityOutlineSegments, segmentsBounds } from "../js/render/edges.js";
 import { highlightAlpha, HIGHLIGHT_MS } from "../js/ui/highlight.js";
@@ -21,8 +21,7 @@ check("凡例の種類は、選んだものがオンならそれ、でなけれ�
 check("色分けが全部オフなら凡例なし", legendKindOf({ states: false }) === null);
 
 console.log("=== プリセット ===");
-for (const p of PRESETS) check(`プリセット「${p.label}」は自分自身と一致する`, presetMatches(p.set, p) && Object.keys(p.set).every((k) => k === "legendKind" || k === "burgLabels" || LAYERS.some((l) => l.key === k)));
-check("「政治」と「文化」は同時には一致しない", !(presetMatches({ ...PRESETS[0].set }, PRESETS[1])));
+check("レイヤープリセットは廃止されている", true);
 const exF = exclusiveFillPatch("religion");
 check("1種類だけ表示する patch", exF.religions === true && exF.states === false && exF.legendKind === "religion");
 const snap = snapshotFills({ states: true, cultures: false });
