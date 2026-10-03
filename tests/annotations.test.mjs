@@ -12,7 +12,7 @@ const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 const { text } = buildSyntheticMapText({ seed: 7 });
 const { map } = await loadFromBytes(new TextEncoder().encode(text), Delaunator);
-const view = { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "all" };
+const view = { biomes: true, heights: false, states: true, cultures: false, religions: false, provinces: false, legendKind: "state", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "all" };
 const opts = viewToRenderOptions(view);
 
 console.log("=== 縮尺 ===");
@@ -38,10 +38,12 @@ check("全て切ると何も入らない", !has(off, "検査の世界") && !has(
 check("付属物ぶんだけ SVG が大きい", svg.length > off.length);
 const only = renderMapToSvg(map, opts, { annotations: { title: false, legend: true, scaleBar: false } });
 check("凡例だけ入れられる", has(only, "凡例：国家") && !has(only, "検査の世界"));
-const none = renderMapToSvg(map, viewToRenderOptions({ ...view, overlay: "none" }));
+const none = renderMapToSvg(map, viewToRenderOptions({ ...view, states: false }));
 check("色分けなしなら凡例は出ない", !has(none, "凡例："));
-const culture = renderMapToSvg(map, viewToRenderOptions({ ...view, overlay: "culture" }));
+const culture = renderMapToSvg(map, viewToRenderOptions({ ...view, states: false, cultures: true, legendKind: "culture" }));
 check("色分けに合わせて凡例が変わる", has(culture, "凡例：文化"));
+const both = renderMapToSvg(map, viewToRenderOptions({ ...view, cultures: true, legendKind: "culture" }));
+check("色分けを重ねても、選んだ種類の凡例が出る", has(both, "凡例：文化") && !has(both, "凡例：国家"));
 
 console.log("=== 縮尺が無い地図 ===");
 const saved = map.settings.options.units; delete map.settings.options.units;

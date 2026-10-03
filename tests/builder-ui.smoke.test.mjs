@@ -139,7 +139,7 @@ check("雰囲気を選べる", sel.value === "yamato");
 q(".b-quick-btn:nth-child(2)").click();
 await waitFor(() => q(".b-task"), 1500, "宗教");
 check("宗教が作られる", q(".b-task-kind").textContent.includes("宗教"));
-check("塗っている間は宗教の色分けに切り替わる", store.getState().view.overlay === "religion");
+check("塗っている間は宗教の色分けに切り替わる", (({ religions, states, cultures, provinces }) => religions === true && !states && !cultures && !provinces)(store.getState().view));
 {
   const rel = store.getState().map.pack.religions.filter((r) => r && r.i && !r.removed).at(-1);
   check("指定した雰囲気（和風）の名前になる", /^[ァ-ヴー]+/.test(rel.name) && ["ヤマ","カワ","ミズ","タケ","シラ","クロ","アオ","ハナ","トヨ","アサ","ナラ","ミナ","サク","ホタ","イズ","ツキ"].some((h) => (rel.name + (rel.deity ?? "")).includes(h)), rel.name + "/" + (rel.deity ?? ""));
@@ -147,7 +147,7 @@ check("塗っている間は宗教の色分けに切り替わる", store.getStat
 
 [...window.document.querySelectorAll(".b-actions button")].find((b) => b.textContent === "完了").click();
 await waitFor(() => !q(".b-task"), 1500, "宗教の完了");
-check("終わると元の色分け（国家）に戻る", store.getState().view.overlay === "state");
+check("終わると元の色分け（国家）に戻る", (({ religions, states }) => states === true && !religions)(store.getState().view));
 
 $("builder-close").click();
 check("閉じられる", $("builder-panel").hidden);

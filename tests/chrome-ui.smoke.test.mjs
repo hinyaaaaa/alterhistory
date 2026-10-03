@@ -46,6 +46,7 @@ Object.defineProperty(input, "files", { value: [new File([text], "synth.map")], 
 input.dispatchEvent(new window.Event("change"));
 check("地図が読み込める", await waitFor(() => store.getState().map, 15000, "読み込み"));
 const app = $("app");
+const mainEl = q("main"); // サイドバーの畳み状態は main に付く
 const key = (k) => window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true }));
 
 console.log("=== Undo/Redo・未保存 ===");
@@ -62,28 +63,29 @@ check("Undo ボタンで戻る（Redo が押せる）", $("btn-undo").disabled &
 $("btn-redo").click();
 check("Redo ボタンでやり直せる", !$("btn-undo").disabled && $("btn-redo").disabled);
 
-console.log("=== 枠の表示切替 ===");
-check("初めは全部表示・戻すボタンなし", !app.className.includes("hide-") && $("btn-chrome-restore").hidden);
-const box = (r) => q(`[data-chrome="${r}"]`);
-box("top").checked = false; box("top").dispatchEvent(new window.Event("change"));
-check("上部バーを隠せる", app.classList.contains("hide-top") && !$("btn-chrome-restore").hidden);
-box("top").checked = true; box("top").dispatchEvent(new window.Event("change"));
-check("上部バーを戻せる", !app.classList.contains("hide-top") && $("btn-chrome-restore").hidden);
-$("btn-builder").click();
-check("右パネルを開いておく", !$("builder-panel").hidden);
+console.log("=== 上部・下部バー（隠せない）と、パネルの × ===");
+check("上部バーを隠す設定（表示・設定メニュー）は無い", !q("#view-menu") && !q("[data-chrome]") && !$("btn-chrome-restore"));
 key("h");
-check("H で4つとも隠れる", ["top", "left", "right", "bottom"].every((r) => app.classList.contains(`hide-${r}`)));
-check("隠すとき開いていた右パネルは閉じる", $("builder-panel").hidden);
-check("チェックボックスも同期する", ["top", "left", "right", "bottom"].every((r) => !box(r).checked));
-key("h");
-check("もう一度 H で全部戻る", !app.className.includes("hide-") && $("btn-chrome-restore").hidden);
-key("h"); $("btn-chrome-restore").click();
-check("⛶ ボタンでも戻せる", !app.className.includes("hide-"));
-key("h");
+check("H キーで枠が隠れたりしない", !app.className.includes("hide-"));
+check("初めは凡例パネルが開いていて、☰ は出ていない", !mainEl.classList.contains("side-collapsed") && $("btn-sidebar-toggle").hidden);
+$("legend-close").click();
+check("凡例の × でサイドバーが畳まれ、☰ が出る", mainEl.classList.contains("side-collapsed") && !$("btn-sidebar-toggle").hidden);
+$("btn-sidebar-toggle").click();
+check("☰ で元に戻り、☰ は消える", !mainEl.classList.contains("side-collapsed") && $("btn-sidebar-toggle").hidden);
+$("legend-close").click();
 window.alterhistory.editorPanel.openEntity?.("state", 1);
 await sleep(50);
-check("国家を開くと左パネルだけ自動で戻る", !app.classList.contains("hide-left"));
-key("h"); key("h");
+check("国家を開くと、畳んでいたサイドバーが自動で開く", !mainEl.classList.contains("side-collapsed"));
+for (const [panel, close, tab, open] of [["builder-panel", "builder-close", "tab-builder-panel", "btn-builder"], ["edit-panel", "edit-panel-close", "tab-edit-panel", "btn-edit-mode"]]) {
+  $(open).click();
+  check(`${panel}: 開くと展開ボタンは出ない`, !$(panel).hidden && $(tab).hidden);
+  $(close).click(); await sleep(20);
+  check(`${panel}: × で閉じ、元の場所の展開ボタンが出る`, $(panel).hidden && !$(tab).hidden);
+  $(tab).click(); await sleep(20);
+  check(`${panel}: 展開ボタンで開き直せて、ボタンは消える`, !$(panel).hidden && $(tab).hidden);
+  $(open).click(); await sleep(20);
+  check(`${panel}: 上部バーのボタンで閉じたときは展開ボタンを出さない`, $(panel).hidden && $(tab).hidden);
+}
 
 console.log("=== 速度ラベル ===");
 check("速度ラベルが年数で書かれている", [...$("sel-time-speed").options].every((o) => /^1年=/.test(o.textContent)));

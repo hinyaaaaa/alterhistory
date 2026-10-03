@@ -107,24 +107,27 @@ check("地図全体が画面に収まる(fit)", viewport.k === viewport.fitK && 
 check("スクリプトエラーなし", errors.length === 0, errors.join("|"));
 
 console.log("=== ツールバー ===");
-const sel = $("sel-overlay");
-sel.value = "culture"; sel.dispatchEvent(new window.Event("change"));
-check("色分けを文化に切替 → 凡例が更新", store.getState().view.overlay === "culture" && $("legend-title").textContent.startsWith("凡例：文化"), $("legend-title").textContent);
-sel.value = "none"; sel.dispatchEvent(new window.Event("change"));
-check("色分けなし → 案内文", $("legend-list").textContent.includes("色分けを選ぶと"));
-const chk = $("chk-rivers"); chk.checked = false; chk.dispatchEvent(new window.Event("change"));
-check("河川のチェックを外す → 状態に反映", store.getState().view.rivers === false);
+const layerBtn = (k) => window.document.querySelector(`[data-layer="${k}"]`);
+layerBtn("cultures").click();
+check("文化のレイヤーを重ねる → 凡例が文化に切り替わる", store.getState().view.cultures === true && store.getState().view.states !== false && $("legend-title").textContent.startsWith("凡例：文化"), $("legend-title").textContent);
+layerBtn("cultures").click(); layerBtn("states").click();
+check("色分けのレイヤーを全部切る → 案内文", $("legend-list").textContent.includes("色分けのレイヤー"));
+layerBtn("states").click();
+layerBtn("rivers").click();
+check("河川のレイヤーを切る → 状態に反映", store.getState().view.rivers === false);
 
 console.log("=== キーボード ===");
 const key = (k, extra = {}) => window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true, ...extra }));
 key("2");
-check("[2] 国家に切替 → セレクトも同期", store.getState().view.overlay === "state" && sel.value === "state");
-key("4");
-check("[4] 宗教に切替", store.getState().view.overlay === "religion");
-key("b");
-check("[B] 標高に切替 → セレクトも同期", store.getState().view.base === "height" && $("sel-base").value === "height");
+key("1");
+check("[1] 国家のレイヤーを切る", store.getState().view.states === false && !layerBtn("states").classList.contains("active"));
+key("1");
+key("3");
+check("[3] 宗教のレイヤーを重ねる", store.getState().view.religions === true && store.getState().view.states === true);
+key("5");
+check("[5] 標高のレイヤーを重ねる → ボタンも同期", store.getState().view.heights === true && layerBtn("heights").classList.contains("active"));
 key("r");
-check("[R] 河川を再表示 → チェックも同期", store.getState().view.rivers === true && $("chk-rivers").checked === true);
+check("[R] 河川を再表示 → ボタンも同期", store.getState().view.rivers === true && layerBtn("rivers").classList.contains("active"));
 const k0 = viewport.k; key("+");
 check("[+] 拡大", viewport.k > k0);
 key("f");
@@ -133,12 +136,13 @@ const x0 = viewport.x; key("ArrowLeft");
 check("[←] 移動", viewport.x > x0);
 key("f");
 key("2", { ctrlKey: true });
-check("Ctrl+数字は無視される（ブラウザ操作と衝突しない）", store.getState().view.overlay === "religion");
+check("Ctrl+数字は無視される（ブラウザ操作と衝突しない）", store.getState().view.states === true);
 
 console.log("=== 入力欄でのショートカット抑止 ===");
-sel.focus();
-sel.dispatchEvent(new window.KeyboardEvent("keydown", { key: "3", bubbles: true }));
-check("セレクト上のキー入力では切り替わらない", store.getState().view.overlay === "religion");
+const selBox = $("sel-burg-labels");
+selBox.focus();
+selBox.dispatchEvent(new window.KeyboardEvent("keydown", { key: "4", bubbles: true }));
+check("セレクト上のキー入力では切り替わらない", store.getState().view.provinces !== true);
 
 console.log("=== マウス ===");
 const canvas = $("map-canvas");
@@ -181,7 +185,7 @@ window.document.getElementById("help-dialog").removeAttribute("open");
 dropTo(new File([gzipSync(readFileSync(SAMPLES + "/新世界より.map"))], "新世界より.map.gz"));
 check("gzip をドロップして開ける", await waitFor(() => $("status-map").textContent.includes("1965セル"), 15000, "gz読み込み"), $("status-map").textContent);
 check("別の地図に凡例が入れ替わる（国家3件）", $("legend-title").textContent === "凡例：国家（3）" && $("legend-list").querySelectorAll("button").length === 3, $("legend-title").textContent);
-check("色分けなどの表示設定は引き継がれる", store.getState().view.overlay === "state");
+check("色分けなどの表示設定は引き継がれる", store.getState().view.states === true);
 
 console.log("=== 保存・書き出し ===");
 const { parseAzgaarText } = await import("../js/io/azgaar-reader.js");

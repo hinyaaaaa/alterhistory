@@ -206,30 +206,43 @@
     const t = map.grid.t[gi];
     return t === -1 ? OCEAN_NEAR : t === -2 ? OCEAN_MID : OCEAN_FAR;
   }
+  var PLAIN_LAND = "#d8d2b4";
   function drawTerrain(ctx, map, vp, mode = "biome") {
     const { cells, vertices, h } = map.geometry.pack;
     const biome = map.pack.cells.biome;
     const biomeColor = map.biomesData.map((b) => b?.color ?? "#999");
-    const groups = /* @__PURE__ */ new Map();
-    for (let i = 0; i < cells.v.length; i++) {
-      const hi = h[i];
-      let color;
-      if (hi < 20) color = waterColorOf(map, i);
-      else if (mode === "height") color = landHeightColor(Math.round(hi / 4) * 4);
-      else color = biomeColor[biome[i]] ?? "#999";
-      let list = groups.get(color);
-      if (!list) {
-        list = [];
-        groups.set(color, list);
+    function paint(landColor, { water = true, alpha = 1 } = {}) {
+      const groups = /* @__PURE__ */ new Map();
+      for (let i = 0; i < cells.v.length; i++) {
+        const hi = h[i];
+        let color;
+        if (hi < 20) color = water ? waterColorOf(map, i) : null;
+        else color = landColor(i, hi);
+        if (color == null) continue;
+        let list = groups.get(color);
+        if (!list) {
+          list = [];
+          groups.set(color, list);
+        }
+        list.push(i);
       }
-      list.push(i);
+      ctx.globalAlpha = alpha;
+      for (const [color, list] of groups) {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        for (const i of list) addCellPath(ctx, cells, vertices, i);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
-    for (const [color, list] of groups) {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      for (const i of list) addCellPath(ctx, cells, vertices, i);
-      ctx.fill();
-    }
+    const byHeight = (_i, hi) => landHeightColor(Math.round(hi / 4) * 4);
+    const byBiome = (i) => biomeColor[biome[i]] ?? "#999";
+    if (mode === "none") paint(() => PLAIN_LAND);
+    else if (mode === "height") paint(byHeight);
+    else if (mode === "both") {
+      paint(byBiome);
+      paint(byHeight, { water: false, alpha: 0.5 });
+    } else paint(byBiome);
   }
 
   // js/render/edges.js
@@ -262,6 +275,30 @@
     }
     ctx.stroke();
   }
+  function entityOutlineSegments(geometry, ids2, id, biome) {
+    const inside = new Uint8Array(ids2.length);
+    let any = false;
+    for (let i = 0; i < ids2.length; i++) {
+      if (ids2[i] === id && (!biome || biome[i] !== 0)) {
+        inside[i] = 1;
+        any = true;
+      }
+    }
+    if (!any) return new Float32Array(0);
+    return buildBoundarySegments(geometry, inside);
+  }
+  function segmentsBounds(segs) {
+    if (!segs || segs.length < 4) return null;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (let i = 0; i < segs.length; i += 2) {
+      const x = segs[i], y = segs[i + 1];
+      if (x < x0) x0 = x;
+      if (x > x1) x1 = x;
+      if (y < y0) y0 = y;
+      if (y > y1) y1 = y;
+    }
+    return { x0, y0, x1, y1 };
+  }
 
   // js/render/layers/politics.js
   var SOURCES = {
@@ -283,7 +320,7 @@
     byTag.set(tag, { geometry, segs });
     return segs;
   }
-  function drawPolitics(ctx, map, vp, kind, { alpha = 0.55 } = {}) {
+  function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, lines = true } = {}) {
     const src = SOURCES[kind];
     if (!src) return;
     const { cells, vertices } = map.geometry.pack;
@@ -304,14 +341,17 @@
       }
       list.push(i);
     }
-    ctx.globalAlpha = alpha;
-    for (const [id, list] of groups) {
-      ctx.fillStyle = entities[id].color ?? NEUTRAL_COLOR;
-      ctx.beginPath();
-      for (const i of list) addCellPath(ctx, cells, vertices, i);
-      ctx.fill();
+    if (fill) {
+      ctx.globalAlpha = alpha;
+      for (const [id, list] of groups) {
+        ctx.fillStyle = entities[id].color ?? NEUTRAL_COLOR;
+        ctx.beginPath();
+        for (const i of list) addCellPath(ctx, cells, vertices, i);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
-    ctx.globalAlpha = 1;
+    if (!lines) return;
     const segs = cachedBoundary(map.geometry, ids2, isLand2, "land:" + kind);
     ctx.strokeStyle = "rgba(40,30,20,0.75)";
     ctx.lineWidth = (kind === "state" ? 1.4 : 0.9) / vp.k;
@@ -921,73 +961,12 @@
     return [...inSet];
   }
 
-  // js/core/edit/attributes.js
-  var ATTR_KINDS = ["state", "culture", "religion", "province"];
-  var MAX_ATTRS = 40;
-  var MAX_LEN = 200;
+  // js/core/edit/ext.js
   function ensureExt(map) {
     var _a;
     if (!map.ext) map.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
     (_a = map.ext).data ?? (_a.data = {});
     return map.ext;
-  }
-  var keyOf = (kind, id) => `${kind}:${id}`;
-  function getAttributes(map, kind, id) {
-    return Object.entries(map.ext?.data?.attributes?.[keyOf(kind, id)] ?? {});
-  }
-  function normalizeAttributes(entries) {
-    const out = /* @__PURE__ */ new Map();
-    for (const [k, v] of entries) {
-      const key = String(k ?? "").trim();
-      if (!key) continue;
-      if (key.length > MAX_LEN) throw new Error(`\u5C5E\u6027\u306E\u540D\u524D\u304C\u9577\u3059\u304E\u307E\u3059\uFF08${MAX_LEN}\u6587\u5B57\u307E\u3067\uFF09`);
-      const val = String(v ?? "").trim();
-      if (val.length > MAX_LEN) throw new Error(`\u5C5E\u6027\u300C${key}\u300D\u306E\u5024\u304C\u9577\u3059\u304E\u307E\u3059\uFF08${MAX_LEN}\u6587\u5B57\u307E\u3067\uFF09`);
-      out.set(key, val);
-    }
-    if (out.size > MAX_ATTRS) throw new Error(`\u5C5E\u6027\u306F ${MAX_ATTRS} \u500B\u307E\u3067\u3067\u3059`);
-    return Object.fromEntries(out);
-  }
-  var sameObj = (a, b) => {
-    const ka = Object.keys(a), kb = Object.keys(b);
-    return ka.length === kb.length && ka.every((k, i) => k === kb[i] && a[k] === b[k]);
-  };
-  function planSetAttributes(map, kind, id, entries) {
-    if (!ATTR_KINDS.includes(kind)) throw new Error(`\u5C5E\u6027\u3092\u4ED8\u3051\u3089\u308C\u306A\u3044\u7A2E\u985E\u3067\u3059: ${kind}`);
-    const after = normalizeAttributes(entries);
-    const before = Object.fromEntries(getAttributes(map, kind, id));
-    if (sameObj(before, after)) return null;
-    const key = keyOf(kind, id);
-    const write = (m, obj) => {
-      var _a;
-      const ext = ensureExt(m);
-      (_a = ext.data).attributes ?? (_a.attributes = {});
-      if (Object.keys(obj).length) ext.data.attributes[key] = { ...obj };
-      else delete ext.data.attributes[key];
-      if (!Object.keys(ext.data.attributes).length) delete ext.data.attributes;
-    };
-    return makeCommand("\u5C5E\u6027\u306E\u5909\u66F4", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
-  }
-  function removeAttributesPart(map, kind, id) {
-    const before = getAttributes(map, kind, id);
-    if (!before.length) return null;
-    const key = keyOf(kind, id);
-    const obj = Object.fromEntries(before);
-    return {
-      apply: (m) => {
-        const a = m.ext?.data?.attributes;
-        if (a) {
-          delete a[key];
-          if (!Object.keys(a).length) delete m.ext.data.attributes;
-        }
-      },
-      revert: (m) => {
-        var _a;
-        const ext = ensureExt(m);
-        (_a = ext.data).attributes ?? (_a.attributes = {});
-        ext.data.attributes[key] = { ...obj };
-      }
-    };
   }
 
   // js/core/edit/eras.js
@@ -1488,10 +1467,12 @@
 
   // js/render/scene.js
   var DEFAULT_RENDER_OPTIONS = Object.freeze({
-    base: "biome",
-    // "biome" | "height"
-    overlay: "state",
-    // "none" | "state" | "culture" | "religion" | "province"
+    terrain: "biome",
+    // "biome" | "height" | "both" | "none"（旧オプション base も受け付ける）
+    fills: null,
+    // 色分けの種類の配列（描く順）。null のときは旧オプション overlay（1種類）を使う
+    borders: true,
+    // 国家の色分けを消していても国境だけ引く
     coast: true,
     rivers: true,
     routes: { roads: true, trails: true, searoutes: true },
@@ -1511,8 +1492,14 @@
     ctx.fillRect(0, 0, vp.screenWidth * dpr, vp.screenHeight * dpr);
     ctx.save();
     vp.apply(ctx, dpr);
-    drawTerrain(ctx, map, vp, o.base);
-    if (o.overlay !== "none") drawPolitics(ctx, map, vp, o.overlay);
+    const terrain = options.terrain ?? (options.base === "height" ? "height" : "biome");
+    const fills = Array.isArray(options.fills) ? options.fills : options.overlay === void 0 ? ["state"] : options.overlay === "none" ? [] : [options.overlay];
+    drawTerrain(ctx, map, vp, terrain);
+    const alpha = fills.length > 1 ? 0.4 : 0.55;
+    for (const kind of fills) {
+      drawPolitics(ctx, map, vp, kind, { alpha, lines: kind === "state" || kind === "province" || fills.length === 1 });
+    }
+    if (o.borders && !fills.includes("state")) drawPolitics(ctx, map, vp, "state", { fill: false });
     if (o.coast) drawCoast(ctx, map, vp);
     if (o.rivers) drawRivers(ctx, map, vp);
     if (o.routes) drawRoutes(ctx, map, vp, o.routes);
@@ -1619,21 +1606,72 @@
     };
   }
 
+  // js/app/layers.js
+  var FILL_KINDS = Object.freeze(["culture", "religion", "province", "state"]);
+  var FILL_KEY = Object.freeze({ state: "states", culture: "cultures", religion: "religions", province: "provinces" });
+  var FILL_LABEL = Object.freeze({ state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" });
+  var LAYERS = Object.freeze([
+    { key: "biomes", label: "\u5730\u5F62\u30FB\u690D\u751F", group: "base", on: true, title: "\u30D0\u30A4\u30AA\u30FC\u30E0\uFF08\u68EE\u30FB\u7802\u6F20\u306A\u3069\uFF09\u3067\u9678\u3092\u5857\u308B" },
+    { key: "heights", label: "\u6A19\u9AD8", group: "base", on: false, title: "\u6A19\u9AD8\u3067\u9678\u3092\u5857\u308B\uFF08\u5730\u5F62\u30FB\u690D\u751F\u3068\u91CD\u306D\u308B\u3068\u534A\u900F\u660E\u3067\u91CD\u306A\u308B\uFF09" },
+    { key: "states", label: "\u56FD\u5BB6", group: "fill", on: true, title: "\u56FD\u5BB6\u306E\u8272\u5206\u3051" },
+    { key: "cultures", label: "\u6587\u5316", group: "fill", on: false, title: "\u6587\u5316\u306E\u8272\u5206\u3051" },
+    { key: "religions", label: "\u5B97\u6559", group: "fill", on: false, title: "\u5B97\u6559\u306E\u8272\u5206\u3051" },
+    { key: "provinces", label: "\u5C5E\u5DDE", group: "fill", on: false, title: "\u5C5E\u5DDE\u306E\u8272\u5206\u3051" },
+    { key: "borders", label: "\u56FD\u5883", group: "line", on: true, title: "\u56FD\u5BB6\u306E\u5883\u754C\u7DDA\uFF08\u56FD\u5BB6\u306E\u8272\u5206\u3051\u3092\u6D88\u3057\u3066\u3044\u3066\u3082\u5F15\u304F\uFF09" },
+    { key: "coast", label: "\u6D77\u5CB8\u7DDA", group: "line", on: true },
+    { key: "rivers", label: "\u6CB3\u5DDD", group: "line", on: true },
+    { key: "routes", label: "\u9053\u8DEF", group: "line", on: true },
+    { key: "burgs", label: "\u90FD\u5E02", group: "mark", on: true, title: "\u90FD\u5E02\u306E\u8A18\u53F7" },
+    { key: "zones", label: "\u30BE\u30FC\u30F3", group: "mark", on: true },
+    { key: "journeys", label: "\u65C5\u306E\u7DDA", group: "mark", on: true },
+    { key: "labels", label: "\u540D\u524D", group: "mark", on: true, title: "\u56FD\u30FB\u5C5E\u5DDE\u30FB\u90FD\u5E02\u306E\u540D\u524D" }
+  ]);
+  var DEFAULT_ON = new Map(LAYERS.map((l) => [l.key, l.on]));
+  var isLayerOn = (view, key) => view?.[key] ?? DEFAULT_ON.get(key) ?? false;
+  var activeFills = (view) => FILL_KINDS.filter((k) => isLayerOn(view, FILL_KEY[k]));
+  function terrainMode(view) {
+    const b = isLayerOn(view, "biomes"), h = isLayerOn(view, "heights");
+    return b && h ? "both" : b ? "biome" : h ? "height" : "none";
+  }
+  function legendKindOf(view) {
+    const on = activeFills(view);
+    if (!on.length) return null;
+    return on.includes(view?.legendKind) ? view.legendKind : on[on.length - 1];
+  }
+  var ALL_FILLS_OFF = { states: false, cultures: false, religions: false, provinces: false };
+  var fillsOnly = (kind) => ({ ...ALL_FILLS_OFF, [FILL_KEY[kind]]: true });
+  var PRESETS = Object.freeze([
+    { id: "politics", label: "\u653F\u6CBB", title: "\u56FD\u5BB6\u306E\u8272\u5206\u3051\u3068\u56FD\u5883\u3002\u9053\u8DEF\u30FB\u5DDD\u30FB\u540D\u524D\u3082\u8868\u793A", set: { biomes: true, heights: false, ...fillsOnly("state"), borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto", legendKind: "state" } },
+    { id: "culture", label: "\u6587\u5316", title: "\u6587\u5316\u306E\u8272\u5206\u3051", set: { biomes: true, heights: false, ...fillsOnly("culture"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "culture" } },
+    { id: "religion", label: "\u5B97\u6559", title: "\u5B97\u6559\u306E\u8272\u5206\u3051", set: { biomes: true, heights: false, ...fillsOnly("religion"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "religion" } },
+    { id: "province", label: "\u5C5E\u5DDE", title: "\u5C5E\u5DDE\u306E\u8272\u5206\u3051", set: { biomes: true, heights: false, ...fillsOnly("province"), borders: true, coast: true, rivers: true, routes: false, burgs: true, labels: true, legendKind: "province" } },
+    { id: "terrain", label: "\u5730\u5F62", title: "\u8272\u5206\u3051\u306A\u3057\u306E\u5730\u5F62\u56F3\u3002\u9996\u90FD\u3060\u3051\u540D\u524D\u3092\u8868\u793A", set: { biomes: true, heights: false, ...ALL_FILLS_OFF, borders: false, coast: true, rivers: true, routes: false, burgs: true, labels: true, burgLabels: "capitals" } },
+    { id: "height", label: "\u6A19\u9AD8", title: "\u6A19\u9AD8\u3060\u3051\u3092\u898B\u308B\uFF08\u8A18\u53F7\u30FB\u6587\u5B57\u306F\u6D88\u3059\uFF09", set: { biomes: false, heights: true, ...ALL_FILLS_OFF, borders: false, coast: true, rivers: true, routes: false, burgs: false, labels: false } }
+  ]);
+  var presetMatches = (view, preset) => Object.entries(preset.set).every(([k, v]) => k === "legendKind" || k === "burgLabels" ? true : isLayerOn(view, k) === v);
+  var exclusiveFillPatch = (kind) => kind && FILL_KEY[kind] ? { ...fillsOnly(kind), legendKind: kind } : { ...ALL_FILLS_OFF };
+  var snapshotFills = (view) => ({ ...Object.fromEntries(FILL_KINDS.map((k) => [FILL_KEY[k], isLayerOn(view, FILL_KEY[k])])), legendKind: view?.legendKind });
+
   // js/render/options.js
   function viewToRenderOptions(view) {
     return {
-      base: view.base,
-      overlay: view.overlay,
-      coast: view.coast,
-      rivers: view.rivers,
-      routes: view.routes ? { roads: true, trails: true, searoutes: true } : false,
-      burgs: view.burgs,
+      terrain: terrainMode(view),
+      // "biome" | "height" | "both" | "none"
+      fills: activeFills(view),
+      // 色分けの種類（描く順）
+      legendKind: legendKindOf(view),
+      // 凡例（書き出し画像）に出す種類
+      borders: isLayerOn(view, "borders"),
+      coast: isLayerOn(view, "coast"),
+      rivers: isLayerOn(view, "rivers"),
+      routes: isLayerOn(view, "routes") ? { roads: true, trails: true, searoutes: true } : false,
+      burgs: isLayerOn(view, "burgs"),
       tradeLines: view.tradeLines ?? null,
-      zones: view.zones ?? true,
+      zones: isLayerOn(view, "zones"),
       zoneSelected: view.zoneSelected ?? null,
-      journeys: view.journeys ?? true,
+      journeys: isLayerOn(view, "journeys"),
       journeySelected: view.journeySelected ?? null,
-      labels: view.labels ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : view.burgLabels === "auto" ? "auto" : true } : false
+      labels: isLayerOn(view, "labels") ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : view.burgLabels === "auto" ? "auto" : true } : false
     };
   }
 
@@ -2953,14 +2991,14 @@
     const canvas = createCanvas(Math.round(w * scale), Math.round(h * scale));
     const ctx = canvas.getContext("2d");
     drawScene(ctx, map, vp, renderOptions, scale);
-    drawAnnotations(ctx, map, { w, h, dpr: scale, overlay: renderOptions?.overlay, options: annotations });
+    drawAnnotations(ctx, map, { w, h, dpr: scale, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
     return canvas;
   }
   function renderMapToSvg(map, renderOptions, { annotations = DEFAULT_ANNOTATIONS } = {}) {
     const { vp, w, h } = wholeMapViewport(map);
     const ctx = createSvgContext(w, h);
     drawScene(ctx, map, vp, renderOptions, 1);
-    drawAnnotations(ctx, map, { w, h, dpr: 1, overlay: renderOptions?.overlay, options: annotations });
+    drawAnnotations(ctx, map, { w, h, dpr: 1, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
     return ctx.toString();
   }
   function canvasToPngBlob(canvas) {
@@ -3005,24 +3043,56 @@
   function warsOf(map, stateId) {
     return listWars(map).filter((w) => w.attackers.includes(stateId) || w.defenders.includes(stateId));
   }
+  function warNameTaken(map, name, exceptId = null) {
+    const n = String(name ?? "").trim();
+    return !!n && listWars(map).some((w) => w.id !== exceptId && w.name === n);
+  }
+  function uniqueDefaultName(map, base) {
+    if (!warNameTaken(map, base)) return base;
+    for (let k = 2; ; k++) {
+      const n = `${base}\uFF08\u7B2C${k}\u6B21\uFF09`;
+      if (!warNameTaken(map, n)) return n;
+    }
+  }
   function planDeclareWar(map, { name, attackers, defenders, date }) {
     const a = [...new Set(attackers)], d = [...new Set(defenders)];
     if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
     for (const id of [...a, ...d]) if (!isLive2(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
     const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
+    const explicit = String(name ?? "").trim();
+    if (explicit && warNameTaken(map, explicit)) throw new Error(`\u300C${explicit}\u300D\u3068\u3044\u3046\u6226\u4E89\u540D\u306F\u65E2\u306B\u4F7F\u308F\u308C\u3066\u3044\u307E\u3059`);
     const war = {
       id: nextWarId(map),
-      name: name || `${aNames[0]}\u5BFE${dNames[0]}\u6226\u4E89`,
+      name: explicit || uniqueDefaultName(map, `${aNames[0]}\u5BFE${dNames[0]}\u6226\u4E89`),
       attackers: a,
       defenders: d,
       startedAt: date,
       endedAt: null,
       battles: [],
-      advantage: {}
+      advantage: {},
+      muster: {}
+      // 召集する部隊: { [国家ID]: [部隊ID, ...] }（チェックを付けた部隊がこの戦争の戦力）
     };
     const before = listWars(map);
     return { command: makeCommand(`\u5BA3\u6226\u5E03\u544A\uFF08${war.name}\uFF09`, [], [{ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) }]), id: war.id };
+  }
+  function planSetMuster(map, warId, muster) {
+    const list = listWars(map);
+    const war = list.find((w) => w.id === warId);
+    if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (war.endedAt) throw new Error("\u7D42\u7D50\u3057\u305F\u6226\u4E89\u306E\u53EC\u96C6\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093");
+    const sides = /* @__PURE__ */ new Set([...war.attackers, ...war.defenders]);
+    const clean = {};
+    for (const [sid, ids2] of Object.entries(muster ?? {})) {
+      const st = map.pack.states[Number(sid)];
+      if (!sides.has(Number(sid)) || !Array.isArray(st?.military)) continue;
+      const have = new Set(st.military.map((r) => r.i));
+      const keep = [...new Set(ids2)].filter((i) => have.has(i));
+      if (keep.length) clean[sid] = keep;
+    }
+    const after = list.map((x) => x.id !== warId ? x : { ...x, muster: clean });
+    return makeCommand("\u90E8\u968A\u306E\u53EC\u96C6", [], [{ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) }]);
   }
   function planRecordBattle(map, warId, { attackerState, defenderState, result, date }) {
     const list = listWars(map);
@@ -4050,7 +4120,6 @@
     const eraName = (d) => validDate(d) ? eraAt(map, d.year)?.name ?? null : null;
     const biomeName = (id) => map.biomesData[id]?.name ?? `\u30D0\u30A4\u30AA\u30FC\u30E0#${id}`;
     const liveStates = P.states.filter(live);
-    const attrsOf = (kind, id) => Object.entries(map.ext?.data?.attributes?.[`${kind}:${id}`] ?? {}).map(([name, value]) => ({ name, value }));
     const noteOf = (type, id) => {
       const t = getNote2(map, type, id);
       return t ? htmlToEditableText(t) : null;
@@ -4117,7 +4186,6 @@
         provinces: (s.provinces ?? []).map((id) => P.provinces[id]).filter(live).map((p) => ({ id: p.i, name: p.fullName ?? p.name })),
         diplomacy,
         alliances: listAlliances(map).filter((a) => a.members.includes(s.i)).map((a) => ({ id: a.id, name: a.name, active: !a.dissolvedAt, formed: fmtDate(a.formedAt), dissolved: fmtDate(a.dissolvedAt) })),
-        attributes: attrsOf("state", s.i),
         note: noteOf("state", s.i)
       };
     });
@@ -4136,7 +4204,6 @@
         absorbedBy: m ? ref(namer, "state", m.toState) : null,
         // 統合すると capital は 0 に戻される。統合マーカー（旧首都のセルに立つ）から旧首都を復元する
         formerCapital: P.burgs[e.capital]?.name ?? recoverFormerCapital(map, e, m),
-        attributes: attrsOf("state", e.i),
         note: noteOf("state", e.i),
         note2: "\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u30FB\u90E8\u968A\u306F\u5168\u3066\u4F75\u5408\u5148\u306B\u79FB\u3063\u3066\u3044\u308B\u3002\u904E\u53BB\u306E\u6226\u4E89\u30FB\u540C\u76DF\u30FB\u5916\u4EA4\u306E\u8A18\u9332\u306B\u306F\u540D\u524D\u304C\u6B8B\u308B\u3002"
       };
@@ -4150,7 +4217,6 @@
         type: e.type ?? null,
         cells: t?.cells ?? 0,
         geography: t ? summarizeAcc(t.acc, W, H) : null,
-        attributes: attrsOf(kind, e.i),
         note: noteOf(kind, e.i),
         ...extra(e)
       };
@@ -4179,7 +4245,6 @@
       citadel: !!b.citadel,
       temple: !!b.temple,
       shanty: !!b.shanty,
-      attributes: [],
       note: noteOf("burg", b.i)
     }));
     const markers = map.markers.map((m) => ({
@@ -4377,8 +4442,8 @@
         "world: \u4E16\u754C\u306E\u57FA\u672C\u60C5\u5831\u3002currentDate \u304C\u300E\u4ECA\u300F\u306E\u5E74\u6708\u3002eras \u306F\u6642\u4EE3\u533A\u5206\uFF08\u5E74\u306E\u7BC4\u56F2\uFF09\u3002",
         "timeline: \u5168\u3066\u306E\u51FA\u6765\u4E8B\uFF08\u958B\u6226\u30FB\u6226\u95D8\u30FB\u8B1B\u548C\u30FB\u540C\u76DF\u30FB\u5916\u4EA4\u5909\u5316\u30FB\u72EC\u7ACB\u30FB\u7D71\u5408\u30FB\u6642\u4EE3\u306E\u59CB\u307E\u308A\uFF09\u3092\u6642\u7CFB\u5217\u306B\u4E26\u3079\u305F\u5E74\u8868\u3002\u6B74\u53F2\u3092\u63B4\u3080\u306B\u306F\u307E\u305A\u3053\u3053\u3092\u8AAD\u3080\u3002",
         "extinctStates: \u7D71\u5408\u3067\u6D88\u6EC5\u3057\u305F\u56FD\u5BB6\u3002\u904E\u53BB\u306E\u8A18\u9332\uFF08wars, alliances, timeline\uFF09\u306B\u540D\u524D\u304C\u51FA\u3066\u304F\u308B\u56FD\u306E\u7D20\u6027\u306F\u3053\u3053\u3067\u5206\u304B\u308B\u3002",
-        "states: \u56FD\u5BB6\u3054\u3068\u306B\u9818\u571F\u30FB\u5730\u7406\u30FB\u96A3\u63A5\u56FD\u30FB\u4EBA\u53E3\u30FB\u7D4C\u6E08\u30FB\u8ECD\u4E8B(\u90E8\u968A\u306E\u5185\u8A33)\u30FB\u5916\u4EA4\u30FB\u540C\u76DF\u30FB\u5C5E\u6027\u30FB\u30CE\u30FC\u30C8\u3092\u96C6\u7D04\u3002id \u306F\u4ED6\u306E\u5834\u6240\uFF08wars, alliances \u306A\u3069\uFF09\u304B\u3089\u306E\u53C2\u7167\u30AD\u30FC\u3002",
-        "cultures / religions / provinces: \u305D\u308C\u305E\u308C\u306E\u5206\u5E03\u3068\u3001\u30E6\u30FC\u30B6\u30FC\u304C\u66F8\u3044\u305F\u5C5E\u6027\u30FB\u30CE\u30FC\u30C8\u3002",
+        "states: \u56FD\u5BB6\u3054\u3068\u306B\u9818\u571F\u30FB\u5730\u7406\u30FB\u96A3\u63A5\u56FD\u30FB\u4EBA\u53E3\u30FB\u7D4C\u6E08\u30FB\u8ECD\u4E8B(\u90E8\u968A\u306E\u5185\u8A33)\u30FB\u5916\u4EA4\u30FB\u540C\u76DF\u30FB\u30CE\u30FC\u30C8\u3092\u96C6\u7D04\u3002id \u306F\u4ED6\u306E\u5834\u6240\uFF08wars, alliances \u306A\u3069\uFF09\u304B\u3089\u306E\u53C2\u7167\u30AD\u30FC\u3002",
+        "cultures / religions / provinces: \u305D\u308C\u305E\u308C\u306E\u5206\u5E03\u3068\u3001\u30E6\u30FC\u30B6\u30FC\u304C\u66F8\u3044\u305F\u30CE\u30FC\u30C8\u3002",
         "burgs: \u5168\u3066\u306E\u90FD\u5E02\uFF08\u5C0F\u3055\u306A\u3082\u306E\u3082\u542B\u3080\uFF09\u3002markers: \u5730\u56F3\u4E0A\u306E\u76EE\u5370\uFF08\u907A\u8DE1\u30FB\u53E4\u6226\u5834\u306A\u3069\uFF09\u3002",
         "wars: \u6226\u4E89\u3054\u3068\u306E\u7D4C\u904E\uFF08\u5168\u6226\u95D8\u306E\u52DD\u6557\u3068\u6226\u529B\uFF09\u3068\u8B1B\u548C\u6761\u4EF6\u3002status \u304C\u300E\u7D99\u7D9A\u4E2D\u300F\u306E\u3082\u306E\u306F\u4ECA\u3082\u6226\u4E89\u304C\u7D9A\u3044\u3066\u3044\u308B\u3002",
         "ranking: \u9818\u571F\u30FB\u4EBA\u53E3\u30FB\u8ECD\u4E8B\u529B\u30FB\u6280\u8853\u6C34\u6E96\u306E\u9806\u4F4D\u3002",
@@ -4392,9 +4457,9 @@
       ],
       designNotes: [
         "\u6226\u95D8\u306B\u52DD\u3063\u3066\u3082\u56FD\u5883\u306F\u52D5\u304B\u306A\u3044\u3002\u9818\u571F\u304C\u52D5\u304F\u306E\u306F\u8B1B\u548C\u6761\u7D04\uFF08wars[].peaceTerms\uFF09\u30FB\u72EC\u7ACB\u30FB\u7D71\u5408\u306E\u3068\u304D\u3060\u3051\u3002",
-        "\u540C\u76DF\u30FB\u6226\u4E89\u30FB\u5916\u4EA4\u30FB\u8ECD\u4E8B\u30FB\u6280\u8853\u6C34\u6E96\u30FB\u5C5E\u6027\u306F\u30E6\u30FC\u30B6\u30FC\u304C\u624B\u52D5\u3067\u6C7A\u3081\u305F\u5185\u5BB9\u3002AI \u306B\u3088\u308B\u81EA\u5F8B\u884C\u52D5\u306F\u5143\u306E\u30A2\u30D7\u30EA\u306B\u306F\u7121\u3044\u3002",
+        "\u540C\u76DF\u30FB\u6226\u4E89\u30FB\u5916\u4EA4\u30FB\u8ECD\u4E8B\u30FB\u6280\u8853\u6C34\u6E96\u306F\u30E6\u30FC\u30B6\u30FC\u304C\u624B\u52D5\u3067\u6C7A\u3081\u305F\u5185\u5BB9\u3002AI \u306B\u3088\u308B\u81EA\u5F8B\u884C\u52D5\u306F\u5143\u306E\u30A2\u30D7\u30EA\u306B\u306F\u7121\u3044\u3002",
         "\u7D4C\u6E08(\u4EBA\u53E3\u30FB\u7523\u696D)\u306F\u5E74\u6B21\u3067\u81EA\u52D5\u66F4\u65B0\u3055\u308C\u308B\u7C21\u6613\u30E2\u30C7\u30EB\u3002\u6570\u5024\u30D0\u30E9\u30F3\u30B9\u306F\u4EEE\u7F6E\u304D\u3067\u3001\u53F2\u5B9F\u306B\u57FA\u3065\u304F\u3082\u306E\u3067\u306F\u306A\u3044\u3002",
-        "\u5C5E\u6027(attributes)\u3068\u30CE\u30FC\u30C8(note)\u306F\u30E6\u30FC\u30B6\u30FC\u306E\u81EA\u7531\u8A18\u8FF0\u3002\u4E16\u754C\u8A2D\u5B9A\u306E\u4E00\u6B21\u60C5\u5831\u3068\u3057\u3066\u6700\u512A\u5148\u3067\u5C0A\u91CD\u3059\u308B\u3053\u3068\u3002"
+        "\u30CE\u30FC\u30C8(note)\u306F\u30E6\u30FC\u30B6\u30FC\u306E\u81EA\u7531\u8A18\u8FF0\u3002\u4E16\u754C\u8A2D\u5B9A\u306E\u4E00\u6B21\u60C5\u5831\u3068\u3057\u3066\u6700\u512A\u5148\u3067\u5C0A\u91CD\u3059\u308B\u3053\u3068\u3002"
       ],
       doNot: [
         "\u5B58\u5728\u3057\u306A\u3044 id \u3092\u4F5C\u3089\u306A\u3044\u3002\u65B0\u3057\u3044\u56FD\u5BB6\u30FB\u90FD\u5E02\u3092\u4F5C\u308B\u3068\u304D\u306F\u65E2\u5B58\u306E\u6700\u5927 id + 1 \u3092\u4F7F\u3046\u3002",
@@ -4403,7 +4468,7 @@
       suggestedTasks: [
         "\u5E74\u8868\u3092\u5143\u306B\u3001\u6642\u4EE3\u3054\u3068\u306E\u6B74\u53F2\u53D9\u8FF0\uFF08\u6559\u79D1\u66F8\u98A8\u30FB\u5E74\u4EE3\u8A18\u98A8\uFF09\u3092\u66F8\u304F\u3002",
         "\u73FE\u5728\u306E\u52E2\u529B\u56F3\u30FB\u540C\u76DF\u30FB\u7D99\u7D9A\u4E2D\u306E\u6226\u4E89\u304B\u3089\u3001\u6B21\u306B\u8D77\u3053\u308A\u3046\u308B\u5C55\u958B\u3092\u63D0\u6848\u3059\u308B\u3002",
-        "\u30CE\u30FC\u30C8\u3084\u5C5E\u6027\u306E\u8A18\u8FF0\u3068\u3001\u5B9F\u969B\u306E\u9818\u571F\u30FB\u6226\u7E3E\u306E\u77DB\u76FE\u3092\u6307\u6458\u3059\u308B\u3002"
+        "\u30CE\u30FC\u30C8\u306E\u8A18\u8FF0\u3068\u3001\u5B9F\u969B\u306E\u9818\u571F\u30FB\u6226\u7E3E\u306E\u77DB\u76FE\u3092\u6307\u6458\u3059\u308B\u3002"
       ]
     };
   }
@@ -4437,7 +4502,6 @@
       for (const r of s.military.regiments) L.push(`  - ${r.name}\uFF08${r.position}\u30FB${r.locatedIn.name}\u9818\u5185\uFF09: ${Object.entries(r.units).map(([k, v]) => `${k}${v}`).join("\u3001") || "\u5175\u529B\u306A\u3057"}`);
       if (s.diplomacy.length) L.push(`- \u5916\u4EA4: ${s.diplomacy.map((d) => `${d.with.name}=${d.relation}`).join("\u3001")}`);
       if (s.alliances.length) L.push(`- \u540C\u76DF: ${s.alliances.map((a) => `${a.name}${a.active ? "" : "\uFF08\u89E3\u6D88\u6E08\u307F\uFF09"}`).join("\u3001")}`);
-      for (const a of s.attributes) L.push(`- \u3010\u5C5E\u6027\u3011${a.name}: ${a.value}`);
       if (s.note) L.push(`- \u3010\u30CE\u30FC\u30C8\u3011${s.note.replace(/\n/g, " ")}`);
       L.push("");
     }
@@ -4461,7 +4525,7 @@
     L.push("", "## \u6587\u5316\u30FB\u5B97\u6559\u30FB\u5C5E\u5DDE", "");
     for (const [label, list] of [["\u6587\u5316", ch.cultures], ["\u5B97\u6559", ch.religions], ["\u5C5E\u5DDE", ch.provinces]]) {
       L.push(`### ${label}`);
-      for (const e of list) L.push(`- ${e.name}\uFF08${e.cells}\u30BB\u30EB\u30FB${e.geography?.position ?? "\u4F4D\u7F6E\u4E0D\u660E"}\uFF09${e.attributes.map((a) => ` [${a.name}: ${a.value}]`).join("")}${e.note ? ` \u2014 ${e.note.replace(/\n/g, " ")}` : ""}`);
+      for (const e of list) L.push(`- ${e.name}\uFF08${e.cells}\u30BB\u30EB\u30FB${e.geography?.position ?? "\u4F4D\u7F6E\u4E0D\u660E"}\uFF09${e.note ? ` \u2014 ${e.note.replace(/\n/g, " ")}` : ""}`);
       L.push("");
     }
     L.push("## \u90FD\u5E02\uFF08\u5168\u3066\uFF09", "");
@@ -4501,23 +4565,10 @@
 
   // js/app/actions.js
   var nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
-  var OVERLAYS = ["none", "state", "culture", "religion", "province"];
-  var TOGGLES = ["coast", "rivers", "routes", "burgs", "labels"];
+  var OVERLAYS = ["none", ...FILL_KINDS];
+  var LAYER_KEYS = new Set(LAYERS.map((l) => l.key));
   var NOTICE_MS = 5e3;
   var PNG_SCALE = 2;
-  var katakanaOnLoad = () => {
-    try {
-      return localStorage.getItem("alterhistory.katakanaBurgs") !== "0";
-    } catch {
-      return true;
-    }
-  };
-  var setKatakanaOnLoad = (on) => {
-    try {
-      localStorage.setItem("alterhistory.katakanaBurgs", on ? "1" : "0");
-    } catch {
-    }
-  };
   function createActions({ store, viewport, renderer, load, Delaunator, download, createCanvas }) {
     const rerender = () => renderer.requestRender();
     let noticeTimer = 0;
@@ -4571,10 +4622,8 @@
           store.replace({ ...prev, map, fileName: file.name, warnings, error: null, notice: null, busy: null, hover: null });
           viewport.fit();
           rerender();
-          if (katakanaOnLoad()) {
-            const n = this.katakanaBurgs(file.name);
-            if (n) showNotice(`\u82F1\u8A9E\u540D\u306E\u90FD\u5E02 ${n} \u4EF6\u3092\u30AB\u30BF\u30AB\u30CA\u306B\u3057\u307E\u3057\u305F\uFF08\u300C\u5143\u306B\u623B\u3059\u300D\u3067\u82F1\u8A9E\u540D\u306B\u623B\u305B\u307E\u3059\uFF09`);
-          }
+          const n = this.katakanaBurgs(file.name);
+          if (n) showNotice(`\u82F1\u8A9E\u540D\u306E\u90FD\u5E02 ${n} \u4EF6\u3092\u30AB\u30BF\u30AB\u30CA\u306B\u3057\u307E\u3057\u305F\uFF08\u300C\u5143\u306B\u623B\u3059\u300D\u3067\u82F1\u8A9E\u540D\u306B\u623B\u305B\u307E\u3059\uFF09`);
         } catch (e) {
           store.update((s) => {
             s.busy = null;
@@ -4582,7 +4631,7 @@
           });
         }
       },
-      /** 英語名の都市をカタカナにする。付け替えた件数を返す（Undo 1回で戻る） */
+      /** 英語名の都市をカタカナにする（地図を開くたびに自動で呼ばれる）。付け替えた件数を返す（Undo 1回で戻る） */
       katakanaBurgs(seedText = "katakana") {
         const map = store.getState().map;
         if (!map) return 0;
@@ -4612,15 +4661,35 @@
         store.update((s) => Object.assign(s.view, patch));
         rerender();
       },
+      /** 色分けを1種類だけにする（"none" なら全部消す）。絵を塗る間の切り替えなどに使う */
       setOverlay(kind) {
-        if (OVERLAYS.includes(kind)) this.setView({ overlay: kind });
+        if (OVERLAYS.includes(kind)) this.setView(exclusiveFillPatch(kind === "none" ? null : kind));
       },
+      /** 色分けの on/off と凡例の種類をまとめて取り出す／戻す */
+      getFills() {
+        return snapshotFills(store.getState().view);
+      },
+      restoreFills(snap) {
+        if (snap) this.setView({ ...snap });
+      },
+      /** レイヤー（地形・標高・国家・文化・宗教・属州・国境・海岸線・河川・道路・都市・ゾーン・旅の線・名前）を1つ切り替える。独立なので、他は変わらない */
       toggle(name) {
-        if (!TOGGLES.includes(name)) return;
-        this.setView({ [name]: !store.getState().view[name] });
+        if (!LAYER_KEYS.has(name)) return;
+        const view = store.getState().view;
+        const on = !isLayerOn(view, name);
+        const patch = { [name]: on };
+        const kind = FILL_KINDS.find((k) => FILL_KEY[k] === name);
+        if (kind && on) patch.legendKind = kind;
+        this.setView(patch);
       },
-      toggleBase() {
-        this.setView({ base: store.getState().view.base === "biome" ? "height" : "biome" });
+      /** プリセット（政治・文化・宗教・属州・地形・標高）。そのプリセットが決めるレイヤーだけを一度に切り替える */
+      applyPreset(id) {
+        const p = PRESETS.find((x) => x.id === id);
+        if (p) this.setView({ ...p.set });
+      },
+      /** 凡例に出す色分けの種類を選ぶ（オンの色分けの中から） */
+      setLegendKind(kind) {
+        if (FILL_KINDS.includes(kind)) this.setView({ legendKind: kind });
       },
       /** 凡例の項目を選んだとき、その場所へ移動する */
       locate(entity) {
@@ -4629,6 +4698,29 @@
         if (!pos) return;
         viewport.centerOn(pos[0], pos[1], Math.max(viewport.k, viewport.fitK * 3));
         rerender();
+      },
+      /**
+       * 凡例の項目を選んだとき、その実体の外周がちょうど画面に収まるように移動・拡大縮小する。
+       * （固定倍率で中心へ寄せるだけだと、大きな国では境界線が画面の外に出てしまい、強調が見えない）
+       * 小さな実体は、見失わない程度（全体表示の8倍まで）に拡大する。外周が求まらなければ locate と同じ動き。
+       * @returns {boolean} 外周に合わせて動かせたか
+       */
+      focusEntity(kind, entity) {
+        const map = store.getState().map;
+        const def = ENTITY_KINDS[kind];
+        if (!map?.geometry || !def) return false;
+        const box = segmentsBounds(entityOutlineSegments(map.geometry, def.cells(map), entity.id, map.pack.cells.biome));
+        if (!box) {
+          this.locate(entity);
+          return false;
+        }
+        const margin = 56;
+        const bw = Math.max(1, box.x1 - box.x0), bh = Math.max(1, box.y1 - box.y0);
+        const kFit = Math.min((viewport.screenWidth - margin * 2) / bw, (viewport.screenHeight - margin * 2) / bh);
+        const k = Math.max(viewport.fitK, Math.min(kFit, viewport.fitK * 8, viewport.maxK));
+        viewport.centerOn((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, k);
+        rerender();
+        return true;
       },
       /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */
       saveNative() {
@@ -4701,9 +4793,9 @@
 
   // js/ui/dom.js
   function byId(id) {
-    const el9 = document.getElementById(id);
-    if (!el9) throw new Error(`\u8981\u7D20 #${id} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08index.html \u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
-    return el9;
+    const el11 = document.getElementById(id);
+    if (!el11) throw new Error(`\u8981\u7D20 #${id} \u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\uFF08index.html \u3092\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
+    return el11;
   }
 
   // js/ui/download.js
@@ -4802,27 +4894,31 @@
   }
 
   // js/ui/legend.js
-  function initLegend({ store, actions, panels }) {
+  function initLegend({ store, actions, panels, highlight }) {
     const title = byId("legend-title");
     const list = byId("legend-list");
     const wrap = byId("legend");
+    const tabs = byId("legend-tabs");
     let lastKey = null;
     let rev = 0;
     function render(state, change) {
       if (change && ["commit", "undo", "redo", "replace"].includes(change.type)) rev++;
       const { map, view } = state;
       wrap.classList.toggle("has-map", !!map);
-      const key = map ? `${map.geometry?.pack.p.length}:${view.overlay}:${state.fileName}:${rev}` : "none";
+      const kind = legendKindOf(view);
+      const fills = activeFills(view);
+      const key = map ? `${map.geometry?.pack.p.length}:${kind}:${fills.join(",")}:${state.fileName}:${rev}` : "none";
       if (key === lastKey) return;
       lastKey = key;
       list.replaceChildren();
-      if (!map || view.overlay === "none") {
+      renderTabs(fills, kind);
+      if (!map || !kind) {
         title.textContent = "\u51E1\u4F8B";
-        list.append(message(map ? "\u8272\u5206\u3051\u3092\u9078\u3076\u3068\u3001\u3053\u3053\u306B\u4E00\u89A7\u304C\u8868\u793A\u3055\u308C\u307E\u3059" : "\u5730\u56F3\u3092\u958B\u304F\u3068\u8868\u793A\u3055\u308C\u307E\u3059"));
+        list.append(message(map ? "\u8272\u5206\u3051\u306E\u30EC\u30A4\u30E4\u30FC\uFF08\u56FD\u5BB6\u30FB\u6587\u5316\u30FB\u5B97\u6559\u30FB\u5C5E\u5DDE\uFF09\u3092\u30AA\u30F3\u306B\u3059\u308B\u3068\u3001\u3053\u3053\u306B\u4E00\u89A7\u304C\u8868\u793A\u3055\u308C\u307E\u3059" : "\u5730\u56F3\u3092\u958B\u304F\u3068\u8868\u793A\u3055\u308C\u307E\u3059"));
         return;
       }
-      const items = listEntities(map, view.overlay);
-      title.textContent = `\u51E1\u4F8B\uFF1A${ENTITY_KINDS[view.overlay].label}\uFF08${items.length}\uFF09`;
+      const items = listEntities(map, kind);
+      title.textContent = `\u51E1\u4F8B\uFF1A${ENTITY_KINDS[kind].label}\uFF08${items.length}\uFF09`;
       if (items.length === 0) {
         list.append(message("\u8A72\u5F53\u3059\u308B\u3082\u306E\u304C\u3042\u308A\u307E\u305B\u3093"));
         return;
@@ -4832,7 +4928,7 @@
         const li = document.createElement("li");
         const btn3 = document.createElement("button");
         btn3.type = "button";
-        btn3.title = `${it.name}\uFF08${it.cells}\u30BB\u30EB\uFF09\u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u79FB\u52D5\u3001\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u7DE8\u96C6`;
+        btn3.title = `${it.name}\uFF08${it.cells}\u30BB\u30EB\uFF09\u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u79FB\u52D5\u3057\u3066\u5883\u754C\u7DDA\u3092\u5149\u3089\u305B\u308B\u3001\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u7DE8\u96C6`;
         const chip = document.createElement("span");
         chip.className = "chip";
         chip.style.background = it.color;
@@ -4843,7 +4939,7 @@
         count.className = "legend-count";
         count.textContent = String(it.cells);
         btn3.append(chip, name);
-        if (isProvisional(map, view.overlay, it.id)) {
+        if (isProvisional(map, kind, it.id)) {
           const tag = document.createElement("span");
           tag.className = "legend-prov";
           tag.textContent = "\u4EEE";
@@ -4851,15 +4947,34 @@
           btn3.append(tag);
         }
         btn3.append(count);
-        btn3.addEventListener("click", () => actions.locate(it));
+        btn3.addEventListener("click", () => {
+          actions.focusEntity(kind, it);
+          highlight?.show(kind, it.id);
+        });
         btn3.addEventListener("contextmenu", (e) => {
           e.preventDefault();
-          panels?.openEntity(view.overlay, it.id);
+          panels?.openEntity(kind, it.id);
         });
         li.append(btn3);
         frag.append(li);
       }
       list.append(frag);
+    }
+    function renderTabs(fills, current) {
+      tabs.replaceChildren();
+      tabs.hidden = fills.length < 2;
+      if (tabs.hidden) return;
+      for (const k of fills) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.dataset.kind = k;
+        b.textContent = FILL_LABEL[k];
+        b.setAttribute("role", "tab");
+        b.setAttribute("aria-selected", String(k === current));
+        b.classList.toggle("active", k === current);
+        b.addEventListener("click", () => actions.setLegendKind(k));
+        tabs.append(b);
+      }
     }
     function message(text2) {
       const li = document.createElement("li");
@@ -4899,58 +5014,7 @@
   }
 
   // js/ui/chrome.js
-  var REGIONS = ["top", "left", "right", "bottom"];
-  function initChrome({ store, viewport, renderer, actions }) {
-    const app = byId("app");
-    const boxes = Object.fromEntries([...document.querySelectorAll("[data-chrome]")].map((b) => [b.dataset.chrome, b]));
-    const restore = byId("btn-chrome-restore");
-    const allBtn = byId("btn-chrome-all");
-    const menu = byId("view-menu");
-    const hidden = /* @__PURE__ */ new Set();
-    const isFit = () => Math.abs(viewport.k - viewport.fitK) < 1e-6;
-    function refit(wasFit) {
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        renderer.resize();
-        if (wasFit) viewport.fit();
-        renderer.requestRender();
-      }));
-    }
-    function apply() {
-      for (const r of REGIONS) {
-        app.classList.toggle(`hide-${r}`, hidden.has(r));
-        if (boxes[r]) boxes[r].checked = !hidden.has(r);
-      }
-      restore.hidden = hidden.size === 0;
-    }
-    function setHidden(region, value) {
-      const wasFit = isFit();
-      if (value) hidden.add(region);
-      else hidden.delete(region);
-      if (region === "right" && value) {
-        for (const id of ["edit-panel-close", "builder-close"]) {
-          const b = byId(id);
-          if (!b.closest("[hidden]")) b.click();
-        }
-      }
-      apply();
-      refit(wasFit);
-    }
-    function setAll(value) {
-      const wasFit = isFit();
-      if (value) for (const r of REGIONS) setHidden(r, true);
-      else {
-        hidden.clear();
-        apply();
-      }
-      refit(wasFit);
-    }
-    const toggleAll = () => setAll(hidden.size < REGIONS.length);
-    for (const r of REGIONS) boxes[r]?.addEventListener("change", () => setHidden(r, !boxes[r].checked));
-    allBtn.addEventListener("click", () => {
-      menu.open = false;
-      setAll(true);
-    });
-    restore.addEventListener("click", () => setAll(false));
+  function initChrome({ store }) {
     const menus = [...document.querySelectorAll("details.menu")];
     document.addEventListener("pointerdown", (e) => {
       for (const m of menus) if (m.open && !m.contains(e.target)) m.open = false;
@@ -4963,16 +5027,6 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") for (const m of menus) m.open = false;
     });
-    document.addEventListener("keydown", (e) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== "h") return;
-      const t = e.target;
-      if (t instanceof HTMLElement && (t.closest("select, input, textarea") || t.isContentEditable || t.closest("dialog[open]"))) return;
-      e.preventDefault();
-      toggleAll();
-    });
-    new MutationObserver(() => {
-      if (!byId("editor-panel").hidden && hidden.has("left")) setHidden("left", false);
-    }).observe(byId("editor-panel"), { attributes: true, attributeFilter: ["hidden"] });
     const undo = byId("btn-undo"), redo = byId("btn-redo"), save = byId("btn-save");
     undo.addEventListener("click", () => store.undo());
     redo.addEventListener("click", () => store.redo());
@@ -4994,53 +5048,487 @@
         e.returnValue = "";
       }
     });
-    const kana = byId("opt-katakana");
-    kana.checked = katakanaOnLoad();
-    kana.addEventListener("change", () => setKatakanaOnLoad(kana.checked));
-    byId("btn-katakana").addEventListener("click", () => {
-      menu.open = false;
-      const n = actions.katakanaBurgs();
-      store.update((st) => {
-        st.notice = n ? `\u82F1\u8A9E\u540D\u306E\u90FD\u5E02 ${n} \u4EF6\u3092\u30AB\u30BF\u30AB\u30CA\u306B\u3057\u307E\u3057\u305F\uFF08\u300C\u5143\u306B\u623B\u3059\u300D\u3067\u623B\u305B\u307E\u3059\uFF09` : "\u30AB\u30BF\u30AB\u30CA\u306B\u3059\u308B\u5BFE\u8C61\u306E\u90FD\u5E02\u306F\u3042\u308A\u307E\u305B\u3093";
-      });
-    });
-    const syncEmpty = () => {
-      byId("btn-katakana").disabled = !store.getState().map;
-    };
-    store.subscribe(syncEmpty);
-    syncEmpty();
-    apply();
-    return { setHidden, setAll, toggleAll, hidden: () => [...hidden] };
   }
 
   // js/ui/sidebar-toggle.js
+  var isNarrow = () => typeof matchMedia === "function" && matchMedia("(max-width: 720px)").matches;
   function initSidebarToggle({ store }) {
     const btn3 = byId("btn-sidebar-toggle");
+    const main = document.querySelector("main");
     const sidebar = byId("sidebar");
     const set = (open) => {
-      sidebar.classList.toggle("open", open);
+      main.classList.toggle("side-collapsed", !open);
+      btn3.hidden = open;
       btn3.setAttribute("aria-expanded", String(open));
+      sidebar.inert = !open;
     };
-    btn3.addEventListener("click", () => set(!sidebar.classList.contains("open")));
+    const isOpen = () => !main.classList.contains("side-collapsed");
+    btn3.addEventListener("click", () => set(true));
+    byId("legend-close").addEventListener("click", () => set(false));
     store.subscribe((_s, change) => {
-      if (change.type === "replace") set(false);
+      if (change.type === "replace" && isNarrow()) set(false);
     });
     window.addEventListener("request-edit-panel-open", () => set(true));
-    const obs = new MutationObserver(() => {
+    new MutationObserver(() => {
       if (!byId("editor-panel").hidden) set(true);
+    }).observe(byId("editor-panel"), { attributes: true, attributeFilter: ["hidden"] });
+    set(!isNarrow());
+    return { open: () => set(true), close: () => set(false), isOpen };
+  }
+
+  // js/ui/panel-dock.js
+  function initPanelDock(defs) {
+    for (const d of defs) {
+      const panel2 = byId(d.panel), tab = byId(d.tab);
+      let minimized = false;
+      const sync = () => {
+        tab.hidden = !(minimized && panel2.hidden);
+      };
+      byId(d.close).addEventListener("click", () => {
+        minimized = true;
+        sync();
+      });
+      byId(d.open).addEventListener("click", () => {
+        minimized = false;
+        sync();
+      }, true);
+      new MutationObserver(() => {
+        if (!panel2.hidden) minimized = false;
+        sync();
+      }).observe(panel2, { attributes: true, attributeFilter: ["hidden"] });
+      tab.addEventListener("click", () => {
+        minimized = false;
+        sync();
+        byId(d.open).click();
+      });
+      sync();
+    }
+  }
+
+  // js/ui/windows.js
+  var el = (tag, cls, text2) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  };
+  function initWindows() {
+    const stage = byId("stage");
+    const wins = /* @__PURE__ */ new Map();
+    let z = 20;
+    function front(w) {
+      w.root.style.zIndex = String(++z);
+    }
+    function build(id, def) {
+      const root = el("section", "float-win");
+      root.dataset.win = id;
+      root.hidden = true;
+      root.setAttribute("role", "dialog");
+      root.setAttribute("aria-label", def.title);
+      const bar = el("header", "float-win-bar");
+      const title = el("h3", "", def.title);
+      const close = el("button", "panel-close", "\xD7");
+      close.type = "button";
+      close.setAttribute("aria-label", `${def.title}\u3092\u9589\u3058\u308B`);
+      bar.append(title, close);
+      const body = el("div", "float-win-body");
+      body.append(def.body);
+      root.append(bar, body);
+      stage.append(root);
+      const w = { root, def };
+      close.addEventListener("click", () => closeWin(id));
+      root.addEventListener("pointerdown", () => front(w));
+      bar.addEventListener("pointerdown", (e) => {
+        if (e.target === close) return;
+        const sr = stage.getBoundingClientRect(), r = root.getBoundingClientRect();
+        const dx = e.clientX - r.left, dy = e.clientY - r.top;
+        bar.setPointerCapture?.(e.pointerId);
+        const move = (ev) => {
+          const x = Math.min(Math.max(0, ev.clientX - dx - sr.left), Math.max(0, sr.width - 80));
+          const y = Math.min(Math.max(0, ev.clientY - dy - sr.top), Math.max(0, sr.height - 40));
+          root.style.left = `${x}px`;
+          root.style.top = `${y}px`;
+        };
+        const up = () => {
+          bar.removeEventListener("pointermove", move);
+          bar.removeEventListener("pointerup", up);
+        };
+        bar.addEventListener("pointermove", move);
+        bar.addEventListener("pointerup", up);
+      });
+      return w;
+    }
+    function register(id, def) {
+      wins.set(id, build(id, def));
+      wins.get(id).root.style.width = `min(${def.width ?? 760}px, calc(100% - 24px))`;
+    }
+    function open(id) {
+      const w = wins.get(id);
+      if (!w) return;
+      if (w.root.hidden) {
+        w.root.hidden = false;
+        if (!w.root.style.left) {
+          const n = [...wins.keys()].indexOf(id);
+          w.root.style.left = `${24 + n * 22}px`;
+          w.root.style.top = `${16 + n * 22}px`;
+        }
+      }
+      w.def.onOpen?.();
+      front(w);
+    }
+    function closeWin(id) {
+      const w = wins.get(id);
+      if (w) w.root.hidden = true;
+    }
+    const isOpen = (id) => !!wins.get(id) && !wins.get(id).root.hidden;
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const top = [...wins.values()].filter((w) => !w.root.hidden).sort((a, b) => Number(b.root.style.zIndex) - Number(a.root.style.zIndex))[0];
+      if (top && !(document.activeElement instanceof HTMLInputElement) && !document.querySelector("details.menu[open]")) top.root.hidden = true;
     });
-    obs.observe(byId("editor-panel"), { attributes: true, attributeFilter: ["hidden"] });
-    return { open: () => set(true), close: () => set(false) };
+    return { register, open, close: closeWin, isOpen };
+  }
+
+  // js/core/sim/economy.js
+  var TECH_MIN = 1;
+  var TECH_MAX = 10;
+  var GROWTH_RATE_BY_TECH = (tech) => 6e-3 + (tech - 1) * 16e-4;
+  var INDUSTRY_PER_CAPITA_BY_TECH = (tech) => 0.05 + (tech - 1) * 0.09;
+  function ensureEconomy(state) {
+    if (typeof state.techLevel !== "number") state.techLevel = 3;
+    if (typeof state.industry !== "number") state.industry = 0;
+    if (typeof state.popCarryCap !== "number") {
+      state.popCarryCap = Math.max(1, (state.rural ?? 0) + (state.urban ?? 0)) * 3;
+    }
+    return state;
+  }
+  function computeAnnualUpdate(state) {
+    const tech = clampTech(state.techLevel ?? 3);
+    const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
+    const cap = Math.max(1, state.popCarryCap ?? (pop * 3 || 1));
+    const r = GROWTH_RATE_BY_TECH(tech);
+    const growth = pop > 0 ? r * pop * (1 - pop / cap) : 0;
+    const newPop = Math.max(0, pop + growth);
+    const ratio = pop > 0 ? (state.urban ?? 0) / pop : 0.3;
+    const newUrban = round2((state.urban ?? 0) + growth * ratio);
+    const newRural = round2(newPop - newUrban);
+    const industry = round2(newPop / 1e3 * INDUSTRY_PER_CAPITA_BY_TECH(tech));
+    return { rural: newRural, urban: newUrban, industry };
+  }
+  function clampTech(v) {
+    return Math.min(TECH_MAX, Math.max(TECH_MIN, Math.round(v)));
+  }
+  function round2(v) {
+    return Math.round(v * 100) / 100;
+  }
+
+  // js/core/sim/military.js
+  var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  function regimentsOf(state) {
+    return Array.isArray(state.military) ? state.military : [];
+  }
+  function nextRegimentId(state) {
+    const list = regimentsOf(state);
+    return list.length ? Math.max(...list.map((r) => r.i)) + 1 : 0;
+  }
+  function planCreateRegiment(map, stateId, cell, { name, icon = "\u{1F6E1}\uFE0F" } = {}) {
+    const state = map.pack.states[stateId];
+    if (!isLive8(state)) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u914D\u7F6E\u3067\u304D\u307E\u305B\u3093");
+    const { p } = map.geometry.pack;
+    const reg = {
+      i: nextRegimentId(state),
+      name: name || `${state.name}\u8ECD`,
+      icon,
+      state: stateId,
+      cell,
+      x: p[cell][0],
+      y: p[cell][1],
+      bx: p[cell][0],
+      by: p[cell][1],
+      u: emptyForce()
+    };
+    const next = [...regimentsOf(state), reg];
+    return { command: makeCommand("\u90E8\u968A\u3092\u7DE8\u6210", ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
+      m.pack.states[stateId].military = v;
+    }, next)]), id: reg.i };
+  }
+  function planMoveRegiment(map, stateId, regId, cell) {
+    const state = map.pack.states[stateId];
+    const reg = regimentsOf(state).find((r) => r.i === regId);
+    if (!reg) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
+    if (reg.cell === cell) return null;
+    const { p } = map.geometry.pack;
+    return makeCommand("\u90E8\u968A\u3092\u79FB\u52D5", ["places"], [setProps(reg, { cell, x: p[cell][0], y: p[cell][1] })]);
+  }
+  function planEditRegiment(map, stateId, regId, patch) {
+    const state = map.pack.states[stateId];
+    const reg = regimentsOf(state).find((r) => r.i === regId);
+    if (!reg) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const next = {};
+    if (patch.name !== void 0 && patch.name !== reg.name) next.name = patch.name;
+    if (patch.icon !== void 0 && patch.icon !== reg.icon) next.icon = patch.icon;
+    if (patch.u) {
+      const u = { ...reg.u };
+      for (const k of UNIT_KEYS) if (patch.u[k] !== void 0) u[k] = Math.max(0, Math.round(patch.u[k]));
+      if (JSON.stringify(u) !== JSON.stringify(reg.u)) next.u = u;
+    }
+    if (!Object.keys(next).length) return null;
+    return makeCommand("\u90E8\u968A\u3092\u7DE8\u96C6", ["places"], [setProps(reg, next)]);
+  }
+  function planDisbandRegiment(map, stateId, regId) {
+    const state = map.pack.states[stateId];
+    const list = regimentsOf(state);
+    if (!list.some((r) => r.i === regId)) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const next = list.filter((r) => r.i !== regId);
+    return makeCommand("\u90E8\u968A\u3092\u89E3\u6563", ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
+      m.pack.states[stateId].military = v;
+    }, next)]);
+  }
+  function planAnnualConscription(map, stateId) {
+    const state = map.pack.states[stateId];
+    if (!isLive8(state)) return null;
+    ensureEconomy(state);
+    const capital = map.pack.burgs[state.capital];
+    if (!capital) return null;
+    const pop = (state.rural ?? 0) + (state.urban ?? 0);
+    const industry = state.industry ?? 0;
+    const doctrine = DOCTRINE_BY_KEY[state.doctrine] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
+    const conscriptBonus = 1 + (doctrine.conscriptBonus ?? 0);
+    let list = regimentsOf(state);
+    let home = list.find((r) => r.i === 0) ?? null;
+    const delta = emptyForce();
+    let any = false;
+    for (const key of UNIT_KEYS) {
+      const def = UNIT_BY_KEY[key];
+      if (def.minTech && (state.techLevel ?? 3) < def.minTech) continue;
+      const manpowerBonus = key === "infantry" || key === "special" ? conscriptBonus : 1;
+      const fromPop = pop / 1e3 * (def.rural + def.urban) * 0.15 * manpowerBonus;
+      const unitCost = (def.soft + def.hard) / 2;
+      const fromIndustry = def.industryShare > 0 ? industry * def.industryShare / (unitCost / 4) : 0;
+      const add = Math.round(fromPop + fromIndustry);
+      if (add > 0) {
+        delta[key] = add;
+        any = true;
+      }
+    }
+    if (!any) return null;
+    const parts = [];
+    if (home) {
+      const u = { ...home.u };
+      for (const k of UNIT_KEYS) u[k] = (u[k] ?? 0) + delta[k];
+      parts.push(setProps(home, { u }));
+    } else {
+      const { p } = map.geometry.pack;
+      const cell = capital.cell;
+      const reg = { i: 0, name: `${state.name}\u56FD\u9632\u672C\u968A`, icon: "\u{1F6E1}\uFE0F", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u: delta };
+      parts.push(setList((m) => m.pack.states[stateId].military, (m, v) => {
+        m.pack.states[stateId].military = v;
+      }, [reg, ...list]));
+    }
+    return makeCommand("\u5E74\u6B21\u5FB4\u5175", [], parts);
+  }
+
+  // js/ui/settings-windows.js
+  var el2 = (tag, cls, text2) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  };
+  var isLive9 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function initSettingsWindows({ store, panels, editorPanel, editActions, actions }) {
+    const wins = initWindows();
+    const noMap = () => el2("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044");
+    wins.register("war", { title: "\u2694 \u6226\u4E89", width: 820, body: byId("tab-wars"), onOpen: () => panels.wars.render() });
+    const dipBody = el2("div", "dip-body");
+    const dipHost = el2("div", "dip-host");
+    const allyHost = el2("div", "editor-section");
+    allyHost.append(el2("h4", "", "\u540C\u76DF"), byId("tab-alliances"));
+    dipBody.append(dipHost, allyHost);
+    let focus = null;
+    function renderDip() {
+      dipHost.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        dipHost.append(noMap());
+        return;
+      }
+      const states = map.pack.states.filter(isLive9);
+      if (focus == null || !states.some((s) => s.i === focus)) focus = states[0]?.i ?? null;
+      if (focus == null) {
+        dipHost.append(el2("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      const row = el2("div", "state-picker");
+      row.append(el2("span", "field-label", "\u95A2\u4FC2\u3092\u8A2D\u5B9A\u3059\u308B\u56FD"));
+      const sel = document.createElement("select");
+      for (const s of states) {
+        const o = document.createElement("option");
+        o.value = s.i;
+        o.textContent = s.fullName ?? s.name;
+        o.selected = s.i === focus;
+        sel.append(o);
+      }
+      sel.addEventListener("change", () => {
+        focus = Number(sel.value);
+        renderDip();
+      });
+      row.append(sel);
+      dipHost.append(row, editorPanel.buildDiplomacy(map, focus));
+    }
+    wins.register("diplomacy", { title: "\u{1F91D} \u5916\u4EA4\u30FB\u540C\u76DF", width: 860, body: dipBody, onOpen: () => {
+      renderDip();
+      panels.alliances.render();
+    } });
+    const milBody = el2("div", "mil-body");
+    const overview = el2("div", "mil-overview");
+    milBody.append(overview, byId("tab-regiments"));
+    function renderMil() {
+      overview.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        overview.append(noMap());
+        return;
+      }
+      const states = map.pack.states.filter(isLive9);
+      const t = el2("table", "win-table");
+      const head = el2("tr");
+      head.append(el2("th", "", "\u56FD\u5BB6"), el2("th", "", "\u90E8\u968A"));
+      for (const u of UNIT_TYPES) head.append(el2("th", "", `${u.icon} ${u.label}`));
+      head.append(el2("th", "", "\u7DCF\u5175\u54E1"), el2("th", "", "\u7DCF\u6226\u529B"));
+      t.append(head);
+      for (const s of states) {
+        const regs = regimentsOf(s), doc = editActions.getDoctrine(s.i);
+        const tr = el2("tr", `clickable${panels.military.selectedState === s.i ? " active" : ""}`);
+        tr.title = "\u62BC\u3059\u3068\u3001\u3053\u306E\u56FD\u306E\u90E8\u968A\u3092\u4E0B\u3067\u7DE8\u6210\u3067\u304D\u307E\u3059";
+        tr.append(el2("td", "", s.fullName ?? s.name), el2("td", "", String(regs.length)));
+        let head2 = 0, power = 0;
+        for (const u of UNIT_TYPES) tr.append(el2("td", "", regs.reduce((n, r) => n + (r.u?.[u.key] ?? 0), 0).toLocaleString()));
+        for (const r of regs) {
+          head2 += forceHeadcount(r.u);
+          power += forcePower(r.u, doc);
+        }
+        tr.append(el2("td", "", Math.round(head2).toLocaleString()), el2("td", "", Math.round(power).toLocaleString()));
+        tr.addEventListener("click", () => {
+          panels.military.selectState(s.i);
+          renderMil();
+        });
+        t.append(tr);
+      }
+      overview.append(t);
+    }
+    wins.register("military", { title: "\u{1F6E1} \u8ECD\u4E8B", width: 900, body: milBody, onOpen: () => {
+      renderMil();
+      panels.military.render();
+    } });
+    store.subscribe((_s, change) => {
+      if (!["replace", "commit", "undo", "redo"].includes(change.type)) return;
+      if (wins.isOpen("diplomacy")) renderDip();
+      if (wins.isOpen("military")) renderMil();
+    });
+    const menu = byId("settings-menu");
+    menu.addEventListener("click", (e) => {
+      const b = e.target instanceof HTMLElement ? e.target.closest("button") : null;
+      if (!b) return;
+      if (b.dataset.openWin) wins.open(b.dataset.openWin);
+      else if (b.dataset.openList) {
+        actions.setView({ [FILL_KEY[b.dataset.openList]]: true, legendKind: b.dataset.openList });
+        window.dispatchEvent(new Event("request-edit-panel-open"));
+      }
+      menu.open = false;
+    });
+    const sync = (s) => menu.classList.toggle("disabled", !s.map);
+    store.subscribe(sync);
+    sync(store.getState());
+    return wins;
+  }
+
+  // js/ui/highlight.js
+  var HIGHLIGHT_MS = 2600;
+  var FADE_MS = 800;
+  var PULSE_MS = 650;
+  var COLOR = "255, 38, 38";
+  function highlightAlpha(elapsed, total = HIGHLIGHT_MS) {
+    if (elapsed >= total) return 0;
+    if (elapsed < 0) elapsed = 0;
+    const rise = Math.min(1, elapsed / 120);
+    const fade = Math.min(1, (total - elapsed) / FADE_MS);
+    const pulse = 0.8 + 0.2 * Math.cos(elapsed / PULSE_MS * Math.PI * 2);
+    return rise * fade * pulse;
+  }
+  function initHighlight({ store, viewport, renderer }) {
+    const canvas = byId("highlight-canvas");
+    const mapCanvas = byId("map-canvas");
+    const ctx = canvas.getContext("2d");
+    let segs = null, t0 = 0, raf = 0;
+    function syncSize() {
+      if (canvas.width !== mapCanvas.width) canvas.width = mapCanvas.width;
+      if (canvas.height !== mapCanvas.height) canvas.height = mapCanvas.height;
+    }
+    const dprNow = () => window.devicePixelRatio || 1;
+    function draw(now = performance.now()) {
+      syncSize();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (!segs) return false;
+      if (now - t0 >= HIGHLIGHT_MS) {
+        segs = null;
+        return false;
+      }
+      const a = highlightAlpha(now - t0);
+      const dpr = dprNow();
+      ctx.save();
+      viewport.apply(ctx, dpr);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.shadowColor = `rgba(${COLOR}, ${0.9 * a})`;
+      ctx.shadowBlur = 14 * dpr;
+      ctx.strokeStyle = `rgba(${COLOR}, ${0.35 * a})`;
+      ctx.lineWidth = 8 / viewport.k;
+      strokeSegments(ctx, segs);
+      ctx.shadowBlur = 6 * dpr;
+      ctx.strokeStyle = `rgba(255, 70, 60, ${a})`;
+      ctx.lineWidth = 3 / viewport.k;
+      strokeSegments(ctx, segs);
+      ctx.restore();
+      return true;
+    }
+    function tick() {
+      raf = 0;
+      if (draw()) raf = requestAnimationFrame(tick);
+    }
+    function clear() {
+      segs = null;
+      if (raf) {
+        cancelAnimationFrame(raf);
+        raf = 0;
+      }
+      draw();
+    }
+    function show(kind, id) {
+      const map = store.getState().map;
+      const def = ENTITY_KINDS[kind];
+      if (!map?.geometry || !def) return false;
+      const s = entityOutlineSegments(map.geometry, def.cells(map), id, map.pack.cells.biome);
+      if (!s.length) return false;
+      segs = s;
+      t0 = performance.now();
+      if (!raf) raf = requestAnimationFrame(tick);
+      return true;
+    }
+    renderer.onFrame(() => {
+      if (segs) draw();
+    });
+    store.subscribe((_s, change) => {
+      if (change.type === "replace") clear();
+    });
+    return { show, clear, isActive: () => !!segs };
   }
 
   // js/ui/toolbar.js
-  var TOGGLE_IDS = { coast: "chk-coast", rivers: "chk-rivers", routes: "chk-routes", burgs: "chk-burgs", labels: "chk-labels", zones: "chk-zones", journeys: "chk-journeys" };
-  var DEFAULT_ON = /* @__PURE__ */ new Set(["zones", "journeys"]);
-  var PRESETS = {
-    politics: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto" },
-    terrain: { overlay: "none", base: "biome", coast: true, rivers: true, routes: false, burgs: true, labels: true, burgLabels: "capitals" },
-    height: { overlay: "none", base: "height", coast: true, rivers: true, routes: false, burgs: false, labels: false }
-  };
+  var GROUP_TITLE = { base: "\u4E0B\u5730", fill: "\u8272\u5206\u3051", line: "\u7DDA", mark: "\u8A18\u53F7\u30FB\u6587\u5B57" };
   function initToolbar({ store, actions, openFileDialog, openHelp }) {
     byId("btn-open").addEventListener("click", openFileDialog);
     byId("btn-open-empty").addEventListener("click", openFileDialog);
@@ -5068,15 +5556,41 @@
     });
     const annotBoxes = [...menu.querySelectorAll("[data-annot]")];
     for (const box of annotBoxes) box.addEventListener("change", () => actions.setExportOption(box.dataset.annot, box.checked));
-    const selOverlay = byId("sel-overlay");
-    const selBase = byId("sel-base");
-    const selBurgLabels = byId("sel-burg-labels");
-    selOverlay.addEventListener("change", () => actions.setOverlay(selOverlay.value));
-    selBase.addEventListener("change", () => actions.setView({ base: selBase.value }));
-    selBurgLabels.addEventListener("change", () => actions.setView({ burgLabels: selBurgLabels.value }));
-    for (const [name, id] of Object.entries(TOGGLE_IDS)) {
-      byId(id).addEventListener("change", (e) => actions.setView({ [name]: e.target.checked }));
+    const presetBox = byId("layer-presets");
+    const toggleBox = byId("layer-toggles");
+    const presetBtns = /* @__PURE__ */ new Map();
+    for (const p of PRESETS) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.textContent = p.label;
+      b.title = p.title;
+      b.dataset.preset = p.id;
+      b.addEventListener("click", () => actions.applyPreset(p.id));
+      presetBox.append(b);
+      presetBtns.set(p.id, b);
     }
+    const layerBtns = /* @__PURE__ */ new Map();
+    let lastGroup = null;
+    for (const l of LAYERS) {
+      if (l.group !== lastGroup) {
+        const t = document.createElement("span");
+        t.className = "lp-group";
+        t.textContent = GROUP_TITLE[l.group];
+        toggleBox.append(t);
+        lastGroup = l.group;
+      }
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "layer-btn";
+      b.dataset.layer = l.key;
+      b.textContent = l.label;
+      b.title = l.title ?? `${l.label}\u306E\u8868\u793A\u3092\u5207\u308A\u66FF\u3048\u308B`;
+      b.addEventListener("click", () => actions.toggle(l.key));
+      toggleBox.append(b);
+      layerBtns.set(l.key, b);
+    }
+    const selBurgLabels = byId("sel-burg-labels");
+    selBurgLabels.addEventListener("change", () => actions.setView({ burgLabels: selBurgLabels.value }));
     const segs = [...document.querySelectorAll("[data-seg-for]")];
     for (const seg of segs) {
       seg.addEventListener("click", (e) => {
@@ -5087,20 +5601,17 @@
         sel.dispatchEvent(new Event("change", { bubbles: true }));
       });
     }
-    for (const b of document.querySelectorAll("[data-preset]")) b.addEventListener("click", () => actions.setView({ ...PRESETS[b.dataset.preset] }));
     const sync = (state) => {
       const v = state.view;
-      if (selOverlay.value !== v.overlay) selOverlay.value = v.overlay;
-      if (selBase.value !== v.base) selBase.value = v.base;
       if (v.burgLabels && selBurgLabels.value !== v.burgLabels) selBurgLabels.value = v.burgLabels;
       const hasMap = !!state.map;
       btnSave.disabled = !hasMap;
       menu.classList.toggle("disabled", !hasMap);
       if (!hasMap) menu.open = false;
-      for (const [name, id] of Object.entries(TOGGLE_IDS)) {
-        const el9 = byId(id);
-        const want = v[name] ?? DEFAULT_ON.has(name);
-        if (el9.checked !== want) el9.checked = want;
+      for (const [key, btn3] of layerBtns) {
+        const on = isLayerOn(v, key);
+        btn3.classList.toggle("active", on);
+        btn3.setAttribute("aria-pressed", String(on));
       }
       for (const seg of segs) {
         const cur = byId(seg.dataset.segFor).value;
@@ -5110,18 +5621,17 @@
           b.setAttribute("aria-pressed", String(on));
         }
       }
-      for (const b of document.querySelectorAll("[data-preset]")) {
-        const p = PRESETS[b.dataset.preset];
-        const on = Object.entries(p).every(([k, val]) => (v[k] ?? DEFAULT_ON.has(k)) === val);
-        b.classList.toggle("active", on);
-        b.setAttribute("aria-pressed", String(on));
+      for (const p of PRESETS) {
+        const on = presetMatches(v, p), btn3 = presetBtns.get(p.id);
+        btn3.classList.toggle("active", on);
+        btn3.setAttribute("aria-pressed", String(on));
       }
       byId("layers-menu").classList.toggle("disabled", !hasMap);
       const eo = state.exportOpts ?? {};
       for (const box of annotBoxes) {
         const name = box.dataset.annot;
         let reason = "";
-        if (name === "legend" && v.overlay === "none") reason = "\u8272\u5206\u3051\u304C\u300C\u306A\u3057\u300D\u306E\u305F\u3081\u3001\u51E1\u4F8B\u306F\u51FA\u307E\u305B\u3093";
+        if (name === "legend" && !legendKindOf(v)) reason = "\u8272\u5206\u3051\u306E\u30EC\u30A4\u30E4\u30FC\u304C\u3059\u3079\u3066\u30AA\u30D5\u306E\u305F\u3081\u3001\u51E1\u4F8B\u306F\u51FA\u307E\u305B\u3093";
         if (name === "scaleBar" && hasMap && !getScale(state.map)) reason = "\u3053\u306E\u5730\u56F3\u306B\u306F\u7E2E\u5C3A\u306E\u60C5\u5831\u304C\u306A\u3044\u305F\u3081\u3001\u30B9\u30B1\u30FC\u30EB\u30D0\u30FC\u306F\u51FA\u307E\u305B\u3093";
         box.disabled = !!reason;
         box.title = reason;
@@ -5471,8 +5981,7 @@ ${shown}${more}`;
 
   // js/ui/shortcuts.js
   var PAN_STEP = 80;
-  var OVERLAY_KEYS = { 1: "none", 2: "state", 3: "culture", 4: "religion", 5: "province" };
-  var TOGGLE_KEYS = { c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
+  var LAYER_KEYS2 = { 1: "states", 2: "cultures", 3: "religions", 4: "provinces", 5: "heights", b: "biomes", c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
   var TOOL_KEYS = { 1: TOOLS.PAINT_STATE, 2: TOOLS.PAINT_CULTURE, 3: TOOLS.PAINT_RELIGION, 4: TOOLS.PAINT_PROVINCE, 5: TOOLS.PAINT_BIOME, 6: TOOLS.ADD_BURG, 7: TOOLS.ADD_MARKER };
   function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, panels }) {
     document.addEventListener("keydown", (e) => {
@@ -5513,7 +6022,6 @@ ${shown}${more}`;
       }
       if (key === "Escape") {
         panels?.military?.cancelPending();
-        panels?.military?.cancelAttackPick();
       }
       if (key === "?") {
         e.preventDefault();
@@ -5560,9 +6068,7 @@ ${shown}${more}`;
       } else if (key === "ArrowDown") {
         e.preventDefault();
         actions.pan(0, -PAN_STEP);
-      } else if (key in OVERLAY_KEYS) actions.setOverlay(OVERLAY_KEYS[key]);
-      else if (key === "b") actions.toggleBase();
-      else if (key in TOGGLE_KEYS) actions.toggle(TOGGLE_KEYS[key]);
+      } else if (key in LAYER_KEYS2) actions.toggle(LAYER_KEYS2[key]);
     });
   }
   function initHelpDialog() {
@@ -5573,11 +6079,11 @@ ${shown}${more}`;
   }
 
   // js/core/edit/burgs.js
-  var isLive8 = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
+  var isLive10 = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
   var round63 = (v) => Math.round(v * 1e6) / 1e6;
   function estimatePopulation(map, cell, rnd) {
     const idx = cellIndexOf(map);
-    const near = idx.findWithin(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1], map.grid.spacing * 6).map((i) => map.pack.cells.burg[i]).filter((id) => id > 0).map((id) => map.pack.burgs[id]).filter(isLive8);
+    const near = idx.findWithin(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1], map.grid.spacing * 6).map((i) => map.pack.cells.burg[i]).filter((id) => id > 0).map((id) => map.pack.burgs[id]).filter(isLive10);
     const base = near.length ? near.map((b) => b.population).sort((a, b) => a - b)[near.length >> 1] : Math.max(0.05, (map.pack.cells.pop[cell] ?? 1) * 0.25);
     const jitter = rnd ? rnd.float(0.6, 1.4) : 1;
     return Math.max(0.01, Math.round(base * jitter * 1e3) / 1e3);
@@ -5628,7 +6134,7 @@ ${shown}${more}`;
     if (religion1 && typeof religion1.urban === "number") parts.push(setProps(religion1, { urban: round63(religion1.urban + burg.population) }));
     if (capital && state1) {
       const oldCapital = map.pack.burgs[state1.capital];
-      if (isLive8(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
+      if (isLive10(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
       parts.push({ apply: (m) => {
         m.pack.burgs[id].capital = 1;
       }, revert: (m) => {
@@ -5640,7 +6146,7 @@ ${shown}${more}`;
   }
   function planMoveBurg(map, id, cell) {
     const burg = map.pack.burgs[id];
-    if (!isLive8(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive10(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const c = map.pack.cells;
     if (burg.cell === cell) return null;
     if (cell < 0 || cell >= c.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
@@ -5684,7 +6190,7 @@ ${shown}${more}`;
   }
   function planRenameBurg(map, id, name) {
     const burg = map.pack.burgs[id];
-    if (!isLive8(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive10(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u90FD\u5E02\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (trimmed === burg.name) return null;
@@ -5692,7 +6198,7 @@ ${shown}${more}`;
   }
   function whyCannotRemoveBurg(map, id) {
     const burg = map.pack.burgs[id];
-    if (!isLive8(burg)) return "\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093";
+    if (!isLive10(burg)) return "\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093";
     if (burg.capital) return "\u9996\u90FD\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B\u5225\u306E\u90FD\u5E02\u3092\u9996\u90FD\u306B\u3057\u3066\u304F\u3060\u3055\u3044";
     if (map.markets?.some((m) => m.centerBurgId === id)) return "\u5E02\u5834\u306E\u4E2D\u5FC3\u90FD\u5E02\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093";
     return null;
@@ -5721,32 +6227,30 @@ ${shown}${more}`;
     if (religion && typeof religion.urban === "number") parts.push(setProps(religion, { urban: round63(Math.max(0, religion.urban - burg.population)) }));
     const notePart = removeLegacyNotesPart(map, "burg", id);
     if (notePart) parts.push(notePart);
-    const attrPart = removeAttributesPart(map, "burg", id);
-    if (attrPart) parts.push(attrPart);
     return makeCommand("\u90FD\u5E02\u3092\u524A\u9664", ["places"], parts);
   }
   function planSetCapital(map, stateId, burgId) {
     const state = map.pack.states[stateId];
     if (!state || !state.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const burg = map.pack.burgs[burgId];
-    if (!isLive8(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive10(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (burg.state !== stateId) throw new Error("\u9996\u90FD\u306F\u81EA\u56FD\u5185\u306E\u90FD\u5E02\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (state.capital === burgId) return null;
     const parts = [];
     const oldCapital = map.pack.burgs[state.capital];
-    if (isLive8(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
+    if (isLive10(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
     parts.push(setProps(burg, { capital: 1 }), setProps(state, { capital: burgId, center: burg.cell }));
     return makeCommand("\u9996\u90FD\u3092\u5909\u66F4", ["places"], parts);
   }
 
   // js/core/edit/entities.js
   var LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive9 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive11 = (e) => !!e && typeof e === "object" && !e.removed;
   function planRenameEntity(map, kind, id, name) {
     const listKey = LIST_KEY[kind];
     if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306E\u540D\u524D\u306F\u5909\u66F4\u3067\u304D\u307E\u305B\u3093");
     const e = map.pack[listKey]?.[id];
-    if (!isLive9(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive11(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const field = "fullName" in e ? "fullName" : "name";
@@ -5780,7 +6284,7 @@ ${shown}${more}`;
     if (!trimmed) throw new Error(`${LABEL_OF[kind]}\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044`);
     const existing = map.pack[listKey];
     const id = existing.length || 1;
-    const liveCount = existing.filter(isLive9).length;
+    const liveCount = existing.filter(isLive11).length;
     const entity = {
       i: id,
       name: trimmed,
@@ -5806,12 +6310,12 @@ ${shown}${more}`;
   }
   function planAddProvince(map, { state, name, rnd }) {
     const owner = map.pack.states[state];
-    if (!isLive9(owner) || !owner.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive11(owner) || !owner.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u5C5E\u5DDE\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const existing = map.pack.provinces;
     const id = existing.length || 1;
-    const liveCount = existing.filter(isLive9).length;
+    const liveCount = existing.filter(isLive11).length;
     const entity = {
       i: id,
       state,
@@ -5853,8 +6357,8 @@ ${shown}${more}`;
     Anarchy: { salesTax: 0, pollTax: 0 }
   });
   var FALLBACK_TAX = TAX_BASE.Monarchy;
-  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var round2 = (v) => Math.round(v * 100) / 100;
+  var isLive12 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var round22 = (v) => Math.round(v * 100) / 100;
   var clamp012 = (v) => Math.min(1, Math.max(0, Number.isFinite(+v) ? +v : 0));
   function getFinance(state) {
     const base = TAX_BASE[state.form] ?? FALLBACK_TAX;
@@ -5877,7 +6381,7 @@ ${shown}${more}`;
     const { biome, state, pop } = map.pack.cells;
     const isCoast = coastalTest(map);
     const sums = /* @__PURE__ */ new Map(), prod = /* @__PURE__ */ new Map();
-    for (const s of map.pack.states) if (isLive10(s)) {
+    for (const s of map.pack.states) if (isLive12(s)) {
       prod.set(s.i, Object.fromEntries(GOODS.map((g) => [g.id, 0])));
       sums.set(s.i, 0);
     }
@@ -5899,9 +6403,9 @@ ${shown}${more}`;
       const out = prod.get(s.i);
       const cellPop = sums.get(s.i);
       const k = cellPop > 0 && typeof s.rural === "number" ? s.rural / cellPop : 1;
-      for (const g of GOODS) out[g.id] = round2(out[g.id] * k);
+      for (const g of GOODS) out[g.id] = round22(out[g.id] * k);
       const tech = typeof s.techLevel === "number" ? s.techLevel : 3;
-      out.crafts = round2((s.urban ?? 0) * (0.3 + 0.08 * (tech - 1)));
+      out.crafts = round22((s.urban ?? 0) * (0.3 + 0.08 * (tech - 1)));
     }
     return prod;
   }
@@ -5912,7 +6416,7 @@ ${shown}${more}`;
     for (const g of GOODS) {
       let per = g.need;
       if (g.id === "crafts" || g.id === "metal") per *= 1 + (tech - 3) * 0.12;
-      d[g.id] = round2(pop * Math.max(0, per));
+      d[g.id] = round22(pop * Math.max(0, per));
     }
     return d;
   }
@@ -5948,13 +6452,13 @@ ${shown}${more}`;
     const adjacent = stateAdjacency(map);
     const diag = Math.hypot(map.meta.width || 1280, map.meta.height || 774);
     const ctx = { wars, adjacent, diag };
-    const live3 = map.pack.states.filter(isLive10);
+    const live3 = map.pack.states.filter(isLive12);
     const production = computeProduction(map);
     const info = /* @__PURE__ */ new Map();
     for (const s of live3) {
       const demand = computeDemand(s);
       const prod = production.get(s.i);
-      const net = Object.fromEntries(GOODS.map((g) => [g.id, round2(prod[g.id] - demand[g.id])]));
+      const net = Object.fromEntries(GOODS.map((g) => [g.id, round22(prod[g.id] - demand[g.id])]));
       info.set(s.i, { production: prod, demand, net, exports: 0, imports: 0, exportValue: 0, importValue: 0, salesTaxRevenue: 0, pollTaxRevenue: 0 });
     }
     const deals = [];
@@ -5968,33 +6472,33 @@ ${shown}${more}`;
           if (need < 0.01) break;
           const left = remaining.get(c.e);
           if (left < 0.01) continue;
-          const units = round2(Math.min(left, need * Math.min(1, c.score * 1.1)));
+          const units = round22(Math.min(left, need * Math.min(1, c.score * 1.1)));
           if (units < 0.01) continue;
-          const price = round2(g.value * (1 + 0.15 * (1 - Math.min(1, c.aff))));
-          const value = round2(units * price);
-          const tax = round2(value * c.tax);
+          const price = round22(g.value * (1 + 0.15 * (1 - Math.min(1, c.aff))));
+          const value = round22(units * price);
+          const tax = round22(value * c.tax);
           deals.push({ from: c.e, to: imp.i, good: g.id, units, price, value, tax });
-          remaining.set(c.e, round2(left - units));
-          need = round2(need - units);
+          remaining.set(c.e, round22(left - units));
+          need = round22(need - units);
         }
       }
     }
     for (const d of deals) {
       const a = info.get(d.from), b = info.get(d.to);
       a.exports += d.units;
-      a.exportValue = round2(a.exportValue + d.value);
-      a.salesTaxRevenue = round2(a.salesTaxRevenue + d.tax);
+      a.exportValue = round22(a.exportValue + d.value);
+      a.salesTaxRevenue = round22(a.salesTaxRevenue + d.tax);
       b.imports += d.units;
-      b.importValue = round2(b.importValue + d.value);
+      b.importValue = round22(b.importValue + d.value);
     }
     for (const s of live3) {
       const f = getFinance(s);
-      info.get(s.i).pollTaxRevenue = round2(f.pollTax * ((s.rural ?? 0) + (s.urban ?? 0)));
+      info.get(s.i).pollTaxRevenue = round22(f.pollTax * ((s.rural ?? 0) + (s.urban ?? 0)));
     }
     return { states: info, deals };
   }
   function annualRevenue(tradeInfo) {
-    return round2(tradeInfo.pollTaxRevenue + tradeInfo.salesTaxRevenue);
+    return round22(tradeInfo.pollTaxRevenue + tradeInfo.salesTaxRevenue);
   }
   function tradePartners(trade, stateId) {
     const by = /* @__PURE__ */ new Map();
@@ -6002,8 +6506,8 @@ ${shown}${more}`;
       if (d.from !== stateId && d.to !== stateId) continue;
       const p = d.from === stateId ? d.to : d.from;
       const e = by.get(p) ?? { partner: p, exportValue: 0, importValue: 0, goods: /* @__PURE__ */ new Set() };
-      if (d.from === stateId) e.exportValue = round2(e.exportValue + d.value);
-      else e.importValue = round2(e.importValue + d.value);
+      if (d.from === stateId) e.exportValue = round22(e.exportValue + d.value);
+      else e.importValue = round22(e.importValue + d.value);
       e.goods.add(d.good);
       by.set(p, e);
     }
@@ -6011,10 +6515,10 @@ ${shown}${more}`;
   }
 
   // js/core/edit/finance.js
-  var isLive11 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive13 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planSetFinance(map, stateId, patch) {
     const s = map.pack.states[stateId];
-    if (!isLive11(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive13(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const before = getFinance(s);
     const after = {};
     if (patch.salesTax !== void 0) after.salesTax = Math.round(clampRate(patch.salesTax) * 100) / 100;
@@ -6032,7 +6536,7 @@ ${shown}${more}`;
 
   // js/core/edit/profile.js
   var round64 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive12 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   var CULTURE_TYPES = Object.freeze([
     { id: "Generic", label: "\u6A19\u6E96" },
     { id: "River", label: "\u6CB3\u5DDD" },
@@ -6080,7 +6584,7 @@ ${shown}${more}`;
     const list = map.pack[ENTITY_LIST[kind]];
     if (!list) throw new Error("\u3053\u306E\u7A2E\u985E\u306F\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093");
     const e = list[id];
-    if (!isLive12(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive14(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const next = {};
     const text2 = (k, v, max = 60) => {
       const t = String(v ?? "").trim();
@@ -6109,7 +6613,7 @@ ${shown}${more}`;
     const list = map.pack[ENTITY_LIST[kind]] ?? [];
     const parent = /* @__PURE__ */ new Map(), children = /* @__PURE__ */ new Map();
     for (const e of list) {
-      if (!isLive12(e)) continue;
+      if (!isLive14(e)) continue;
       const p = parentOf(e);
       parent.set(e.i, p);
       if (!children.has(p)) children.set(p, []);
@@ -6131,8 +6635,8 @@ ${shown}${more}`;
     if (kind !== "culture" && kind !== "religion") throw new Error("\u8D77\u6E90\u3092\u6301\u3064\u306E\u306F\u6587\u5316\u3068\u5B97\u6559\u3060\u3051\u3067\u3059");
     const list = map.pack[ENTITY_LIST[kind]];
     const e = list[id];
-    if (!isLive12(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    if (parentId !== 0 && !isLive12(list[parentId])) throw new Error("\u8D77\u6E90\u306B\u6307\u5B9A\u3057\u305F\u5BFE\u8C61\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive14(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (parentId !== 0 && !isLive14(list[parentId])) throw new Error("\u8D77\u6E90\u306B\u6307\u5B9A\u3057\u305F\u5BFE\u8C61\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (parentId === id) throw new Error("\u81EA\u5206\u81EA\u8EAB\u3092\u8D77\u6E90\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
     if (descendantsOf(map, kind, id).includes(parentId)) throw new Error("\u81EA\u5206\u306E\u5B50\u5B6B\u3092\u8D77\u6E90\u306B\u306F\u3067\u304D\u307E\u305B\u3093\uFF08\u7CFB\u7D71\u304C\u8F2A\u306B\u306A\u308A\u307E\u3059\uFF09");
     if (parentOf(e) === parentId && Array.isArray(e.origins) && e.origins.length === 1) return null;
@@ -6173,49 +6677,16 @@ ${shown}${more}`;
     return makeCommand(`\u90FD\u5E02\u306E\u8A2D\u5B9A\u3092\u5909\u66F4\uFF08${b.name}\uFF09`, ["places"], parts);
   }
 
-  // js/core/sim/economy.js
-  var TECH_MIN = 1;
-  var TECH_MAX = 10;
-  var GROWTH_RATE_BY_TECH = (tech) => 6e-3 + (tech - 1) * 16e-4;
-  var INDUSTRY_PER_CAPITA_BY_TECH = (tech) => 0.05 + (tech - 1) * 0.09;
-  function ensureEconomy(state) {
-    if (typeof state.techLevel !== "number") state.techLevel = 3;
-    if (typeof state.industry !== "number") state.industry = 0;
-    if (typeof state.popCarryCap !== "number") {
-      state.popCarryCap = Math.max(1, (state.rural ?? 0) + (state.urban ?? 0)) * 3;
-    }
-    return state;
-  }
-  function computeAnnualUpdate(state) {
-    const tech = clampTech(state.techLevel ?? 3);
-    const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
-    const cap = Math.max(1, state.popCarryCap ?? (pop * 3 || 1));
-    const r = GROWTH_RATE_BY_TECH(tech);
-    const growth = pop > 0 ? r * pop * (1 - pop / cap) : 0;
-    const newPop = Math.max(0, pop + growth);
-    const ratio = pop > 0 ? (state.urban ?? 0) / pop : 0.3;
-    const newUrban = round22((state.urban ?? 0) + growth * ratio);
-    const newRural = round22(newPop - newUrban);
-    const industry = round22(newPop / 1e3 * INDUSTRY_PER_CAPITA_BY_TECH(tech));
-    return { rural: newRural, urban: newUrban, industry };
-  }
-  function clampTech(v) {
-    return Math.min(TECH_MAX, Math.max(TECH_MIN, Math.round(v)));
-  }
-  function round22(v) {
-    return Math.round(v * 100) / 100;
-  }
-
   // js/core/edit/economy.js
-  var isLive13 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive15 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getTechLevel(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive13(s)) return null;
+    if (!isLive15(s)) return null;
     return typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
   }
   function planSetTechLevel(map, stateId, value) {
     const s = map.pack.states[stateId];
-    if (!isLive13(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive15(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const after = clampTech(value);
     const before = typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
     if (before === after) return null;
@@ -6223,15 +6694,15 @@ ${shown}${more}`;
   }
 
   // js/core/edit/military-doctrine.js
-  var isLive14 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive16 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getDoctrine(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive14(s)) return null;
+    if (!isLive16(s)) return null;
     return DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
   }
   function planSetDoctrine(map, stateId, doctrineKey) {
     const s = map.pack.states[stateId];
-    if (!isLive14(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive16(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (!DOCTRINE_BY_KEY[doctrineKey]) throw new Error("\u4E0D\u660E\u306A\u30C9\u30AF\u30C8\u30EA\u30F3\u3067\u3059");
     const before = DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
     if (before === doctrineKey) return null;
@@ -6380,12 +6851,6 @@ ${shown}${more}`;
       },
       noteTarget(type, id) {
         return withMap((map) => noteTarget(map, type, id)) ?? null;
-      },
-      getAttributes(kind, id) {
-        return withMap((map) => getAttributes(map, kind, id)) ?? [];
-      },
-      setAttributes(kind, id, entries) {
-        withMap((map) => safeRun("\u5C5E\u6027\u306E\u4FDD\u5B58", () => commitOrThrow(planSetAttributes(map, kind, id, entries))));
       },
       getRelation(a, b) {
         return withMap((map) => getRelation(map, a, b)) ?? null;
@@ -6593,8 +7058,8 @@ ${shown}${more}`;
   function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLabel, danger, suggest, hint }) {
     const dialog = document.createElement("dialog");
     dialog.className = "confirm-dialog";
-    if (title) dialog.append(el("h2", null, title));
-    if (bodyText) dialog.append(el("p", null, bodyText));
+    if (title) dialog.append(el3("h2", null, title));
+    if (bodyText) dialog.append(el3("p", null, bodyText));
     let input = null;
     if (showInput) {
       input = document.createElement("input");
@@ -6605,7 +7070,7 @@ ${shown}${more}`;
     }
     let suggestBtn = null;
     if (input && suggest) {
-      suggestBtn = el("button", "suggest-btn", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3092\u751F\u6210");
+      suggestBtn = el3("button", "suggest-btn", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3092\u751F\u6210");
       suggestBtn.type = "button";
       suggestBtn.addEventListener("click", () => {
         const v = suggest();
@@ -6617,23 +7082,23 @@ ${shown}${more}`;
       });
       dialog.append(suggestBtn);
     }
-    if (hint) dialog.append(el("p", "hint", hint));
-    const actions = el("div", "confirm-dialog-actions");
+    if (hint) dialog.append(el3("p", "hint", hint));
+    const actions = el3("div", "confirm-dialog-actions");
     let cancelBtn = null;
     if (cancelLabel !== null) {
-      cancelBtn = el("button", "", cancelLabel ?? "\u30AD\u30E3\u30F3\u30BB\u30EB");
+      cancelBtn = el3("button", "", cancelLabel ?? "\u30AD\u30E3\u30F3\u30BB\u30EB");
       cancelBtn.type = "button";
       cancelBtn.value = "cancel";
       actions.append(cancelBtn);
     }
-    const okBtn = el("button", danger ? "danger" : "primary", okLabel ?? "OK");
+    const okBtn = el3("button", danger ? "danger" : "primary", okLabel ?? "OK");
     okBtn.type = "button";
     actions.append(okBtn);
     dialog.append(actions);
     document.body.append(dialog);
     return { dialog, input, okBtn, cancelBtn, suggestBtn };
   }
-  function el(tag, cls, text2) {
+  function el3(tag, cls, text2) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
@@ -6701,7 +7166,7 @@ ${shown}${more}`;
 
   // js/ui/edit-toolbar.js
   var TARGET_LIST = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive17 = (e) => !!e && typeof e === "object" && !e.removed;
   var NEW_VALUE = "__new__";
   function initEditToolbar({ store, editMode, editActions }) {
     const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
@@ -6744,7 +7209,7 @@ ${shown}${more}`;
       erase.value = "0";
       erase.textContent = `\uFF08${PAINT_KINDS[kind].label}\u306A\u3057\u306B\u3059\u308B\uFF09`;
       targetSel.append(erase);
-      const list = map.pack[TARGET_LIST[kind]].filter(isLive15);
+      const list = map.pack[TARGET_LIST[kind]].filter(isLive17);
       for (const e of list) {
         const o = document.createElement("option");
         o.value = e.i;
@@ -6970,15 +7435,14 @@ ${shown}${more}`;
       const m = store.getState().map;
       return m ? fn(m) : void 0;
     };
-    let savedOverlay = null;
+    let savedFills = null;
     function showOverlay(kind) {
-      const cur = store.getState().view.overlay;
-      if (savedOverlay == null) savedOverlay = cur;
-      if (cur !== kind) actions.setOverlay(kind);
+      if (savedFills == null) savedFills = actions.getFills();
+      actions.setOverlay(kind);
     }
     function restoreOverlay() {
-      if (savedOverlay != null && store.getState().view.overlay !== savedOverlay) actions.setOverlay(savedOverlay);
-      savedOverlay = null;
+      if (savedFills != null) actions.restoreFills(savedFills);
+      savedFills = null;
     }
     function beginPaint(kind, id) {
       showOverlay(kind);
@@ -7082,28 +7546,28 @@ ${shown}${more}`;
   }
 
   // js/ui/kit.js
-  function el2(tag, cls, text2) {
+  function el4(tag, cls, text2) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   }
   function btn(cls, text2, title, onClick) {
-    const b = el2("button", cls, text2);
+    const b = el4("button", cls, text2);
     b.type = "button";
     if (title) b.title = title;
     b.addEventListener("click", onClick);
     return b;
   }
   function swatch(color, tall = true) {
-    const s = el2("span", "b-swatch");
+    const s = el4("span", "b-swatch");
     s.style.background = color ?? "#888";
     if (!tall) s.style.height = "14px";
     return s;
   }
   function slider({ label, min, max, step, value, format, onCommit }) {
-    const wrap = el2("label", "b-field");
-    const val = el2("span", "b-mini", `${label} ${format(value)}`);
+    const wrap = el4("label", "b-field");
+    const val = el4("span", "b-mini", `${label} ${format(value)}`);
     const r = document.createElement("input");
     r.type = "range";
     r.min = String(min);
@@ -7117,14 +7581,14 @@ ${shown}${more}`;
     wrap.append(val, r);
     return wrap;
   }
-  var isLive16 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive18 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 
   // js/ui/profile-fields.js
   var LIST_KEY2 = { state: "states", culture: "cultures", religion: "religions" };
   var live2 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function selectField(label, options, value, onChange, hint) {
-    const f = el2("label", "b-field");
-    f.append(el2("span", "b-mini", label));
+    const f = el4("label", "b-field");
+    f.append(el4("span", "b-mini", label));
     const sel = document.createElement("select");
     for (const o of options) sel.append(new Option(o.label, String(o.id)));
     if (!options.some((o) => String(o.id) === String(value))) sel.append(new Option(String(value ?? "\uFF08\u672A\u8A2D\u5B9A\uFF09"), String(value ?? "")));
@@ -7135,8 +7599,8 @@ ${shown}${more}`;
     return f;
   }
   function textField(label, value, onChange) {
-    const f = el2("label", "b-field");
-    f.append(el2("span", "b-mini", label));
+    const f = el4("label", "b-field");
+    f.append(el4("span", "b-mini", label));
     const inp = document.createElement("input");
     inp.value = value ?? "";
     inp.addEventListener("change", () => {
@@ -7162,17 +7626,17 @@ ${shown}${more}`;
     d.append(selectField("\u8D77\u6E90\uFF08\u3069\u3053\u304B\u3089\u5206\u304B\u308C\u305F\u304B\uFF09", opts, editActions.originOf(kind, e.i), (v) => editActions.setOrigin(kind, e.i, Number(v))));
     const kids = editActions.descendantsOf(kind, e.i).map((i) => map.pack[LIST_KEY2[kind]][i]).filter(live2);
     if (kids.length) {
-      const row = el2("div", "b-kids");
-      row.append(el2("span", "b-mini", "\u3053\u3053\u304B\u3089\u5206\u304B\u308C\u305F"));
+      const row = el4("div", "b-kids");
+      row.append(el4("span", "b-mini", "\u3053\u3053\u304B\u3089\u5206\u304B\u308C\u305F"));
       for (const k of kids.slice(0, 8)) row.append(btn("b-chip", k.name, "\u3053\u306E\u9805\u76EE\u3092\u958B\u304F", () => openEntity?.(kind, k.i)));
-      if (kids.length > 8) row.append(el2("span", "b-mini", `\u307B\u304B${kids.length - 8}`));
+      if (kids.length > 8) row.append(el4("span", "b-mini", `\u307B\u304B${kids.length - 8}`));
       d.append(row);
     }
   }
   function burgDetails(b, { editActions, map }) {
-    const d = el2("div", "b-details");
-    const pop = el2("label", "b-field");
-    pop.append(el2("span", "b-mini", "\u4EBA\u53E3\uFF08\u5343\u4EBA\u3002\u56FD\u306E\u90FD\u5E02\u4EBA\u53E3\u306B\u3082\u53CD\u6620\uFF09"));
+    const d = el4("div", "b-details");
+    const pop = el4("label", "b-field");
+    pop.append(el4("span", "b-mini", "\u4EBA\u53E3\uFF08\u5343\u4EBA\u3002\u56FD\u306E\u90FD\u5E02\u4EBA\u53E3\u306B\u3082\u53CD\u6620\uFF09"));
     const inp = document.createElement("input");
     inp.type = "number";
     inp.min = "0";
@@ -7184,20 +7648,20 @@ ${shown}${more}`;
     d.append(selectField("\u533A\u5206", BURG_GROUPS, b.group, (v) => editActions.setBurgProfile(b.i, { group: v }), b.capital ? "\u9996\u90FD\u306E\u533A\u5206\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093" : ""));
     d.querySelector("select:last-of-type")?.toggleAttribute("disabled", !!b.capital);
     d.append(selectField("\u7A2E\u985E", CULTURE_TYPES, b.type ?? "Generic", (v) => editActions.setBurgProfile(b.i, { type: v })));
-    const feats = el2("div", "b-feats");
-    feats.append(el2("span", "b-mini", "\u8A2D\u5099"));
+    const feats = el4("div", "b-feats");
+    feats.append(el4("span", "b-mini", "\u8A2D\u5099"));
     for (const f of BURG_FEATURES) {
-      const lab = el2("label", "b-feat");
+      const lab = el4("label", "b-feat");
       const cb = document.createElement("input");
       cb.type = "checkbox";
       cb.checked = !!b[f.id];
       cb.addEventListener("change", () => editActions.setBurgProfile(b.i, { [f.id]: cb.checked }));
-      lab.append(cb, el2("span", "", `${f.icon} ${f.label}`));
+      lab.append(cb, el4("span", "", `${f.icon} ${f.label}`));
       feats.append(lab);
     }
     d.append(feats);
-    if (b.port) d.append(el2("p", "b-hint", "\u2693 \u6E2F\u304C\u3042\u308A\u307E\u3059\uFF08\u6E2F\u306E\u6709\u7121\u306F\u3001\u3053\u3053\u3067\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093\uFF09"));
-    const foot = el2("div", "b-actions");
+    if (b.port) d.append(el4("p", "b-hint", "\u2693 \u6E2F\u304C\u3042\u308A\u307E\u3059\uFF08\u6E2F\u306E\u6709\u7121\u306F\u3001\u3053\u3053\u3067\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093\uFF09"));
+    const foot = el4("div", "b-actions");
     const st = map.pack.states[b.state];
     if (!b.capital && st && st.i) foot.append(btn("", "\u9996\u90FD\u306B\u3059\u308B", `${st.name}\u306E\u9996\u90FD\u3092\u3053\u306E\u90FD\u5E02\u306B\u3059\u308B`, () => editActions.setCapital(b.state, b.i)));
     d.append(foot);
@@ -7208,15 +7672,15 @@ ${shown}${more}`;
   // js/ui/history-builder.js
   var LIST_KEY3 = { state: "states", culture: "cultures", religion: "religions" };
   var ICON = { state: "\u{1F3F3}", religion: "\u2628", culture: "\u2616" };
-  var isLive17 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  function el3(tag, cls, text2) {
+  var isLive19 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function el5(tag, cls, text2) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   }
   function btn2(cls, text2, title, onClick) {
-    const b = el3("button", cls, text2);
+    const b = el5("button", cls, text2);
     b.type = "button";
     if (title) b.title = title;
     b.addEventListener("click", onClick);
@@ -7247,7 +7711,7 @@ ${shown}${more}`;
       render();
     }
     function modeTabs() {
-      const bar = el3("div", "b-modes");
+      const bar = el5("div", "b-modes");
       for (const [key, label] of MODES) {
         if (key !== "build" && !views[key]) continue;
         bar.append(btn2(`b-mode${mode === key ? " on" : ""}`, label, "", () => setMode(key)));
@@ -7288,12 +7752,12 @@ ${shown}${more}`;
       if (isOpen() && editFab.getAttribute("aria-expanded") !== "true") close();
     }, true);
     function swatch2(e) {
-      const s = el3("span", "b-swatch");
+      const s = el5("span", "b-swatch");
       s.style.background = e.color ?? "#888";
       return s;
     }
     function provBadge(kind, id) {
-      return editActions.isProvisional(kind, id) ? el3("span", "b-badge", "\u4EEE") : null;
+      return editActions.isProvisional(kind, id) ? el5("span", "b-badge", "\u4EEE") : null;
     }
     function startPaint(kind, id) {
       task = { kind, id, size: task?.size ?? "m", autoCapital: task?.autoCapital ?? true, status: "\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u3001\u9818\u571F\u3092\u5857\u3063\u3066\u304F\u3060\u3055\u3044" };
@@ -7326,19 +7790,19 @@ ${shown}${more}`;
       render();
     }
     function quickSection() {
-      const sec = el3("section", "b-sec");
-      sec.append(el3("h4", "b-title", "\u304B\u3093\u305F\u3093\u4F5C\u6210"));
-      const grid = el3("div", "b-quick");
+      const sec = el5("section", "b-sec");
+      sec.append(el5("h4", "b-title", "\u304B\u3093\u305F\u3093\u4F5C\u6210"));
+      const grid = el5("div", "b-quick");
       const defs = [
         ["state", "\u56FD\u3092\u5EFA\u3066\u308B", "\u4EEE\u306E\u540D\u524D\u3067\u56FD\u3092\u4F5C\u308A\u3001\u9818\u571F\u3092\u6C7A\u3081\u308B"],
         ["religion", "\u5B97\u6559\u3092\u8208\u3059", "\u4EEE\u306E\u540D\u524D\u3067\u5B97\u6559\u3092\u4F5C\u308A\u3001\u4FE1\u8005\u306E\u571F\u5730\u3092\u6C7A\u3081\u308B"],
         ["culture", "\u6587\u5316\u3092\u52A0\u3048\u308B", "\u4EEE\u306E\u540D\u524D\u3067\u6587\u5316\u3092\u4F5C\u308A\u3001\u305D\u306E\u571F\u5730\u3092\u6C7A\u3081\u308B"]
       ];
       for (const [kind, label, tip] of defs) {
-        const b = el3("button", "b-quick-btn");
+        const b = el5("button", "b-quick-btn");
         b.type = "button";
         b.title = tip;
-        b.append(el3("span", "b-quick-icon", ICON[kind]), el3("span", "b-quick-label", label));
+        b.append(el5("span", "b-quick-icon", ICON[kind]), el5("span", "b-quick-label", label));
         b.addEventListener("click", () => {
           const id = builderActions.create(kind, styleOpt());
           if (id == null) return;
@@ -7348,9 +7812,9 @@ ${shown}${more}`;
         grid.append(b);
       }
       sec.append(grid);
-      const more = el3("details", "b-more");
+      const more = el5("details", "b-more");
       if (nameStyle) more.open = true;
-      more.append(el3("summary", "", nameStyle ? `\u540D\u524D\u306E\u96F0\u56F2\u6C17\uFF1A${NAME_STYLES[nameStyle].label}` : "\u540D\u524D\u306E\u96F0\u56F2\u6C17\u3092\u6307\u5B9A\u3059\u308B\uFF08\u4EFB\u610F\uFF09"));
+      more.append(el5("summary", "", nameStyle ? `\u540D\u524D\u306E\u96F0\u56F2\u6C17\uFF1A${NAME_STYLES[nameStyle].label}` : "\u540D\u524D\u306E\u96F0\u56F2\u6C17\u3092\u6307\u5B9A\u3059\u308B\uFF08\u4EFB\u610F\uFF09"));
       const sel = document.createElement("select");
       sel.append(new Option("\u304A\u307E\u304B\u305B\uFF08\u6BCE\u56DE\u3070\u3089\u3070\u3089\uFF09", ""));
       for (const k of STYLE_KEYS) sel.append(new Option(NAME_STYLES[k].label, k));
@@ -7359,23 +7823,23 @@ ${shown}${more}`;
         nameStyle = sel.value;
         render();
       });
-      more.append(sel, el3("p", "b-hint", "\u6307\u5B9A\u3059\u308B\u3068\u3001\u3053\u308C\u304B\u3089\u4F5C\u308B\u540D\u524D\u3068\u{1F3B2}\u304C\u305D\u306E\u96F0\u56F2\u6C17\u306B\u306A\u308A\u307E\u3059\u3002"));
+      more.append(sel, el5("p", "b-hint", "\u6307\u5B9A\u3059\u308B\u3068\u3001\u3053\u308C\u304B\u3089\u4F5C\u308B\u540D\u524D\u3068\u{1F3B2}\u304C\u305D\u306E\u96F0\u56F2\u6C17\u306B\u306A\u308A\u307E\u3059\u3002"));
       sec.append(more);
       return sec;
     }
     function taskSection() {
       if (!task) return null;
       const e = ent(task.kind, task.id);
-      if (!isLive17(e)) {
+      if (!isLive19(e)) {
         task = null;
         return null;
       }
       const label = builderActions.KIND_LABEL[task.kind];
-      const sec = el3("section", "b-task");
-      const head = el3("div", "b-task-head");
-      head.append(swatch2(e), el3("span", "b-task-kind", `${label}\u3092\u4F5C\u6210\u4E2D`));
+      const sec = el5("section", "b-task");
+      const head = el5("div", "b-task-head");
+      head.append(swatch2(e), el5("span", "b-task-kind", `${label}\u3092\u4F5C\u6210\u4E2D`));
       sec.append(head);
-      const nameRow = el3("div", "b-namerow");
+      const nameRow = el5("div", "b-namerow");
       const input = document.createElement("input");
       input.value = nameOf2(e);
       input.setAttribute("aria-label", `${label}\u306E\u540D\u524D`);
@@ -7388,9 +7852,9 @@ ${shown}${more}`;
       const badge = provBadge(task.kind, task.id);
       if (badge) nameRow.append(badge);
       sec.append(nameRow);
-      sec.append(el3("p", "b-status", task.status));
+      sec.append(el5("p", "b-status", task.status));
       const free = builderActions.freeLand(task.kind);
-      const how = el3("div", "b-how");
+      const how = el5("div", "b-how");
       const drag = btn2(`b-seg${task.mode === "auto" ? "" : " active"}`, "\u270B \u30C9\u30E9\u30C3\u30B0\u3067\u5857\u308B", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u9818\u571F\u3092\u6C7A\u3081\u308B", () => {
         task.mode = "drag";
         task.status = "\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u3001\u9818\u571F\u3092\u5857\u3063\u3066\u304F\u3060\u3055\u3044";
@@ -7401,8 +7865,8 @@ ${shown}${more}`;
       auto.disabled = !free;
       how.append(drag, auto);
       sec.append(how);
-      const sizeRow = el3("div", "b-sizes");
-      sizeRow.append(el3("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5927\u304D\u3055"));
+      const sizeRow = el5("div", "b-sizes");
+      sizeRow.append(el5("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5927\u304D\u3055"));
       for (const [k, v] of Object.entries(builderActions.TERRITORY_SIZES)) {
         sizeRow.append(btn2(`b-chip${task.size === k ? " on" : ""}`, v.label, "", () => {
           task.size = k;
@@ -7410,8 +7874,8 @@ ${shown}${more}`;
         }));
       }
       sec.append(sizeRow);
-      const brush = el3("label", "b-brush");
-      brush.append(el3("span", "b-mini", "\u30D6\u30E9\u30B7"));
+      const brush = el5("label", "b-brush");
+      brush.append(el5("span", "b-mini", "\u30D6\u30E9\u30B7"));
       const rng = document.createElement("input");
       rng.type = "range";
       rng.min = "10";
@@ -7421,17 +7885,17 @@ ${shown}${more}`;
       brush.append(rng);
       sec.append(brush);
       if (task.kind === "state") {
-        const lab = el3("label", "b-check");
+        const lab = el5("label", "b-check");
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = task.autoCapital;
         cb.addEventListener("change", () => {
           task.autoCapital = cb.checked;
         });
-        lab.append(cb, el3("span", "", "\u5B8C\u4E86\u3057\u305F\u3089\u9996\u90FD\u3092\u81EA\u52D5\u3067\u7F6E\u304F\uFF08\u4EEE\u306E\u540D\u524D\uFF09"));
+        lab.append(cb, el5("span", "", "\u5B8C\u4E86\u3057\u305F\u3089\u9996\u90FD\u3092\u81EA\u52D5\u3067\u7F6E\u304F\uFF08\u4EEE\u306E\u540D\u524D\uFF09"));
         sec.append(lab);
       }
-      const actions = el3("div", "b-actions");
+      const actions = el5("div", "b-actions");
       const fresh = e.cells === 0 && store.peekUndoLabel() === `${label}\u3092\u65B0\u898F\u4F5C\u6210`;
       if (fresh) actions.append(btn2("", "\u3084\u3081\u308B", "\u4F5C\u6210\u3092\u53D6\u308A\u6D88\u3059", cancelFresh));
       actions.append(btn2("primary", "\u5B8C\u4E86", "\u3053\u306E\u5185\u5BB9\u3067\u78BA\u5B9A\u3057\u3066\u3001\u30C4\u30FC\u30EB\u3092\u7D42\u3048\u308B", finishTask));
@@ -7440,11 +7904,11 @@ ${shown}${more}`;
     }
     function listSection() {
       const map = getMap();
-      const sec = el3("section", "b-sec");
-      sec.append(el3("h4", "b-title", "\u3064\u304F\u3063\u305F\u6B74\u53F2"));
-      const tabs = el3("div", "b-tabs");
+      const sec = el5("section", "b-sec");
+      sec.append(el5("h4", "b-title", "\u3064\u304F\u3063\u305F\u6B74\u53F2"));
+      const tabs = el5("div", "b-tabs");
       for (const k of ["state", "religion", "culture"]) {
-        const n = map.pack[LIST_KEY3[k]].filter(isLive17).length;
+        const n = map.pack[LIST_KEY3[k]].filter(isLive19).length;
         tabs.append(btn2(`b-tab${tab === k ? " on" : ""}`, `${builderActions.KIND_LABEL[k]} ${n}`, "", () => {
           tab = k;
           render();
@@ -7457,35 +7921,35 @@ ${shown}${more}`;
       }));
       sec.append(tabs);
       if (tab === "burg") {
-        const list2 = el3("div", "b-cards");
+        const list2 = el5("div", "b-cards");
         for (const b of burgs.sort((a, c) => (c.population ?? 0) - (a.population ?? 0)).slice(0, 80)) list2.append(burgCard(b));
-        if (!burgs.length) sec.append(el3("p", "b-hint", "\u307E\u3060\u90FD\u5E02\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u7DE8\u96C6\u306E\u300C\u90FD\u5E02\u300D\u3067\u7F6E\u3051\u307E\u3059\u3002"));
+        if (!burgs.length) sec.append(el5("p", "b-hint", "\u307E\u3060\u90FD\u5E02\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u7DE8\u96C6\u306E\u300C\u90FD\u5E02\u300D\u3067\u7F6E\u3051\u307E\u3059\u3002"));
         sec.append(list2);
-        if (burgs.length > 80) sec.append(el3("p", "b-hint", `\u4EBA\u53E3\u306E\u591A\u304480\u4EF6\u3092\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF08\u5168${burgs.length}\u4EF6\uFF09\u3002`));
+        if (burgs.length > 80) sec.append(el5("p", "b-hint", `\u4EBA\u53E3\u306E\u591A\u304480\u4EF6\u3092\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF08\u5168${burgs.length}\u4EF6\uFF09\u3002`));
         return sec;
       }
       cellCounts = new Map(listEntities(map, tab).map((x) => [x.id, x.cells]));
-      const items = map.pack[LIST_KEY3[tab]].filter(isLive17).sort((a, b) => b.i - a.i);
-      if (!items.length) sec.append(el3("p", "b-hint", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u30DC\u30BF\u30F3\u3067\u4F5C\u308C\u307E\u3059\u3002"));
-      const list = el3("div", "b-cards");
+      const items = map.pack[LIST_KEY3[tab]].filter(isLive19).sort((a, b) => b.i - a.i);
+      if (!items.length) sec.append(el5("p", "b-hint", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u30DC\u30BF\u30F3\u3067\u4F5C\u308C\u307E\u3059\u3002"));
+      const list = el5("div", "b-cards");
       for (const e of items) list.append(card(tab, e));
       sec.append(list);
       return sec;
     }
     function burgCard(b) {
       const key = `burg:${b.i}`;
-      const wrap = el3("div", "b-card");
-      const row = el3("div", "b-row b-click");
+      const wrap = el5("div", "b-card");
+      const row = el5("div", "b-row b-click");
       const st = getMap().pack.states[b.state];
       row.append(swatch2({ color: st?.color ?? "#888" }));
-      const main = el3("div", "b-row-main");
-      const nm = el3("div", "b-row-name");
-      nm.append(el3("span", "", `${b.capital ? "\u{1F3F0} " : ""}${b.name}`));
+      const main = el5("div", "b-row-main");
+      const nm = el5("div", "b-row-name");
+      nm.append(el5("span", "", `${b.capital ? "\u{1F3F0} " : ""}${b.name}`));
       const badge = provBadge("burg", b.i);
       if (badge) nm.append(badge);
-      main.append(nm, el3("div", "b-row-meta", `${st?.name ?? "\u7121\u6240\u5C5E"}\u30FB\u4EBA\u53E3 ${Math.round((b.population ?? 0) * 10) / 10}${featureIcons(b) ? "\u30FB" + featureIcons(b) : ""}`));
+      main.append(nm, el5("div", "b-row-meta", `${st?.name ?? "\u7121\u6240\u5C5E"}\u30FB\u4EBA\u53E3 ${Math.round((b.population ?? 0) * 10) / 10}${featureIcons(b) ? "\u30FB" + featureIcons(b) : ""}`));
       const open2 = openCards.has(key);
-      row.append(main, el3("span", "b-chev", open2 ? "\u25B4" : "\u25BE"));
+      row.append(main, el5("span", "b-chev", open2 ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         if (open2) openCards.delete(key);
         else openCards.add(key);
@@ -7497,19 +7961,19 @@ ${shown}${more}`;
     }
     function card(kind, e) {
       const key = `${kind}:${e.i}`;
-      const wrap = el3("div", "b-card");
+      const wrap = el5("div", "b-card");
       const active = task && task.kind === kind && task.id === e.i;
       if (active) wrap.classList.add("active");
-      const row = el3("div", "b-row");
+      const row = el5("div", "b-row");
       row.append(swatch2(e));
-      const main = el3("div", "b-row-main");
-      const nm = el3("div", "b-row-name");
-      nm.append(el3("span", "", nameOf2(e)));
+      const main = el5("div", "b-row-main");
+      const nm = el5("div", "b-row-name");
+      nm.append(el5("span", "", nameOf2(e)));
       const badge = provBadge(kind, e.i);
       if (badge) nm.append(badge);
-      main.append(nm, el3("div", "b-row-meta", metaText(kind, e)));
+      main.append(nm, el5("div", "b-row-meta", metaText(kind, e)));
       row.append(main);
-      const ops = el3("div", "b-row-ops");
+      const ops = el5("div", "b-row-ops");
       ops.append(btn2("suggest-mini", "\u{1F3B2}", "\u540D\u524D\u3092\u5F15\u304D\u76F4\u3059", () => builderActions.rerollName(kind, e.i, styleOpt())));
       if (badge) ops.append(btn2("suggest-mini", "\u2713", "\u3053\u306E\u540D\u524D\u3067\u78BA\u5B9A", () => editActions.confirmName(kind, e.i)));
       const isOpenCard = openCards.has(key);
@@ -7532,9 +7996,9 @@ ${shown}${more}`;
       return parts.join("\u30FB");
     }
     function details(kind, e) {
-      const d = el3("div", "b-details");
-      const nameF = el3("label", "b-field");
-      nameF.append(el3("span", "b-mini", "\u540D\u524D"));
+      const d = el5("div", "b-details");
+      const nameF = el5("label", "b-field");
+      nameF.append(el5("span", "b-mini", "\u540D\u524D"));
       const input = document.createElement("input");
       input.value = nameOf2(e);
       input.addEventListener("change", () => {
@@ -7543,8 +8007,8 @@ ${shown}${more}`;
       nameF.append(input);
       d.append(nameF);
       if (kind === "state") {
-        const tech = el3("label", "b-field");
-        const val = el3("span", "b-mini", `\u6280\u8853\u6C34\u6E96 ${editActions.getTechLevel(e.i) ?? 3}`);
+        const tech = el5("label", "b-field");
+        const val = el5("span", "b-mini", `\u6280\u8853\u6C34\u6E96 ${editActions.getTechLevel(e.i) ?? 3}`);
         const r = document.createElement("input");
         r.type = "range";
         r.min = String(editActions.TECH_MIN);
@@ -7556,8 +8020,8 @@ ${shown}${more}`;
         r.addEventListener("change", () => editActions.setTechLevel(e.i, Number(r.value)));
         tech.append(val, r);
         d.append(tech);
-        const doc = el3("label", "b-field");
-        doc.append(el3("span", "b-mini", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
+        const doc = el5("label", "b-field");
+        doc.append(el5("span", "b-mini", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
         const sel = document.createElement("select");
         for (const x of editActions.DOCTRINES) sel.append(new Option(x.label, x.key));
         sel.value = editActions.getDoctrine(e.i);
@@ -7566,8 +8030,8 @@ ${shown}${more}`;
         d.append(doc);
         const burgs = getMap().pack.burgs.filter((b) => b && b.i && !b.removed && b.state === e.i);
         if (burgs.length) {
-          const cap = el3("label", "b-field");
-          cap.append(el3("span", "b-mini", "\u9996\u90FD"));
+          const cap = el5("label", "b-field");
+          cap.append(el5("span", "b-mini", "\u9996\u90FD"));
           const cs = document.createElement("select");
           for (const b of burgs) cs.append(new Option(b.name, String(b.i)));
           cs.value = String(e.capital);
@@ -7577,8 +8041,8 @@ ${shown}${more}`;
         }
       }
       if (kind === "culture") {
-        const f = el3("label", "b-field");
-        f.append(el3("span", "b-mini", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u3053\u306E\u6587\u5316\u306E\u5730\u540D\u306E\u96F0\u56F2\u6C17\uFF09"));
+        const f = el5("label", "b-field");
+        f.append(el5("span", "b-mini", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u3053\u306E\u6587\u5316\u306E\u5730\u540D\u306E\u96F0\u56F2\u6C17\uFF09"));
         const sel = document.createElement("select");
         for (const k of STYLE_KEYS) sel.append(new Option(NAME_STYLES[k].label, k));
         sel.value = editActions.effectiveNameStyle(e.i);
@@ -7591,14 +8055,14 @@ ${shown}${more}`;
         openCards.add(`${k}:${i}`);
         render();
       } });
-      const terr = el3("div", "b-how");
+      const terr = el5("div", "b-how");
       terr.append(
         btn2("b-seg", "\u270B \u5857\u308A\u8DB3\u3059", "\u3053\u306E\u571F\u5730\u3092\u5730\u56F3\u3067\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5E83\u3052\u308B\u30FB\u76F4\u3059", () => startPaint(kind, e.i)),
         btn2("b-seg", "\u{1F3B2} \u304A\u307E\u304B\u305B\u3067\u5E83\u3052\u308B", "\u7A7A\u304D\u5730\u304B\u3089\u81EA\u52D5\u3067\u8FFD\u52A0\u3059\u308B", () => runAuto(kind, e.i, task?.size ?? "m"))
       );
       d.append(terr);
-      const foot = el3("div", "b-actions");
-      foot.append(btn2("", "\u5168\u8A2D\u5B9A\u3092\u958B\u304F \u2197", "\u5C5E\u6027\u30FB\u6587\u7AE0\u30FB\u5916\u4EA4\u306A\u3069\u3001\u3059\u3079\u3066\u306E\u8A2D\u5B9A\u3092\u5DE6\u306E\u30D1\u30CD\u30EB\u3067\u958B\u304F", () => panels.openEntity(kind, e.i)));
+      const foot = el5("div", "b-actions");
+      foot.append(btn2("", "\u5168\u8A2D\u5B9A\u3092\u958B\u304F \u2197", "\u6587\u7AE0\u30FB\u5916\u4EA4\u306A\u3069\u3001\u3059\u3079\u3066\u306E\u8A2D\u5B9A\u3092\u5DE6\u306E\u30D1\u30CD\u30EB\u3067\u958B\u304F", () => panels.openEntity(kind, e.i)));
       d.append(foot);
       return d;
     }
@@ -7607,9 +8071,9 @@ ${shown}${more}`;
     function provisionalSection() {
       const list = builderActions.provisional();
       if (!list.length) return null;
-      const box = el3("section", "b-tray b-tray-col");
-      const head = el3("div", "b-tray-head");
-      head.append(el3("span", "b-tray-text", `\u{1F3B2} \u4EEE\u306E\u540D\u524D\u304C ${list.length} \u4EF6\u3042\u308A\u307E\u3059`));
+      const box = el5("section", "b-tray b-tray-col");
+      const head = el5("div", "b-tray-head");
+      head.append(el5("span", "b-tray-text", `\u{1F3B2} \u4EEE\u306E\u540D\u524D\u304C ${list.length} \u4EF6\u3042\u308A\u307E\u3059`));
       head.append(btn2("", provOpen ? "\u4E00\u89A7\u3092\u9589\u3058\u308B" : "\u4E00\u89A7\u3092\u898B\u308B", "\u3069\u308C\u304C\u4EEE\u306E\u540D\u524D\u304B\u78BA\u8A8D\u3059\u308B", () => {
         provOpen = !provOpen;
         schedule();
@@ -7620,12 +8084,12 @@ ${shown}${more}`;
       box.append(head);
       if (provOpen) {
         const map = getMap();
-        const ul = el3("ul", "b-prov-list");
+        const ul = el5("ul", "b-prov-list");
         for (const { kind, id } of list) {
           const [key, label] = PROV_KINDS[kind] ?? [null, kind];
           const name = key && map?.pack?.[key]?.[id]?.name || `#${id}`;
-          const li = el3("li", "b-prov-item");
-          li.append(el3("span", "b-prov-kind", label), el3("span", "b-prov-name", name));
+          const li = el5("li", "b-prov-item");
+          li.append(el5("span", "b-prov-kind", label), el5("span", "b-prov-name", name));
           li.append(btn2("", "\u2713 \u78BA\u5B9A", `${name} \u306E\u300C\u4EEE\u300D\u306E\u5370\u3092\u5916\u3059`, () => {
             editActions.confirmName(kind, id);
           }));
@@ -7642,18 +8106,18 @@ ${shown}${more}`;
       const scrollTop = panel2.scrollTop;
       body.replaceChildren();
       if (!map) {
-        body.append(el3("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        body.append(el5("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
       body.append(modeTabs());
       if (mode !== "build" && views[mode]) {
-        const c = el3("div", "b-modebody");
+        const c = el5("div", "b-modebody");
         body.append(c);
         views[mode].render(c);
         panel2.scrollTop = scrollTop;
         return;
       }
-      body.append(el3("p", "b-lead", "\u30DC\u30BF\u30F31\u3064\u3067\u3001\u307E\u305A\u5F62\u306B\u306A\u308A\u307E\u3059\u3002\u540D\u524D\u30FB\u9818\u571F\u30FB\u8A2D\u5B9A\u306F\u3001\u3044\u3064\u3067\u3082\u81EA\u7531\u306B\u76F4\u305B\u307E\u3059\u3002"));
+      body.append(el5("p", "b-lead", "\u30DC\u30BF\u30F31\u3064\u3067\u3001\u307E\u305A\u5F62\u306B\u306A\u308A\u307E\u3059\u3002\u540D\u524D\u30FB\u9818\u571F\u30FB\u8A2D\u5B9A\u306F\u3001\u3044\u3064\u3067\u3082\u81EA\u7531\u306B\u76F4\u305B\u307E\u3059\u3002"));
       body.append(quickSection());
       const t = taskSection();
       if (t) body.append(t);
@@ -7682,114 +8146,6 @@ ${shown}${more}`;
     }, _state: () => ({ task, tab, nameStyle }) };
   }
 
-  // js/core/sim/military.js
-  var isLive18 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  function regimentsOf(state) {
-    return Array.isArray(state.military) ? state.military : [];
-  }
-  function nextRegimentId(state) {
-    const list = regimentsOf(state);
-    return list.length ? Math.max(...list.map((r) => r.i)) + 1 : 0;
-  }
-  function planCreateRegiment(map, stateId, cell, { name, icon = "\u{1F6E1}\uFE0F" } = {}) {
-    const state = map.pack.states[stateId];
-    if (!isLive18(state)) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u914D\u7F6E\u3067\u304D\u307E\u305B\u3093");
-    const { p } = map.geometry.pack;
-    const reg = {
-      i: nextRegimentId(state),
-      name: name || `${state.name}\u8ECD`,
-      icon,
-      state: stateId,
-      cell,
-      x: p[cell][0],
-      y: p[cell][1],
-      bx: p[cell][0],
-      by: p[cell][1],
-      u: emptyForce()
-    };
-    const next = [...regimentsOf(state), reg];
-    return { command: makeCommand("\u90E8\u968A\u3092\u7DE8\u6210", ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
-      m.pack.states[stateId].military = v;
-    }, next)]), id: reg.i };
-  }
-  function planMoveRegiment(map, stateId, regId, cell) {
-    const state = map.pack.states[stateId];
-    const reg = regimentsOf(state).find((r) => r.i === regId);
-    if (!reg) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    if (cell < 0 || cell >= map.pack.cells.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
-    if (reg.cell === cell) return null;
-    const { p } = map.geometry.pack;
-    return makeCommand("\u90E8\u968A\u3092\u79FB\u52D5", ["places"], [setProps(reg, { cell, x: p[cell][0], y: p[cell][1] })]);
-  }
-  function planEditRegiment(map, stateId, regId, patch) {
-    const state = map.pack.states[stateId];
-    const reg = regimentsOf(state).find((r) => r.i === regId);
-    if (!reg) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    const next = {};
-    if (patch.name !== void 0 && patch.name !== reg.name) next.name = patch.name;
-    if (patch.icon !== void 0 && patch.icon !== reg.icon) next.icon = patch.icon;
-    if (patch.u) {
-      const u = { ...reg.u };
-      for (const k of UNIT_KEYS) if (patch.u[k] !== void 0) u[k] = Math.max(0, Math.round(patch.u[k]));
-      if (JSON.stringify(u) !== JSON.stringify(reg.u)) next.u = u;
-    }
-    if (!Object.keys(next).length) return null;
-    return makeCommand("\u90E8\u968A\u3092\u7DE8\u96C6", ["places"], [setProps(reg, next)]);
-  }
-  function planDisbandRegiment(map, stateId, regId) {
-    const state = map.pack.states[stateId];
-    const list = regimentsOf(state);
-    if (!list.some((r) => r.i === regId)) throw new Error("\u305D\u306E\u90E8\u968A\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    const next = list.filter((r) => r.i !== regId);
-    return makeCommand("\u90E8\u968A\u3092\u89E3\u6563", ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
-      m.pack.states[stateId].military = v;
-    }, next)]);
-  }
-  function planAnnualConscription(map, stateId) {
-    const state = map.pack.states[stateId];
-    if (!isLive18(state)) return null;
-    ensureEconomy(state);
-    const capital = map.pack.burgs[state.capital];
-    if (!capital) return null;
-    const pop = (state.rural ?? 0) + (state.urban ?? 0);
-    const industry = state.industry ?? 0;
-    const doctrine = DOCTRINE_BY_KEY[state.doctrine] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
-    const conscriptBonus = 1 + (doctrine.conscriptBonus ?? 0);
-    let list = regimentsOf(state);
-    let home = list.find((r) => r.i === 0) ?? null;
-    const delta = emptyForce();
-    let any = false;
-    for (const key of UNIT_KEYS) {
-      const def = UNIT_BY_KEY[key];
-      if (def.minTech && (state.techLevel ?? 3) < def.minTech) continue;
-      const manpowerBonus = key === "infantry" || key === "special" ? conscriptBonus : 1;
-      const fromPop = pop / 1e3 * (def.rural + def.urban) * 0.15 * manpowerBonus;
-      const unitCost = (def.soft + def.hard) / 2;
-      const fromIndustry = def.industryShare > 0 ? industry * def.industryShare / (unitCost / 4) : 0;
-      const add = Math.round(fromPop + fromIndustry);
-      if (add > 0) {
-        delta[key] = add;
-        any = true;
-      }
-    }
-    if (!any) return null;
-    const parts = [];
-    if (home) {
-      const u = { ...home.u };
-      for (const k of UNIT_KEYS) u[k] = (u[k] ?? 0) + delta[k];
-      parts.push(setProps(home, { u }));
-    } else {
-      const { p } = map.geometry.pack;
-      const cell = capital.cell;
-      const reg = { i: 0, name: `${state.name}\u56FD\u9632\u672C\u968A`, icon: "\u{1F6E1}\uFE0F", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u: delta };
-      parts.push(setList((m) => m.pack.states[stateId].military, (m, v) => {
-        m.pack.states[stateId].military = v;
-      }, [reg, ...list]));
-    }
-    return makeCommand("\u5E74\u6B21\u5FB4\u5175", [], parts);
-  }
-
   // js/core/sim/world.js
   var UPKEEP_WEIGHT = { infantry: 1, armor: 8, air: 15, navy: 25, special: 3, advanced: 6, nuclear: 100 };
   var UPKEEP_FACTOR = 0.2;
@@ -7801,12 +8157,12 @@ ${shown}${more}`;
     const popK = Math.max(1, ((state.rural ?? 0) + (state.urban ?? 0)) / 1e3);
     return Math.min(UPKEEP_MAX, weighted / popK * UPKEEP_FACTOR);
   }
-  var isLive19 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive20 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planAnnualUpdate(map) {
     const parts = [];
     const trade = computeTrade(map);
     for (const state of map.pack.states) {
-      if (!isLive19(state)) continue;
+      if (!isLive20(state)) continue;
       ensureEconomy(state);
       const revenue = annualRevenue(trade.states.get(state.i));
       if (revenue > 0) {
@@ -7831,7 +8187,7 @@ ${shown}${more}`;
     let selected = null;
     function summary(eco, states) {
       const total = eco.trade.deals.reduce((a, d) => a + d.value, 0);
-      const box = el2("div", "b-eco-sum");
+      const box = el4("div", "b-eco-sum");
       box.append(
         stat("\u53D6\u5F15", `${eco.trade.deals.length}\u4EF6`),
         stat("\u53D6\u5F15\u984D", fmt2(total)),
@@ -7840,23 +8196,23 @@ ${shown}${more}`;
       return box;
     }
     const stat = (k, v) => {
-      const d = el2("div", "b-stat");
-      d.append(el2("div", "b-stat-v", v), el2("div", "b-mini", k));
+      const d = el4("div", "b-stat");
+      d.append(el4("div", "b-stat-v", v), el4("div", "b-mini", k));
       return d;
     };
     function stateRow(map, eco, s) {
       const f = editActions.getFinance(s.i);
       const info = eco.trade.states.get(s.i);
-      const card = el2("div", `b-card${selected === s.i ? " active" : ""}`);
-      const row = el2("div", "b-row b-click");
+      const card = el4("div", `b-card${selected === s.i ? " active" : ""}`);
+      const row = el4("div", "b-row b-click");
       row.append(swatch(s.color));
-      const main = el2("div", "b-row-main");
-      main.append(el2("div", "b-row-name", s.fullName ?? s.name));
+      const main = el4("div", "b-row-main");
+      main.append(el4("div", "b-row-name", s.fullName ?? s.name));
       const rev = eco.revenue(s.i);
       const burden = militaryBurden(s);
       const upkeep = burden > 0 ? `\uFF08\u8ECD\u4E8B\u8CBB ${Math.round(burden * 100)}% \u2192 \u624B\u53D6\u308A +${fmt2(rev * (1 - burden))}\uFF09` : "";
-      main.append(el2("div", "b-row-meta", `\u56FD\u5EAB ${fmt2(f.treasury)}\u30FB\u5E74\u53CE +${fmt2(rev)}${upkeep}\u30FB\u8CBF\u6613 ${signed(info.exportValue - info.importValue)}`));
-      row.append(main, el2("span", "b-chev", selected === s.i ? "\u25B4" : "\u25BE"));
+      main.append(el4("div", "b-row-meta", `\u56FD\u5EAB ${fmt2(f.treasury)}\u30FB\u5E74\u53CE +${fmt2(rev)}${upkeep}\u30FB\u8CBF\u6613 ${signed(info.exportValue - info.importValue)}`));
+      row.append(main, el4("span", "b-chev", selected === s.i ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         selected = selected === s.i ? null : s.i;
         if (selected == null) builderActions.showTradeLines(null);
@@ -7867,16 +8223,16 @@ ${shown}${more}`;
       return card;
     }
     function detail(map, eco, s, f, info) {
-      const d = el2("div", "b-details");
-      const rates = el2("div", "b-tax");
+      const d = el4("div", "b-details");
+      const rates = el4("div", "b-tax");
       rates.append(
         slider({ label: "\u58F2\u4E0A\u7A0E\uFF08\u8F38\u51FA\u306B\u304B\u304B\u308B\uFF09", min: 0, max: 0.6, step: 0.01, value: f.salesTax, format: (v) => `${Math.round(v * 100)}%`, onCommit: (v) => editActions.setFinance(s.i, { salesTax: v }) }),
         slider({ label: "\u4EBA\u982D\u7A0E\uFF08\u4EBA\u53E3\u306B\u304B\u304B\u308B\uFF09", min: 0, max: 0.5, step: 0.01, value: f.pollTax, format: (v) => `${Math.round(v * 100)}%`, onCommit: (v) => editActions.setFinance(s.i, { pollTax: v }) })
       );
       d.append(rates);
-      d.append(el2("p", "b-hint", `\u5E74\u53CE\u306E\u898B\u8FBC\u307F: \u4EBA\u982D\u7A0E ${fmt2(info.pollTaxRevenue)} + \u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E ${fmt2(info.salesTaxRevenue)} = ${fmt2(eco.revenue(s.i))}`));
-      const tre = el2("label", "b-field");
-      tre.append(el2("span", "b-mini", "\u56FD\u5EAB\uFF08\u76F4\u63A5\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u3059\uFF09"));
+      d.append(el4("p", "b-hint", `\u5E74\u53CE\u306E\u898B\u8FBC\u307F: \u4EBA\u982D\u7A0E ${fmt2(info.pollTaxRevenue)} + \u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E ${fmt2(info.salesTaxRevenue)} = ${fmt2(eco.revenue(s.i))}`));
+      const tre = el4("label", "b-field");
+      tre.append(el4("span", "b-mini", "\u56FD\u5EAB\uFF08\u76F4\u63A5\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u3059\uFF09"));
       const inp = document.createElement("input");
       inp.type = "number";
       inp.min = "0";
@@ -7885,34 +8241,34 @@ ${shown}${more}`;
       inp.addEventListener("change", () => editActions.setFinance(s.i, { treasury: inp.value }));
       tre.append(inp);
       d.append(tre);
-      const tbl = el2("div", "b-goods");
-      const head = el2("div", "b-goods-row b-goods-head");
-      head.append(el2("span", "", "\u7523\u7269"), el2("span", "", "\u7523"), el2("span", "", "\u9700"), el2("span", "", "\u5DEE"));
+      const tbl = el4("div", "b-goods");
+      const head = el4("div", "b-goods-row b-goods-head");
+      head.append(el4("span", "", "\u7523\u7269"), el4("span", "", "\u7523"), el4("span", "", "\u9700"), el4("span", "", "\u5DEE"));
       tbl.append(head);
       for (const g of eco.goods) {
         const p = info.production[g.id], dm = info.demand[g.id], net = info.net[g.id];
         if (p < 0.05 && dm < 0.05) continue;
-        const r = el2("div", "b-goods-row");
-        const diff = el2("span", net >= 0 ? "pos" : "neg", signed(net));
-        r.append(el2("span", "", `${g.icon} ${g.label}`), el2("span", "", fmt2(p)), el2("span", "", fmt2(dm)), diff);
+        const r = el4("div", "b-goods-row");
+        const diff = el4("span", net >= 0 ? "pos" : "neg", signed(net));
+        r.append(el4("span", "", `${g.icon} ${g.label}`), el4("span", "", fmt2(p)), el4("span", "", fmt2(dm)), diff);
         tbl.append(r);
       }
       d.append(tbl);
       const partners = eco.partners(s.i);
-      d.append(el2("h5", "b-sub", "\u8CBF\u6613\u76F8\u624B"));
-      if (!partners.length) d.append(el2("p", "b-hint", "\u53D6\u5F15\u76F8\u624B\u304C\u3044\u307E\u305B\u3093\uFF08\u6226\u4E89\u4E2D\u30FB\u5B64\u7ACB\u30FB\u4F59\u5270\u306A\u3057\uFF09\u3002"));
+      d.append(el4("h5", "b-sub", "\u8CBF\u6613\u76F8\u624B"));
+      if (!partners.length) d.append(el4("p", "b-hint", "\u53D6\u5F15\u76F8\u624B\u304C\u3044\u307E\u305B\u3093\uFF08\u6226\u4E89\u4E2D\u30FB\u5B64\u7ACB\u30FB\u4F59\u5270\u306A\u3057\uFF09\u3002"));
       for (const p of partners.slice(0, 5)) {
         const ps = map.pack.states[p.partner];
-        const r = el2("div", "b-partner");
+        const r = el4("div", "b-partner");
         r.append(
           swatch(ps.color, false),
-          el2("span", "b-partner-name", ps.name),
-          el2("span", "b-mini", `\u8F38\u51FA ${fmt2(p.exportValue)} / \u8F38\u5165 ${fmt2(p.importValue)}`),
-          el2("span", "b-partner-goods", p.goods.map((id) => eco.goods.find((g) => g.id === id)?.icon ?? "").join(""))
+          el4("span", "b-partner-name", ps.name),
+          el4("span", "b-mini", `\u8F38\u51FA ${fmt2(p.exportValue)} / \u8F38\u5165 ${fmt2(p.importValue)}`),
+          el4("span", "b-partner-goods", p.goods.map((id) => eco.goods.find((g) => g.id === id)?.icon ?? "").join(""))
         );
         d.append(r);
       }
-      d.append(el2("p", "b-hint", "\u5730\u56F3\u306E\u91D1\u306E\u7DDA\u306F\u8F38\u51FA\u8D85\u904E\u3001\u9752\u7DD1\u306E\u7DDA\u306F\u8F38\u5165\u8D85\u904E\u306E\u76F8\u624B\u3067\u3059\u3002"));
+      d.append(el4("p", "b-hint", "\u5730\u56F3\u306E\u91D1\u306E\u7DDA\u306F\u8F38\u51FA\u8D85\u904E\u3001\u9752\u7DD1\u306E\u7DDA\u306F\u8F38\u5165\u8D85\u904E\u306E\u76F8\u624B\u3067\u3059\u3002"));
       return d;
     }
     function render(container) {
@@ -7922,19 +8278,19 @@ ${shown}${more}`;
       c.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        c.append(el2("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        c.append(el4("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
       const eco = builderActions.economy();
-      const states = map.pack.states.filter(isLive16).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
+      const states = map.pack.states.filter(isLive18).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
       if (selected != null && !states.some((s) => s.i === selected)) selected = null;
       if (selected != null) builderActions.showTradeLines(selected, eco);
-      c.append(el2("p", "b-lead", "\u56FD\u306E\u8CA1\u653F\u3068\u4EA4\u6613\u3092\u898B\u307E\u3059\u3002\u5E74\u304C\u5909\u308F\u308B\u305F\u3073\u306B\u3001\u4EBA\u982D\u7A0E\u3068\u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E\u304B\u3089\u8ECD\u306E\u7DAD\u6301\u8CBB\u3092\u5F15\u3044\u305F\u5206\u304C\u56FD\u5EAB\u306B\u305F\u307E\u308A\u307E\u3059\u3002"));
+      c.append(el4("p", "b-lead", "\u56FD\u306E\u8CA1\u653F\u3068\u4EA4\u6613\u3092\u898B\u307E\u3059\u3002\u5E74\u304C\u5909\u308F\u308B\u305F\u3073\u306B\u3001\u4EBA\u982D\u7A0E\u3068\u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E\u304B\u3089\u8ECD\u306E\u7DAD\u6301\u8CBB\u3092\u5F15\u3044\u305F\u5206\u304C\u56FD\u5EAB\u306B\u305F\u307E\u308A\u307E\u3059\u3002"));
       c.append(summary(eco, states));
-      const list = el2("div", "b-cards");
+      const list = el4("div", "b-cards");
       for (const s of states) list.append(stateRow(map, eco, s));
       c.append(list);
-      c.append(el2("p", "b-hint", "\u7523\u7269\u306F\u5730\u56F3\uFF08\u30D0\u30A4\u30AA\u30FC\u30E0\u30FB\u4EBA\u53E3\u30FB\u6D77\u5CB8\uFF09\u304B\u3089\u8A08\u7B97\u3057\u305F\u7C21\u6613\u30E2\u30C7\u30EB\u3067\u3059\u3002\u6226\u4E89\u4E2D\u306E\u56FD\u3069\u3046\u3057\u306F\u53D6\u5F15\u3057\u307E\u305B\u3093\u3002"));
+      c.append(el4("p", "b-hint", "\u7523\u7269\u306F\u5730\u56F3\uFF08\u30D0\u30A4\u30AA\u30FC\u30E0\u30FB\u4EBA\u53E3\u30FB\u6D77\u5CB8\uFF09\u304B\u3089\u8A08\u7B97\u3057\u305F\u7C21\u6613\u30E2\u30C7\u30EB\u3067\u3059\u3002\u6226\u4E89\u4E2D\u306E\u56FD\u3069\u3046\u3057\u306F\u53D6\u5F15\u3057\u307E\u305B\u3093\u3002"));
     }
     return { render, leave() {
       selected = null;
@@ -7963,7 +8319,7 @@ ${shown}${more}`;
       actions.setView({ journeySelected: selJourney, zoneSelected: selZone });
     }
     function journeySection(map) {
-      const sec = el2("section", "b-sec");
+      const sec = el4("section", "b-sec");
       sec.append(btn("b-quick-btn b-wide", "\uFF0B \u65C5\u3092\u3064\u304F\u308B", "\u7A7A\u306E\u65C5\u3092\u4F5C\u308B\u3002\u305D\u306E\u3042\u3068\u533A\u9593\u3092\u8DB3\u3059", () => {
         const id = editActions.addJourney({});
         if (id != null) {
@@ -7973,26 +8329,26 @@ ${shown}${more}`;
         }
       }));
       const sc = travelScale(map);
-      if (sc.usedDefault) sec.append(el2("p", "b-hint", "\u3053\u306E\u5730\u56F3\u306B\u306F\u7E2E\u5C3A\u306E\u60C5\u5831\u304C\u306A\u3044\u305F\u3081\u3001\u6A19\u6E96\uFF081\u753B\u7D20\uFF1D3km\uFF09\u3067\u8A08\u7B97\u3057\u307E\u3059\u3002"));
+      if (sc.usedDefault) sec.append(el4("p", "b-hint", "\u3053\u306E\u5730\u56F3\u306B\u306F\u7E2E\u5C3A\u306E\u60C5\u5831\u304C\u306A\u3044\u305F\u3081\u3001\u6A19\u6E96\uFF081\u753B\u7D20\uFF1D3km\uFF09\u3067\u8A08\u7B97\u3057\u307E\u3059\u3002"));
       const list = listJourneys(map);
-      if (!list.length) sec.append(el2("p", "b-hint", "\u307E\u3060\u65C5\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8ECD\u306E\u9060\u5F81\u3001\u5546\u4EBA\u306E\u884C\u304D\u6765\u3001\u5192\u967A\u8005\u306E\u9053\u306E\u308A\u306A\u3069\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
-      const cards = el2("div", "b-cards");
+      if (!list.length) sec.append(el4("p", "b-hint", "\u307E\u3060\u65C5\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8ECD\u306E\u9060\u5F81\u3001\u5546\u4EBA\u306E\u884C\u304D\u6765\u3001\u5192\u967A\u8005\u306E\u9053\u306E\u308A\u306A\u3069\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
+      const cards = el4("div", "b-cards");
       for (const j of list.slice().reverse()) cards.append(journeyCard(map, j));
       sec.append(cards);
       return sec;
     }
     function journeyCard(map, j) {
       const open = selJourney === j.id;
-      const card = el2("div", `b-card${open ? " active" : ""}`);
-      const row = el2("div", "b-row b-click");
+      const card = el4("div", `b-card${open ? " active" : ""}`);
+      const row = el4("div", "b-row b-click");
       const sw = swatch(j.color);
-      const main = el2("div", "b-row-main");
+      const main = el4("div", "b-row-main");
       const tot = journeyTotals(map, j);
       main.append(
-        el2("div", "b-row-name", j.name),
-        el2("div", "b-row-meta", j.legs.length ? `${j.type}\u30FB${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}` : `${j.type}\u30FB\u533A\u9593\u306A\u3057`)
+        el4("div", "b-row-name", j.name),
+        el4("div", "b-row-meta", j.legs.length ? `${j.type}\u30FB${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}` : `${j.type}\u30FB\u533A\u9593\u306A\u3057`)
       );
-      row.append(sw, main, el2("span", "b-chev", open ? "\u25B4" : "\u25BE"));
+      row.append(sw, main, el4("span", "b-chev", open ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         selJourney = open ? null : j.id;
         setHighlight();
@@ -8003,9 +8359,9 @@ ${shown}${more}`;
       return card;
     }
     function journeyDetail(map, j) {
-      const d = el2("div", "b-details");
-      const nameF = el2("label", "b-field");
-      nameF.append(el2("span", "b-mini", "\u540D\u524D"));
+      const d = el4("div", "b-details");
+      const nameF = el4("label", "b-field");
+      nameF.append(el4("span", "b-mini", "\u540D\u524D"));
       const input = document.createElement("input");
       input.value = j.name;
       input.addEventListener("change", () => {
@@ -8013,20 +8369,20 @@ ${shown}${more}`;
       });
       nameF.append(input);
       d.append(nameF);
-      d.append(el2("h5", "b-sub", "\u533A\u9593"));
-      if (!j.legs.length) d.append(el2("p", "b-hint", "\u307E\u3060\u533A\u9593\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u3067\u624B\u6BB5\u3092\u9078\u3093\u3067\u300C\u533A\u9593\u3092\u8DB3\u3059\u300D\u3092\u62BC\u3057\u3001\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3073\u307E\u3059\u3002"));
+      d.append(el4("h5", "b-sub", "\u533A\u9593"));
+      if (!j.legs.length) d.append(el4("p", "b-hint", "\u307E\u3060\u533A\u9593\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u3067\u624B\u6BB5\u3092\u9078\u3093\u3067\u300C\u533A\u9593\u3092\u8DB3\u3059\u300D\u3092\u62BC\u3057\u3001\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3073\u307E\u3059\u3002"));
       j.legs.forEach((leg, idx) => {
         const t = TRANSPORT_BY_ID[leg.transport];
         const st = t ? legStats(map, leg, t) : { distance: 0, days: 0, unit: "" };
-        const row = el2("div", "b-leg");
-        const head = el2("div", "b-leg-head");
+        const row = el4("div", "b-leg");
+        const head = el4("div", "b-leg-head");
         head.append(
-          el2("span", "b-leg-ico", t?.icon ?? "?"),
-          el2("span", "b-leg-route", t?.domain === "stay" ? `${placeName(map, leg.from)}\u3067\u6EDE\u5728` : `${placeName(map, leg.from)} \u2192 ${placeName(map, leg.to)}`),
+          el4("span", "b-leg-ico", t?.icon ?? "?"),
+          el4("span", "b-leg-route", t?.domain === "stay" ? `${placeName(map, leg.from)}\u3067\u6EDE\u5728` : `${placeName(map, leg.from)} \u2192 ${placeName(map, leg.to)}`),
           btn("suggest-mini", "\xD7", "\u3053\u306E\u533A\u9593\u3092\u524A\u9664", () => editActions.removeLeg(j.id, idx))
         );
         row.append(head);
-        const meta = el2("div", "b-row-meta", t?.domain === "stay" ? formatDuration(st.days) : `${fmt3(st.distance)}${st.unit}\u30FB${formatDuration(st.days)}`);
+        const meta = el4("div", "b-row-meta", t?.domain === "stay" ? formatDuration(st.days) : `${fmt3(st.distance)}${st.unit}\u30FB${formatDuration(st.days)}`);
         const sel = document.createElement("select");
         sel.title = "\u79FB\u52D5\u624B\u6BB5\u3092\u5909\u3048\u308B\u3068\u3001\u7D4C\u8DEF\u3092\u5F15\u304D\u76F4\u3057\u307E\u3059";
         for (const x of TRANSPORTS) sel.append(new Option(`${x.icon} ${x.label}`, x.id));
@@ -8035,7 +8391,7 @@ ${shown}${more}`;
         row.append(meta, sel);
         d.append(row);
       });
-      const add = el2("div", "b-addleg");
+      const add = el4("div", "b-addleg");
       const tsel = document.createElement("select");
       for (const x of TRANSPORTS) tsel.append(new Option(`${x.icon} ${x.label}`, x.id));
       tsel.value = transport;
@@ -8044,10 +8400,10 @@ ${shown}${more}`;
       });
       add.append(tsel, btn("b-seg", picking ? "\u9078\u629E\u4E2D\u2026\uFF08Esc \u3067\u53D6\u6D88\uFF09" : "\uFF0B \u533A\u9593\u3092\u8DB3\u3059", "\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3076", () => startPick(map, j)));
       d.append(add);
-      if (picking) d.append(el2("p", "b-status", picking.text));
+      if (picking) d.append(el4("p", "b-status", picking.text));
       const tot = journeyTotals(map, j);
-      if (j.legs.length) d.append(el2("p", "b-hint", `\u5408\u8A08 ${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}`));
-      const foot = el2("div", "b-actions");
+      if (j.legs.length) d.append(el4("p", "b-hint", `\u5408\u8A08 ${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}`));
+      const foot = el4("div", "b-actions");
       foot.append(btn("", "\u65C5\u3092\u524A\u9664", "\u3053\u306E\u65C5\u3092\u3059\u3079\u3066\u6D88\u3059\uFF08Undo\u3067\u623B\u305B\u307E\u3059\uFF09", () => {
         selJourney = null;
         editActions.removeJourney(j.id);
@@ -8108,8 +8464,8 @@ ${shown}${more}`;
       renderOnce();
     }
     function zoneSection(map) {
-      const sec = el2("section", "b-sec");
-      const row = el2("div", "b-addleg");
+      const sec = el4("section", "b-sec");
+      const row = el4("div", "b-addleg");
       const tsel = document.createElement("select");
       for (const t of ZONE_TYPES) tsel.append(new Option(t.label, t.id));
       tsel.value = zoneType;
@@ -8118,7 +8474,7 @@ ${shown}${more}`;
       });
       row.append(tsel);
       sec.append(row);
-      const how = el2("div", "b-how");
+      const how = el4("div", "b-how");
       how.append(
         btn("b-seg", "\u270B \u5857\u3063\u3066\u4F5C\u308B", "\u7A7A\u306E\u30BE\u30FC\u30F3\u3092\u4F5C\u308A\u3001\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u6C7A\u3081\u308B", () => {
           const idx = editActions.addZone({ type: zoneType });
@@ -8148,17 +8504,17 @@ ${shown}${more}`;
         })
       );
       sec.append(how);
-      if (picking) sec.append(el2("p", "b-status", picking.text));
-      const sizeRow = el2("div", "b-sizes");
-      sizeRow.append(el2("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5E83\u3055"));
+      if (picking) sec.append(el4("p", "b-status", picking.text));
+      const sizeRow = el4("div", "b-sizes");
+      sizeRow.append(el4("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5E83\u3055"));
       for (const [n, label] of [[10, "\u5C0F"], [24, "\u4E2D"], [60, "\u5927"]]) sizeRow.append(btn(`b-chip${zoneSize === n ? " on" : ""}`, label, `${n}\u30BB\u30EB`, () => {
         zoneSize = n;
         renderOnce();
       }));
       sec.append(sizeRow);
       const zones = (map.zones ?? []).map((z, index) => ({ z, index })).filter((x) => x.z && Array.isArray(x.z.cells));
-      if (!zones.length) sec.append(el2("p", "b-hint", "\u307E\u3060\u30BE\u30FC\u30F3\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4FB5\u653B\u30FB\u53CD\u4E71\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\u306E\u7BC4\u56F2\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
-      const cards = el2("div", "b-cards");
+      if (!zones.length) sec.append(el4("p", "b-hint", "\u307E\u3060\u30BE\u30FC\u30F3\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4FB5\u653B\u30FB\u53CD\u4E71\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\u306E\u7BC4\u56F2\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
+      const cards = el4("div", "b-cards");
       for (const { z, index } of zones.slice().reverse()) cards.append(zoneCard(map, z, index));
       sec.append(cards);
       return sec;
@@ -8180,11 +8536,11 @@ ${shown}${more}`;
     }
     function zoneCard(map, z, index) {
       const open = selZone === index;
-      const card = el2("div", `b-card${open ? " active" : ""}`);
-      const row = el2("div", "b-row b-click");
-      const main = el2("div", "b-row-main");
-      main.append(el2("div", "b-row-name", z.name), el2("div", "b-row-meta", `${zoneLabel(z)}\u30FB${z.cells.length}\u30BB\u30EB${z.hidden ? "\u30FB\u975E\u8868\u793A" : ""}`));
-      row.append(swatch(zoneColor(z)), main, el2("span", "b-chev", open ? "\u25B4" : "\u25BE"));
+      const card = el4("div", `b-card${open ? " active" : ""}`);
+      const row = el4("div", "b-row b-click");
+      const main = el4("div", "b-row-main");
+      main.append(el4("div", "b-row-name", z.name), el4("div", "b-row-meta", `${zoneLabel(z)}\u30FB${z.cells.length}\u30BB\u30EB${z.hidden ? "\u30FB\u975E\u8868\u793A" : ""}`));
+      row.append(swatch(zoneColor(z)), main, el4("span", "b-chev", open ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         if (open) endPaint();
         selZone = open ? null : index;
@@ -8193,9 +8549,9 @@ ${shown}${more}`;
       });
       card.append(row);
       if (open) {
-        const d = el2("div", "b-details");
-        const nameF = el2("label", "b-field");
-        nameF.append(el2("span", "b-mini", "\u540D\u524D"));
+        const d = el4("div", "b-details");
+        const nameF = el4("label", "b-field");
+        nameF.append(el4("span", "b-mini", "\u540D\u524D"));
         const input = document.createElement("input");
         input.value = z.name;
         input.addEventListener("change", () => {
@@ -8203,8 +8559,8 @@ ${shown}${more}`;
         });
         nameF.append(input);
         d.append(nameF);
-        const tf = el2("label", "b-field");
-        tf.append(el2("span", "b-mini", "\u7A2E\u985E"));
+        const tf = el4("label", "b-field");
+        tf.append(el4("span", "b-mini", "\u7A2E\u985E"));
         const tsel = document.createElement("select");
         for (const t of ZONE_TYPES) tsel.append(new Option(t.label, t.id));
         if (!ZONE_TYPES.some((t) => t.id === z.type)) tsel.append(new Option(z.type, z.type));
@@ -8212,14 +8568,14 @@ ${shown}${more}`;
         tsel.addEventListener("change", () => editActions.editZone(index, { type: tsel.value }));
         tf.append(tsel);
         d.append(tf);
-        const ops = el2("div", "b-how");
+        const ops = el4("div", "b-how");
         const painting = paintingZone === index;
         ops.append(
           btn(`b-seg${painting ? " active" : ""}`, painting ? "\u270B \u5857\u3063\u3066\u3044\u307E\u3059\uFF08\u5B8C\u4E86\u3067\u7D42\u4E86\uFF09" : "\u270B \u5857\u308A\u8DB3\u3059", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u5E83\u3052\u308B", () => painting ? (endPaint(), renderOnce()) : startPaint(index, "add")),
           btn("b-seg", "\u{1F9FD} \u6D88\u3059", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u6E1B\u3089\u3059", () => startPaint(index, "erase"))
         );
         d.append(ops);
-        const foot = el2("div", "b-actions");
+        const foot = el4("div", "b-actions");
         foot.append(
           btn("", z.hidden ? "\u8868\u793A\u3059\u308B" : "\u96A0\u3059", "\u5730\u56F3\u306B\u51FA\u3059\u304B\u3069\u3046\u304B", () => editActions.editZone(index, { hidden: !z.hidden })),
           btn("", "\u524A\u9664", "\u3053\u306E\u30BE\u30FC\u30F3\u3092\u6D88\u3059\uFF08Undo\u3067\u623B\u305B\u307E\u3059\uFF09", () => {
@@ -8244,11 +8600,11 @@ ${shown}${more}`;
       c.replaceChildren();
       const map = getMap();
       if (!map) {
-        c.append(el2("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        c.append(el4("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
-      c.append(el2("p", "b-lead", "\u65C5\u306E\u9053\u306E\u308A\u3068\u3001\u30BE\u30FC\u30F3\uFF08\u4FB5\u653B\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\uFF09\u3092\u8A18\u9332\u3057\u307E\u3059\u3002"));
-      const tabs = el2("div", "b-tabs");
+      c.append(el4("p", "b-lead", "\u65C5\u306E\u9053\u306E\u308A\u3068\u3001\u30BE\u30FC\u30F3\uFF08\u4FB5\u653B\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\uFF09\u3092\u8A18\u9332\u3057\u307E\u3059\u3002"));
+      const tabs = el4("div", "b-tabs");
       for (const [k, label] of [["journey", "\u65C5"], ["zone", "\u30BE\u30FC\u30F3"]]) {
         tabs.append(btn(`b-tab${section === k ? " on" : ""}`, label, "", () => {
           if (section !== k) {
@@ -8275,17 +8631,15 @@ ${shown}${more}`;
   }
 
   // js/ui/panels/editor-panel.js
-  var el4 = (tag, cls, text2) => {
+  var el6 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive20 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive21 = (e) => !!e && typeof e === "object" && !e.removed;
   var STATE_SUBTABS = [
     { key: "info", label: "\u57FA\u672C\u60C5\u5831", icon: "\u26ED" },
-    { key: "diplomacy", label: "\u5916\u4EA4", icon: "\u26E8" },
-    { key: "military", label: "\u8ECD\u4E8B", icon: "\u2694" },
     { key: "provinces", label: "\u5C5E\u5DDE", icon: "\u25A6" }
   ];
   function initEditorPanel({ store, editActions, editMode, panels: initialPanels }) {
@@ -8294,14 +8648,6 @@ ${shown}${more}`;
     let current = null;
     let stateSubtab = "info";
     let panels = initialPanels ?? null;
-    const mountHome = byId("panel-mounts");
-    const mounts = { regiments: byId("tab-regiments"), wars: byId("tab-wars"), alliances: byId("tab-alliances") };
-    function reclaimMounts() {
-      for (const m of Object.values(mounts)) {
-        m.hidden = true;
-        mountHome.append(m);
-      }
-    }
     function open(kind, id) {
       current = { kind, id };
       if (kind === "state") stateSubtab = "info";
@@ -8309,11 +8655,9 @@ ${shown}${more}`;
     }
     function close() {
       current = null;
-      panels?.military?.unlock?.();
       render();
     }
     function render() {
-      reclaimMounts();
       root.replaceChildren();
       if (!current) {
         root.hidden = true;
@@ -8325,28 +8669,28 @@ ${shown}${more}`;
         close();
         return;
       }
-      const header = el4("div", "editor-header");
-      const title = el4("h3");
-      const closeBtn = el4("button", "editor-close", "\xD7");
+      const header = el6("div", "editor-header");
+      const title = el6("h3");
+      const closeBtn = el6("button", "editor-close", "\xD7");
       closeBtn.type = "button";
       closeBtn.setAttribute("aria-label", "\u9589\u3058\u308B");
       closeBtn.addEventListener("click", close);
       header.append(title, closeBtn);
       root.append(header);
       if (current.kind === "cell") {
-        const body2 = el4("div", "editor-body");
+        const body2 = el6("div", "editor-body");
         root.append(body2);
         renderCell(map, title, body2);
         return;
       }
       if (current.kind === "burg") {
-        const body2 = el4("div", "editor-body");
+        const body2 = el6("div", "editor-body");
         root.append(body2);
         renderBurg(map, title, body2);
         return;
       }
       if (current.kind === "marker") {
-        const body2 = el4("div", "editor-body");
+        const body2 = el6("div", "editor-body");
         root.append(body2);
         renderMarker(map, title, body2);
         return;
@@ -8355,25 +8699,24 @@ ${shown}${more}`;
         renderStateTabs(map, title, root);
         return;
       }
-      const body = el4("div", "editor-body");
+      const body = el6("div", "editor-body");
       root.append(body);
       renderEntity(map, current.kind, title, body);
     }
     function renderStateTabs(map, title, root2) {
       const e = map.pack.states[current.id];
-      if (!isLive20(e)) {
+      if (!isLive21(e)) {
         close();
         return;
       }
       title.textContent = `\u{1F3F3} ${e.fullName ?? e.name}`;
-      if (stateSubtab !== "military") panels?.military?.unlock?.();
-      const tabs = el4("div", "dialog-tabs");
+      const tabs = el6("div", "dialog-tabs");
       tabs.setAttribute("role", "tablist");
       for (const t of STATE_SUBTABS) {
-        const b = el4("button", `tab-btn${stateSubtab === t.key ? " active" : ""}`);
+        const b = el6("button", `tab-btn${stateSubtab === t.key ? " active" : ""}`);
         b.type = "button";
         b.setAttribute("role", "tab");
-        const icon = el4("span", "tab-icon", t.icon);
+        const icon = el6("span", "tab-icon", t.icon);
         b.append(icon, document.createTextNode(t.label));
         b.addEventListener("click", () => {
           stateSubtab = t.key;
@@ -8382,28 +8725,24 @@ ${shown}${more}`;
         tabs.append(b);
       }
       root2.append(tabs);
-      const body = el4("div", "editor-body tab-panel");
+      const body = el6("div", "editor-body tab-panel");
       root2.append(body);
       if (stateSubtab === "info") renderStateInfo(map, e, body);
-      else if (stateSubtab === "diplomacy") renderStateDiplomacy(map, e, body);
-      else if (stateSubtab === "military") renderStateMilitary(map, e, body);
       else if (stateSubtab === "provinces") renderStateProvinces(map, e, body);
     }
     function renderStateInfo(map, e, body) {
-      const form = el4("div", "editor-form");
+      const form = el6("div", "editor-form");
       form.append(basicStatsSection(map, e));
       form.append(textField2("\u56FD\u5BB6\u540D", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v), () => editActions.suggestName("state", { id: e.i })));
       form.append(...provisionalNote("state", e.i));
       form.append(techLevelSection(e.i));
       form.append(doctrineSection(e.i));
-      form.append(growthRateSection(e.i));
-      form.append(attributesField("state", e.i));
       form.append(noteField(map, "state", e.i));
       body.append(form);
     }
     function basicStatsSection(map, e) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u56FD\u529B"));
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u56FD\u529B"));
       const pop = statePopulation(e);
       const power = stateMilitaryPower(e);
       const headcount = stateHeadcount(e);
@@ -8422,36 +8761,18 @@ ${shown}${more}`;
       wrap.append(table(rows));
       return wrap;
     }
-    function renderStateDiplomacy(map, e, body) {
-      const form = el4("div", "editor-form");
-      form.append(diplomacyMatrix(map, e.i));
-      form.append(diplomacySection(map, e.i));
-      body.append(form);
-      if (panels?.wars) {
-        const warsWrap = el4("div", "editor-section");
-        warsWrap.append(el4("h4", "", "\u6226\u4E89"));
-        const warsMount = mounts.wars;
-        warsWrap.append(warsMount);
-        warsMount.hidden = false;
-        body.append(warsWrap);
-        panels.wars.render();
-      }
-      if (panels?.alliances) {
-        const alliancesWrap = el4("div", "editor-section");
-        alliancesWrap.append(el4("h4", "", "\u540C\u76DF"));
-        const alliancesMount = mounts.alliances;
-        alliancesWrap.append(alliancesMount);
-        alliancesMount.hidden = false;
-        body.append(alliancesWrap);
-        panels.alliances.render();
-      }
+    function buildDiplomacy(map, focusId) {
+      const form = el6("div", "editor-form");
+      form.append(diplomacyMatrix(map, focusId));
+      form.append(diplomacySection(map, focusId));
+      return form;
     }
     function diplomacyMatrix(map, focusId) {
-      const wrap = el4("div", "editor-section diplomacy-matrix-wrap");
-      wrap.append(el4("h4", "", "\u5916\u4EA4\u4E00\u89A7\uFF08\u5168\u56FD\u5BB6\uFF09"));
-      const states = map.pack.states.filter(isLive20).sort((a, b) => a.i - b.i);
+      const wrap = el6("div", "editor-section diplomacy-matrix-wrap");
+      wrap.append(el6("h4", "", "\u5916\u4EA4\u4E00\u89A7\uFF08\u5168\u56FD\u5BB6\uFF09"));
+      const states = map.pack.states.filter(isLive21).sort((a, b) => a.i - b.i);
       if (states.length < 2) {
-        wrap.append(el4("p", "hint", "\u56FD\u5BB6\u304C2\u3064\u4EE5\u4E0A\u306A\u3044\u3068\u8868\u306B\u306A\u308A\u307E\u305B\u3093\u3002"));
+        wrap.append(el6("p", "hint", "\u56FD\u5BB6\u304C2\u3064\u4EE5\u4E0A\u306A\u3044\u3068\u8868\u306B\u306A\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
       }
       const table2 = document.createElement("table");
@@ -8494,7 +8815,7 @@ ${shown}${more}`;
         tbody.append(tr);
       }
       table2.append(tbody);
-      const scroller = el4("div", "diplomacy-matrix-scroll");
+      const scroller = el6("div", "diplomacy-matrix-scroll");
       scroller.append(table2);
       wrap.append(scroller);
       return wrap;
@@ -8524,28 +8845,18 @@ ${shown}${more}`;
       td.append(sel);
       sel.focus();
     }
-    function renderStateMilitary(map, e, body) {
-      if (!panels?.military) {
-        body.append(el4("p", "muted", "\u8ECD\u4E8B\u30D1\u30CD\u30EB\u304C\u5229\u7528\u3067\u304D\u307E\u305B\u3093"));
-        return;
-      }
-      panels.military.lockToState(e.i);
-      const mount = mounts.regiments;
-      body.append(mount);
-      mount.hidden = false;
-    }
     function renderStateProvinces(map, e, body) {
-      const form = el4("div", "editor-form");
+      const form = el6("div", "editor-form");
       form.append(newProvinceSection(e));
-      const provinces = map.pack.provinces.filter((p) => isLive20(p) && p.state === e.i);
+      const provinces = map.pack.provinces.filter((p) => isLive21(p) && p.state === e.i);
       if (!provinces.length) {
-        form.append(el4("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u300C\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3057\u3001\u300C\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u9818\u571F\u3092\u5272\u308A\u5F53\u3066\u3089\u308C\u307E\u3059\u3002"));
+        form.append(el6("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u300C\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3057\u3001\u300C\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u9818\u571F\u3092\u5272\u308A\u5F53\u3066\u3089\u308C\u307E\u3059\u3002"));
       } else {
-        const list = el4("div", "attr-list");
+        const list = el6("div", "attr-list");
         for (const p of provinces) {
-          const row = el4("div", "diplomacy-row");
-          row.append(el4("span", "diplomacy-name", `${p.fullName ?? p.name}\uFF08${p.cells ?? 0}\u30BB\u30EB\uFF09`));
-          const repaint = el4("button", "", "\u3053\u306E\u5C5E\u5DDE\u3092\u5857\u308A\u76F4\u3059");
+          const row = el6("div", "diplomacy-row");
+          row.append(el6("span", "diplomacy-name", `${p.fullName ?? p.name}\uFF08${p.cells ?? 0}\u30BB\u30EB\uFF09`));
+          const repaint = el6("button", "", "\u3053\u306E\u5C5E\u5DDE\u3092\u5857\u308A\u76F4\u3059");
           repaint.type = "button";
           repaint.title = "\u5730\u56F3\u7DE8\u96C6\u30D1\u30CD\u30EB\u306E\u300C\u5C5E\u5DDE\u3092\u5857\u308B\u300D\u30C4\u30FC\u30EB\u306B\u5207\u308A\u66FF\u3048\u3066\u3001\u3053\u306E\u5C5E\u5DDE\u3092\u5BFE\u8C61\u306B\u3057\u307E\u3059";
           repaint.addEventListener("click", () => {
@@ -8554,7 +8865,7 @@ ${shown}${more}`;
             window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
           });
           row.append(repaint);
-          const independence = el4("button", "", "\u72EC\u7ACB\u3055\u305B\u308B");
+          const independence = el6("button", "", "\u72EC\u7ACB\u3055\u305B\u308B");
           independence.type = "button";
           independence.title = "\u3053\u306E\u5C5E\u5DDE\u306E\u9818\u571F\u3092\u5207\u308A\u96E2\u3057\u3001\u65B0\u3057\u3044\u72EC\u7ACB\u56FD\u5BB6\u306B\u3057\u307E\u3059";
           independence.addEventListener("click", async () => {
@@ -8575,20 +8886,20 @@ ${shown}${more}`;
       body.append(form);
     }
     function newProvinceSection(e) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u65B0\u3057\u3044\u5C5E\u5DDE"));
-      const row = el4("div", "diplomacy-row");
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u65B0\u3057\u3044\u5C5E\u5DDE"));
+      const row = el6("div", "diplomacy-row");
       const input = document.createElement("input");
       input.placeholder = "\u5C5E\u5DDE\u306E\u540D\u524D\uFF08\u7A7A\u6B04\u306A\u3089\u4EEE\u306E\u540D\u524D\uFF09";
       row.append(input);
-      const dice = el4("button", "suggest-mini", "\u{1F3B2}");
+      const dice = el6("button", "suggest-mini", "\u{1F3B2}");
       dice.type = "button";
       dice.title = "\u4EEE\u306E\u540D\u524D\u3092\u751F\u6210";
       dice.addEventListener("click", () => {
         input.value = editActions.suggestName("province", { stateId: e.i });
       });
       row.append(dice);
-      const btn3 = el4("button", "", "\u4F5C\u308B");
+      const btn3 = el6("button", "", "\u4F5C\u308B");
       btn3.type = "button";
       btn3.addEventListener("click", () => {
         const newId = editActions.addProvince(e.i, input.value);
@@ -8604,14 +8915,14 @@ ${shown}${more}`;
       return wrap;
     }
     function mergeSection(map, e) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u56FD\u5BB6\u306E\u7D71\u5408"));
-      const others = map.pack.states.filter((s) => isLive20(s) && s.i !== e.i && s.i > 0);
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u56FD\u5BB6\u306E\u7D71\u5408"));
+      const others = map.pack.states.filter((s) => isLive21(s) && s.i !== e.i && s.i > 0);
       if (!others.length) {
-        wrap.append(el4("p", "hint", "\u7D71\u5408\u3067\u304D\u308B\u4ED6\u306E\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
+        wrap.append(el6("p", "hint", "\u7D71\u5408\u3067\u304D\u308B\u4ED6\u306E\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
       }
-      const row = el4("div", "diplomacy-row");
+      const row = el6("div", "diplomacy-row");
       const sel = document.createElement("select");
       for (const s of others) {
         const o = document.createElement("option");
@@ -8620,7 +8931,7 @@ ${shown}${more}`;
         sel.append(o);
       }
       row.append(sel);
-      const btn3 = el4("button", "danger", "\u3053\u306E\u56FD\u5BB6\u3092\u7D71\u5408\u3055\u305B\u308B\uFF08\u89E3\u6563\uFF09");
+      const btn3 = el6("button", "danger", "\u3053\u306E\u56FD\u5BB6\u3092\u7D71\u5408\u3055\u305B\u308B\uFF08\u89E3\u6563\uFF09");
       btn3.type = "button";
       btn3.addEventListener("click", async () => {
         const target = map.pack.states[Number(sel.value)];
@@ -8633,33 +8944,14 @@ ${shown}${more}`;
       });
       row.append(btn3);
       wrap.append(row);
-      wrap.append(el4("p", "hint", "\u3053\u306E\u56FD\u5BB6\u306E\u5168\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u30FB\u90E8\u968A\u3092\u9078\u3093\u3060\u56FD\u5BB6\u306B\u7D71\u5408\u3057\u3001\u3053\u306E\u56FD\u5BB6\u81EA\u4F53\u306F\u89E3\u6563\u3057\u307E\u3059\u3002"));
-      return wrap;
-    }
-    function growthRateSection(stateId) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u4EBA\u53E3\u5897\u52A0\u7387"));
-      const attrs = editActions.getAttributes("state", stateId);
-      const existing = attrs.find(([k]) => k === "\u4EBA\u53E3\u5897\u52A0\u7387");
-      const row = el4("label", "field");
-      const input = document.createElement("input");
-      input.type = "number";
-      input.step = "0.1";
-      input.value = existing ? existing[1] : "1.0";
-      input.addEventListener("change", () => {
-        const next = attrs.filter(([k]) => k !== "\u4EBA\u53E3\u5897\u52A0\u7387");
-        next.push(["\u4EBA\u53E3\u5897\u52A0\u7387", input.value]);
-        editActions.setAttributes("state", stateId, next);
-      });
-      row.append(el4("span", "field-label", "\u5E74\u3042\u305F\u308A\u306E\u500D\u7387\uFF08\u4F8B\uFF1A1.0\uFF1D\u73FE\u72B6\u7DAD\u6301\uFF09"), input);
-      wrap.append(row);
+      wrap.append(el6("p", "hint", "\u3053\u306E\u56FD\u5BB6\u306E\u5168\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u30FB\u90E8\u968A\u3092\u9078\u3093\u3060\u56FD\u5BB6\u306B\u7D71\u5408\u3057\u3001\u3053\u306E\u56FD\u5BB6\u81EA\u4F53\u306F\u89E3\u6563\u3057\u307E\u3059\u3002"));
       return wrap;
     }
     function renderCell(map, title, body) {
       const info = describeCell(map, current.id);
       title.textContent = `\u30BB\u30EB #${current.id}`;
       if (!info) {
-        body.append(el4("p", "muted", "\u60C5\u5831\u304C\u3042\u308A\u307E\u305B\u3093"));
+        body.append(el6("p", "muted", "\u60C5\u5831\u304C\u3042\u308A\u307E\u305B\u3093"));
         return;
       }
       const rows = [
@@ -8673,13 +8965,13 @@ ${shown}${more}`;
       ];
       body.append(table(rows.filter(([, v]) => v != null)));
       if (info.burg) {
-        const b = el4("button", "link", `\u90FD\u5E02\u300C${info.burg}\u300D\u3092\u958B\u304F`);
+        const b = el6("button", "link", `\u90FD\u5E02\u300C${info.burg}\u300D\u3092\u958B\u304F`);
         b.addEventListener("click", () => open("burg", map.pack.cells.burg[current.id]));
         body.append(b);
       }
       const stateId = map.pack.cells.state[current.id];
       if (stateId) {
-        const b = el4("button", "link", `\u56FD\u5BB6\u300C${info.state}\u300D\u3092\u958B\u304F`);
+        const b = el6("button", "link", `\u56FD\u5BB6\u300C${info.state}\u300D\u3092\u958B\u304F`);
         b.addEventListener("click", () => open("state", stateId));
         body.append(b);
       }
@@ -8691,9 +8983,9 @@ ${shown}${more}`;
         return;
       }
       title.textContent = `${m.icon} ${m.name ?? defaultMarkerName(m.type)}`;
-      const form = el4("div", "editor-form");
-      const typeRow = el4("label", "field");
-      typeRow.append(el4("span", "field-label", "\u7A2E\u985E"));
+      const form = el6("div", "editor-form");
+      const typeRow = el6("label", "field");
+      typeRow.append(el6("span", "field-label", "\u7A2E\u985E"));
       const sel = document.createElement("select");
       for (const t of DEFAULT_MARKER_TYPES) {
         const o = document.createElement("option");
@@ -8717,7 +9009,7 @@ ${shown}${more}`;
       form.append(typeRow);
       form.append(textField2("\u540D\u524D", m.name ?? defaultMarkerName(m.type), (v) => editActions.editMarker(m.i, { name: v })));
       form.append(noteField(map, "marker", m.i));
-      const del = el4("button", "danger", "\u3053\u306E\u30DE\u30FC\u30AB\u30FC\u3092\u524A\u9664");
+      const del = el6("button", "danger", "\u3053\u306E\u30DE\u30FC\u30AB\u30FC\u3092\u524A\u9664");
       del.type = "button";
       del.addEventListener("click", async () => {
         if (await confirmDialog("\u3053\u306E\u30DE\u30FC\u30AB\u30FC\u3092\u524A\u9664\u3057\u307E\u3059\u304B\uFF1F", { danger: true, okLabel: "\u524A\u9664" })) {
@@ -8730,28 +9022,28 @@ ${shown}${more}`;
     }
     function renderBurg(map, title, body) {
       const b = map.pack.burgs[current.id];
-      if (!isLive20(b)) {
+      if (!isLive21(b)) {
         close();
         return;
       }
       title.textContent = `${b.capital ? "\u{1F3F0} " : "\u{1F3D8}\uFE0F "}${b.name}`;
-      const form = el4("div", "editor-form");
+      const form = el6("div", "editor-form");
       form.append(table([
-        ["\u56FD\u5BB6", isLive20(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
+        ["\u56FD\u5BB6", isLive21(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
         ["\u6587\u5316", map.pack.cultures[b.culture]?.name ?? ""],
         ["\u4EBA\u53E3(\u6982\u7B97)", (b.population ?? 0).toFixed(2)]
       ]));
       form.append(textField2("\u540D\u524D", b.name, (v) => editActions.renameBurg(b.i, v), () => editActions.suggestName("burg", { id: b.i })));
       form.append(...provisionalNote("burg", b.i));
       if (!b.capital) {
-        const cap = el4("button", "", "\u3053\u306E\u90FD\u5E02\u3092\u9996\u90FD\u306B\u3059\u308B");
+        const cap = el6("button", "", "\u3053\u306E\u90FD\u5E02\u3092\u9996\u90FD\u306B\u3059\u308B");
         cap.type = "button";
         cap.addEventListener("click", () => editActions.setCapital(b.state, b.i));
         form.append(cap);
       }
       form.append(noteField(map, "burg", b.i));
       const reason = editActions.whyCannotRemoveBurg(b.i);
-      const del = el4("button", "danger", "\u3053\u306E\u90FD\u5E02\u3092\u524A\u9664");
+      const del = el6("button", "danger", "\u3053\u306E\u90FD\u5E02\u3092\u524A\u9664");
       del.type = "button";
       del.disabled = !!reason;
       if (reason) del.title = reason;
@@ -8762,51 +9054,50 @@ ${shown}${more}`;
         }
       });
       form.append(del);
-      if (reason) form.append(el4("p", "hint", reason));
+      if (reason) form.append(el6("p", "hint", reason));
       body.append(form);
     }
     function renderEntity(map, kind, title, body) {
       const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
       const e = list?.[current.id];
-      if (!isLive20(e)) {
+      if (!isLive21(e)) {
         close();
         return;
       }
       const labelOf = { culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
       title.textContent = `${labelOf}\u300C${e.fullName ?? e.name}\u300D`;
-      const form = el4("div", "editor-form");
+      const form = el6("div", "editor-form");
       const stats = [["\u30BB\u30EB\u6570", e.cells], ["\u9762\u7A4D", e.area], ["\u90FD\u5E02\u6570", Array.isArray(e.burgs) ? e.burgs.length : e.burgs]].filter(([, v]) => v != null);
       form.append(table(stats));
       form.append(textField2("\u540D\u524D", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v), () => editActions.suggestName(kind, { id: e.i })));
       form.append(...provisionalNote(kind, e.i));
       if (kind === "culture") form.append(nameStyleSection(e.i));
-      form.append(attributesField(kind, e.i));
       form.append(noteField(map, kind, e.i));
       body.append(form);
     }
     function techLevelSection(stateId) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u6280\u8853\u6C34\u6E96"));
-      const row = el4("div", "tech-level-row");
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u6280\u8853\u6C34\u6E96"));
+      const row = el6("div", "tech-level-row");
       const slider2 = document.createElement("input");
       slider2.type = "range";
       slider2.min = String(editActions.TECH_MIN);
       slider2.max = String(editActions.TECH_MAX);
       slider2.step = "1";
       slider2.value = String(editActions.getTechLevel(stateId) ?? 3);
-      const value = el4("span", "tech-level-value", slider2.value);
+      const value = el6("span", "tech-level-value", slider2.value);
       slider2.addEventListener("input", () => {
         value.textContent = slider2.value;
       });
       slider2.addEventListener("change", () => editActions.setTechLevel(stateId, Number(slider2.value)));
       row.append(slider2, value);
       wrap.append(row);
-      wrap.append(el4("p", "hint", "1\uFF08\u4F4E\u3044\uFF09\u301C10\uFF08\u9AD8\u3044\uFF09\u3002\u4EBA\u53E3\u6210\u9577\u7387\u30FB\u7523\u696D\u529B\u306E\u8A08\u7B97\u306B\u4F7F\u308F\u308C\u307E\u3059\u3002"));
+      wrap.append(el6("p", "hint", "1\uFF08\u4F4E\u3044\uFF09\u301C10\uFF08\u9AD8\u3044\uFF09\u3002\u4EBA\u53E3\u6210\u9577\u7387\u30FB\u7523\u696D\u529B\u306E\u8A08\u7B97\u306B\u4F7F\u308F\u308C\u307E\u3059\u3002"));
       return wrap;
     }
     function doctrineSection(stateId) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
       const sel = document.createElement("select");
       const current2 = editActions.getDoctrine(stateId);
       for (const d of editActions.DOCTRINES) {
@@ -8818,16 +9109,16 @@ ${shown}${more}`;
       }
       sel.addEventListener("change", () => editActions.setDoctrine(stateId, sel.value));
       wrap.append(sel);
-      wrap.append(el4("p", "hint", "\u56FD\u5168\u4F53\u306E\u6226\u3044\u65B9\u306E\u65B9\u91DD\u3002\u5168\u90E8\u968A\u306E\u6226\u95D8\u529B\u306B\u4E00\u5F8B\u3067\u5F71\u97FF\u3057\u307E\u3059\uFF08\u90E8\u968A\u3054\u3068\u306B\u306F\u8A2D\u5B9A\u3057\u307E\u305B\u3093\uFF09\u3002"));
+      wrap.append(el6("p", "hint", "\u56FD\u5168\u4F53\u306E\u6226\u3044\u65B9\u306E\u65B9\u91DD\u3002\u5168\u90E8\u968A\u306E\u6226\u95D8\u529B\u306B\u4E00\u5F8B\u3067\u5F71\u97FF\u3057\u307E\u3059\uFF08\u90E8\u968A\u3054\u3068\u306B\u306F\u8A2D\u5B9A\u3057\u307E\u305B\u3093\uFF09\u3002"));
       return wrap;
     }
     function diplomacySection(map, stateId) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u5916\u4EA4\u95A2\u4FC2"));
-      const others = map.pack.states.filter((s) => isLive20(s) && s.i !== stateId);
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u5916\u4EA4\u95A2\u4FC2"));
+      const others = map.pack.states.filter((s) => isLive21(s) && s.i !== stateId);
       for (const s of others) {
-        const row = el4("div", "diplomacy-row");
-        row.append(el4("span", "diplomacy-name", s.name));
+        const row = el6("div", "diplomacy-row");
+        row.append(el6("span", "diplomacy-name", s.name));
         const sel = document.createElement("select");
         const current2 = editActions.getRelation(map, stateId, s.i) ?? "Neutral";
         for (const r of RELATIONS) {
@@ -8843,55 +9134,12 @@ ${shown}${more}`;
       }
       return wrap;
     }
-    function attributesField(kind, id) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u8FFD\u52A0\u306E\u5C5E\u6027"));
-      const list = el4("div", "attr-list");
-      const entries = editActions.getAttributes(kind, id);
-      const rowsState = entries.length ? entries.slice() : [["", ""]];
-      const renderRows = () => {
-        list.replaceChildren();
-        rowsState.forEach((pair, i) => {
-          const row = el4("div", "attr-row");
-          const k = document.createElement("input");
-          k.placeholder = "\u9805\u76EE\u540D\uFF08\u4F8B\uFF1A\u6280\u8853\u6C34\u6E96\uFF09";
-          k.value = pair[0];
-          const v = document.createElement("input");
-          v.placeholder = "\u5024\uFF08\u4F8B\uFF1A\u4E2D\u4E16\uFF09";
-          v.value = pair[1];
-          const commit = () => {
-            rowsState[i] = [k.value, v.value];
-            editActions.setAttributes(kind, id, rowsState.filter(([kk]) => kk.trim()));
-          };
-          k.addEventListener("change", commit);
-          v.addEventListener("change", commit);
-          const rm = el4("button", "attr-remove", "\u2212");
-          rm.type = "button";
-          rm.addEventListener("click", () => {
-            rowsState.splice(i, 1);
-            editActions.setAttributes(kind, id, rowsState.filter(([kk]) => kk.trim()));
-            renderRows();
-          });
-          row.append(k, v, rm);
-          list.append(row);
-        });
-      };
-      renderRows();
-      const add = el4("button", "", "\uFF0B \u9805\u76EE\u3092\u8FFD\u52A0");
-      add.type = "button";
-      add.addEventListener("click", () => {
-        rowsState.push(["", ""]);
-        renderRows();
-      });
-      wrap.append(list, add);
-      return wrap;
-    }
     function noteField(map, type, id) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u6587\u7AE0"));
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u6587\u7AE0"));
       const { text: text2, rich } = htmlToEditable(editActions.getNote(type, id));
       if (rich) {
-        wrap.append(el4("p", "hint", "\u66F8\u5F0F\uFF08HTML\uFF09\u3092\u542B\u3080\u6587\u7AE0\u306E\u305F\u3081\u3001\u66F8\u5F0F\u3092\u4FDD\u3063\u305F\u307E\u307E\u6B21\u306E\u3068\u304A\u308A\u4FDD\u5B58\u3055\u308C\u307E\u3059\u3002\u30D7\u30EC\u30FC\u30F3\u30C6\u30AD\u30B9\u30C8\u3068\u3057\u3066\u7DE8\u96C6\u3059\u308B\u3068\u66F8\u5F0F\u306F\u5931\u308F\u308C\u307E\u3059\u3002"));
+        wrap.append(el6("p", "hint", "\u66F8\u5F0F\uFF08HTML\uFF09\u3092\u542B\u3080\u6587\u7AE0\u306E\u305F\u3081\u3001\u66F8\u5F0F\u3092\u4FDD\u3063\u305F\u307E\u307E\u6B21\u306E\u3068\u304A\u308A\u4FDD\u5B58\u3055\u308C\u307E\u3059\u3002\u30D7\u30EC\u30FC\u30F3\u30C6\u30AD\u30B9\u30C8\u3068\u3057\u3066\u7DE8\u96C6\u3059\u308B\u3068\u66F8\u5F0F\u306F\u5931\u308F\u308C\u307E\u3059\u3002"));
       }
       const ta = document.createElement("textarea");
       ta.className = "note-field";
@@ -8902,8 +9150,8 @@ ${shown}${more}`;
       return wrap;
     }
     function textField2(label, value, onChange, suggest) {
-      const row = el4("label", "field");
-      row.append(el4("span", "field-label", label));
+      const row = el6("label", "field");
+      row.append(el6("span", "field-label", label));
       const input = document.createElement("input");
       input.value = value ?? "";
       input.addEventListener("change", () => onChange(input.value));
@@ -8911,8 +9159,8 @@ ${shown}${more}`;
         row.append(input);
         return row;
       }
-      const box = el4("span", "name-row");
-      const dice = el4("button", "suggest-mini", "\u{1F3B2}");
+      const box = el6("span", "name-row");
+      const dice = el6("button", "suggest-mini", "\u{1F3B2}");
       dice.type = "button";
       dice.title = "\u4EEE\u306E\u540D\u524D\u3092\u751F\u6210\uFF08\u62BC\u3059\u305F\u3073\u306B\u5909\u308F\u308A\u307E\u3059\u3002Undo \u3067\u623B\u305B\u307E\u3059\uFF09";
       dice.addEventListener("click", (ev) => {
@@ -8929,17 +9177,17 @@ ${shown}${more}`;
     }
     function provisionalNote(kind, id) {
       if (!editActions.isProvisional(kind, id)) return [];
-      const box = el4("div", "provisional-note");
-      box.append(el4("span", "", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3067\u3059\u3002"));
-      const ok = el4("button", "", "\u3053\u306E\u540D\u524D\u3067\u78BA\u5B9A");
+      const box = el6("div", "provisional-note");
+      box.append(el6("span", "", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3067\u3059\u3002"));
+      const ok = el6("button", "", "\u3053\u306E\u540D\u524D\u3067\u78BA\u5B9A");
       ok.type = "button";
       ok.addEventListener("click", () => editActions.confirmName(kind, id));
       box.append(ok);
       return [box];
     }
     function nameStyleSection(cultureId) {
-      const wrap = el4("div", "editor-section");
-      wrap.append(el4("h4", "", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u4EEE\u751F\u6210\u7528\uFF09"));
+      const wrap = el6("div", "editor-section");
+      wrap.append(el6("h4", "", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u4EEE\u751F\u6210\u7528\uFF09"));
       const sel = document.createElement("select");
       const explicit = editActions.getNameStyle(cultureId);
       const auto = editActions.effectiveNameStyle(cultureId);
@@ -8956,7 +9204,7 @@ ${shown}${more}`;
       sel.value = explicit ?? "";
       sel.addEventListener("change", () => editActions.setNameStyle(cultureId, sel.value || null));
       wrap.append(sel);
-      wrap.append(el4("p", "hint", "\u3053\u306E\u6587\u5316\u306E\u9818\u57DF\u306B\u4F5C\u308B\u90FD\u5E02\u30FB\u5C5E\u5DDE\u306E\u4EEE\u306E\u540D\u524D\u304C\u3001\u3053\u306E\u7CFB\u7D71\u306E\u97FF\u304D\u306B\u306A\u308A\u307E\u3059\u3002"));
+      wrap.append(el6("p", "hint", "\u3053\u306E\u6587\u5316\u306E\u9818\u57DF\u306B\u4F5C\u308B\u90FD\u5E02\u30FB\u5C5E\u5DDE\u306E\u4EEE\u306E\u540D\u524D\u304C\u3001\u3053\u306E\u7CFB\u7D71\u306E\u97FF\u304D\u306B\u306A\u308A\u307E\u3059\u3002"));
       return wrap;
     }
     function table(rows) {
@@ -8964,7 +9212,7 @@ ${shown}${more}`;
       t.className = "editor-table";
       for (const [k, v] of rows) {
         const tr = document.createElement("tr");
-        tr.append(el4("th", "", k), el4("td", "", String(v)));
+        tr.append(el6("th", "", k), el6("td", "", String(v)));
         t.append(tr);
       }
       return t;
@@ -8979,6 +9227,7 @@ ${shown}${more}`;
       openMarker: (id) => open("marker", id),
       openEntity: (kind, id) => open(kind, id),
       close,
+      buildDiplomacy,
       promptBurgName(cb, cell) {
         promptDialog("\u65B0\u3057\u3044\u90FD\u5E02\u306E\u540D\u524D", "", {
           suggest: () => editActions.suggestName("burg", { cell }),
@@ -9263,6 +9512,32 @@ ${shown}${more}`;
           return r.id;
         }));
       },
+      warNameTaken(name, exceptId) {
+        return withMap((map) => warNameTaken(map, name, exceptId)) ?? false;
+      },
+      /** 召集する部隊（{ [国家ID]: [部隊ID...] }）を保存する */
+      setMuster(warId, muster) {
+        withMap((map) => safeRun("\u90E8\u968A\u306E\u53EC\u96C6", () => {
+          store.commit(planSetMuster(map, warId, muster));
+          rerender();
+        }));
+      },
+      /** ある国の、その戦争に召集された部隊の合計戦力 */
+      musterPower(war, stateId) {
+        return withMap((map) => {
+          const ids2 = new Set(war.muster?.[stateId] ?? []);
+          return Math.round(regimentsOf(map.pack.states[stateId] ?? {}).filter((r) => ids2.has(r.i)).reduce((n, r) => n + forcePower(r.u), 0));
+        }) ?? 0;
+      },
+      /** 戦闘を戦争に記録する（勝敗は利用者が決める。戦力は召集した部隊の合計を一緒に残す） */
+      recordBattle(warId, { attackerState, defenderState, winner }) {
+        withMap((map) => safeRun("\u6226\u95D8\u306E\u8A18\u9332", () => {
+          const war = listWars(map).find((w) => w.id === warId);
+          const result = { winner, aPower: this.musterPower(war, attackerState), dPower: this.musterPower(war, defenderState) };
+          store.commit(planRecordBattle(map, warId, { attackerState, defenderState, result, date: currentDate() }));
+          rerender();
+        }));
+      },
       suggestCessions(attackerId, defenderId) {
         return withMap((map) => suggestCessions(map, attackerId, defenderId)) ?? [];
       },
@@ -9377,7 +9652,7 @@ ${shown}${more}`;
   }
 
   // js/ui/time-settings-dialog.js
-  var el5 = (tag, cls, text2) => {
+  var el7 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
@@ -9388,17 +9663,17 @@ ${shown}${more}`;
     if (!map) return;
     const dialog = document.createElement("dialog");
     dialog.className = "confirm-dialog time-settings-dialog";
-    dialog.append(el5("h2", null, "\u6642\u9593\u306E\u8A2D\u5B9A"));
-    dialog.append(el5("h3", "dialog-subhead", "\u73FE\u5728\u306E\u5E74\u6708"));
-    dialog.append(el5("p", "hint", "1\u30F6\u6708\u305A\u3064\u9032\u3081\u308B\u4EE5\u5916\u306B\u3001\u3053\u3053\u3067\u5E74\u6708\u3092\u76F4\u63A5\u6307\u5B9A\u3057\u3066\u305D\u306E\u6642\u70B9\u304B\u3089\u59CB\u3081\u308B\u3053\u3068\u3082\u3067\u304D\u307E\u3059\u3002"));
-    const dateRow = el5("div", "time-settings-row");
+    dialog.append(el7("h2", null, "\u6642\u9593\u306E\u8A2D\u5B9A"));
+    dialog.append(el7("h3", "dialog-subhead", "\u73FE\u5728\u306E\u5E74\u6708"));
+    dialog.append(el7("p", "hint", "1\u30F6\u6708\u305A\u3064\u9032\u3081\u308B\u4EE5\u5916\u306B\u3001\u3053\u3053\u3067\u5E74\u6708\u3092\u76F4\u63A5\u6307\u5B9A\u3057\u3066\u305D\u306E\u6642\u70B9\u304B\u3089\u59CB\u3081\u308B\u3053\u3068\u3082\u3067\u304D\u307E\u3059\u3002"));
+    const dateRow = el7("div", "time-settings-row");
     const yearInput = document.createElement("input");
     yearInput.type = "number";
     yearInput.min = "1";
     yearInput.step = "1";
     yearInput.value = String(map.worldTime.year);
     yearInput.setAttribute("aria-label", "\u5E74");
-    const yearSuffix = el5("span", "", "\u5E74");
+    const yearSuffix = el7("span", "", "\u5E74");
     const monthInput = document.createElement("input");
     monthInput.type = "number";
     monthInput.min = "1";
@@ -9406,21 +9681,21 @@ ${shown}${more}`;
     monthInput.step = "1";
     monthInput.value = String(map.worldTime.month);
     monthInput.setAttribute("aria-label", "\u6708");
-    const monthSuffix = el5("span", "", "\u6708");
+    const monthSuffix = el7("span", "", "\u6708");
     dateRow.append(yearInput, yearSuffix, monthInput, monthSuffix);
     dialog.append(dateRow);
-    const applyDateBtn = el5("button", "primary", "\u3053\u306E\u5E74\u6708\u306B\u8A2D\u5B9A\u3059\u308B");
+    const applyDateBtn = el7("button", "primary", "\u3053\u306E\u5E74\u6708\u306B\u8A2D\u5B9A\u3059\u308B");
     applyDateBtn.type = "button";
     applyDateBtn.addEventListener("click", () => {
       timeActions.setWorldTime(yearInput.value, monthInput.value);
       renderEraList();
     });
     dialog.append(applyDateBtn);
-    dialog.append(el5("h3", "dialog-subhead", "\u6642\u4EE3\u533A\u5206"));
-    dialog.append(el5("p", "hint", "\u300C\u25EF\u5E74\u304B\u3089\u25B3\u25B3\u6642\u4EE3\u300D\u3068\u3044\u3046\u5F62\u3067\u3001\u597D\u304D\u306A\u6570\u3060\u3051\u6642\u4EE3\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002\u5E74\u6708\u306E\u8868\u793A\u306B\u3001\u4ECA\u304C\u4F55\u6642\u4EE3\u304B\u304C\u6DFB\u3048\u3089\u308C\u307E\u3059\u3002"));
-    const eraList = el5("div", "era-list");
+    dialog.append(el7("h3", "dialog-subhead", "\u6642\u4EE3\u533A\u5206"));
+    dialog.append(el7("p", "hint", "\u300C\u25EF\u5E74\u304B\u3089\u25B3\u25B3\u6642\u4EE3\u300D\u3068\u3044\u3046\u5F62\u3067\u3001\u597D\u304D\u306A\u6570\u3060\u3051\u6642\u4EE3\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002\u5E74\u6708\u306E\u8868\u793A\u306B\u3001\u4ECA\u304C\u4F55\u6642\u4EE3\u304B\u304C\u6DFB\u3048\u3089\u308C\u307E\u3059\u3002"));
+    const eraList = el7("div", "era-list");
     dialog.append(eraList);
-    const newRow = el5("div", "time-settings-row");
+    const newRow = el7("div", "time-settings-row");
     const nameInput = document.createElement("input");
     nameInput.placeholder = "\u6642\u4EE3\u306E\u540D\u524D\uFF08\u4F8B: \u6C5F\u6238\u6642\u4EE3\uFF09";
     const fromInput = document.createElement("input");
@@ -9428,10 +9703,10 @@ ${shown}${more}`;
     fromInput.min = "1";
     fromInput.step = "1";
     fromInput.placeholder = "\u958B\u59CB\u5E74";
-    const fromSuffix = el5("span", "", "\u5E74\u304B\u3089");
+    const fromSuffix = el7("span", "", "\u5E74\u304B\u3089");
     newRow.append(nameInput, fromInput, fromSuffix);
     dialog.append(newRow);
-    const addEraBtn = el5("button", "", "\u6642\u4EE3\u3092\u8FFD\u52A0");
+    const addEraBtn = el7("button", "", "\u6642\u4EE3\u3092\u8FFD\u52A0");
     addEraBtn.type = "button";
     addEraBtn.addEventListener("click", () => {
       if (!nameInput.value.trim() || !fromInput.value) return;
@@ -9445,13 +9720,13 @@ ${shown}${more}`;
       eraList.replaceChildren();
       const list = editActions.listEras();
       if (!list.length) {
-        eraList.append(el5("p", "muted", "\u307E\u3060\u6642\u4EE3\u306F\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002"));
+        eraList.append(el7("p", "muted", "\u307E\u3060\u6642\u4EE3\u306F\u8A2D\u5B9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002"));
         return;
       }
       for (const e of list) {
-        const row = el5("div", "era-row");
-        row.append(el5("span", "era-row-name", `${e.name}\uFF08${e.fromYear}\u5E74\u301C\uFF09`));
-        const editBtn = el5("button", "", "\u7DE8\u96C6");
+        const row = el7("div", "era-row");
+        row.append(el7("span", "era-row-name", `${e.name}\uFF08${e.fromYear}\u5E74\u301C\uFF09`));
+        const editBtn = el7("button", "", "\u7DE8\u96C6");
         editBtn.type = "button";
         editBtn.addEventListener("click", () => {
           nameInput.value = e.name;
@@ -9467,7 +9742,7 @@ ${shown}${more}`;
             renderEraList();
           };
         });
-        const delBtn = el5("button", "danger", "\u524A\u9664");
+        const delBtn = el7("button", "danger", "\u524A\u9664");
         delBtn.type = "button";
         delBtn.addEventListener("click", () => {
           editActions.removeEra(e.id);
@@ -9478,8 +9753,8 @@ ${shown}${more}`;
       }
     }
     renderEraList();
-    const actions = el5("div", "confirm-dialog-actions");
-    const closeBtn = el5("button", "primary", "\u9589\u3058\u308B");
+    const actions = el7("div", "confirm-dialog-actions");
+    const closeBtn = el7("button", "primary", "\u9589\u3058\u308B");
     closeBtn.type = "button";
     actions.append(closeBtn);
     dialog.append(actions);
@@ -9538,21 +9813,17 @@ ${shown}${more}`;
   }
 
   // js/ui/panels/military-panel.js
-  var el6 = (tag, cls, text2) => {
+  var el8 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive21 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive22 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initMilitaryPanel({ store, simActions, editActions }) {
     const root = byId("tab-regiments");
     let selectedState = null;
     let lockedToState = false;
-    let targetBrowseState = null;
-    let attackPick = null;
-    let musterMode = false;
-    const musterSelection = /* @__PURE__ */ new Set();
     const cardCache = /* @__PURE__ */ new Map();
     let pending = null;
     function doctrineOf(stateId) {
@@ -9562,10 +9833,6 @@ ${shown}${more}`;
       const key = doctrineOf(stateId);
       return editActions.DOCTRINES.find((d) => d.key === key)?.label ?? key;
     }
-    function findActiveWar(stateA, stateB) {
-      const wars = simActions.warsOf(stateA);
-      return wars.find((w) => !w.endedAt && (w.attackers.includes(stateA) && w.defenders.includes(stateB) || w.defenders.includes(stateA) && w.attackers.includes(stateB))) ?? null;
-    }
     function hasFocusWithin(card) {
       const a = document.activeElement;
       return !!a && card.contains(a);
@@ -9574,16 +9841,16 @@ ${shown}${more}`;
       const map = store.getState().map;
       if (!map) {
         root.replaceChildren();
-        root.append(el6("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        root.append(el8("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         cardCache.clear();
         return;
       }
-      const states = map.pack.states.filter(isLive21);
+      const states = map.pack.states.filter(isLive22);
       if (selectedState == null || !states.some((s) => s.i === selectedState)) selectedState = states[0]?.i ?? null;
       root.replaceChildren();
-      const picker = el6("div", "state-picker");
+      const picker = el8("div", "state-picker");
       if (!lockedToState) {
-        picker.append(el6("span", "field-label", "\u56FD\u5BB6"));
+        picker.append(el8("span", "field-label", "\u56FD\u5BB6"));
         const sel = document.createElement("select");
         for (const s of states) {
           const o = document.createElement("option");
@@ -9595,13 +9862,11 @@ ${shown}${more}`;
         sel.addEventListener("change", () => {
           selectedState = Number(sel.value);
           cardCache.clear();
-          musterSelection.clear();
-          musterMode = false;
           render();
         });
         picker.append(sel);
       }
-      const addBtn = el6("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\u2026\uFF08\u30AF\u30EA\u30C3\u30AF\u3067\u53D6\u6D88\uFF09" : "\uFF0B \u65B0\u3057\u3044\u90E8\u968A\u3092\u7DE8\u6210\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\uFF09");
+      const addBtn = el8("button", pending?.type === "place" ? "primary" : "", pending?.type === "place" ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\u2026\uFF08\u30AF\u30EA\u30C3\u30AF\u3067\u53D6\u6D88\uFF09" : "\uFF0B \u65B0\u3057\u3044\u90E8\u968A\u3092\u7DE8\u6210\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u914D\u7F6E\uFF09");
       addBtn.type = "button";
       addBtn.addEventListener("click", () => {
         if (pending?.type === "place") {
@@ -9619,106 +9884,19 @@ ${shown}${more}`;
         render();
       });
       picker.append(addBtn);
-      const musterBtn = el6("button", musterMode ? "primary" : "", musterMode ? "\u52D5\u54E1\u30E2\u30FC\u30C9\u3092\u7D42\u4E86" : "\u90E8\u968A\u3092\u52D5\u54E1\u3057\u3066\u653B\u6483\u2026");
-      musterBtn.type = "button";
-      musterBtn.addEventListener("click", () => {
-        musterMode = !musterMode;
-        musterSelection.clear();
-        cardCache.clear();
-        render();
-      });
-      picker.append(musterBtn);
       root.append(picker);
-      if (musterMode) {
-        const hint = el6("p", "hint", "\u540C\u3058\u5834\u6240\uFF08\u30BB\u30EB\uFF09\u306B\u3044\u308B\u90E8\u968A\u306B\u30C1\u30A7\u30C3\u30AF\u3092\u5165\u308C\u3066\u9078\u3073\u3001\u307E\u3068\u3081\u30661\u3064\u306E\u8ECD\u3068\u3057\u3066\u653B\u6483\u3092\u4ED5\u639B\u3051\u3089\u308C\u307E\u3059\u3002\u884C\u8ECD\u3067\u90E8\u968A\u3092\u96C6\u7D50\u3055\u305B\u3066\u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002");
-        root.append(hint);
-      }
       if (!states.length) {
-        root.append(el6("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
+        root.append(el8("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
         cardCache.clear();
         return;
       }
-      const list = el6("div", "regiment-list");
+      const list = el8("div", "regiment-list");
       const regs = simActions.regimentsOf(selectedState);
-      if (!regs.length) list.append(el6("p", "muted", "\u3053\u306E\u56FD\u306B\u306F\u307E\u3060\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093"));
+      if (!regs.length) list.append(el8("p", "muted", "\u3053\u306E\u56FD\u306B\u306F\u307E\u3060\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093"));
       const liveIds = new Set(regs.map((r) => r.i));
       for (const id of [...cardCache.keys()]) if (!liveIds.has(id)) cardCache.delete(id);
       for (const r of regs) list.append(getOrBuildCard(map, selectedState, r));
       root.append(list);
-      if (musterMode && musterSelection.size > 0) {
-        const bar = el6("div", "muster-bar");
-        const selectedRegs = regs.filter((r) => musterSelection.has(r.i));
-        const cell = selectedRegs[0]?.cell;
-        const sameCell = selectedRegs.every((r) => r.cell === cell);
-        if (!sameCell) {
-          bar.append(el6("p", "muted", "\u9078\u3093\u3060\u90E8\u968A\u304C\u540C\u3058\u5834\u6240\u306B\u3044\u307E\u305B\u3093\u3002\u540C\u3058\u5834\u6240\u306E\u90E8\u968A\u3060\u3051\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044\u3002"));
-        } else {
-          const total = Math.round(selectedRegs.reduce((sum, r) => sum + forcePower(r.u, doctrineOf(selectedState)), 0));
-          bar.append(el6("span", "", `\u52D5\u54E1: ${selectedRegs.length}\u90E8\u968A\uFF08\u5408\u7B97\u6226\u529B ${total.toLocaleString()}\uFF09`));
-          const go = el6("button", "primary", "\u653B\u6483\u5BFE\u8C61\u3092\u9078\u3076 \u2192");
-          go.type = "button";
-          go.addEventListener("click", () => {
-            attackPick = { stateId: selectedState, regIds: [...musterSelection] };
-            musterMode = false;
-            render();
-          });
-          bar.append(go);
-        }
-        root.append(bar);
-      }
-      if (attackPick && attackPick.stateId === selectedState) {
-        root.append(attackTargetSection(map, states));
-      }
-    }
-    function attackTargetSection(map, states) {
-      const wrap = el6("div", "editor-section attack-target-section");
-      wrap.append(el6("h4", "", "\u653B\u6483\u5BFE\u8C61\u3092\u9078\u3076"));
-      const others = states.filter((s) => s.i !== attackPick.stateId);
-      if (!others.length) {
-        wrap.append(el6("p", "muted", "\u4ED6\u306B\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
-        return wrap;
-      }
-      if (targetBrowseState == null || !others.some((s) => s.i === targetBrowseState)) targetBrowseState = others[0].i;
-      const row = el6("div", "state-picker");
-      row.append(el6("span", "field-label", "\u76F8\u624B\u56FD"));
-      const sel = document.createElement("select");
-      for (const s of others) {
-        const o = document.createElement("option");
-        o.value = s.i;
-        o.textContent = s.fullName ?? s.name;
-        if (s.i === targetBrowseState) o.selected = true;
-        sel.append(o);
-      }
-      sel.addEventListener("change", () => {
-        targetBrowseState = Number(sel.value);
-        render();
-      });
-      row.append(sel);
-      const cancelBtn = el6("button", "", "\u653B\u6483\u3092\u53D6\u308A\u3084\u3081\u308B");
-      cancelBtn.type = "button";
-      cancelBtn.addEventListener("click", () => {
-        attackPick = null;
-        render();
-      });
-      row.append(cancelBtn);
-      wrap.append(row);
-      const targetRegs = simActions.regimentsOf(targetBrowseState);
-      if (!targetRegs.length) {
-        wrap.append(el6("p", "muted", "\u3053\u306E\u56FD\u306B\u306F\u307E\u3060\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u90E8\u968A\u304C\u7121\u3044\u56FD\u306F\u653B\u3081\u843D\u3068\u305B\u307E\u305B\u3093\uFF09\u3002"));
-        return wrap;
-      }
-      const list = el6("div", "regiment-list");
-      for (const r of targetRegs) {
-        const card = el6("div", "regiment-card target-card");
-        card.append(el6("p", "regiment-name-ro", `${r.name}\u3000\u914D\u7F6E: \u30BB\u30EB#${r.cell}`));
-        card.append(el6("p", "regiment-power", `\u7DCF\u6226\u529B: ${Math.round(forcePower(r.u, doctrineOf(targetBrowseState))).toLocaleString()}`));
-        const slot = el6("div", "attack-target-slot");
-        card.append(slot);
-        fillAttackTarget(map, targetBrowseState, r, slot);
-        list.append(card);
-      }
-      wrap.append(list);
-      return wrap;
     }
     function getOrBuildCard(map, stateId, reg) {
       const cached = cardCache.get(reg.i);
@@ -9732,20 +9910,8 @@ ${shown}${more}`;
       return built;
     }
     function buildRegimentCard(map, stateId, reg) {
-      const card = el6("div", "regiment-card");
-      const head = el6("div", "regiment-card-head");
-      if (musterMode) {
-        const check = document.createElement("input");
-        check.type = "checkbox";
-        check.dataset.field = "muster-check";
-        check.checked = musterSelection.has(reg.i);
-        check.addEventListener("change", () => {
-          if (check.checked) musterSelection.add(reg.i);
-          else musterSelection.delete(reg.i);
-          render();
-        });
-        head.append(check);
-      }
+      const card = el8("div", "regiment-card");
+      const head = el8("div", "regiment-card-head");
       const nameInput = document.createElement("input");
       nameInput.value = reg.name;
       nameInput.style.fontWeight = "600";
@@ -9755,23 +9921,23 @@ ${shown}${more}`;
       nameInput.style.flex = "1";
       nameInput.dataset.field = "name";
       nameInput.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { name: nameInput.value }));
-      const disbandBtn = el6("button", "danger", "\u89E3\u6563");
+      const disbandBtn = el8("button", "danger", "\u89E3\u6563");
       disbandBtn.type = "button";
       disbandBtn.addEventListener("click", async () => {
         if (await confirmDialog(`\u300C${reg.name}\u300D\u3092\u89E3\u6563\u3057\u307E\u3059\u304B\uFF1F`, { danger: true, okLabel: "\u89E3\u6563" })) simActions.disbandRegiment(stateId, reg.i);
       });
       head.append(nameInput, disbandBtn);
       card.append(head);
-      const cellInfo = el6("p", "muted", `\u914D\u7F6E: \u30BB\u30EB#${reg.cell}`);
+      const cellInfo = el8("p", "muted", `\u914D\u7F6E: \u30BB\u30EB#${reg.cell}`);
       cellInfo.dataset.field = "cell";
       card.append(cellInfo);
-      const doctrineRow = el6("p", "muted regiment-doctrine", `\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3: ${doctrineLabelOf(stateId)}\uFF08\u56FD\u5BB6\u30D1\u30CD\u30EB\u3067\u5909\u66F4\uFF09`);
+      const doctrineRow = el8("p", "muted regiment-doctrine", `\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3: ${doctrineLabelOf(stateId)}\uFF08\u56FD\u5BB6\u30D1\u30CD\u30EB\u3067\u5909\u66F4\uFF09`);
       doctrineRow.dataset.field = "doctrine-label";
       card.append(doctrineRow);
-      const units = el6("div", "regiment-units");
+      const units = el8("div", "regiment-units");
       for (const u of UNIT_TYPES) {
-        const field = el6("div", "unit-field");
-        field.append(el6("span", "", `${u.icon} ${u.label}`));
+        const field = el8("div", "unit-field");
+        field.append(el8("span", "", `${u.icon} ${u.label}`));
         const input = document.createElement("input");
         input.type = "number";
         input.min = "0";
@@ -9782,12 +9948,12 @@ ${shown}${more}`;
         units.append(field);
       }
       card.append(units);
-      const power = el6("p", "regiment-power", `\u7DCF\u6226\u529B: ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}\u3000\u7DCF\u5175\u54E1/\u6A5F\u6570: ${forceHeadcount(reg.u).toLocaleString()}`);
+      const power = el8("p", "regiment-power", `\u7DCF\u6226\u529B: ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}\u3000\u7DCF\u5175\u54E1/\u6A5F\u6570: ${forceHeadcount(reg.u).toLocaleString()}`);
       power.dataset.field = "power";
       card.append(power);
-      const actions = el6("div", "regiment-actions");
+      const actions = el8("div", "regiment-actions");
       const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
-      const moveBtn = el6("button", "", isMovePicking ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3078\u2026" : "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09");
+      const moveBtn = el8("button", "", isMovePicking ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3078\u2026" : "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09");
       moveBtn.dataset.field = "move-btn";
       moveBtn.type = "button";
       moveBtn.addEventListener("click", () => {
@@ -9797,41 +9963,9 @@ ${shown}${more}`;
         });
         render();
       });
-      const isPicking = attackPick && attackPick.stateId === stateId && attackPick.regIds.length === 1 && attackPick.regIds[0] === reg.i;
-      const attackBtn = el6("button", "", isPicking ? "\u5BFE\u8C61\u3092\u9078\u629E\u4E2D\u2026" : "\u5358\u72EC\u3067\u653B\u6483\u3059\u308B");
-      attackBtn.dataset.field = "attack-btn";
-      attackBtn.type = "button";
-      attackBtn.addEventListener("click", () => {
-        attackPick = { stateId, regIds: [reg.i] };
-        render();
-      });
-      actions.append(moveBtn, attackBtn);
+      actions.append(moveBtn);
       card.append(actions);
-      const targetSlot = el6("div", "attack-target-slot");
-      targetSlot.dataset.field = "attack-target-slot";
-      card.append(targetSlot);
-      fillAttackTarget(map, stateId, reg, targetSlot);
       return card;
-    }
-    function fillAttackTarget(map, stateId, reg, slot) {
-      slot.replaceChildren();
-      if (!(attackPick && attackPick.stateId !== stateId)) return;
-      const isMuster = attackPick.regIds.length > 1;
-      const row = el6("div", "attack-target");
-      row.append(el6("span", "", isMuster ? `\u300C${reg.name}\u300D\u304C\u3044\u308B\u5834\u6240\u3092\u72D9\u3046\uFF08\u305D\u306E\u56FD\u306E\u5168\u90E8\u968A\u304C\u5FDC\u6226\uFF09:` : `\u300C${reg.name}\u300D\u3092\u9078\u629E:`));
-      const go = el6("button", "danger", isMuster ? "\u3053\u306E\u5834\u6240\u3078\u653B\u3081\u8FBC\u3080" : "\u3053\u306E\u90E8\u968A\u3092\u653B\u6483");
-      go.type = "button";
-      go.addEventListener("click", async () => {
-        const war = findActiveWar(attackPick.stateId, stateId);
-        const a = attackPick, target = { stateId, regId: reg.i };
-        const result = isMuster ? simActions.musterAttack({ stateId: a.stateId, regIds: a.regIds }, target, war?.id) : simActions.attack({ stateId: a.stateId, regId: a.regIds[0] }, target, war?.id);
-        attackPick = null;
-        musterSelection.clear();
-        render();
-        if (result) await alertDialog(formatBattleResult(result), { okLabel: "\u9589\u3058\u308B" });
-      });
-      row.append(go);
-      slot.append(row);
     }
     function patchRegimentCard(map, stateId, reg, cached) {
       const card = cached.el;
@@ -9849,22 +9983,9 @@ ${shown}${more}`;
       }
       const power = card.querySelector('[data-field="power"]');
       if (power) power.textContent = `\u7DCF\u6226\u529B: ${Math.round(forcePower(reg.u, doctrineOf(stateId))).toLocaleString()}\u3000\u7DCF\u5175\u54E1/\u6A5F\u6570: ${forceHeadcount(reg.u).toLocaleString()}`;
-      const isPicking = attackPick && attackPick.stateId === stateId && attackPick.regIds.length === 1 && attackPick.regIds[0] === reg.i;
-      const attackBtn = card.querySelector('[data-field="attack-btn"]');
-      if (attackBtn) attackBtn.textContent = isPicking ? "\u5BFE\u8C61\u3092\u9078\u629E\u4E2D\u2026" : "\u5358\u72EC\u3067\u653B\u6483\u3059\u308B";
       const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
       const moveBtn = card.querySelector('[data-field="move-btn"]');
       if (moveBtn) moveBtn.textContent = isMovePicking ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u79FB\u52D5\u5148\u3078\u2026" : "\u79FB\u52D5\uFF08\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\uFF09";
-      const targetSlot = card.querySelector('[data-field="attack-target-slot"]');
-      if (targetSlot) fillAttackTarget(map, stateId, reg, targetSlot);
-    }
-    function formatBattleResult(r) {
-      const winLabel = r.winner === "attacker" ? "\u653B\u6483\u5074\u306E\u52DD\u5229" : "\u9632\u5FA1\u5074\u306E\u52DD\u5229";
-      const muster = r.attackerRegimentCount > 1 || r.defenderRegimentCount > 1 ? `\uFF08\u653B\u6483\u5074${r.attackerRegimentCount}\u90E8\u968A vs \u9632\u5FA1\u5074${r.defenderRegimentCount}\u90E8\u968A\uFF09
-` : "";
-      return `${winLabel}
-${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLossFraction * 100).toFixed(0)}%\uFF08${r.attackerCasualties}\uFF09
-\u9632\u5FA1\u5074 \u6226\u529B${r.dPower} \u88AB\u5BB3${(r.defenderLossFraction * 100).toFixed(0)}%\uFF08${r.defenderCasualties}\uFF09`;
     }
     store.subscribe((_s, change) => {
       if (["replace", "commit", "undo", "redo"].includes(change.type)) render();
@@ -9889,15 +10010,6 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       },
       get selectedState() {
         return selectedState;
-      },
-      cancelAttackPick() {
-        if (attackPick || musterMode) {
-          attackPick = null;
-          musterMode = false;
-          musterSelection.clear();
-          targetBrowseState = null;
-          render();
-        }
       },
       /** 地図クリックで部隊の配置/移動を待っているか（edit-mode.js から参照） */
       regimentPending() {
@@ -9938,96 +10050,213 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
   }
 
   // js/ui/panels/wars-panel.js
-  var el7 = (tag, cls, text2) => {
+  var el9 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive22 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive23 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initWarsPanel({ store, simActions }) {
     const root = byId("tab-wars");
+    let selected = null;
+    let creating = false;
+    let draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set() };
+    const stateName = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     function render() {
       root.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        root.append(el7("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        root.append(el9("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive22);
-      root.append(declareForm(map, states));
+      const states = map.pack.states.filter(isLive23);
       const wars = simActions.listWars().slice().reverse();
-      if (!wars.length) {
-        root.append(el7("p", "muted", "\u6226\u4E89\u306E\u8A18\u9332\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
-        return;
+      if (selected != null && !wars.some((w) => w.id === selected)) selected = null;
+      const split = el9("div", "win-split");
+      const list = el9("div", "win-list");
+      const add = el9("button", creating ? "primary" : "", "\uFF0B \u65B0\u3057\u3044\u6226\u4E89\uFF08\u5BA3\u6226\u5E03\u544A\uFF09");
+      add.type = "button";
+      add.addEventListener("click", () => {
+        creating = true;
+        selected = null;
+        render();
+      });
+      list.append(add);
+      for (const w of wars) {
+        const b = el9("button", `${w.id === selected ? "active" : ""}${w.endedAt ? " ended" : ""}`, `${w.endedAt ? "\u{1F54A} " : "\u2694 "}${w.name}`);
+        b.type = "button";
+        b.addEventListener("click", () => {
+          selected = w.id;
+          creating = false;
+          render();
+        });
+        list.append(b);
       }
-      for (const w of wars) root.append(warCard(map, states, w));
-    }
-    function stateName(map, id) {
-      return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
+      if (!wars.length) list.append(el9("p", "muted", "\u6226\u4E89\u306E\u8A18\u9332\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+      const detail = el9("div", "win-detail");
+      if (creating) detail.append(declareForm(map, states));
+      else if (selected != null) detail.append(warDetail(map, states, wars.find((w) => w.id === selected)));
+      else detail.append(el9("p", "muted", "\u5DE6\u306E\u4E00\u89A7\u304B\u3089\u6226\u4E89\u3092\u9078\u3076\u304B\u3001\u300C\u65B0\u3057\u3044\u6226\u4E89\u300D\u3067\u5BA3\u6226\u5E03\u544A\u3057\u3066\u304F\u3060\u3055\u3044\u3002"));
+      split.append(list, detail);
+      root.append(split);
     }
     function declareForm(map, states) {
-      const wrap = el7("div", "editor-section");
-      wrap.append(el7("h4", "", "\u5BA3\u6226\u5E03\u544A"));
-      const row = el7("div", "member-picker");
-      const aSel = document.createElement("select");
-      const bSel = document.createElement("select");
-      for (const s of states) {
-        const o1 = document.createElement("option");
-        o1.value = s.i;
-        o1.textContent = s.name;
-        aSel.append(o1);
-      }
-      for (const s of states) {
-        const o2 = document.createElement("option");
-        o2.value = s.i;
-        o2.textContent = s.name;
-        bSel.append(o2);
-      }
-      if (states[1]) bSel.value = String(states[1].i);
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u5BA3\u6226\u5E03\u544A"));
       const nameInput = document.createElement("input");
-      nameInput.placeholder = "\u6226\u4E89\u306E\u540D\u524D\uFF08\u7701\u7565\u53EF\uFF09";
-      const go = el7("button", "danger", "\u5BA3\u6226\u5E03\u544A\u3059\u308B");
+      nameInput.placeholder = "\u6226\u4E89\u306E\u540D\u524D\uFF08\u7701\u7565\u3059\u308B\u3068\u81EA\u52D5\u3067\u4ED8\u304D\u307E\u3059\uFF09";
+      nameInput.value = draft.name;
+      const warn = el9("p", "muted", "");
+      const go = el9("button", "danger", "\u5BA3\u6226\u5E03\u544A\u3059\u308B");
       go.type = "button";
+      const sideBox = (label, key, other) => {
+        const box = el9("div", "member-picker");
+        box.append(el9("span", "field-label", label));
+        for (const s of states) {
+          const l = el9("label", "");
+          const cb = document.createElement("input");
+          cb.type = "checkbox";
+          cb.checked = draft[key].has(s.i);
+          cb.disabled = draft[other].has(s.i);
+          cb.addEventListener("change", () => {
+            if (cb.checked) draft[key].add(s.i);
+            else draft[key].delete(s.i);
+            draft.name = nameInput.value;
+            render();
+          });
+          l.append(cb, document.createTextNode(s.name));
+          box.append(l);
+        }
+        return box;
+      };
+      const sync = () => {
+        const taken = nameInput.value.trim() && simActions.warNameTaken(nameInput.value);
+        warn.textContent = taken ? `\u300C${nameInput.value.trim()}\u300D\u3068\u3044\u3046\u6226\u4E89\u540D\u306F\u65E2\u306B\u4F7F\u308F\u308C\u3066\u3044\u307E\u3059` : "";
+        go.disabled = !!taken || !draft.attackers.size || !draft.defenders.size;
+      };
+      nameInput.addEventListener("input", () => {
+        draft.name = nameInput.value;
+        sync();
+      });
       go.addEventListener("click", async () => {
-        if (aSel.value === bSel.value) {
-          await alertDialog("\u540C\u3058\u56FD\u5BB6\u3069\u3046\u3057\u3067\u306F\u6226\u4E89\u3067\u304D\u307E\u305B\u3093");
+        if (simActions.warNameTaken(nameInput.value)) {
+          await alertDialog("\u305D\u306E\u6226\u4E89\u540D\u306F\u65E2\u306B\u4F7F\u308F\u308C\u3066\u3044\u307E\u3059");
           return;
         }
-        simActions.declareWar([Number(aSel.value)], [Number(bSel.value)], nameInput.value || void 0);
+        const id = simActions.declareWar([...draft.attackers], [...draft.defenders], nameInput.value.trim() || void 0);
+        if (id != null) {
+          selected = id;
+          creating = false;
+          draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set() };
+          render();
+        }
       });
-      row.append(el7("span", "", "\u653B\u6483\u5074"), aSel, el7("span", "", "\u9632\u5FA1\u5074"), bSel);
-      wrap.append(row, nameInput, go);
+      wrap.append(nameInput, warn, sideBox("\u653B\u6483\u5074", "attackers", "defenders"), sideBox("\u9632\u5FA1\u5074", "defenders", "attackers"), go);
+      sync();
       return wrap;
     }
-    function warCard(map, states, w) {
-      const card = el7("div", `war-card${w.endedAt ? " ended" : ""}`);
-      card.append(el7("div", "war-title", w.name));
+    function warDetail(map, states, w) {
+      const box = el9("div", `war-card${w.endedAt ? " ended" : ""}`);
+      box.append(el9("div", "war-title", w.name));
       const aNames = w.attackers.map((id) => stateName(map, id)).join("\u30FB");
       const dNames = w.defenders.map((id) => stateName(map, id)).join("\u30FB");
-      card.append(el7("div", "war-meta", `${aNames} \u5BFE ${dNames}\u3000\u958B\u6226: ${formatWorldTime(w.startedAt)}${w.endedAt ? `\u3000\u7D42\u7D50: ${formatWorldTime(w.endedAt)}` : ""}`));
-      const log = el7("div", "battle-log");
-      if (w.battles.length) {
-        for (const b of w.battles.slice(-8).reverse()) {
-          log.append(el7("div", "", `${b.year}\u5E74${b.month}\u6708 ${stateName(map, b.attackerState)} vs ${stateName(map, b.defenderState)} \u2192 ${b.winner === "attacker" ? "\u653B\u6483\u5074" : "\u9632\u5FA1\u5074"}\u306E\u52DD\u5229`));
-        }
-      } else log.append(el7("div", "", "\u307E\u3060\u6226\u95D8\u306E\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093"));
-      card.append(log);
+      box.append(el9("div", "war-meta", `${aNames} \u5BFE ${dNames}\u3000\u958B\u6226: ${formatWorldTime(w.startedAt)}${w.endedAt ? `\u3000\u7D42\u7D50: ${formatWorldTime(w.endedAt)}` : ""}`));
+      if (!w.endedAt) {
+        box.append(musterSection(map, w));
+        box.append(battleForm(map, w));
+      }
+      box.append(battleLog(map, w));
       if (!w.endedAt) {
         const adv = w.advantage[w.attackers[0]] ?? 0;
-        card.append(el7("p", "muted", `\u512A\u52E2\u5EA6\uFF08\u653B\u6483\u5074\u57FA\u6E96\uFF09: ${adv > 0 ? "+" : ""}${adv}`));
-        card.append(peaceForm(map, states, w));
-      } else {
-        card.append(el7("p", "muted", "\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u307E\u3057\u305F"));
+        box.append(el9("p", "muted", `\u512A\u52E2\u5EA6\uFF08\u653B\u6483\u5074\u57FA\u6E96\uFF09: ${adv > 0 ? "+" : ""}${adv}`));
+        box.append(peaceForm(map, states, w));
+      } else box.append(el9("p", "muted", "\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u307E\u3057\u305F"));
+      return box;
+    }
+    function musterSection(map, w) {
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u53EC\u96C6\u3059\u308B\u90E8\u968A"));
+      const current = w.muster ?? {};
+      const save = (sid, ids2) => simActions.setMuster(w.id, { ...current, [sid]: ids2 });
+      for (const [label, ids2] of [["\u653B\u6483\u5074", w.attackers], ["\u9632\u5FA1\u5074", w.defenders]]) {
+        for (const sid of ids2) {
+          const regs = simActions.regimentsOf(sid);
+          const picked = new Set(current[sid] ?? []);
+          const sec = el9("div", "muster-state");
+          sec.append(el9("h5", "", `${label}\uFF1A${stateName(map, sid)}\u3000\u53EC\u96C6\u4E2D\u306E\u6226\u529B ${simActions.musterPower(w, sid).toLocaleString()}`));
+          if (!regs.length) sec.append(el9("p", "muted", "\u90E8\u968A\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u8ECD\u4E8B\u30A6\u30A3\u30F3\u30C9\u30A6\u3067\u7DE8\u6210\u3067\u304D\u307E\u3059\uFF09"));
+          for (const r of regs) {
+            const row = el9("label", "muster-row");
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = picked.has(r.i);
+            cb.addEventListener("change", () => {
+              const n = new Set(picked);
+              if (cb.checked) n.add(r.i);
+              else n.delete(r.i);
+              save(sid, [...n]);
+            });
+            row.append(cb, document.createTextNode(`${r.icon ?? "\u{1F6E1}\uFE0F"} ${r.name ?? `\u90E8\u968A${r.i}`}`), el9("span", "muted", `\u6226\u529B ${Math.round(forcePower(r.u)).toLocaleString()}`));
+            sec.append(row);
+          }
+          wrap.append(sec);
+        }
       }
-      return card;
+      return wrap;
+    }
+    function battleForm(map, w) {
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u6226\u95D8\u3092\u8A18\u9332\u3059\u308B"));
+      const mk = (ids2) => {
+        const s = document.createElement("select");
+        for (const id of ids2) {
+          const o = document.createElement("option");
+          o.value = id;
+          o.textContent = stateName(map, id);
+          s.append(o);
+        }
+        return s;
+      };
+      const aSel = mk(w.attackers), dSel = mk(w.defenders);
+      const win = document.createElement("select");
+      for (const [v, t] of [["attacker", "\u653B\u6483\u5074\u306E\u52DD\u5229"], ["defender", "\u9632\u5FA1\u5074\u306E\u52DD\u5229"]]) {
+        const o = document.createElement("option");
+        o.value = v;
+        o.textContent = t;
+        win.append(o);
+      }
+      const info = el9("p", "muted", "");
+      const sync = () => {
+        const ap = simActions.musterPower(w, Number(aSel.value)), dp = simActions.musterPower(w, Number(dSel.value));
+        info.textContent = `\u53EC\u96C6\u3057\u305F\u6226\u529B\uFF1A${ap.toLocaleString()} \u5BFE ${dp.toLocaleString()}\uFF08\u52DD\u6557\u306F\u81EA\u7531\u306B\u6C7A\u3081\u3089\u308C\u307E\u3059\uFF09`;
+      };
+      aSel.addEventListener("change", sync);
+      dSel.addEventListener("change", sync);
+      sync();
+      const go = el9("button", "primary", "\u8A18\u9332\u3059\u308B");
+      go.type = "button";
+      go.addEventListener("click", () => simActions.recordBattle(w.id, { attackerState: Number(aSel.value), defenderState: Number(dSel.value), winner: win.value }));
+      const row = el9("div", "member-picker");
+      row.append(el9("span", "", "\u653B\u6483\u5074"), aSel, el9("span", "", "\u9632\u5FA1\u5074"), dSel, win);
+      wrap.append(row, info, go);
+      return wrap;
+    }
+    function battleLog(map, w) {
+      const log = el9("div", "battle-log");
+      if (w.battles.length) {
+        for (const b of w.battles.slice(-12).reverse()) {
+          log.append(el9("div", "", `${b.year}\u5E74${b.month}\u6708 ${stateName(map, b.attackerState)} vs ${stateName(map, b.defenderState)} \u2192 ${b.winner === "attacker" ? "\u653B\u6483\u5074" : "\u9632\u5FA1\u5074"}\u306E\u52DD\u5229`));
+        }
+      } else log.append(el9("div", "", "\u307E\u3060\u6226\u95D8\u306E\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093"));
+      return log;
     }
     function peaceForm(map, states, w) {
-      const wrap = el7("div", "editor-section");
-      wrap.append(el7("h4", "", "\u8B1B\u548C\u6761\u7D04"));
-      const dirRow = el7("div", "member-picker");
-      const aTo = el7("button", "", `${stateName(map, w.attackers[0])}\u306B\u5272\u8B72`);
-      const dTo = el7("button", "", `${stateName(map, w.defenders[0])}\u306B\u5272\u8B72`);
+      const wrap = el9("div", "editor-section");
+      wrap.append(el9("h4", "", "\u8B1B\u548C\u6761\u7D04"));
+      const dirRow = el9("div", "member-picker");
+      const aTo = el9("button", "", `${stateName(map, w.attackers[0])}\u306B\u5272\u8B72`);
+      const dTo = el9("button", "", `${stateName(map, w.defenders[0])}\u306B\u5272\u8B72`);
       let direction = "attacker";
       const syncDir = () => {
         aTo.classList.toggle("active", direction === "attacker");
@@ -10046,7 +10275,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       });
       dirRow.append(aTo, dTo);
       wrap.append(dirRow);
-      const listEl = el7("div", "cession-list");
+      const listEl = el9("div", "cession-list");
       wrap.append(listEl);
       const checks = [];
       function refreshList() {
@@ -10056,31 +10285,31 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
         const to = direction === "attacker" ? w.attackers[0] : w.defenders[0];
         const candidates = simActions.suggestCessions(to, from);
         if (!candidates.length) {
-          listEl.append(el7("p", "muted", "\u5272\u8B72\u3067\u304D\u305D\u3046\u306A\u5730\u57DF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u56FD\u5883\u304C\u63A5\u3057\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF09"));
+          listEl.append(el9("p", "muted", "\u5272\u8B72\u3067\u304D\u305D\u3046\u306A\u5730\u57DF\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u56FD\u5883\u304C\u63A5\u3057\u3066\u3044\u306A\u3044\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\uFF09"));
           return;
         }
         for (const c of candidates) {
-          const row = el7("label", "cession-item");
+          const row = el9("label", "cession-item");
           const cb = document.createElement("input");
           cb.type = "checkbox";
           cb.dataset.type = c.type;
           if (c.type === "province") cb.dataset.provinceId = c.provinceId;
           else cb.__regionCells = c.regionCells;
-          row.append(cb, el7("span", "", `${c.name}\uFF08${c.cells}\u30BB\u30EB\uFF09`));
+          row.append(cb, el9("span", "", `${c.name}\uFF08${c.cells}\u30BB\u30EB\uFF09`));
           listEl.append(row);
           checks.push(cb);
         }
       }
       refreshList();
-      const repRow = el7("label", "field");
-      repRow.append(el7("span", "field-label", "\u8CE0\u511F\u91D1\uFF08\u76F8\u624B\u306E\u7523\u696D\u529B\u304B\u3089\u5DEE\u3057\u5F15\u304F\u30FB\u4EFB\u610F\uFF09"));
+      const repRow = el9("label", "field");
+      repRow.append(el9("span", "field-label", "\u8CE0\u511F\u91D1\uFF08\u76F8\u624B\u306E\u7523\u696D\u529B\u304B\u3089\u5DEE\u3057\u5F15\u304F\u30FB\u4EFB\u610F\uFF09"));
       const repInput = document.createElement("input");
       repInput.type = "number";
       repInput.min = "0";
       repInput.value = "0";
       repRow.append(repInput);
       wrap.append(repRow);
-      const signBtn = el7("button", "danger", "\u3053\u306E\u5185\u5BB9\u3067\u8B1B\u548C\u3059\u308B");
+      const signBtn = el9("button", "danger", "\u3053\u306E\u5185\u5BB9\u3067\u8B1B\u548C\u3059\u308B");
       signBtn.type = "button";
       signBtn.addEventListener("click", () => {
         const provinceIds = checks.filter((c) => c.checked && c.dataset.type === "province").map((c) => Number(c.dataset.provinceId));
@@ -10098,31 +10327,31 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
   }
 
   // js/ui/panels/alliances-panel.js
-  var el8 = (tag, cls, text2) => {
+  var el10 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive23 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive24 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initAlliancesPanel({ store, simActions }) {
     const root = byId("tab-alliances");
     function render() {
       root.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        root.append(el8("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        root.append(el10("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive23);
+      const states = map.pack.states.filter(isLive24);
       root.append(createForm(map, states));
       const list = simActions.listAlliances();
       const active = list.filter((a) => !a.dissolvedAt);
       const dissolved = list.filter((a) => a.dissolvedAt);
-      if (!active.length) root.append(el8("p", "muted", "\u540C\u76DF\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+      if (!active.length) root.append(el10("p", "muted", "\u540C\u76DF\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
       else for (const a of active) root.append(allianceCard(map, states, a));
       if (dissolved.length) {
-        root.append(el8("h4", "", "\u89E3\u6D88\u6E08\u307F\u306E\u540C\u76DF\uFF08\u5C65\u6B74\uFF09"));
+        root.append(el10("h4", "", "\u89E3\u6D88\u6E08\u307F\u306E\u540C\u76DF\uFF08\u5C65\u6B74\uFF09"));
         for (const a of dissolved) root.append(allianceCard(map, states, a));
       }
     }
@@ -10130,10 +10359,10 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     }
     function memberPicker(states, checkedIds = []) {
-      const wrap = el8("div", "member-picker");
+      const wrap = el10("div", "member-picker");
       const boxes = [];
       for (const s of states) {
-        const label = el8("label", "");
+        const label = el10("label", "");
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.value = s.i;
@@ -10145,14 +10374,14 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       return { wrap, boxes };
     }
     function createForm(map, states) {
-      const wrap = el8("div", "editor-section");
-      wrap.append(el8("h4", "", "\u65B0\u3057\u3044\u540C\u76DF"));
+      const wrap = el10("div", "editor-section");
+      wrap.append(el10("h4", "", "\u65B0\u3057\u3044\u540C\u76DF"));
       const nameInput = document.createElement("input");
       nameInput.placeholder = "\u540C\u76DF\u306E\u540D\u524D";
       wrap.append(nameInput);
       const { wrap: picker, boxes } = memberPicker(states);
       wrap.append(picker);
-      const go = el8("button", "", "\u540C\u76DF\u3092\u7D50\u6210\uFF082\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u629E\uFF09");
+      const go = el10("button", "", "\u540C\u76DF\u3092\u7D50\u6210\uFF082\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u629E\uFF09");
       go.type = "button";
       go.addEventListener("click", async () => {
         const ids2 = boxes.filter((b) => b.checked).map((b) => Number(b.value));
@@ -10167,8 +10396,8 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     }
     function allianceCard(map, states, a) {
       const dissolved = !!a.dissolvedAt;
-      const card = el8("div", `alliance-card${dissolved ? " dissolved" : ""}`);
-      const head = el8("div", "regiment-card-head");
+      const card = el10("div", `alliance-card${dissolved ? " dissolved" : ""}`);
+      const head = el10("div", "regiment-card-head");
       const nameInput = document.createElement("input");
       nameInput.value = a.name;
       nameInput.style.fontWeight = "600";
@@ -10179,7 +10408,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       nameInput.addEventListener("change", () => simActions.editAlliance(a.id, { name: nameInput.value }));
       head.append(nameInput);
       if (!dissolved) {
-        const delBtn = el8("button", "danger", "\u89E3\u6D88");
+        const delBtn = el10("button", "danger", "\u89E3\u6D88");
         delBtn.type = "button";
         delBtn.addEventListener("click", async () => {
           if (await confirmDialog(`\u300C${a.name}\u300D\u3092\u89E3\u6D88\u3057\u307E\u3059\u304B\uFF1F`, { danger: true, okLabel: "\u89E3\u6D88" })) simActions.dissolveAlliance(a.id);
@@ -10188,15 +10417,15 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       }
       card.append(head);
       const dateLine = a.formedAt ? `\u7D50\u6210: ${formatWorldTime(a.formedAt)}${dissolved ? `\u3000\u89E3\u6D88: ${formatWorldTime(a.dissolvedAt)}` : ""}` : dissolved ? "\u89E3\u6D88\u6E08\u307F" : "";
-      if (dateLine) card.append(el8("p", "hint", dateLine));
-      const chips = el8("div", "member-chip-list");
-      for (const id of a.members) chips.append(el8("span", "member-chip", stateName(map, id)));
+      if (dateLine) card.append(el10("p", "hint", dateLine));
+      const chips = el10("div", "member-chip-list");
+      for (const id of a.members) chips.append(el10("span", "member-chip", stateName(map, id)));
       card.append(chips);
       if (!dissolved) {
         const { wrap: picker, boxes } = memberPicker(states, a.members);
-        card.append(el8("p", "muted", "\u52A0\u76DF\u56FD\u306E\u5909\u66F4:"));
+        card.append(el10("p", "muted", "\u52A0\u76DF\u56FD\u306E\u5909\u66F4:"));
         card.append(picker);
-        const update = el8("button", "", "\u30E1\u30F3\u30D0\u30FC\u3092\u66F4\u65B0");
+        const update = el10("button", "", "\u30E1\u30F3\u30D0\u30FC\u3092\u66F4\u65B0");
         update.type = "button";
         update.addEventListener("click", async () => {
           const ids2 = boxes.filter((b) => b.checked).map((b) => Number(b.value));
@@ -10231,7 +10460,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       notice: null,
       busy: null,
       hover: null,
-      view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto" },
+      view: { biomes: true, heights: false, states: true, cultures: false, religions: false, provinces: false, borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto", legendKind: "state" },
       editTool: "select",
       brushRadius: 40,
       timeRunning: false,
@@ -10281,7 +10510,9 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
       consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell)
     };
     editorPanel.setPanels?.(panels);
+    initSettingsWindows({ store, panels, editorPanel, editActions, actions });
     const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
+    deps.highlight = initHighlight(deps);
     initBanner(deps);
     initToolbar(deps);
     initStatusBar(deps);
@@ -10294,6 +10525,10 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     editModeRef = editMode;
     const editToolbar = initEditToolbar({ store, editMode, editActions });
     const editPanel = initEditPanel();
+    initPanelDock([
+      { panel: "edit-panel", close: "edit-panel-close", tab: "tab-edit-panel", open: "btn-edit-mode" },
+      { panel: "builder-panel", close: "builder-close", tab: "tab-builder-panel", open: "btn-builder" }
+    ]);
     const builderActions = createBuilderActions({ store, editActions, editMode, actions });
     const economyView = createEconomyView({ store, editActions, builderActions });
     const travelView = createTravelView({ store, editActions, editMode, viewport, actions });
@@ -10311,7 +10546,7 @@ ${muster}\u653B\u6483\u5074 \u6226\u529B${r.aPower} \u88AB\u5BB3${(r.attackerLos
     initShortcuts({ ...deps, editMode, editToolbar, timeActions });
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
     renderer.resize();
-    globalThis.alterhistory = { store, viewport, renderer, actions, editActions, simActions, timeActions, editorPanel, builderActions, historyBuilder };
+    globalThis.alterhistory = { store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions, historyBuilder };
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

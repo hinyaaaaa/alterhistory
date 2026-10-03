@@ -74,76 +74,74 @@ main > * { min-height: 0; }
    サイドバー(300px固定)と地図編集パネル(280px)が両方幅を取り合うと、地図が極端に
    狭くなったりタブが潰れて見える恐れがあるため、狭い画面ではサイドバーを地図に重ねる
    オーバーレイに切り替え、地図の表示幅を犠牲にしないようにする。 */
-/* 狭い画面用の開閉ボタン。デスクトップ幅では常に隠す（sidebar は常設なので不要）。
-   地図を最優先で見せるため、既定では畳んでおき、押したときだけサイドバーを重ねて出す
-   （凡例やその場に応じて自動オンにすると、常に地図の半分近くを覆ってしまい閉じる手段が無かった）。 */
-.sidebar-fab { display: none; }
+/* サイドバー（凡例・国家編集）は、凡例の × で畳める。畳むと幅0になり、元の場所（左上）に小さな ☰ が出る。
+   広い画面では常設（既定は開いている）、狭い画面（スマートフォン等）では地図に重ねて出し入れする（既定は閉じている）。 */
+.sidebar-fab {
+  position: absolute; top: 10px; left: 10px; z-index: 16;
+  width: 34px; height: 34px; padding: 0; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, var(--panel-3), var(--panel-2));
+  border: 1px solid var(--brass-dim);
+  box-shadow: var(--shadow-panel);
+}
+.sidebar-fab[hidden] { display: none; }
+/* 畳んだサイドバー: 列の幅を0にして、中身は見えず・触れないようにする（display:none にすると列番号がずれる） */
+main.side-collapsed { grid-template-columns: 0 1fr !important; }
+main.side-collapsed:has(#builder-panel:not([hidden])) { grid-template-columns: 0 1fr 320px !important; }
+main.side-collapsed #sidebar { visibility: hidden; overflow: hidden; min-width: 0; pointer-events: none; box-shadow: none; border-right: 0; }
 
 @media (max-width: 720px) {
   main, main:has(#editor-panel:not([hidden])), main:has(.legend.has-map) { grid-template-columns: 1fr; }
+  main.side-collapsed, main.side-collapsed:has(#builder-panel:not([hidden])) { grid-template-columns: 1fr !important; }
   #sidebar {
     position: absolute; top: 0; bottom: 0; left: 0; z-index: 15;
     width: min(86vw, 320px); max-width: 86vw;
     box-shadow: 6px 0 20px rgba(0, 0, 0, 0.5);
-    transform: translateX(-100%); transition: transform 0.15s ease;
+    transition: transform 0.15s ease;
   }
-  #sidebar.open { transform: translateX(0); }
-  /* 開閉ボタン(☰)が凡例タイトルに重なるのを避ける */
-  #sidebar .legend, #sidebar #editor-panel .editor-header { padding-left: 54px; }
+  main.side-collapsed #sidebar { transform: translateX(-100%); visibility: visible; box-shadow: none; }
   #sidebar:has(#editor-panel[hidden]):not(:has(.legend.has-map)) { display: none; }
   .edit-panel { width: min(86vw, 320px); }
-
-  .sidebar-fab {
-    display: flex; align-items: center; justify-content: center;
-    position: absolute; top: 12px; left: 12px; z-index: 16;
-    width: 34px; height: 34px; padding: 0; font-size: 16px;
-    background: linear-gradient(180deg, var(--panel-3), var(--panel-2));
-    border: 1px solid var(--brass-dim);
-    box-shadow: var(--shadow-panel);
-  }
-  .sidebar-fab[aria-expanded="true"] {
-    background: linear-gradient(180deg, var(--brass-bright), var(--brass));
-    color: var(--accent-text); border-color: var(--brass-dim);
-  }
 }
 
-/* --- 枠の表示切替（js/ui/chrome.js）：行を明示して、隠しても main の位置がずれないようにする --- */
+/* --- 上部バー・下の状態バーは常に表示する（隠せない）。main の位置がずれないよう行を明示する --- */
 .topbar { grid-row: 1; }
 main { grid-row: 2; }
 .statusbar { grid-row: 3; }
-#app.hide-top .topbar, #app.hide-bottom .statusbar { display: none; }
-/* 左パネルは display:none にせず幅0の列として残す（消すと builder の列番号とずれ、地図の横に黒い空き列ができた） */
-#app.hide-left #sidebar { visibility: hidden; overflow: hidden; min-width: 0; pointer-events: none; }
-#app.hide-left .sidebar-fab { display: none; }
-#app.hide-right #btn-edit-mode, #app.hide-right #btn-builder, #app.hide-right #edit-panel, #app.hide-right #builder-panel { display: none; }
-@media (min-width: 721px) {
-  #app.hide-left main { grid-template-columns: 0 1fr !important; }
-  #app.hide-left main:has(#builder-panel:not([hidden])) { grid-template-columns: 0 1fr 320px !important; }
-}
-.chrome-fab {
-  position: absolute; right: 10px; bottom: 10px; z-index: 6; width: 40px; height: 40px; padding: 0;
-  display: flex; align-items: center; justify-content: center; font-size: 18px; opacity: 0.75;
-}
-.chrome-fab:hover, .chrome-fab:focus-visible { opacity: 1; }
-.chrome-fab[hidden] { display: none; }
 .icon-btn { min-width: 32px; padding-left: 8px; padding-right: 8px; font-size: 15px; line-height: 1; }
 .icon-btn:disabled { opacity: 0.35; cursor: default; }
 .menu-check { display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .menu-check:hover { background: var(--panel-2); }
 .menu-right .menu-list { left: auto; right: 0; }
 
-/* --- 上部バーの並び：ファイル｜取り消し｜作業の種類 … 時間 … 表示 --- */
+/* --- 上部バーの並び：ファイル｜取り消し｜作業の種類 … 時間 … 表示 ---
+   どの幅でも部品どうしが重ならないことが最優先。部品は縮めず（flex-shrink:0）、入りきらなければ
+   折り返して2段にする。全部品の高さを揃え、文字は折り返さない（以前は幅1280px前後で時間バーが
+   潰れ、「+1ヶ月」が縦に割れ、▶ と速度選択が隣のボタンに重なっていた）。 */
+.topbar { flex-wrap: wrap; row-gap: 4px; --ctl-h: 32px; }
+.topbar > *, .topbar-group > *, .topbar-time > * { flex-shrink: 0; }
+.topbar button, .topbar .menu > summary, .topbar select, .topbar .world-date-sm {
+  box-sizing: border-box; height: var(--ctl-h); white-space: nowrap; line-height: 1.2;
+  display: inline-flex; align-items: center; justify-content: center; padding-top: 0; padding-bottom: 0;
+}
+.topbar select { padding-left: 8px; padding-right: 8px; }
+.topbar .icon-btn { padding-left: 9px; padding-right: 9px; }
 .topbar-group + .topbar-group:not(.topbar-time) { padding-left: 10px; border-left: 1px solid var(--line); }
-.topbar-modes .builder-fab, .topbar-modes .edit-mode-fab { position: static; right: auto; top: auto; box-shadow: none; padding: 6px 12px; font-size: 12.5px; }
+.topbar-modes .builder-fab, .topbar-modes .edit-mode-fab { position: static; right: auto; top: auto; box-shadow: none; padding-top: 0; padding-bottom: 0; padding-left: 12px; padding-right: 12px; font-size: 12.5px; }
 .topbar-modes .edit-mode-fab[aria-expanded="true"] { right: auto; }
-.topbar-time { flex: 1 1 0; }
-@media (max-width: 960px) { .brand-name { display: none; } }
+/* 時間バー: 中身の幅を確保し、残りの余白を左右均等に（中央寄せ）。右端のレイヤー等は右に寄せる */
+.topbar-time { flex: 0 0 auto; margin-left: auto; margin-right: auto; min-width: max-content; }
+.topbar-time .time-btn { min-width: var(--ctl-h); }
+.topbar-time .world-date-sm { min-width: 6.4em; flex-direction: column; overflow: hidden; }
+.topbar-time .time-speed-sm { width: 7.6em; }
+.topbar .topbar-group:last-child { margin-left: 0; }
+@media (max-width: 1500px) { .brand-name { display: none; } .brand { padding-right: 10px; } }
+@media (max-width: 1360px) { .icon-btn .lbl { display: none; } }
 @media (max-width: 720px) {
-  .topbar { flex-wrap: wrap; row-gap: 4px; padding: 4px 8px; }
+  .topbar { padding: 4px 8px; }
   .brand { display: none !important; }
-  .topbar-time { order: 9; flex-basis: 100%; }
+  .topbar-time { order: 9; flex-basis: 100%; justify-content: center; margin: 0; }
   .topbar-group + .topbar-group:not(.topbar-time) { padding-left: 0; border-left: 0; }
-  .icon-btn .lbl { display: none; }
   .topbar-group { gap: 4px; }
 }
 /* --- 地図を開く前の案内（元の #empty-state に手順を足した） --- */
@@ -152,3 +150,4 @@ main { grid-row: 2; }
 .empty-steps li::before { content: counter(step); position: absolute; left: 0; top: 0.35em; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; border: 1px solid var(--brass-dim); border-radius: 50%; font-size: 11px; color: var(--brass); }
 .empty-steps b { color: var(--text); }
 .menu-sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+.topbar { position: relative; z-index: 40; } /* メニューの一覧は、地図の上のウィンドウ(z-index 20〜)より手前に出す */

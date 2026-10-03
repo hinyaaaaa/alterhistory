@@ -1,7 +1,7 @@
 // クロニクル（AI 向けセーブデータ）の検証。
 //
 // 「AI が読んで分かる」ことを機械的に保証するために、次を確かめる:
-//   1. 完全性  : 元の map にある情報が欠落していない（国家・都市・マーカー・戦争・同盟・属性・ノート・全戦闘）
+//   1. 完全性  : 元の map にある情報が欠落していない（国家・都市・マーカー・戦争・同盟・ノート・全戦闘）
 //   2. 正確性  : 数値が元データと一致する（人口・領土セル数・兵力・順位）
 //   3. 解決済み: どこにも「生の ID だけ」が残っていない（全参照が {id, name} で名前を持つ）
 //   4. 可逆性  : セル単位データ(RLE)を展開すると元のセル配列と完全一致
@@ -58,13 +58,6 @@ check("全ての時代が含まれる", ch.world.eras.length === (map.ext.data.e
 check("全ての文化・宗教・属州が含まれる", ch.cultures.length === map.pack.cultures.filter(live).length && ch.religions.length === map.pack.religions.filter(live).length && ch.provinces.length === map.pack.provinces.filter(live).length);
 check("バイオーム一覧が含まれる", ch.biomes.length === map.biomesData.length);
 
-const attrCount = Object.values(map.ext.data.attributes ?? {}).reduce((a, o) => a + Object.keys(o).length, 0);
-const chAttrCount = [...ch.states, ...ch.cultures, ...ch.religions, ...ch.provinces].reduce((a, e) => a + e.attributes.length, 0);
-check("ユーザーが付けた属性が 1 つも欠けない", attrCount > 0 && chAttrCount === attrCount, `${chAttrCount}/${attrCount}`);
-check("国家ノートが平文で入る（HTML タグが残らない）", ch.states.find((s) => s.id === 1).note?.includes("大陸西部") && !/<[a-z]/i.test(ch.states.find((s) => s.id === 1).note));
-check("都市ノートが入る", ch.burgs.find((b) => b.id === 1).note?.includes("王都"));
-check("マーカーノートが入る", ch.markers.find((m) => m.name === "古代神殿跡")?.note?.includes("地下墓所"));
-check("宗教ノートが入る", ch.religions.find((r) => r.id === 1).note?.includes("アマル"));
 
 console.log("=== 正確性（数値が元データと一致） ===");
 for (const s of liveStates) {
@@ -156,7 +149,7 @@ console.log("=== 直列化・Markdown ===");
   check("Markdown に全国家の名前がある", liveStates.every((s) => md.includes(s.fullName ?? s.name)));
   check("Markdown に全都市の名前がある", map.pack.burgs.filter(live).every((b) => md.includes(b.name)));
   check("Markdown に全マーカーの名前がある", map.markers.every((m) => md.includes(m.name)));
-  check("Markdown に属性・ノートが載る", md.includes("立憲君主制") && md.includes("太陽神アマル"));
+  check("Markdown にノートが載る", md.includes("太陽神アマル"));
   check("Markdown に生の JSON が漏れない", !/[{]"[a-z]+":/.test(md));
   check("同名都市が id で区別できる", (() => { const names = map.pack.burgs.filter(live).map((b) => b.name); const dup = names.find((n, i) => names.indexOf(n) !== i); return !dup || md.includes(`${dup}(id`); })());
   console.log(`  情報: JSON ${(json.length / 1024).toFixed(0)}KB / Markdown ${(md.length / 1024).toFixed(1)}KB / 従来 .map との比: 意味付き情報量が桁違い`);

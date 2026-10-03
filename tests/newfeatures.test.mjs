@@ -13,7 +13,7 @@ import { checkIntegrity, snapshotBaseline } from "../js/core/edit/integrity.js";
 import { serializeAzgaar } from "../js/io/azgaar-writer.js";
 import { parseAzgaarText } from "../js/io/azgaar-reader.js";
 import { attachExtension } from "../js/io/native-format.js";
-import { ensureExt } from "../js/core/edit/attributes.js";
+import { ensureExt } from "../js/core/edit/ext.js";
 import { planCreateAlliance, planDissolveAlliance, listAlliances } from "../js/core/edit/alliances.js";
 
 const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";

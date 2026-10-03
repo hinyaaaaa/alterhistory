@@ -50,6 +50,21 @@
       <button id="btn-edit-mode" class="edit-mode-fab" title="地図編集モード — レイヤー・文化・宗教・地形・都市建設・目印" aria-expanded="false" aria-controls="edit-panel">
         <span class="tool-icon">✎</span> 地図編集
       </button>
+      <!-- 設定：各設定のウィンドウへ飛ぶ入口（Azgaar の Overview に相当）。地図の上に重ねて開く -->
+      <details id="settings-menu" class="menu">
+        <summary title="国家・戦争・外交・軍事などの設定画面を開く">設定 ▾</summary>
+        <div class="menu-list settings-pop" role="menu" aria-label="設定">
+          <span class="lp-group">一覧（左のパネル）</span>
+          <button type="button" role="menuitem" data-open-list="state">🏳 国家</button>
+          <button type="button" role="menuitem" data-open-list="culture">🎭 文化</button>
+          <button type="button" role="menuitem" data-open-list="religion">✦ 宗教</button>
+          <button type="button" role="menuitem" data-open-list="province">▦ 属州</button>
+          <span class="lp-group">ウィンドウ（地図の上に開く）</span>
+          <button type="button" role="menuitem" data-open-win="war">⚔ 戦争</button>
+          <button type="button" role="menuitem" data-open-win="diplomacy">🤝 外交・同盟</button>
+          <button type="button" role="menuitem" data-open-win="military">🛡 軍事</button>
+        </div>
+      </details>
     </div>
 
     <!-- 中央: 年月表示＋開始/停止。小さくまとめる（旧・下部時間バーをここへ統合） -->
@@ -67,69 +82,29 @@
 
     <div class="topbar-group">
       <details id="layers-menu" class="menu menu-right">
-        <summary title="色分け・川・道路・地名など、地図に何を表示するか">レイヤー ▾</summary>
+        <summary title="地図に何を重ねるか。1つずつオン/オフでき、複数を同時に重ねられます">レイヤー ▾</summary>
         <div class="menu-list layers-pop" role="group" aria-label="レイヤー">
           <div class="lp-sec">
-            <span class="lp-title">まとめて切り替え</span>
-            <div class="seg seg-3">
-              <button type="button" data-preset="politics" title="国境と色分け。道路・川・地名も表示">政治</button>
-              <button type="button" data-preset="terrain" title="色分けなしの地形図。首都だけ名前を表示">地形</button>
-              <button type="button" data-preset="height" title="標高だけを見る（記号・文字は消す）">標高</button>
-            </div>
+            <span class="lp-title">プリセット <span class="lp-sub">よく使う組み合わせ</span></span>
+            <div id="layer-presets" class="lp-presets"></div>
           </div>
           <div class="lp-sec">
-            <span class="lp-title">色分け <kbd>1〜5</kbd></span>
-            <div class="seg seg-5" data-seg-for="sel-overlay">
-              <button type="button" data-value="none">なし</button><button type="button" data-value="state">国家</button><button type="button" data-value="culture">文化</button><button type="button" data-value="religion">宗教</button><button type="button" data-value="province">属州</button>
-            </div>
-          </div>
-          <div class="lp-sec">
-            <span class="lp-title">下地 <kbd>B</kbd></span>
-            <div class="seg seg-2" data-seg-for="sel-base">
-              <button type="button" data-value="biome">地形・植生</button><button type="button" data-value="height">標高</button>
-            </div>
-          </div>
-          <div class="lp-sec">
-            <span class="lp-title">地図の要素</span>
-            <div class="lp-chips">
-              <label class="layer-toggle"><input type="checkbox" id="chk-coast" checked> 海岸線 <kbd>C</kbd></label>
-              <label class="layer-toggle"><input type="checkbox" id="chk-rivers" checked> 河川 <kbd>R</kbd></label>
-              <label class="layer-toggle"><input type="checkbox" id="chk-routes" checked> 道路 <kbd>T</kbd></label>
-              <label class="layer-toggle"><input type="checkbox" id="chk-burgs" checked> 都市の記号 <kbd>U</kbd></label>
-              <label class="layer-toggle"><input type="checkbox" id="chk-zones" checked> ゾーン</label>
-              <label class="layer-toggle"><input type="checkbox" id="chk-journeys" checked> 旅の線</label>
-            </div>
+            <span class="lp-title">レイヤー <span class="lp-sub">押すとオン/オフ。重ねられます</span></span>
+            <div id="layer-toggles" class="lp-toggles"></div>
           </div>
           <div class="lp-sec">
             <span class="lp-title">名前の表示 <kbd>L</kbd></span>
-            <label class="layer-toggle lp-wide"><input type="checkbox" id="chk-labels" checked> 名前（国・属州・都市）を表示</label>
             <div class="seg seg-4" data-seg-for="sel-burg-labels">
               <button type="button" data-value="auto" title="近づくほど、小さな都市や属州の名前が現れる">ズーム連動</button><button type="button" data-value="all" title="重ならない範囲で、すべての都市名を出す">全部</button><button type="button" data-value="capitals">首都のみ</button><button type="button" data-value="none">都市名なし</button>
             </div>
             <p class="lp-help">「ズーム連動」では、全体表示で国名と首都、拡大すると属州名や人口の多い都市、さらに近づくと小さな町の名前が現れます。</p>
           </div>
           <div hidden>
-            <select id="sel-overlay"><option value="none">なし</option><option value="state" selected>国家</option><option value="culture">文化</option><option value="religion">宗教</option><option value="province">属州</option></select>
-            <select id="sel-base"><option value="biome" selected>バイオーム</option><option value="height">標高</option></select>
             <select id="sel-burg-labels"><option value="auto" selected>ズーム連動</option><option value="all">すべての都市</option><option value="capitals">首都のみ</option><option value="none">表示しない</option></select>
           </div>
         </div>
       </details>
       <button id="btn-fit" title="地図全体を表示 (F)">全体表示</button>
-      <details id="view-menu" class="menu menu-right">
-        <summary title="パネルの表示・非表示と、読み込み時の設定（H で全部まとめて切替）">表示・設定 ▾</summary>
-        <div class="menu-list" role="group" aria-label="表示するパネル">
-          <label class="menu-check"><input type="checkbox" data-chrome="top" checked> 上部バー</label>
-          <label class="menu-check"><input type="checkbox" data-chrome="left" checked> 左パネル（凡例・国家）</label>
-          <label class="menu-check"><input type="checkbox" data-chrome="right" checked> 右パネル（地図編集・歴史）</label>
-          <label class="menu-check"><input type="checkbox" data-chrome="bottom" checked> 下の状態バー</label>
-          <hr class="menu-sep">
-          <label class="menu-check" title="Azgaar 由来の英語の都市名を、地図を開くときにカタカナへ付け替えます"><input type="checkbox" id="opt-katakana" checked> 開くとき英語の都市名をカタカナにする</label>
-          <button type="button" id="btn-katakana" title="いま開いている地図の英語名の都市を、カタカナに付け替えます（元に戻せます）">英語の都市名をカタカナにする（今すぐ）</button>
-          <hr class="menu-sep">
-          <button type="button" id="btn-chrome-all" title="すべて隠して地図だけにする (H)">地図だけにする</button>
-        </div>
-      </details>
       <button id="btn-help" title="ショートカット一覧 (?)">?</button>
     </div>
   </header>
@@ -138,15 +113,22 @@
     <aside id="sidebar" aria-label="国家・都市の編集">
       <div id="editor-panel" hidden></div>
       <div id="legend" class="legend">
-        <h3 id="legend-title">凡例</h3>
+        <div class="legend-head">
+          <h3 id="legend-title">凡例</h3>
+          <button id="legend-close" class="panel-close" aria-label="凡例パネルを小さくする" title="小さくする（左上の ☰ で元に戻せます）">×</button>
+        </div>
+        <div id="legend-tabs" class="legend-tabs" role="tablist" aria-label="凡例に出す色分け" hidden></div>
         <ul id="legend-list" class="legend-list"></ul>
       </div>
     </aside>
 
-    <button id="btn-sidebar-toggle" class="sidebar-fab" aria-expanded="true" aria-controls="sidebar" title="国家一覧（凡例）の表示切替">☰</button>
+    <!-- 凡例・国家パネルを × で小さくしたあと、元の場所（左上）に出る展開ボタン。畳んでいるときだけ見える -->
+    <button id="btn-sidebar-toggle" class="sidebar-fab" aria-expanded="true" aria-controls="sidebar" title="凡例・国家パネルを開く" aria-label="凡例・国家パネルを開く" hidden>☰</button>
 
     <section id="stage" aria-label="地図">
       <canvas id="map-canvas" tabindex="0" aria-label="地図の表示領域"></canvas>
+      <!-- 凡例の項目を押したとき、その境界線を赤く光らせるための透明な層（地図の描画とは別。クリックは通す） -->
+      <canvas id="highlight-canvas" aria-hidden="true"></canvas>
       <div id="empty-state">
         <h1>地図ファイルを開いてください</h1>
         <p>Azgaar 形式の <code>.map</code>（<code>.map.gz</code> も可）や、ALTERHISTORY 形式のファイルを、<br>
@@ -168,7 +150,11 @@
         <div id="banner-body"></div>
         <button id="banner-close" aria-label="閉じる">×</button>
       </div>
-      <button id="btn-chrome-restore" class="chrome-fab" title="パネルを戻す／隠す (H)" aria-label="パネルの表示切替" hidden>⛶</button>
+      <!-- 右のパネル（地図編集・歴史をつくる）を × で小さくしたあと、元の場所（右端）に出る展開ボタン -->
+      <div id="panel-tabs" class="panel-tabs">
+        <button id="tab-edit-panel" class="panel-tab" title="地図編集を開く" aria-label="地図編集を開く" hidden>✎</button>
+        <button id="tab-builder-panel" class="panel-tab" title="歴史をつくるを開く" aria-label="歴史をつくるを開く" hidden>🏛</button>
+      </div>
       <div id="drop-hint" hidden>ここにドロップして開く</div>
 
     </section>
@@ -230,10 +216,10 @@
        サブタブを開いたときに、ここから該当パネルの要素を取り出して差し込む。
        この div 自体は隠さない。中の各 .tab-panel が個別に hidden で表示/非表示を切り替える
        （どのサブタブにも属していない間は各 .tab-panel 自身に hidden がついている）。 -->
-  <div id="panel-mounts">
-    <div id="tab-regiments" class="tab-panel" hidden></div>
-    <div id="tab-wars" class="tab-panel" hidden></div>
-    <div id="tab-alliances" class="tab-panel" hidden></div>
+  <div id="panel-mounts" hidden>
+    <div id="tab-regiments" class="tab-panel"></div>
+    <div id="tab-wars" class="tab-panel"></div>
+    <div id="tab-alliances" class="tab-panel"></div>
   </div>
 
   <dialog id="help-dialog">
@@ -250,19 +236,20 @@
         <tr><td><kbd>F</kbd> / <kbd>0</kbd></td><td>地図全体を表示</td></tr>
         <tr><td><kbd>+</kbd> / <kbd>-</kbd></td><td>拡大 / 縮小</td></tr>
         <tr><td><kbd>←</kbd><kbd>↑</kbd><kbd>→</kbd><kbd>↓</kbd></td><td>地図を移動</td></tr>
-        <tr><td><kbd>1</kbd>〜<kbd>5</kbd></td><td>色分け: なし / 国家 / 文化 / 宗教 / 属州</td></tr>
-        <tr><td><kbd>B</kbd></td><td>下地: バイオーム ⇔ 標高</td></tr>
-        <tr><td><kbd>C</kbd> <kbd>R</kbd> <kbd>T</kbd> <kbd>U</kbd> <kbd>L</kbd></td><td>海岸線 / 河川 / 道路 / 都市 / ラベルの表示切替</td></tr>
+        <tr><td><kbd>1</kbd>〜<kbd>4</kbd></td><td>レイヤーのオン/オフ: 国家 / 文化 / 宗教 / 属州（重ねられる）</td></tr>
+        <tr><td><kbd>B</kbd> <kbd>5</kbd></td><td>レイヤーのオン/オフ: 地形・植生 / 標高</td></tr>
+        <tr><td><kbd>C</kbd> <kbd>R</kbd> <kbd>T</kbd> <kbd>U</kbd> <kbd>L</kbd></td><td>海岸線 / 河川 / 道路 / 都市 / 名前のオン/オフ</td></tr>
         <tr><th colspan="2">編集ツール（右上「地図編集」ボタンで開く）</th></tr>
         <tr><td><kbd>V</kbd></td><td>選択ツール（クリックでセルを見る、国家/都市はダブルクリックでタブを開く）</td></tr>
-        <tr><td><kbd>1</kbd>〜<kbd>5</kbd></td><td>塗るツール: 国家 / 文化 / 宗教 / 属州 / 地形（選択ツールの時は色分けの切替）</td></tr>
+        <tr><td><kbd>1</kbd>〜<kbd>5</kbd></td><td>塗るツール: 国家 / 文化 / 宗教 / 属州 / 地形（選択ツールの時はレイヤーのオン/オフ）</td></tr>
         <tr><td><kbd>6</kbd> <kbd>7</kbd></td><td>都市を置く / マーカーを置く</td></tr>
         <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>ブラシの大きさ</td></tr>
         <tr><td><kbd>Ctrl+Z</kbd> / <kbd>Ctrl+Y</kbd></td><td>元に戻す／やり直す</td></tr>
         <tr><th colspan="2">時間・軍事</th></tr>
         <tr><td><kbd>Space</kbd></td><td>時間の進行を開始/停止</td></tr>
         <tr><td><kbd>Esc</kbd></td><td>部隊の配置/移動/攻撃対象の選択を取り消す</td></tr>
-        <tr><td><kbd>H</kbd></td><td>パネルを全部隠す／戻す（地図だけ表示）</td></tr>
+        <tr><th colspan="2">パネル</th></tr>
+        <tr><td>パネルの <b>×</b></td><td>そのパネルを小さくする。元の場所に出る小さなボタンで、また開ける</td></tr>
         <tr><td><kbd>?</kbd></td><td>この一覧を表示</td></tr>
       </tbody>
     </table>

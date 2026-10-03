@@ -154,7 +154,7 @@ console.log("=== キーボードでのツール切替 ===");
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "v", bubbles: true }));
 check("[V] で選択ツールに戻る", q('[data-tool="select"]').classList.contains("active"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "1", bubbles: true }));
-check("選択ツール中の[1]は色分け切替（塗るツールにはならない）", store.getState().view.overlay === "none" && q('[data-tool="select"]').classList.contains("active"));
+check("選択ツール中の[1]はレイヤー切替（塗るツールにはならない）", store.getState().view.states === false && q('[data-tool="select"]').classList.contains("active"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "6", bubbles: true }));
 check("選択ツール中の[6]は都市配置ツールに切り替わる", q('[data-tool="add:burg"]').classList.contains("active"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "2", bubbles: true }));
