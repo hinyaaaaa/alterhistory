@@ -31,7 +31,7 @@ export function renderMapToCanvas(map, renderOptions, { scale = 2, createCanvas,
   const canvas = createCanvas(Math.round(w * scale), Math.round(h * scale));
   const ctx = canvas.getContext("2d");
   drawScene(ctx, map, vp, renderOptions, scale);
-  drawAnnotations(ctx, map, { w, h, dpr: scale, overlay: renderOptions?.overlay, options: annotations });
+  drawAnnotations(ctx, map, { w, h, dpr: scale, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
   return canvas;
 }
 
@@ -40,7 +40,7 @@ export function renderMapToSvg(map, renderOptions, { annotations = DEFAULT_ANNOT
   const { vp, w, h } = wholeMapViewport(map);
   const ctx = createSvgContext(w, h);
   drawScene(ctx, map, vp, renderOptions, 1);
-  drawAnnotations(ctx, map, { w, h, dpr: 1, overlay: renderOptions?.overlay, options: annotations });
+  drawAnnotations(ctx, map, { w, h, dpr: 1, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
   return ctx.toString();
 }
 

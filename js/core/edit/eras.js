@@ -2,12 +2,12 @@
 //
 // 保存場所: ALTERHISTORY拡張データ ext.data.eras = [{ id, name, fromYear }]
 // 「fromYear年から、次の時代の開始年の前年まで」がその時代。最後の時代は無期限に続く。
-// Azgaar形式には無い概念のため、edit/attributes.js と同様に拡張データに保存する。
+// Azgaar形式には無い概念のため、edit/ext.js の ensureExt と同様に拡張データに保存する。
 //
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand } from "./commands.js";
-import { ensureExt } from "./attributes.js";
+import { ensureExt } from "./ext.js";
 
 export function listEras(map) {
   const list = map.ext?.data?.eras ?? [];

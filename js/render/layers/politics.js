@@ -25,9 +25,9 @@ export function cachedBoundary(geometry, values, include, tag) {
 
 /**
  * @param {"state"|"culture"|"religion"|"province"} kind
- * @param {{alpha?:number}} opts
+ * @param {{alpha?:number, fill?:boolean, lines?:boolean}} opts  fill: 色を塗る / lines: 境界線を引く
  */
-export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55 } = {}) {
+export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, lines = true } = {}) {
   const src = SOURCES[kind];
   if (!src) return;
   const { cells, vertices } = map.geometry.pack;
@@ -47,14 +47,17 @@ export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55 } = {}) {
     if (!list) { list = []; groups.set(id, list); }
     list.push(i);
   }
-  ctx.globalAlpha = alpha;
-  for (const [id, list] of groups) {
-    ctx.fillStyle = entities[id].color ?? NEUTRAL_COLOR;
-    ctx.beginPath();
-    for (const i of list) addCellPath(ctx, cells, vertices, i);
-    ctx.fill();
+  if (fill) {
+    ctx.globalAlpha = alpha;
+    for (const [id, list] of groups) {
+      ctx.fillStyle = entities[id].color ?? NEUTRAL_COLOR;
+      ctx.beginPath();
+      for (const i of list) addCellPath(ctx, cells, vertices, i);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
   }
-  ctx.globalAlpha = 1;
+  if (!lines) return;
 
   // 境界線（陸どうしの間のみ）
   const segs = cachedBoundary(map.geometry, ids, isLand, "land:" + kind);

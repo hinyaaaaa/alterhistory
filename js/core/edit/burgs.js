@@ -13,7 +13,6 @@
 
 import { makeCommand, setList, setProps, setIndexed } from "./commands.js";
 import { removeLegacyNotesPart } from "./notes.js";
-import { removeAttributesPart } from "./attributes.js";
 import { cellIndexOf } from "../spatial.js";
 
 const isLive = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
@@ -172,8 +171,6 @@ export function planRemoveBurg(map, id) {
   if (religion && typeof religion.urban === "number") parts.push(setProps(religion, { urban: round6(Math.max(0, religion.urban - burg.population)) }));
   const notePart = removeLegacyNotesPart(map, "burg", id);
   if (notePart) parts.push(notePart);
-  const attrPart = removeAttributesPart(map, "burg", id);
-  if (attrPart) parts.push(attrPart);
   return makeCommand("都市を削除", ["places"], parts);
 }
 

@@ -7,7 +7,7 @@
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand } from "./commands.js";
-import { ensureExt } from "./attributes.js";
+import { ensureExt } from "./ext.js";
 import { TRANSPORT_BY_ID, findPath } from "../sim/travel.js";
 
 export const MAX_JOURNEYS = 200;

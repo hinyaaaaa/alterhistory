@@ -20,7 +20,7 @@
 import { makeCommand, setIndexed, setProps, setList } from "./commands.js";
 import { computePole } from "./pole.js";
 import { cellAreas } from "../geometry.js";
-import { ensureExt } from "./attributes.js";
+import { ensureExt } from "./ext.js";
 import { defaultMarkerName } from "./markers.js";
 
 const round6 = (v) => Math.round(v * 1e6) / 1e6;

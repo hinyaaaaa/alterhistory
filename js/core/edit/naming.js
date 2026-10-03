@@ -12,7 +12,7 @@
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand } from "./commands.js";
-import { ensureExt } from "./attributes.js";
+import { ensureExt } from "./ext.js";
 import {
   NAME_STYLES, STYLE_KEYS, DEFAULT_STYLE, isStyle,
   generatePlaceName, generateStateName, generateReligionName, generateCultureName, generateProvinceName,

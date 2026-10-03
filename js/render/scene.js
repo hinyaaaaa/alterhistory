@@ -10,8 +10,9 @@ import { drawTradeLines } from "./layers/trade-lines.js";
 import { drawZones, drawJourneys } from "./layers/journeys-zones.js";
 
 export const DEFAULT_RENDER_OPTIONS = Object.freeze({
-  base: "biome",          // "biome" | "height"
-  overlay: "state",       // "none" | "state" | "culture" | "religion" | "province"
+  terrain: "biome",       // "biome" | "height" | "both" | "none"（旧オプション base も受け付ける）
+  fills: null,            // 色分けの種類の配列（描く順）。null のときは旧オプション overlay（1種類）を使う
+  borders: true,          // 国家の色分けを消していても国境だけ引く
   coast: true,
   rivers: true,
   routes: { roads: true, trails: true, searoutes: true },
@@ -39,8 +40,20 @@ export function drawScene(ctx, map, vp, options = {}, dpr = 1) {
 
   ctx.save();
   vp.apply(ctx, dpr);
-  drawTerrain(ctx, map, vp, o.base);
-  if (o.overlay !== "none") drawPolitics(ctx, map, vp, o.overlay);
+  // 旧オプション（base / overlay）との互換: 古い形で渡されても動く（overlay 省略時は国家のみ）
+  const terrain = options.terrain ?? (options.base === "height" ? "height" : "biome");
+  const fills = Array.isArray(options.fills) ? options.fills
+    : options.overlay === undefined ? ["state"]
+    : options.overlay === "none" ? [] : [options.overlay];
+  drawTerrain(ctx, map, vp, terrain);
+  // 色分けは重ねて描く。2つ以上のときは下の層が見えるよう、少し薄くする
+  const alpha = fills.length > 1 ? 0.4 : 0.55;
+  for (const kind of fills) {
+    // 文化・宗教の破線の境界は、単独のときだけ引く（重ねると線が混ざって読めなくなる）
+    drawPolitics(ctx, map, vp, kind, { alpha, lines: kind === "state" || kind === "province" || fills.length === 1 });
+  }
+  // 国家の色分けが無くても、国境だけは引ける（Azgaar の「境界」レイヤー）
+  if (o.borders && !fills.includes("state")) drawPolitics(ctx, map, vp, "state", { fill: false });
   if (o.coast) drawCoast(ctx, map, vp);
   if (o.rivers) drawRivers(ctx, map, vp);
   if (o.routes) drawRoutes(ctx, map, vp, o.routes);

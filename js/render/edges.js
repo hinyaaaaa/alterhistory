@@ -42,3 +42,34 @@ export function strokeSegments(ctx, segs) {
   }
   ctx.stroke();
 }
+
+/**
+ * ある実体（国家・文化・宗教・属州の1つ）の外周の線分。海・湖との境も、他の実体との境も含む。
+ * 凡例の項目を押したときの強調表示に使う。実体のセルが無ければ空。
+ *
+ * @param {object} geometry
+ * @param {ArrayLike<number>} ids  セルごとの実体ID
+ * @param {number} id              強調したい実体のID
+ * @param {ArrayLike<number>} [biome]  セルごとのバイオーム。0 = 水域。水域のセルは実体に含めない
+ */
+export function entityOutlineSegments(geometry, ids, id, biome) {
+  const inside = new Uint8Array(ids.length);
+  let any = false;
+  for (let i = 0; i < ids.length; i++) {
+    if (ids[i] === id && (!biome || biome[i] !== 0)) { inside[i] = 1; any = true; }
+  }
+  if (!any) return new Float32Array(0);
+  return buildBoundarySegments(geometry, inside);
+}
+
+/** 線分の配列 [x1,y1,x2,y2,...] を囲む長方形。線分が無ければ null */
+export function segmentsBounds(segs) {
+  if (!segs || segs.length < 4) return null;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < segs.length; i += 2) {
+    const x = segs[i], y = segs[i + 1];
+    if (x < x0) x0 = x; if (x > x1) x1 = x;
+    if (y < y0) y0 = y; if (y > y1) y1 = y;
+  }
+  return { x0, y0, x1, y1 };
+}

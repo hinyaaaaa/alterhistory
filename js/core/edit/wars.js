@@ -14,7 +14,7 @@
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand, setIndexed, setProps } from "./commands.js";
-import { ensureExt } from "./attributes.js";
+import { ensureExt } from "./ext.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
@@ -35,18 +35,51 @@ export function warsOf(map, stateId) {
 }
 
 /** 宣戦布告。attackers/defenders はそれぞれ1カ国以上 */
+/** 戦争名が既に使われているか（自分自身 exceptId は除く） */
+export function warNameTaken(map, name, exceptId = null) {
+  const n = String(name ?? "").trim();
+  return !!n && listWars(map).some((w) => w.id !== exceptId && w.name === n);
+}
+/** 既定の戦争名が重なるときは「（第2次）」「（第3次）」…を付けて一意にする */
+function uniqueDefaultName(map, base) {
+  if (!warNameTaken(map, base)) return base;
+  for (let k = 2; ; k++) { const n = `${base}（第${k}次）`; if (!warNameTaken(map, n)) return n; }
+}
+
 export function planDeclareWar(map, { name, attackers, defenders, date }) {
   const a = [...new Set(attackers)], d = [...new Set(defenders)];
   if (!a.length || !d.length) throw new Error("攻撃側・防御側とも1カ国以上必要です");
   for (const id of [...a, ...d]) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
   if (a.some((id) => d.includes(id))) throw new Error("同じ国家が両陣営に入っています");
   const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
+  const explicit = String(name ?? "").trim();
+  if (explicit && warNameTaken(map, explicit)) throw new Error(`「${explicit}」という戦争名は既に使われています`);
   const war = {
-    id: nextWarId(map), name: name || `${aNames[0]}対${dNames[0]}戦争`,
+    id: nextWarId(map), name: explicit || uniqueDefaultName(map, `${aNames[0]}対${dNames[0]}戦争`),
     attackers: a, defenders: d, startedAt: date, endedAt: null, battles: [], advantage: {},
+    muster: {}, // 召集する部隊: { [国家ID]: [部隊ID, ...] }（チェックを付けた部隊がこの戦争の戦力）
   };
   const before = listWars(map);
   return { command: makeCommand(`宣戦布告（${war.name}）`, [], [{ apply: (m) => writeWars(m, [...before, war]), revert: (m) => writeWars(m, before) }]), id: war.id };
+}
+
+/** 召集する部隊を保存する。muster は { [国家ID]: [部隊ID, ...] }。参戦国以外・存在しない部隊は取り除く */
+export function planSetMuster(map, warId, muster) {
+  const list = listWars(map);
+  const war = list.find((w) => w.id === warId);
+  if (!war) throw new Error("その戦争は存在しません");
+  if (war.endedAt) throw new Error("終結した戦争の召集は変えられません");
+  const sides = new Set([...war.attackers, ...war.defenders]);
+  const clean = {};
+  for (const [sid, ids] of Object.entries(muster ?? {})) {
+    const st = map.pack.states[Number(sid)];
+    if (!sides.has(Number(sid)) || !Array.isArray(st?.military)) continue;
+    const have = new Set(st.military.map((r) => r.i));
+    const keep = [...new Set(ids)].filter((i) => have.has(i));
+    if (keep.length) clean[sid] = keep;
+  }
+  const after = list.map((x) => (x.id !== warId ? x : { ...x, muster: clean }));
+  return makeCommand("部隊の召集", [], [{ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) }]);
 }
 
 /** 戦闘結果を戦争記録に追記する（battle.js の planResolveBattle と組み合わせて呼ぶ） */

@@ -6,9 +6,9 @@
 //
 //   ・ID を全て名前に解決する（"attackers":[2] ではなく {"id":2,"name":"ベルガ公国"}）
 //   ・全ての出来事を 1 本の年表にまとめ、時代名も付ける
-//   ・国家ごとに、領土・隣接・都市・軍事・外交・属性・ノートを 1 か所に集約する
+//   ・国家ごとに、領土・隣接・都市・軍事・外交・ノートを 1 か所に集約する
 //   ・地理は「範囲・重心・地形内訳・隣接国」など、言葉で読める形にする
-//   ・どうでもいい情報（全マーカー・全都市・全属性・ノート・河川・時代）も省略しない
+//   ・どうでもいい情報（全マーカー・全都市・ノート・河川・時代）も省略しない
 //   ・冒頭に「AI への読み方ガイド」を同梱し、ファイル単体で意味が通るようにする
 //
 // 形式は JSON（AI が最も正確に読める）。Markdown 版（人間・AI 両用の読み物）も同じデータから作る。
@@ -177,7 +177,6 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
 
   // ---- 国家 ----
   const liveStates = P.states.filter(live);
-  const attrsOf = (kind, id) => Object.entries(map.ext?.data?.attributes?.[`${kind}:${id}`] ?? {}).map(([name, value]) => ({ name, value }));
   const noteOf = (type, id) => { const t = getNote(map, type, id); return t ? htmlToEditableText(t) : null; };
 
   const states = liveStates.map((s) => {
@@ -237,7 +236,6 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
       provinces: (s.provinces ?? []).map((id) => P.provinces[id]).filter(live).map((p) => ({ id: p.i, name: p.fullName ?? p.name })),
       diplomacy,
       alliances: listAlliances(map).filter((a) => a.members.includes(s.i)).map((a) => ({ id: a.id, name: a.name, active: !a.dissolvedAt, formed: fmtDate(a.formedAt), dissolved: fmtDate(a.dissolvedAt) })),
-      attributes: attrsOf("state", s.i),
       note: noteOf("state", s.i),
     };
   });
@@ -252,7 +250,7 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
       absorbedBy: m ? ref(namer, "state", m.toState) : null,
       // 統合すると capital は 0 に戻される。統合マーカー（旧首都のセルに立つ）から旧首都を復元する
       formerCapital: P.burgs[e.capital]?.name ?? recoverFormerCapital(map, e, m),
-      attributes: attrsOf("state", e.i), note: noteOf("state", e.i),
+      note: noteOf("state", e.i),
       note2: "領土・都市・属州・部隊は全て併合先に移っている。過去の戦争・同盟・外交の記録には名前が残る。",
     };
   });
@@ -263,7 +261,7 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     return {
       id: e.i, name: e.fullName ?? e.name, color: e.color ?? null, type: e.type ?? null,
       cells: t?.cells ?? 0, geography: t ? summarizeAcc(t.acc, W, H) : null,
-      attributes: attrsOf(kind, e.i), note: noteOf(kind, e.i), ...extra(e),
+      note: noteOf(kind, e.i), ...extra(e),
     };
   });
   const cultures = mkEntity("culture", P.cultures, T.cult, (e) => ({ originCultures: (e.origins ?? []).filter((o) => o !== 0 || e.i === 0).map((o) => namer.culture(o)), homeCell: e.center ?? null }));
@@ -279,7 +277,7 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     cell: b.cell, position: describePosition(b.x, b.y, W, H), xy: [Math.round(b.x), Math.round(b.y)],
     type: b.type ?? null, group: b.group ?? null,
     walls: !!b.walls, plaza: !!b.plaza, citadel: !!b.citadel, temple: !!b.temple, shanty: !!b.shanty,
-    attributes: [], note: noteOf("burg", b.i),
+    note: noteOf("burg", b.i),
   }));
 
   // ---- マーカー（全て） ----
@@ -433,8 +431,8 @@ function buildGuide() {
       "world: 世界の基本情報。currentDate が『今』の年月。eras は時代区分（年の範囲）。",
       "timeline: 全ての出来事（開戦・戦闘・講和・同盟・外交変化・独立・統合・時代の始まり）を時系列に並べた年表。歴史を掴むにはまずここを読む。",
       "extinctStates: 統合で消滅した国家。過去の記録（wars, alliances, timeline）に名前が出てくる国の素性はここで分かる。",
-      "states: 国家ごとに領土・地理・隣接国・人口・経済・軍事(部隊の内訳)・外交・同盟・属性・ノートを集約。id は他の場所（wars, alliances など）からの参照キー。",
-      "cultures / religions / provinces: それぞれの分布と、ユーザーが書いた属性・ノート。",
+      "states: 国家ごとに領土・地理・隣接国・人口・経済・軍事(部隊の内訳)・外交・同盟・ノートを集約。id は他の場所（wars, alliances など）からの参照キー。",
+      "cultures / religions / provinces: それぞれの分布と、ユーザーが書いたノート。",
       "burgs: 全ての都市（小さなものも含む）。markers: 地図上の目印（遺跡・古戦場など）。",
       "wars: 戦争ごとの経過（全戦闘の勝敗と戦力）と講和条件。status が『継続中』のものは今も戦争が続いている。",
       "ranking: 領土・人口・軍事力・技術水準の順位。",
@@ -448,9 +446,9 @@ function buildGuide() {
     ],
     designNotes: [
       "戦闘に勝っても国境は動かない。領土が動くのは講和条約（wars[].peaceTerms）・独立・統合のときだけ。",
-      "同盟・戦争・外交・軍事・技術水準・属性はユーザーが手動で決めた内容。AI による自律行動は元のアプリには無い。",
+      "同盟・戦争・外交・軍事・技術水準はユーザーが手動で決めた内容。AI による自律行動は元のアプリには無い。",
       "経済(人口・産業)は年次で自動更新される簡易モデル。数値バランスは仮置きで、史実に基づくものではない。",
-      "属性(attributes)とノート(note)はユーザーの自由記述。世界設定の一次情報として最優先で尊重すること。",
+      "ノート(note)はユーザーの自由記述。世界設定の一次情報として最優先で尊重すること。",
     ],
     doNot: [
       "存在しない id を作らない。新しい国家・都市を作るときは既存の最大 id + 1 を使う。",
@@ -459,7 +457,7 @@ function buildGuide() {
     suggestedTasks: [
       "年表を元に、時代ごとの歴史叙述（教科書風・年代記風）を書く。",
       "現在の勢力図・同盟・継続中の戦争から、次に起こりうる展開を提案する。",
-      "ノートや属性の記述と、実際の領土・戦績の矛盾を指摘する。",
+      "ノートの記述と、実際の領土・戦績の矛盾を指摘する。",
     ],
   };
 }
@@ -496,7 +494,6 @@ export function chronicleToMarkdown(ch) {
     for (const r of s.military.regiments) L.push(`  - ${r.name}（${r.position}・${r.locatedIn.name}領内）: ${Object.entries(r.units).map(([k, v]) => `${k}${v}`).join("、") || "兵力なし"}`);
     if (s.diplomacy.length) L.push(`- 外交: ${s.diplomacy.map((d) => `${d.with.name}=${d.relation}`).join("、")}`);
     if (s.alliances.length) L.push(`- 同盟: ${s.alliances.map((a) => `${a.name}${a.active ? "" : "（解消済み）"}`).join("、")}`);
-    for (const a of s.attributes) L.push(`- 【属性】${a.name}: ${a.value}`);
     if (s.note) L.push(`- 【ノート】${s.note.replace(/\n/g, " ")}`);
     L.push("");
   }
@@ -524,7 +521,7 @@ export function chronicleToMarkdown(ch) {
   L.push("", "## 文化・宗教・属州", "");
   for (const [label, list] of [["文化", ch.cultures], ["宗教", ch.religions], ["属州", ch.provinces]]) {
     L.push(`### ${label}`);
-    for (const e of list) L.push(`- ${e.name}（${e.cells}セル・${e.geography?.position ?? "位置不明"}）${e.attributes.map((a) => ` [${a.name}: ${a.value}]`).join("")}${e.note ? ` — ${e.note.replace(/\n/g, " ")}` : ""}`);
+    for (const e of list) L.push(`- ${e.name}（${e.cells}セル・${e.geography?.position ?? "位置不明"}）${e.note ? ` — ${e.note.replace(/\n/g, " ")}` : ""}`);
     L.push("");
   }
 

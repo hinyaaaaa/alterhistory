@@ -2,12 +2,12 @@
 //
 // 保存場所: ALTERHISTORY拡張データ ext.data.alliances = [{ id, name, members:[stateId,...], formedAt, dissolvedAt }]
 // formedAt/dissolvedAt は { year, month } | null（結成日・解消日）。世界の現在時刻から自動で記録する。
-// Azgaar形式には無い概念のため、edit/attributes.js と同様に拡張データに保存する。
+// Azgaar形式には無い概念のため、edit/ext.js の ensureExt と同様に拡張データに保存する。
 //
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand } from "./commands.js";
-import { ensureExt } from "./attributes.js";
+import { ensureExt } from "./ext.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 

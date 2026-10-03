@@ -13,7 +13,7 @@
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand, setProps } from "./commands.js";
-import { ensureExt } from "./attributes.js";
+import { ensureExt } from "./ext.js";
 
 export const RELATIONS = Object.freeze([
   { id: "Ally", label: "同盟" },
