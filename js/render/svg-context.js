@@ -48,7 +48,7 @@ export function createSvgContext(width, height) {
 
   const st = {
     fillStyle: "#000000", strokeStyle: "#000000", lineWidth: 1, lineCap: "butt", lineJoin: "miter",
-    globalAlpha: 1, font: "10px sans-serif", textAlign: "start", textBaseline: "alphabetic", dash: [],
+    globalAlpha: 1, font: "10px sans-serif", letterSpacing: "0px", textAlign: "start", textBaseline: "alphabetic", dash: [],
   };
 
   const closeGroup = () => { if (open) { body.push("</g>"); open = false; } };
@@ -75,7 +75,7 @@ export function createSvgContext(width, height) {
     const anchor = st.textAlign === "center" ? "middle" : st.textAlign === "right" || st.textAlign === "end" ? "end" : "start";
     const base = st.textBaseline === "middle" ? ` dominant-baseline="central"` : "";
     return `x="${num(x)}" y="${num(y)}" font-size="${num(f.size * 1000) / 1000}" font-family="${esc(f.family)}"` +
-      `${f.bold ? ` font-weight="bold"` : ""} text-anchor="${anchor}"${base}`;
+      `${f.bold ? ` font-weight="bold"` : ""}${st.letterSpacing && st.letterSpacing !== "0px" ? ` letter-spacing="${esc(st.letterSpacing)}"` : ""} text-anchor="${anchor}"${base}`;
   };
 
   const ctx = {
@@ -87,6 +87,7 @@ export function createSvgContext(width, height) {
     get globalAlpha() { return st.globalAlpha; }, set globalAlpha(v) { st.globalAlpha = v; },
     get font() { return st.font; }, set font(v) { st.font = v; },
     get textAlign() { return st.textAlign; }, set textAlign(v) { st.textAlign = v; },
+    get letterSpacing() { return st.letterSpacing; }, set letterSpacing(v) { st.letterSpacing = v; },
     get textBaseline() { return st.textBaseline; }, set textBaseline(v) { st.textBaseline = v; },
 
     save() { stack.push({ ...st, dash: st.dash.slice() }); },

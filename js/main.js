@@ -11,6 +11,7 @@ import { byId } from "./ui/dom.js";
 import { downloadBlob, createBrowserCanvas } from "./ui/download.js";
 import { initMapView } from "./ui/map-view.js";
 import { initLegend } from "./ui/legend.js";
+import { initFontsSync } from "./ui/fonts-sync.js";
 import { initChrome } from "./ui/chrome.js";
 import { initSidebarToggle } from "./ui/sidebar-toggle.js";
 import { initToolbar } from "./ui/toolbar.js";
@@ -43,7 +44,7 @@ function start() {
 
   const store = createStore({
     map: null, fileName: "", warnings: [], error: null, notice: null, busy: null, hover: null,
-    view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "all" },
+    view: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto" },
     editTool: "select", brushRadius: 40,
     timeRunning: false, timeSpeed: 120000, hint: null,
     exportOpts: { title: true, legend: true, scaleBar: true },
@@ -91,6 +92,7 @@ function start() {
   initLegend(deps);
   initSidebarToggle(deps);
   initChrome(deps);
+  initFontsSync(deps);
   const editMode = initEditMode(deps);
   editModeRef = editMode;
   const editToolbar = initEditToolbar({ store, editMode, editActions });

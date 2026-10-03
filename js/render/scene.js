@@ -18,7 +18,7 @@ export const DEFAULT_RENDER_OPTIONS = Object.freeze({
   burgs: true,
   zones: false,           // ゾーン（侵攻・疫病など）。画面では既定で表示する（options.js）
   journeys: false,        // 旅の線。同上
-  labels: { states: true, burgs: true },
+  labels: { states: true, burgs: "auto" },
   background: "#2f4a72",
 });
 
@@ -47,7 +47,7 @@ export function drawScene(ctx, map, vp, options = {}, dpr = 1) {
   if (o.zones) drawZones(ctx, map, vp, { selected: o.zoneSelected ?? null });
   if (o.tradeLines) drawTradeLines(ctx, vp, o.tradeLines);
   if (o.journeys) drawJourneys(ctx, map, vp, { selected: o.journeySelected ?? null });
-  if (o.burgs) drawBurgs(ctx, map, vp);
+  if (o.burgs) drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" });
   if (o.labels) drawLabels(ctx, map, vp, o.labels);
   ctx.restore();
 }

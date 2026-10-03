@@ -10,7 +10,8 @@
 import { listEntities, ENTITY_KINDS } from "../../core/query.js";
 import { eraAt } from "../../core/edit/eras.js";
 
-const FONT = '"Yu Gothic UI","Meiryo","Hiragino Sans","Noto Sans CJK JP",sans-serif';
+import { FONT_PLACE } from "../fonts.js";
+const FONT = FONT_PLACE; // 題名・凡例も地図の文字と同じ明朝系にそろえる
 const PANEL_BG = "rgba(20,22,28,0.80)";
 const PANEL_LINE = "rgba(201,162,75,0.9)";
 const TEXT = "#f1ecdc";

@@ -2,7 +2,14 @@
 import { byId } from "./dom.js";
 import { getScale } from "../render/layers/annotations.js";
 
-const TOGGLE_IDS = { coast: "chk-coast", rivers: "chk-rivers", routes: "chk-routes", burgs: "chk-burgs", labels: "chk-labels" };
+const TOGGLE_IDS = { coast: "chk-coast", rivers: "chk-rivers", routes: "chk-routes", burgs: "chk-burgs", labels: "chk-labels", zones: "chk-zones", journeys: "chk-journeys" };
+// 値がまだ決まっていない（= 既定でオン）項目
+const DEFAULT_ON = new Set(["zones", "journeys"]);
+const PRESETS = {
+  politics: { overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto" },
+  terrain: { overlay: "none", base: "biome", coast: true, rivers: true, routes: false, burgs: true, labels: true, burgLabels: "capitals" },
+  height: { overlay: "none", base: "height", coast: true, rivers: true, routes: false, burgs: false, labels: false },
+};
 
 export function initToolbar({ store, actions, openFileDialog, openHelp }) {
   byId("btn-open").addEventListener("click", openFileDialog);
@@ -41,6 +48,19 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
     byId(id).addEventListener("change", (e) => actions.setView({ [name]: e.target.checked }));
   }
 
+  // 区切りボタン（セレクトの代わりに見せる）と、まとめて切り替えるボタン
+  const segs = [...document.querySelectorAll("[data-seg-for]")];
+  for (const seg of segs) {
+    seg.addEventListener("click", (e) => {
+      const b = e.target instanceof HTMLElement ? e.target.closest("button[data-value]") : null;
+      if (!b) return;
+      const sel = byId(seg.dataset.segFor);
+      sel.value = b.dataset.value;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  }
+  for (const b of document.querySelectorAll("[data-preset]")) b.addEventListener("click", () => actions.setView({ ...PRESETS[b.dataset.preset] }));
+
   // ショートカット等で状態が変わったときにも、コントロールの表示を合わせる
   const sync = (state) => {
     const v = state.view;
@@ -53,8 +73,19 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
     if (!hasMap) menu.open = false;
     for (const [name, id] of Object.entries(TOGGLE_IDS)) {
       const el = byId(id);
-      if (el.checked !== v[name]) el.checked = v[name];
+      const want = v[name] ?? DEFAULT_ON.has(name);
+      if (el.checked !== want) el.checked = want;
     }
+    for (const seg of segs) {
+      const cur = byId(seg.dataset.segFor).value;
+      for (const b of seg.querySelectorAll("button[data-value]")) { const on = b.dataset.value === cur; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); }
+    }
+    for (const b of document.querySelectorAll("[data-preset]")) {
+      const p = PRESETS[b.dataset.preset];
+      const on = Object.entries(p).every(([k, val]) => (v[k] ?? DEFAULT_ON.has(k)) === val);
+      b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on));
+    }
+    byId("layers-menu").classList.toggle("disabled", !hasMap);
     // 書き出しの付属物: 凡例は色分け「なし」だと出せず、スケールバーは縮尺の無い地図だと出せない（理由を表示）
     const eo = state.exportOpts ?? {};
     for (const box of annotBoxes) {

@@ -2,6 +2,8 @@
 // UI（DOM）は、ここの関数を呼ぶだけにする。UI にロジックを書かない。
 //   依存: store / viewport / renderer / loader（すべて注入。テストで差し替え可能）
 
+import { planKatakanaBurgs } from "../core/edit/katakana.js";
+import { createRandom as createKanaRandom } from "../core/random.js";
 import { entityPosition } from "../core/query.js";
 import { serializeAzgaar } from "../io/azgaar-writer.js";
 import { renderMapToCanvas, renderMapToSvg, canvasToPngBlob, exportFileName, todayString } from "../io/exporter.js";
@@ -21,6 +23,10 @@ const PNG_SCALE = 2;
  * @param deps.download      (blob, fileName) => void   ブラウザのダウンロード
  * @param deps.createCanvas  (w, h) => Canvas            PNG 書き出し用
  */
+/** 「開くとき英語の都市名をカタカナにする」設定（既定はオン） */
+export const katakanaOnLoad = () => { try { return localStorage.getItem("alterhistory.katakanaBurgs") !== "0"; } catch { return true; } };
+export const setKatakanaOnLoad = (on) => { try { localStorage.setItem("alterhistory.katakanaBurgs", on ? "1" : "0"); } catch { /* 保存できなくても動作に支障はない */ } };
+
 export function createActions({ store, viewport, renderer, load, Delaunator, download, createCanvas }) {
   const rerender = () => renderer.requestRender();
   let noticeTimer = 0;
@@ -67,9 +73,24 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
         store.replace({ ...prev, map, fileName: file.name, warnings, error: null, notice: null, busy: null, hover: null });
         viewport.fit();
         rerender();
+        if (katakanaOnLoad()) {
+          const n = this.katakanaBurgs(file.name);
+          if (n) showNotice(`英語名の都市 ${n} 件をカタカナにしました（「元に戻す」で英語名に戻せます）`);
+        }
       } catch (e) {
         store.update((s) => { s.busy = null; s.error = e.message; });
       }
+    },
+
+    /** 英語名の都市をカタカナにする。付け替えた件数を返す（Undo 1回で戻る） */
+    katakanaBurgs(seedText = "katakana") {
+      const map = store.getState().map;
+      if (!map) return 0;
+      const cmd = planKatakanaBurgs(map, createKanaRandom(`${seedText}:${map.pack.burgs.length}`));
+      if (!cmd) return 0;
+      store.commit(cmd);
+      rerender();
+      return cmd.parts.length;
     },
 
     fit() { viewport.fit(); rerender(); },

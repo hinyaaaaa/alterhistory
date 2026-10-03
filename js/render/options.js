@@ -13,7 +13,7 @@ export function viewToRenderOptions(view) {
     journeys: view.journeys ?? true,
     journeySelected: view.journeySelected ?? null,
     labels: view.labels
-      ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : true }
+      ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : view.burgLabels === "auto" ? "auto" : true }
       : false,
   };
 }

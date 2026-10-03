@@ -2,10 +2,11 @@
 // 地図をできるだけ広く見せるため、どの枠も個別に、または H キーで一括して隠せる。
 // 隠している間も、右下の小さな ⛶ ボタンと H キーでいつでも戻せる。
 import { byId } from "./dom.js";
+import { katakanaOnLoad, setKatakanaOnLoad } from "../app/actions.js";
 
 const REGIONS = ["top", "left", "right", "bottom"];
 
-export function initChrome({ store, viewport, renderer }) {
+export function initChrome({ store, viewport, renderer, actions }) {
   const app = byId("app");
   const boxes = Object.fromEntries([...document.querySelectorAll("[data-chrome]")].map((b) => [b.dataset.chrome, b]));
   const restore = byId("btn-chrome-restore");
@@ -50,7 +51,11 @@ export function initChrome({ store, viewport, renderer }) {
   allBtn.addEventListener("click", () => { menu.open = false; setAll(true); });
   restore.addEventListener("click", () => setAll(false)); // 何か隠れているときだけ見えるボタン。押すと全部戻す
 
-  document.addEventListener("pointerdown", (e) => { if (menu.open && !menu.contains(e.target)) menu.open = false; });
+  // どのメニューも、外を押したとき・別のメニューを開いたとき・Esc で閉じる
+  const menus = [...document.querySelectorAll("details.menu")];
+  document.addEventListener("pointerdown", (e) => { for (const m of menus) if (m.open && !m.contains(e.target)) m.open = false; });
+  for (const m of menus) m.addEventListener("toggle", () => { if (m.open) for (const o of menus) if (o !== m) o.open = false; });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") for (const m of menus) m.open = false; });
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey || e.key.toLowerCase() !== "h") return;
     const t = e.target;
@@ -78,6 +83,17 @@ export function initChrome({ store, viewport, renderer }) {
   window.addEventListener("beforeunload", (e) => {
     if (store.getState().map && store.isDirty()) { e.preventDefault(); e.returnValue = ""; }
   });
+  // ---- 地図を開く前の案内 ／ 英語名の都市のカタカナ化 ----
+  const kana = byId("opt-katakana");
+  kana.checked = katakanaOnLoad();
+  kana.addEventListener("change", () => setKatakanaOnLoad(kana.checked));
+  byId("btn-katakana").addEventListener("click", () => {
+    menu.open = false;
+    const n = actions.katakanaBurgs();
+    store.update((st) => { st.notice = n ? `英語名の都市 ${n} 件をカタカナにしました（「元に戻す」で戻せます）` : "カタカナにする対象の都市はありません"; });
+  });
+  const syncEmpty = () => { byId("btn-katakana").disabled = !store.getState().map; };
+  store.subscribe(syncEmpty); syncEmpty();
   apply();
   return { setHidden, setAll, toggleAll, hidden: () => [...hidden] };
 }
