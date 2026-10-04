@@ -57,6 +57,19 @@ const formLabel = (f) => (f ? (FORM_LABEL[f] ? `${FORM_LABEL[f]}（${f}）` : f)
 const rel = (r) => (r ? relationLabel(r) : null);
 
 /** セルの重心・範囲を集計 */
+/** 講和条約の記録（新しい形式の cessions / reparations / annex と、旧い形式の provinceIds / regionCells の両方に対応） */
+function peaceTermsOfFactory(namer) {
+  return (t) => ({
+    name: t.treatyName ?? null, kind: t.kind ?? "standard", venue: t.venue?.place ?? null, signedAt: t.signedAt ? `${t.signedAt.year}年${t.signedAt.month}月` : null, notes: t.notes ?? "",
+    cessions: (t.cessions ?? []).map((c) => ({ name: c.name ?? "", from: namer.state(c.fromStateId), to: namer.state(c.toStateId), cells: c.cells ?? 0, burgs: c.burgs ?? [] })),
+    reparations: (t.reparations && Array.isArray(t.reparations) ? t.reparations : []).map((r) => ({ from: namer.state(r.fromStateId), to: namer.state(r.toStateId), amount: r.amount, currency: r.currency ?? null, received: r.received ?? null, receivedCurrency: r.receivedCurrency ?? null })),
+    annex: (t.annex ?? []).map((x) => ({ from: namer.state(x.fromStateId), to: namer.state(x.toStateId) })),
+    // 旧形式
+    cededProvinces: (t.provinceIds ?? []).map((id) => namer.province(id)), cededUnaffiliatedRegions: (t.regionCells ?? []).length,
+    cededTo: t.toStateId != null ? namer.state(t.toStateId) : null, legacyReparations: typeof t.reparations === "number" ? t.reparations : 0,
+  });
+}
+
 function newAcc() { return { n: 0, sx: 0, sy: 0, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }; }
 function addPt(a, x, y) { a.n++; a.sx += x; a.sy += y; if (x < a.x0) a.x0 = x; if (x > a.x1) a.x1 = x; if (y < a.y0) a.y0 = y; if (y > a.y1) a.y1 = y; }
 
@@ -304,17 +317,14 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
       started: fmtDate(w.startedAt), startedEra: eraName(w.startedAt), ended: fmtDate(w.endedAt), endedEra: eraName(w.endedAt),
       attackers: stateNames(w.attackers), defenders: stateNames(w.defenders),
       battleCount: (w.battles ?? []).length, attackerWins: wins.attacker, defenderWins: wins.defender,
+      type: w.type ?? null, warScore: w.result?.warScore ?? null,
       battles: (w.battles ?? []).map((b) => ({
-        date: fmtDate(b), attacker: namer.state(b.attackerState), defender: namer.state(b.defenderState),
+        date: fmtDate(b.date ?? b), name: b.name ?? null, place: b.place ?? null, text: b.text ?? null,
+        attacker: namer.state(b.attackerState), defender: namer.state(b.defenderState),
         winner: b.winner === "attacker" ? namer.state(b.attackerState) : namer.state(b.defenderState), winnerSide: b.winner,
-        attackerPower: b.aPower, defenderPower: b.dPower,
+        attackerPower: b.aPower ?? null, defenderPower: b.dPower ?? null,
       })),
-      peaceTerms: w.terms ? {
-        cededProvinces: (w.terms.provinceIds ?? []).map((id) => namer.province(id)),
-        cededUnaffiliatedRegions: (w.terms.regionCells ?? []).length,
-        cededTo: namer.state(w.terms.toStateId), reparations: w.terms.reparations ?? 0,
-        reparationsNote: "賠償は産業力(industry)の移転として簡易記録",
-      } : null,
+      peaceTerms: w.terms ? peaceTermsOfFactory(namer)(w.terms) : null,
     };
   });
 
@@ -341,7 +351,13 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
   for (const w of listWars(map)) {
     push(w.startedAt, "war-declared", `戦争「${w.name}」開戦`, `攻撃側: ${w.attackers.map(namer.state).join("、")} / 防御側: ${w.defenders.map(namer.state).join("、")}`, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
     for (const b of w.battles ?? []) push(b, "battle", `戦闘（${w.name}）`, `${namer.state(b.attackerState)}（攻）対 ${namer.state(b.defenderState)}（防）→ ${b.winner === "attacker" ? namer.state(b.attackerState) : namer.state(b.defenderState)} の勝利（戦力 ${b.aPower} 対 ${b.dPower}）`, [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)]);
-    if (w.endedAt) push(w.endedAt, "war-ended", `戦争「${w.name}」講和`, w.terms ? `割譲: ${(w.terms.provinceIds ?? []).map(namer.province).join("、") || "属州なし"}${(w.terms.regionCells ?? []).length ? ` ほか未編入地域${w.terms.regionCells.length}か所` : ""} → ${namer.state(w.terms.toStateId)}${w.terms.reparations ? ` / 賠償(産業力) ${w.terms.reparations}` : ""}` : "条件の記録なし", [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+    if (w.endedAt) {
+      const t = w.terms, nm = (id) => namer.state(id);
+      const body = !t ? "条件の記録なし" : t.cessions || t.annex || Array.isArray(t.reparations)
+        ? `${t.treatyName ?? "講和条約"}（${{ standard: "通常の講和", white: "白紙和平", annex: "全面降伏" }[t.kind ?? "standard"]}）${(t.cessions ?? []).length ? ` / 割譲 ${(t.cessions ?? []).map((c) => `${c.name || "区画"}→${nm(c.toStateId)}`).join("、")}` : ""}${(t.reparations ?? []).length ? ` / 賠償 ${(t.reparations ?? []).map((r) => `${nm(r.fromStateId)}→${nm(r.toStateId)} ${r.amount}`).join("、")}` : ""}${(t.annex ?? []).length ? ` / 併合 ${(t.annex ?? []).map((x) => `${nm(x.fromStateId)}→${nm(x.toStateId)}`).join("、")}` : ""}`
+        : `割譲: ${(t.provinceIds ?? []).map(namer.province).join("、") || "属州なし"}${(t.regionCells ?? []).length ? ` ほか未編入地域${t.regionCells.length}か所` : ""} → ${namer.state(t.toStateId)}${t.reparations ? ` / 賠償(産業力) ${t.reparations}` : ""}`;
+      push(w.endedAt, "war-ended", `戦争「${w.name}」講和`, body, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+    }
   }
   for (const s of listSovereigntyLog(map)) {
     if (s.type === "merge") {
@@ -510,8 +526,17 @@ export function chronicleToMarkdown(ch) {
   for (const wr of ch.wars) {
     L.push(`### ${wr.name}（${wr.status}）`, `- 期間: ${wr.started} 〜 ${wr.ended ?? "継続中"} / 攻撃側: ${wr.attackers.map((x) => x.name).join("、")} / 防御側: ${wr.defenders.map((x) => x.name).join("、")}`);
     L.push(`- 戦闘 ${wr.battleCount} 回（攻撃側 ${wr.attackerWins} 勝・防御側 ${wr.defenderWins} 勝）`);
-    for (const b of wr.battles) L.push(`  - ${b.date}: ${b.attacker} 対 ${b.defender} → ${b.winner} 勝利（戦力 ${b.attackerPower} 対 ${b.defenderPower}）`);
-    if (wr.peaceTerms) L.push(`- 講和: 割譲 ${wr.peaceTerms.cededProvinces.join("、") || "なし"} → ${wr.peaceTerms.cededTo}${wr.peaceTerms.reparations ? ` / 賠償 ${wr.peaceTerms.reparations}` : ""}`);
+    for (const b of wr.battles) L.push(`  - ${b.date}: ${b.name ? `${b.name}　` : ""}${b.attacker} 対 ${b.defender} → ${b.winner} 勝利${b.attackerPower != null ? `（戦力 ${b.attackerPower} 対 ${b.defenderPower}）` : ""}`);
+    const pt = wr.peaceTerms;
+    if (pt) {
+      if (pt.cessions?.length || pt.reparations?.length || pt.annex?.length || pt.name) {
+        L.push(`- 講和条約: ${pt.name ?? "—"}（${{ standard: "通常の講和", white: "白紙和平", annex: "全面降伏" }[pt.kind] ?? pt.kind}${pt.venue ? `・講和地 ${pt.venue}` : ""}）`);
+        for (const c of pt.cessions) L.push(`  - 割譲: ${c.name || "区画"}（${c.cells}セル）${c.from} → ${c.to}`);
+        for (const r of pt.reparations) L.push(`  - 賠償: ${r.from} が ${r.amount} ${r.currency ?? ""} → ${r.to} が ${r.received ?? "?"} ${r.receivedCurrency ?? ""}`);
+        for (const x of pt.annex) L.push(`  - 併合: ${x.from} → ${x.to}`);
+        if (pt.notes) L.push(`  - 条件: ${pt.notes}`);
+      } else L.push(`- 講和: 割譲 ${pt.cededProvinces.join("、") || "なし"} → ${pt.cededTo}${pt.legacyReparations ? ` / 賠償 ${pt.legacyReparations}` : ""}`);
+    }
     L.push("");
   }
   if (!ch.wars.length) L.push("（戦争の記録はありません）", "");

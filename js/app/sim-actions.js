@@ -4,11 +4,15 @@
 import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegiment, regimentsOf } from "../core/sim/military.js";
 import { planResolveBattle, planResolveMuster } from "../core/sim/battle.js";
 import { planCreateAlliance, planEditAlliance, planDissolveAlliance, listAlliances, alliancesOf } from "../core/edit/alliances.js";
-import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, planSignPeace, planRenameWar, warsAwaitingTreaty, planPeaceVenue, peaceSides, estimatePeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
+import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, suggestCessionChunks, suggestTreaty, planWarPreview, planReevaluateWars, planSignPeace, planSignTreaty, treatyBudget, planAdvanceWars, planFinishWar, warsOngoing, planRenameWar, warsAwaitingTreaty, planPeaceVenue, peaceSides, estimatePeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
 import { forcePower } from "../core/sim/units.js";
 import { planAddMarker } from "../core/edit/markers.js";
 import { createRandom } from "../core/random.js";
+import { makeCommand } from "../core/edit/commands.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
+import { planNextCollapse } from "../core/sim/collapse.js";
+import { planMergeStates } from "../core/edit/sovereignty.js";
+import { strikeEffects } from "../core/sim/nuclear.js";
 import { planDraftNuclearOp, planCancelNuclearOp, planExecuteNuclearOp, listNuclearOps, nuclearStock } from "../core/sim/nuclear.js";
 
 export function createSimActions({ store, renderer }) {
@@ -31,6 +35,17 @@ export function createSimActions({ store, renderer }) {
   };
   const regimentCell = (map, ref) => (map.pack.states[ref.stateId]?.military ?? []).find((r) => r.i === (ref.regId ?? ref.regIds?.[0]))?.cell ?? null;
   const battleName = (map, a, b) => `${dateLabel()} ${map.pack.states[a.stateId].name}対${map.pack.states[b.stateId].name}の戦い`;
+
+  /** 人口の大部分を失った国を崩壊させる（無くなるまで）。崩壊した国の説明文の配列を返す */
+  const runCollapses = () => {
+    const names = [];
+    for (let guard = 0; guard < 8; guard++) {
+      const c = planNextCollapse(store.getState().map, currentDate());
+      if (!c) break;
+      try { store.commit(c.command); names.push(c.annexer != null ? `${c.name}（${store.getState().map.pack.states[c.annexer]?.name}へ併合）` : `${c.name}（解体）`); } catch { break; }
+    }
+    return names;
+  };
 
   return {
     // --- 部隊 ---
@@ -111,25 +126,39 @@ export function createSimActions({ store, renderer }) {
         return r.id;
       }));
     },
-    /** 宣戦布告と同時に即判定する。名前は自動。結果 { id, name, result } を返す（失敗時は undefined） */
-    declareWarInstant(attackers, defenders) {
+    /** 戦争開始前の見積もり（招集した部隊でのバー用）。副作用なし */
+    previewWar(attackers, defenders, muster, type) { return withMap((map) => planWarPreview(map, { attackers, defenders, muster, type })); },
+    /** 「戦争開始」：招集した部隊で即判定し、戦闘の記録を自動生成する。結果 { id, name, result, joined, endsAt, battles, collapsed } */
+    declareWarInstant(attackers, defenders, muster = null, type = "conventional") {
       return withMap((map) => {
         let out;
-        safeRun("宣戦布告", () => {
-          const r = planDeclareAndResolveWar(map, { attackers, defenders, date: currentDate(), rnd });
-          store.beginBatch(r.command.label ?? "宣戦布告");
+        safeRun("戦争開始", () => {
+          const r = planDeclareAndResolveWar(map, { attackers, defenders, date: currentDate(), rnd, muster, type });
+          store.beginBatch(r.command.label ?? "戦争開始");
+          let collapsed = [];
           try {
             store.commit(r.command);
             putMarker("war", "⚔️", capitalCell(store.getState().map, attackers[0]), `${dateLabel()} ${r.name}`);
+            collapsed = runCollapses(); // 人口の大部分を失った国は、ここで崩壊する
           } finally { store.endBatch(); }
           rerender();
-          out = { id: r.id, name: r.name, result: r.result, joined: r.joined, endsAt: r.endsAt };
+          out = { id: r.id, name: r.name, result: r.result, joined: r.joined, endsAt: r.endsAt, battles: r.battles, collapsed };
         });
         return out;
       });
     },
+    suggestTreaty(warId) { return withMap((map) => { const w = listWars(map).find((x) => x.id === warId); return w ? suggestTreaty(map, w) : null; }); },
+    suggestCessionChunks(toIds, fromId, opts) { return withMap((map) => suggestCessionChunks(map, toIds, fromId, opts)) ?? []; },
+    treatyBudget(warId, terms) { return withMap((map) => { const w = listWars(map).find((x) => x.id === warId); return w ? treatyBudget(map, w, terms) : []; }) ?? []; },
+    warsOngoing() { return withMap((map) => warsOngoing(map)) ?? []; },
+    /** 戦闘を最後まで進める */
+    finishWar(warId) { withMap((map) => safeRun("戦闘を進める", () => { commitOrThrow(planFinishWar(map, warId)); runCollapses(); })); },
+    /** 月が進むたびの、戦争の損害の展開（時間経過）。崩壊した国名を返す */
+    advanceWars(date) { return withMap((map) => { const c = planAdvanceWars(map, date); if (c) store.commit(c); return c ? runCollapses() : []; }) ?? []; },
+    runCollapses,
     // --- 核作戦（立案→実行。通常の戦争では使われない） ---
     nuclearOps() { return withMap((map) => listNuclearOps(map)) ?? []; },
+    strikeEstimate(stateId, warheads) { return withMap((map) => strikeEffects(map.pack.states[stateId]?.techLevel ?? 3, warheads)); },
     nuclearStock(stateId) { return withMap((map) => nuclearStock(map.pack.states[stateId])) ?? 0; },
     draftNuclearOp(attackerId, targetId, warheads) { return withMap((map) => { let id; safeRun("核作戦の立案", () => { const r = planDraftNuclearOp(map, { attackerId, targetId, warheads }); commitOrThrow(r.command); id = r.id; }); return id; }); },
     cancelNuclearOp(id) { withMap((map) => safeRun("核作戦の取り消し", () => commitOrThrow(planCancelNuclearOp(map, id)))); },
@@ -137,7 +166,15 @@ export function createSimActions({ store, renderer }) {
       withMap((map) => safeRun("核作戦の実行", () => {
         const cmd = planExecuteNuclearOp(map, id, currentDate());
         store.beginBatch(cmd.label ?? "核作戦の実行");
-        try { store.commit(cmd); const op = listNuclearOps(store.getState().map).find((o) => o.id === id); putMarker("nuclear", "☢️", capitalCell(store.getState().map, op.targetId), `${dateLabel()} ${op.name}`); } finally { store.endBatch(); }
+        try {
+          store.commit(cmd);
+          const op = listNuclearOps(store.getState().map).find((o) => o.id === id);
+          putMarker("nuclear", "☢️", capitalCell(store.getState().map, op.targetId), `${dateLabel()} ${op.name}`);
+          // まだ講和していない戦争は、いまの戦力・士気で判定し直す（核の打撃が戦況・勝敗に反映される）
+          const re = planReevaluateWars(store.getState().map, [op.targetId, op.attackerId], `☢ ${op.name}：${op.warheads}発が使用された`);
+          if (re) store.commit(makeCommand("核作戦による戦況の変化", [], [re]));
+          runCollapses();
+        } finally { store.endBatch(); }
         rerender();
       }));
     },
@@ -170,15 +207,29 @@ export function createSimActions({ store, renderer }) {
     peaceSides(war) { return peaceSides(war); },
     estimatePeace(warId, args) { return withMap((map) => estimatePeace(map, warId, args)); },
     suggestCessions(attackerId, defenderId) { return withMap((map) => suggestCessions(map, attackerId, defenderId)) ?? []; },
+    /** 講和条約を締結する。新しい形式 { kind, cessions, reparations, annex, treatyName, venue, notes } */
+    signTreaty(warId, terms) {
+      return withMap((map) => { let ok = false; safeRun("講和条約", () => {
+        const war = listWars(map).find((w) => w.id === warId);
+        const cmd = planSignTreaty(map, warId, terms, currentDate());
+        store.beginBatch(cmd.label ?? "講和条約");
+        try {
+          store.commit(cmd);
+          const to = terms.cessions?.[0]?.toStateId ?? terms.annex?.[0]?.toStateId ?? terms.reparations?.[0]?.toStateId ?? war?.attackers?.[0];
+          putMarker("peace", "🕊️", capitalCell(store.getState().map, to), `${dateLabel()} ${war?.name ?? "戦争"}の講和`);
+          for (const x of terms.annex ?? []) { try { store.commit(planMergeStates(store.getState().map, { from: x.fromStateId, to: x.toStateId, date: currentDate() })); } catch (e) { /* 併合できなければ通常の講和のまま */ } }
+          runCollapses();
+        } finally { store.endBatch(); }
+        rerender(); ok = true;
+      }); return ok; }) ?? false;
+    },
+    /** 旧形式（互換用）：1つの受取国・領域・賠償金 */
     signPeace(warId, terms) {
       withMap((map) => safeRun("講和条約", () => {
         const war = listWars(map).find((w) => w.id === warId);
         const cmd = planSignPeace(map, warId, terms, currentDate());
         store.beginBatch(cmd.label ?? "講和条約");
-        try {
-          store.commit(cmd);
-          putMarker("peace", "🕊️", capitalCell(store.getState().map, terms.toStateId), `${dateLabel()} ${war?.name ?? "戦争"}の講和`);
-        } finally { store.endBatch(); }
+        try { store.commit(cmd); putMarker("peace", "🕊️", capitalCell(store.getState().map, terms.toStateId), `${dateLabel()} ${war?.name ?? "戦争"}の講和`); runCollapses(); } finally { store.endBatch(); }
         rerender();
       }));
     },

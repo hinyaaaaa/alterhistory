@@ -10,7 +10,7 @@ import { planRenameEntity, planAddEntity, planAddProvince, planRemoveEntity } fr
 import { planDeclareIndependence, planMergeStates } from "../core/edit/sovereignty.js";
 import { listEras, eraAt, planSetEra, planRemoveEra } from "../core/edit/eras.js";
 import { planSetFinance, getFinance } from "../core/edit/finance.js";
-import { planSetEntityProfile, planSetOrigin, planSetBurgProfile, originTree, descendantsOf } from "../core/edit/profile.js";
+import { planSetEntityProfile, planSetOrigin, planSetOrigins, planSetBurgProfile, originTree, descendantsOf } from "../core/edit/profile.js";
 import { planAddJourney, planEditJourney, planRemoveJourney, planAddLeg, planRemoveLeg, planChangeLegTransport } from "../core/edit/journeys.js";
 import { planAddZone, planEditZone, planRemoveZone, planPaintZone, growZoneCells } from "../core/edit/zones.js";
 import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
@@ -180,6 +180,8 @@ export function createEditActions({ store, renderer }) {
     // ---- 政治・文化の深さ（種類・政体・起源・都市の設備） ----
     setEntityProfile(kind, id, patch) { withMap((map) => safeRun("設定の変更", () => commitOrThrow(planSetEntityProfile(map, kind, id, patch)))); },
     setOrigin(kind, id, parentId) { withMap((map) => safeRun("起源の変更", () => commitOrThrow(planSetOrigin(map, kind, id, parentId)))); },
+    setOrigins(kind, id, parentIds) { withMap((map) => safeRun("起源の変更", () => commitOrThrow(planSetOrigins(map, kind, id, parentIds)))); },
+    originsOf(kind, id) { return withMap((map) => originTree(map, kind).parents.get(id) ?? [0]) ?? [0]; },
     originOf(kind, id) { return withMap((map) => originTree(map, kind).parent.get(id) ?? 0) ?? 0; },
     descendantsOf(kind, id) { return withMap((map) => descendantsOf(map, kind, id)) ?? []; },
     setBurgProfile(id, patch) { withMap((map) => safeRun("都市の設定", () => commitOrThrow(planSetBurgProfile(map, id, patch)))); },

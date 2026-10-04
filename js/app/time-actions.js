@@ -9,11 +9,12 @@
 
 import { advanceMonth, createWorldTime } from "../core/sim/time.js";
 import { planAnnualUpdate } from "../core/sim/world.js";
+import { planNextCollapse } from "../core/sim/collapse.js";
 import { createRandom } from "../core/random.js";
 
 const DEFAULT_MS_PER_MONTH = (2 * 60 * 1000) / 12; // 既定: 1年=2分 → 1ヶ月=10秒
 
-export function createTimeActions({ store, renderer }) {
+export function createTimeActions({ store, renderer, simActions = null }) {
   const rates = createRandom(Date.now() ^ 0x5eed);
   let timer = null;
   let msPerMonth = DEFAULT_MS_PER_MONTH;
@@ -23,9 +24,16 @@ export function createTimeActions({ store, renderer }) {
     if (!map) return;
     const { time, yearChanged } = advanceMonth(map.worldTime);
     store.update((s) => { s.map.worldTime = time; });
+    simActions?.advanceWars?.(time); // 戦争中の損害を、月ごとに自動で展開する
     if (yearChanged) {
       const cmd = planAnnualUpdate(map, rates);
       if (cmd) store.commit(cmd);
+      // 人口の大部分を失った国は崩壊する（無くなるまで繰り返す）
+      for (let guard = 0; guard < 8; guard++) {
+        const m = store.getState().map; const c = planNextCollapse(m, time);
+        if (!c) break;
+        try { store.commit(c.command); } catch { break; }
+      }
     }
     renderer.requestRender();
   }

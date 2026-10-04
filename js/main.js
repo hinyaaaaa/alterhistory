@@ -73,7 +73,7 @@ function start() {
   const files = initFileInput({ actions });
   const editActions = createEditActions({ store, renderer });
   const simActions = createSimActions({ store, renderer });
-  const timeActions = createTimeActions({ store, renderer });
+  const timeActions = createTimeActions({ store, renderer, simActions });
   const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
   const warOutcome = initWarOutcome({ store, simActions });
   let winsRef = null;

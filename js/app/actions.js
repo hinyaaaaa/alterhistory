@@ -5,6 +5,7 @@
 import { planKatakanaBurgs } from "../core/edit/katakana.js";
 import { createRandom as createKanaRandom } from "../core/random.js";
 import { entityPosition, ENTITY_KINDS } from "../core/query.js";
+import { importAzgaarMilitary } from "../core/sim/military.js";
 import { entityOutlineSegments, segmentsBounds } from "../render/edges.js";
 import { serializeAzgaar } from "../io/azgaar-writer.js";
 import { renderMapToCanvas, renderMapToSvg, canvasToPngBlob, exportFileName, todayString } from "../io/exporter.js";
@@ -66,6 +67,8 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
       await nextPaint(); // 「読み込み中」を先に表示してから重い処理を始める
       try {
         const { map, warnings } = await load(file, Delaunator);
+        const nMil = importAzgaarMilitary(map); // Azgaar に記録された部隊の人数を、そのまま取り込む
+        if (nMil) warnings.push(`Azgaar の部隊 ${nMil} 隊を、人数そのままで取り込みました`);
         const prev = store.getState();
         viewport.setMapSize(map.meta.width || 1280, map.meta.height || 774);
         store.replace({ ...prev, map, fileName: file.name, warnings, error: null, notice: null, busy: null, hover: null });
