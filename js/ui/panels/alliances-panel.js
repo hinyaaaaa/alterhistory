@@ -37,7 +37,7 @@ export function initAlliancesPanel({ store, simActions }) {
     for (const s of states) {
       const label = el("label", "");
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = s.i; cb.checked = checkedIds.includes(s.i);
-      label.append(cb, document.createTextNode(stateName(map, s.i));
+      label.append(cb, document.createTextNode(stateName(map, s.i)));
       wrap.append(label);
       boxes.push(cb);
     }
