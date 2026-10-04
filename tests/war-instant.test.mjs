@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createRandom } from "../js/core/random.js";
-import { planDeclareAndResolveWar, planSignPeace, listWars } from "../js/core/edit/wars.js";
+import { planDeclareAndResolveWar, planSignPeace, planFinishWar, listWars } from "../js/core/edit/wars.js";
 import { planSetCurrency, exchangeRate, planUpdateRates } from "../js/core/sim/currency.js";
 import { carryingCapacity, computeAnnualUpdate } from "../js/core/sim/economy.js";
 import { createStore } from "../js/core/store.js";
@@ -19,6 +19,7 @@ const store = createStore({ map });
 const rnd = createRandom(7);
 const r = planDeclareAndResolveWar(store.getState().map, { attackers: [1], defenders: [2], date: { year: 1, month: 1 }, rnd });
 store.commit(r.command);
+store.commit(planFinishWar(store.getState().map, r.id)); // 損害は時間経過で積み重なる。最後まで進める
 const m = store.getState().map;
 assert.equal(r.result.winner, "attacker", "兵力9倍の側が勝つ");
 assert.ok(m.pack.states[2].military[0].u.infantry < 1000, "敗者の兵が消耗する");

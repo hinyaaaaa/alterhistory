@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createRandom } from "../js/core/random.js";
 import { createStore } from "../js/core/store.js";
 import { planCreateAlliance } from "../js/core/edit/alliances.js";
-import { planDeclareAndResolveWar, planSignPeace, planRenameWar, warsAwaitingTreaty, planPeaceVenue, listWars } from "../js/core/edit/wars.js";
+import { planDeclareAndResolveWar, planFinishWar, planSignPeace, planRenameWar, warsAwaitingTreaty, planPeaceVenue, listWars } from "../js/core/edit/wars.js";
 import { simpleRelation } from "../js/core/edit/diplomacy.js";
 import { blockedPairs } from "../js/core/sim/sanctions.js";
 import { planAnnualConscription } from "../js/core/sim/military.js";
@@ -15,7 +15,7 @@ const map = () => ({
   worldTime: { year: 1, month: 1 }, rev: { places: 0, politics: 0, terrain: 0 },
   meta: { width: 100, height: 100 },
   pack: {
-    states: [{ i: 0, name: "Neutrals", diplomacy: [] }, st(1, "ア", 5000), st(2, "イ", 800), st(3, "ウ", 800), st(4, "エ", 800), st(5, "オ", 800)],
+    states: [{ i: 0, name: "Neutrals", diplomacy: [] }, st(1, "ア", 5000, { rural: 6000 }), st(2, "イ", 800), st(3, "ウ", 800), st(4, "エ", 800), st(5, "オ", 800)],
     burgs: [null, ...[1, 2, 3, 4, 5].map((i) => ({ i, name: `都${i}`, cell: i, state: i }))],
     provinces: [0], cultures: [null, { i: 1, name: "文1", color: "#111", cells: 0 }], religions: [null, { i: 1, name: "宗1", color: "#222", cells: 0, origins: [0] }, { i: 2, name: "宗2", color: "#333", cells: 0, origins: [1] }],
     cells: { state: new Uint16Array([0, 1, 2, 3, 4, 5, 5, 5]), province: new Uint16Array(N), biome: new Uint8Array([0, 1, 1, 1, 1, 1, 1, 1]), culture: new Uint16Array(N), religion: new Uint16Array(N) },
@@ -39,6 +39,7 @@ assert.throws(() => planCreateAlliance(store.getState().map, "x", [1, 2], date, 
 let r = planDeclareAndResolveWar(store.getState().map, { attackers: [1], defenders: [2], date, rnd });
 assert.ok(r.joined.some((j) => j.id === 3 && j.side === "defender"), "標準同盟は防衛参戦する");
 run(r.command);
+run(planFinishWar(store.getState().map, r.id));
 const w1 = listWars(store.getState().map)[0];
 assert.ok(w1.endsAt && w1.durationMonths >= 1 && w1.endsAt.year * 12 + w1.endsAt.month > 1 * 12 + 1, "終戦日が自動で決まる");
 assert.equal(simpleRelation(store.getState().map, 1, 2), "hostile");

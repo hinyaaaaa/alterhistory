@@ -735,3 +735,14 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .b-kind-select { width: 100%; margin: 4px 0 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; color: var(--text); }
 .b-random > summary, .state-prov-fold > summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 6px 0; }
 .state-prov-fold { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 4px; }
+
+.gen-parents { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; max-height: 150px; overflow: auto; }
+.gen-parent { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ---- 戦争の準備・戦闘の記録 ---- */
+.muster-box { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
+.muster-state { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+.muster-reg { font-size: 12px; white-space: nowrap; }
+.battle-log { margin: 4px 0 10px; padding-left: 20px; font-size: 12px; color: var(--muted); }
+.battle-log li { margin-bottom: 3px; }
+.doctrine-merit { margin: 2px 0 4px; font-size: 12px; color: #4fb477; }

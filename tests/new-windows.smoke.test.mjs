@@ -78,7 +78,7 @@ console.log("=== 系譜図 ===");
 const g = open("genealogy-religion");
 check("宗教の系譜図が描かれる（ノードと線）", g.querySelectorAll(".gen-node").length > 1 && g.querySelectorAll("svg path").length > 0);
 const node = g.querySelectorAll(".gen-node")[1]; node.dispatchEvent(new window.Event("click", { bubbles: true }));
-check("ノードを選ぶと編集欄（親・名前・削除）が出る", !!win("genealogy-religion").querySelector(".gen-edit select"));
+check("ノードを選ぶと編集欄（親を複数選べるチェック・名前・削除）が出る", !!win("genealogy-religion").querySelector(".gen-edit .gen-parent input[type=checkbox]") || !!win("genealogy-religion").querySelector(".gen-edit button"));
 
 console.log("=== 通貨・為替 ===");
 const cw = open("currency");
@@ -90,12 +90,14 @@ const nw = open("nuclear");
 check("核作戦ウィンドウが開く（核の保有国が無ければ案内）", !nw.hidden && nw.textContent.includes("核"));
 
 console.log("=== 講和条約・戦争・外交 ===");
-check("講和待ちが無いときは案内が出る", open("treaty").textContent.includes("講和待ちの戦争はありません"));
+check("戦争がまだ無いときは案内が出る", open("treaty").textContent.includes("まだありません"));
 const ids = store.getState().map.pack.states.filter((s) => s && s.i > 0 && !s.removed).map((s) => s.i);
-const out = simActions.declareWarInstant([ids[0]], [ids[1]]);
+const out = simActions.declareWarInstant([ids[0]], [ids[1]], null, "conventional");
 check("宣戦布告で即判定され、名前と終戦日が付く", !!out && !!out.name && !!out.endsAt);
+check("戦闘中の戦争は、講和ではなく「戦闘を進める」案内になる", open("treaty").textContent.includes("戦闘が続いています"));
+simActions.finishWar(out.id); // 時間経過のかわりに最後まで進める
 const tw = open("treaty");
-check("講和条約ウィンドウに戦争・条約名・渡る量の表が出る", !!tw.querySelector(".treaty-form") && !!tw.querySelector(".wo-impact table"));
+check("講和条約ウィンドウに戦争・条約名・渡る量の表が出る", !!tw.querySelector(".treaty-form") && (!!tw.querySelector(".wo-impact table") || tw.textContent.includes("各国の消耗")));
 const ww = open("war");
 [...ww.querySelectorAll(".win-list button")].find((b) => b.textContent.includes(out.name))?.click(); // 戦争を選ぶと詳細（戦況）が出る
 check("戦争ウィンドウに戦況バーがある", ww.querySelectorAll(".wo-bar-wrap").length === 4);

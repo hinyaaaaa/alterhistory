@@ -24,7 +24,14 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
   beforeParse(window) {
     window.devicePixelRatio = 1;
     window.ResizeObserver = class { observe() {} disconnect() {} };
-    window.HTMLCanvasElement.prototype.getContext = function () { return (this.__ctx ??= fakeCtx()); };
+    window.HTMLCanvasElement.prototype.getContext = function () {
+      if (!this.__ctx) { // 描画先は画面外のタイルにもなるので、どのキャンバスに描かれた文字も記録する
+        const c = fakeCtx(); const o = c.fillText?.bind(c);
+        c.fillText = (t, ...r) => { (globalThis.__drawn ??= []).push(t); return o ? o(t, ...r) : undefined; };
+        this.__ctx = c;
+      }
+      return this.__ctx;
+    };
     window.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 700, right: 1000, bottom: 700, x: 0, y: 0 });
     window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
     window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); this.dispatchEvent(new window.Event("close")); };
@@ -48,8 +55,7 @@ check("地図が読み込める", await waitFor(() => store.getState().map, 1500
 
 // 描画された文字を数える：ctx.fillText を差し替えて、何が描かれたかを記録する
 const canvas = $("map-canvas"); const ctx = canvas.getContext("2d");
-const drawn = []; const orig = ctx.fillText.bind(ctx);
-ctx.fillText = (t, ...r) => { drawn.push(t); return orig(t, ...r); };
+const drawn = (globalThis.__drawn ??= []); void ctx;
 const render = async () => { drawn.length = 0; window.alterhistory.renderer.requestRender(); await sleep(80); return [...new Set(drawn)]; };
 const map = () => store.getState().map;
 const capitalNames = map().pack.burgs.filter((b) => b && b.i && !b.removed && b.capital).map((b) => b.name);
