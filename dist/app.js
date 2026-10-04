@@ -11286,7 +11286,7 @@ ${shown}${more}`;
             else draft[key].delete(s.i);
             render();
           });
-          l.append(cb, document.createTextNode(stateName(map, s.i)));
+          l.append(cb, document.createTextNode(s.fullName ?? s.name));
           box.append(l);
         }
         return box;
@@ -11750,7 +11750,7 @@ ${shown}${more}`;
         cb.type = "checkbox";
         cb.value = s.i;
         cb.checked = checkedIds.includes(s.i);
-        label.append(cb, document.createTextNode(stateName(map, s.i)));
+        label.append(cb, document.createTextNode(s.fullName ?? s.name));
         wrap.append(label);
         boxes.push(cb);
       }
