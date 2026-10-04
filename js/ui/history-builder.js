@@ -7,6 +7,7 @@
 //   4. 仮の名前トレイ … 仮の名前を数えて、まとめて確定できる。気に入らなければ個別に🎲。
 // 細かい設定は消さずに畳む。全部おまかせでも、1つだけ手で決めても、途中で混ぜてもよい。
 
+import { guardRender } from "./safe-render.js";
 import { byId } from "./dom.js";
 import { NAME_STYLES, STYLE_KEYS } from "../core/names/katakana.js";
 import { listEntities } from "../core/query.js";
@@ -462,7 +463,8 @@ export function initHistoryBuilder({ store, viewport, renderer, editActions, bui
     const p = provisionalSection(); if (p) body.append(p);
     panel.scrollTop = scrollTop;
   }
-  function schedule() { if (scheduled || !isOpen()) return; scheduled = true; requestAnimationFrame(render); }
+  const safeBuilderRender = guardRender(panel, () => render());
+  function schedule() { if (scheduled || !isOpen()) return; scheduled = true; requestAnimationFrame(() => { scheduled = false; safeBuilderRender(); }); }
 
   store.subscribe((_s, change) => {
     if (change.type === "replace") { task = null; openCards.clear(); for (const v of Object.values(views)) v.leave?.(); mode = "build"; }

@@ -77,22 +77,28 @@ function stateRelationNone(map, a, b) {
 }
 
 /**
- * 講和が行われる地（都市）を選ぶ。候補は
- *   ① 戦争に関わっていない国のうち、交戦国のすべてと中立の関係にある国の都市
- *   ② 無ければ、交戦国の都市
+ * 講和が行われる地（都市）を選ぶ。
+ *   ・勝敗がついた戦争は、基本的に戦勝国の都市で行う（勝者が会議の主導権を持つ）
+ *   ・膠着（決着つかず）の戦争は、仲介国として、交戦国のすべてと中立な国の都市で行う。仲介できる国が無ければ交戦国の都市
  * 条約名は「その地名 + 条約」になる。
- * @returns {{burgId:number, place:string, stateId:number, neutral:boolean, treatyName:string}|null}
+ * @returns {{burgId:number, place:string, stateId:number, neutral:boolean, role:"winner"|"mediator"|"belligerent", treatyName:string}|null}
  */
 export function proposePeaceVenue(map, war, rnd) {
   const belligerents = [...war.attackers, ...war.defenders];
+  const stalemate = war.result?.winner === "stalemate";
   const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && isLive(map.pack.states[b.state]));
-  const neutralStates = new Set(map.pack.states.filter((s) => isLive(s) && !belligerents.includes(s.i) && belligerents.every((x) => stateRelationNone(map, s.i, x))).map((s) => s.i));
-  let pool = burgs.filter((b) => neutralStates.has(b.state));
-  let neutral = true;
-  if (!pool.length) { pool = burgs.filter((b) => belligerents.includes(b.state)); neutral = false; }
+  let pool = [], role = "winner";
+  if (!stalemate && war.result) {
+    const winners = war.result.winner === "defender" ? war.defenders : war.attackers;
+    pool = burgs.filter((b) => winners.includes(b.state));
+  } else {
+    const neutralStates = new Set(map.pack.states.filter((s) => isLive(s) && !belligerents.includes(s.i) && belligerents.every((x) => stateRelationNone(map, s.i, x))).map((s) => s.i));
+    pool = burgs.filter((b) => neutralStates.has(b.state)); role = "mediator";
+  }
+  if (!pool.length) { pool = burgs.filter((b) => belligerents.includes(b.state)); role = "belligerent"; }
   if (!pool.length) return null;
   const b = rnd.pick(pool);
-  return { burgId: b.i, place: b.name, stateId: b.state, neutral, treatyName: `${b.name}条約` };
+  return { burgId: b.i, place: b.name, stateId: b.state, neutral: role === "mediator", role, treatyName: `${b.name}条約` };
 }
 
 // ---- 講和で相手へ渡る量 ----

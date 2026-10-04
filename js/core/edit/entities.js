@@ -3,6 +3,7 @@
 // name と fullName の両方を持つ実体では、表示に使われる fullName を優先して書き換える
 // （国家一覧・凡例などは fullName ?? name を表示に使っているため）。
 
+import { shortNameFrom } from "../names.js";
 import { makeCommand, setProps, setList, setIndexed } from "./commands.js";
 
 const LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
@@ -19,7 +20,10 @@ export function planRenameEntity(map, kind, id, name) {
   const field = "fullName" in e ? "fullName" : "name";
   if (trimmed === e[field]) return null;
   const label = { state: "国家", culture: "文化", religion: "宗教", province: "属州" }[kind];
-  return makeCommand(`${label}の名前を変更`, ["places"], [setProps(e, { [field]: trimmed })]);
+  // 国家は、略称(name)を正式名称(fullName)に連動させる（形態の語を外した名前）。正式名称が無い実体は name だけを変える
+  const patch = { [field]: trimmed };
+  if (kind === "state" && field === "fullName") patch.name = shortNameFrom(trimmed);
+  return makeCommand(`${label}の名前を変更`, ["places"], [setProps(e, patch)]);
 }
 
 const EXTRA_KEYS = ["name", "form", "formName", "deity", "type"];
@@ -112,7 +116,7 @@ const CELL_FIELD = { state: "state", culture: "culture", religion: "religion", p
  * その実体に属していたセルは「所属なし(0)」になる。国家を消すと、その国の属州も一緒に消える。
  * 戦争中の国家は消せない（先に講和する）。
  */
-export function planRemoveEntity(map, kind, id) {
+export function planRemoveEntity(map, kind, id, { force = false } = {}) {
   const listKey = LIST_KEY[kind];
   if (!listKey) throw new Error("この種類は削除できません");
   const e = map.pack[listKey]?.[id];
@@ -129,7 +133,7 @@ export function planRemoveEntity(map, kind, id) {
 
   if (kind === "state") {
     const wars = map.ext?.data?.wars ?? [];
-    if (wars.some((w) => !w.endedAt && (w.attackers.includes(id) || w.defenders.includes(id)))) throw new Error(`「${nm}」は戦争中のため削除できません。先に講和してください`);
+    if (!force && wars.some((w) => !w.endedAt && (w.attackers.includes(id) || w.defenders.includes(id)))) throw new Error(`「${nm}」は戦争中のため削除できません。先に講和してください`);
     const provIds = new Set(map.pack.provinces.filter((p) => isLive(p) && p.i && p.state === id).map((p) => p.i));
     clearCells("state", new Set([id]));
     if (provIds.size) clearCells("province", provIds);

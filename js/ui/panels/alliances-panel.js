@@ -1,6 +1,7 @@
 // 同盟タブ：3カ国以上の同盟を作成・編集・解消する。
 import { formatWorldTime } from "../../core/sim/time.js";
 import { BONDS, BOND_BY_KEY, bondOf } from "../../core/sim/war-flow.js";
+import { guardRender } from "../safe-render.js";
 import { byId } from "../dom.js";
 import { confirmDialog, alertDialog } from "../dialogs.js";
 
@@ -120,6 +121,7 @@ export function initAlliancesPanel({ store, simActions }) {
     return card;
   }
 
-  store.subscribe((_s, change) => { if (["replace", "commit", "undo", "redo"].includes(change.type)) render(); });
+  const safeRender = guardRender(root, () => render());
+  store.subscribe((_s, change) => { if (["replace", "commit", "undo", "redo"].includes(change.type)) safeRender(); });
   return { render };
 }

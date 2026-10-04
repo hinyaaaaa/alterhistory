@@ -20,12 +20,17 @@ export function initGenealogy({ store, wins, editActions }) {
   function layout(map, kind) {
     const list = map.pack[LIST_KEY[kind]];
     const live = list.filter(isLive);
+    const parentsOf = (e) => {
+      const ps = [...new Set((Array.isArray(e.origins) ? e.origins : []).filter((o) => Number.isInteger(o) && (o === 0 || isLive(list[o]))))];
+      return ps.length ? ps : [0];
+    };
     const children = new Map([[0, []]]);
     for (const e of live) children.set(e.i, []);
+    const extra = []; // 2番目以降の親からの線
     for (const e of live) {
-      let p = Array.isArray(e.origins) && Number.isInteger(e.origins[0]) ? e.origins[0] : 0;
-      if (p !== 0 && !isLive(list[p])) p = 0;
-      children.get(p).push(e.i);
+      const ps = parentsOf(e);
+      children.get(ps[0]).push(e.i);
+      for (const p of ps.slice(1)) if (p !== 0) extra.push([p, e.i]);
     }
     const pos = new Map(); let row = 0;
     const visit = (id, depth, seen) => {
@@ -37,8 +42,11 @@ export function initGenealogy({ store, wins, editActions }) {
       pos.set(id, { depth, y: (start + row - 1) / 2 });
     };
     visit(0, 0, new Set());
+    // 追加の親が主な親より深い（右にある）と線が戻るので、子を追加の親より右へ寄せる
+    for (let pass = 0; pass < 6; pass++) for (const [p, k] of extra) { const a = pos.get(p), c = pos.get(k); if (a && c && c.depth <= a.depth) c.depth = a.depth + 1; }
     const edges = [];
-    for (const [p, kids] of children) for (const k of kids) if (pos.has(p) && pos.has(k)) edges.push([p, k]);
+    for (const [p, kids] of children) for (const k of kids) if (pos.has(p) && pos.has(k)) edges.push([p, k, false]);
+    for (const [p, k] of extra) if (pos.has(p) && pos.has(k)) edges.push([p, k, true]);
     return { pos, edges, rows: Math.max(1, row), depth: Math.max(...[...pos.values()].map((v) => v.depth)) };
   }
 
@@ -48,14 +56,14 @@ export function initGenealogy({ store, wins, editActions }) {
     if (!map) { body.append(el("p", "muted", "地図を開いてください")); return; }
     const list = map.pack[LIST_KEY[kind]];
     const { pos, edges, rows, depth } = layout(map, kind);
-    body.append(el("p", "hint", `${LABEL[kind]}の系譜図。ノードを別のノードへドラッグすると、その子（分派）になります。「共通の祖」に落とすと独立した系統になります。`));
+    body.append(el("p", "hint", `${LABEL[kind]}の系譜図。ノードを別のノードへドラッグすると、その子（分派）になります（親は1つに置き換わります）。親は下の欄で複数選べます（金色の点線が2つ目以降の親）。`));
     const W = (depth + 1) * (NODE_W + GAP_X) + 10, H = rows * (NODE_H + GAP_Y) + 10;
     const svg = sv("svg", { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: "gen-svg" });
     const X = (d) => 5 + d * (NODE_W + GAP_X), Y = (y) => 5 + y * (NODE_H + GAP_Y);
-    for (const [p, k] of edges) {
+    for (const [p, k, isExtra] of edges) {
       const a = pos.get(p), b = pos.get(k);
       const x1 = X(a.depth) + NODE_W, y1 = Y(a.y) + NODE_H / 2, x2 = X(b.depth), y2 = Y(b.y) + NODE_H / 2, mx = (x1 + x2) / 2;
-      svg.append(sv("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, fill: "none", stroke: "var(--line, #555)", "stroke-width": 1.5 }));
+      svg.append(sv("path", { d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`, fill: "none", stroke: isExtra ? "var(--brass, #c9a24a)" : "var(--line, #555)", "stroke-width": 1.5, ...(isExtra ? { "stroke-dasharray": "5 3" } : {}) }));
     }
     const nodeG = new Map();
     for (const [id, p] of pos) {
@@ -102,13 +110,18 @@ export function initGenealogy({ store, wins, editActions }) {
     if (!id || !isLive(list[id])) { box.append(el("p", "muted", "ノードを選ぶと、親の変更・名前の変更・削除ができます")); return box; }
     const e = list[id];
     box.append(el("h4", "", `「${e.fullName ?? e.name}」`));
-    const sel = document.createElement("select");
     const banned = new Set([id, ...editActions.descendantsOf(kind, id)]);
-    const root = document.createElement("option"); root.value = 0; root.textContent = ROOT_LABEL[kind]; sel.append(root);
-    for (const o of list) if (isLive(o) && !banned.has(o.i)) { const op = document.createElement("option"); op.value = o.i; op.textContent = o.fullName ?? o.name; sel.append(op); }
-    sel.value = String(editActions.originOf(kind, id));
-    sel.addEventListener("change", () => { editActions.setOrigin(kind, id, Number(sel.value)); render(kind); });
-    const row = el("div", "gen-row"); row.append(el("span", "", "どこから分かれたか"), sel);
+    const cur = new Set(editActions.originsOf(kind, id));
+    box.append(el("p", "hint", "どこから分かれたか（複数選べます。何も選ばなければ共通の祖）"));
+    const grid = el("div", "gen-parents");
+    const boxes = [];
+    for (const o of list) {
+      if (!isLive(o) || banned.has(o.i)) continue;
+      const l = el("label", "gen-parent"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.value = o.i; cb.checked = cur.has(o.i);
+      cb.addEventListener("change", () => { editActions.setOrigins(kind, id, boxes.filter((x) => x.checked).map((x) => Number(x.value))); render(kind); });
+      boxes.push(cb); l.append(cb, document.createTextNode(` ${o.fullName ?? o.name}`)); grid.append(l);
+    }
+    box.append(grid);
     const rename = el("button", "", "名前を変える"); rename.type = "button";
     rename.addEventListener("click", async () => { const n = await promptDialog(`${LABEL[kind]}の新しい名前`, e.fullName ?? e.name); if (n) { editActions.renameEntity(kind, id, n); render(kind); } });
     const del = el("button", "danger", "削除"); del.type = "button";
@@ -116,7 +129,7 @@ export function initGenealogy({ store, wins, editActions }) {
       if (!window.confirm(`${LABEL[kind]}「${e.fullName ?? e.name}」を削除します。（元に戻せます）`)) return;
       if (editActions.removeEntity(kind, id)) { selected[kind] = null; render(kind); }
     });
-    box.append(row, rename, del);
+    box.append(rename, del);
     return box;
   }
 

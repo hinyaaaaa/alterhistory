@@ -43,8 +43,11 @@ export function planAnnualUpdate(map, rnd = null) {
       parts.push(setProps(state, { treasury: Math.round((getFinance(state).treasury + net) * 100) / 100 }));
     }
     const { rural, urban, industry } = computeAnnualUpdate(state);
-    if (rural !== state.rural || urban !== state.urban || industry !== state.industry) {
-      parts.push(setProps(state, { rural, urban, industry }));
+    const peak = Math.max(state.popPeak ?? 0, rural + urban); // 過去最大の人口（崩壊の判定に使う）
+    // 士気は年ごとに平時の水準(70)へ近づく（戦争や核の打撃からの立ち直り）
+    const morale = state.morale == null ? null : Math.max(0, Math.min(100, state.morale + Math.max(-5, Math.min(5, 70 - state.morale))));
+    if (rural !== state.rural || urban !== state.urban || industry !== state.industry || peak !== state.popPeak || (morale != null && morale !== state.morale)) {
+      parts.push(setProps(state, { rural, urban, industry, popPeak: peak, ...(morale != null ? { morale } : {}) }));
     }
     const conscription = planAnnualConscription(map, state.i);
     if (conscription) parts.push(...conscription.parts);

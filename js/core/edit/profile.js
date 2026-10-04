@@ -62,42 +62,58 @@ export function planSetEntityProfile(map, kind, id, patch) {
 }
 
 // ---------- 起源（系統） ----------
-const parentOf = (e) => (Array.isArray(e?.origins) && Number.isInteger(e.origins[0]) ? e.origins[0] : 0);
+// origins は Azgaar と同じく配列。2つ以上あれば「複数の親から生まれた」（宗教の習合・文化の混交など）。
+// 先頭を主な親とし、残りは追加の親。0 は共通の祖（野生・原始信仰）で、他の親がいれば入れない。
+const parentsOf = (e) => {
+  const ps = Array.isArray(e?.origins) ? [...new Set(e.origins.filter((o) => Number.isInteger(o)))] : [];
+  return ps.length ? ps : [0];
+};
+const parentOf = (e) => parentsOf(e)[0];
 
-/** 系統の親子。{ parent: Map(id→親id), children: Map(id→[子id]) }。0 は共通の祖（野生・原始信仰） */
+/** 系統の親子。parent: id→主な親、parents: id→全ての親、children: id→子（どの親からでも）。0 は共通の祖 */
 export function originTree(map, kind) {
   const list = map.pack[ENTITY_LIST[kind]] ?? [];
-  const parent = new Map(), children = new Map();
+  const parent = new Map(), parents = new Map(), children = new Map();
   for (const e of list) {
     if (!isLive(e)) continue;
-    const p = parentOf(e);
-    parent.set(e.i, p);
-    if (!children.has(p)) children.set(p, []);
-    children.get(p).push(e.i);
+    const ps = parentsOf(e).filter((p) => p === 0 || isLive(list[p]));
+    const use = ps.length ? ps : [0];
+    parent.set(e.i, use[0]); parents.set(e.i, use);
+    for (const p of use) { if (!children.has(p)) children.set(p, []); children.get(p).push(e.i); }
   }
-  return { parent, children };
+  return { parent, parents, children };
 }
 
-/** 子孫すべて（自分は含まない） */
+/** 子孫すべて（自分は含まない。親が複数でも、どの経路からでも辿る） */
 export function descendantsOf(map, kind, id) {
   const { children } = originTree(map, kind);
-  const out = [], stack = [...(children.get(id) ?? [])];
-  while (stack.length) { const c = stack.pop(); out.push(c); stack.push(...(children.get(c) ?? [])); }
-  return out;
+  const out = new Set(), stack = [...(children.get(id) ?? [])];
+  while (stack.length) { const c = stack.pop(); if (out.has(c)) continue; out.add(c); stack.push(...(children.get(c) ?? [])); }
+  return [...out];
 }
 
-/** 起源を1つ指定する（0=共通の祖）。自分自身・自分の子孫を親にはできない（輪になるため） */
-export function planSetOrigin(map, kind, id, parentId) {
+/** 起源（親）を複数指定する。0=共通の祖。自分自身・自分の子孫は親にできない（輪になるため） */
+export function planSetOrigins(map, kind, id, parentIds) {
   if (kind !== "culture" && kind !== "religion") throw new Error("起源を持つのは文化と宗教だけです");
   const list = map.pack[ENTITY_LIST[kind]];
   const e = list[id];
   if (!isLive(e)) throw new Error("その対象は存在しません");
-  if (parentId !== 0 && !isLive(list[parentId])) throw new Error("起源に指定した対象が存在しません");
-  if (parentId === id) throw new Error("自分自身を起源にはできません");
-  if (descendantsOf(map, kind, id).includes(parentId)) throw new Error("自分の子孫を起源にはできません（系統が輪になります）");
-  if (parentOf(e) === parentId && Array.isArray(e.origins) && e.origins.length === 1) return null;
-  return makeCommand(`${KIND_LABEL[kind]}の起源を変更（${e.name}）`, ["politics"], [setProps(e, { origins: [parentId] })]);
+  let ps = [...new Set((parentIds ?? []).map(Number))];
+  const banned = new Set(descendantsOf(map, kind, id));
+  for (const p of ps) {
+    if (p !== 0 && !isLive(list[p])) throw new Error("起源に指定した対象が存在しません");
+    if (p === id) throw new Error("自分自身を起源にはできません");
+    if (banned.has(p)) throw new Error("自分の子孫を起源にはできません（系統が輪になります）");
+  }
+  if (ps.length > 1) ps = ps.filter((p) => p !== 0);
+  if (!ps.length) ps = [0];
+  const cur = parentsOf(e);
+  if (JSON.stringify(cur) === JSON.stringify(ps) && Array.isArray(e.origins) && e.origins.length === ps.length) return null;
+  return makeCommand(`${KIND_LABEL[kind]}の起源を変更（${e.name}）`, ["politics"], [setProps(e, { origins: ps })]);
 }
+
+/** 起源を1つだけ指定する（0=共通の祖） */
+export function planSetOrigin(map, kind, id, parentId) { return planSetOrigins(map, kind, id, [parentId]); }
 
 // ---------- 都市 ----------
 /** patch: { group, type, population, citadel, walls, plaza, temple, shanty }。変化が無ければ null */

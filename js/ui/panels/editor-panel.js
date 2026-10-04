@@ -2,6 +2,7 @@
 // 左サイドバーに差し込む1枚のパネル。DOMを直接組み立てる（フレームワーク不使用）。
 // 国家（kind === "state"）はサブタブ化して、基本情報・外交・軍事・属州を1つのタブ内に集約する。
 
+import { guardRender } from "../safe-render.js";
 import { describeCell, statePopulation, stateMilitaryPower, stateHeadcount, stateRank } from "../../core/query.js";
 import { htmlToEditable, editableToHtml } from "../../core/edit/notes.js";
 import { simpleRelation, SIMPLE_LABEL } from "../../core/edit/diplomacy.js";
@@ -397,7 +398,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
       const radio = document.createElement("input"); radio.type = "radio"; radio.name = `doctrine-${stateId}`; radio.checked = d.key === current;
       radio.addEventListener("change", () => editActions.setDoctrine(stateId, d.key));
       const body = el("div", "doctrine-body");
-      body.append(el("strong", "", d.label), el("p", "hint", d.desc ?? ""));
+      body.append(el("strong", "", d.label), el("p", "hint", d.desc ?? ""), el("p", "doctrine-merit", `👍 良さ: ${d.merit ?? ""}`));
       const chips = el("div", "doctrine-chips");
       for (const e of doctrineEffects(d)) chips.append(el("span", `doctrine-chip ${e.up ? "up" : "down"}`, e.text));
       if (!chips.children.length) chips.append(el("span", "doctrine-chip", "効果の偏りなし"));
@@ -484,7 +485,9 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     return t;
   }
 
-  store.subscribe((state, change) => { if (current && (change.type === "replace")) close(); else if (current) render(); });
+  const safeRender = guardRender(root, () => render());
+  // 時間が進むだけの更新（update）では描き直さない。入力中は保留する
+  store.subscribe((state, change) => { if (current && (change.type === "replace")) close(); else if (current && change.type !== "update" && change.type !== "batch") safeRender(); });
   return {
     openCell: (id) => open("cell", id),
     openBurg: (id) => open("burg", id),

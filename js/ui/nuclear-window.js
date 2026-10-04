@@ -1,4 +1,5 @@
 // 核作戦ウィンドウ：立案 → 実行の2段階。通常の戦争では核は使われず、ここで明示的に行う。
+import { guardRender } from "./safe-render.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
@@ -11,9 +12,9 @@ export function initNuclearWindow({ store, simActions, wins }) {
     body.replaceChildren();
     const map = store.getState().map; if (!map) { body.append(el("p", "muted", "地図を開いてください")); return; }
     const states = map.pack.states.filter(isLive);
-    body.append(el("p", "hint", "核兵器は通常の戦争では使われません。交戦中の相手に対して作戦を立案し、確認したうえで実行します。実行すると標的国の人口・産業・士気に壊滅的な打撃を与えます（元に戻せます）。"));
+    body.append(el("p", "hint", "核兵器は通常の戦争では使われません。核を保有していれば、どの国に対しても作戦を立案し、確認したうえで実行できます（戦争中でなくても可）。精度と威力は使う国の技術水準で決まり、標的国の人口・産業・軍隊・士気に打撃を与えます。士気と軍隊は戦争の判定にそのまま響き、まだ講和していない戦争は判定し直されます。元に戻せます。"));
     const holders = states.filter((s) => simActions.nuclearStock(s.i) > 0);
-    if (!holders.length) body.append(el("p", "muted", "核を保有する国がありません（軍事ウィンドウで、技術水準9以上の国の部隊に核を配備できます）"));
+    if (!holders.length) body.append(el("p", "muted", "核を保有する国がありません（軍事ウィンドウで、部隊の兵力に核を設定できます）"));
     else {
       if (!holders.some((s) => s.i === atk)) atk = holders[0].i;
       const targets = states.filter((s) => s.i !== atk);
@@ -24,7 +25,9 @@ export function initNuclearWindow({ store, simActions, wins }) {
       form.append(el("span", "", "使う国"), mk(holders, atk, (x) => { atk = x; }), el("span", "", `（保有 ${simActions.nuclearStock(atk)} 発）　標的の国`), mk(targets, tgt, (x) => { tgt = x; }), el("span", "", "発数"), n);
       const go = el("button", "primary", "作戦を立案する"); go.type = "button";
       go.addEventListener("click", () => { simActions.draftNuclearOp(atk, tgt, heads); });
-      body.append(form, go);
+      const fx = simActions.strikeEstimate(atk, heads);
+      const est = el("p", "hint", `この国の技術水準での性能（${heads}発）: 精度 ${Math.round(fx.accuracy * 100)}% ／ 標的国の人口 −${Math.round(fx.popLossShare * 100)}% ・産業 −${Math.round(fx.industryLossShare * 100)}% ・軍隊 −${Math.round(fx.troopLossShare * 100)}% ・士気 −${fx.moraleDropTotal}`);
+      body.append(form, est, go);
     }
     body.append(el("h4", "", "作戦の一覧"));
     const ops = simActions.nuclearOps().slice().reverse();
@@ -42,5 +45,6 @@ export function initNuclearWindow({ store, simActions, wins }) {
     }
   }
   wins.register("nuclear", { title: "☢ 核作戦", width: 720, body, onOpen: render });
-  store.subscribe((_s, ch) => { if (["replace", "commit", "undo", "redo"].includes(ch.type) && wins.isOpen("nuclear")) render(); });
+  const safe = guardRender(body, () => render());
+  store.subscribe((_s, ch) => { if (["replace", "commit", "undo", "redo"].includes(ch.type) && wins.isOpen("nuclear")) safe(); });
 }

@@ -10,7 +10,7 @@
 // 純粋ロジック層：DOM に依存しない。編集はコマンド(commands.js の部品)として返す。
 
 import { setList, setProps, makeCommand } from "../edit/commands.js";
-import { UNIT_KEYS, UNIT_BY_KEY, emptyForce, DOCTRINE_BY_KEY, DEFAULT_DOCTRINE, stateTypeMult } from "./units.js";
+import { UNIT_KEYS, UNIT_BY_KEY, forceHeadcount, emptyForce, DOCTRINE_BY_KEY, DEFAULT_DOCTRINE, stateTypeMult } from "./units.js";
 import { ensureEconomy } from "./economy.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
@@ -93,9 +93,9 @@ export function isCoastalState(map, stateId) {
 }
 
 // 兵科1ユニットあたりの人員（人）。目標の兵員規模を、兵科ごとのユニット数へ換算するのに使う
-const CREW = { infantry: 1, artillery: 6, armor: 20, air: 25, navy: 150, special: 1, advanced: 30 };
+const CREW = { infantry: 1, cavalry: 1, archers: 1, artillery: 6, armor: 20, air: 25, navy: 150, special: 1, advanced: 30 };
 // 平時に目標とする編成比（人員ベース）。装備の重い兵科ほど小さい
-const BASE_SHARE = { infantry: 1, artillery: 0.14, armor: 0.1, air: 0.06, navy: 0.05, special: 0.02, advanced: 0.02 };
+const BASE_SHARE = { infantry: 1, cavalry: 0.25, archers: 0.3, artillery: 0.14, armor: 0.1, air: 0.06, navy: 0.05, special: 0.02, advanced: 0.02 };
 
 /**
  * 年次の兵力変動。現実の軍隊のように「いまの編成を土台に、少しずつ目標へ近づく」。
@@ -130,7 +130,7 @@ export function planAnnualConscription(map, stateId) {
   let sum = 0;
   for (const k of Object.keys(BASE_SHARE)) {
     const def = UNIT_BY_KEY[k];
-    const allowed = tech >= (def.minTech ?? 1) && !(def.needsCoast && !coastal);
+    const allowed = tech >= (def.minTech ?? 1) && tech <= (def.maxTech ?? 99) && !(def.needsCoast && !coastal);
     let v = allowed ? BASE_SHARE[k] * (doctrine.mult[k] ?? 1) * (tmult[k] ?? 1) : 0;
     if (def.industryShare > 0) v *= 0.2 + 0.8 * industrial;
     shares[k] = v; sum += v;
@@ -150,18 +150,57 @@ export function planAnnualConscription(map, stateId) {
   }
   if (!any) return null;
 
+  // 新しい部隊は作らない。いまある部隊の兵力だけを、各部隊の規模に比例して増減させる
+  if (!list.length) return null;
   const parts = [];
-  if (home) {
-    const u = { ...home.u };
-    for (const k of UNIT_KEYS) u[k] = Math.max(0, (u[k] ?? 0) + delta[k]);
-    parts.push(setProps(home, { u }));
-  } else {
-    const { p } = map.geometry.pack;
-    const cell = capital.cell;
-    const u = emptyForce();
-    for (const k of UNIT_KEYS) u[k] = Math.max(0, delta[k]);
-    const reg = { i: 0, name: `${state.name}国防本隊`, icon: "🛡️", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u };
-    parts.push(setList((m) => m.pack.states[stateId].military, (m, v) => { m.pack.states[stateId].military = v; }, [reg, ...list]));
+  const totalBy = (k) => list.reduce((n, r) => n + (r.u?.[k] ?? 0), 0);
+  const u2 = list.map((r) => ({ ...r.u }));
+  for (const k of UNIT_KEYS) {
+    const d = delta[k]; if (!d) continue;
+    const tot = totalBy(k);
+    if (tot > 0) {
+      let left = d;
+      list.forEach((r, idx) => {
+        const have = r.u?.[k] ?? 0; if (!have) return;
+        const share = Math.round(d * have / tot);
+        const v = Math.max(0, have + share); u2[idx][k] = v; left -= (v - have);
+      });
+      if (left !== 0) { const big = list.reduce((bi, r, idx) => ((r.u?.[k] ?? 0) > (list[bi].u?.[k] ?? 0) ? idx : bi), 0); u2[big][k] = Math.max(0, (u2[big][k] ?? 0) + left); }
+    } else if (d > 0) {
+      u2[list.reduce((bi, r, idx) => (forceHeadcount(r.u) > forceHeadcount(list[bi].u) ? idx : bi), 0)][k] = d; // その兵科を持つ部隊が無ければ、最大の部隊にごく少数だけ加える
+    }
   }
+  list.forEach((r, idx) => { if (UNIT_KEYS.some((k) => (u2[idx][k] ?? 0) !== (r.u?.[k] ?? 0))) parts.push(setProps(r, { u: u2[idx] })); });
+  if (!parts.length) return null;
   return makeCommand("年次の兵力変動", [], parts);
+}
+
+// ---- Azgaar の部隊をそのまま取り込む ----
+// Azgaar の部隊は u に兵科名（既定: infantry / cavalry / archers / artillery / fleet）で人数を持つ。
+// ここの兵科キーに写すが、人数は一切変えない（足し算だけ）。元の u は azU に控える。
+const AZ_ALIAS = { fleet: "navy", ships: "navy", navy: "navy", cavalry: "cavalry", archers: "archers", artillery: "artillery", infantry: "infantry" };
+const AZ_BY_TYPE = { melee: "infantry", ranged: "archers", mounted: "cavalry", machinery: "artillery", naval: "navy", armored: "armor", aviation: "air", magical: "special" };
+
+/** 読み込み直後に呼ぶ。人数は変えず、兵科名だけを揃える。何度呼んでも結果は同じ。変えた部隊数を返す */
+export function importAzgaarMilitary(map) {
+  const defs = Array.isArray(map.settings?.military) ? map.settings.military : [];
+  const typeOf = new Map(defs.map((d) => [String(d.name).toLowerCase(), d.type]));
+  let changed = 0;
+  for (const st of map.pack.states) {
+    if (!st || !Array.isArray(st.military)) continue;
+    for (const r of st.military) {
+      if (!r || !r.u || r.azU) continue; // 取り込み済みは触らない
+      const keys = Object.keys(r.u);
+      if (keys.every((k) => UNIT_KEYS.includes(k))) continue; // すでにこちらの兵科名
+      const out = emptyForce();
+      for (const [k, v] of Object.entries(r.u)) {
+        const n = Number(v) || 0;
+        const key = UNIT_KEYS.includes(k) ? k : AZ_ALIAS[String(k).toLowerCase()] ?? AZ_BY_TYPE[typeOf.get(String(k).toLowerCase())] ?? "infantry";
+        out[key] += n;
+      }
+      r.azU = { ...r.u };
+      r.u = out; changed++;
+    }
+  }
+  return changed;
 }

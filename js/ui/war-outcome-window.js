@@ -3,6 +3,7 @@
 //   ・講和条約は戦争ウィンドウから切り離し、「講和条約」ウィンドウで決める
 //   ・通貨・為替は証券の相場表のように、レート・前年比・推移グラフで見せる
 // どれも設定メニューから開くウィンドウ。判定や計算は core/ にあり、ここは表示だけ。
+import { guardRender } from "./safe-render.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -24,6 +25,13 @@ export function initWarOutcome({ store, simActions }) {
     track.append(a, d); wrap.append(row, track);
     return wrap;
   }
+  /** 陸軍力・制海権・制空権・士気の比較バー（戦争開始前の見積もりにも、判定後の戦況にも使う） */
+  function bars(r) {
+    const A = r.aStrength, D = r.dStrength, c = r.compare, n = (v) => fmt(v);
+    const box = el("div", "wo-bars");
+    box.append(bar("陸軍力", c.land, n(A.land), n(D.land)), bar("制海権", c.sea, n(A.sea), n(D.sea)), bar("制空権", c.air, n(A.air), n(D.air)), bar("士気", c.morale, fmt(A.morale), fmt(D.morale)));
+    return box;
+  }
   /** 戦争1つの戦況（両陣営・比較バー・結果・終戦日・参戦した同盟国）をまとめて返す */
   function situation(map, war) {
     const box = el("div", "wo-situation");
@@ -32,114 +40,186 @@ export function initWarOutcome({ store, simActions }) {
     box.append(sides);
     const r = war.result;
     if (!r) { box.append(el("p", "muted", "戦況の記録がありません（旧データの戦争です）")); return box; }
-    const A = r.aStrength, D = r.dStrength, c = r.compare, n = (v) => fmt(v);
-    const bars = el("div", "wo-bars");
-    bars.append(bar("陸軍力", c.land, n(A.land), n(D.land)), bar("制海権", c.sea, n(A.sea), n(D.sea)), bar("制空権", c.air, n(A.air), n(D.air)), bar("士気", c.morale, fmt(A.morale), fmt(D.morale)));
-    box.append(bars);
+    box.append(bars(r));
     box.append(el("div", `wo-verdict ${r.winner}`, r.winner === "attacker" ? `攻撃側の勝利（${names(map, war.attackers)}）` : r.winner === "defender" ? `防衛側の勝利（${names(map, war.defenders)}）` : "決着つかず（膠着）"));
-    const dates = `開戦 ${fmtDate(war.startedAt)}　${war.endedAt ? `終戦 ${fmtDate(war.endedAt)}` : `終戦予定 ${fmtDate(war.endsAt)}（約${war.durationMonths ?? "?"}ヶ月）`}`;
+    const dates = `開戦 ${fmtDate(war.startedAt)}　${war.endedAt ? `終戦 ${fmtDate(war.endedAt)}` : `終戦予定 ${fmtDate(war.endsAt)}（約${war.durationMonths ?? "?"}ヶ月）`}${r.warScore != null ? `　戦争スコア ${r.warScore}` : ""}`;
     box.append(el("p", "hint", dates));
     if (war.joinedAllies?.length) box.append(el("p", "hint", `同盟の拘束により参戦: ${war.joinedAllies.map((j) => `${sname(map, j.id)}（${j.alliance}・${j.side === "attacker" ? "攻撃側" : "防衛側"}）`).join("、")}`));
     return box;
   }
 
   // ================= 講和条約ウィンドウ =================
+  // 戦闘が終わった戦争（講和待ち）の条約を決める。締結した条約は、あとから「締結済み」として中身を確認できる。
   const treatyBody = el("div", "treaty-body");
-  let sel = null;                 // 選んでいる戦争
-  let draft = null;               // { warId, venue, treatyName, toStateId, fromStateId, picked:Set, reparations, notes }
-  const cellsOfProvince = (map, pid) => { const out = []; const c = map.pack.cells.province; for (let i = 0; i < c.length; i++) if (c[i] === pid) out.push(i); return out; };
+  let sel = null;   // 選んでいる戦争
+  let draft = null; // { warId, venue, treatyName, kind, size, cessions:[{key,cells,fromStateId,toStateId,name,on}], reparations:{ "from-to": amount }, notes, sug }
 
   function renderTreaty() {
     treatyBody.replaceChildren();
     const map = store.getState().map;
     if (!map) { treatyBody.append(el("p", "muted", "地図を開いてください")); return; }
-    const pending = simActions.warsAwaitingTreaty();
-    if (!pending.length) { treatyBody.append(el("p", "muted", "講和待ちの戦争はありません。戦争ウィンドウで宣戦布告すると、ここで講和条約を決められます。")); sel = null; draft = null; return; }
-    if (!pending.some((w) => w.id === sel)) { sel = pending[0].id; draft = null; }
+    const all = simActions.listWars().slice().reverse().filter((w) => w.result);
+    if (!all.length) { treatyBody.append(el("p", "muted", "講和条約を結べる戦争はまだありません。戦争ウィンドウで戦争を始めると、戦闘が終わったあとにここで講和条約を決められます。")); sel = null; draft = null; return; }
+    if (!all.some((w) => w.id === sel)) { sel = (all.find((w) => !w.endedAt) ?? all[0]).id; draft = null; }
     const split = el("div", "win-split"), list = el("div", "win-list");
-    for (const w of pending) {
-      const b = el("button", w.id === sel ? "active" : "", `📜 ${w.name}`); b.type = "button";
+    for (const w of all) {
+      const icon = w.endedAt ? "✅" : (w.progress != null && w.progress < 1) ? "⏳" : "📜";
+      const b = el("button", w.id === sel ? "active" : "", `${icon} ${w.endedAt && w.treatyName ? w.treatyName : w.name}`); b.type = "button";
+      b.title = w.endedAt ? "締結済みの条約（中身を確認できます）" : (w.progress != null && w.progress < 1) ? "戦闘中" : "講和待ち";
       b.addEventListener("click", () => { sel = w.id; draft = null; renderTreaty(); });
       list.append(b);
     }
-    const detail = el("div", "win-detail");
-    detail.append(treatyForm(map, pending.find((w) => w.id === sel)));
+    const detail = el("div", "win-detail"); const war = all.find((w) => w.id === sel);
+    if (war.endedAt) detail.append(treatyRecord(map, war));
+    else if (war.progress != null && war.progress < 1) {
+      detail.append(el("h4", "", war.name), situation(map, war));
+      detail.append(el("p", "hint", `戦闘が続いています（進行 ${pct(war.progress)}）。時間が進むと損害が積み重なり、終わると講和条約を結べます。`));
+      const go = el("button", "primary", "戦闘を最後まで進める"); go.type = "button";
+      go.addEventListener("click", () => simActions.finishWar(war.id)); detail.append(go);
+    } else detail.append(treatyForm(map, war));
     split.append(list, detail); treatyBody.append(split);
   }
+
+  /** 締結済みの条約の中身（読み取り専用） */
+  function treatyRecord(map, war) {
+    const t = war.terms ?? {}, box = el("div", "treaty-record");
+    box.append(el("h3", "", war.treatyName ?? t.treatyName ?? "講和条約"));
+    const kindLabel = { standard: "通常の講和", white: "白紙和平", annex: "全面降伏（併合）" }[t.kind ?? "standard"];
+    const lines = [["戦争", `${war.name}（${warTypeLabel(war.type)}）`], ["種類", kindLabel], ["締結", `${fmtDate(t.signedAt ?? war.endedAt)}`], ["講和地", t.venue ? `${t.venue.place}（${t.venue.stateId ? sname(map, t.venue.stateId) : ""}）` : "—"],
+      ["交戦国", `${names(map, war.attackers)} ／ ${names(map, war.defenders)}`], ["戦争スコア", t.score ? `${t.score.total}` : "—"]];
+    const tb = el("table", "win-table");
+    for (const [k, v] of lines) { const tr = el("tr"); tr.append(el("th", "", k), el("td", "", v)); tb.append(tr); }
+    box.append(tb);
+    box.append(el("h4", "", "割譲"));
+    if (t.cessions?.length) { const ul = el("ul"); for (const c of t.cessions) ul.append(el("li", "", `${c.name || "区画"}（${c.cells}セル${c.burgs?.length ? `・都市: ${c.burgs.join("、")}` : ""}）：${sname(map, c.fromStateId)} → ${sname(map, c.toStateId)}`)); box.append(ul); } else box.append(el("p", "muted", "なし"));
+    box.append(el("h4", "", "賠償金"));
+    if (t.reparations?.length) { const ul = el("ul"); for (const r of t.reparations) ul.append(el("li", "", `${sname(map, r.fromStateId)} が ${fmt(r.amount, 2)} ${r.currency} を支払い → ${sname(map, r.toStateId)} が ${fmt(r.received, 2)} ${r.receivedCurrency} を受け取り`)); box.append(ul); } else box.append(el("p", "muted", "なし"));
+    if (t.annex?.length) { box.append(el("h4", "", "併合")); const ul = el("ul"); for (const x of t.annex) ul.append(el("li", "", `${sname(map, x.fromStateId)} は ${sname(map, x.toStateId)} に併合`)); box.append(ul); }
+    if (t.notes) box.append(el("h4", "", "その他の条件"), el("p", "", t.notes));
+    box.append(el("h4", "", "戦争の経過"), situation(map, war));
+    return box;
+  }
+  const warTypeLabel = (k) => ({ limited: "限定戦", conventional: "通常戦", total: "総力戦", asymmetric: "非対称戦" }[k] ?? "通常戦");
 
   function treatyForm(map, war) {
     const { winners, losers, stalemate } = simActions.peaceSides(war);
     if (!draft || draft.warId !== war.id) {
-      const venue = simActions.peaceVenue(war.id);
-      draft = { warId: war.id, venue, treatyName: venue?.treatyName ?? `${war.name}の講和条約`, toStateId: winners[0], fromStateId: losers[0], picked: new Set(), reparations: 0, notes: "" };
+      const venue = simActions.peaceVenue(war.id), sug = simActions.suggestTreaty(war.id);
+      draft = { warId: war.id, venue, treatyName: venue?.treatyName ?? `${war.name}の講和条約`, kind: sug?.kind ?? "standard", size: "m", sug, cessions: null, reparations: null, notes: "" };
     }
     const wrap = el("div", "treaty-form");
+    const wn = document.createElement("input"); wn.value = war.name; wn.addEventListener("change", () => { simActions.renameWar(war.id, wn.value); });
+    wrap.append(el("label", "field-label", "戦争の名前"), wn, situation(map, war));
 
-    // 戦争名（変更できる）
-    const wn = document.createElement("input"); wn.value = war.name;
-    wn.addEventListener("change", () => { simActions.renameWar(war.id, wn.value); });
-    wrap.append(el("label", "field-label", "戦争の名前"), wn);
-    wrap.append(situation(map, war));
+    const sug = draft.sug;
+    if (sug) { // 各国の消耗
+      const t = el("table", "win-table"); const h = el("tr");
+      for (const x of ["国", "立場", "兵力の損失", "損失の割合", "士気の変動"]) h.append(el("th", "", x)); t.append(h);
+      for (const e of sug.exhaustion) {
+        const tr = el("tr"); const frac = e.before > 0 ? e.lost / e.before : 0;
+        tr.append(el("td", "", sname(map, e.stateId)), el("td", "", e.side === "winner" ? "勝者側" : "敗者側"), el("td", "", `${fmt(e.lost)} 人`), el("td", "", pct(frac)), el("td", e.moraleDelta >= 0 ? "cur-chg up" : "cur-chg down", `${e.moraleDelta >= 0 ? "+" : ""}${e.moraleDelta}`));
+        t.append(tr);
+      }
+      wrap.append(el("h4", "", "各国の消耗"), t);
+      wrap.append(el("p", "hint", `戦争スコア ${sug.warScore}（勝者はこの範囲でしか要求できません。勝者が複数なら、戦力への貢献に応じて分け合います）`));
+    }
 
-    // 講和地と条約名
+    const kinds = [["standard", "通常の講和（割譲・賠償）"], ["white", "白紙和平（条件なし）"], ["annex", "全面降伏（敗者を併合。戦争スコア85以上）"]];
+    const kindRow = el("div", "member-picker");
+    for (const [k, label] of kinds) {
+      const l = el("label", ""); const rb = document.createElement("input"); rb.type = "radio"; rb.name = "treaty-kind"; rb.checked = draft.kind === k;
+      rb.addEventListener("change", () => { draft.kind = k; renderTreaty(); });
+      l.append(rb, document.createTextNode(` ${label}`)); kindRow.append(l);
+    }
+    wrap.append(el("h4", "", "講和の種類"), kindRow);
+
+    // 講和地と条約名（基本は戦勝国の都市。膠着なら仲介する中立国の都市）
     const v = draft.venue;
-    const venueLine = el("p", "hint", v ? `講和地：${v.place}（${sname(map, v.stateId)}${v.neutral ? "・中立国" : "・交戦国"}）` : "講和地を決められませんでした（都市がありません）");
+    const roleLabel = v?.role === "winner" ? "戦勝国" : v?.role === "mediator" ? "仲介国（中立）" : "交戦国";
+    const venueLine = el("p", "hint", v ? `講和地：${v.place}（${sname(map, v.stateId)}・${roleLabel}）` : "講和地を決められませんでした（都市がありません）");
     const again = el("button", "", "別の地で開く"); again.type = "button";
     again.addEventListener("click", () => { const nv = simActions.peaceVenue(war.id); if (nv) { draft.venue = nv; draft.treatyName = nv.treatyName; renderTreaty(); } });
     const tn = document.createElement("input"); tn.value = draft.treatyName; tn.addEventListener("input", () => { draft.treatyName = tn.value; });
     wrap.append(el("label", "field-label", "講和条約の名前（講和地の地名から）"), tn, venueLine, again);
 
-    // 受け取る国・支払う国
-    const mk = (ids, cur, on) => { const s = document.createElement("select"); for (const id of ids) { const o = document.createElement("option"); o.value = id; o.textContent = sname(map, id); o.selected = id === cur; s.append(o); } s.addEventListener("change", () => { on(Number(s.value)); renderTreaty(); }); return s; };
-    const recvIds = stalemate ? [...war.attackers, ...war.defenders] : winners, payIds = stalemate ? [...war.attackers, ...war.defenders].filter((x) => x !== draft.toStateId) : losers;
-    if (!payIds.includes(draft.fromStateId)) draft.fromStateId = payIds[0];
-    const row = el("div", "member-picker");
-    row.append(el("span", "", "受け取る国"), mk(recvIds, draft.toStateId, (x) => { draft.toStateId = x; draft.picked.clear(); }), el("span", "", "支払う国"), mk(payIds, draft.fromStateId, (x) => { draft.fromStateId = x; draft.picked.clear(); }));
-    wrap.append(row);
+    const detail = el("div", "treaty-detail"); wrap.append(detail);
+    const meter = el("div", "wo-impact"); const impact = el("div", "wo-impact");
+    const annexTargets = () => losers.map((L) => ({ fromStateId: L, toStateId: winners[0] }));
 
-    // 割譲する地域（首都を含む地域は候補に出ない）
-    const cands = simActions.suggestCessions(draft.toStateId, draft.fromStateId);
-    wrap.append(el("h4", "", "割譲する地域"));
-    const cessBox = el("div", "wo-cess");
-    if (!cands.length) cessBox.append(el("p", "muted", "割譲できる地域はありません（首都は割譲できません）"));
-    const keyOf = (cd) => (cd.type === "province" ? `p${cd.provinceId}` : `r${cd.regionCells[0]}`);
-    const groupsOf = (cd) => (cd.type === "province" ? cellsOfProvince(map, cd.provinceId) : cd.regionCells);
-    for (const cd of cands) {
-      const l = el("label", "wo-cess-row"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = draft.picked.has(keyOf(cd));
-      cb.addEventListener("change", () => { if (cb.checked) draft.picked.add(keyOf(cd)); else draft.picked.delete(keyOf(cd)); renderImpact(); });
-      l.append(cb, document.createTextNode(`${cd.name}（${cd.cells}セル）`)); cessBox.append(l);
+    // 割譲の候補（敗者ごと）。消耗に比例した量が、初めから選ばれている
+    function ensureCessions() {
+      if (draft.cessions) return;
+      draft.cessions = [];
+      for (const L of losers) {
+        const chunks = simActions.suggestCessionChunks(winners, L, { size: draft.size });
+        let sum = 0; const want = draft.sug?.cessionByLoser?.[L] ?? 0;
+        for (const c of chunks) { const on = sum < want; if (on) sum += c.cells; draft.cessions.push({ ...c, key: `${L}:${c.regionCells[0]}`, on }); }
+      }
     }
-    wrap.append(cessBox);
-
-    // 賠償金（支払国の通貨）
-    const pc = simActions.getCurrency(draft.fromStateId), rc = simActions.getCurrency(draft.toStateId);
-    const amount = document.createElement("input"); amount.type = "number"; amount.min = "0"; amount.value = String(draft.reparations);
-    amount.addEventListener("input", () => { draft.reparations = Number(amount.value) || 0; renderImpact(); });
-    wrap.append(el("h4", "", "賠償金"), el("label", "field-label", `${sname(map, draft.fromStateId)}が ${pc.name} で支払う額`), amount);
-
-    // 渡る量の計算（割譲と賠償）
-    const impact = el("div", "wo-impact");
-    function renderImpact() {
+    function ensureRepar() {
+      if (draft.reparations) return;
+      draft.reparations = {};
+      for (const r of draft.sug?.reparations ?? []) draft.reparations[`${r.fromStateId}-${r.toStateId}`] = r.amount;
+    }
+    const currentTerms = () => ({
+      kind: draft.kind,
+      cessions: draft.kind === "standard" ? (draft.cessions ?? []).filter((c) => c.on).map((c) => ({ cells: c.regionCells, fromStateId: c.fromStateId, toStateId: c.toStateId, name: c.name })) : [],
+      reparations: draft.kind === "standard" ? Object.entries(draft.reparations ?? {}).filter(([, a]) => a > 0).map(([k, amount]) => { const [f, t] = k.split("-").map(Number); return { fromStateId: f, toStateId: t, amount }; }) : [],
+      annex: draft.kind === "annex" ? annexTargets() : [],
+    });
+    function renderMeter() {
+      meter.replaceChildren();
+      const terms = currentTerms();
+      const rows = simActions.treatyBudget(war.id, terms);
+      const t = el("table", "win-table"); const h = el("tr"); for (const x of ["勝者", "取り分", "要求の費用 / 上限（戦争スコア）"]) h.append(el("th", "", x)); t.append(h);
+      for (const r of rows) { const tr = el("tr"); const over = r.spent > r.budget + 0.05; tr.append(el("td", "", sname(map, r.stateId)), el("td", "", pct(r.share)), el("td", over ? "cur-chg down" : "", `${fmt(r.spent, 1)} / ${fmt(r.budget, 1)}${over ? "　⚠ 超過" : ""}`)); t.append(tr); }
+      meter.append(el("h4", "", "戦争スコアの使い道"), t);
+      // 相手から渡るもの
       impact.replaceChildren();
-      const picked = cands.filter((cd) => draft.picked.has(keyOf(cd)));
-      const groups = picked.map(groupsOf);
-      const r = simActions.estimatePeace(war.id, { loserId: draft.fromStateId, cellGroups: groups, reparations: draft.reparations });
-      if (!r) return;
-      const rate = simActions.exchangeRate(draft.fromStateId, draft.toStateId);
-      const lines = [
-        ["割譲される領土", `${fmt(r.cells)}セル（${sname(map, draft.fromStateId)}の領土の ${pct(r.share)}）`],
-        ["移る人口の目安", `約 ${fmt(r.population, 1)} 千人`],
-        ["移る産業力の目安", fmt(r.industry, 1)],
-        ["移る都市", `${fmt(r.burgs)} 件`],
-        ["賠償金（支払額）", `${fmt(draft.reparations, 2)} ${pc.name}${r.reparationsShare != null ? `（支払国の国庫の ${pct(r.reparationsShare)}）` : ""}`],
-        ["賠償金（受取額）", `${fmt(draft.reparations * rate, 2)} ${rc.name}　為替 1 ${pc.name} = ${rate.toFixed(4)} ${rc.name}`],
-      ];
-      const t = el("table", "win-table");
-      for (const [k, val] of lines) { const tr = el("tr"); tr.append(el("th", "", k), el("td", "", val)); t.append(tr); }
-      impact.append(el("h4", "", "この条約で相手から渡るもの"), t);
+      const lines = [];
+      for (const L of losers) {
+        const mine = terms.cessions.filter((c) => c.fromStateId === L);
+        const r = simActions.estimatePeace(war.id, { loserId: L, cellGroups: mine.map((c) => c.cells), reparations: terms.reparations.filter((x) => x.fromStateId === L).reduce((n, x) => n + x.amount, 0) });
+        if (!r) continue;
+        lines.push([`${sname(map, L)}から`, `${fmt(r.cells)}セル（領土の ${pct(r.share)}）・人口 約${fmt(r.population, 1)}千人・産業 ${fmt(r.industry, 1)}・都市 ${fmt(r.burgs)}件${r.reparations ? `・賠償 ${fmt(r.reparations, 2)}${r.reparationsShare != null ? `（国庫の ${pct(r.reparationsShare)}）` : ""}` : ""}`]);
+      }
+      for (const x of terms.reparations) { const rate = simActions.exchangeRate(x.fromStateId, x.toStateId); lines.push([`${sname(map, x.fromStateId)} → ${sname(map, x.toStateId)}`, `${fmt(x.amount, 2)} ${simActions.getCurrency(x.fromStateId).name} ＝ ${fmt(x.amount * rate, 2)} ${simActions.getCurrency(x.toStateId).name}（1 ${simActions.getCurrency(x.fromStateId).name} = ${rate.toFixed(4)}）`]); }
+      if (lines.length) { const tb = el("table", "win-table"); for (const [k, val] of lines) { const tr = el("tr"); tr.append(el("th", "", k), el("td", "", val)); tb.append(tr); } impact.append(el("h4", "", "この条約で相手から渡るもの"), tb); }
     }
-    wrap.append(impact);
-    renderImpact();
+
+    if (draft.kind === "white") detail.append(el("p", "hint", "どちらも何も受け取りません。戦争は終わり、関係は中立に戻ります。"));
+    else if (draft.kind === "annex") detail.append(el("p", "hint", `${losers.map((L) => sname(map, L)).join("・")}は降伏し、全土が${sname(map, winners[0])}に併合されます。`), meter);
+    else {
+      ensureCessions(); ensureRepar();
+      const sizeRow = el("div", "member-picker"); sizeRow.append(el("span", "field-label", "区画の大きさ"));
+      for (const [k, label] of [["s", "小"], ["m", "中"], ["l", "大"]]) {
+        const l = el("label", ""); const rb = document.createElement("input"); rb.type = "radio"; rb.name = "treaty-size"; rb.checked = draft.size === k;
+        rb.addEventListener("change", () => { draft.size = k; draft.cessions = null; renderTreaty(); });
+        l.append(rb, document.createTextNode(` ${label}`)); sizeRow.append(l);
+      }
+      detail.append(el("h4", "", "割譲する地域"), sizeRow, el("p", "hint", `消耗に比例した目安: 約${fmt(draft.sug?.cessionCells ?? 0)}セル。区画ごとに受け取る勝者を選べます（首都は割譲できません）`));
+      const cessBox = el("div", "wo-cess");
+      if (!draft.cessions.length) cessBox.append(el("p", "muted", "割譲できる区画がありません"));
+      for (const c of draft.cessions) {
+        const l = el("label", "wo-cess-row"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = c.on;
+        cb.addEventListener("change", () => { c.on = cb.checked; renderMeter(); });
+        l.append(cb, document.createTextNode(`${c.name}（${c.cells}セル・${sname(map, c.fromStateId)}）→ `));
+        if (winners.length > 1) { const s2 = document.createElement("select"); for (const wId of winners) { const o = document.createElement("option"); o.value = wId; o.textContent = sname(map, wId); o.selected = wId === c.toStateId; s2.append(o); } s2.addEventListener("change", () => { c.toStateId = Number(s2.value); renderMeter(); }); l.append(s2); }
+        else l.append(document.createTextNode(sname(map, c.toStateId)));
+        cessBox.append(l);
+      }
+      detail.append(cessBox);
+      detail.append(el("h4", "", "賠償金（消耗から自動で仮設定。変更できます）"));
+      for (const L of losers) for (const W of winners) {
+        const key = `${L}-${W}`; const row = el("div", "member-picker");
+        const amount = document.createElement("input"); amount.type = "number"; amount.min = "0"; amount.value = String(draft.reparations[key] ?? 0);
+        amount.addEventListener("input", () => { draft.reparations[key] = Number(amount.value) || 0; renderMeter(); });
+        row.append(el("span", "", `${sname(map, L)} → ${sname(map, W)}`), amount, el("span", "muted", simActions.getCurrency(L).name));
+        detail.append(row);
+      }
+      detail.append(meter, impact);
+    }
+    renderMeter();
 
     const notes = document.createElement("textarea"); notes.rows = 3; notes.placeholder = "その他の条件（非武装化・通商・駐留など自由記述）"; notes.value = draft.notes;
     notes.addEventListener("input", () => { draft.notes = notes.value; });
@@ -147,15 +227,8 @@ export function initWarOutcome({ store, simActions }) {
 
     const sign = el("button", "primary", "講和条約を締結する"); sign.type = "button";
     sign.addEventListener("click", () => {
-      const picked = cands.filter((cd) => draft.picked.has(keyOf(cd)));
-      simActions.signPeace(war.id, {
-        toStateId: draft.toStateId, fromStateId: draft.fromStateId,
-        provinceIds: picked.filter((x) => x.type === "province").map((x) => x.provinceId),
-        regionCells: picked.filter((x) => x.type === "region").map((x) => x.regionCells),
-        reparations: draft.reparations, treatyName: draft.treatyName.trim(), notes: draft.notes.trim(),
-        venue: draft.venue ? { place: draft.venue.place, stateId: draft.venue.stateId } : null,
-      });
-      draft = null; renderTreaty();
+      const ok = simActions.signTreaty(war.id, { ...currentTerms(), treatyName: draft.treatyName.trim(), notes: draft.notes.trim(), venue: draft.venue ? { place: draft.venue.place, stateId: draft.venue.stateId } : null });
+      if (ok) { draft = null; renderTreaty(); }
     });
     wrap.append(sign);
     return wrap;
@@ -232,11 +305,12 @@ export function initWarOutcome({ store, simActions }) {
     conv.append(el("h4", "", "両替"), amt, sel(convFrom, (x) => { convFrom = x; }), el("span", "", "＝"), out, el("span", "", "（"), sel(convTo, (x) => { convTo = x; }), el("span", "", "に）"));
     currencyBody.append(conv);
   }
+  const safeTreaty = guardRender(treatyBody, () => renderTreaty()), safeCurrency = guardRender(currencyBody, () => renderCurrency());
   store.subscribe((_s, ch) => {
     if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
-    if (currencyBody.offsetParent) renderCurrency();
-    if (treatyBody.offsetParent) renderTreaty();
+    if (currencyBody.offsetParent) safeCurrency();
+    if (treatyBody.offsetParent) safeTreaty();
   });
 
-  return { situation, treatyBody, renderTreaty, currencyBody, renderCurrency };
+  return { situation, bars, treatyBody, renderTreaty, currencyBody, renderCurrency };
 }

@@ -1,6 +1,7 @@
 // 部隊の編成：国家を選び、その国の部隊一覧・兵力編集・移動を行う（軍事ウィンドウの中身）。
 // 戦闘は戦争ウィンドウで、召集した部隊をもとに記録する（ここからは攻撃しない）。
 import { UNIT_TYPES, forcePower, forceHeadcount } from "../../core/sim/units.js";
+import { guardRender } from "../safe-render.js";
 import { byId } from "../dom.js";
 import { confirmDialog, alertDialog } from "../dialogs.js";
 
@@ -117,7 +118,7 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     more.append(el("summary", "", "兵力を編集"));
     const units = el("div", "regiment-units");
     for (const u of UNIT_TYPES) {
-      if (u.key === "nuclear" && (map.pack.states[stateId]?.techLevel ?? 3) < 9) continue; // 核は技術水準9以上の国だけ配備できる（使うのは核作戦ウィンドウ）
+      // 核も他の兵科と同じように数を設定できる（使うのは核作戦ウィンドウ。通常の戦争では使われない）
       const field = el("label", "unit-field"); field.title = u.desc ?? "";
       field.append(el("span", "", `${u.icon} ${u.label}（${u.unit}）`));
       const input = document.createElement("input");
@@ -158,7 +159,8 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
 
   }
 
-  store.subscribe((_s, change) => { if (["replace", "commit", "undo", "redo"].includes(change.type)) render(); });
+  const safeRender = guardRender(root, () => render());
+  store.subscribe((_s, change) => { if (["replace", "commit", "undo", "redo"].includes(change.type)) safeRender(); });
   return {
     render,
     selectState(id) { selectedState = id; cardCache.clear(); render(); },
