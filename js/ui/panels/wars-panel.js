@@ -61,7 +61,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
         const l = el("label", ""); const cb = document.createElement("input"); cb.type = "checkbox";
         cb.checked = draft[key].has(s.i); cb.disabled = draft[other].has(s.i);
         cb.addEventListener("change", () => { if (cb.checked) draft[key].add(s.i); else draft[key].delete(s.i); render(); });
-        l.append(cb, document.createTextNode(s.name)); box.append(l);
+        l.append(cb, document.createTextNode(stateName(map, s.i)); box.append(l);
       }
       return box;
     };
