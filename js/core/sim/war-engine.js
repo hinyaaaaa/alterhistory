@@ -15,6 +15,8 @@ const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const LAND = ["infantry", "cavalry", "archers", "artillery", "armor", "special", "advanced"];
 const AIR = ["air"], SEA = ["navy"];
 export const BASE_MORALE = 70;
+export const BASE_SUPPORT = 70; // 民意（戦争への支持）の平時の水準。長引く戦争・大きな損害で下がり、平時に回復する
+export const supportOf = (state) => clamp(state?.support ?? BASE_SUPPORT, 0, 100);
 
 /**
  * 戦争の形態。常に総力戦ではなく、規模と性格を選べる。
@@ -22,13 +24,13 @@ export const BASE_MORALE = 70;
  *   allMuster: true なら、部隊の選択に関係なく全部隊が出る（総力戦）
  */
 export const WAR_TYPES = Object.freeze({
-  limited: { key: "limited", label: "限定戦（国境紛争）", lossScale: 0.55, popScale: 0.4, duration: 0.5, scoreScale: 0.4, allMuster: false,
+  limited: { key: "limited", label: "限定戦（国境紛争）", weary: 0.3, capitalFall: 0.2, lossScale: 0.3, popScale: 0.35, duration: 0.25, scoreScale: 0.4, allMuster: false,
     desc: "国境付近の小規模な衝突。損害も期間も小さく、要求できるものも小さい。" },
-  conventional: { key: "conventional", label: "通常戦", lossScale: 1, popScale: 1, duration: 1, scoreScale: 0.8, allMuster: false,
+  conventional: { key: "conventional", label: "通常戦", weary: 1, capitalFall: 1, lossScale: 0.75, popScale: 1, duration: 0.8, scoreScale: 0.8, allMuster: false,
     desc: "招集した部隊どうしの正規戦。標準的な損害と期間。" },
-  total: { key: "total", label: "総力戦", lossScale: 1.3, popScale: 1.6, duration: 1.3, scoreScale: 1, allMuster: true,
+  total: { key: "total", label: "総力戦", weary: 0.8, capitalFall: 1.3, lossScale: 1.2, popScale: 1.6, duration: 1.3, scoreScale: 1, allMuster: true,
     desc: "国のすべてを注ぎ込む。全部隊が参戦し、損害も民間の被害も大きい。全面降伏まで要求できる。" },
-  asymmetric: { key: "asymmetric", label: "非対称戦（ゲリラ・占領戦）", lossScale: 1, popScale: 1.3, duration: 2.2, scoreScale: 0.5, allMuster: false,
+  asymmetric: { key: "asymmetric", label: "非対称戦（ゲリラ・占領戦）", weary: 1.4, capitalFall: 0, lossScale: 0.9, popScale: 1.3, duration: 2.2, scoreScale: 0.5, allMuster: false,
     desc: "弱い側が地形と民衆を盾にゲリラ戦を行う。強い側は制空・制海が効きにくく、士気が長期で削られる。決着がつきにくく、長引く。" },
 });
 export const warTypeOf = (key) => WAR_TYPES[key] ?? WAR_TYPES.conventional;
@@ -61,28 +63,30 @@ export function nationStrength(state, muster = null) {
   return {
     land: sumUnits(state, LAND, regs) * m, sea: sumUnits(state, SEA, regs) * m, air: sumUnits(state, AIR, regs) * m,
     manpower: regs.reduce((n, r) => n + forceHeadcount({ ...r.u, nuclear: 0 }), 0),
-    morale: moraleOf(state),
+    morale: moraleOf(state) * (0.8 + 0.2 * supportOf(state) / 100), // 民意が低いほど、士気は実際には振るわない
+    support: supportOf(state),
   };
 }
 
 /** 連合（複数国）をまとめた戦力。士気は兵員数で加重平均 */
 export function sideStrength(map, ids, muster = null) {
-  const out = { land: 0, sea: 0, air: 0, manpower: 0, morale: 0 };
+  const out = { land: 0, sea: 0, air: 0, manpower: 0, morale: 0, support: 0 };
   let wm = 0;
   for (const id of ids) {
     const st = map.pack.states[id]; if (!isLive(st)) continue;
     const s = nationStrength(st, muster);
     out.land += s.land; out.sea += s.sea; out.air += s.air; out.manpower += s.manpower;
-    out.morale += s.morale * Math.max(1, s.manpower); wm += Math.max(1, s.manpower);
+    out.morale += s.morale * Math.max(1, s.manpower); out.support += s.support * Math.max(1, s.manpower); wm += Math.max(1, s.manpower);
   }
   out.morale = wm ? out.morale / wm : BASE_MORALE;
+  out.support = wm ? out.support / wm : BASE_SUPPORT;
   return out;
 }
 
 /** 双方の比較値（0〜1。攻撃側の取り分）。バー表示にそのまま使える */
 export function compareSides(a, b) {
   const share = (x, y) => (x + y <= 0 ? 0.5 : x / (x + y));
-  return { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale) };
+  return { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale), support: share(a.support ?? BASE_SUPPORT, b.support ?? BASE_SUPPORT) };
 }
 
 /** 陣営のドクトリン効果（兵員で加重平均） */
@@ -103,7 +107,8 @@ function sideDoctrine(map, ids) {
 /** 総合の優勢度（攻撃側が優勢なら正）。ブレ(noise)を除いた値 */
 export function edgeOf(cmp, atk, def) {
   const score = 0.5 * cmp.land + 0.2 * cmp.air + 0.15 * cmp.sea + 0.15 * cmp.morale;
-  return score - 0.5 + (cmp.air - 0.5) * 0.1 + (atk.attack - def.defense) * 0.5;
+  // 戦力差の効き方は6割に圧縮する（兵が2倍でも必ず勝つわけではない。ドクトリンの有利不利はそのまま効く）
+  return 0.6 * (score - 0.5 + (cmp.air - 0.5) * 0.1) + (atk.attack - def.defense) * 0.5;
 }
 
 function verdictOf(edge, band = 0.03) {
@@ -127,8 +132,9 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
   const m = T.allMuster ? null : muster;
   const { aStrength: A, dStrength: D, compare: cmp } = previewWar(map, attackers, defenders, m);
   const da = sideDoctrine(map, attackers), dd = sideDoctrine(map, defenders);
-  const noiseAmp = 0.08 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1);
-  const noise = rnd.float(-noiseAmp, noiseAmp);
+  const noiseAmp = 0.24 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1); // 戦力差があっても、番狂わせが起こりうる大きさ
+  const lopsided = 1 - 0.7 * Math.pow(2 * cmp.land - 1, 2); // 圧倒的な戦力差のときは、番狂わせが起きにくい
+  const noise = rnd.float(-noiseAmp * lopsided, noiseAmp * lopsided);
   let edge = edgeOf(cmp, da, dd) + noise;
   // 非対称戦：弱い側はゲリラ戦で戦力差を縮める（制空・制海は強い側の頼みにならない）。決着は僅差になりやすい
   let strongIsAttacker = A.land >= D.land;
@@ -136,10 +142,11 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
     const weakIds = strongIsAttacker ? defenders : attackers;
     const h = map.geometry?.pack?.h, st = map.pack.cells.state; let tot = 0, rough = 0;
     if (h) for (let i = 0; i < st.length; i++) if (weakIds.includes(st[i])) { tot++; if (h[i] >= 55) rough++; }
-    const guerrilla = 0.08 + 0.12 * (tot ? rough / tot : 0);
-    edge = edge * 0.4 + (strongIsAttacker ? -guerrilla : guerrilla);
+    const guerrilla = 0.012 + 0.05 * (tot ? rough / tot : 0);
+    const gap = Math.min(1, Math.abs(2 * cmp.land - 1) * 3); // 強い側がはっきりしているときだけ、ゲリラ戦の効果が出る
+    edge = edge * 0.7 + (strongIsAttacker ? -guerrilla : guerrilla) * gap;
   }
-  const verdict = verdictOf(edge, T.key === "asymmetric" ? 0.07 : 0.03);
+  const verdict = verdictOf(edge, T.key === "asymmetric" ? 0.05 : 0.015);
   const { winner, decisiveness } = verdict;
 
   // 消耗: 敗者ほど重く、僅差（長期戦）ほど双方が重い。ドクトリンと戦争の形態で変わる
@@ -168,8 +175,75 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
   apply(attackers, aLoss, winner === "attacker", "attacker");
   apply(defenders, dLoss, winner === "defender", "defender");
   // 戦争スコア（HoI4 の戦争スコアにあたる）。勝者が講和で「要求できる大きさ」。決着が大きいほど、形態が大きいほど高い
-  const warScore = winner === "stalemate" ? 0 : Math.round(clamp(100 * (0.2 + 0.8 * decisiveness) * T.scoreScale, 5, 100));
-  return { winner, decisiveness, warScore, type: T.key, compare: cmp, aStrength: A, dStrength: D, noise, losses, casualties, moraleDelta, popLossShare, doctrine: { attacker: da, defender: dd } };
+  const dominance = clamp(Math.abs(edge) * 6, 0, 1); // 戦力差が大きいほど、講和で要求できる範囲が広がる
+  const warScore = winner === "stalemate" ? 0 : Math.round(clamp(100 * (0.15 + 0.85 * dominance) * T.scoreScale, 5, 100));
+  return { winner, decisiveness, dominance, warScore, type: T.key, compare: cmp, aStrength: A, dStrength: D, noise, losses, casualties, moraleDelta, popLossShare, doctrine: { attacker: da, defender: dd } };
+}
+
+/**
+ * 勝利条件（HoI4 の降伏条件にあたる）。戦力の優劣に加えて、次の条件で戦争が決着する。
+ *   ・首都陥落: 勝者が圧倒し、敗者の首都が勝者の領土に近いほど起こりやすい。起これば決定的な勝利になり、早く終わる。
+ *   ・兵力の壊滅: 敗者が動員した兵力の3割以上を失った（決定的な敗北）
+ *   ・民意の崩壊: 膠着でも、片方の民意が戦争中に尽きれば、その側が降伏する
+ *   ・戦力の優位 / 膠着: 上のどれでもない通常の決着
+ * 限定戦では首都は陥落せず、非対称戦では占領できない。副作用なし。
+ * @returns {{ victory:{type, text, stateId?, burgId?}, capitalFall:null|{stateId,burgId,place}, winner, warScore, moraleDelta, durationFactor }}
+ */
+export function applyVictoryConditions(map, result, { attackers, defenders, type, supportDelta, rnd }) {
+  const T = warTypeOf(type);
+  let { winner, warScore } = result; const moraleDelta = { ...result.moraleDelta };
+  const winners = winner === "defender" ? defenders : attackers, losers = winner === "defender" ? attackers : defenders;
+  let victory = { type: winner === "stalemate" ? "stalemate" : "superiority", text: winner === "stalemate" ? "決着つかず（膠着）" : "戦力・士気の優位による勝利" };
+  let capitalFall = null, durationFactor = 1;
+  const finalSupport = (id) => supportOf(map.pack.states[id]) + (supportDelta?.[id] ?? 0);
+  if (winner !== "stalemate") {
+    // 首都陥落
+    const dom = result.dominance ?? result.decisiveness; // 戦力差の大きさ（0〜1）
+    const dist = distanceFrom(map, losers, winners);
+    const maxD = Math.max(1, ...dist.values());
+    let best = null;
+    for (const L of losers) {
+      const cap = map.pack.burgs[map.pack.states[L]?.capital]; if (!cap || cap.removed) continue;
+      const d = dist.get(cap.cell); if (d == null) continue;
+      const p = clamp((0.05 + dom * 0.75 - 0.45 * (d / maxD)) * T.capitalFall, 0, 0.85);
+      if (rnd.next() < p && (!best || d < best.d)) best = { d, stateId: L, burgId: cap.i, place: cap.name };
+    }
+    if (best) {
+      capitalFall = { stateId: best.stateId, burgId: best.burgId, place: best.place };
+      victory = { type: "capital", text: `首都${best.place}の陥落による決定的勝利`, stateId: best.stateId, burgId: best.burgId };
+      warScore = clamp(warScore + 25, 5, 100); moraleDelta[best.stateId] = (moraleDelta[best.stateId] ?? 0) - 20; durationFactor = 0.75;
+    } else {
+      const frac = Math.max(...losers.map((L) => result.casualties?.[L] && result.casualties[L].before > 0 ? result.casualties[L].lost / result.casualties[L].before : 0));
+      if (frac >= 0.3 && result.decisiveness >= 0.4) { victory = { type: "attrition", text: "敗者の兵力が壊滅した（動員兵力の3割以上を喪失）" }; warScore = clamp(warScore + 10, 5, 100); }
+    }
+  } else {
+    // 膠着でも、民意が尽きた側は降伏する
+    const weary = (ids) => ids.filter((id) => finalSupport(id) <= 15);
+    const aw = weary(attackers).length > 0, dw = weary(defenders).length > 0;
+    if (aw !== dw) {
+      winner = aw ? "defender" : "attacker";
+      victory = { type: "exhaustion", text: `${aw ? "攻撃側" : "防衛側"}の民意が尽き、戦争を続けられなくなった` };
+      warScore = Math.round(25 * T.scoreScale + 5);
+    }
+  }
+  return { victory, capitalFall, winner, warScore, moraleDelta, durationFactor };
+}
+
+/** 戦争中の民意の変化（期間全体の合計）。損害が大きく、長引くほど下がる。攻撃側は下がりやすく、防衛側は守る戦いで一時的に結束する */
+export function planSupportDeltas(result, { attackers, defenders, months, type }) {
+  const T = warTypeOf(type), out = {};
+  const strongIsAttacker = (result.aStrength?.land ?? 0) >= (result.dStrength?.land ?? 0);
+  for (const [ids, side] of [[attackers, "attacker"], [defenders, "defender"]]) {
+    for (const id of ids) {
+      const lost = result.losses?.[id] ?? 0;
+      let d = -(lost * (side === "attacker" ? 55 : 50) + months * (side === "attacker" ? 0.3 : 0.18) * T.weary);
+      if (side === "defender") d += 6;
+      if (T.key === "asymmetric" && (side === "attacker") === strongIsAttacker) d -= months * 0.35; // 長引く占領・掃討で、強い側の民意が削られる
+      if (result.winner === side) d += 8;
+      out[id] = Math.round(d);
+    }
+  }
+  return out;
 }
 
 /** 核作戦などで状況が変わったあとの再判定。最初に出たブレ(noise)は使い回すので、結果が勝手に揺れない */
@@ -177,7 +251,7 @@ export function reevaluateWar(map, war) {
   const r = war.result; if (!r) return null;
   const { aStrength: A, dStrength: D, compare } = previewWar(map, war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null);
   const edge = edgeOf(compare, r.doctrine?.attacker ?? sideDoctrine(map, war.attackers), r.doctrine?.defender ?? sideDoctrine(map, war.defenders)) + (r.noise ?? 0);
-  return { ...r, ...verdictOf(edge, r.type === "asymmetric" ? 0.07 : 0.03), compare, aStrength: A, dStrength: D };
+  return { ...r, ...verdictOf(edge, r.type === "asymmetric" ? 0.05 : 0.015), compare, aStrength: A, dStrength: D };
 }
 
 /** 損耗率を部隊の兵力に反映した新しい u を返す（核は消耗させない） */
@@ -276,7 +350,7 @@ const DOCTRINE_STORY = {
  * 攻撃側が優勢なほど奥の都市へ進む。防衛側が優勢なら国境付近で食い止め、終盤は反攻して攻撃側の国境の都市に及ぶ。
  * @returns {{date, name, place, burgId, winner:"attacker"|"defender", text, attackerState, defenderState, winnerState, loserState}[]}
  */
-export function generateBattleLog(map, { attackers, defenders, result, startedAt, durationMonths }, rnd, addMonths) {
+export function generateBattleLog(map, { attackers, defenders, result, startedAt, durationMonths, capitalFall = null }, rnd, addMonths) {
   const n = clamp(Math.round(2 + Math.log10(1 + (result.aStrength.manpower + result.dStrength.manpower)) * 1.1 + durationMonths / 8), 2, 9);
   const winnerSide = result.winner === "defender" ? "defender" : "attacker";
   const pWin = result.winner === "stalemate" ? 0.5 : clamp(0.55 + result.decisiveness * 0.35, 0.55, 0.9);
@@ -304,6 +378,11 @@ export function generateBattleLog(map, { attackers, defenders, result, startedAt
     const t = Math.min(durationMonths, Math.max(0, Math.round(((i + 1) / (n + 1)) * durationMonths)));
     log.push({ date: addMonths(startedAt, t), name: kind, place, burgId: burg?.i ?? null, winner: side, attackerState: attackers[0], defenderState: defenders[0], winnerState: wId, loserState: lId,
       text: `${officialName(map.pack.states[wId])}軍：${rnd.pick(story.win)}（${officialName(map.pack.states[lId])}軍：${rnd.pick((DOCTRINE_STORY[doctrineOf(map.pack.states[lId]).key] ?? DOCTRINE_STORY.balanced).lose)}）` });
+  }
+  if (capitalFall) { // 首都陥落：最後の戦いは首都で起き、これで決着する
+    const w = result.winner === "defender" ? defenders : attackers, l = capitalFall.stateId;
+    log.push({ date: addMonths(startedAt, durationMonths), name: `${capitalFall.place}の陥落`, place: capitalFall.place, burgId: capitalFall.burgId, winner: result.winner, attackerState: attackers[0], defenderState: defenders[0], winnerState: w[0], loserState: l,
+      text: `${officialName(map.pack.states[w[0]])}軍が${officialName(map.pack.states[l])}の首都${capitalFall.place}を攻略し、${officialName(map.pack.states[l])}は降伏を迫られた` });
   }
   return log;
 }

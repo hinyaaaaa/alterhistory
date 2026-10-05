@@ -45,9 +45,12 @@ export function planAnnualUpdate(map, rnd = null) {
     const { rural, urban, industry } = computeAnnualUpdate(state);
     const peak = Math.max(state.popPeak ?? 0, rural + urban); // 過去最大の人口（崩壊の判定に使う）
     // 士気は年ごとに平時の水準(70)へ近づく（戦争や核の打撃からの立ち直り）
+    // 民意：戦争をしていない国は、年ごとに平時の水準(70)へ回復する（戦争中は戦争の進行が動かす）
+    const atWar = (map.ext?.data?.wars ?? []).some((w) => !w.endedAt && (w.attackers.includes(state.i) || w.defenders.includes(state.i)));
+    const support = state.support == null || atWar ? null : Math.max(0, Math.min(100, state.support + Math.max(-4, Math.min(6, 70 - state.support))));
     const morale = state.morale == null ? null : Math.max(0, Math.min(100, state.morale + Math.max(-5, Math.min(5, 70 - state.morale))));
-    if (rural !== state.rural || urban !== state.urban || industry !== state.industry || peak !== state.popPeak || (morale != null && morale !== state.morale)) {
-      parts.push(setProps(state, { rural, urban, industry, popPeak: peak, ...(morale != null ? { morale } : {}) }));
+    if (rural !== state.rural || urban !== state.urban || industry !== state.industry || peak !== state.popPeak || (morale != null && morale !== state.morale) || (support != null && support !== state.support)) {
+      parts.push(setProps(state, { rural, urban, industry, popPeak: peak, ...(morale != null ? { morale } : {}), ...(support != null ? { support } : {}) }));
     }
     const conscription = planAnnualConscription(map, state.i);
     if (conscription) parts.push(...conscription.parts);

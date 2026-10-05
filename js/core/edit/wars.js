@@ -15,13 +15,15 @@
 
 import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
-import { resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf } from "../sim/war-engine.js";
+import { resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, applyVictoryConditions, planSupportDeltas, supportOf } from "../sim/war-engine.js";
 import { officialName } from "../names.js";
 import { regimentsOf } from "../sim/military.js";
 import { convert, getCurrency } from "../sim/currency.js";
 import { getFinance } from "../sim/trade.js";
 import { expandWithAllies, estimateDurationMonths, addMonths, proposePeaceVenue, peaceImpact } from "../sim/war-flow.js";
 import { diplomacyParts, crossPairs } from "./diplomacy.js";
+import { VASSAL_BY_KEY, vassalInfo } from "./vassals.js";
+import { leaderOf } from "./alliances.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
@@ -94,9 +96,16 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
   const result = resolveWar(map, a, d, rnd, m, T.key);
   // 規模・地形・決着の差・ドクトリン・戦争の形態から、戦争の長さ（終戦日）を自動で決める
   const speed = (result.doctrine.attacker.speed + result.doctrine.defender.speed) / 2;
-  const months = Math.max(1, Math.round(estimateDurationMonths(map, a, d, result, rnd) * speed * T.duration));
+  let months = Math.max(1, Math.round(estimateDurationMonths(map, a, d, result, rnd) * speed * T.duration));
+  // 民意の変化 → 勝利条件（首都陥落・兵力の壊滅・民意の崩壊）。首都が陥落すれば、戦争は早く終わる
+  const supportDelta = planSupportDeltas(result, { attackers: a, defenders: d, months, type: T.key });
+  const vic = applyVictoryConditions(map, result, { attackers: a, defenders: d, type: T.key, supportDelta, rnd });
+  if (vic.durationFactor !== 1) months = Math.max(1, Math.round(months * vic.durationFactor));
+  result.winner = vic.winner; result.warScore = vic.warScore; result.moraleDelta = vic.moraleDelta;
+  if (vic.winner !== "stalemate" && vic.victory.type === "exhaustion") result.decisiveness = Math.max(result.decisiveness, 0.2);
+  const supportDelta2 = planSupportDeltas(result, { attackers: a, defenders: d, months, type: T.key }); // 勝者が確定したので、勝者の民意の回復を反映して計算し直す
   const endsAt = addMonths(date, months);
-  const battles = generateBattleLog(map, { attackers: a, defenders: d, result, startedAt: date, durationMonths: months }, rnd, addMonths);
+  const battles = generateBattleLog(map, { attackers: a, defenders: d, result, startedAt: date, durationMonths: months, capitalFall: vic.capitalFall }, rnd, addMonths);
   // 戦争の名前は、実際に戦いが行われた場所から付ける
   const name = nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key });
   const war = {
@@ -106,6 +115,7 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
     result: {
       winner: result.winner, decisiveness: result.decisiveness, warScore: result.warScore, type: T.key, compare: result.compare, aStrength: result.aStrength, dStrength: result.dStrength,
       noise: result.noise, doctrine: result.doctrine, casualties: result.casualties, moraleDelta: result.moraleDelta, popLossShare: result.popLossShare, losses: result.losses,
+      supportDelta: supportDelta2, victory: vic.victory, capitalFall: vic.capitalFall,
     },
   };
   const parts = [];
@@ -132,6 +142,7 @@ function progressParts(map, war, q0, q1) {
     const pop0 = (st.rural ?? 0) + (st.urban ?? 0);
     parts.push(setProps(st, {
       morale: Math.max(0, Math.min(100, (st.morale ?? 70) + (r.moraleDelta?.[id] ?? 0) * dq)),
+      support: Math.max(0, Math.min(100, supportOf(st) + (r.supportDelta?.[id] ?? 0) * dq)), // 民意も、期間に均等に動く
       popPeak: Math.max(st.popPeak ?? 0, pop0),
       rural: Math.round((st.rural ?? 0) * (1 - pstep) * 100) / 100, urban: Math.round((st.urban ?? 0) * (1 - pstep) * 100) / 100,
     }));
@@ -227,7 +238,7 @@ export function peaceSides(war) {
 /** 講和で相手に渡る量の見積もり（UI表示用） */
 export function estimatePeace(map, warId, { loserId, cellGroups, reparations = 0 }) {
   const loser = map.pack.states[loserId];
-  return peaceImpact(map, loserId, cellGroups, reparations, loser ? getFinance(loser).treasury : null);
+  return peaceImpact(map, loserId, cellGroups, reparations, loser ? wealthOf(loser) : null);
 }
 
 /** 召集する部隊を保存する。muster は { [国家ID]: [部隊ID, ...] }。参戦国以外・存在しない部隊は取り除く */
@@ -333,7 +344,7 @@ export function suggestCessions(map, attackerId, defenderId, { maxDepth = 3 } = 
 }
 
 // 1つの要求にかかる「戦争スコア」の費用（HoI4 の講和会議と同じく、勝者は戦争スコアの範囲でしか要求できない）
-const COST = { cellBase: 1, burg: 6, reparPer2pct: 1, annex: 100 };
+const COST = { cellBase: 1, burg: 6, reparPer2pct: 1, annex: 100, vassal: { puppet: 60, protectorate: 45, vassal: 50 } };
 const capitalCellsOf = (map, ids) => { const set = new Set(); for (const sid of ids) { const cap = map.pack.burgs[map.pack.states[sid]?.capital]; if (cap && !cap.removed) set.add(cap.cell); } return set; };
 
 /** 割譲の費用（敗者の産業が集中した土地・都市が多い土地ほど高い） */
@@ -344,8 +355,13 @@ export function cessionCost(map, fromId, cells) {
   const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).length;
   return cells.length * (COST.cellBase + dens) + burgs * COST.burg;
 }
+/** 国の富（賠償金の基準）。国庫が空の国（Azgaar 由来の国は国庫0が多い）でも、経済の大きさから見積もれるようにする */
+export function wealthOf(state) {
+  const pop = (state?.rural ?? 0) + (state?.urban ?? 0);
+  return Math.max(getFinance(state).treasury, (state?.industry ?? 0) * 5 + pop * 0.2, 1);
+}
 export function reparationCost(map, fromId, amount) {
-  const t = Math.max(1, getFinance(map.pack.states[fromId]).treasury);
+  const t = wealthOf(map.pack.states[fromId]);
   return (amount / t) * 100 * 0.5 * COST.reparPer2pct;
 }
 
@@ -355,7 +371,12 @@ export function winnerShares(map, war) {
   const m = war.muster && Object.keys(war.muster).length ? war.muster : null;
   const w = {};
   let tot = 0;
-  for (const id of winners) { const st = map.pack.states[id]; const x = isLive(st) ? previewWar(map, [id], [id], m).aStrength : null; w[id] = x ? Math.max(1, x.land + x.sea + x.air) : 1; tot += w[id]; }
+  const leaders = new Set((map.ext?.data?.alliances ?? []).filter((a) => !a.dissolvedAt && a.members.filter((x) => winners.includes(x)).length >= 2).map((a) => leaderOf(a)));
+  for (const id of winners) {
+    const st = map.pack.states[id]; const x = isLive(st) ? previewWar(map, [id], [id], m).aStrength : null;
+    w[id] = (x ? Math.max(1, x.land + x.sea + x.air) : 1) * (leaders.has(id) ? 1.4 : 1); // 同盟の盟主は、講和を主導するぶん取り分が多い
+    tot += w[id];
+  }
   for (const id of winners) w[id] = tot ? w[id] / tot : 1 / winners.length;
   return w;
 }
@@ -368,6 +389,7 @@ export function treatyBudget(map, war, terms) {
   for (const c of terms.cessions ?? []) if (spent[c.toStateId] != null) spent[c.toStateId] += cessionCost(map, c.fromStateId, c.cells);
   for (const r of terms.reparations ?? []) if (spent[r.toStateId] != null && r.amount > 0) spent[r.toStateId] += reparationCost(map, r.fromStateId, r.amount);
   for (const x of terms.annex ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.annex;
+  for (const x of terms.vassalize ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.vassal[x.kind] ?? 50;
   return winners.map((id) => ({ stateId: id, share: shares[id], budget: Math.round(score * shares[id] * 10) / 10, spent: Math.round(spent[id] * 10) / 10 }));
 }
 
@@ -390,7 +412,9 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
   const cessions = kind === "standard" ? (terms.cessions ?? []).filter((c) => c.cells?.length) : [];
   const reparations = kind === "standard" ? (terms.reparations ?? []).filter((r) => r.amount > 0) : [];
   const annex = kind === "annex" ? (terms.annex ?? []) : [];
-  for (const x of [...cessions, ...reparations, ...annex]) {
+  const vassalize = kind === "vassal" ? (terms.vassalize ?? []) : [];
+  for (const x of vassalize) if (!VASSAL_BY_KEY[x.kind]) throw new Error("従属の種類は 傀儡・保護国・属国 から選んでください");
+  for (const x of [...cessions, ...reparations, ...annex, ...vassalize]) {
     if (!all.includes(x.fromStateId) || !all.includes(x.toStateId)) throw new Error("条約の当事国は交戦国から選んでください");
     if (!isLive(map.pack.states[x.fromStateId]) || !isLive(map.pack.states[x.toStateId])) throw new Error("存在しない国家が含まれています");
     if (x.fromStateId === x.toStateId) throw new Error("同じ国どうしでは要求できません");
@@ -398,7 +422,7 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
   const caps = capitalCellsOf(map, all);
   for (const c of cessions) if (c.cells.some((i) => caps.has(i))) throw new Error("首都を含む地域は割譲できません");
   if (enforceBudget && war.result && winners.length) {
-    const rows = treatyBudget(map, war, { cessions, reparations, annex });
+    const rows = treatyBudget(map, war, { cessions, reparations, annex, vassalize });
     const over = rows.find((r) => r.spent > r.budget + 0.05);
     if (over) throw new Error(`${officialName(map.pack.states[over.stateId])}の要求が戦争スコアを超えています（使用 ${over.spent} / 上限 ${over.budget}）`);
     if (annex.length && (war.result.warScore ?? 0) < 85) throw new Error("全面降伏（併合）を求めるには、戦争スコアが85以上の決定的な勝利が必要です");
@@ -423,9 +447,14 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
   }
   for (const [id, d] of delta) parts.push(setProps(map.pack.states[id], { treasury: Math.round((fin(id) + d) * 100) / 100 }));
   for (const x of annex) record.annex.push({ fromStateId: x.fromStateId, toStateId: x.toStateId });
+  record.vassalize = [];
+  for (const x of vassalize) { // 敗者を併合せず従属させる（傀儡・保護国・属国）
+    parts.push(setProps(map.pack.states[x.fromStateId], { vassal: { overlord: x.toStateId, kind: x.kind, since: date } }));
+    record.vassalize.push({ fromStateId: x.fromStateId, toStateId: x.toStateId, kind: x.kind });
+  }
 
   const treatyName = uniqueTreatyName(map, terms.treatyName || `${war.name}の講和条約`);
-  const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, ...record, score: { total: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex }) : [] } };
+  const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, ...record, score: { total: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex, vassalize }) : [] } };
   const endDate = war.endsAt ?? date;
   const after = list.map((w) => (w.id !== warId ? w : { ...w, endedAt: endDate, terms: full, treatyName, treatyVenue: terms.venue?.place ?? null }));
   parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) });
@@ -480,7 +509,7 @@ export function suggestTreaty(map, war) {
   const reparations = [], cessionByLoser = {};
   for (const L of losers) {
     const st = map.pack.states[L]; if (!isLive(st)) continue;
-    const treasury = Math.max(0, getFinance(st).treasury);
+    const treasury = wealthOf(st);
     const share = stalemate ? 0 : Math.max(0, Math.min(0.6, 0.05 + 0.5 * r.decisiveness * lossFracOf(L)));
     cessionByLoser[L] = Math.round(cellsOf(L) * demand * (lossFracOf(L) + 0.5));
     for (const W of winners) { const amount = Math.round(treasury * share * shares[W] * 100) / 100; if (amount > 0) reparations.push({ fromStateId: L, toStateId: W, amount }); }
@@ -488,7 +517,7 @@ export function suggestTreaty(map, war) {
   return {
     kind: stalemate ? "white" : "standard", warScore: r.warScore ?? 0, shares, cessionByLoser, reparations,
     cessionCells: Object.values(cessionByLoser).reduce((n, x) => n + x, 0),
-    exhaustion: [...winners, ...losers].map((id) => ({ stateId: id, side: winners.includes(id) ? "winner" : "loser", lost: cas[id]?.lost ?? 0, before: cas[id]?.before ?? 0, moraleDelta: r.moraleDelta?.[id] ?? 0 })),
+    exhaustion: [...winners, ...losers].map((id) => ({ stateId: id, side: winners.includes(id) ? "winner" : "loser", lost: cas[id]?.lost ?? 0, before: cas[id]?.before ?? 0, moraleDelta: r.moraleDelta?.[id] ?? 0, supportDelta: r.supportDelta?.[id] ?? 0, support: supportOf(map.pack.states[id]) })),
   };
 }
 

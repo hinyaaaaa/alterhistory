@@ -11,6 +11,8 @@ import { createRandom } from "../core/random.js";
 import { makeCommand } from "../core/edit/commands.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
 import { planNextCollapse } from "../core/sim/collapse.js";
+import { leaderOf } from "../core/edit/alliances.js";
+import { planSetVassal, planReleaseVassal, vassalInfo } from "../core/edit/vassals.js";
 import { planMergeStates } from "../core/edit/sovereignty.js";
 import { strikeEffects } from "../core/sim/nuclear.js";
 import { planDraftNuclearOp, planCancelNuclearOp, planExecuteNuclearOp, listNuclearOps, nuclearStock } from "../core/sim/nuclear.js";
@@ -102,8 +104,8 @@ export function createSimActions({ store, renderer }) {
     // --- 同盟 ---
     listAlliances() { return withMap((map) => listAlliances(map)) ?? []; },
     alliancesOf(stateId) { return withMap((map) => alliancesOf(map, stateId)) ?? []; },
-    createAlliance(name, memberIds, bond = "standard") {
-      return withMap((map) => safeRun("同盟の結成", () => { const r = planCreateAlliance(map, name, memberIds, currentDate(), bond); commitOrThrow(r.command); return r.id; }));
+    createAlliance(name, memberIds, bond = "standard", leader = null) {
+      return withMap((map) => safeRun("同盟の結成", () => { const r = planCreateAlliance(map, name, memberIds, currentDate(), bond, leader); commitOrThrow(r.command); return r.id; }));
     },
     editAlliance(id, patch) { withMap((map) => safeRun("同盟の編集", () => commitOrThrow(planEditAlliance(map, id, patch)))); },
     dissolveAlliance(id) { withMap((map) => safeRun("同盟の解消", () => commitOrThrow(planDissolveAlliance(map, id, currentDate())))); },
@@ -156,6 +158,11 @@ export function createSimActions({ store, renderer }) {
     /** 月が進むたびの、戦争の損害の展開（時間経過）。崩壊した国名を返す */
     advanceWars(date) { return withMap((map) => { const c = planAdvanceWars(map, date); if (c) store.commit(c); return c ? runCollapses() : []; }) ?? []; },
     runCollapses,
+    allianceLeader(a) { return leaderOf(a); },
+    // --- 従属関係（傀儡・保護国・属国） ---
+    vassalInfo(stateId) { return withMap((map) => vassalInfo(map, stateId)) ?? null; },
+    setVassal(vassalId, overlordId, kind) { withMap((map) => safeRun("従属関係", () => commitOrThrow(planSetVassal(map, vassalId, overlordId, kind, currentDate())))); },
+    releaseVassal(vassalId) { withMap((map) => safeRun("独立", () => commitOrThrow(planReleaseVassal(map, vassalId)))); },
     // --- 核作戦（立案→実行。通常の戦争では使われない） ---
     nuclearOps() { return withMap((map) => listNuclearOps(map)) ?? []; },
     strikeEstimate(stateId, warheads) { return withMap((map) => strikeEffects(map.pack.states[stateId]?.techLevel ?? 3, warheads)); },

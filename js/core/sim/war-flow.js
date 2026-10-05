@@ -2,6 +2,7 @@
 // 純粋ロジック層：DOM に依存しない。
 import { regimentsOf } from "./military.js";
 import { forceHeadcount } from "./units.js";
+import { vassalInfo, vassalsOf, VASSAL_BY_KEY } from "../edit/vassals.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -39,6 +40,20 @@ export function expandWithAllies(map, attackers, defenders) {
     }
     if (!changed) break;
   }
+  // 従属国：宗主国が戦えば、傀儡と属国は従って参戦する。保護国は、宗主国が守る戦争にだけ参戦する。宗主国が攻められれば従属国も守る
+  for (let round = 0; round < 3; round++) {
+    let changed = false;
+    for (const [mine, side, label, offensive] of [[A, "attacker", "攻撃側", true], [D, "defender", "防衛側", false]]) {
+      for (const o of [...mine]) for (const v of vassalsOf(map, o)) {
+        if (A.has(v.stateId) || D.has(v.stateId)) continue;
+        if (offensive && !VASSAL_BY_KEY[v.kind].joinsOffensive) continue;
+        mine.add(v.stateId); joined.push({ id: v.stateId, side, alliance: `${VASSAL_BY_KEY[v.kind].label}（宗主国に従う）` }); changed = true;
+      }
+      // 従属国が攻められたら、宗主国も守る（防衛側にいる従属国の宗主国が、まだ参戦していなければ）
+      if (!offensive) for (const v of [...mine]) { const info = vassalInfo(map, v); if (info && !A.has(info.overlord) && !D.has(info.overlord)) { D.add(info.overlord); joined.push({ id: info.overlord, side: "defender", alliance: "宗主国として従属国を守る" }); changed = true; } }
+    }
+    if (!changed) break;
+  }
   return { attackers: [...A], defenders: [...D], joined };
 }
 
@@ -65,7 +80,7 @@ export function estimateDurationMonths(map, attackers, defenders, result, rnd) {
   const closeness = 1 + (1 - clamp(result.decisiveness ?? 0.5, 0, 1)) * 1.2;
   const world = ids.length >= 5 ? 1.6 : 1;
   const base = (2 + scale * 2.5) * terrain * closeness * world;
-  return clamp(Math.round(base * rnd.float(0.75, 1.25)), 1, 96);
+  return clamp(Math.round(base * rnd.float(0.75, 1.25)), 1, 120);
 }
 
 // ---- 講和地 ----

@@ -10,6 +10,9 @@
 import { advanceMonth, createWorldTime } from "../core/sim/time.js";
 import { planAnnualUpdate } from "../core/sim/world.js";
 import { planNextCollapse } from "../core/sim/collapse.js";
+import { planTribute } from "../core/edit/vassals.js";
+import { convert } from "../core/sim/currency.js";
+import { getFinance } from "../core/sim/trade.js";
 import { createRandom } from "../core/random.js";
 
 const DEFAULT_MS_PER_MONTH = (2 * 60 * 1000) / 12; // 既定: 1年=2分 → 1ヶ月=10秒
@@ -28,6 +31,7 @@ export function createTimeActions({ store, renderer, simActions = null }) {
     if (yearChanged) {
       const cmd = planAnnualUpdate(map, rates);
       if (cmd) store.commit(cmd);
+      { const tc = planTribute(store.getState().map, (st) => getFinance(st).treasury, convert); if (tc) store.commit(tc); } // 従属国の貢納
       // 人口の大部分を失った国は崩壊する（無くなるまで繰り返す）
       for (let guard = 0; guard < 8; guard++) {
         const m = store.getState().map; const c = planNextCollapse(m, time);

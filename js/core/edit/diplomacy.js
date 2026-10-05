@@ -106,7 +106,10 @@ export function crossPairs(listA, listB) { const out = []; for (const a of listA
 export function simpleRelation(map, a, b) {
   const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt);
   if (wars.some((w) => (w.attackers.includes(a) && w.defenders.includes(b)) || (w.attackers.includes(b) && w.defenders.includes(a)))) return "hostile";
+  const va = map.pack.states[a]?.vassal, vb = map.pack.states[b]?.vassal;
+  if (va && va.overlord === b && map.pack.states[a] && !map.pack.states[a].removed) return "vassal";   // a は b に従属している
+  if (vb && vb.overlord === a && map.pack.states[b] && !map.pack.states[b].removed) return "overlord"; // a は b の宗主国
   if ((map.ext?.data?.alliances ?? []).some((al) => !al.dissolvedAt && al.members.includes(a) && al.members.includes(b))) return "alliance";
   return "none";
 }
-export const SIMPLE_LABEL = Object.freeze({ alliance: "同盟", hostile: "敵対", none: "中立" });
+export const SIMPLE_LABEL = Object.freeze({ alliance: "同盟", hostile: "敵対", none: "中立", vassal: "従属", overlord: "宗主" });

@@ -64,6 +64,7 @@ function peaceTermsOfFactory(namer) {
     cessions: (t.cessions ?? []).map((c) => ({ name: c.name ?? "", from: namer.state(c.fromStateId), to: namer.state(c.toStateId), cells: c.cells ?? 0, burgs: c.burgs ?? [] })),
     reparations: (t.reparations && Array.isArray(t.reparations) ? t.reparations : []).map((r) => ({ from: namer.state(r.fromStateId), to: namer.state(r.toStateId), amount: r.amount, currency: r.currency ?? null, received: r.received ?? null, receivedCurrency: r.receivedCurrency ?? null })),
     annex: (t.annex ?? []).map((x) => ({ from: namer.state(x.fromStateId), to: namer.state(x.toStateId) })),
+    vassalize: (t.vassalize ?? []).map((x) => ({ from: namer.state(x.fromStateId), to: namer.state(x.toStateId), kind: { puppet: "傀儡", protectorate: "保護国", vassal: "属国" }[x.kind] ?? x.kind })),
     // 旧形式
     cededProvinces: (t.provinceIds ?? []).map((id) => namer.province(id)), cededUnaffiliatedRegions: (t.regionCells ?? []).length,
     cededTo: t.toStateId != null ? namer.state(t.toStateId) : null, legacyReparations: typeof t.reparations === "number" ? t.reparations : 0,
@@ -530,10 +531,11 @@ export function chronicleToMarkdown(ch) {
     const pt = wr.peaceTerms;
     if (pt) {
       if (pt.cessions?.length || pt.reparations?.length || pt.annex?.length || pt.name) {
-        L.push(`- 講和条約: ${pt.name ?? "—"}（${{ standard: "通常の講和", white: "白紙和平", annex: "全面降伏" }[pt.kind] ?? pt.kind}${pt.venue ? `・講和地 ${pt.venue}` : ""}）`);
+        L.push(`- 講和条約: ${pt.name ?? "—"}（${{ standard: "通常の講和", white: "白紙和平", vassal: "従属化", annex: "全面降伏" }[pt.kind] ?? pt.kind}${pt.venue ? `・講和地 ${pt.venue}` : ""}）`);
         for (const c of pt.cessions) L.push(`  - 割譲: ${c.name || "区画"}（${c.cells}セル）${c.from} → ${c.to}`);
         for (const r of pt.reparations) L.push(`  - 賠償: ${r.from} が ${r.amount} ${r.currency ?? ""} → ${r.to} が ${r.received ?? "?"} ${r.receivedCurrency ?? ""}`);
         for (const x of pt.annex) L.push(`  - 併合: ${x.from} → ${x.to}`);
+        for (const x of pt.vassalize ?? []) L.push(`  - 従属: ${x.from} は ${x.to} の${x.kind}`);
         if (pt.notes) L.push(`  - 条件: ${pt.notes}`);
       } else L.push(`- 講和: 割譲 ${pt.cededProvinces.join("、") || "なし"} → ${pt.cededTo}${pt.legacyReparations ? ` / 賠償 ${pt.legacyReparations}` : ""}`);
     }
