@@ -100,7 +100,7 @@ const tw = open("treaty");
 check("講和条約ウィンドウに戦争・条約名・渡る量の表が出る", !!tw.querySelector(".treaty-form") && (!!tw.querySelector(".wo-impact table") || tw.textContent.includes("各国の消耗")));
 const ww = open("war");
 [...ww.querySelectorAll(".win-list button")].find((b) => b.textContent.includes(out.name))?.click(); // 戦争を選ぶと詳細（戦況）が出る
-check("戦争ウィンドウに戦況バーがある", ww.querySelectorAll(".wo-bar-wrap").length === 4);
+check("戦争ウィンドウに戦況バーがある", ww.querySelectorAll(".wo-bar-wrap").length === 5);
 const dw = open("diplomacy");
 check("外交一覧は同盟・敵対・中立だけで、Neutrals は出ない", !dw.textContent.includes("Neutrals") && dw.textContent.includes("敵対"));
 check("同盟の拘束力を選べる", !!dw.querySelector(".bond-picker select"));

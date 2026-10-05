@@ -3547,13 +3547,17 @@
   var AIR = ["air"];
   var SEA = ["navy"];
   var BASE_MORALE = 70;
+  var BASE_SUPPORT = 70;
+  var supportOf = (state) => clamp2(state?.support ?? BASE_SUPPORT, 0, 100);
   var WAR_TYPES = Object.freeze({
     limited: {
       key: "limited",
       label: "\u9650\u5B9A\u6226\uFF08\u56FD\u5883\u7D1B\u4E89\uFF09",
-      lossScale: 0.55,
-      popScale: 0.4,
-      duration: 0.5,
+      weary: 0.3,
+      capitalFall: 0.2,
+      lossScale: 0.3,
+      popScale: 0.35,
+      duration: 0.25,
       scoreScale: 0.4,
       allMuster: false,
       desc: "\u56FD\u5883\u4ED8\u8FD1\u306E\u5C0F\u898F\u6A21\u306A\u885D\u7A81\u3002\u640D\u5BB3\u3082\u671F\u9593\u3082\u5C0F\u3055\u304F\u3001\u8981\u6C42\u3067\u304D\u308B\u3082\u306E\u3082\u5C0F\u3055\u3044\u3002"
@@ -3561,9 +3565,11 @@
     conventional: {
       key: "conventional",
       label: "\u901A\u5E38\u6226",
-      lossScale: 1,
+      weary: 1,
+      capitalFall: 1,
+      lossScale: 0.75,
       popScale: 1,
-      duration: 1,
+      duration: 0.8,
       scoreScale: 0.8,
       allMuster: false,
       desc: "\u62DB\u96C6\u3057\u305F\u90E8\u968A\u3069\u3046\u3057\u306E\u6B63\u898F\u6226\u3002\u6A19\u6E96\u7684\u306A\u640D\u5BB3\u3068\u671F\u9593\u3002"
@@ -3571,7 +3577,9 @@
     total: {
       key: "total",
       label: "\u7DCF\u529B\u6226",
-      lossScale: 1.3,
+      weary: 0.8,
+      capitalFall: 1.3,
+      lossScale: 1.2,
       popScale: 1.6,
       duration: 1.3,
       scoreScale: 1,
@@ -3581,7 +3589,9 @@
     asymmetric: {
       key: "asymmetric",
       label: "\u975E\u5BFE\u79F0\u6226\uFF08\u30B2\u30EA\u30E9\u30FB\u5360\u9818\u6226\uFF09",
-      lossScale: 1,
+      weary: 1.4,
+      capitalFall: 0,
+      lossScale: 0.9,
       popScale: 1.3,
       duration: 2.2,
       scoreScale: 0.5,
@@ -3616,11 +3626,13 @@
       sea: sumUnits(state, SEA, regs) * m,
       air: sumUnits(state, AIR, regs) * m,
       manpower: regs.reduce((n, r) => n + forceHeadcount({ ...r.u, nuclear: 0 }), 0),
-      morale: moraleOf(state)
+      morale: moraleOf(state) * (0.8 + 0.2 * supportOf(state) / 100),
+      // 民意が低いほど、士気は実際には振るわない
+      support: supportOf(state)
     };
   }
   function sideStrength(map, ids2, muster = null) {
-    const out = { land: 0, sea: 0, air: 0, manpower: 0, morale: 0 };
+    const out = { land: 0, sea: 0, air: 0, manpower: 0, morale: 0, support: 0 };
     let wm = 0;
     for (const id of ids2) {
       const st = map.pack.states[id];
@@ -3631,14 +3643,16 @@
       out.air += s.air;
       out.manpower += s.manpower;
       out.morale += s.morale * Math.max(1, s.manpower);
+      out.support += s.support * Math.max(1, s.manpower);
       wm += Math.max(1, s.manpower);
     }
     out.morale = wm ? out.morale / wm : BASE_MORALE;
+    out.support = wm ? out.support / wm : BASE_SUPPORT;
     return out;
   }
   function compareSides(a, b) {
     const share = (x, y) => x + y <= 0 ? 0.5 : x / (x + y);
-    return { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale) };
+    return { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale), support: share(a.support ?? BASE_SUPPORT, b.support ?? BASE_SUPPORT) };
   }
   function sideDoctrine(map, ids2) {
     const acc = { attack: 0, defense: 0, noise: 0, ownLoss: 0, enemyLoss: 0, speed: 0, moraleHit: 0 };
@@ -3656,7 +3670,7 @@
   }
   function edgeOf(cmp, atk, def) {
     const score = 0.5 * cmp.land + 0.2 * cmp.air + 0.15 * cmp.sea + 0.15 * cmp.morale;
-    return score - 0.5 + (cmp.air - 0.5) * 0.1 + (atk.attack - def.defense) * 0.5;
+    return 0.6 * (score - 0.5 + (cmp.air - 0.5) * 0.1) + (atk.attack - def.defense) * 0.5;
   }
   function verdictOf(edge, band = 0.03) {
     const winner = Math.abs(edge) < band ? "stalemate" : edge > 0 ? "attacker" : "defender";
@@ -3671,8 +3685,9 @@
     const m = T.allMuster ? null : muster;
     const { aStrength: A, dStrength: D, compare: cmp } = previewWar(map, attackers, defenders, m);
     const da = sideDoctrine(map, attackers), dd = sideDoctrine(map, defenders);
-    const noiseAmp = 0.08 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1);
-    const noise = rnd.float(-noiseAmp, noiseAmp);
+    const noiseAmp = 0.24 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1);
+    const lopsided = 1 - 0.7 * Math.pow(2 * cmp.land - 1, 2);
+    const noise = rnd.float(-noiseAmp * lopsided, noiseAmp * lopsided);
     let edge = edgeOf(cmp, da, dd) + noise;
     let strongIsAttacker = A.land >= D.land;
     if (T.key === "asymmetric") {
@@ -3685,10 +3700,11 @@
           if (h[i] >= 55) rough++;
         }
       }
-      const guerrilla = 0.08 + 0.12 * (tot ? rough / tot : 0);
-      edge = edge * 0.4 + (strongIsAttacker ? -guerrilla : guerrilla);
+      const guerrilla = 0.012 + 0.05 * (tot ? rough / tot : 0);
+      const gap = Math.min(1, Math.abs(2 * cmp.land - 1) * 3);
+      edge = edge * 0.7 + (strongIsAttacker ? -guerrilla : guerrilla) * gap;
     }
-    const verdict = verdictOf(edge, T.key === "asymmetric" ? 0.07 : 0.03);
+    const verdict = verdictOf(edge, T.key === "asymmetric" ? 0.05 : 0.015);
     const { winner, decisiveness } = verdict;
     const base = (0.12 + (1 - decisiveness) * 0.12) * T.lossScale;
     const lossFor = (isWinner) => clamp2(isWinner ? base * 0.5 : base * (1 + decisiveness), 0.02, 0.6);
@@ -3715,15 +3731,76 @@
     };
     apply(attackers, aLoss, winner === "attacker", "attacker");
     apply(defenders, dLoss, winner === "defender", "defender");
-    const warScore = winner === "stalemate" ? 0 : Math.round(clamp2(100 * (0.2 + 0.8 * decisiveness) * T.scoreScale, 5, 100));
-    return { winner, decisiveness, warScore, type: T.key, compare: cmp, aStrength: A, dStrength: D, noise, losses, casualties, moraleDelta, popLossShare, doctrine: { attacker: da, defender: dd } };
+    const dominance = clamp2(Math.abs(edge) * 6, 0, 1);
+    const warScore = winner === "stalemate" ? 0 : Math.round(clamp2(100 * (0.15 + 0.85 * dominance) * T.scoreScale, 5, 100));
+    return { winner, decisiveness, dominance, warScore, type: T.key, compare: cmp, aStrength: A, dStrength: D, noise, losses, casualties, moraleDelta, popLossShare, doctrine: { attacker: da, defender: dd } };
+  }
+  function applyVictoryConditions(map, result, { attackers, defenders, type, supportDelta, rnd }) {
+    const T = warTypeOf(type);
+    let { winner, warScore } = result;
+    const moraleDelta = { ...result.moraleDelta };
+    const winners = winner === "defender" ? defenders : attackers, losers = winner === "defender" ? attackers : defenders;
+    let victory = { type: winner === "stalemate" ? "stalemate" : "superiority", text: winner === "stalemate" ? "\u6C7A\u7740\u3064\u304B\u305A\uFF08\u81A0\u7740\uFF09" : "\u6226\u529B\u30FB\u58EB\u6C17\u306E\u512A\u4F4D\u306B\u3088\u308B\u52DD\u5229" };
+    let capitalFall = null, durationFactor = 1;
+    const finalSupport = (id) => supportOf(map.pack.states[id]) + (supportDelta?.[id] ?? 0);
+    if (winner !== "stalemate") {
+      const dom = result.dominance ?? result.decisiveness;
+      const dist = distanceFrom(map, losers, winners);
+      const maxD = Math.max(1, ...dist.values());
+      let best = null;
+      for (const L of losers) {
+        const cap = map.pack.burgs[map.pack.states[L]?.capital];
+        if (!cap || cap.removed) continue;
+        const d = dist.get(cap.cell);
+        if (d == null) continue;
+        const p = clamp2((0.05 + dom * 0.75 - 0.45 * (d / maxD)) * T.capitalFall, 0, 0.85);
+        if (rnd.next() < p && (!best || d < best.d)) best = { d, stateId: L, burgId: cap.i, place: cap.name };
+      }
+      if (best) {
+        capitalFall = { stateId: best.stateId, burgId: best.burgId, place: best.place };
+        victory = { type: "capital", text: `\u9996\u90FD${best.place}\u306E\u9665\u843D\u306B\u3088\u308B\u6C7A\u5B9A\u7684\u52DD\u5229`, stateId: best.stateId, burgId: best.burgId };
+        warScore = clamp2(warScore + 25, 5, 100);
+        moraleDelta[best.stateId] = (moraleDelta[best.stateId] ?? 0) - 20;
+        durationFactor = 0.75;
+      } else {
+        const frac = Math.max(...losers.map((L) => result.casualties?.[L] && result.casualties[L].before > 0 ? result.casualties[L].lost / result.casualties[L].before : 0));
+        if (frac >= 0.3 && result.decisiveness >= 0.4) {
+          victory = { type: "attrition", text: "\u6557\u8005\u306E\u5175\u529B\u304C\u58CA\u6EC5\u3057\u305F\uFF08\u52D5\u54E1\u5175\u529B\u306E3\u5272\u4EE5\u4E0A\u3092\u55AA\u5931\uFF09" };
+          warScore = clamp2(warScore + 10, 5, 100);
+        }
+      }
+    } else {
+      const weary = (ids2) => ids2.filter((id) => finalSupport(id) <= 15);
+      const aw = weary(attackers).length > 0, dw = weary(defenders).length > 0;
+      if (aw !== dw) {
+        winner = aw ? "defender" : "attacker";
+        victory = { type: "exhaustion", text: `${aw ? "\u653B\u6483\u5074" : "\u9632\u885B\u5074"}\u306E\u6C11\u610F\u304C\u5C3D\u304D\u3001\u6226\u4E89\u3092\u7D9A\u3051\u3089\u308C\u306A\u304F\u306A\u3063\u305F` };
+        warScore = Math.round(25 * T.scoreScale + 5);
+      }
+    }
+    return { victory, capitalFall, winner, warScore, moraleDelta, durationFactor };
+  }
+  function planSupportDeltas(result, { attackers, defenders, months, type }) {
+    const T = warTypeOf(type), out = {};
+    const strongIsAttacker = (result.aStrength?.land ?? 0) >= (result.dStrength?.land ?? 0);
+    for (const [ids2, side] of [[attackers, "attacker"], [defenders, "defender"]]) {
+      for (const id of ids2) {
+        const lost = result.losses?.[id] ?? 0;
+        let d = -(lost * (side === "attacker" ? 55 : 50) + months * (side === "attacker" ? 0.3 : 0.18) * T.weary);
+        if (side === "defender") d += 6;
+        if (T.key === "asymmetric" && side === "attacker" === strongIsAttacker) d -= months * 0.35;
+        if (result.winner === side) d += 8;
+        out[id] = Math.round(d);
+      }
+    }
+    return out;
   }
   function reevaluateWar(map, war) {
     const r = war.result;
     if (!r) return null;
     const { aStrength: A, dStrength: D, compare } = previewWar(map, war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null);
     const edge = edgeOf(compare, r.doctrine?.attacker ?? sideDoctrine(map, war.attackers), r.doctrine?.defender ?? sideDoctrine(map, war.defenders)) + (r.noise ?? 0);
-    return { ...r, ...verdictOf(edge, r.type === "asymmetric" ? 0.07 : 0.03), compare, aStrength: A, dStrength: D };
+    return { ...r, ...verdictOf(edge, r.type === "asymmetric" ? 0.05 : 0.015), compare, aStrength: A, dStrength: D };
   }
   function applyLossFraction(units, fraction) {
     const out = { ...units };
@@ -3799,7 +3876,7 @@
     massassault: { win: ["\u5927\u5175\u529B\u3092\u6CE2\u72B6\u306B\u6295\u5165\u3057\u3001\u640D\u5BB3\u3092\u3044\u3068\u308F\u305A\u7A81\u7834\u3057\u305F", "\u6570\u306E\u512A\u4F4D\u3067\u6575\u3092\u62BC\u3057\u5207\u3063\u305F"], lose: ["\u5927\u91CF\u306E\u640D\u8017\u3092\u51FA\u3057\u3001\u653B\u52E2\u306F\u9813\u632B\u3057\u305F"] },
     balanced: { win: ["\u5404\u5175\u79D1\u3092\u9023\u643A\u3055\u305B\u3001\u5805\u5B9F\u306B\u52DD\u5229\u3057\u305F", "\u5747\u8861\u306E\u53D6\u308C\u305F\u904B\u7528\u3067\u512A\u4F4D\u3092\u4FDD\u3063\u305F"], lose: ["\u6C7A\u3081\u624B\u3092\u6B20\u304D\u3001\u5F8C\u9000\u3057\u305F"] }
   };
-  function generateBattleLog(map, { attackers, defenders, result, startedAt, durationMonths }, rnd, addMonths2) {
+  function generateBattleLog(map, { attackers, defenders, result, startedAt, durationMonths, capitalFall = null }, rnd, addMonths2) {
     const n = clamp2(Math.round(2 + Math.log10(1 + (result.aStrength.manpower + result.dStrength.manpower)) * 1.1 + durationMonths / 8), 2, 9);
     const winnerSide = result.winner === "defender" ? "defender" : "attacker";
     const pWin = result.winner === "stalemate" ? 0.5 : clamp2(0.55 + result.decisiveness * 0.35, 0.55, 0.9);
@@ -3839,6 +3916,21 @@
         winnerState: wId,
         loserState: lId,
         text: `${officialName(map.pack.states[wId])}\u8ECD\uFF1A${rnd.pick(story.win)}\uFF08${officialName(map.pack.states[lId])}\u8ECD\uFF1A${rnd.pick((DOCTRINE_STORY[doctrineOf(map.pack.states[lId]).key] ?? DOCTRINE_STORY.balanced).lose)}\uFF09`
+      });
+    }
+    if (capitalFall) {
+      const w = result.winner === "defender" ? defenders : attackers, l = capitalFall.stateId;
+      log.push({
+        date: addMonths2(startedAt, durationMonths),
+        name: `${capitalFall.place}\u306E\u9665\u843D`,
+        place: capitalFall.place,
+        burgId: capitalFall.burgId,
+        winner: result.winner,
+        attackerState: attackers[0],
+        defenderState: defenders[0],
+        winnerState: w[0],
+        loserState: l,
+        text: `${officialName(map.pack.states[w[0]])}\u8ECD\u304C${officialName(map.pack.states[l])}\u306E\u9996\u90FD${capitalFall.place}\u3092\u653B\u7565\u3057\u3001${officialName(map.pack.states[l])}\u306F\u964D\u4F0F\u3092\u8FEB\u3089\u308C\u305F`
       });
     }
     return log;
@@ -3989,13 +4081,82 @@
   function simpleRelation(map, a, b) {
     const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt);
     if (wars.some((w) => w.attackers.includes(a) && w.defenders.includes(b) || w.attackers.includes(b) && w.defenders.includes(a))) return "hostile";
+    const va = map.pack.states[a]?.vassal, vb = map.pack.states[b]?.vassal;
+    if (va && va.overlord === b && map.pack.states[a] && !map.pack.states[a].removed) return "vassal";
+    if (vb && vb.overlord === a && map.pack.states[b] && !map.pack.states[b].removed) return "overlord";
     if ((map.ext?.data?.alliances ?? []).some((al) => !al.dissolvedAt && al.members.includes(a) && al.members.includes(b))) return "alliance";
     return "none";
   }
-  var SIMPLE_LABEL = Object.freeze({ alliance: "\u540C\u76DF", hostile: "\u6575\u5BFE", none: "\u4E2D\u7ACB" });
+  var SIMPLE_LABEL = Object.freeze({ alliance: "\u540C\u76DF", hostile: "\u6575\u5BFE", none: "\u4E2D\u7ACB", vassal: "\u5F93\u5C5E", overlord: "\u5B97\u4E3B" });
+
+  // js/core/edit/vassals.js
+  var isLive6 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var VASSAL_KINDS = Object.freeze([
+    { key: "puppet", label: "\u5080\u5121", tribute: 0.2, joinsOffensive: true, desc: "\u5B97\u4E3B\u56FD\u306E\u6226\u4E89\u306B\u5FC5\u305A\u5F93\u3046\u3002\u8CA2\u7D0D\u304C\u91CD\u3044\u3002" },
+    { key: "protectorate", label: "\u4FDD\u8B77\u56FD", tribute: 0.08, joinsOffensive: false, desc: "\u5B97\u4E3B\u56FD\u304C\u5B88\u308B\u3002\u5B97\u4E3B\u56FD\u304C\u653B\u3081\u308B\u6226\u4E89\u306B\u306F\u52A0\u308F\u3089\u305A\u3001\u5B88\u308B\u6226\u4E89\u306B\u306F\u53C2\u6226\u3059\u308B\u3002" },
+    { key: "vassal", label: "\u5C5E\u56FD", tribute: 0.12, joinsOffensive: true, desc: "\u5185\u653F\u306F\u4FDD\u3064\u304C\u3001\u5B97\u4E3B\u56FD\u306E\u6226\u4E89\u306B\u5F93\u3044\u3001\u8CA2\u7D0D\u3092\u7D0D\u3081\u308B\u3002" }
+  ]);
+  var VASSAL_BY_KEY = Object.fromEntries(VASSAL_KINDS.map((k) => [k.key, k]));
+  function vassalInfo(map, id) {
+    const st = map.pack.states[id], v = st?.vassal;
+    if (!v || !isLive6(st) || !isLive6(map.pack.states[v.overlord]) || !VASSAL_BY_KEY[v.kind]) return null;
+    return { overlord: v.overlord, kind: v.kind };
+  }
+  function vassalsOf(map, overlordId) {
+    return map.pack.states.filter((s) => isLive6(s) && vassalInfo(map, s.i)?.overlord === overlordId).map((s) => ({ stateId: s.i, kind: s.vassal.kind }));
+  }
+  function topOverlord(map, id) {
+    let cur = id;
+    const seen = /* @__PURE__ */ new Set();
+    while (!seen.has(cur)) {
+      seen.add(cur);
+      const v = vassalInfo(map, cur);
+      if (!v) break;
+      cur = v.overlord;
+    }
+    return cur;
+  }
+  function planSetVassal(map, vassalId, overlordId, kind, date) {
+    const V = map.pack.states[vassalId], O = map.pack.states[overlordId];
+    if (!isLive6(V) || !isLive6(O)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (vassalId === overlordId) throw new Error("\u81EA\u56FD\u3092\u5F93\u5C5E\u3055\u305B\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093");
+    if (!VASSAL_BY_KEY[kind]) throw new Error("\u5F93\u5C5E\u306E\u7A2E\u985E\u306F \u5080\u5121\u30FB\u4FDD\u8B77\u56FD\u30FB\u5C5E\u56FD \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if (topOverlord(map, overlordId) === vassalId) throw new Error("\u5B97\u4E3B\u56FD\u304C\u3059\u3067\u306B\u76F8\u624B\u306B\u5F93\u5C5E\u3057\u3066\u3044\u307E\u3059\uFF08\u5F93\u5C5E\u95A2\u4FC2\u304C\u8F2A\u306B\u306A\u308A\u307E\u3059\uFF09");
+    const cur = vassalInfo(map, vassalId);
+    if (cur && cur.overlord === overlordId && cur.kind === kind) return null;
+    const label = VASSAL_BY_KEY[kind].label;
+    return makeCommand(`${label}\u306B\u3059\u308B\uFF08${officialName(V)} \u2192 ${officialName(O)}\uFF09`, [], [setProps(V, { vassal: { overlord: overlordId, kind, since: date ?? null } })]);
+  }
+  function planReleaseVassal(map, vassalId) {
+    const V = map.pack.states[vassalId];
+    if (!isLive6(V) || !vassalInfo(map, vassalId)) throw new Error("\u5F93\u5C5E\u3057\u3066\u3044\u306A\u3044\u56FD\u3067\u3059");
+    return makeCommand(`\u72EC\u7ACB\u3055\u305B\u308B\uFF08${officialName(V)}\uFF09`, [], [setProps(V, { vassal: null })]);
+  }
+  function tributeParts(map, getTreasury, convert2) {
+    const parts = [];
+    for (const s of map.pack.states) {
+      const v = s && isLive6(s) ? vassalInfo(map, s.i) : null;
+      if (!v) continue;
+      const rate = VASSAL_BY_KEY[v.kind].tribute, t = Math.max(0, getTreasury(s)), amount = Math.round(t * rate * 100) / 100;
+      if (amount <= 0) continue;
+      parts.push({ from: s.i, to: v.overlord, amount, received: Math.round(convert2(map, s.i, v.overlord, amount) * 100) / 100 });
+    }
+    return parts;
+  }
+  function planTribute(map, getTreasury, convert2) {
+    const list = tributeParts(map, getTreasury, convert2);
+    if (!list.length) return null;
+    const delta = /* @__PURE__ */ new Map();
+    for (const t of list) {
+      delta.set(t.from, (delta.get(t.from) ?? 0) - t.amount);
+      delta.set(t.to, (delta.get(t.to) ?? 0) + t.received);
+    }
+    const parts = [...delta].map(([id, d]) => setProps(map.pack.states[id], { treasury: Math.round((getTreasury(map.pack.states[id]) + d) * 100) / 100 }));
+    return makeCommand("\u5F93\u5C5E\u56FD\u306E\u8CA2\u7D0D", [], parts);
+  }
 
   // js/core/sim/war-flow.js
-  var isLive6 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var clamp4 = (v, a, b) => Math.min(b, Math.max(a, v));
   var BONDS = Object.freeze([
     { key: "loose", label: "\u7DE9\u3084\u304B", desc: "\u6226\u4E89\u306B\u5DFB\u304D\u8FBC\u307E\u308C\u306A\u3044\u3002\u8CBF\u6613\u306E\u5C01\u9396\u3082\u5404\u56FD\u306E\u81EA\u7531\u3002" },
@@ -4012,7 +4173,7 @@
       for (const al of liveAlliances(map)) {
         const bond = bondOf(al);
         if (bond === "loose") continue;
-        const members = al.members.filter((m) => isLive6(map.pack.states[m]));
+        const members = al.members.filter((m) => isLive7(map.pack.states[m]));
         const inA = members.some((m) => A.has(m)), inD = members.some((m) => D.has(m));
         if (inA && inD) continue;
         const join = (set, side) => {
@@ -4024,6 +4185,27 @@
         };
         if (inD) join(D, "defender");
         if (inA && bond === "strict") join(A, "attacker");
+      }
+      if (!changed) break;
+    }
+    for (let round3 = 0; round3 < 3; round3++) {
+      let changed = false;
+      for (const [mine, side, label, offensive] of [[A, "attacker", "\u653B\u6483\u5074", true], [D, "defender", "\u9632\u885B\u5074", false]]) {
+        for (const o of [...mine]) for (const v of vassalsOf(map, o)) {
+          if (A.has(v.stateId) || D.has(v.stateId)) continue;
+          if (offensive && !VASSAL_BY_KEY[v.kind].joinsOffensive) continue;
+          mine.add(v.stateId);
+          joined.push({ id: v.stateId, side, alliance: `${VASSAL_BY_KEY[v.kind].label}\uFF08\u5B97\u4E3B\u56FD\u306B\u5F93\u3046\uFF09` });
+          changed = true;
+        }
+        if (!offensive) for (const v of [...mine]) {
+          const info = vassalInfo(map, v);
+          if (info && !A.has(info.overlord) && !D.has(info.overlord)) {
+            D.add(info.overlord);
+            joined.push({ id: info.overlord, side: "defender", alliance: "\u5B97\u4E3B\u56FD\u3068\u3057\u3066\u5F93\u5C5E\u56FD\u3092\u5B88\u308B" });
+            changed = true;
+          }
+        }
       }
       if (!changed) break;
     }
@@ -4050,7 +4232,7 @@
     const closeness = 1 + (1 - clamp4(result.decisiveness ?? 0.5, 0, 1)) * 1.2;
     const world = ids2.length >= 5 ? 1.6 : 1;
     const base = (2 + scale * 2.5) * terrain * closeness * world;
-    return clamp4(Math.round(base * rnd.float(0.75, 1.25)), 1, 96);
+    return clamp4(Math.round(base * rnd.float(0.75, 1.25)), 1, 120);
   }
   function stateRelationNone(map, a, b) {
     if (liveAlliances(map).some((al) => al.members.includes(a) && al.members.includes(b))) return false;
@@ -4060,13 +4242,13 @@
   function proposePeaceVenue(map, war, rnd) {
     const belligerents = [...war.attackers, ...war.defenders];
     const stalemate = war.result?.winner === "stalemate";
-    const burgs = map.pack.burgs.filter((b2) => b2 && b2.i && !b2.removed && isLive6(map.pack.states[b2.state]));
+    const burgs = map.pack.burgs.filter((b2) => b2 && b2.i && !b2.removed && isLive7(map.pack.states[b2.state]));
     let pool = [], role = "winner";
     if (!stalemate && war.result) {
       const winners = war.result.winner === "defender" ? war.defenders : war.attackers;
       pool = burgs.filter((b2) => winners.includes(b2.state));
     } else {
-      const neutralStates = new Set(map.pack.states.filter((s) => isLive6(s) && !belligerents.includes(s.i) && belligerents.every((x) => stateRelationNone(map, s.i, x))).map((s) => s.i));
+      const neutralStates = new Set(map.pack.states.filter((s) => isLive7(s) && !belligerents.includes(s.i) && belligerents.every((x) => stateRelationNone(map, s.i, x))).map((s) => s.i));
       pool = burgs.filter((b2) => neutralStates.has(b2.state));
       role = "mediator";
     }
@@ -4098,7 +4280,7 @@
   }
 
   // js/core/sim/sanctions.js
-  var isLive7 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function blockedPairs(map) {
     const set = /* @__PURE__ */ new Set();
     const add = (x, y) => set.add(x < y ? `${x}-${y}` : `${y}-${x}`);
@@ -4107,7 +4289,7 @@
     for (const w of wars) {
       for (const x of w.attackers) for (const y of w.defenders) add(x, y);
       for (const al of alliances) {
-        const M = al.members.filter((m) => isLive7(map.pack.states[m]));
+        const M = al.members.filter((m) => isLive8(map.pack.states[m]));
         for (const [mine, theirs] of [[w.attackers, w.defenders], [w.defenders, w.attackers]]) {
           if (!M.some((m) => mine.includes(m))) continue;
           for (const m of M) if (!w.attackers.includes(m) && !w.defenders.includes(m)) for (const y of theirs) add(m, y);
@@ -4142,7 +4324,7 @@
     Anarchy: { salesTax: 0, pollTax: 0 }
   });
   var FALLBACK_TAX = TAX_BASE.Monarchy;
-  var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive9 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var round22 = (v) => Math.round(v * 100) / 100;
   var clamp012 = (v) => Math.min(1, Math.max(0, Number.isFinite(+v) ? +v : 0));
   function getFinance(state) {
@@ -4166,7 +4348,7 @@
     const { biome, state, pop } = map.pack.cells;
     const isCoast = coastalTest(map);
     const sums = /* @__PURE__ */ new Map(), prod = /* @__PURE__ */ new Map();
-    for (const s of map.pack.states) if (isLive8(s)) {
+    for (const s of map.pack.states) if (isLive9(s)) {
       prod.set(s.i, Object.fromEntries(GOODS.map((g) => [g.id, 0])));
       sums.set(s.i, 0);
     }
@@ -4238,7 +4420,7 @@
     const adjacent = stateAdjacency(map);
     const diag = Math.hypot(map.meta.width || 1280, map.meta.height || 774);
     const ctx = { wars, adjacent, diag, blocked };
-    const live3 = map.pack.states.filter(isLive8);
+    const live3 = map.pack.states.filter(isLive9);
     const production = computeProduction(map);
     const info = /* @__PURE__ */ new Map();
     for (const s of live3) {
@@ -4300,8 +4482,74 @@
     return [...by.values()].map((e) => ({ ...e, goods: [...e.goods] })).sort((a, b) => b.exportValue + b.importValue - (a.exportValue + a.importValue));
   }
 
+  // js/core/edit/alliances.js
+  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var leaderOf = (a) => a?.members?.includes(a.leader) ? a.leader : a?.members?.[0] ?? null;
+  var bondKey = (a) => BOND_BY_KEY[a?.bond] ? a.bond : "standard";
+  function listAlliances(map) {
+    return map.ext?.data?.alliances ?? [];
+  }
+  function nextAllianceId(map) {
+    const list = listAlliances(map);
+    return list.length ? Math.max(...list.map((a) => a.id)) + 1 : 1;
+  }
+  function planCreateAlliance(map, name, memberIds, date, bond = "standard", leader = null) {
+    const uniq = [...new Set(memberIds)];
+    if (uniq.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
+    for (const id of uniq) if (!isLive10(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    if (!BOND_BY_KEY[bond]) throw new Error("\u540C\u76DF\u306E\u62D8\u675F\u529B\u306F \u7DE9\u3084\u304B\u30FB\u6A19\u6E96\u30FB\u5F37\u56FA \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if (leader != null && !uniq.includes(leader)) throw new Error("\u76DF\u4E3B\u306F\u52A0\u76DF\u56FD\u306E\u4E2D\u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq, bond, leader: leader ?? uniq[0], formedAt: date ?? null, dissolvedAt: null };
+    const pairs = [];
+    for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) pairs.push([uniq[i], uniq[j]]);
+    const before = listAlliances(map);
+    const write = (m, list) => {
+      const ext = ensureExt(m);
+      ext.data.alliances = list;
+      if (!list.length) delete ext.data.alliances;
+    };
+    return {
+      command: makeCommand(`\u540C\u76DF\u3092\u7D50\u6210\uFF08${alliance.name}\uFF09`, [], [{ apply: (m) => write(m, [...before, alliance]), revert: (m) => write(m, before) }, ...diplomacyParts(map, pairs, "Ally")]),
+      id: alliance.id
+    };
+  }
+  function planEditAlliance(map, allianceId, patch) {
+    const list = listAlliances(map);
+    const a = list.find((x) => x.id === allianceId);
+    if (!a) throw new Error("\u305D\u306E\u540C\u76DF\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const nextMembers = patch.members ? [...new Set(patch.members)] : a.members;
+    if (nextMembers.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
+    const nextName = patch.name !== void 0 ? patch.name : a.name;
+    const nextBond = patch.bond ?? bondKey(a);
+    const nextLeader = nextMembers.includes(patch.leader) ? patch.leader : nextMembers.includes(leaderOf(a)) ? leaderOf(a) : nextMembers[0];
+    if (patch.leader != null && !nextMembers.includes(patch.leader)) throw new Error("\u76DF\u4E3B\u306F\u52A0\u76DF\u56FD\u306E\u4E2D\u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if (!BOND_BY_KEY[nextBond]) throw new Error("\u540C\u76DF\u306E\u62D8\u675F\u529B\u306F \u7DE9\u3084\u304B\u30FB\u6A19\u6E96\u30FB\u5F37\u56FA \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if (nextName === a.name && nextBond === bondKey(a) && nextLeader === leaderOf(a) && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
+    const before = list;
+    const after = list.map((x) => x.id === allianceId ? { ...x, name: nextName, members: nextMembers, bond: nextBond, leader: nextLeader } : x);
+    const write = (m, v) => {
+      ensureExt(m).data.alliances = v;
+    };
+    return makeCommand("\u540C\u76DF\u3092\u7DE8\u96C6", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
+  }
+  function planDissolveAlliance(map, allianceId, date) {
+    const list = listAlliances(map);
+    const a = list.find((x) => x.id === allianceId);
+    if (!a) throw new Error("\u305D\u306E\u540C\u76DF\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (a.dissolvedAt) throw new Error("\u65E2\u306B\u89E3\u6D88\u3055\u308C\u3066\u3044\u307E\u3059");
+    const before = list;
+    const after = list.map((x) => x.id === allianceId ? { ...x, dissolvedAt: date ?? null } : x);
+    const write = (m, v) => {
+      ensureExt(m).data.alliances = v;
+    };
+    return makeCommand("\u540C\u76DF\u3092\u89E3\u6D88", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
+  }
+  function alliancesOf(map, stateId) {
+    return listAlliances(map).filter((a) => a.members.includes(stateId));
+  }
+
   // js/core/edit/wars.js
-  var isLive9 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive11 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function listWars(map) {
     return map.ext?.data?.wars ?? [];
   }
@@ -4334,7 +4582,7 @@
   function planDeclareWar(map, { name, attackers, defenders, date }) {
     const a = [...new Set(attackers)], d = [...new Set(defenders)];
     if (!a.length || !d.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
-    for (const id of [...a, ...d]) if (!isLive9(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of [...a, ...d]) if (!isLive11(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     if (a.some((id) => d.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
     const aNames = a.map((id) => map.pack.states[id].name), dNames = d.map((id) => map.pack.states[id].name);
     const explicit = String(name ?? "").trim();
@@ -4357,7 +4605,7 @@
   function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd, muster = null, type = "conventional" }) {
     const a0 = [...new Set(attackers)], d0 = [...new Set(defenders)];
     if (!a0.length || !d0.length) throw new Error("\u653B\u6483\u5074\u30FB\u9632\u5FA1\u5074\u3068\u30821\u30AB\u56FD\u4EE5\u4E0A\u5FC5\u8981\u3067\u3059");
-    for (const id of [...a0, ...d0]) if (!isLive9(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
+    for (const id of [...a0, ...d0]) if (!isLive11(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
     if (a0.some((id) => d0.includes(id))) throw new Error("\u540C\u3058\u56FD\u5BB6\u304C\u4E21\u9663\u55B6\u306B\u5165\u3063\u3066\u3044\u307E\u3059");
     const T = warTypeOf(type);
     const { attackers: a, defenders: d, joined } = expandWithAllies(map, a0, d0);
@@ -4371,9 +4619,17 @@
     const m = Object.keys(cleanMuster).length ? cleanMuster : null;
     const result = resolveWar(map, a, d, rnd, m, T.key);
     const speed = (result.doctrine.attacker.speed + result.doctrine.defender.speed) / 2;
-    const months = Math.max(1, Math.round(estimateDurationMonths(map, a, d, result, rnd) * speed * T.duration));
+    let months = Math.max(1, Math.round(estimateDurationMonths(map, a, d, result, rnd) * speed * T.duration));
+    const supportDelta = planSupportDeltas(result, { attackers: a, defenders: d, months, type: T.key });
+    const vic = applyVictoryConditions(map, result, { attackers: a, defenders: d, type: T.key, supportDelta, rnd });
+    if (vic.durationFactor !== 1) months = Math.max(1, Math.round(months * vic.durationFactor));
+    result.winner = vic.winner;
+    result.warScore = vic.warScore;
+    result.moraleDelta = vic.moraleDelta;
+    if (vic.winner !== "stalemate" && vic.victory.type === "exhaustion") result.decisiveness = Math.max(result.decisiveness, 0.2);
+    const supportDelta2 = planSupportDeltas(result, { attackers: a, defenders: d, months, type: T.key });
     const endsAt = addMonths(date, months);
-    const battles = generateBattleLog(map, { attackers: a, defenders: d, result, startedAt: date, durationMonths: months }, rnd, addMonths);
+    const battles = generateBattleLog(map, { attackers: a, defenders: d, result, startedAt: date, durationMonths: months, capitalFall: vic.capitalFall }, rnd, addMonths);
     const name = nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key });
     const war = {
       id: nextWarId(map),
@@ -4404,7 +4660,10 @@
         casualties: result.casualties,
         moraleDelta: result.moraleDelta,
         popLossShare: result.popLossShare,
-        losses: result.losses
+        losses: result.losses,
+        supportDelta: supportDelta2,
+        victory: vic.victory,
+        capitalFall: vic.capitalFall
       }
     };
     const parts = [];
@@ -4422,7 +4681,7 @@
     const m = war.muster && Object.keys(war.muster).length ? war.muster : null;
     for (const sidStr of Object.keys(r.losses ?? {})) {
       const id = Number(sidStr), st = map.pack.states[id];
-      if (!isLive9(st)) continue;
+      if (!isLive11(st)) continue;
       const f = r.losses[id] ?? 0;
       const step = 1 - Math.pow(1 - f, dq);
       for (const reg of mobilized(st, m)) parts.push(setProps(reg, { u: applyLossFraction(reg.u, step) }));
@@ -4430,6 +4689,8 @@
       const pop0 = (st.rural ?? 0) + (st.urban ?? 0);
       parts.push(setProps(st, {
         morale: Math.max(0, Math.min(100, (st.morale ?? 70) + (r.moraleDelta?.[id] ?? 0) * dq)),
+        support: Math.max(0, Math.min(100, supportOf(st) + (r.supportDelta?.[id] ?? 0) * dq)),
+        // 民意も、期間に均等に動く
         popPeak: Math.max(st.popPeak ?? 0, pop0),
         rural: Math.round((st.rural ?? 0) * (1 - pstep) * 100) / 100,
         urban: Math.round((st.urban ?? 0) * (1 - pstep) * 100) / 100
@@ -4517,7 +4778,7 @@
   }
   function estimatePeace(map, warId, { loserId, cellGroups, reparations = 0 }) {
     const loser = map.pack.states[loserId];
-    return peaceImpact(map, loserId, cellGroups, reparations, loser ? getFinance(loser).treasury : null);
+    return peaceImpact(map, loserId, cellGroups, reparations, loser ? wealthOf(loser) : null);
   }
   function planSetMuster(map, warId, muster) {
     const list = listWars(map);
@@ -4604,7 +4865,7 @@
     const byRegion = regions.map((cells, idx) => ({ type: "region", regionCells: cells, name: `\u672A\u7DE8\u5165\u5730\u57DF${idx + 1}\uFF08${cells.length}\u30BB\u30EB\uFF09`, cells: cells.length }));
     const capCells = /* @__PURE__ */ new Set();
     for (const st of map.pack.states) {
-      const cap = isLive9(st) ? map.pack.burgs[st.capital] : null;
+      const cap = isLive11(st) ? map.pack.burgs[st.capital] : null;
       if (cap && !cap.removed) capCells.add(cap.cell);
     }
     const provHasCapital = (pid) => {
@@ -4613,7 +4874,7 @@
     };
     return [...byProvince.filter((x) => !provHasCapital(x.provinceId)), ...byRegion.filter((x) => !x.regionCells.some((i) => capCells.has(i)))].sort((a, b) => b.cells - a.cells);
   }
-  var COST = { cellBase: 1, burg: 6, reparPer2pct: 1, annex: 100 };
+  var COST = { cellBase: 1, burg: 6, reparPer2pct: 1, annex: 100, vassal: { puppet: 60, protectorate: 45, vassal: 50 } };
   var capitalCellsOf = (map, ids2) => {
     const set = /* @__PURE__ */ new Set();
     for (const sid of ids2) {
@@ -4630,8 +4891,12 @@
     const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).length;
     return cells.length * (COST.cellBase + dens) + burgs * COST.burg;
   }
+  function wealthOf(state) {
+    const pop = (state?.rural ?? 0) + (state?.urban ?? 0);
+    return Math.max(getFinance(state).treasury, (state?.industry ?? 0) * 5 + pop * 0.2, 1);
+  }
   function reparationCost(map, fromId, amount) {
-    const t = Math.max(1, getFinance(map.pack.states[fromId]).treasury);
+    const t = wealthOf(map.pack.states[fromId]);
     return amount / t * 100 * 0.5 * COST.reparPer2pct;
   }
   function winnerShares(map, war) {
@@ -4639,10 +4904,11 @@
     const m = war.muster && Object.keys(war.muster).length ? war.muster : null;
     const w = {};
     let tot = 0;
+    const leaders = new Set((map.ext?.data?.alliances ?? []).filter((a) => !a.dissolvedAt && a.members.filter((x) => winners.includes(x)).length >= 2).map((a) => leaderOf(a)));
     for (const id of winners) {
       const st = map.pack.states[id];
-      const x = isLive9(st) ? previewWar(map, [id], [id], m).aStrength : null;
-      w[id] = x ? Math.max(1, x.land + x.sea + x.air) : 1;
+      const x = isLive11(st) ? previewWar(map, [id], [id], m).aStrength : null;
+      w[id] = (x ? Math.max(1, x.land + x.sea + x.air) : 1) * (leaders.has(id) ? 1.4 : 1);
       tot += w[id];
     }
     for (const id of winners) w[id] = tot ? w[id] / tot : 1 / winners.length;
@@ -4655,6 +4921,7 @@
     for (const c of terms.cessions ?? []) if (spent[c.toStateId] != null) spent[c.toStateId] += cessionCost(map, c.fromStateId, c.cells);
     for (const r of terms.reparations ?? []) if (spent[r.toStateId] != null && r.amount > 0) spent[r.toStateId] += reparationCost(map, r.fromStateId, r.amount);
     for (const x of terms.annex ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.annex;
+    for (const x of terms.vassalize ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.vassal[x.kind] ?? 50;
     return winners.map((id) => ({ stateId: id, share: shares[id], budget: Math.round(score * shares[id] * 10) / 10, spent: Math.round(spent[id] * 10) / 10 }));
   }
   function planSignTreaty(map, warId, terms, date, { enforceBudget = true, allowOngoing = false } = {}) {
@@ -4669,15 +4936,17 @@
     const cessions = kind === "standard" ? (terms.cessions ?? []).filter((c2) => c2.cells?.length) : [];
     const reparations = kind === "standard" ? (terms.reparations ?? []).filter((r) => r.amount > 0) : [];
     const annex = kind === "annex" ? terms.annex ?? [] : [];
-    for (const x of [...cessions, ...reparations, ...annex]) {
+    const vassalize = kind === "vassal" ? terms.vassalize ?? [] : [];
+    for (const x of vassalize) if (!VASSAL_BY_KEY[x.kind]) throw new Error("\u5F93\u5C5E\u306E\u7A2E\u985E\u306F \u5080\u5121\u30FB\u4FDD\u8B77\u56FD\u30FB\u5C5E\u56FD \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    for (const x of [...cessions, ...reparations, ...annex, ...vassalize]) {
       if (!all.includes(x.fromStateId) || !all.includes(x.toStateId)) throw new Error("\u6761\u7D04\u306E\u5F53\u4E8B\u56FD\u306F\u4EA4\u6226\u56FD\u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
-      if (!isLive9(map.pack.states[x.fromStateId]) || !isLive9(map.pack.states[x.toStateId])) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u304C\u542B\u307E\u308C\u3066\u3044\u307E\u3059");
+      if (!isLive11(map.pack.states[x.fromStateId]) || !isLive11(map.pack.states[x.toStateId])) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u304C\u542B\u307E\u308C\u3066\u3044\u307E\u3059");
       if (x.fromStateId === x.toStateId) throw new Error("\u540C\u3058\u56FD\u3069\u3046\u3057\u3067\u306F\u8981\u6C42\u3067\u304D\u307E\u305B\u3093");
     }
     const caps = capitalCellsOf(map, all);
     for (const c2 of cessions) if (c2.cells.some((i) => caps.has(i))) throw new Error("\u9996\u90FD\u3092\u542B\u3080\u5730\u57DF\u306F\u5272\u8B72\u3067\u304D\u307E\u305B\u3093");
     if (enforceBudget && war.result && winners.length) {
-      const rows = treatyBudget(map, war, { cessions, reparations, annex });
+      const rows = treatyBudget(map, war, { cessions, reparations, annex, vassalize });
       const over = rows.find((r) => r.spent > r.budget + 0.05);
       if (over) throw new Error(`${officialName(map.pack.states[over.stateId])}\u306E\u8981\u6C42\u304C\u6226\u4E89\u30B9\u30B3\u30A2\u3092\u8D85\u3048\u3066\u3044\u307E\u3059\uFF08\u4F7F\u7528 ${over.spent} / \u4E0A\u9650 ${over.budget}\uFF09`);
       if (annex.length && (war.result.warScore ?? 0) < 85) throw new Error("\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09\u3092\u6C42\u3081\u308B\u306B\u306F\u3001\u6226\u4E89\u30B9\u30B3\u30A2\u304C85\u4EE5\u4E0A\u306E\u6C7A\u5B9A\u7684\u306A\u52DD\u5229\u304C\u5FC5\u8981\u3067\u3059");
@@ -4700,8 +4969,13 @@
     }
     for (const [id, d] of delta) parts.push(setProps(map.pack.states[id], { treasury: Math.round((fin(id) + d) * 100) / 100 }));
     for (const x of annex) record.annex.push({ fromStateId: x.fromStateId, toStateId: x.toStateId });
+    record.vassalize = [];
+    for (const x of vassalize) {
+      parts.push(setProps(map.pack.states[x.fromStateId], { vassal: { overlord: x.toStateId, kind: x.kind, since: date } }));
+      record.vassalize.push({ fromStateId: x.fromStateId, toStateId: x.toStateId, kind: x.kind });
+    }
     const treatyName = uniqueTreatyName(map, terms.treatyName || `${war.name}\u306E\u8B1B\u548C\u6761\u7D04`);
-    const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, ...record, score: { total: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex }) : [] } };
+    const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, ...record, score: { total: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex, vassalize }) : [] } };
     const endDate = war.endsAt ?? date;
     const after = list.map((w) => w.id !== warId ? w : { ...w, endedAt: endDate, terms: full, treatyName, treatyVenue: terms.venue?.place ?? null });
     parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) });
@@ -4714,7 +4988,7 @@
   function planSignPeace(map, warId, terms, date) {
     const war = listWars(map).find((w) => w.id === warId);
     if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    if (!isLive9(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive11(map.pack.states[terms.toStateId])) throw new Error("\u5272\u8B72\u5148\u306E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     const { winners, losers } = peaceSides(war);
     if (!winners.includes(terms.toStateId) && !losers.includes(terms.toStateId)) throw new Error("\u53D7\u3051\u53D6\u308B\u56FD\u306F\u4EA4\u6226\u56FD\u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
     const c = map.pack.cells;
@@ -4754,8 +5028,8 @@
     const reparations = [], cessionByLoser = {};
     for (const L of losers) {
       const st = map.pack.states[L];
-      if (!isLive9(st)) continue;
-      const treasury = Math.max(0, getFinance(st).treasury);
+      if (!isLive11(st)) continue;
+      const treasury = wealthOf(st);
       const share = stalemate ? 0 : Math.max(0, Math.min(0.6, 0.05 + 0.5 * r.decisiveness * lossFracOf(L)));
       cessionByLoser[L] = Math.round(cellsOf(L) * demand * (lossFracOf(L) + 0.5));
       for (const W of winners) {
@@ -4770,7 +5044,7 @@
       cessionByLoser,
       reparations,
       cessionCells: Object.values(cessionByLoser).reduce((n, x) => n + x, 0),
-      exhaustion: [...winners, ...losers].map((id) => ({ stateId: id, side: winners.includes(id) ? "winner" : "loser", lost: cas[id]?.lost ?? 0, before: cas[id]?.before ?? 0, moraleDelta: r.moraleDelta?.[id] ?? 0 }))
+      exhaustion: [...winners, ...losers].map((id) => ({ stateId: id, side: winners.includes(id) ? "winner" : "loser", lost: cas[id]?.lost ?? 0, before: cas[id]?.before ?? 0, moraleDelta: r.moraleDelta?.[id] ?? 0, supportDelta: r.supportDelta?.[id] ?? 0, support: supportOf(map.pack.states[id]) }))
     };
   }
   function suggestCessionChunks(map, toIds, fromId, { size = "m", maxChunks = 10 } = {}) {
@@ -4831,68 +5105,6 @@
     let k = 2;
     while (taken.has(`${place}\u6761\u7D04\uFF08${k}\uFF09`)) k++;
     return `${place}\u6761\u7D04\uFF08${k}\uFF09`;
-  }
-
-  // js/core/edit/alliances.js
-  var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var bondKey = (a) => BOND_BY_KEY[a?.bond] ? a.bond : "standard";
-  function listAlliances(map) {
-    return map.ext?.data?.alliances ?? [];
-  }
-  function nextAllianceId(map) {
-    const list = listAlliances(map);
-    return list.length ? Math.max(...list.map((a) => a.id)) + 1 : 1;
-  }
-  function planCreateAlliance(map, name, memberIds, date, bond = "standard") {
-    const uniq = [...new Set(memberIds)];
-    if (uniq.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
-    for (const id of uniq) if (!isLive10(map.pack.states[id])) throw new Error(`\u56FD\u5BB6#${id}\u306F\u5B58\u5728\u3057\u307E\u305B\u3093`);
-    if (!BOND_BY_KEY[bond]) throw new Error("\u540C\u76DF\u306E\u62D8\u675F\u529B\u306F \u7DE9\u3084\u304B\u30FB\u6A19\u6E96\u30FB\u5F37\u56FA \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
-    const alliance = { id: nextAllianceId(map), name: name || "\u65B0\u3057\u3044\u540C\u76DF", members: uniq, bond, formedAt: date ?? null, dissolvedAt: null };
-    const pairs = [];
-    for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) pairs.push([uniq[i], uniq[j]]);
-    const before = listAlliances(map);
-    const write = (m, list) => {
-      const ext = ensureExt(m);
-      ext.data.alliances = list;
-      if (!list.length) delete ext.data.alliances;
-    };
-    return {
-      command: makeCommand(`\u540C\u76DF\u3092\u7D50\u6210\uFF08${alliance.name}\uFF09`, [], [{ apply: (m) => write(m, [...before, alliance]), revert: (m) => write(m, before) }, ...diplomacyParts(map, pairs, "Ally")]),
-      id: alliance.id
-    };
-  }
-  function planEditAlliance(map, allianceId, patch) {
-    const list = listAlliances(map);
-    const a = list.find((x) => x.id === allianceId);
-    if (!a) throw new Error("\u305D\u306E\u540C\u76DF\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    const nextMembers = patch.members ? [...new Set(patch.members)] : a.members;
-    if (nextMembers.length < 2) throw new Error("\u540C\u76DF\u306B\u306F2\u30AB\u56FD\u4EE5\u4E0A\u304C\u5FC5\u8981\u3067\u3059");
-    const nextName = patch.name !== void 0 ? patch.name : a.name;
-    const nextBond = patch.bond ?? bondKey(a);
-    if (!BOND_BY_KEY[nextBond]) throw new Error("\u540C\u76DF\u306E\u62D8\u675F\u529B\u306F \u7DE9\u3084\u304B\u30FB\u6A19\u6E96\u30FB\u5F37\u56FA \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
-    if (nextName === a.name && nextBond === bondKey(a) && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
-    const before = list;
-    const after = list.map((x) => x.id === allianceId ? { ...x, name: nextName, members: nextMembers, bond: nextBond } : x);
-    const write = (m, v) => {
-      ensureExt(m).data.alliances = v;
-    };
-    return makeCommand("\u540C\u76DF\u3092\u7DE8\u96C6", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
-  }
-  function planDissolveAlliance(map, allianceId, date) {
-    const list = listAlliances(map);
-    const a = list.find((x) => x.id === allianceId);
-    if (!a) throw new Error("\u305D\u306E\u540C\u76DF\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    if (a.dissolvedAt) throw new Error("\u65E2\u306B\u89E3\u6D88\u3055\u308C\u3066\u3044\u307E\u3059");
-    const before = list;
-    const after = list.map((x) => x.id === allianceId ? { ...x, dissolvedAt: date ?? null } : x);
-    const write = (m, v) => {
-      ensureExt(m).data.alliances = v;
-    };
-    return makeCommand("\u540C\u76DF\u3092\u89E3\u6D88", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
-  }
-  function alliancesOf(map, stateId) {
-    return listAlliances(map).filter((a) => a.members.includes(stateId));
   }
 
   // js/core/edit/pole.js
@@ -5016,20 +5228,20 @@
     province: { list: "provinces", label: "\u5C5E\u5DDE" }
   });
   var round6 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive11 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive12 = (e) => !!e && typeof e === "object" && !e.removed;
   var liveBurg = (map, id) => {
     const b = id > 0 ? map.pack.burgs[id] : null;
-    return isLive11(b) && b.i ? b : null;
+    return isLive12(b) && b.i ? b : null;
   };
   function protectedCells(map) {
     const capital = /* @__PURE__ */ new Set(), provinceCenter = /* @__PURE__ */ new Set();
     for (const s of map.pack.states) {
-      if (!isLive11(s) || !s.i) continue;
+      if (!isLive12(s) || !s.i) continue;
       const b = liveBurg(map, s.capital);
       if (b) capital.add(b.cell);
     }
     for (const pr of map.pack.provinces) {
-      if (!isLive11(pr) || !pr.i) continue;
+      if (!isLive12(pr) || !pr.i) continue;
       const b = liveBurg(map, pr.burg);
       if (b) provinceCenter.add(b.cell);
     }
@@ -5053,7 +5265,7 @@
     if (!def) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
     const list = map.pack[def.list];
     const entity = target > 0 ? list[target] : null;
-    if (target > 0 && !isLive11(entity)) throw new Error(`${def.label}#${target} \u306F\u5B58\u5728\u3057\u306A\u3044\u304B\u3001\u524A\u9664\u3055\u308C\u3066\u3044\u307E\u3059`);
+    if (target > 0 && !isLive12(entity)) throw new Error(`${def.label}#${target} \u306F\u5B58\u5728\u3057\u306A\u3044\u304B\u3001\u524A\u9664\u3055\u308C\u3066\u3044\u307E\u3059`);
     const c = map.pack.cells;
     const arr = c[kind];
     const burgs = map.pack.burgs;
@@ -5188,18 +5400,18 @@
   // js/core/edit/notes.js
   var NOTE_TYPES = ["state", "province", "culture", "religion", "burg", "marker"];
   var MAX_NOTE = 2e4;
-  var isLive12 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive13 = (e) => !!e && typeof e === "object" && !e.removed;
   var isLegacy = (map) => map.settings.format === "legacy";
   function noteTarget(map, type, id) {
     if (type === "marker") return map.markers.find((m) => m.i === id) ?? null;
     if (type === "burg") {
       const b = map.pack.burgs[id];
-      return isLive12(b) && b.i ? b : null;
+      return isLive13(b) && b.i ? b : null;
     }
     const def = PAINT_KINDS[type];
     if (!def) return null;
     const e = map.pack[def.list][id];
-    return isLive12(e) && e.i ? e : null;
+    return isLive13(e) && e.i ? e : null;
   }
   var legacyIds = (type, id) => {
     const ids2 = [`${type}${id}`];
@@ -5326,11 +5538,11 @@
 
   // js/core/edit/sovereignty.js
   var round62 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive13 = (e) => !!e && typeof e === "object" && !e.removed;
-  var isLiveState2 = (s) => isLive13(s) && s.i > 0;
+  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLiveState2 = (s) => isLive14(s) && s.i > 0;
   var liveBurg2 = (map, id) => {
     const b = id > 0 ? map.pack.burgs[id] : null;
-    return isLive13(b) && b.i ? b : null;
+    return isLive14(b) && b.i ? b : null;
   };
   function pickColor(existingCount, rnd) {
     const golden = 137.508;
@@ -5384,7 +5596,7 @@
   }
   function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
     const province = map.pack.provinces[provinceId];
-    if (!isLive13(province) || !province.i) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive14(province) || !province.i) throw new Error("\u305D\u306E\u5C5E\u5DDE\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const fromState = map.pack.states[province.state];
     if (!isLiveState2(fromState)) throw new Error("\u5C5E\u5DDE\u306E\u6240\u5C5E\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
@@ -5496,14 +5708,14 @@
     }
     const movedBurgIds = [];
     for (const b of map.pack.burgs) {
-      if (!isLive13(b) || !b.i || b.state !== from) continue;
+      if (!isLive14(b) || !b.i || b.state !== from) continue;
       const patch = { state: to };
       if (b.capital) patch.capital = 0;
       parts.push(setProps(b, patch));
       movedBurgIds.push(b.i);
     }
     for (const pr of map.pack.provinces) {
-      if (isLive13(pr) && pr.i && pr.state === from) parts.push(setProps(pr, { state: to }));
+      if (isLive14(pr) && pr.i && pr.state === from) parts.push(setProps(pr, { state: to }));
     }
     const toPatch = {};
     if (typeof toState.cells === "number" && typeof fromState.cells === "number") toPatch.cells = toState.cells + fromState.cells;
@@ -5598,6 +5810,7 @@
       cessions: (t.cessions ?? []).map((c) => ({ name: c.name ?? "", from: namer.state(c.fromStateId), to: namer.state(c.toStateId), cells: c.cells ?? 0, burgs: c.burgs ?? [] })),
       reparations: (t.reparations && Array.isArray(t.reparations) ? t.reparations : []).map((r) => ({ from: namer.state(r.fromStateId), to: namer.state(r.toStateId), amount: r.amount, currency: r.currency ?? null, received: r.received ?? null, receivedCurrency: r.receivedCurrency ?? null })),
       annex: (t.annex ?? []).map((x) => ({ from: namer.state(x.fromStateId), to: namer.state(x.toStateId) })),
+      vassalize: (t.vassalize ?? []).map((x) => ({ from: namer.state(x.fromStateId), to: namer.state(x.toStateId), kind: { puppet: "\u5080\u5121", protectorate: "\u4FDD\u8B77\u56FD", vassal: "\u5C5E\u56FD" }[x.kind] ?? x.kind })),
       // 旧形式
       cededProvinces: (t.provinceIds ?? []).map((id) => namer.province(id)),
       cededUnaffiliatedRegions: (t.regionCells ?? []).length,
@@ -6121,10 +6334,11 @@
       const pt = wr.peaceTerms;
       if (pt) {
         if (pt.cessions?.length || pt.reparations?.length || pt.annex?.length || pt.name) {
-          L.push(`- \u8B1B\u548C\u6761\u7D04: ${pt.name ?? "\u2014"}\uFF08${{ standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", annex: "\u5168\u9762\u964D\u4F0F" }[pt.kind] ?? pt.kind}${pt.venue ? `\u30FB\u8B1B\u548C\u5730 ${pt.venue}` : ""}\uFF09`);
+          L.push(`- \u8B1B\u548C\u6761\u7D04: ${pt.name ?? "\u2014"}\uFF08${{ standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", vassal: "\u5F93\u5C5E\u5316", annex: "\u5168\u9762\u964D\u4F0F" }[pt.kind] ?? pt.kind}${pt.venue ? `\u30FB\u8B1B\u548C\u5730 ${pt.venue}` : ""}\uFF09`);
           for (const c of pt.cessions) L.push(`  - \u5272\u8B72: ${c.name || "\u533A\u753B"}\uFF08${c.cells}\u30BB\u30EB\uFF09${c.from} \u2192 ${c.to}`);
           for (const r of pt.reparations) L.push(`  - \u8CE0\u511F: ${r.from} \u304C ${r.amount} ${r.currency ?? ""} \u2192 ${r.to} \u304C ${r.received ?? "?"} ${r.receivedCurrency ?? ""}`);
           for (const x of pt.annex) L.push(`  - \u4F75\u5408: ${x.from} \u2192 ${x.to}`);
+          for (const x of pt.vassalize ?? []) L.push(`  - \u5F93\u5C5E: ${x.from} \u306F ${x.to} \u306E${x.kind}`);
           if (pt.notes) L.push(`  - \u6761\u4EF6: ${pt.notes}`);
         } else L.push(`- \u8B1B\u548C: \u5272\u8B72 ${pt.cededProvinces.join("\u3001") || "\u306A\u3057"} \u2192 ${pt.cededTo}${pt.legacyReparations ? ` / \u8CE0\u511F ${pt.legacyReparations}` : ""}`);
       }
@@ -6714,6 +6928,7 @@
           const y = Math.min(Math.max(0, ev.clientY - dy - sr.top), Math.max(0, sr.height - 40));
           root.style.left = `${x}px`;
           root.style.top = `${y}px`;
+          fit(root);
         };
         const up = () => {
           bar.removeEventListener("pointermove", move);
@@ -6724,6 +6939,15 @@
       });
       return w;
     }
+    function fit(root) {
+      const parent = root.offsetParent ?? root.parentElement;
+      if (!parent) return;
+      const top = parseFloat(root.style.top) || 0;
+      root.style.maxHeight = `${Math.max(240, parent.clientHeight - top - 12)}px`;
+    }
+    window.addEventListener("resize", () => {
+      for (const w of wins.values()) if (!w.root.hidden) fit(w.root);
+    });
     function register(id, def) {
       wins.set(id, build(id, def));
       wins.get(id).root.style.width = `min(${def.width ?? 760}px, calc(100% - 24px))`;
@@ -6734,10 +6958,11 @@
       if (w.root.hidden) {
         w.root.hidden = false;
         if (!w.root.style.left) {
-          const n = [...wins.keys()].indexOf(id);
-          w.root.style.left = `${24 + n * 22}px`;
-          w.root.style.top = `${16 + n * 22}px`;
+          const n = [...wins.values()].filter((x) => x !== w && !x.root.hidden).length % 5;
+          w.root.style.left = `${24 + n * 28}px`;
+          w.root.style.top = `${16 + n * 28}px`;
         }
+        fit(w.root);
       }
       w.def.onOpen?.();
       front(w);
@@ -6762,7 +6987,7 @@
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive14 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }) {
     const wins = initWindows();
     const noMap = () => el2("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044");
@@ -6780,7 +7005,7 @@
         dipHost.append(noMap());
         return;
       }
-      const states = map.pack.states.filter(isLive14);
+      const states = map.pack.states.filter(isLive15);
       if (focus == null || !states.some((s) => s.i === focus)) focus = states[0]?.i ?? null;
       if (focus == null) {
         dipHost.append(el2("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
@@ -6817,7 +7042,7 @@
         overview.append(noMap());
         return;
       }
-      const states = map.pack.states.filter(isLive14);
+      const states = map.pack.states.filter(isLive15);
       const t = el2("table", "win-table");
       const head = el2("tr");
       head.append(el2("th", "", "\u56FD\u5BB6"), el2("th", "", "\u90E8\u968A"));
@@ -7102,15 +7327,15 @@
   var LIST_KEY2 = { religion: "religions", culture: "cultures" };
   var LABEL2 = { religion: "\u5B97\u6559", culture: "\u6587\u5316" };
   var ROOT_LABEL = { religion: "\u5171\u901A\u306E\u7956\uFF08\u539F\u59CB\u4FE1\u4EF0\uFF09", culture: "\u5171\u901A\u306E\u7956" };
-  var isLive15 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive16 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initGenealogy({ store, wins, editActions }) {
     const bodies = {}, selected = {};
     const NODE_W = 150, NODE_H = 28, GAP_X = 50, GAP_Y = 14;
     function layout(map, kind) {
       const list = map.pack[LIST_KEY2[kind]];
-      const live3 = list.filter(isLive15);
+      const live3 = list.filter(isLive16);
       const parentsOf2 = (e) => {
-        const ps = [...new Set((Array.isArray(e.origins) ? e.origins : []).filter((o) => Number.isInteger(o) && (o === 0 || isLive15(list[o]))))];
+        const ps = [...new Set((Array.isArray(e.origins) ? e.origins : []).filter((o) => Number.isInteger(o) && (o === 0 || isLive16(list[o]))))];
         return ps.length ? ps : [0];
       };
       const children = /* @__PURE__ */ new Map([[0, []]]);
@@ -7224,7 +7449,7 @@
     function editPanel(map, kind, list) {
       const box = el5("div", "gen-edit");
       const id = selected[kind];
-      if (!id || !isLive15(list[id])) {
+      if (!id || !isLive16(list[id])) {
         box.append(el5("p", "muted", "\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u89AA\u306E\u5909\u66F4\u30FB\u540D\u524D\u306E\u5909\u66F4\u30FB\u524A\u9664\u304C\u3067\u304D\u307E\u3059"));
         return box;
       }
@@ -7236,7 +7461,7 @@
       const grid = el5("div", "gen-parents");
       const boxes = [];
       for (const o of list) {
-        if (!isLive15(o) || banned.has(o.i)) continue;
+        if (!isLive16(o) || banned.has(o.i)) continue;
         const l = el5("label", "gen-parent");
         const cb = document.createElement("input");
         cb.type = "checkbox";
@@ -7315,7 +7540,7 @@
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive16 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive17 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function initNuclearWindow({ store, simActions, wins }) {
     const body = el6("div", "nuc-body");
     let atk = null, tgt = null, heads = 1;
@@ -7327,7 +7552,7 @@
         body.append(el6("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive16);
+      const states = map.pack.states.filter(isLive17);
       body.append(el6("p", "hint", "\u6838\u5175\u5668\u306F\u901A\u5E38\u306E\u6226\u4E89\u3067\u306F\u4F7F\u308F\u308C\u307E\u305B\u3093\u3002\u6838\u3092\u4FDD\u6709\u3057\u3066\u3044\u308C\u3070\u3001\u3069\u306E\u56FD\u306B\u5BFE\u3057\u3066\u3082\u4F5C\u6226\u3092\u7ACB\u6848\u3057\u3001\u78BA\u8A8D\u3057\u305F\u3046\u3048\u3067\u5B9F\u884C\u3067\u304D\u307E\u3059\uFF08\u6226\u4E89\u4E2D\u3067\u306A\u304F\u3066\u3082\u53EF\uFF09\u3002\u7CBE\u5EA6\u3068\u5A01\u529B\u306F\u4F7F\u3046\u56FD\u306E\u6280\u8853\u6C34\u6E96\u3067\u6C7A\u307E\u308A\u3001\u6A19\u7684\u56FD\u306E\u4EBA\u53E3\u30FB\u7523\u696D\u30FB\u8ECD\u968A\u30FB\u58EB\u6C17\u306B\u6253\u6483\u3092\u4E0E\u3048\u307E\u3059\u3002\u58EB\u6C17\u3068\u8ECD\u968A\u306F\u6226\u4E89\u306E\u5224\u5B9A\u306B\u305D\u306E\u307E\u307E\u97FF\u304D\u3001\u307E\u3060\u8B1B\u548C\u3057\u3066\u3044\u306A\u3044\u6226\u4E89\u306F\u5224\u5B9A\u3057\u76F4\u3055\u308C\u307E\u3059\u3002\u5143\u306B\u623B\u305B\u307E\u3059\u3002"));
       const holders = states.filter((s) => simActions.nuclearStock(s.i) > 0);
       if (!holders.length) body.append(el6("p", "muted", "\u6838\u3092\u4FDD\u6709\u3059\u308B\u56FD\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u8ECD\u4E8B\u30A6\u30A3\u30F3\u30C9\u30A6\u3067\u3001\u90E8\u968A\u306E\u5175\u529B\u306B\u6838\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\uFF09"));
@@ -8016,11 +8241,11 @@ ${shown}${more}`;
   }
 
   // js/core/edit/burgs.js
-  var isLive17 = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
+  var isLive18 = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
   var round63 = (v) => Math.round(v * 1e6) / 1e6;
   function estimatePopulation(map, cell, rnd) {
     const idx = cellIndexOf(map);
-    const near = idx.findWithin(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1], map.grid.spacing * 6).map((i) => map.pack.cells.burg[i]).filter((id) => id > 0).map((id) => map.pack.burgs[id]).filter(isLive17);
+    const near = idx.findWithin(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1], map.grid.spacing * 6).map((i) => map.pack.cells.burg[i]).filter((id) => id > 0).map((id) => map.pack.burgs[id]).filter(isLive18);
     const base = near.length ? near.map((b) => b.population).sort((a, b) => a - b)[near.length >> 1] : Math.max(0.05, (map.pack.cells.pop[cell] ?? 1) * 0.25);
     const jitter = rnd ? rnd.float(0.6, 1.4) : 1;
     return Math.max(0.01, Math.round(base * jitter * 1e3) / 1e3);
@@ -8071,7 +8296,7 @@ ${shown}${more}`;
     if (religion1 && typeof religion1.urban === "number") parts.push(setProps(religion1, { urban: round63(religion1.urban + burg.population) }));
     if (capital && state1) {
       const oldCapital = map.pack.burgs[state1.capital];
-      if (isLive17(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
+      if (isLive18(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
       parts.push({ apply: (m) => {
         m.pack.burgs[id].capital = 1;
       }, revert: (m) => {
@@ -8083,7 +8308,7 @@ ${shown}${more}`;
   }
   function planMoveBurg(map, id, cell) {
     const burg = map.pack.burgs[id];
-    if (!isLive17(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive18(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const c = map.pack.cells;
     if (burg.cell === cell) return null;
     if (cell < 0 || cell >= c.biome.length) throw new Error("\u5730\u56F3\u306E\u5916\u306B\u306F\u79FB\u52D5\u3067\u304D\u307E\u305B\u3093");
@@ -8127,7 +8352,7 @@ ${shown}${more}`;
   }
   function planRenameBurg(map, id, name) {
     const burg = map.pack.burgs[id];
-    if (!isLive17(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive18(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u90FD\u5E02\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (trimmed === burg.name) return null;
@@ -8135,7 +8360,7 @@ ${shown}${more}`;
   }
   function whyCannotRemoveBurg(map, id) {
     const burg = map.pack.burgs[id];
-    if (!isLive17(burg)) return "\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093";
+    if (!isLive18(burg)) return "\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093";
     if (burg.capital) return "\u9996\u90FD\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B\u5225\u306E\u90FD\u5E02\u3092\u9996\u90FD\u306B\u3057\u3066\u304F\u3060\u3055\u3044";
     if (map.markets?.some((m) => m.centerBurgId === id)) return "\u5E02\u5834\u306E\u4E2D\u5FC3\u90FD\u5E02\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093";
     return null;
@@ -8170,24 +8395,24 @@ ${shown}${more}`;
     const state = map.pack.states[stateId];
     if (!state || !state.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const burg = map.pack.burgs[burgId];
-    if (!isLive17(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive18(burg)) throw new Error("\u305D\u306E\u90FD\u5E02\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (burg.state !== stateId) throw new Error("\u9996\u90FD\u306F\u81EA\u56FD\u5185\u306E\u90FD\u5E02\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (state.capital === burgId) return null;
     const parts = [];
     const oldCapital = map.pack.burgs[state.capital];
-    if (isLive17(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
+    if (isLive18(oldCapital)) parts.push(setProps(oldCapital, { capital: 0 }));
     parts.push(setProps(burg, { capital: 1 }), setProps(state, { capital: burgId, center: burg.cell }));
     return makeCommand("\u9996\u90FD\u3092\u5909\u66F4", ["places"], parts);
   }
 
   // js/core/edit/entities.js
   var LIST_KEY3 = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive18 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive19 = (e) => !!e && typeof e === "object" && !e.removed;
   function planRenameEntity(map, kind, id, name) {
     const listKey = LIST_KEY3[kind];
     if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306E\u540D\u524D\u306F\u5909\u66F4\u3067\u304D\u307E\u305B\u3093");
     const e = map.pack[listKey]?.[id];
-    if (!isLive18(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive19(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const field = "fullName" in e ? "fullName" : "name";
@@ -8223,7 +8448,7 @@ ${shown}${more}`;
     if (!trimmed) throw new Error(`${LABEL_OF[kind]}\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044`);
     const existing = map.pack[listKey];
     const id = existing.length || 1;
-    const liveCount = existing.filter(isLive18).length;
+    const liveCount = existing.filter(isLive19).length;
     const entity = {
       i: id,
       name: trimmed,
@@ -8249,12 +8474,12 @@ ${shown}${more}`;
   }
   function planAddProvince(map, { state, name, rnd }) {
     const owner = map.pack.states[state];
-    if (!isLive18(owner) || !owner.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive19(owner) || !owner.i) throw new Error("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const trimmed = (name ?? "").trim();
     if (!trimmed) throw new Error("\u5C5E\u5DDE\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const existing = map.pack.provinces;
     const id = existing.length || 1;
-    const liveCount = existing.filter(isLive18).length;
+    const liveCount = existing.filter(isLive19).length;
     const entity = {
       i: id,
       state,
@@ -8278,7 +8503,7 @@ ${shown}${more}`;
     const listKey = LIST_KEY3[kind];
     if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093");
     const e = map.pack[listKey]?.[id];
-    if (!isLive18(e) || !e.i) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive19(e) || !e.i) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const label = LABEL_OF[kind], nm = e.fullName ?? e.name;
     const c = map.pack.cells;
     const parts = [];
@@ -8291,32 +8516,32 @@ ${shown}${more}`;
     if (kind === "state") {
       const wars = map.ext?.data?.wars ?? [];
       if (!force && wars.some((w) => !w.endedAt && (w.attackers.includes(id) || w.defenders.includes(id)))) throw new Error(`\u300C${nm}\u300D\u306F\u6226\u4E89\u4E2D\u306E\u305F\u3081\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B\u8B1B\u548C\u3057\u3066\u304F\u3060\u3055\u3044`);
-      const provIds = new Set(map.pack.provinces.filter((p) => isLive18(p) && p.i && p.state === id).map((p) => p.i));
+      const provIds = new Set(map.pack.provinces.filter((p) => isLive19(p) && p.i && p.state === id).map((p) => p.i));
       clearCells("state", /* @__PURE__ */ new Set([id]));
       if (provIds.size) clearCells("province", provIds);
       for (const p of map.pack.provinces) if (provIds.has(p.i)) parts.push(setProps(p, { removed: true, ...zero }));
-      for (const b of map.pack.burgs) if (isLive18(b) && b.i && b.state === id) parts.push(setProps(b, { state: 0, ...b.capital ? { capital: 0 } : {} }));
+      for (const b of map.pack.burgs) if (isLive19(b) && b.i && b.state === id) parts.push(setProps(b, { state: 0, ...b.capital ? { capital: 0 } : {} }));
       parts.push(setProps(e, { removed: true, ...zero, burgs: 0, capital: 0, military: [] }));
     } else if (kind === "culture") {
       clearCells("culture", /* @__PURE__ */ new Set([id]));
-      for (const b of map.pack.burgs) if (isLive18(b) && b.i && b.culture === id) parts.push(setProps(b, { culture: 0 }));
+      for (const b of map.pack.burgs) if (isLive19(b) && b.i && b.culture === id) parts.push(setProps(b, { culture: 0 }));
       parts.push(setProps(e, { removed: true, ...zero }));
     } else if (kind === "religion") {
       clearCells("religion", /* @__PURE__ */ new Set([id]));
       parts.push(setProps(e, { removed: true, ...zero }));
     } else {
       clearCells("province", /* @__PURE__ */ new Set([id]));
-      for (const b of map.pack.burgs) if (isLive18(b) && b.i && b.province === id) parts.push(setProps(b, { province: 0 }));
+      for (const b of map.pack.burgs) if (isLive19(b) && b.i && b.province === id) parts.push(setProps(b, { province: 0 }));
       parts.push(setProps(e, { removed: true, ...zero }));
     }
     return makeCommand(`${label}\u300C${nm}\u300D\u3092\u524A\u9664`, ["politics", "places"], parts);
   }
 
   // js/core/edit/finance.js
-  var isLive19 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive20 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planSetFinance(map, stateId, patch) {
     const s = map.pack.states[stateId];
-    if (!isLive19(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive20(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const before = getFinance(s);
     const after = {};
     if (patch.salesTax !== void 0) after.salesTax = Math.round(clampRate(patch.salesTax) * 100) / 100;
@@ -8334,7 +8559,7 @@ ${shown}${more}`;
 
   // js/core/edit/profile.js
   var round64 = (v) => Math.round(v * 1e6) / 1e6;
-  var isLive20 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive21 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   var CULTURE_TYPES = Object.freeze([
     { id: "Generic", label: "\u6A19\u6E96" },
     { id: "River", label: "\u6CB3\u5DDD" },
@@ -8382,7 +8607,7 @@ ${shown}${more}`;
     const list = map.pack[ENTITY_LIST[kind]];
     if (!list) throw new Error("\u3053\u306E\u7A2E\u985E\u306F\u7DE8\u96C6\u3067\u304D\u307E\u305B\u3093");
     const e = list[id];
-    if (!isLive20(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive21(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const next = {};
     const text2 = (k, v, max = 60) => {
       const t = String(v ?? "").trim();
@@ -8414,8 +8639,8 @@ ${shown}${more}`;
     const list = map.pack[ENTITY_LIST[kind]] ?? [];
     const parent = /* @__PURE__ */ new Map(), parents = /* @__PURE__ */ new Map(), children = /* @__PURE__ */ new Map();
     for (const e of list) {
-      if (!isLive20(e)) continue;
-      const ps = parentsOf(e).filter((p) => p === 0 || isLive20(list[p]));
+      if (!isLive21(e)) continue;
+      const ps = parentsOf(e).filter((p) => p === 0 || isLive21(list[p]));
       const use = ps.length ? ps : [0];
       parent.set(e.i, use[0]);
       parents.set(e.i, use);
@@ -8441,11 +8666,11 @@ ${shown}${more}`;
     if (kind !== "culture" && kind !== "religion") throw new Error("\u8D77\u6E90\u3092\u6301\u3064\u306E\u306F\u6587\u5316\u3068\u5B97\u6559\u3060\u3051\u3067\u3059");
     const list = map.pack[ENTITY_LIST[kind]];
     const e = list[id];
-    if (!isLive20(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive21(e)) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     let ps = [...new Set((parentIds ?? []).map(Number))];
     const banned = new Set(descendantsOf(map, kind, id));
     for (const p of ps) {
-      if (p !== 0 && !isLive20(list[p])) throw new Error("\u8D77\u6E90\u306B\u6307\u5B9A\u3057\u305F\u5BFE\u8C61\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+      if (p !== 0 && !isLive21(list[p])) throw new Error("\u8D77\u6E90\u306B\u6307\u5B9A\u3057\u305F\u5BFE\u8C61\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
       if (p === id) throw new Error("\u81EA\u5206\u81EA\u8EAB\u3092\u8D77\u6E90\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
       if (banned.has(p)) throw new Error("\u81EA\u5206\u306E\u5B50\u5B6B\u3092\u8D77\u6E90\u306B\u306F\u3067\u304D\u307E\u305B\u3093\uFF08\u7CFB\u7D71\u304C\u8F2A\u306B\u306A\u308A\u307E\u3059\uFF09");
     }
@@ -8494,15 +8719,15 @@ ${shown}${more}`;
   }
 
   // js/core/edit/economy.js
-  var isLive21 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive22 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getTechLevel(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive21(s)) return null;
+    if (!isLive22(s)) return null;
     return typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
   }
   function planSetTechLevel(map, stateId, value) {
     const s = map.pack.states[stateId];
-    if (!isLive21(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive22(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     const after = clampTech(value);
     const before = typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
     if (before === after) return null;
@@ -8510,15 +8735,15 @@ ${shown}${more}`;
   }
 
   // js/core/edit/military-doctrine.js
-  var isLive22 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive23 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function getDoctrine(map, stateId) {
     const s = map.pack.states[stateId];
-    if (!isLive22(s)) return null;
+    if (!isLive23(s)) return null;
     return DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
   }
   function planSetDoctrine(map, stateId, doctrineKey) {
     const s = map.pack.states[stateId];
-    if (!isLive22(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive23(s)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (!DOCTRINE_BY_KEY[doctrineKey]) throw new Error("\u4E0D\u660E\u306A\u30C9\u30AF\u30C8\u30EA\u30F3\u3067\u3059");
     const before = DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
     if (before === doctrineKey) return null;
@@ -8889,7 +9114,7 @@ ${shown}${more}`;
 
   // js/ui/edit-toolbar.js
   var TARGET_LIST = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var isLive23 = (e) => !!e && typeof e === "object" && !e.removed;
+  var isLive24 = (e) => !!e && typeof e === "object" && !e.removed;
   var NEW_VALUE = "__new__";
   function initEditToolbar({ store, editMode, editActions }) {
     const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
@@ -8932,7 +9157,7 @@ ${shown}${more}`;
       erase.value = "0";
       erase.textContent = `\uFF08${PAINT_KINDS[kind].label}\u306A\u3057\u306B\u3059\u308B\uFF09`;
       targetSel.append(erase);
-      const list = map.pack[TARGET_LIST[kind]].filter(isLive23);
+      const list = map.pack[TARGET_LIST[kind]].filter(isLive24);
       for (const e of list) {
         const o = document.createElement("option");
         o.value = e.i;
@@ -9341,7 +9566,7 @@ ${shown}${more}`;
     wrap.append(val, r);
     return wrap;
   }
-  var isLive24 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive25 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 
   // js/ui/profile-fields.js
   var LIST_KEY4 = { state: "states", culture: "cultures", religion: "religions" };
@@ -9432,7 +9657,7 @@ ${shown}${more}`;
   // js/ui/history-builder.js
   var LIST_KEY5 = { state: "states", culture: "cultures", religion: "religions" };
   var ICON = { state: "\u{1F3F3}", religion: "\u2628", culture: "\u2616" };
-  var isLive25 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive26 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function el8(tag, cls, text2) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -9591,7 +9816,7 @@ ${shown}${more}`;
     function taskSection() {
       if (!task) return null;
       const e = ent(task.kind, task.id);
-      if (!isLive25(e)) {
+      if (!isLive26(e)) {
         task = null;
         return null;
       }
@@ -9670,7 +9895,7 @@ ${shown}${more}`;
       const kindSel = document.createElement("select");
       kindSel.className = "b-kind-select";
       for (const k of ["state", "religion", "culture"]) {
-        const n = map.pack[LIST_KEY5[k]].filter(isLive25).length;
+        const n = map.pack[LIST_KEY5[k]].filter(isLive26).length;
         const o = document.createElement("option");
         o.value = k;
         o.textContent = `${builderActions.KIND_LABEL[k]}\uFF08${n}\uFF09`;
@@ -9698,7 +9923,7 @@ ${shown}${more}`;
         return sec;
       }
       cellCounts = new Map(listEntities(map, tab).map((x) => [x.id, x.cells]));
-      const items = map.pack[LIST_KEY5[tab]].filter(isLive25).sort((a, b) => b.i - a.i);
+      const items = map.pack[LIST_KEY5[tab]].filter(isLive26).sort((a, b) => b.i - a.i);
       if (!items.length) sec.append(el8("p", "b-hint", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u30DC\u30BF\u30F3\u3067\u4F5C\u308C\u307E\u3059\u3002"));
       const list = el8("div", "b-cards");
       for (const e of items) list.append(card(tab, e));
@@ -9937,12 +10162,12 @@ ${shown}${more}`;
     const popK = Math.max(1, ((state.rural ?? 0) + (state.urban ?? 0)) / 1e3);
     return Math.min(UPKEEP_MAX, weighted / popK * UPKEEP_FACTOR);
   }
-  var isLive26 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive27 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planAnnualUpdate(map, rnd = null) {
     const parts = [];
     const trade = computeTrade(map);
     for (const state of map.pack.states) {
-      if (!isLive26(state)) continue;
+      if (!isLive27(state)) continue;
       ensureEconomy(state);
       const revenue = annualRevenue(trade.states.get(state.i));
       if (revenue > 0) {
@@ -9951,9 +10176,11 @@ ${shown}${more}`;
       }
       const { rural, urban, industry } = computeAnnualUpdate(state);
       const peak = Math.max(state.popPeak ?? 0, rural + urban);
+      const atWar2 = (map.ext?.data?.wars ?? []).some((w) => !w.endedAt && (w.attackers.includes(state.i) || w.defenders.includes(state.i)));
+      const support = state.support == null || atWar2 ? null : Math.max(0, Math.min(100, state.support + Math.max(-4, Math.min(6, 70 - state.support))));
       const morale = state.morale == null ? null : Math.max(0, Math.min(100, state.morale + Math.max(-5, Math.min(5, 70 - state.morale))));
-      if (rural !== state.rural || urban !== state.urban || industry !== state.industry || peak !== state.popPeak || morale != null && morale !== state.morale) {
-        parts.push(setProps(state, { rural, urban, industry, popPeak: peak, ...morale != null ? { morale } : {} }));
+      if (rural !== state.rural || urban !== state.urban || industry !== state.industry || peak !== state.popPeak || morale != null && morale !== state.morale || support != null && support !== state.support) {
+        parts.push(setProps(state, { rural, urban, industry, popPeak: peak, ...morale != null ? { morale } : {}, ...support != null ? { support } : {} }));
       }
       const conscription = planAnnualConscription(map, state.i);
       if (conscription) parts.push(...conscription.parts);
@@ -10065,7 +10292,7 @@ ${shown}${more}`;
         return;
       }
       const eco = builderActions.economy();
-      const states = map.pack.states.filter(isLive24).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
+      const states = map.pack.states.filter(isLive25).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
       if (selected != null && !states.some((s) => s.i === selected)) selected = null;
       if (selected != null) builderActions.showTradeLines(selected, eco);
       c.append(el7("p", "b-lead", "\u56FD\u306E\u8CA1\u653F\u3068\u4EA4\u6613\u3092\u898B\u307E\u3059\u3002\u5E74\u304C\u5909\u308F\u308B\u305F\u3073\u306B\u3001\u4EBA\u982D\u7A0E\u3068\u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E\u304B\u3089\u8ECD\u306E\u7DAD\u6301\u8CBB\u3092\u5F15\u3044\u305F\u5206\u304C\u56FD\u5EAB\u306B\u305F\u307E\u308A\u307E\u3059\u3002"));
@@ -10420,7 +10647,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive27 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive28 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initEditorPanel({ store, editActions, editMode, panels: initialPanels }) {
     const root = byId("editor-panel");
     const sidebar = byId("sidebar");
@@ -10484,7 +10711,7 @@ ${shown}${more}`;
     }
     function renderStateTabs(map, title, root2) {
       const e = map.pack.states[current.id];
-      if (!isLive27(e)) {
+      if (!isLive28(e)) {
         close();
         return;
       }
@@ -10543,7 +10770,7 @@ ${shown}${more}`;
     function diplomacyMatrix(map, focusId) {
       const wrap = el9("div", "editor-section diplomacy-matrix-wrap");
       wrap.append(el9("h4", "", "\u5916\u4EA4\u4E00\u89A7\uFF08\u5168\u56FD\u5BB6\uFF09"), el9("p", "hint", "\u540C\u76DF\u3092\u7D50\u3076\u3068\u300C\u540C\u76DF\u300D\u3001\u6226\u4E89\u3092\u3059\u308B\u3068\u300C\u6575\u5BFE\u300D\u306B\u306A\u308A\u3001\u8B1B\u548C\u3059\u308B\u3068\u4E2D\u7ACB\u306B\u623B\u308A\u307E\u3059\u3002\u3053\u3053\u3067\u306F\u8A2D\u5B9A\u3057\u307E\u305B\u3093\u3002"));
-      const states = map.pack.states.filter(isLive27).sort((a, b) => a.i - b.i);
+      const states = map.pack.states.filter(isLive28).sort((a, b) => a.i - b.i);
       if (states.length < 2) {
         wrap.append(el9("p", "hint", "\u56FD\u5BB6\u304C2\u3064\u4EE5\u4E0A\u306A\u3044\u3068\u8868\u306B\u306A\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
@@ -10595,7 +10822,7 @@ ${shown}${more}`;
     function renderStateProvinces(map, e, body) {
       const form = el9("div", "editor-form");
       form.append(newProvinceSection(e));
-      const provinces = map.pack.provinces.filter((p) => isLive27(p) && p.state === e.i);
+      const provinces = map.pack.provinces.filter((p) => isLive28(p) && p.state === e.i);
       if (!provinces.length) {
         form.append(el9("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u300C\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3057\u3001\u300C\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u9818\u571F\u3092\u5272\u308A\u5F53\u3066\u3089\u308C\u307E\u3059\u3002"));
       } else {
@@ -10664,7 +10891,7 @@ ${shown}${more}`;
     function mergeSection(map, e) {
       const wrap = el9("div", "editor-section");
       wrap.append(el9("h4", "", "\u56FD\u5BB6\u306E\u7D71\u5408"));
-      const others = map.pack.states.filter((s) => isLive27(s) && s.i !== e.i && s.i > 0);
+      const others = map.pack.states.filter((s) => isLive28(s) && s.i !== e.i && s.i > 0);
       if (!others.length) {
         wrap.append(el9("p", "hint", "\u7D71\u5408\u3067\u304D\u308B\u4ED6\u306E\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
@@ -10769,14 +10996,14 @@ ${shown}${more}`;
     }
     function renderBurg(map, title, body) {
       const b = map.pack.burgs[current.id];
-      if (!isLive27(b)) {
+      if (!isLive28(b)) {
         close();
         return;
       }
       title.textContent = `${b.capital ? "\u{1F3F0} " : "\u{1F3D8}\uFE0F "}${b.name}`;
       const form = el9("div", "editor-form");
       form.append(table([
-        ["\u56FD\u5BB6", isLive27(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
+        ["\u56FD\u5BB6", isLive28(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
         ["\u6587\u5316", map.pack.cultures[b.culture]?.name ?? ""],
         ["\u4EBA\u53E3(\u6982\u7B97)", (b.population ?? 0).toFixed(2)]
       ]));
@@ -10807,7 +11034,7 @@ ${shown}${more}`;
     function renderEntity(map, kind, title, body) {
       const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
       const e = list?.[current.id];
-      if (!isLive27(e)) {
+      if (!isLive28(e)) {
         close();
         return;
       }
@@ -11114,17 +11341,17 @@ ${shown}${more}`;
   }
 
   // js/core/sim/collapse.js
-  var isLive28 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive29 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var COLLAPSE_RATIO = 0.25;
   var popOf = (s) => (s.rural ?? 0) + (s.urban ?? 0);
   function findCollapse(map) {
     for (const s of map.pack.states) {
-      if (!isLive28(s)) continue;
+      if (!isLive29(s)) continue;
       const peak = s.popPeak ?? 0;
       if (peak > 0 && popOf(s) < peak * COLLAPSE_RATIO) {
         const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt && (w.attackers.includes(s.i) || w.defenders.includes(s.i)));
         const enemies = /* @__PURE__ */ new Set();
-        for (const w of wars) for (const e of w.attackers.includes(s.i) ? w.defenders : w.attackers) if (isLive28(map.pack.states[e])) enemies.add(e);
+        for (const w of wars) for (const e of w.attackers.includes(s.i) ? w.defenders : w.attackers) if (isLive29(map.pack.states[e])) enemies.add(e);
         const strength = (id) => regimentsOf(map.pack.states[id]).reduce((n, r) => n + forceHeadcount({ ...r.u, nuclear: 0 }), 0);
         const annexer = [...enemies].sort((a, b) => strength(b) - strength(a))[0] ?? null;
         return { stateId: s.i, annexer };
@@ -11141,7 +11368,7 @@ ${shown}${more}`;
   }
 
   // js/core/sim/nuclear.js
-  var isLive29 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive30 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function warheadSpec(tech) {
     const t = Math.max(1, Math.min(10, tech ?? 3));
     const yieldK = 0.06 + 0.012 * t;
@@ -11178,7 +11405,7 @@ ${shown}${more}`;
   }
   function planDraftNuclearOp(map, { attackerId, targetId, warheads = 1 }) {
     const A = map.pack.states[attackerId], T = map.pack.states[targetId];
-    if (!isLive29(A) || !isLive29(T)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive30(A) || !isLive30(T)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (attackerId === targetId) throw new Error("\u81EA\u56FD\u3092\u6A19\u7684\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
     if (!Number.isInteger(warheads) || warheads < 1) throw new Error("\u767A\u6570\u306F1\u4EE5\u4E0A\u306E\u6574\u6570\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (nuclearStock(A) < warheads) throw new Error(`\u4FDD\u6709\u3059\u308B\u6838\u304C\u8DB3\u308A\u307E\u305B\u3093\uFF08\u4FDD\u6709 ${nuclearStock(A)} \u767A\uFF09`);
@@ -11197,7 +11424,7 @@ ${shown}${more}`;
     if (!op) throw new Error("\u305D\u306E\u4F5C\u6226\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (op.status !== "planned") throw new Error("\u3059\u3067\u306B\u5B9F\u884C\u3055\u308C\u305F\u4F5C\u6226\u3067\u3059");
     const A = map.pack.states[op.attackerId], T = map.pack.states[op.targetId];
-    if (!isLive29(A) || !isLive29(T)) throw new Error("\u95A2\u4FC2\u3059\u308B\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive30(A) || !isLive30(T)) throw new Error("\u95A2\u4FC2\u3059\u308B\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (nuclearStock(A) < op.warheads) throw new Error("\u4FDD\u6709\u3059\u308B\u6838\u304C\u8DB3\u308A\u307E\u305B\u3093");
     const parts = [];
     let left = op.warheads;
@@ -11363,9 +11590,9 @@ ${shown}${more}`;
       alliancesOf(stateId) {
         return withMap((map) => alliancesOf(map, stateId)) ?? [];
       },
-      createAlliance(name, memberIds, bond = "standard") {
+      createAlliance(name, memberIds, bond = "standard", leader = null) {
         return withMap((map) => safeRun("\u540C\u76DF\u306E\u7D50\u6210", () => {
-          const r = planCreateAlliance(map, name, memberIds, currentDate(), bond);
+          const r = planCreateAlliance(map, name, memberIds, currentDate(), bond, leader);
           commitOrThrow(r.command);
           return r.id;
         }));
@@ -11461,6 +11688,19 @@ ${shown}${more}`;
         }) ?? [];
       },
       runCollapses,
+      allianceLeader(a) {
+        return leaderOf(a);
+      },
+      // --- 従属関係（傀儡・保護国・属国） ---
+      vassalInfo(stateId) {
+        return withMap((map) => vassalInfo(map, stateId)) ?? null;
+      },
+      setVassal(vassalId, overlordId, kind) {
+        withMap((map) => safeRun("\u5F93\u5C5E\u95A2\u4FC2", () => commitOrThrow(planSetVassal(map, vassalId, overlordId, kind, currentDate()))));
+      },
+      releaseVassal(vassalId) {
+        withMap((map) => safeRun("\u72EC\u7ACB", () => commitOrThrow(planReleaseVassal(map, vassalId))));
+      },
       // --- 核作戦（立案→実行。通常の戦争では使われない） ---
       nuclearOps() {
         return withMap((map) => listNuclearOps(map)) ?? [];
@@ -11642,6 +11882,10 @@ ${shown}${more}`;
       if (yearChanged) {
         const cmd = planAnnualUpdate(map, rates);
         if (cmd) store.commit(cmd);
+        {
+          const tc = planTribute(store.getState().map, (st) => getFinance(st).treasury, convert);
+          if (tc) store.commit(tc);
+        }
         for (let guard = 0; guard < 8; guard++) {
           const m = store.getState().map;
           const c = planNextCollapse(m, time);
@@ -11886,7 +12130,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive30 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive31 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initMilitaryPanel({ store, simActions, editActions }) {
     const root = byId("tab-regiments");
     let selectedState = null;
@@ -11912,7 +12156,7 @@ ${shown}${more}`;
         cardCache.clear();
         return;
       }
-      const states = map.pack.states.filter(isLive30);
+      const states = map.pack.states.filter(isLive31);
       if (selectedState == null || !states.some((s) => s.i === selectedState)) selectedState = states[0]?.i ?? null;
       root.replaceChildren();
       const picker = el11("div", "state-picker");
@@ -12113,7 +12357,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive31 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive32 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initWarsPanel({ store, simActions, getOutcome = () => null, getWins = () => null }) {
     const root = byId("tab-wars");
     let selected = null;
@@ -12127,7 +12371,7 @@ ${shown}${more}`;
         root.append(el12("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive31);
+      const states = map.pack.states.filter(isLive32);
       const wars = simActions.listWars().slice().reverse();
       if (selected != null && !wars.some((w) => w.id === selected)) selected = null;
       const split = el12("div", "win-split");
@@ -12307,7 +12551,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive32 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive33 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var pct = (v) => `${Math.round(v * 100)}%`;
   var fmt4 = (n, d = 0) => Number(n).toLocaleString("ja-JP", { maximumFractionDigits: d, minimumFractionDigits: d });
   var fmtDate2 = (d) => d ? `${d.year}\u5E74${d.month}\u6708` : "\u2014";
@@ -12317,7 +12561,8 @@ ${shown}${more}`;
     function bar(label, aShare, aText, dText) {
       const wrap = el13("div", "wo-bar-wrap");
       const row = el13("div", "wo-bar-row");
-      row.append(el13("span", "wo-bar-val a", aText), el13("span", "wo-bar-label", label), el13("span", "wo-bar-val d", dText));
+      const none = aText === "0" && dText === "0";
+      row.append(el13("span", "wo-bar-val a", none ? "\u2014" : aText), el13("span", "wo-bar-label", label), el13("span", "wo-bar-val d", none ? "\u2014" : dText));
       const track = el13("div", "wo-bar");
       const a = el13("div", "wo-bar-a");
       a.style.width = pct(aShare);
@@ -12331,6 +12576,7 @@ ${shown}${more}`;
       const A = r.aStrength, D = r.dStrength, c = r.compare, n = (v) => fmt4(v);
       const box = el13("div", "wo-bars");
       box.append(bar("\u9678\u8ECD\u529B", c.land, n(A.land), n(D.land)), bar("\u5236\u6D77\u6A29", c.sea, n(A.sea), n(D.sea)), bar("\u5236\u7A7A\u6A29", c.air, n(A.air), n(D.air)), bar("\u58EB\u6C17", c.morale, fmt4(A.morale), fmt4(D.morale)));
+      if (A.support != null && c.support != null) box.append(bar("\u6C11\u610F", c.support, fmt4(A.support), fmt4(D.support)));
       return box;
     }
     function situation(map, war) {
@@ -12338,14 +12584,20 @@ ${shown}${more}`;
       const sides = el13("div", "wo-sides");
       sides.append(el13("div", "wo-side a", names(map, war.attackers)), el13("div", "wo-vs", "VS"), el13("div", "wo-side d", names(map, war.defenders)));
       box.append(sides);
-      const r = war.result;
-      if (!r) {
+      const ongoing = war.progress != null && war.progress < 1 && !war.endedAt;
+      const r0 = war.result;
+      if (!r0) {
         box.append(el13("p", "muted", "\u6226\u6CC1\u306E\u8A18\u9332\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u65E7\u30C7\u30FC\u30BF\u306E\u6226\u4E89\u3067\u3059\uFF09"));
         return box;
       }
+      const r = ongoing ? { ...r0, ...simActions.previewWar(war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null, war.type) ?? {} } : r0;
       box.append(bars(r));
-      box.append(el13("div", `wo-verdict ${r.winner}`, r.winner === "attacker" ? `\u653B\u6483\u5074\u306E\u52DD\u5229\uFF08${names(map, war.attackers)}\uFF09` : r.winner === "defender" ? `\u9632\u885B\u5074\u306E\u52DD\u5229\uFF08${names(map, war.defenders)}\uFF09` : "\u6C7A\u7740\u3064\u304B\u305A\uFF08\u81A0\u7740\uFF09"));
-      const dates = `\u958B\u6226 ${fmtDate2(war.startedAt)}\u3000${war.endedAt ? `\u7D42\u6226 ${fmtDate2(war.endedAt)}` : `\u7D42\u6226\u4E88\u5B9A ${fmtDate2(war.endsAt)}\uFF08\u7D04${war.durationMonths ?? "?"}\u30F6\u6708\uFF09`}${r.warScore != null ? `\u3000\u6226\u4E89\u30B9\u30B3\u30A2 ${r.warScore}` : ""}`;
+      if (ongoing) box.append(el13("p", "hint", "\u6226\u95D8\u306E\u3055\u306A\u304B\u3067\u3059\u3002\u52DD\u6557\u306F\u3001\u6226\u95D8\u304C\u7D42\u308F\u308B\u3068\u660E\u3089\u304B\u306B\u306A\u308A\u307E\u3059\u3002"));
+      else {
+        if (r.victory) box.append(el13("p", "hint", `\u52DD\u5229\u6761\u4EF6\uFF1A${r.victory.text}`));
+        box.append(el13("div", `wo-verdict ${r.winner}`, r.winner === "attacker" ? `\u653B\u6483\u5074\u306E\u52DD\u5229\uFF08${names(map, war.attackers)}\uFF09` : r.winner === "defender" ? `\u9632\u885B\u5074\u306E\u52DD\u5229\uFF08${names(map, war.defenders)}\uFF09` : "\u6C7A\u7740\u3064\u304B\u305A\uFF08\u81A0\u7740\uFF09"));
+      }
+      const dates = ongoing ? `\u958B\u6226 ${fmtDate2(war.startedAt)}\u3000\u7D42\u6226\u4E88\u5B9A ${fmtDate2(war.endsAt)}\uFF08\u7D04${war.durationMonths ?? "?"}\u30F6\u6708\uFF09` : `\u958B\u6226 ${fmtDate2(war.startedAt)}\u3000\u7D42\u6226 ${fmtDate2(war.endedAt ?? war.endsAt)}${r.warScore != null ? `\u3000\u6226\u4E89\u30B9\u30B3\u30A2 ${r.warScore}` : ""}`;
       box.append(el13("p", "hint", dates));
       if (war.joinedAllies?.length) box.append(el13("p", "hint", `\u540C\u76DF\u306E\u62D8\u675F\u306B\u3088\u308A\u53C2\u6226: ${war.joinedAllies.map((j) => `${sname(map, j.id)}\uFF08${j.alliance}\u30FB${j.side === "attacker" ? "\u653B\u6483\u5074" : "\u9632\u885B\u5074"}\uFF09`).join("\u3001")}`));
       return box;
@@ -12401,7 +12653,7 @@ ${shown}${more}`;
     function treatyRecord(map, war) {
       const t = war.terms ?? {}, box = el13("div", "treaty-record");
       box.append(el13("h3", "", war.treatyName ?? t.treatyName ?? "\u8B1B\u548C\u6761\u7D04"));
-      const kindLabel = { standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", annex: "\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09" }[t.kind ?? "standard"];
+      const kindLabel = { standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", vassal: "\u5F93\u5C5E\u5316", annex: "\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09" }[t.kind ?? "standard"];
       const lines = [
         ["\u6226\u4E89", `${war.name}\uFF08${warTypeLabel(war.type)}\uFF09`],
         ["\u7A2E\u985E", kindLabel],
@@ -12429,6 +12681,12 @@ ${shown}${more}`;
         for (const r of t.reparations) ul.append(el13("li", "", `${sname(map, r.fromStateId)} \u304C ${fmt4(r.amount, 2)} ${r.currency} \u3092\u652F\u6255\u3044 \u2192 ${sname(map, r.toStateId)} \u304C ${fmt4(r.received, 2)} ${r.receivedCurrency} \u3092\u53D7\u3051\u53D6\u308A`));
         box.append(ul);
       } else box.append(el13("p", "muted", "\u306A\u3057"));
+      if (t.vassalize?.length) {
+        box.append(el13("h4", "", "\u5F93\u5C5E\u5316"));
+        const ul = el13("ul");
+        for (const x of t.vassalize) ul.append(el13("li", "", `${sname(map, x.fromStateId)} \u306F ${sname(map, x.toStateId)} \u306E${VASSAL_BY_KEY[x.kind]?.label ?? x.kind}\u306B\u306A\u308B`));
+        box.append(ul);
+      }
       if (t.annex?.length) {
         box.append(el13("h4", "", "\u4F75\u5408"));
         const ul = el13("ul");
@@ -12440,6 +12698,7 @@ ${shown}${more}`;
       return box;
     }
     const warTypeLabel = (k) => ({ limited: "\u9650\u5B9A\u6226", conventional: "\u901A\u5E38\u6226", total: "\u7DCF\u529B\u6226", asymmetric: "\u975E\u5BFE\u79F0\u6226" })[k] ?? "\u901A\u5E38\u6226";
+    const isLeader = (id) => simActions.listAlliances().some((a) => !a.dissolvedAt && a.members.includes(id) && simActions.allianceLeader(a) === id);
     function treatyForm(map, war) {
       const { winners, losers, stalemate } = simActions.peaceSides(war);
       if (!draft || draft.warId !== war.id) {
@@ -12457,18 +12716,18 @@ ${shown}${more}`;
       if (sug) {
         const t = el13("table", "win-table");
         const h = el13("tr");
-        for (const x of ["\u56FD", "\u7ACB\u5834", "\u5175\u529B\u306E\u640D\u5931", "\u640D\u5931\u306E\u5272\u5408", "\u58EB\u6C17\u306E\u5909\u52D5"]) h.append(el13("th", "", x));
+        for (const x of ["\u56FD", "\u7ACB\u5834", "\u5175\u529B\u306E\u640D\u5931", "\u640D\u5931\u306E\u5272\u5408", "\u58EB\u6C17\u306E\u5909\u52D5", "\u6C11\u610F\u306E\u5909\u52D5"]) h.append(el13("th", "", x));
         t.append(h);
         for (const e of sug.exhaustion) {
           const tr = el13("tr");
           const frac = e.before > 0 ? e.lost / e.before : 0;
-          tr.append(el13("td", "", sname(map, e.stateId)), el13("td", "", e.side === "winner" ? "\u52DD\u8005\u5074" : "\u6557\u8005\u5074"), el13("td", "", `${fmt4(e.lost)} \u4EBA`), el13("td", "", pct(frac)), el13("td", e.moraleDelta >= 0 ? "cur-chg up" : "cur-chg down", `${e.moraleDelta >= 0 ? "+" : ""}${e.moraleDelta}`));
+          tr.append(el13("td", "", sname(map, e.stateId)), el13("td", "", e.side === "winner" ? "\u52DD\u8005\u5074" : "\u6557\u8005\u5074"), el13("td", "", `${fmt4(e.lost)} \u4EBA`), el13("td", "", pct(frac)), el13("td", e.moraleDelta >= 0 ? "cur-chg up" : "cur-chg down", `${e.moraleDelta >= 0 ? "+" : ""}${e.moraleDelta}`), el13("td", (e.supportDelta ?? 0) >= 0 ? "cur-chg up" : "cur-chg down", `${(e.supportDelta ?? 0) >= 0 ? "+" : ""}${e.supportDelta ?? 0}`));
           t.append(tr);
         }
         wrap.append(el13("h4", "", "\u5404\u56FD\u306E\u6D88\u8017"), t);
         wrap.append(el13("p", "hint", `\u6226\u4E89\u30B9\u30B3\u30A2 ${sug.warScore}\uFF08\u52DD\u8005\u306F\u3053\u306E\u7BC4\u56F2\u3067\u3057\u304B\u8981\u6C42\u3067\u304D\u307E\u305B\u3093\u3002\u52DD\u8005\u304C\u8907\u6570\u306A\u3089\u3001\u6226\u529B\u3078\u306E\u8CA2\u732E\u306B\u5FDC\u3058\u3066\u5206\u3051\u5408\u3044\u307E\u3059\uFF09`));
       }
-      const kinds = [["standard", "\u901A\u5E38\u306E\u8B1B\u548C\uFF08\u5272\u8B72\u30FB\u8CE0\u511F\uFF09"], ["white", "\u767D\u7D19\u548C\u5E73\uFF08\u6761\u4EF6\u306A\u3057\uFF09"], ["annex", "\u5168\u9762\u964D\u4F0F\uFF08\u6557\u8005\u3092\u4F75\u5408\u3002\u6226\u4E89\u30B9\u30B3\u30A285\u4EE5\u4E0A\uFF09"]];
+      const kinds = [["standard", "\u901A\u5E38\u306E\u8B1B\u548C\uFF08\u5272\u8B72\u30FB\u8CE0\u511F\uFF09"], ["white", "\u767D\u7D19\u548C\u5E73\uFF08\u6761\u4EF6\u306A\u3057\uFF09"], ["vassal", "\u5F93\u5C5E\u5316\uFF08\u5080\u5121\u30FB\u4FDD\u8B77\u56FD\u30FB\u5C5E\u56FD\u306B\u3059\u308B\uFF09"], ["annex", "\u5168\u9762\u964D\u4F0F\uFF08\u6557\u8005\u3092\u4F75\u5408\u3002\u6226\u4E89\u30B9\u30B3\u30A285\u4EE5\u4E0A\uFF09"]];
       const kindRow = el13("div", "member-picker");
       for (const [k, label] of kinds) {
         const l = el13("label", "");
@@ -12508,6 +12767,8 @@ ${shown}${more}`;
       const meter = el13("div", "wo-impact");
       const impact = el13("div", "wo-impact");
       const annexTargets = () => losers.map((L) => ({ fromStateId: L, toStateId: winners[0] }));
+      draft.vkind ?? (draft.vkind = "vassal");
+      const vassalTargets = () => losers.map((L) => ({ fromStateId: L, toStateId: winners[0], kind: draft.vkind }));
       function ensureCessions() {
         if (draft.cessions) return;
         draft.cessions = [];
@@ -12534,7 +12795,8 @@ ${shown}${more}`;
           const [f, t] = k.split("-").map(Number);
           return { fromStateId: f, toStateId: t, amount };
         }) : [],
-        annex: draft.kind === "annex" ? annexTargets() : []
+        annex: draft.kind === "annex" ? annexTargets() : [],
+        vassalize: draft.kind === "vassal" ? vassalTargets() : []
       });
       function renderMeter() {
         meter.replaceChildren();
@@ -12547,7 +12809,7 @@ ${shown}${more}`;
         for (const r of rows) {
           const tr = el13("tr");
           const over = r.spent > r.budget + 0.05;
-          tr.append(el13("td", "", sname(map, r.stateId)), el13("td", "", pct(r.share)), el13("td", over ? "cur-chg down" : "", `${fmt4(r.spent, 1)} / ${fmt4(r.budget, 1)}${over ? "\u3000\u26A0 \u8D85\u904E" : ""}`));
+          tr.append(el13("td", "", `${isLeader(r.stateId) ? "\u2605 " : ""}${sname(map, r.stateId)}`), el13("td", "", pct(r.share)), el13("td", over ? "cur-chg down" : "", `${fmt4(r.spent, 1)} / ${fmt4(r.budget, 1)}${over ? "\u3000\u26A0 \u8D85\u904E" : ""}`));
           t.append(tr);
         }
         meter.append(el13("h4", "", "\u6226\u4E89\u30B9\u30B3\u30A2\u306E\u4F7F\u3044\u9053"), t);
@@ -12574,7 +12836,22 @@ ${shown}${more}`;
         }
       }
       if (draft.kind === "white") detail.append(el13("p", "hint", "\u3069\u3061\u3089\u3082\u4F55\u3082\u53D7\u3051\u53D6\u308A\u307E\u305B\u3093\u3002\u6226\u4E89\u306F\u7D42\u308F\u308A\u3001\u95A2\u4FC2\u306F\u4E2D\u7ACB\u306B\u623B\u308A\u307E\u3059\u3002"));
-      else if (draft.kind === "annex") detail.append(el13("p", "hint", `${losers.map((L) => sname(map, L)).join("\u30FB")}\u306F\u964D\u4F0F\u3057\u3001\u5168\u571F\u304C${sname(map, winners[0])}\u306B\u4F75\u5408\u3055\u308C\u307E\u3059\u3002`), meter);
+      else if (draft.kind === "vassal") {
+        const sel2 = document.createElement("select");
+        for (const k of VASSAL_KINDS) {
+          const o = document.createElement("option");
+          o.value = k.key;
+          o.textContent = `${k.label}\uFF08\u8CA2\u7D0D ${Math.round(k.tribute * 100)}%/\u5E74\uFF09`;
+          o.selected = draft.vkind === k.key;
+          sel2.append(o);
+        }
+        const desc = el13("p", "hint", VASSAL_BY_KEY[draft.vkind].desc);
+        sel2.addEventListener("change", () => {
+          draft.vkind = sel2.value;
+          renderTreaty();
+        });
+        detail.append(el13("p", "hint", `${losers.map((L) => sname(map, L)).join("\u30FB")}\u306F\u4F75\u5408\u3055\u308C\u305A\u3001${sname(map, winners[0])}\u306B\u5F93\u5C5E\u3057\u307E\u3059\u3002\u9818\u571F\u306F\u5909\u308F\u308A\u307E\u305B\u3093\u3002`), sel2, desc, meter);
+      } else if (draft.kind === "annex") detail.append(el13("p", "hint", `${losers.map((L) => sname(map, L)).join("\u30FB")}\u306F\u964D\u4F0F\u3057\u3001\u5168\u571F\u304C${sname(map, winners[0])}\u306B\u4F75\u5408\u3055\u308C\u307E\u3059\u3002`), meter);
       else {
         ensureCessions();
         ensureRepar();
@@ -12690,7 +12967,7 @@ ${shown}${more}`;
         currencyBody.append(el13("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive32);
+      const states = map.pack.states.filter(isLive33);
       if (!states.length) {
         currencyBody.append(el13("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
         return;
@@ -12816,7 +13093,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive33 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive34 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initAlliancesPanel({ store, simActions }) {
     const root = byId("tab-alliances");
     function render() {
@@ -12826,17 +13103,62 @@ ${shown}${more}`;
         root.append(el14("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive33);
+      const states = map.pack.states.filter(isLive34);
       root.append(createForm(map, states));
       const list = simActions.listAlliances();
       const active = list.filter((a) => !a.dissolvedAt);
       const dissolved = list.filter((a) => a.dissolvedAt);
       if (!active.length) root.append(el14("p", "muted", "\u540C\u76DF\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
       else for (const a of active) root.append(allianceCard(map, states, a));
+      root.append(vassalSection(map, states));
       if (dissolved.length) {
         root.append(el14("h4", "", "\u89E3\u6D88\u6E08\u307F\u306E\u540C\u76DF\uFF08\u5C65\u6B74\uFF09"));
         for (const a of dissolved) root.append(allianceCard(map, states, a));
       }
+    }
+    function vassalSection(map, states) {
+      const box = el14("div", "editor-section");
+      box.append(el14("h4", "", "\u5F93\u5C5E\u95A2\u4FC2\uFF08\u5080\u5121\u30FB\u4FDD\u8B77\u56FD\u30FB\u5C5E\u56FD\uFF09"));
+      box.append(el14("p", "hint", VASSAL_KINDS.map((k) => `${k.label}: ${k.desc}`).join(" \uFF0F ")));
+      const rows = states.filter((s) => simActions.vassalInfo(s.i));
+      if (!rows.length) box.append(el14("p", "muted", "\u5F93\u5C5E\u3057\u3066\u3044\u308B\u56FD\u306F\u3042\u308A\u307E\u305B\u3093"));
+      for (const s of rows) {
+        const v = simActions.vassalInfo(s.i);
+        const row = el14("div", "ent-row");
+        row.append(el14("span", "ent-main", `${stateName(map, s.i)} \u306F ${stateName(map, v.overlord)} \u306E${VASSAL_BY_KEY[v.kind].label}\uFF08\u8CA2\u7D0D ${Math.round(VASSAL_BY_KEY[v.kind].tribute * 100)}%/\u5E74\uFF09`));
+        const rel2 = el14("button", "ent-btn", "\u72EC\u7ACB\u3055\u305B\u308B");
+        rel2.type = "button";
+        rel2.addEventListener("click", () => simActions.releaseVassal(s.i));
+        row.append(rel2);
+        box.append(row);
+      }
+      const add = el14("div", "member-picker");
+      const mk = (cur) => {
+        const sel = document.createElement("select");
+        for (const s of states) {
+          const o = document.createElement("option");
+          o.value = s.i;
+          o.textContent = stateName(map, s.i);
+          sel.append(o);
+        }
+        if (cur != null) sel.value = cur;
+        return sel;
+      };
+      const a = mk(), b = mk(states[1]?.i), kind = document.createElement("select");
+      for (const k of VASSAL_KINDS) {
+        const o = document.createElement("option");
+        o.value = k.key;
+        o.textContent = k.label;
+        kind.append(o);
+      }
+      const go = el14("button", "", "\u5F93\u5C5E\u3055\u305B\u308B");
+      go.type = "button";
+      go.addEventListener("click", () => {
+        if (a.value !== b.value) simActions.setVassal(Number(a.value), Number(b.value), kind.value);
+      });
+      add.append(a, el14("span", "", "\u3092"), b, el14("span", "", "\u306E"), kind, go);
+      box.append(add);
+      return box;
     }
     function stateName(map, id) {
       return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
@@ -12888,6 +13210,21 @@ ${shown}${more}`;
       const bp = bondPicker("standard", () => {
       });
       wrap.append(bp.wrap);
+      const leaderSel = document.createElement("select");
+      const syncLeader = () => {
+        const chosen = boxes.filter((b) => b.checked).map((b) => Number(b.value));
+        const cur = leaderSel.value;
+        leaderSel.replaceChildren();
+        for (const id of chosen) {
+          const o = document.createElement("option");
+          o.value = id;
+          o.textContent = stateName(map, id);
+          o.selected = String(id) === cur;
+          leaderSel.append(o);
+        }
+      };
+      for (const b of boxes) b.addEventListener("change", syncLeader);
+      wrap.append(el14("label", "field-label", "\u76DF\u4E3B\uFF08\u9078\u3093\u3060\u52A0\u76DF\u56FD\u304B\u3089\uFF09"), leaderSel);
       const go = el14("button", "", "\u540C\u76DF\u3092\u7D50\u6210\uFF082\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u629E\uFF09");
       go.type = "button";
       go.addEventListener("click", async () => {
@@ -12896,7 +13233,7 @@ ${shown}${more}`;
           await alertDialog("2\u30AB\u56FD\u4EE5\u4E0A\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
           return;
         }
-        simActions.createAlliance(nameInput.value, ids2, bp.value);
+        simActions.createAlliance(nameInput.value, ids2, bp.value, leaderSel.value ? Number(leaderSel.value) : ids2[0]);
       });
       wrap.append(go);
       return wrap;
@@ -12927,8 +13264,20 @@ ${shown}${more}`;
       if (dateLine) card.append(el14("p", "hint", dateLine));
       if (!dissolved) card.append(bondPicker(bondOf(a), (v) => simActions.editAlliance(a.id, { bond: v })).wrap);
       else card.append(el14("p", "hint", `\u62D8\u675F\u529B\uFF1A${BOND_BY_KEY[bondOf(a)].label}`));
+      if (!dissolved) {
+        const ls = document.createElement("select");
+        for (const id of a.members) {
+          const o = document.createElement("option");
+          o.value = id;
+          o.textContent = stateName(map, id);
+          o.selected = id === leaderOf(a);
+          ls.append(o);
+        }
+        ls.addEventListener("change", () => simActions.editAlliance(a.id, { leader: Number(ls.value) }));
+        card.append(el14("label", "field-label", "\u76DF\u4E3B\uFF08\u8B1B\u548C\u3092\u4E3B\u5C0E\u3057\u3001\u53D6\u308A\u5206\u304C\u591A\u3044\uFF09"), ls);
+      } else card.append(el14("p", "hint", `\u76DF\u4E3B\uFF1A${stateName(map, leaderOf(a))}`));
       const chips = el14("div", "member-chip-list");
-      for (const id of a.members) chips.append(el14("span", "member-chip", stateName(map, id)));
+      for (const id of a.members) chips.append(el14("span", "member-chip", `${id === leaderOf(a) ? "\u2605 " : ""}${stateName(map, id)}`));
       card.append(chips);
       if (!dissolved) {
         const { wrap: picker, boxes } = memberPicker(states, a.members);

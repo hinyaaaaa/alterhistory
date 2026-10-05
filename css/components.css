@@ -746,3 +746,5 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .battle-log { margin: 4px 0 10px; padding-left: 20px; font-size: 12px; color: var(--muted); }
 .battle-log li { margin-bottom: 3px; }
 .doctrine-merit { margin: 2px 0 4px; font-size: 12px; color: #4fb477; }
+
+.wo-cess { max-height: none; overflow: visible; } /* 割譲の一覧は窓のスクロールに任せる（入れ子のスクロールを作らない） */

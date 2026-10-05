@@ -49,11 +49,14 @@ const tot = planDeclareAndResolveWar(mk(), { attackers: [1], defenders: [2], dat
 const con = planDeclareAndResolveWar(mk(), { attackers: [1], defenders: [2], date, rnd: createRandom(4), type: "conventional" });
 assert.ok(lim.endsAt.year * 12 + lim.endsAt.month <= con.endsAt.year * 12 + con.endsAt.month && con.endsAt.year * 12 + con.endsAt.month <= tot.endsAt.year * 12 + tot.endsAt.month, "限定戦＜通常戦＜総力戦の順に長い");
 assert.ok(lim.result.warScore < con.result.warScore && con.result.warScore <= tot.result.warScore, "要求できる大きさも同じ順");
-const asy = planDeclareAndResolveWar(mk(), { attackers: [1], defenders: [4], date, rnd: createRandom(8), type: "asymmetric" });
-const asyC = planDeclareAndResolveWar(mk(), { attackers: [1], defenders: [4], date, rnd: createRandom(8), type: "conventional" });
-assert.ok(asy.endsAt.year * 12 + asy.endsAt.month > asyC.endsAt.year * 12 + asyC.endsAt.month, "非対称戦は長引く");
-assert.ok(asy.result.decisiveness < asyC.result.decisiveness, "非対称戦は決着がつきにくい（弱い側が戦力差を縮める）");
-assert.ok(asy.result.moraleDelta[1] < asyC.result.moraleDelta[1], "非対称戦では強い側の士気も削られる");
+// 非対称戦：1回の乱数ではなく、多数の試行の平均で性質を確かめる
+const avg = (xs) => xs.reduce((a, b) => a + b, 0) / xs.length;
+const trial = (type) => { const rows = []; for (let k = 1; k <= 40; k++) { const q = planDeclareAndResolveWar(mk(), { attackers: [1], defenders: [4], date, rnd: createRandom(k), type }); rows.push({ months: (q.endsAt.year - 1) * 12 + q.endsAt.month - 1, dec: q.result.decisiveness, mor: q.result.moraleDelta[1], win: q.result.winner }); } return rows; };
+const A = trial("asymmetric"), C = trial("conventional");
+assert.ok(avg(A.map((x) => x.months)) > avg(C.map((x) => x.months)) * 1.5, "非対称戦は通常戦より大幅に長引く");
+assert.ok(avg(A.map((x) => x.dec)) < avg(C.map((x) => x.dec)), "非対称戦は決着がつきにくい（弱い側が戦力差を縮める）");
+assert.ok(avg(A.map((x) => x.mor)) < avg(C.map((x) => x.mor)), "非対称戦では強い側の士気も削られる");
+assert.ok(C.filter((x) => x.win === "attacker").length > A.filter((x) => x.win === "attacker").length, "同じ戦力差でも、非対称戦のほうが強い側は勝ちにくい");
 
 // --- 戦争名は実際の戦場（都市）から ---
 const places = new Set(listWars(m)[0].battles.map((b) => b.place));
@@ -105,4 +108,12 @@ assert.equal(a4.fullName, "新アルダ帝国"); assert.equal(a4.name, "新ア�
 assert.equal(officialName(a4), "新アルダ帝国");
 const r4 = planDeclareAndResolveWar(s4.getState().map, { attackers: [1], defenders: [2], date, rnd: createRandom(6) });
 assert.ok(r4.battles.every((b) => !b.text.includes("新アルダ軍")) && r4.battles.some((b) => b.text.includes("新アルダ帝国軍") || b.text.includes("ボルク公国軍")), "戦闘の記録は正式名称");
+// --- 賠償金の自動案は、国庫が空でも0にならない（経済の大きさから見積もる） ---
+{ const ms = mk(); for (const x of ms.pack.states.slice(1)) x.treasury = 0;
+  const sm = createStore({ map: ms }); const rr = planDeclareAndResolveWar(sm.getState().map, { attackers: [1, 3], defenders: [2], date, rnd: createRandom(2), type: "total" }); sm.commit(rr.command); sm.commit(planFinishWar(sm.getState().map, rr.id));
+  const ww = listWars(sm.getState().map)[0]; assert.equal(ww.result.winner, "attacker");
+  const sg = suggestTreaty(sm.getState().map, ww);
+  assert.ok(sg.reparations.length >= 2 && sg.reparations.every((x) => x.amount > 0), "国庫が0でも賠償金の自動案が出る");
+  const rows = treatyBudget(sm.getState().map, ww, { reparations: sg.reparations });
+  assert.ok(rows.every((x) => x.spent <= x.budget + 0.05), "自動案は戦争スコアの範囲に収まる"); }
 console.log("war-progress OK");

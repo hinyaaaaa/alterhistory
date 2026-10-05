@@ -81,7 +81,7 @@ check("講和条約名は講和地の地名から付く（◯◯条約）", /条
 
 console.log("=== 戦争ウィンドウ：戦況と講和の分離 ===");
 [...qa("#tab-wars .win-list button")].find((b) => b.textContent.includes(names[0])).click();
-check("戦況バー（陸軍・海軍・空軍・士気）が戦争ウィンドウに出る", qa("#tab-wars .wo-bar-wrap").length === 4);
+check("戦況バー（陸軍・海軍・空軍・士気・民意）が戦争ウィンドウに出る", qa("#tab-wars .wo-bar-wrap").length === 5);
 check("戦争名を変えられる入力欄がある", !!q("#tab-wars .war-name-input"));
 check("講和条約の入力は戦争ウィンドウに無い（講和条約ウィンドウに分離）", !q("#tab-wars .wo-cess") && ![...qa("#tab-wars button")].some((b) => b.textContent.includes("この内容で講和する")));
 check("終戦日が自動で決まっている", !!simActions.listWars().find((w) => w.name === names[0]).endsAt);
