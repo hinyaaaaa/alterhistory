@@ -1,6 +1,8 @@
 // 同盟タブ：3カ国以上の同盟を作成・編集・解消する。
 import { formatWorldTime } from "../../core/sim/time.js";
 import { BONDS, BOND_BY_KEY, bondOf } from "../../core/sim/war-flow.js";
+import { leaderOf } from "../../core/edit/alliances.js";
+import { VASSAL_KINDS, VASSAL_BY_KEY } from "../../core/edit/vassals.js";
 import { guardRender } from "../safe-render.js";
 import { byId } from "../dom.js";
 import { confirmDialog, alertDialog } from "../dialogs.js";
@@ -24,10 +26,35 @@ export function initAlliancesPanel({ store, simActions }) {
     if (!active.length) root.append(el("p", "muted", "同盟はまだありません"));
     else for (const a of active) root.append(allianceCard(map, states, a));
 
+    root.append(vassalSection(map, states));
     if (dissolved.length) {
       root.append(el("h4", "", "解消済みの同盟（履歴）"));
       for (const a of dissolved) root.append(allianceCard(map, states, a));
     }
+  }
+
+  /** 従属関係（傀儡・保護国・属国）。戦争の講和でも作れるが、ここで直接設定することもできる */
+  function vassalSection(map, states) {
+    const box = el("div", "editor-section");
+    box.append(el("h4", "", "従属関係（傀儡・保護国・属国）"));
+    box.append(el("p", "hint", VASSAL_KINDS.map((k) => `${k.label}: ${k.desc}`).join(" ／ ")));
+    const rows = states.filter((s) => simActions.vassalInfo(s.i));
+    if (!rows.length) box.append(el("p", "muted", "従属している国はありません"));
+    for (const s of rows) {
+      const v = simActions.vassalInfo(s.i); const row = el("div", "ent-row");
+      row.append(el("span", "ent-main", `${stateName(map, s.i)} は ${stateName(map, v.overlord)} の${VASSAL_BY_KEY[v.kind].label}（貢納 ${Math.round(VASSAL_BY_KEY[v.kind].tribute * 100)}%/年）`));
+      const rel = el("button", "ent-btn", "独立させる"); rel.type = "button"; rel.addEventListener("click", () => simActions.releaseVassal(s.i));
+      row.append(rel); box.append(row);
+    }
+    const add = el("div", "member-picker");
+    const mk = (cur) => { const sel = document.createElement("select"); for (const s of states) { const o = document.createElement("option"); o.value = s.i; o.textContent = stateName(map, s.i); sel.append(o); } if (cur != null) sel.value = cur; return sel; };
+    const a = mk(), b = mk(states[1]?.i), kind = document.createElement("select");
+    for (const k of VASSAL_KINDS) { const o = document.createElement("option"); o.value = k.key; o.textContent = k.label; kind.append(o); }
+    const go = el("button", "", "従属させる"); go.type = "button";
+    go.addEventListener("click", () => { if (a.value !== b.value) simActions.setVassal(Number(a.value), Number(b.value), kind.value); });
+    add.append(a, el("span", "", "を"), b, el("span", "", "の"), kind, go);
+    box.append(add);
+    return box;
   }
 
   function stateName(map, id) { return map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`; }
@@ -66,12 +93,17 @@ export function initAlliancesPanel({ store, simActions }) {
     wrap.append(picker);
     const bp = bondPicker("standard", () => {});
     wrap.append(bp.wrap);
+    // 盟主：同盟を主導し、講和では取り分が多くなる（結成時に選ぶ。あとから変えられる）
+    const leaderSel = document.createElement("select");
+    const syncLeader = () => { const chosen = boxes.filter((b) => b.checked).map((b) => Number(b.value)); const cur = leaderSel.value; leaderSel.replaceChildren(); for (const id of chosen) { const o = document.createElement("option"); o.value = id; o.textContent = stateName(map, id); o.selected = String(id) === cur; leaderSel.append(o); } };
+    for (const b of boxes) b.addEventListener("change", syncLeader);
+    wrap.append(el("label", "field-label", "盟主（選んだ加盟国から）"), leaderSel);
     const go = el("button", "", "同盟を結成（2カ国以上を選択）");
     go.type = "button";
     go.addEventListener("click", async () => {
       const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
       if (ids.length < 2) { await alertDialog("2カ国以上を選んでください"); return; }
-      simActions.createAlliance(nameInput.value, ids, bp.value);
+      simActions.createAlliance(nameInput.value, ids, bp.value, leaderSel.value ? Number(leaderSel.value) : ids[0]);
     });
     wrap.append(go);
     return wrap;
@@ -101,8 +133,14 @@ export function initAlliancesPanel({ store, simActions }) {
 
     if (!dissolved) card.append(bondPicker(bondOf(a), (v) => simActions.editAlliance(a.id, { bond: v })).wrap);
     else card.append(el("p", "hint", `拘束力：${BOND_BY_KEY[bondOf(a)].label}`));
+    if (!dissolved) {
+      const ls = document.createElement("select");
+      for (const id of a.members) { const o = document.createElement("option"); o.value = id; o.textContent = stateName(map, id); o.selected = id === leaderOf(a); ls.append(o); }
+      ls.addEventListener("change", () => simActions.editAlliance(a.id, { leader: Number(ls.value) }));
+      card.append(el("label", "field-label", "盟主（講和を主導し、取り分が多い）"), ls);
+    } else card.append(el("p", "hint", `盟主：${stateName(map, leaderOf(a))}`));
     const chips = el("div", "member-chip-list");
-    for (const id of a.members) chips.append(el("span", "member-chip", stateName(map, id)));
+    for (const id of a.members) chips.append(el("span", "member-chip", `${id === leaderOf(a) ? "★ " : ""}${stateName(map, id)}`));
     card.append(chips);
 
     if (!dissolved) {

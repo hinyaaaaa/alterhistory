@@ -57,13 +57,21 @@ export function initWindows() {
       const move = (ev) => {
         const x = Math.min(Math.max(0, ev.clientX - dx - sr.left), Math.max(0, sr.width - 80));
         const y = Math.min(Math.max(0, ev.clientY - dy - sr.top), Math.max(0, sr.height - 40));
-        root.style.left = `${x}px`; root.style.top = `${y}px`;
+        root.style.left = `${x}px`; root.style.top = `${y}px`; fit(root);
       };
       const up = () => { bar.removeEventListener("pointermove", move); bar.removeEventListener("pointerup", up); };
       bar.addEventListener("pointermove", move); bar.addEventListener("pointerup", up);
     });
     return w;
   }
+
+  /** 窓の下端が画面の外に出ないよう、いまの位置から画面の下端までを最大の高さにする（下の「締結」「戦争開始」ボタンが必ず届く） */
+  function fit(root) {
+    const parent = root.offsetParent ?? root.parentElement; if (!parent) return;
+    const top = parseFloat(root.style.top) || 0;
+    root.style.maxHeight = `${Math.max(240, parent.clientHeight - top - 12)}px`;
+  }
+  window.addEventListener("resize", () => { for (const w of wins.values()) if (!w.root.hidden) fit(w.root); });
 
   /** def: { title, body: HTMLElement, onOpen?: () => void, width?: number } */
   function register(id, def) { wins.set(id, build(id, def)); wins.get(id).root.style.width = `min(${def.width ?? 760}px, calc(100% - 24px))`; }
@@ -72,7 +80,8 @@ export function initWindows() {
     const w = wins.get(id); if (!w) return;
     if (w.root.hidden) {
       w.root.hidden = false;
-      if (!w.root.style.left) { const n = [...wins.keys()].indexOf(id); w.root.style.left = `${24 + n * 22}px`; w.root.style.top = `${16 + n * 22}px`; }
+      if (!w.root.style.left) { const n = [...wins.values()].filter((x) => x !== w && !x.root.hidden).length % 5; w.root.style.left = `${24 + n * 28}px`; w.root.style.top = `${16 + n * 28}px`; } // 開いている窓の数だけずらす（最大5段）
+      fit(w.root);
     }
     w.def.onOpen?.();
     front(w);

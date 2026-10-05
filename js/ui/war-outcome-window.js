@@ -4,6 +4,7 @@
 //   ・通貨・為替は証券の相場表のように、レート・前年比・推移グラフで見せる
 // どれも設定メニューから開くウィンドウ。判定や計算は core/ にあり、ここは表示だけ。
 import { guardRender } from "./safe-render.js";
+import { VASSAL_KINDS, VASSAL_BY_KEY } from "../core/edit/vassals.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const pct = (v) => `${Math.round(v * 100)}%`;
@@ -18,7 +19,8 @@ export function initWarOutcome({ store, simActions }) {
   function bar(label, aShare, aText, dText) {
     const wrap = el("div", "wo-bar-wrap");
     const row = el("div", "wo-bar-row");
-    row.append(el("span", "wo-bar-val a", aText), el("span", "wo-bar-label", label), el("span", "wo-bar-val d", dText));
+    const none = aText === "0" && dText === "0"; // 双方0（その兵科を持たない）のときは、数字ではなく「—」を出す
+    row.append(el("span", "wo-bar-val a", none ? "—" : aText), el("span", "wo-bar-label", label), el("span", "wo-bar-val d", none ? "—" : dText));
     const track = el("div", "wo-bar");
     const a = el("div", "wo-bar-a"); a.style.width = pct(aShare);
     const d = el("div", "wo-bar-d"); d.style.width = pct(1 - aShare);
@@ -30,6 +32,7 @@ export function initWarOutcome({ store, simActions }) {
     const A = r.aStrength, D = r.dStrength, c = r.compare, n = (v) => fmt(v);
     const box = el("div", "wo-bars");
     box.append(bar("陸軍力", c.land, n(A.land), n(D.land)), bar("制海権", c.sea, n(A.sea), n(D.sea)), bar("制空権", c.air, n(A.air), n(D.air)), bar("士気", c.morale, fmt(A.morale), fmt(D.morale)));
+    if (A.support != null && c.support != null) box.append(bar("民意", c.support, fmt(A.support), fmt(D.support))); // 戦争への支持。長引くほど下がる
     return box;
   }
   /** 戦争1つの戦況（両陣営・比較バー・結果・終戦日・参戦した同盟国）をまとめて返す */
@@ -38,11 +41,18 @@ export function initWarOutcome({ store, simActions }) {
     const sides = el("div", "wo-sides");
     sides.append(el("div", "wo-side a", names(map, war.attackers)), el("div", "wo-vs", "VS"), el("div", "wo-side d", names(map, war.defenders)));
     box.append(sides);
-    const r = war.result;
-    if (!r) { box.append(el("p", "muted", "戦況の記録がありません（旧データの戦争です）")); return box; }
+    const ongoing = war.progress != null && war.progress < 1 && !war.endedAt;
+    const r0 = war.result;
+    if (!r0) { box.append(el("p", "muted", "戦況の記録がありません（旧データの戦争です）")); return box; }
+    // 戦闘中は、勝敗や戦争スコアはまだ伏せる。バーはいまの戦力（損害を反映した値）で出す
+    const r = ongoing ? { ...r0, ...(simActions.previewWar(war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null, war.type) ?? {}) } : r0;
     box.append(bars(r));
-    box.append(el("div", `wo-verdict ${r.winner}`, r.winner === "attacker" ? `攻撃側の勝利（${names(map, war.attackers)}）` : r.winner === "defender" ? `防衛側の勝利（${names(map, war.defenders)}）` : "決着つかず（膠着）"));
-    const dates = `開戦 ${fmtDate(war.startedAt)}　${war.endedAt ? `終戦 ${fmtDate(war.endedAt)}` : `終戦予定 ${fmtDate(war.endsAt)}（約${war.durationMonths ?? "?"}ヶ月）`}${r.warScore != null ? `　戦争スコア ${r.warScore}` : ""}`;
+    if (ongoing) box.append(el("p", "hint", "戦闘のさなかです。勝敗は、戦闘が終わると明らかになります。"));
+    else {
+      if (r.victory) box.append(el("p", "hint", `勝利条件：${r.victory.text}`));
+      box.append(el("div", `wo-verdict ${r.winner}`, r.winner === "attacker" ? `攻撃側の勝利（${names(map, war.attackers)}）` : r.winner === "defender" ? `防衛側の勝利（${names(map, war.defenders)}）` : "決着つかず（膠着）"));
+    }
+    const dates = ongoing ? `開戦 ${fmtDate(war.startedAt)}　終戦予定 ${fmtDate(war.endsAt)}（約${war.durationMonths ?? "?"}ヶ月）` : `開戦 ${fmtDate(war.startedAt)}　終戦 ${fmtDate(war.endedAt ?? war.endsAt)}${r.warScore != null ? `　戦争スコア ${r.warScore}` : ""}`;
     box.append(el("p", "hint", dates));
     if (war.joinedAllies?.length) box.append(el("p", "hint", `同盟の拘束により参戦: ${war.joinedAllies.map((j) => `${sname(map, j.id)}（${j.alliance}・${j.side === "attacker" ? "攻撃側" : "防衛側"}）`).join("、")}`));
     return box;
@@ -84,7 +94,7 @@ export function initWarOutcome({ store, simActions }) {
   function treatyRecord(map, war) {
     const t = war.terms ?? {}, box = el("div", "treaty-record");
     box.append(el("h3", "", war.treatyName ?? t.treatyName ?? "講和条約"));
-    const kindLabel = { standard: "通常の講和", white: "白紙和平", annex: "全面降伏（併合）" }[t.kind ?? "standard"];
+    const kindLabel = { standard: "通常の講和", white: "白紙和平", vassal: "従属化", annex: "全面降伏（併合）" }[t.kind ?? "standard"];
     const lines = [["戦争", `${war.name}（${warTypeLabel(war.type)}）`], ["種類", kindLabel], ["締結", `${fmtDate(t.signedAt ?? war.endedAt)}`], ["講和地", t.venue ? `${t.venue.place}（${t.venue.stateId ? sname(map, t.venue.stateId) : ""}）` : "—"],
       ["交戦国", `${names(map, war.attackers)} ／ ${names(map, war.defenders)}`], ["戦争スコア", t.score ? `${t.score.total}` : "—"]];
     const tb = el("table", "win-table");
@@ -94,12 +104,15 @@ export function initWarOutcome({ store, simActions }) {
     if (t.cessions?.length) { const ul = el("ul"); for (const c of t.cessions) ul.append(el("li", "", `${c.name || "区画"}（${c.cells}セル${c.burgs?.length ? `・都市: ${c.burgs.join("、")}` : ""}）：${sname(map, c.fromStateId)} → ${sname(map, c.toStateId)}`)); box.append(ul); } else box.append(el("p", "muted", "なし"));
     box.append(el("h4", "", "賠償金"));
     if (t.reparations?.length) { const ul = el("ul"); for (const r of t.reparations) ul.append(el("li", "", `${sname(map, r.fromStateId)} が ${fmt(r.amount, 2)} ${r.currency} を支払い → ${sname(map, r.toStateId)} が ${fmt(r.received, 2)} ${r.receivedCurrency} を受け取り`)); box.append(ul); } else box.append(el("p", "muted", "なし"));
+    if (t.vassalize?.length) { box.append(el("h4", "", "従属化")); const ul = el("ul"); for (const x of t.vassalize) ul.append(el("li", "", `${sname(map, x.fromStateId)} は ${sname(map, x.toStateId)} の${VASSAL_BY_KEY[x.kind]?.label ?? x.kind}になる`)); box.append(ul); }
     if (t.annex?.length) { box.append(el("h4", "", "併合")); const ul = el("ul"); for (const x of t.annex) ul.append(el("li", "", `${sname(map, x.fromStateId)} は ${sname(map, x.toStateId)} に併合`)); box.append(ul); }
     if (t.notes) box.append(el("h4", "", "その他の条件"), el("p", "", t.notes));
     box.append(el("h4", "", "戦争の経過"), situation(map, war));
     return box;
   }
   const warTypeLabel = (k) => ({ limited: "限定戦", conventional: "通常戦", total: "総力戦", asymmetric: "非対称戦" }[k] ?? "通常戦");
+
+  const isLeader = (id) => simActions.listAlliances().some((a) => !a.dissolvedAt && a.members.includes(id) && simActions.allianceLeader(a) === id);
 
   function treatyForm(map, war) {
     const { winners, losers, stalemate } = simActions.peaceSides(war);
@@ -114,17 +127,17 @@ export function initWarOutcome({ store, simActions }) {
     const sug = draft.sug;
     if (sug) { // 各国の消耗
       const t = el("table", "win-table"); const h = el("tr");
-      for (const x of ["国", "立場", "兵力の損失", "損失の割合", "士気の変動"]) h.append(el("th", "", x)); t.append(h);
+      for (const x of ["国", "立場", "兵力の損失", "損失の割合", "士気の変動", "民意の変動"]) h.append(el("th", "", x)); t.append(h);
       for (const e of sug.exhaustion) {
         const tr = el("tr"); const frac = e.before > 0 ? e.lost / e.before : 0;
-        tr.append(el("td", "", sname(map, e.stateId)), el("td", "", e.side === "winner" ? "勝者側" : "敗者側"), el("td", "", `${fmt(e.lost)} 人`), el("td", "", pct(frac)), el("td", e.moraleDelta >= 0 ? "cur-chg up" : "cur-chg down", `${e.moraleDelta >= 0 ? "+" : ""}${e.moraleDelta}`));
+        tr.append(el("td", "", sname(map, e.stateId)), el("td", "", e.side === "winner" ? "勝者側" : "敗者側"), el("td", "", `${fmt(e.lost)} 人`), el("td", "", pct(frac)), el("td", e.moraleDelta >= 0 ? "cur-chg up" : "cur-chg down", `${e.moraleDelta >= 0 ? "+" : ""}${e.moraleDelta}`), el("td", (e.supportDelta ?? 0) >= 0 ? "cur-chg up" : "cur-chg down", `${(e.supportDelta ?? 0) >= 0 ? "+" : ""}${e.supportDelta ?? 0}`));
         t.append(tr);
       }
       wrap.append(el("h4", "", "各国の消耗"), t);
       wrap.append(el("p", "hint", `戦争スコア ${sug.warScore}（勝者はこの範囲でしか要求できません。勝者が複数なら、戦力への貢献に応じて分け合います）`));
     }
 
-    const kinds = [["standard", "通常の講和（割譲・賠償）"], ["white", "白紙和平（条件なし）"], ["annex", "全面降伏（敗者を併合。戦争スコア85以上）"]];
+    const kinds = [["standard", "通常の講和（割譲・賠償）"], ["white", "白紙和平（条件なし）"], ["vassal", "従属化（傀儡・保護国・属国にする）"], ["annex", "全面降伏（敗者を併合。戦争スコア85以上）"]];
     const kindRow = el("div", "member-picker");
     for (const [k, label] of kinds) {
       const l = el("label", ""); const rb = document.createElement("input"); rb.type = "radio"; rb.name = "treaty-kind"; rb.checked = draft.kind === k;
@@ -145,6 +158,8 @@ export function initWarOutcome({ store, simActions }) {
     const detail = el("div", "treaty-detail"); wrap.append(detail);
     const meter = el("div", "wo-impact"); const impact = el("div", "wo-impact");
     const annexTargets = () => losers.map((L) => ({ fromStateId: L, toStateId: winners[0] }));
+    draft.vkind ??= "vassal";
+    const vassalTargets = () => losers.map((L) => ({ fromStateId: L, toStateId: winners[0], kind: draft.vkind }));
 
     // 割譲の候補（敗者ごと）。消耗に比例した量が、初めから選ばれている
     function ensureCessions() {
@@ -166,13 +181,14 @@ export function initWarOutcome({ store, simActions }) {
       cessions: draft.kind === "standard" ? (draft.cessions ?? []).filter((c) => c.on).map((c) => ({ cells: c.regionCells, fromStateId: c.fromStateId, toStateId: c.toStateId, name: c.name })) : [],
       reparations: draft.kind === "standard" ? Object.entries(draft.reparations ?? {}).filter(([, a]) => a > 0).map(([k, amount]) => { const [f, t] = k.split("-").map(Number); return { fromStateId: f, toStateId: t, amount }; }) : [],
       annex: draft.kind === "annex" ? annexTargets() : [],
+      vassalize: draft.kind === "vassal" ? vassalTargets() : [],
     });
     function renderMeter() {
       meter.replaceChildren();
       const terms = currentTerms();
       const rows = simActions.treatyBudget(war.id, terms);
       const t = el("table", "win-table"); const h = el("tr"); for (const x of ["勝者", "取り分", "要求の費用 / 上限（戦争スコア）"]) h.append(el("th", "", x)); t.append(h);
-      for (const r of rows) { const tr = el("tr"); const over = r.spent > r.budget + 0.05; tr.append(el("td", "", sname(map, r.stateId)), el("td", "", pct(r.share)), el("td", over ? "cur-chg down" : "", `${fmt(r.spent, 1)} / ${fmt(r.budget, 1)}${over ? "　⚠ 超過" : ""}`)); t.append(tr); }
+      for (const r of rows) { const tr = el("tr"); const over = r.spent > r.budget + 0.05; tr.append(el("td", "", `${isLeader(r.stateId) ? "★ " : ""}${sname(map, r.stateId)}`), el("td", "", pct(r.share)), el("td", over ? "cur-chg down" : "", `${fmt(r.spent, 1)} / ${fmt(r.budget, 1)}${over ? "　⚠ 超過" : ""}`)); t.append(tr); }
       meter.append(el("h4", "", "戦争スコアの使い道"), t);
       // 相手から渡るもの
       impact.replaceChildren();
@@ -188,6 +204,13 @@ export function initWarOutcome({ store, simActions }) {
     }
 
     if (draft.kind === "white") detail.append(el("p", "hint", "どちらも何も受け取りません。戦争は終わり、関係は中立に戻ります。"));
+    else if (draft.kind === "vassal") {
+      const sel = document.createElement("select");
+      for (const k of VASSAL_KINDS) { const o = document.createElement("option"); o.value = k.key; o.textContent = `${k.label}（貢納 ${Math.round(k.tribute * 100)}%/年）`; o.selected = draft.vkind === k.key; sel.append(o); }
+      const desc = el("p", "hint", VASSAL_BY_KEY[draft.vkind].desc);
+      sel.addEventListener("change", () => { draft.vkind = sel.value; renderTreaty(); });
+      detail.append(el("p", "hint", `${losers.map((L) => sname(map, L)).join("・")}は併合されず、${sname(map, winners[0])}に従属します。領土は変わりません。`), sel, desc, meter);
+    }
     else if (draft.kind === "annex") detail.append(el("p", "hint", `${losers.map((L) => sname(map, L)).join("・")}は降伏し、全土が${sname(map, winners[0])}に併合されます。`), meter);
     else {
       ensureCessions(); ensureRepar();
