@@ -4,7 +4,7 @@
 import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegiment, regimentsOf } from "../core/sim/military.js";
 import { planResolveBattle, planResolveMuster } from "../core/sim/battle.js";
 import { planCreateAlliance, planEditAlliance, planDissolveAlliance, listAlliances, alliancesOf } from "../core/edit/alliances.js";
-import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, suggestCessionChunks, suggestTreaty, planWarPreview, planReevaluateWars, planSignPeace, planSignTreaty, treatyBudget, planAdvanceWars, planFinishWar, warsOngoing, planRenameWar, warsAwaitingTreaty, planPeaceVenue, peaceSides, estimatePeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
+import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMuster, warNameTaken, suggestCessions, suggestCessionChunks, suggestTreaty, suggestTerms, planWarPreview, planReevaluateWars, planSignPeace, planSignTreaty, treatyBudget, planAdvanceWars, planFinishWar, planWithdraw, currentWarScore, warsOngoing, planRenameWar, warsAwaitingTreaty, planPeaceVenue, peaceSides, estimatePeace, listWars, activeWars, warsOf } from "../core/edit/wars.js";
 import { forcePower } from "../core/sim/units.js";
 import { planAddMarker } from "../core/edit/markers.js";
 import { createRandom } from "../core/random.js";
@@ -12,6 +12,7 @@ import { makeCommand } from "../core/edit/commands.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
 import { planNextCollapse } from "../core/sim/collapse.js";
 import { leaderOf } from "../core/edit/alliances.js";
+import { planCovertOp, covertOdds, listCovertOps, COVERT_KINDS } from "../core/sim/covert.js";
 import { planSetVassal, planReleaseVassal, vassalInfo } from "../core/edit/vassals.js";
 import { planMergeStates } from "../core/edit/sovereignty.js";
 import { strikeEffects } from "../core/sim/nuclear.js";
@@ -37,6 +38,15 @@ export function createSimActions({ store, renderer }) {
   };
   const regimentCell = (map, ref) => (map.pack.states[ref.stateId]?.military ?? []).find((r) => r.i === (ref.regId ?? ref.regIds?.[0]))?.cell ?? null;
   const battleName = (map, a, b) => `${dateLabel()} ${map.pack.states[a.stateId].name}対${map.pack.states[b.stateId].name}の戦い`;
+
+  /** 状況が動いた戦争を、いまの戦力・士気・民意で判定し直す（ハプニング・隠密作戦・撤退・核の使用のあと） */
+  const reevaluateWarIds = (ids) => {
+    const map = store.getState().map; if (!map || !ids.length) return;
+    const stateIds = new Set(); for (const w of listWars(map)) if (ids.includes(w.id)) for (const x of [...w.attackers, ...w.defenders]) stateIds.add(x);
+    const re = planReevaluateWars(map, [...stateIds], null); if (re) store.commit(makeCommand("戦況の再判定", [], [re]));
+  };
+  const reevaluateTouched = (cmd) => { if (cmd?.touchedWars?.length) reevaluateWarIds(cmd.touchedWars); };
+  const reevaluateStates = (stateIds) => { const map = store.getState().map; const re = map ? planReevaluateWars(map, stateIds, null) : null; if (re) store.commit(makeCommand("戦況の再判定", [], [re])); };
 
   /** 人口の大部分を失った国を崩壊させる（無くなるまで）。崩壊した国の説明文の配列を返す */
   const runCollapses = () => {
@@ -150,13 +160,41 @@ export function createSimActions({ store, renderer }) {
       });
     },
     suggestTreaty(warId) { return withMap((map) => { const w = listWars(map).find((x) => x.id === warId); return w ? suggestTreaty(map, w) : null; }); },
+    suggestTerms(warId, opts) { return withMap((map) => { const w = listWars(map).find((x) => x.id === warId); return w ? suggestTerms(map, w, opts) : null; }); },
     suggestCessionChunks(toIds, fromId, opts) { return withMap((map) => suggestCessionChunks(map, toIds, fromId, opts)) ?? []; },
     treatyBudget(warId, terms) { return withMap((map) => { const w = listWars(map).find((x) => x.id === warId); return w ? treatyBudget(map, w, terms) : []; }) ?? []; },
     warsOngoing() { return withMap((map) => warsOngoing(map)) ?? []; },
     /** 戦闘を最後まで進める */
-    finishWar(warId) { withMap((map) => safeRun("戦闘を進める", () => { commitOrThrow(planFinishWar(map, warId)); runCollapses(); })); },
-    /** 月が進むたびの、戦争の損害の展開（時間経過）。崩壊した国名を返す */
-    advanceWars(date) { return withMap((map) => { const c = planAdvanceWars(map, date); if (c) store.commit(c); return c ? runCollapses() : []; }) ?? []; },
+    /** 経過を、目安の期間の終わりまで進める（時間を待たずに確かめたいとき） */
+    finishWar(warId) { withMap((map) => safeRun("経過を進める", () => { const c = planFinishWar(map, warId, rnd); if (c) { store.commit(c); reevaluateTouched(c); runCollapses(); rerender(); } })); },
+    /** 月が進むたびの、戦争の損害とハプニングの展開（時間経過）。崩壊した国名を返す */
+    advanceWars(date) {
+      return withMap((map) => {
+        const c = planAdvanceWars(map, date, rnd); if (!c) return [];
+        store.commit(c); reevaluateTouched(c);
+        return runCollapses();
+      }) ?? [];
+    },
+    /** 軍を引き上げる。regIds は戦線に残す部隊（空なら全軍撤退） */
+    withdrawFromWar(warId, stateId, regIds) {
+      return withMap((map) => { let ok = false; safeRun("軍の引き上げ", () => {
+        const c = planWithdraw(map, warId, stateId, regIds, currentDate()); if (!c) return;
+        store.commit(c); reevaluateWarIds([warId]); rerender(); ok = true;
+      }); return ok; }) ?? false;
+    },
+    currentWarScore(war) { return currentWarScore(war); },
+    // --- 隠密作戦（サイバー攻撃など） ---
+    covertKinds() { return COVERT_KINDS; },
+    covertOps() { return withMap((map) => listCovertOps(map)) ?? []; },
+    covertOdds(attackerId, targetId, kind) { return withMap((map) => covertOdds(map, attackerId, targetId, kind)); },
+    runCovertOp(attackerId, targetId, kind) {
+      return withMap((map) => { let op = null; safeRun("隠密作戦", () => {
+        const r = planCovertOp(map, { attackerId, targetId, kind, date: currentDate(), rnd });
+        store.beginBatch(r.command.label ?? "隠密作戦");
+        try { store.commit(r.command); reevaluateStates([attackerId, targetId]); runCollapses(); } finally { store.endBatch(); }
+        rerender(); op = r.op;
+      }); return op; }) ?? null;
+    },
     runCollapses,
     allianceLeader(a) { return leaderOf(a); },
     // --- 従属関係（傀儡・保護国・属国） ---

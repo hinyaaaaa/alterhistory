@@ -19,6 +19,7 @@ import { initSettingsWindows } from "./ui/settings-windows.js";
 import { initEntityLists } from "./ui/entity-list-window.js";
 import { initGenealogy } from "./ui/genealogy-window.js";
 import { initNuclearWindow } from "./ui/nuclear-window.js";
+import { initCovertWindow } from "./ui/covert-window.js";
 import { makeDraggable } from "./ui/windows.js";
 import { initHighlight } from "./ui/highlight.js";
 import { initToolbar } from "./ui/toolbar.js";
@@ -75,7 +76,8 @@ function start() {
   const simActions = createSimActions({ store, renderer });
   const timeActions = createTimeActions({ store, renderer, simActions });
   const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
-  const warOutcome = initWarOutcome({ store, simActions });
+  let highlightRef = null; // 講和の割譲区画を赤く強調するために、あとで入る
+  const warOutcome = initWarOutcome({ store, simActions, getHighlight: () => highlightRef });
   let winsRef = null;
   const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome, getWins: () => winsRef });
   const alliancesPanel = initAlliancesPanel({ store, simActions });
@@ -93,12 +95,13 @@ function start() {
     consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell),
   };
   editorPanel.setPanels?.(panels); // editor-panel.js 内で使う panels（wars/alliances/military）を後から渡す
-  const highlight = initHighlight({ store, viewport, renderer }); // 一覧・地図クリックで、ズームせずに境界線を光らせる
+  const highlight = initHighlight({ store, viewport, renderer }); highlightRef = highlight; // 一覧・地図クリックで、ズームせずに境界線を光らせる
   const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   winsRef = wins;
   initEntityLists({ store, wins, panels, editActions, highlight });
   initGenealogy({ store, wins, editActions });
   initNuclearWindow({ store, simActions, wins });
+  initCovertWindow({ store, simActions, wins });
   // 地図上の国・州などを選んだときも、ズームせず強調だけする
   const rawOpen = panels.openEntity;
   panels.openEntity = (kind, id) => { if (["state", "culture", "religion", "province"].includes(kind)) highlight.show(kind, id); return rawOpen(kind, id); };

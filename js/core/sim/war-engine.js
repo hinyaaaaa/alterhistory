@@ -249,9 +249,15 @@ export function planSupportDeltas(result, { attackers, defenders, months, type }
 /** 核作戦などで状況が変わったあとの再判定。最初に出たブレ(noise)は使い回すので、結果が勝手に揺れない */
 export function reevaluateWar(map, war) {
   const r = war.result; if (!r) return null;
+  const T = warTypeOf(r.type);
   const { aStrength: A, dStrength: D, compare } = previewWar(map, war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null);
-  const edge = edgeOf(compare, r.doctrine?.attacker ?? sideDoctrine(map, war.attackers), r.doctrine?.defender ?? sideDoctrine(map, war.defenders)) + (r.noise ?? 0);
-  return { ...r, ...verdictOf(edge, r.type === "asymmetric" ? 0.05 : 0.015), compare, aStrength: A, dStrength: D };
+  const edge = edgeOf(compare, r.doctrine?.attacker ?? sideDoctrine(map, war.attackers), r.doctrine?.defender ?? sideDoctrine(map, war.defenders)) + (r.noise ?? 0) + (war.edgeShift ?? 0);
+  const v = verdictOf(edge, r.type === "asymmetric" ? 0.05 : 0.015);
+  // 首都陥落・民意の崩壊で決着した戦争は、その決着を保つ（ハプニングで勝敗は覆らない）。それ以外は、いまの戦力で判定し直す
+  if (r.victory && (r.victory.type === "capital" || r.victory.type === "exhaustion")) return { ...r, compare, aStrength: A, dStrength: D };
+  const dominance = clamp(Math.abs(edge) * 6, 0, 1);
+  const warScore = v.winner === "stalemate" ? 0 : Math.round(clamp(100 * (0.15 + 0.85 * dominance) * T.scoreScale, 5, 100));
+  return { ...r, ...v, dominance, warScore, compare, aStrength: A, dStrength: D };
 }
 
 /** 損耗率を部隊の兵力に反映した新しい u を返す（核は消耗させない） */

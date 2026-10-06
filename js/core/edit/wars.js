@@ -17,6 +17,7 @@ import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
 import { resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, applyVictoryConditions, planSupportDeltas, supportOf } from "../sim/war-engine.js";
 import { officialName } from "../names.js";
+import { newFx, rollWarMonth, fxParts, addMorale, addSupport, mulPop, mulTroops } from "../sim/war-events.js";
 import { regimentsOf } from "../sim/military.js";
 import { convert, getCurrency } from "../sim/currency.js";
 import { getFinance } from "../sim/trade.js";
@@ -110,7 +111,7 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
   const name = nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key });
   const war = {
     id: nextWarId(map), name, type: T.key, attackers: a, defenders: d, startedAt: date, endsAt, durationMonths: months, endedAt: null,
-    progress: 0, // 0〜1。月が進むごとに損害が積み重なり、1で戦闘が終わって講和できる
+    progress: 0, monthsDone: 0, events: [], omens: [], edgeShift: 0, withdrawn: {}, // progress: 経過月数 ÷ 目安の月数（1を超えて長引くこともある）。終わりは決まっておらず、講和条約を結んだ月が終戦の月になる
     joinedAllies: joined, battles, advantage: {}, muster: cleanMuster,
     result: {
       winner: result.winner, decisiveness: result.decisiveness, warScore: result.warScore, type: T.key, compare: result.compare, aStrength: result.aStrength, dStrength: result.dStrength,
@@ -126,61 +127,78 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
 }
 
 const monthsBetween = (from, to) => (to.year - from.year) * 12 + (to.month - from.month);
+/** 目安の期間(1.0)を超えて長引いた分は、損害の増え方が鈍る（消耗戦になる） */
+const effExp = (p) => (p <= 1 ? p : 1 + 0.35 * (p - 1));
 
-/** 戦争の進行（月ごとの損害）を、進行度 q0→q1 の分だけ反映する部品。損害・士気・民間の被害は、期間に均等に積み重なる */
-function progressParts(map, war, q0, q1) {
-  const parts = [];
-  const r = war.result; if (!r || q1 <= q0) return parts;
+/** 戦争の進行（月ごとの損害・士気・民意・民間の被害）を、進行度 q0→q1（effExp の値）の分だけ fx に積む */
+function addProgressFx(map, war, fx, q0, q1) {
+  const r = war.result; if (!r || q1 <= q0) return;
   const dq = q1 - q0;
-  const m = war.muster && Object.keys(war.muster).length ? war.muster : null;
   for (const sidStr of Object.keys(r.losses ?? {})) {
-    const id = Number(sidStr), st = map.pack.states[id]; if (!isLive(st)) continue;
-    const f = r.losses[id] ?? 0;
-    const step = 1 - Math.pow(1 - f, dq); // 全期間で f 失う損害を、dq の分だけ
-    for (const reg of mobilized(st, m)) parts.push(setProps(reg, { u: applyLossFraction(reg.u, step) }));
-    const pl = r.popLossShare?.[id] ?? 0, pstep = 1 - Math.pow(1 - pl, dq);
-    const pop0 = (st.rural ?? 0) + (st.urban ?? 0);
-    parts.push(setProps(st, {
-      morale: Math.max(0, Math.min(100, (st.morale ?? 70) + (r.moraleDelta?.[id] ?? 0) * dq)),
-      support: Math.max(0, Math.min(100, supportOf(st) + (r.supportDelta?.[id] ?? 0) * dq)), // 民意も、期間に均等に動く
-      popPeak: Math.max(st.popPeak ?? 0, pop0),
-      rural: Math.round((st.rural ?? 0) * (1 - pstep) * 100) / 100, urban: Math.round((st.urban ?? 0) * (1 - pstep) * 100) / 100,
-    }));
+    const id = Number(sidStr), st = map.pack.states[id]; if (!isLive(st) || war.withdrawn?.[id]) continue; // 引き上げた国は、もう消耗しない
+    mulTroops(fx, map, war, id, Math.pow(1 - (r.losses[id] ?? 0), dq));
+    mulPop(fx, id, Math.pow(1 - (r.popLossShare?.[id] ?? 0), dq));
+    addMorale(fx, id, (r.moraleDelta?.[id] ?? 0) * dq);
+    addSupport(fx, id, (r.supportDelta?.[id] ?? 0) * dq);
   }
-  return parts;
 }
 
-/** 月が進むたびに呼ぶ。戦闘中の戦争の損害を、経過した分だけ自動で展開する。変化が無ければ null */
-export function planAdvanceWars(map, date) {
+/** 戦争の「いま」の戦争スコア。時間が経つほど（占領・消耗が進むほど）上がる。講和で要求できる大きさの上限になる */
+export function currentWarScore(war) {
+  const r = war?.result; if (!r) return 0;
+  if (r.winner === "stalemate") return 0;
+  const p = war.progress == null ? 1 : Math.min(1, Math.max(0, war.progress));
+  return Math.round((r.warScore ?? 0) * Math.min(1, 0.12 + 0.88 * p));
+}
+
+/**
+ * 月が進むたびに呼ぶ。戦争中の損害を、経過した月ぶんだけ自動で展開し、ハプニング（rnd があるとき）を起こす。
+ * 戦争にあらかじめ決まった終わりは無い。ユーザーが講和条約を結んだ月が、終戦の月になる。
+ * @returns コマンド。変化が無ければ null。afterEvents は、状況が動いた戦争のID（呼び出し側で再判定する）
+ */
+export function planAdvanceWars(map, date, rnd = null) {
   const list = listWars(map);
-  const parts = []; let changed = false;
+  const fx = newFx(); const touched = [];
   const after = list.map((w) => {
-    if (w.endedAt || !w.result || w.progress == null || w.progress >= 1) return w;
-    const p = Math.min(1, monthsBetween(w.startedAt, date) / Math.max(1, w.durationMonths));
-    if (p <= w.progress) return w;
-    parts.push(...progressParts(map, w, w.progress, p)); changed = true;
-    return { ...w, progress: p };
+    if (w.endedAt || !w.result || w.progress == null) return w;
+    const dur = Math.max(1, w.durationMonths ?? 12);
+    const done0 = w.monthsDone ?? Math.round((w.progress ?? 0) * dur);
+    const el = monthsBetween(w.startedAt, date);
+    if (el <= done0) return w;
+    let cur = { ...w, events: [...(w.events ?? [])], omens: [...(w.omens ?? [])], edgeShift: w.edgeShift ?? 0 };
+    const last = Math.min(el, done0 + 24); // 長く放置した場合でも、一度に処理するのは2年分まで
+    for (let k = done0 + 1; k <= last; k++) {
+      addProgressFx(map, cur, fx, effExp((k - 1) / dur), effExp(k / dur));
+      if (rnd) {
+        const rr = rollWarMonth(map, cur, addMonths(w.startedAt, k), rnd, fx);
+        if (rr.events.length) { cur.events.push(...rr.events); touched.push(w.id); }
+        cur.omens = rr.omens; cur.edgeShift += rr.edgeShift; if (rr.mediator != null) cur.mediator = rr.mediator;
+      }
+    }
+    cur.monthsDone = last; cur.progress = last / dur;
+    return cur;
   });
-  if (!changed) return null;
+  if (after.every((w, i) => w === list[i])) return null;
+  const parts = fxParts(map, fx, setProps);
   parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) });
-  return makeCommand("戦争の進行（月ごとの損害）", ["places"], parts);
+  const cmd = makeCommand("戦争の進行（月ごとの損害とできごと）", ["places"], parts);
+  cmd.touchedWars = [...new Set(touched)];
+  return cmd;
 }
 
-/** 戦闘を最後まで進める（残りの損害をまとめて反映して、講和できる状態にする） */
-export function planFinishWar(map, warId) {
+/** 経過を、目安の期間の終わりまで進める（時間を待たずに、損害を目安の期間ぶん反映する） */
+export function planFinishWar(map, warId, rnd = null) {
   const list = listWars(map), w = list.find((x) => x.id === warId);
   if (!w || !w.result) throw new Error("その戦争は存在しません");
   if (w.endedAt) throw new Error("すでに終結しています");
-  if (w.progress == null || w.progress >= 1) return null;
-  const parts = progressParts(map, w, w.progress, 1);
-  const after = list.map((x) => (x.id === warId ? { ...x, progress: 1 } : x));
-  parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) });
-  return makeCommand(`戦闘を最後まで進める（${w.name}）`, ["places"], parts);
+  const dur = Math.max(1, w.durationMonths ?? 12), done0 = w.monthsDone ?? Math.round((w.progress ?? 0) * dur);
+  if (done0 >= dur) return null;
+  return planAdvanceWars(map, addMonths(w.startedAt, dur), rnd);
 }
 
-/** 戦闘が終わって、講和を待っている戦争（進行度が1。旧データは進行度なし＝終わっているとみなす） */
-export const warFought = (w) => !!w.result && !w.endedAt && (w.progress == null || w.progress >= 1);
-export const warOngoing = (w) => !!w.result && !w.endedAt && w.progress != null && w.progress < 1;
+/** 戦争が続いている（まだ講和していない）。講和条約は、いつでも結べる */
+export const warOngoing = (w) => !!w.result && !w.endedAt;
+export const warFought = warOngoing;
 
 /** 戦争開始前の見積もり（招集した部隊でのバー表示）。同盟の参戦も反映する */
 export function planWarPreview(map, { attackers, defenders, muster = null, type = "conventional" }) {
@@ -258,6 +276,48 @@ export function planSetMuster(map, warId, muster) {
   }
   const after = list.map((x) => (x.id !== warId ? x : { ...x, muster: clean }));
   return makeCommand("部隊の召集", [], [{ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) }]);
+}
+
+/**
+ * 軍を引き上げる（戦線から部隊を外す）。regIds は戦線に残す部隊。空なら全軍撤退。
+ *   ・引き上げた部隊は、もう損耗しない。戦力バーからも外れる
+ *   ・撤退は士気に響く（−6×引き上げた割合）が、戦争への不満は和らぐ（民意 +3×割合）
+ *   ・ある陣営の全員が全軍を引き上げると、その陣営は敗北を認めたことになり、相手の勝ちで決着する（講和はこのあと結ぶ）
+ */
+export function planWithdraw(map, warId, stateId, regIds, date) {
+  const list = listWars(map), war = list.find((w) => w.id === warId);
+  if (!war || !war.result) throw new Error("その戦争は存在しません");
+  if (war.endedAt) throw new Error("終結した戦争では引き上げられません");
+  const all = [...war.attackers, ...war.defenders];
+  if (!all.includes(stateId)) throw new Error("その国はこの戦争に参加していません");
+  const st = map.pack.states[stateId]; if (!isLive(st)) throw new Error("存在しない国家です");
+  const have = (st.military ?? []).map((r) => r.i);
+  const cur = new Set(war.muster?.[stateId] ?? have);
+  const keep = [...new Set(regIds ?? [])].filter((i) => have.includes(i));
+  const pulled = [...cur].filter((i) => !keep.includes(i)).length;
+  const returned = keep.filter((i) => !cur.has(i)).length;
+  if (!pulled && !returned) return null;
+  // 全参戦国の召集を、明示的な形にそろえる（未指定＝全部隊 のままだと、引き上げが表せない）
+  const muster = {}; for (const id of all) muster[id] = war.muster?.[id] ?? (map.pack.states[id]?.military ?? []).map((r) => r.i);
+  muster[stateId] = keep;
+  const withdrawn = { ...(war.withdrawn ?? {}) };
+  if (!keep.length) withdrawn[stateId] = date ?? true; else delete withdrawn[stateId];
+  const name = officialName(st), frac = have.length ? pulled / have.length : 1;
+  const events = [...(war.events ?? [])];
+  if (!keep.length) events.push({ date: date ?? null, kind: "withdraw", title: "全軍撤退", text: `${name}は全軍を戦線から引き上げた` });
+  else if (pulled) events.push({ date: date ?? null, kind: "withdraw", title: "部隊の引き上げ", text: `${name}は一部の部隊（${pulled}隊）を戦線から引き上げた` });
+  else events.push({ date: date ?? null, kind: "withdraw", title: "増派", text: `${name}は部隊（${returned}隊）を戦線へ戻した` });
+  let result = war.result;
+  // ある陣営が全員撤退したら、その陣営の敗北で決着する
+  const sideDone = (ids) => ids.every((id) => withdrawn[id]);
+  if (sideDone(war.attackers) !== sideDone(war.defenders)) {
+    const loserIsAttacker = sideDone(war.attackers);
+    result = { ...war.result, winner: loserIsAttacker ? "defender" : "attacker", victory: { type: "withdrawal", text: `${loserIsAttacker ? "攻撃側" : "防衛側"}が全軍を撤退させた` }, warScore: Math.max(war.result.warScore ?? 0, 30) };
+    events.push({ date: date ?? null, kind: "withdraw", title: "戦争の決着", text: `${loserIsAttacker ? "攻撃側" : "防衛側"}の全員が撤退し、戦争は相手側の勝利で決着した` });
+  }
+  const parts = [{ apply: (m) => writeWars(m, list.map((w) => (w.id === warId ? { ...w, muster, withdrawn, events, result } : w))), revert: (m) => writeWars(m, list) }];
+  if (pulled) parts.push(setProps(st, { morale: Math.max(0, (st.morale ?? 70) - 6 * frac), support: Math.min(100, (st.support ?? 70) + 3 * frac) }));
+  return makeCommand(`${name}が軍を引き上げる`, ["places"], parts);
 }
 
 /** 戦闘結果を戦争記録に追記する（battle.js の planResolveBattle と組み合わせて呼ぶ） */
@@ -384,7 +444,7 @@ export function winnerShares(map, war) {
 /** 条約の要求の、勝者ごとの費用と上限（戦争スコア×取り分）。UI の残量表示と、締結時の検査に使う */
 export function treatyBudget(map, war, terms) {
   const { winners } = peaceSides(war);
-  const score = war.result?.warScore ?? 0, shares = winnerShares(map, war);
+  const score = currentWarScore(war), shares = winnerShares(map, war);
   const spent = Object.fromEntries(winners.map((id) => [id, 0]));
   for (const c of terms.cessions ?? []) if (spent[c.toStateId] != null) spent[c.toStateId] += cessionCost(map, c.fromStateId, c.cells);
   for (const r of terms.reparations ?? []) if (spent[r.toStateId] != null && r.amount > 0) spent[r.toStateId] += reparationCost(map, r.fromStateId, r.amount);
@@ -405,7 +465,6 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
   const war = list.find((w) => w.id === warId);
   if (!war) throw new Error("その戦争は存在しません");
   if (war.endedAt) throw new Error("既に終結しています");
-  if (!allowOngoing && warOngoing(war)) throw new Error("戦闘がまだ続いています。最後まで進めてから講和してください");
   const { winners, losers } = peaceSides(war);
   const all = [...war.attackers, ...war.defenders];
   const kind = terms.kind ?? "standard";
@@ -425,7 +484,7 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
     const rows = treatyBudget(map, war, { cessions, reparations, annex, vassalize });
     const over = rows.find((r) => r.spent > r.budget + 0.05);
     if (over) throw new Error(`${officialName(map.pack.states[over.stateId])}の要求が戦争スコアを超えています（使用 ${over.spent} / 上限 ${over.budget}）`);
-    if (annex.length && (war.result.warScore ?? 0) < 85) throw new Error("全面降伏（併合）を求めるには、戦争スコアが85以上の決定的な勝利が必要です");
+    if (annex.length && currentWarScore(war) < 85) throw new Error("全面降伏（併合）を求めるには、戦争スコアが85以上の決定的な勝利が必要です。戦争が続いて消耗が進むほどスコアは上がります");
   }
 
   const c = map.pack.cells, parts = [], record = { cessions: [], reparations: [], annex: [] };
@@ -454,9 +513,10 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
   }
 
   const treatyName = uniqueTreatyName(map, terms.treatyName || `${war.name}の講和条約`);
-  const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, ...record, score: { total: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex, vassalize }) : [] } };
-  const endDate = war.endsAt ?? date;
-  const after = list.map((w) => (w.id !== warId ? w : { ...w, endedAt: endDate, terms: full, treatyName, treatyVenue: terms.venue?.place ?? null }));
+  const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, ...record, score: { total: currentWarScore(war), max: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex, vassalize }) : [] } };
+  // 終戦の月は、実際に講和条約を結んだ月。経過した月数も記録する
+  const endDate = date;
+  const after = list.map((w) => (w.id !== warId ? w : { ...w, endedAt: endDate, lastedMonths: Math.max(0, monthsBetween(w.startedAt, date)), terms: full, treatyName, treatyVenue: terms.venue?.place ?? null }));
   parts.push({ apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) });
   // 講和すれば敵対は終わり、中立に戻る（他の戦争で敵対中の組は、その戦争が終わるまで敵対のまま）
   const stillHostile = new Set();
@@ -515,7 +575,7 @@ export function suggestTreaty(map, war) {
     for (const W of winners) { const amount = Math.round(treasury * share * shares[W] * 100) / 100; if (amount > 0) reparations.push({ fromStateId: L, toStateId: W, amount }); }
   }
   return {
-    kind: stalemate ? "white" : "standard", warScore: r.warScore ?? 0, shares, cessionByLoser, reparations,
+    kind: stalemate ? "white" : "standard", warScore: currentWarScore(war), warScoreMax: r.warScore ?? 0, shares, cessionByLoser, reparations,
     cessionCells: Object.values(cessionByLoser).reduce((n, x) => n + x, 0),
     exhaustion: [...winners, ...losers].map((id) => ({ stateId: id, side: winners.includes(id) ? "winner" : "loser", lost: cas[id]?.lost ?? 0, before: cas[id]?.before ?? 0, moraleDelta: r.moraleDelta?.[id] ?? 0, supportDelta: r.supportDelta?.[id] ?? 0, support: supportOf(map.pack.states[id]) })),
   };
@@ -552,9 +612,56 @@ export function suggestCessionChunks(map, toIds, fromId, { size = "m", maxChunks
     // 受け取る勝者の初期値：その区画に最も接している勝者
     const tally = new Map(); for (const i of cells) { const w = adjWinner(i); if (w != null) tally.set(w, (tally.get(w) ?? 0) + 1); }
     const to = [...tally].sort((a, b) => b[1] - a[1])[0]?.[0] ?? winners[0];
-    chunks.push({ type: "region", name: `${base}周辺`, cells: cells.length, regionCells: cells, fromStateId: fromId, toStateId: to, burgs: cells.filter((i) => burgAt.has(i)).length });
+    chunks.push({ type: "region", name: `${base}周辺`, cells: cells.length, regionCells: cells, fromStateId: fromId, toStateId: to, burgs: cells.filter((i) => burgAt.has(i)).length, burgNames: cells.filter((i) => burgAt.has(i)).map((i) => burgAt.get(i).name) });
   }
   return chunks;
+}
+
+/**
+ * 講和条約の自動案（要求の中身）。必ず戦争スコアの範囲に収まり、そのまま締結できる。
+ *   ・割譲は、国境に近い区画から、消耗に比例した広さまで。各勝者の予算の6割までを割譲に使う
+ *   ・賠償金は、残りの予算の範囲で、敗者の富に応じた額を、勝者の取り分に比例して分ける
+ *   ・区画は、接している勝者に渡す。その勝者の予算が足りなければ、別の勝者に回す
+ * @returns {{kind:string, cessions:object[], reparations:{fromStateId:number,toStateId:number,amount:number}[]}}
+ *   cessions は suggestCessionChunks の区画に on（選択済みか）と toStateId（決まった受取国）を付けたもの
+ */
+export function suggestTerms(map, war, { size = "m" } = {}) {
+  const sug = suggestTreaty(map, war); if (!sug) return null;
+  const { winners, losers } = peaceSides(war);
+  const budget = Object.fromEntries(treatyBudget(map, war, {}).map((r) => [r.stateId, r.budget]));
+  const spent = Object.fromEntries(winners.map((w) => [w, 0]));
+  const cessions = [];
+  if (sug.kind !== "white") for (const L of losers) {
+    const want = sug.cessionByLoser?.[L] ?? 0; let sum = 0;
+    for (const c of suggestCessionChunks(map, winners, L, { size })) {
+      let on = false, to = c.toStateId;
+      let chunk = c;
+      if (sum < want) {
+        const cost = cessionCost(map, L, c.regionCells);
+        for (const w of [to, ...winners.filter((x) => x !== to)]) if (spent[w] + cost <= budget[w] * 0.6 + 1e-6) { on = true; to = w; spent[w] += cost; sum += c.cells; break; }
+        if (!on) { // 予算が足りないときは、区画を縮めて（国境側の数セルだけ）収める。2セル未満になるなら諦める
+          const unit = cost / Math.max(1, c.regionCells.length);
+          for (const w of [to, ...winners.filter((x) => x !== to)]) {
+            const k = Math.floor((budget[w] * 0.6 - spent[w]) / Math.max(0.01, unit));
+            if (k >= 2) {
+              const cells = c.regionCells.slice(0, Math.min(k, c.regionCells.length)), set = new Set(cells);
+              const names = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).map((b) => b.name);
+              chunk = { ...c, regionCells: cells, cells: cells.length, burgNames: names, burgs: names.length };
+              const cc = cessionCost(map, L, cells); if (spent[w] + cc <= budget[w] * 0.6 + 1e-6) { on = true; to = w; spent[w] += cc; sum += cells.length; break; }
+            }
+          }
+        }
+      }
+      cessions.push({ ...chunk, toStateId: to, on });
+    }
+  }
+  const reparations = [];
+  if (sug.kind !== "white") for (const r of sug.reparations) {
+    const rem = Math.max(0, budget[r.toStateId] - spent[r.toStateId]), full = reparationCost(map, r.fromStateId, r.amount);
+    const f = full <= 0 ? 0 : Math.min(1, rem / full), amount = Math.floor(r.amount * f * 100) / 100;
+    if (amount > 0) { reparations.push({ ...r, amount }); spent[r.toStateId] += reparationCost(map, r.fromStateId, amount); }
+  }
+  return { kind: sug.kind, cessions, reparations };
 }
 
 /** 条約名が他の条約と重ならないようにする（◯◯条約 → ◯◯和約 → ◯◯平和条約 → 番号） */
