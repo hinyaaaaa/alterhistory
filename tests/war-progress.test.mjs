@@ -30,18 +30,27 @@ const r = planDeclareAndResolveWar(store.getState().map, { attackers: [1], defen
 store.commit(r.command);
 let m = store.getState().map; const w = listWars(m)[0];
 assert.equal(men(m.pack.states[2]), 1500, "宣戦布告の時点ではまだ損害が出ていない");
-assert.equal(w.progress, 0); assert.ok(warsOngoing(m).length === 1 && warsAwaitingTreaty(m).length === 0, "戦闘中は講和待ちに入らない");
+assert.equal(w.progress, 0); assert.ok(warsOngoing(m).length === 1 && warsAwaitingTreaty(m).length === 1, "戦争中でも講和条約はいつでも結べる");
 const mid = { year: 1 + Math.floor((w.durationMonths / 2 + 0) / 12), month: 1 + (Math.floor(w.durationMonths / 2) % 12) };
 const c1 = planAdvanceWars(m, mid); assert.ok(c1, "月が進むと損害が出る"); store.commit(c1);
 m = store.getState().map; const half = men(m.pack.states[2]);
 assert.ok(half < 1500, "途中まで損害が出る"); assert.ok(listWars(m)[0].progress > 0 && listWars(m)[0].progress < 1);
 store.commit(planFinishWar(m, w.id)); m = store.getState().map;
 assert.ok(men(m.pack.states[2]) <= half, "最後まで進めると損害がさらに増える");
-assert.equal(listWars(m)[0].progress, 1); assert.equal(warsAwaitingTreaty(m).length, 1);
-assert.equal(planAdvanceWars(m, { year: 99, month: 1 }), null, "戦闘が終わった戦争はもう進まない");
+assert.equal(listWars(m)[0].progress, 1);
+assert.ok(planAdvanceWars(m, { year: 5, month: 1 }), "目安の期間を過ぎても戦争は続く（終わりは講和を結ぶまで決まらない）");
 // 戦闘中の講和は拒否される
 const s2 = createStore({ map: mk() }); const r2 = planDeclareAndResolveWar(s2.getState().map, { attackers: [1], defenders: [2], date, rnd: createRandom(4) }); s2.commit(r2.command);
-assert.throws(() => planSignTreaty(s2.getState().map, r2.id, { kind: "white" }, date), /戦闘がまだ続いて/);
+// 講和は、戦争の途中でもいつでも結べる。終戦の月は、結んだ月になる
+{ const signAt = { year: 1, month: 5 };
+  s2.commit(planSignTreaty(s2.getState().map, r2.id, { kind: "white", treatyName: "早期和平" }, signAt));
+  const ended = listWars(s2.getState().map)[0]; assert.deepEqual(ended.endedAt, signAt, "終戦の月＝講和を結んだ月"); assert.equal(ended.lastedMonths, 4); }
+// 早く講和するほど、要求できる範囲（戦争スコア）は小さい
+{ const sa = createStore({ map: mk() }); const ra = planDeclareAndResolveWar(sa.getState().map, { attackers: [1], defenders: [2], date, rnd: createRandom(4), type: "total" }); sa.commit(ra.command);
+  const { currentWarScore } = await import("../js/core/edit/wars.js");
+  const early = currentWarScore(listWars(sa.getState().map)[0]); sa.commit(planFinishWar(sa.getState().map, ra.id));
+  const late = currentWarScore(listWars(sa.getState().map)[0]); const max = listWars(sa.getState().map)[0].result.warScore;
+  assert.ok(early < late && late === max, `戦争スコアは時間とともに上がる（${early}→${late}）`); }
 
 // --- 戦争の形態 ---
 const lim = planDeclareAndResolveWar(mk(), { attackers: [1], defenders: [2], date, rnd: createRandom(4), type: "limited" });

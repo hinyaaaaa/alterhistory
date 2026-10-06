@@ -41,7 +41,7 @@ assert.ok(r.joined.some((j) => j.id === 3 && j.side === "defender"), "標準同�
 run(r.command);
 run(planFinishWar(store.getState().map, r.id));
 const w1 = listWars(store.getState().map)[0];
-assert.ok(w1.endsAt && w1.durationMonths >= 1 && w1.endsAt.year * 12 + w1.endsAt.month > 1 * 12 + 1, "終戦日が自動で決まる");
+assert.ok(w1.endsAt && w1.durationMonths >= 1, "経過の目安（月数）は付くが、終わりの日付ではない"); assert.equal(w1.endedAt, null, "終戦日は決まっていない（講和を結んだ月が終戦）");
 assert.equal(simpleRelation(store.getState().map, 1, 2), "hostile");
 // 同盟国の貿易封鎖（標準以上）：参戦しない立場でも盟主の敵国と取引しない
 assert.ok(blockedPairs(store.getState().map).has("1-2") && blockedPairs(store.getState().map).has("1-3"));
@@ -69,7 +69,7 @@ assert.ok(v && v.treatyName === `${v.place}条約`);
 assert.ok(v.neutral === (v.stateId === 4 || v.stateId === 5), "中立国(4,5=同盟外・戦争外)の都市が選ばれる");
 run(planSignPeace(store.getState().map, w1.id, { toStateId: 1, treatyName: v.treatyName }, date));
 const done = listWars(store.getState().map)[0];
-assert.deepEqual(done.endedAt, w1.endsAt, "終戦日は自動算出された日付になる");
+assert.deepEqual(done.endedAt, date, "終戦の月は、実際に講和条約を結んだ月");
 assert.equal(simpleRelation(store.getState().map, 1, 2), "none", "講和後は中立に戻る");
 assert.equal(blockedPairs(store.getState().map).size, 0);
 

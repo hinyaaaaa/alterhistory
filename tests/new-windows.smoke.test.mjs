@@ -94,17 +94,26 @@ check("戦争がまだ無いときは案内が出る", open("treaty").textConten
 const ids = store.getState().map.pack.states.filter((s) => s && s.i > 0 && !s.removed).map((s) => s.i);
 const out = simActions.declareWarInstant([ids[0]], [ids[1]], null, "conventional");
 check("宣戦布告で即判定され、名前と終戦日が付く", !!out && !!out.name && !!out.endsAt);
-check("戦闘中の戦争は、講和ではなく「戦闘を進める」案内になる", open("treaty").textContent.includes("戦闘が続いています"));
-simActions.finishWar(out.id); // 時間経過のかわりに最後まで進める
+check("戦争中でも、講和条約をいつでも結べる（締結ボタンがある）", [...open("treaty").querySelectorAll("button")].some((b) => b.textContent.includes("講和条約を締結")));
 const tw = open("treaty");
-check("講和条約ウィンドウに戦争・条約名・渡る量の表が出る", !!tw.querySelector(".treaty-form") && (!!tw.querySelector(".wo-impact table") || tw.textContent.includes("各国の消耗")));
+check("講和条約ウィンドウに戦争・条約名・渡る量の表が出る", !!tw.querySelector(".war-prep") && (!!tw.querySelector(".wo-impact table") || tw.textContent.includes("各国の消耗")));
 const ww = open("war");
-[...ww.querySelectorAll(".win-list button")].find((b) => b.textContent.includes(out.name))?.click(); // 戦争を選ぶと詳細（戦況）が出る
+[...ww.querySelectorAll(".war-band button")].find((b) => b.textContent.includes(out.name))?.click(); // 戦争を選ぶと詳細（戦況）が出る
 check("戦争ウィンドウに戦況バーがある", ww.querySelectorAll(".wo-bar-wrap").length === 5);
 const dw = open("diplomacy");
 check("外交一覧は同盟・敵対・中立だけで、Neutrals は出ない", !dw.textContent.includes("Neutrals") && dw.textContent.includes("敵対"));
 check("同盟の拘束力を選べる", !!dw.querySelector(".bond-picker select"));
 
+console.log("=== 隠密作戦・自動の講和 ===");
+const cv = open("covert");
+check("隠密作戦ウィンドウに、3種の作戦と成功率が出る", cv.querySelectorAll(".doctrine-card").length === 3 && cv.textContent.includes("成功率"));
+const before = simActions.covertOps().length;
+[...cv.querySelectorAll("button")].find((b) => b.textContent.includes("作戦を実行"))?.click();
+check("作戦を実行すると記録が残る", simActions.covertOps().length === before + 1);
+open("treaty");
+const tdet = win("treaty");
+check("講和の自動案が入っている（種類・条約名・賠償金・その他の条件）", tdet.querySelector("select") && tdet.querySelector("textarea")?.value.length > 0 && /条約$/.test([...tdet.querySelectorAll("input:not([type])")].map((i) => i.value).find((v) => /条約$/.test(v)) ?? ""));
+check("割譲の行に、都市名の表示がある", [...tdet.querySelectorAll(".wo-cess-burgs")].length === 0 || tdet.querySelector(".wo-cess-burgs").textContent.length > 0);
 console.log("=== 廃止したもの ===");
 check("レイヤープリセットは無い", !q("#layer-presets") && !q("[data-preset]"));
 check("サイドバーの開閉ボタンは非表示", $("btn-sidebar-toggle").hidden === true || $("btn-sidebar-toggle").style.display === "none");

@@ -129,3 +129,27 @@ s7.getState().map.ext.data.wars[0].result.winner = "attacker";
 const sh = winnerShares(s7.getState().map, listWars(s7.getState().map)[0]);
 assert.ok(sh[1] > sh[3] && Math.abs(sh[1] + sh[3] - 1) < 1e-9, "同じ戦力なら、盟主のほうが取り分が多い");
 console.log("war-rules OK");
+
+// ---------- 講和の自動案は、必ず戦争スコアの範囲に収まり、そのまま締結できる ----------
+{
+  const { suggestTerms, treatyBudget, planSignTreaty, planFinishWar } = await import("../js/core/edit/wars.js");
+  let checked = 0, withCession = 0, withRepar = 0;
+  for (let k = 1; k <= 60; k++) {
+    const sm = createStore({ map: fix(mk([20000, 3000, 6000, 3000, 3000])) });
+    sm.commit(planCreateAlliance(sm.getState().map, "同盟", [1, 3], date, "loose", 1).command);
+    const q = planDeclareAndResolveWar(sm.getState().map, { attackers: [1, 3], defenders: [2], date, rnd: createRandom(k), type: ["conventional", "total", "limited"][k % 3] });
+    sm.commit(q.command); sm.commit(planFinishWar(sm.getState().map, q.id));
+    const w = listWars(sm.getState().map)[0]; if (w.result.winner !== "attacker") continue;
+    for (const size of ["s", "m", "l"]) {
+      const t = suggestTerms(sm.getState().map, w, { size });
+      const terms = { kind: t.kind, cessions: t.cessions.filter((c) => c.on).map((c) => ({ cells: c.regionCells, fromStateId: c.fromStateId, toStateId: c.toStateId, name: c.name })), reparations: t.reparations };
+      const rows = treatyBudget(sm.getState().map, w, terms);
+      assert.ok(rows.every((r) => r.spent <= r.budget + 0.05), `自動案は予算内（${JSON.stringify(rows)}）`);
+      assert.doesNotThrow(() => planSignTreaty(sm.getState().map, w.id, { ...terms, treatyName: "自動案" }, date), "自動案はそのまま締結できる");
+      checked++; if (terms.cessions.length) withCession++; if (terms.reparations.length) withRepar++;
+    }
+  }
+  assert.ok(checked >= 20, `十分な数の自動案を検証した（${checked}）`);
+  assert.ok(withCession > checked / 3 && withRepar > checked / 3, `自動案には割譲も賠償も入る（割譲${withCession}・賠償${withRepar}/${checked}）`);
+  console.log("auto-terms OK");
+}
