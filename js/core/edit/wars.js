@@ -15,7 +15,7 @@
 
 import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
-import { resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, applyVictoryConditions, planSupportDeltas, supportOf } from "../sim/war-engine.js";
+import { resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, applyVictoryConditions, planSupportDeltas, supportOf, EXHAUST_SUPPORT, WAR_TYPES } from "../sim/war-engine.js";
 import { officialName } from "../names.js";
 import { newFx, rollWarMonth, fxParts, addMorale, addSupport, mulPop, mulTroops } from "../sim/war-events.js";
 import { regimentsOf } from "../sim/military.js";
@@ -143,12 +143,50 @@ function addProgressFx(map, war, fx, q0, q1) {
   }
 }
 
-/** 戦争の「いま」の戦争スコア。時間が経つほど（占領・消耗が進むほど）上がる。講和で要求できる大きさの上限になる */
+/** 戦争形態ごとの、長期戦で到達できる戦争スコアの上限（限定戦・非対称戦では、敗者を併合するほどは占領できない） */
+const SCORE_CAP = { limited: 50, conventional: 100, total: 100, asymmetric: 65 };
+
+/**
+ * 戦争の「いま」の戦争スコア。講和で要求できる大きさの上限になる。
+ *   ・目安の期間までは、開戦時の判定（warScore）に向けて上がっていく
+ *   ・目安の期間を過ぎても戦争が続けば、占領が進むものとして毎月上がり続ける（形態ごとの上限まで）
+ *     → 何十年も戦えば、敗者を全面降伏に追い込める
+ */
 export function currentWarScore(war) {
   const r = war?.result; if (!r) return 0;
   if (r.winner === "stalemate") return 0;
-  const p = war.progress == null ? 1 : Math.min(1, Math.max(0, war.progress));
-  return Math.round((r.warScore ?? 0) * Math.min(1, 0.12 + 0.88 * p));
+  const p = r.victory?.collapse ? 1 : war.progress == null ? 1 : Math.min(1, Math.max(0, war.progress)); // 民意の崩壊で降伏したときは、すぐに全額を要求できる
+  const base = Math.round((r.warScore ?? 0) * Math.min(1, 0.12 + 0.88 * p));
+  const dur = Math.max(1, war.durationMonths ?? 12);
+  const done = war.monthsDone ?? Math.round((war.progress ?? 0) * dur);
+  const over = Math.max(0, done - dur);
+  if (!over) return base;
+  const T = WAR_TYPES[war.type] ?? WAR_TYPES.conventional;
+  const cap = SCORE_CAP[T.key] ?? 100;
+  return Math.round(Math.min(Math.max(base, cap), base + over * 2 * T.scoreScale)); // 1か月あたり +1.6（通常戦）〜 +2（総力戦）
+}
+
+/**
+ * 民意の崩壊：戦争中に、ある陣営の国の民意が EXHAUST_SUPPORT 以下まで落ちたら、その陣営は戦争を続けられず降伏する（相手の勝ち）。
+ * 双方が崩壊したときは、民意の低いほうが負ける。すでに民意の崩壊で決着している戦争は、そのまま。
+ * @returns 更新後の戦争。崩壊が起きていなければ null
+ */
+function exhaustionCollapse(map, war, fx, date) {
+  const r = war.result; if (!r || r.victory?.type === "exhaustion") return null;
+  const now = (id) => Math.max(0, Math.min(100, supportOf(map.pack.states[id]) + (fx.support.get(id) ?? 0)));
+  const worst = (ids) => ids.map((id) => ({ id, v: now(id) })).filter((x) => x.v <= EXHAUST_SUPPORT).sort((a, b) => a.v - b.v)[0] ?? null;
+  const a = worst(war.attackers ?? []), d = worst(war.defenders ?? []);
+  if (!a && !d) return null;
+  const loseSide = a && d ? (a.v <= d.v ? "attacker" : "defender") : a ? "attacker" : "defender";
+  const winner = loseSide === "attacker" ? "defender" : "attacker";
+  const loser = loseSide === "attacker" ? a : d;
+  const T = WAR_TYPES[war.type] ?? WAR_TYPES.conventional;
+  const warScore = Math.max(winner === r.winner ? (r.warScore ?? 0) : 0, Math.round(30 + 40 * T.scoreScale));
+  const name = map.pack.states[loser.id]?.fullName ?? map.pack.states[loser.id]?.name ?? "敗者";
+  const text = `${name}の民意が尽き、戦争を続けられなくなった（民意${Math.round(loser.v)}）。講和を求めて降伏する`;
+  return { ...war,
+    result: { ...r, winner, warScore, victory: { type: "exhaustion", text, collapse: true } },
+    events: [...(war.events ?? []), { date, kind: "collapse", title: "民意の崩壊", text }] };
 }
 
 /**
@@ -176,6 +214,8 @@ export function planAdvanceWars(map, date, rnd = null) {
       }
     }
     cur.monthsDone = last; cur.progress = last / dur;
+    const col = exhaustionCollapse(map, cur, fx, addMonths(w.startedAt, last));
+    if (col) { cur = col; touched.push(w.id); }
     return cur;
   });
   if (after.every((w, i) => w === list[i])) return null;
@@ -404,16 +444,18 @@ export function suggestCessions(map, attackerId, defenderId, { maxDepth = 3 } = 
 }
 
 // 1つの要求にかかる「戦争スコア」の費用（HoI4 の講和会議と同じく、勝者は戦争スコアの範囲でしか要求できない）
-const COST = { cellBase: 1, burg: 6, reparPer2pct: 1, annex: 100, vassal: { puppet: 60, protectorate: 45, vassal: 50 } };
+// 割譲は「敗者の領土の何割か」で費用を決める（地図の大きさに左右されない）。領土を全部奪うのが 70、都市は1つにつき +1.5
+const COST = { landAll: 70, burg: 1.5, reparPer2pct: 1, annex: 60, annexMinScore: 70, vassal: { puppet: 60, protectorate: 45, vassal: 50 } };
 const capitalCellsOf = (map, ids) => { const set = new Set(); for (const sid of ids) { const cap = map.pack.burgs[map.pack.states[sid]?.capital]; if (cap && !cap.removed) set.add(cap.cell); } return set; };
 
-/** 割譲の費用（敗者の産業が集中した土地・都市が多い土地ほど高い） */
+/** 割譲の費用（敗者の領土に占める割合で決まる。産業が集中した土地・都市が多い土地ほど高い） */
 export function cessionCost(map, fromId, cells) {
   const from = map.pack.states[fromId]; if (!from || !cells.length) return 0;
   const dens = Math.max(0, Math.min(2, ((from.industry ?? 0) / Math.max(1, from.cells ?? 1)) / 20));
   const set = new Set(cells);
   const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).length;
-  return cells.length * (COST.cellBase + dens) + burgs * COST.burg;
+  const frac = Math.min(1, cells.length / Math.max(1, from.cells ?? cells.length));
+  return COST.landAll * frac * (1 + dens * 0.5) + burgs * COST.burg;
 }
 /** 国の富（賠償金の基準）。国庫が空の国（Azgaar 由来の国は国庫0が多い）でも、経済の大きさから見積もれるようにする */
 export function wealthOf(state) {
@@ -450,7 +492,8 @@ export function treatyBudget(map, war, terms) {
   for (const r of terms.reparations ?? []) if (spent[r.toStateId] != null && r.amount > 0) spent[r.toStateId] += reparationCost(map, r.fromStateId, r.amount);
   for (const x of terms.annex ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.annex;
   for (const x of terms.vassalize ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.vassal[x.kind] ?? 50;
-  return winners.map((id) => ({ stateId: id, share: shares[id], budget: Math.round(score * shares[id] * 10) / 10, spent: Math.round(spent[id] * 10) / 10 }));
+  const annexers = new Set((terms.annex ?? []).map((x) => x.toStateId)); // 全面降伏は、主導する勝者が戦争スコアをそのまま使える
+  return winners.map((id) => ({ stateId: id, share: shares[id], budget: Math.round(score * (annexers.has(id) ? 1 : shares[id]) * 10) / 10, spent: Math.round(spent[id] * 10) / 10 }));
 }
 
 /**
@@ -484,7 +527,7 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
     const rows = treatyBudget(map, war, { cessions, reparations, annex, vassalize });
     const over = rows.find((r) => r.spent > r.budget + 0.05);
     if (over) throw new Error(`${officialName(map.pack.states[over.stateId])}の要求が戦争スコアを超えています（使用 ${over.spent} / 上限 ${over.budget}）`);
-    if (annex.length && currentWarScore(war) < 85) throw new Error("全面降伏（併合）を求めるには、戦争スコアが85以上の決定的な勝利が必要です。戦争が続いて消耗が進むほどスコアは上がります");
+    if (annex.length && currentWarScore(war) < COST.annexMinScore) throw new Error(`全面降伏（併合）を求めるには、戦争スコアが${COST.annexMinScore}以上の決定的な勝利が必要です。戦争が長引くほど（占領が進むほど）スコアは上がり続けます`);
   }
 
   const c = map.pack.cells, parts = [], record = { cessions: [], reparations: [], annex: [] };

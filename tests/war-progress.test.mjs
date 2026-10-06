@@ -7,7 +7,7 @@ import { forceHeadcount } from "../js/core/sim/units.js";
 import { officialName } from "../js/core/names.js";
 
 const reg = (id, i, inf, ex = {}) => ({ i, name: `軍${i}`, state: id, cell: 0, u: { infantry: inf, cavalry: 0, archers: 0, artillery: 0, armor: 0, air: 0, navy: 0, special: 0, advanced: 0, nuclear: 0, ...ex } });
-const st = (i, name, full, regs, o = {}) => ({ i, name, fullName: full, techLevel: 6, industry: 300, rural: 900, urban: 100, cells: 4, capital: i, morale: 70, doctrine: "balanced", military: regs, diplomacy: [], treasury: 1000, ...o });
+const st = (i, name, full, regs, o = {}) => ({ i, name, fullName: full, techLevel: 6, industry: 300, rural: 900, urban: 100, cells: 40, capital: i, morale: 70, doctrine: "balanced", military: regs, diplomacy: [], treasury: 1000, ...o });
 const N = 16;
 // 一列の地図: [ア][ア][ア][ア] [イ][イ][イ][イ] [ウ][ウ][ウ][ウ] [中立][中立][中立][中立]
 const mk = () => ({

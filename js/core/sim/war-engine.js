@@ -17,6 +17,7 @@ const AIR = ["air"], SEA = ["navy"];
 export const BASE_MORALE = 70;
 export const BASE_SUPPORT = 70; // 民意（戦争への支持）の平時の水準。長引く戦争・大きな損害で下がり、平時に回復する
 export const supportOf = (state) => clamp(state?.support ?? BASE_SUPPORT, 0, 100);
+export const EXHAUST_SUPPORT = 10; // 民意がこの値以下になった側は、戦争を続けられず降伏する（開戦時の見積もりにも、月ごとの進行にも使う）
 
 /**
  * 戦争の形態。常に総力戦ではなく、規模と性格を選べる。
@@ -83,10 +84,22 @@ export function sideStrength(map, ids, muster = null) {
   return out;
 }
 
-/** 双方の比較値（0〜1。攻撃側の取り分）。バー表示にそのまま使える */
+/**
+ * 双方の比較値（0〜1。攻撃側の取り分）。バー表示にそのまま使える。
+ * eff は勝敗の計算に使う補正後の値：
+ *   ・海軍・空軍は、陸軍に比べて取るに足らない規模なら効きにくい（相手がゼロなら100%になってしまうのを防ぐ）
+ *   ・士気は、差が出にくい数値なので、差を2倍に広げて効かせる
+ */
 export function compareSides(a, b) {
   const share = (x, y) => (x + y <= 0 ? 0.5 : x / (x + y));
-  return { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale), support: share(a.support ?? BASE_SUPPORT, b.support ?? BASE_SUPPORT) };
+  const landTotal = a.land + b.land;
+  const damp = (raw, x, y) => { // 規模が陸軍の2割5分に満たない兵科は、その分だけ0.5（互角）に近づける
+    const w = landTotal <= 0 ? 1 : clamp((x + y) / (0.25 * landTotal), 0, 1);
+    return 0.5 + (raw - 0.5) * w;
+  };
+  const cmp = { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale), support: share(a.support ?? BASE_SUPPORT, b.support ?? BASE_SUPPORT) };
+  cmp.eff = { sea: damp(cmp.sea, a.sea, b.sea), air: damp(cmp.air, a.air, b.air), morale: clamp(0.5 + (cmp.morale - 0.5) * 2, 0, 1) };
+  return cmp;
 }
 
 /** 陣営のドクトリン効果（兵員で加重平均） */
@@ -104,11 +117,12 @@ function sideDoctrine(map, ids) {
   return acc;
 }
 
-/** 総合の優勢度（攻撃側が優勢なら正）。ブレ(noise)を除いた値 */
+/** 総合の優勢度（攻撃側が優勢なら正）。ブレ(noise)を除いた値。陸軍が主で、海・空は補助、士気は補正した差で効く */
 export function edgeOf(cmp, atk, def) {
-  const score = 0.5 * cmp.land + 0.2 * cmp.air + 0.15 * cmp.sea + 0.15 * cmp.morale;
+  const sea = cmp.eff?.sea ?? cmp.sea, air = cmp.eff?.air ?? cmp.air, morale = cmp.eff?.morale ?? cmp.morale;
+  const score = 0.6 * cmp.land + 0.14 * air + 0.1 * sea + 0.16 * morale;
   // 戦力差の効き方は6割に圧縮する（兵が2倍でも必ず勝つわけではない。ドクトリンの有利不利はそのまま効く）
-  return 0.6 * (score - 0.5 + (cmp.air - 0.5) * 0.1) + (atk.attack - def.defense) * 0.5;
+  return 0.6 * (score - 0.5 + (air - 0.5) * 0.1) + (atk.attack - def.defense) * 0.5;
 }
 
 function verdictOf(edge, band = 0.03) {
@@ -132,7 +146,7 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
   const m = T.allMuster ? null : muster;
   const { aStrength: A, dStrength: D, compare: cmp } = previewWar(map, attackers, defenders, m);
   const da = sideDoctrine(map, attackers), dd = sideDoctrine(map, defenders);
-  const noiseAmp = 0.24 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1); // 戦力差があっても、番狂わせが起こりうる大きさ
+  const noiseAmp = 0.18 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1); // 戦力差があっても、番狂わせが起こりうる大きさ
   const lopsided = 1 - 0.7 * Math.pow(2 * cmp.land - 1, 2); // 圧倒的な戦力差のときは、番狂わせが起きにくい
   const noise = rnd.float(-noiseAmp * lopsided, noiseAmp * lopsided);
   let edge = edgeOf(cmp, da, dd) + noise;
@@ -218,7 +232,7 @@ export function applyVictoryConditions(map, result, { attackers, defenders, type
     }
   } else {
     // 膠着でも、民意が尽きた側は降伏する
-    const weary = (ids) => ids.filter((id) => finalSupport(id) <= 15);
+    const weary = (ids) => ids.filter((id) => finalSupport(id) <= EXHAUST_SUPPORT);
     const aw = weary(attackers).length > 0, dw = weary(defenders).length > 0;
     if (aw !== dw) {
       winner = aw ? "defender" : "attacker";

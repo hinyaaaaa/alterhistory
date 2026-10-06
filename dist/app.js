@@ -3549,6 +3549,7 @@
   var BASE_MORALE = 70;
   var BASE_SUPPORT = 70;
   var supportOf = (state) => clamp2(state?.support ?? BASE_SUPPORT, 0, 100);
+  var EXHAUST_SUPPORT = 10;
   var WAR_TYPES = Object.freeze({
     limited: {
       key: "limited",
@@ -3652,7 +3653,14 @@
   }
   function compareSides(a, b) {
     const share = (x, y) => x + y <= 0 ? 0.5 : x / (x + y);
-    return { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale), support: share(a.support ?? BASE_SUPPORT, b.support ?? BASE_SUPPORT) };
+    const landTotal = a.land + b.land;
+    const damp = (raw, x, y) => {
+      const w = landTotal <= 0 ? 1 : clamp2((x + y) / (0.25 * landTotal), 0, 1);
+      return 0.5 + (raw - 0.5) * w;
+    };
+    const cmp = { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale), support: share(a.support ?? BASE_SUPPORT, b.support ?? BASE_SUPPORT) };
+    cmp.eff = { sea: damp(cmp.sea, a.sea, b.sea), air: damp(cmp.air, a.air, b.air), morale: clamp2(0.5 + (cmp.morale - 0.5) * 2, 0, 1) };
+    return cmp;
   }
   function sideDoctrine(map, ids2) {
     const acc = { attack: 0, defense: 0, noise: 0, ownLoss: 0, enemyLoss: 0, speed: 0, moraleHit: 0 };
@@ -3669,8 +3677,9 @@
     return acc;
   }
   function edgeOf(cmp, atk, def) {
-    const score = 0.5 * cmp.land + 0.2 * cmp.air + 0.15 * cmp.sea + 0.15 * cmp.morale;
-    return 0.6 * (score - 0.5 + (cmp.air - 0.5) * 0.1) + (atk.attack - def.defense) * 0.5;
+    const sea = cmp.eff?.sea ?? cmp.sea, air = cmp.eff?.air ?? cmp.air, morale = cmp.eff?.morale ?? cmp.morale;
+    const score = 0.6 * cmp.land + 0.14 * air + 0.1 * sea + 0.16 * morale;
+    return 0.6 * (score - 0.5 + (air - 0.5) * 0.1) + (atk.attack - def.defense) * 0.5;
   }
   function verdictOf(edge, band = 0.03) {
     const winner = Math.abs(edge) < band ? "stalemate" : edge > 0 ? "attacker" : "defender";
@@ -3685,7 +3694,7 @@
     const m = T.allMuster ? null : muster;
     const { aStrength: A, dStrength: D, compare: cmp } = previewWar(map, attackers, defenders, m);
     const da = sideDoctrine(map, attackers), dd = sideDoctrine(map, defenders);
-    const noiseAmp = 0.24 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1);
+    const noiseAmp = 0.18 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1);
     const lopsided = 1 - 0.7 * Math.pow(2 * cmp.land - 1, 2);
     const noise = rnd.float(-noiseAmp * lopsided, noiseAmp * lopsided);
     let edge = edgeOf(cmp, da, dd) + noise;
@@ -3770,7 +3779,7 @@
         }
       }
     } else {
-      const weary = (ids2) => ids2.filter((id) => finalSupport(id) <= 15);
+      const weary = (ids2) => ids2.filter((id) => finalSupport(id) <= EXHAUST_SUPPORT);
       const aw = weary(attackers).length > 0, dw = weary(defenders).length > 0;
       if (aw !== dw) {
         winner = aw ? "defender" : "attacker";
@@ -5041,12 +5050,40 @@
       addSupport(fx, id, (r.supportDelta?.[id] ?? 0) * dq);
     }
   }
+  var SCORE_CAP = { limited: 50, conventional: 100, total: 100, asymmetric: 65 };
   function currentWarScore(war) {
     const r = war?.result;
     if (!r) return 0;
     if (r.winner === "stalemate") return 0;
-    const p = war.progress == null ? 1 : Math.min(1, Math.max(0, war.progress));
-    return Math.round((r.warScore ?? 0) * Math.min(1, 0.12 + 0.88 * p));
+    const p = r.victory?.collapse ? 1 : war.progress == null ? 1 : Math.min(1, Math.max(0, war.progress));
+    const base = Math.round((r.warScore ?? 0) * Math.min(1, 0.12 + 0.88 * p));
+    const dur = Math.max(1, war.durationMonths ?? 12);
+    const done = war.monthsDone ?? Math.round((war.progress ?? 0) * dur);
+    const over = Math.max(0, done - dur);
+    if (!over) return base;
+    const T = WAR_TYPES[war.type] ?? WAR_TYPES.conventional;
+    const cap = SCORE_CAP[T.key] ?? 100;
+    return Math.round(Math.min(Math.max(base, cap), base + over * 2 * T.scoreScale));
+  }
+  function exhaustionCollapse(map, war, fx, date) {
+    const r = war.result;
+    if (!r || r.victory?.type === "exhaustion") return null;
+    const now = (id) => Math.max(0, Math.min(100, supportOf(map.pack.states[id]) + (fx.support.get(id) ?? 0)));
+    const worst = (ids2) => ids2.map((id) => ({ id, v: now(id) })).filter((x) => x.v <= EXHAUST_SUPPORT).sort((a2, b) => a2.v - b.v)[0] ?? null;
+    const a = worst(war.attackers ?? []), d = worst(war.defenders ?? []);
+    if (!a && !d) return null;
+    const loseSide = a && d ? a.v <= d.v ? "attacker" : "defender" : a ? "attacker" : "defender";
+    const winner = loseSide === "attacker" ? "defender" : "attacker";
+    const loser = loseSide === "attacker" ? a : d;
+    const T = WAR_TYPES[war.type] ?? WAR_TYPES.conventional;
+    const warScore = Math.max(winner === r.winner ? r.warScore ?? 0 : 0, Math.round(30 + 40 * T.scoreScale));
+    const name = map.pack.states[loser.id]?.fullName ?? map.pack.states[loser.id]?.name ?? "\u6557\u8005";
+    const text2 = `${name}\u306E\u6C11\u610F\u304C\u5C3D\u304D\u3001\u6226\u4E89\u3092\u7D9A\u3051\u3089\u308C\u306A\u304F\u306A\u3063\u305F\uFF08\u6C11\u610F${Math.round(loser.v)}\uFF09\u3002\u8B1B\u548C\u3092\u6C42\u3081\u3066\u964D\u4F0F\u3059\u308B`;
+    return {
+      ...war,
+      result: { ...r, winner, warScore, victory: { type: "exhaustion", text: text2, collapse: true } },
+      events: [...war.events ?? [], { date, kind: "collapse", title: "\u6C11\u610F\u306E\u5D29\u58CA", text: text2 }]
+    };
   }
   function planAdvanceWars(map, date, rnd = null) {
     const list = listWars(map);
@@ -5075,6 +5112,11 @@
       }
       cur.monthsDone = last;
       cur.progress = last / dur;
+      const col = exhaustionCollapse(map, cur, fx, addMonths(w.startedAt, last));
+      if (col) {
+        cur = col;
+        touched.push(w.id);
+      }
       return cur;
     });
     if (after.every((w, i) => w === list[i])) return null;
@@ -5278,7 +5320,7 @@
     };
     return [...byProvince.filter((x) => !provHasCapital(x.provinceId)), ...byRegion.filter((x) => !x.regionCells.some((i) => capCells.has(i)))].sort((a, b) => b.cells - a.cells);
   }
-  var COST = { cellBase: 1, burg: 6, reparPer2pct: 1, annex: 100, vassal: { puppet: 60, protectorate: 45, vassal: 50 } };
+  var COST = { landAll: 70, burg: 1.5, reparPer2pct: 1, annex: 60, annexMinScore: 70, vassal: { puppet: 60, protectorate: 45, vassal: 50 } };
   var capitalCellsOf = (map, ids2) => {
     const set = /* @__PURE__ */ new Set();
     for (const sid of ids2) {
@@ -5293,7 +5335,8 @@
     const dens = Math.max(0, Math.min(2, (from.industry ?? 0) / Math.max(1, from.cells ?? 1) / 20));
     const set = new Set(cells);
     const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).length;
-    return cells.length * (COST.cellBase + dens) + burgs * COST.burg;
+    const frac = Math.min(1, cells.length / Math.max(1, from.cells ?? cells.length));
+    return COST.landAll * frac * (1 + dens * 0.5) + burgs * COST.burg;
   }
   function wealthOf(state) {
     const pop = (state?.rural ?? 0) + (state?.urban ?? 0);
@@ -5326,7 +5369,8 @@
     for (const r of terms.reparations ?? []) if (spent[r.toStateId] != null && r.amount > 0) spent[r.toStateId] += reparationCost(map, r.fromStateId, r.amount);
     for (const x of terms.annex ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.annex;
     for (const x of terms.vassalize ?? []) if (spent[x.toStateId] != null) spent[x.toStateId] += COST.vassal[x.kind] ?? 50;
-    return winners.map((id) => ({ stateId: id, share: shares[id], budget: Math.round(score * shares[id] * 10) / 10, spent: Math.round(spent[id] * 10) / 10 }));
+    const annexers = new Set((terms.annex ?? []).map((x) => x.toStateId));
+    return winners.map((id) => ({ stateId: id, share: shares[id], budget: Math.round(score * (annexers.has(id) ? 1 : shares[id]) * 10) / 10, spent: Math.round(spent[id] * 10) / 10 }));
   }
   function planSignTreaty(map, warId, terms, date, { enforceBudget = true, allowOngoing = false } = {}) {
     const list = listWars(map);
@@ -5352,7 +5396,7 @@
       const rows = treatyBudget(map, war, { cessions, reparations, annex, vassalize });
       const over = rows.find((r) => r.spent > r.budget + 0.05);
       if (over) throw new Error(`${officialName(map.pack.states[over.stateId])}\u306E\u8981\u6C42\u304C\u6226\u4E89\u30B9\u30B3\u30A2\u3092\u8D85\u3048\u3066\u3044\u307E\u3059\uFF08\u4F7F\u7528 ${over.spent} / \u4E0A\u9650 ${over.budget}\uFF09`);
-      if (annex.length && currentWarScore(war) < 85) throw new Error("\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09\u3092\u6C42\u3081\u308B\u306B\u306F\u3001\u6226\u4E89\u30B9\u30B3\u30A2\u304C85\u4EE5\u4E0A\u306E\u6C7A\u5B9A\u7684\u306A\u52DD\u5229\u304C\u5FC5\u8981\u3067\u3059\u3002\u6226\u4E89\u304C\u7D9A\u3044\u3066\u6D88\u8017\u304C\u9032\u3080\u307B\u3069\u30B9\u30B3\u30A2\u306F\u4E0A\u304C\u308A\u307E\u3059");
+      if (annex.length && currentWarScore(war) < COST.annexMinScore) throw new Error(`\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09\u3092\u6C42\u3081\u308B\u306B\u306F\u3001\u6226\u4E89\u30B9\u30B3\u30A2\u304C${COST.annexMinScore}\u4EE5\u4E0A\u306E\u6C7A\u5B9A\u7684\u306A\u52DD\u5229\u304C\u5FC5\u8981\u3067\u3059\u3002\u6226\u4E89\u304C\u9577\u5F15\u304F\u307B\u3069\uFF08\u5360\u9818\u304C\u9032\u3080\u307B\u3069\uFF09\u30B9\u30B3\u30A2\u306F\u4E0A\u304C\u308A\u7D9A\u3051\u307E\u3059`);
     }
     const c = map.pack.cells, parts = [], record = { cessions: [], reparations: [], annex: [] };
     for (const cs of cessions) {
@@ -7973,6 +8017,39 @@
   // js/ui/safe-render.js
   var TYPING = /* @__PURE__ */ new Set(["INPUT", "TEXTAREA", "SELECT"]);
   var isTyping = (el16) => !!el16 && TYPING.has(el16.tagName) && !["checkbox", "radio", "button", "range"].includes(el16.type);
+  function keepScroll(root, renderFn) {
+    const saved = [];
+    for (let a = root; a; a = a.parentElement) if (a.scrollTop > 0 || a.scrollLeft > 0) saved.push({ el: a, top: a.scrollTop, left: a.scrollLeft });
+    const keyOf = (e) => {
+      const cls = e.className && typeof e.className === "string" ? e.className.trim().split(/\s+/)[0] : "";
+      return { cls, tag: e.tagName };
+    };
+    const inner = [];
+    const nth = /* @__PURE__ */ new Map();
+    for (const e of root.querySelectorAll("*")) {
+      const k = keyOf(e), id = `${k.tag}.${k.cls}`, n = nth.get(id) ?? 0;
+      nth.set(id, n + 1);
+      if (e.scrollTop > 0) inner.push({ id, n, top: e.scrollTop });
+    }
+    const result = renderFn();
+    const restore = () => {
+      for (const x of saved) {
+        x.el.scrollTop = x.top;
+        x.el.scrollLeft = x.left;
+      }
+      if (!inner.length) return;
+      const cnt = /* @__PURE__ */ new Map();
+      for (const e of root.querySelectorAll("*")) {
+        const k = keyOf(e), id = `${k.tag}.${k.cls}`, n = cnt.get(id) ?? 0;
+        cnt.set(id, n + 1);
+        const hit = inner.find((x) => x.id === id && x.n === n);
+        if (hit) e.scrollTop = hit.top;
+      }
+    };
+    restore();
+    if (typeof requestAnimationFrame === "function") requestAnimationFrame(restore);
+    return result;
+  }
   function guardRender(root, renderFn) {
     let pending = false;
     root.addEventListener("focusout", () => {
@@ -7981,7 +8058,7 @@
         if (!pending) return;
         if (!isTyping(document.activeElement) || !root.contains(document.activeElement)) {
           pending = false;
-          renderFn();
+          keepScroll(root, () => renderFn());
         }
       }, 0);
     });
@@ -7992,7 +8069,7 @@
         return;
       }
       pending = false;
-      renderFn(...args);
+      keepScroll(root, () => renderFn(...args));
     };
   }
 
@@ -13137,6 +13214,9 @@ ${shown}${more}`;
     const monthIdx = (d) => d.year * 12 + d.month;
     const fmtDate3 = (d) => d ? `${d.year}\u5E74${d.month}\u6708` : "";
     function render() {
+      keepScroll(root, renderBody);
+    }
+    function renderBody() {
       root.replaceChildren();
       const map = store.getState().map;
       if (!map) {
@@ -13410,6 +13490,9 @@ ${shown}${more}`;
     let draft = null;
     const warTypeLabel = (k) => ({ limited: "\u9650\u5B9A\u6226", conventional: "\u901A\u5E38\u6226", total: "\u7DCF\u529B\u6226", asymmetric: "\u975E\u5BFE\u79F0\u6226" })[k] ?? "\u901A\u5E38\u6226";
     function renderTreaty() {
+      keepScroll(treatyBody, renderTreatyBody);
+    }
+    function renderTreatyBody() {
       treatyBody.replaceChildren();
       const map = store.getState().map;
       if (!map) {
@@ -13570,7 +13653,7 @@ ${shown}${more}`;
       left.append(
         el14("h4", "", "\u8B1B\u548C\u306E\u7A2E\u985E"),
         kindSel,
-        el14("p", "hint", { standard: "\u5272\u8B72\u3068\u8CE0\u511F\u3092\u6C7A\u3081\u307E\u3059\uFF08\u81EA\u52D5\u6848\u304C\u5165\u3063\u3066\u3044\u307E\u3059\uFF09\u3002", white: "\u3069\u3061\u3089\u3082\u4F55\u3082\u53D7\u3051\u53D6\u3089\u305A\u3001\u6226\u4E89\u3092\u7D42\u3048\u307E\u3059\u3002", vassal: "\u6557\u8005\u3092\u4F75\u5408\u305B\u305A\u3001\u5F93\u5C5E\u3055\u305B\u307E\u3059\u3002", annex: "\u6557\u8005\u306E\u5168\u571F\u3092\u4F75\u5408\u3057\u307E\u3059\uFF08\u6226\u4E89\u30B9\u30B3\u30A285\u4EE5\u4E0A\uFF09\u3002" }[draft.kind]),
+        el14("p", "hint", { standard: "\u5272\u8B72\u3068\u8CE0\u511F\u3092\u6C7A\u3081\u307E\u3059\uFF08\u81EA\u52D5\u6848\u304C\u5165\u3063\u3066\u3044\u307E\u3059\uFF09\u3002", white: "\u3069\u3061\u3089\u3082\u4F55\u3082\u53D7\u3051\u53D6\u3089\u305A\u3001\u6226\u4E89\u3092\u7D42\u3048\u307E\u3059\u3002", vassal: "\u6557\u8005\u3092\u4F75\u5408\u305B\u305A\u3001\u5F93\u5C5E\u3055\u305B\u307E\u3059\u3002", annex: "\u6557\u8005\u306E\u5168\u571F\u3092\u4F75\u5408\u3057\u307E\u3059\uFF08\u6226\u4E89\u30B9\u30B3\u30A270\u4EE5\u4E0A\uFF09\u3002" }[draft.kind]),
         el14("h4", "", "\u6761\u7D04\u306E\u540D\u524D\u3068\u8B1B\u548C\u5730"),
         tn,
         el14("p", "hint", v ? `\u8B1B\u548C\u5730\uFF1A${v.place}\uFF08${sname(map, v.stateId)}\u30FB${roleLabel}\uFF09` : "\u8B1B\u548C\u5730\u3092\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3067\u3057\u305F\uFF08\u90FD\u5E02\u304C\u3042\u308A\u307E\u305B\u3093\uFF09"),
