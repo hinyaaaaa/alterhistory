@@ -69,15 +69,18 @@ alterhistory/
 │  │   edit-mode.js         編集ツールのポインタ操作（ブラシ・配置・選択・部隊配置/移動の割込み）
 │  │   edit-toolbar.js      編集ツールバーの表示（ツール・対象・ブラシの大きさ）
 │  │   time-bar.js          時間バー（開始/停止・速度・年月表示）
-│  │   military-dialog.js   軍事・外交ダイアログの開閉・タブ切替・地図クリック連携
+│  │   windows.js           地図の上に重ねる浮動ウィンドウ（設定・戦争・軍事・外交・講和・バランス調整ほか）
+│  │   settings-windows.js  設定メニューから開く各ウィンドウの組み立て
+│  │   war-outcome-window.js 戦争ウィンドウの概要・部隊・経過・講和タブ
+│  │   safe-render.js       再描画してもフォーカスとスクロールを保つ補助
 │  │   tools/               brush.js（ブラシの共通処理）selection.js（クリック判定）
 │  │   panels/editor-panel.js     選んだ対象の編集フォーム（都市・マーカー・国家など）
-│  │   panels/military-panel.js   部隊タブ（編成・兵力編集・ドクトリン・攻撃指示）
+│  │   panels/military-panel.js   軍事ウィンドウ（部隊の編成・編集・移動。戦闘は戦争ウィンドウで記録する）
 │  │   panels/wars-panel.js       戦争タブ（宣戦布告・戦績・講和条約フォーム）
 │  │   panels/alliances-panel.js  同盟タブ（結成・メンバー編集・解消）
 │  └ vendor/delaunator.min.js   公式が同梱するのと同じビルド（ISC）
 ├ docs/                     MAP_FORMAT_SPEC.md（形式の仕様）ほか
-└ tests/                    19スイート・約785項目（実マップで検証。ファズテスト含む）
+└ tests/                    全スイートを tests/run-all.mjs が実行（合成マップで完結。実マップ検証は test:compat）
 ```
 
 ## 「pack の形は保存されていない」問題
@@ -178,3 +181,17 @@ alterhistory/
 
 未実装の機能一覧、仮置きの数値、既知の制約、UIの粗さ、作業中に踏んだ落とし穴は
 `docs/HANDOFF.md` に分けてまとめてある。次のセッションはまずそちらを読むこと。
+
+## シミュレーションの意味（どこまでが計算で、どこからが演出か）
+
+- **戦争の判定**（`core/sim/war-engine.js`）: 陸・海・空の戦力、士気、民意、ドクトリン、戦争の形態から「優勢度」を求め、
+  開戦時に一度だけ決めた乱数（`noise`）と、できごとによる補正（`edgeShift`）を足して勝敗を決める。
+  乱数は戦争ごとに固定なので、結果が勝手に揺れることはない。
+- **勝敗は戦力に追従する**: 召集する部隊の変更・撤退・損耗（月が進むたび）・ハプニング・隠密作戦・核の使用のたびに
+  `reevaluateWar` が、いまの戦力・士気・民意で勝敗と戦争スコアを判定し直す。
+  ただし首都陥落と民意の崩壊で決着した戦争は、その決着を保つ。
+- **表に出る勝敗**: 戦争が続いている間、画面は勝敗を出さない（見通しは講和条約を結ぶ段階で明らかになる）。
+- **月ごとの損害・できごと**（`core/edit/wars.js` の `planAdvanceWars`）は、判定結果に向けて損耗を積み上げる演出であり、
+  ここで直接勝敗を決めてはいない。
+- **バランス設定**（`core/sim/balance.js`）: 実行時の値は `BALANCE`。アプリの既定値＋その地図の上書き値
+  （`map.ext.data.balance`。`core/edit/balance-setting.js`）で作る。地図を開く・Undo/Redo のたびに作り直す。

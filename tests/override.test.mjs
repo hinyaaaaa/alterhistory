@@ -7,7 +7,7 @@ import { loadFromBytes } from "../js/io/loader.js";
 import { applyVertexOverrides } from "../js/core/geometry.js";
 import { serializeAzgaar } from "../js/io/azgaar-writer.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 import { parseAzgaarText } from "../js/io/azgaar-reader.js";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");

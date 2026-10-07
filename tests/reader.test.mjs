@@ -3,7 +3,11 @@ import { createRequire } from "node:module";
 import { parseAzgaarBytes, parseAzgaarText, isLegacySettings, compareVersions, MapParseError } from "../js/io/azgaar-reader.js";
 import { validateMap, cellCount } from "../js/core/model.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
+// 実Azgaarマップでしか確かめられない項目（旧形式・計測線・交易・namesbase）は REAL_MAPS=1 のときだけ検証する。
+// 通常の npm test は合成マップだけで完結させ、実マップ検証は npm run test:compat に分ける。
+const REAL = process.env.REAL_MAPS === "1";
+const compat = (label, ok, extra = "") => REAL ? check(label, ok, extra) : console.log(`  SKIP ${label}  (実マップ専用: npm run test:compat)`);
 import { buildGeometry, GeometryError } from "../js/core/derive.js";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
@@ -23,16 +27,16 @@ for (const f of files) {
   const { map, warnings } = parseAzgaarBytes(buf);
   check("読み込み完了", true, `${(performance.now() - t0).toFixed(0)}ms`);
   check("バージョン取得", !!map.meta.version, map.meta.version);
-  check("旧形式(パイプ区切り)と判定", map.settings.format === "legacy");
+  compat("旧形式(パイプ区切り)と判定", map.settings.format === "legacy");
   check("設定が新形式の構造に正規化される", map.settings.options?.units?.distance?.unit === "km", `単位=${map.settings.options?.units?.distance?.unit}`);
   check("座標(旧L2)を取得", map.coordinates?.latT !== undefined);
   const n = cellCount(map);
   check("セル数 > 0", n > 0, `cells=${n}`);
   check("都市/国家/文化/宗教あり", map.pack.burgs.length > 1 && map.pack.states.length > 1 && map.pack.cultures.length > 1 && map.pack.religions.length > 1);
   check("マーカー(L35)を取得", map.markers.length > 0 && "icon" in map.markers[0], `n=${map.markers.length}`);
-  check("計測線(L46)を取得", map.measurers.length === 1 && Array.isArray(map.measurers[0].points));
-  check("交易(L43)を取得", map.deals.length > 0, `n=${map.deals.length}`);
-  check("namesbase 43件", map.namesbase.length === 43);
+  compat("計測線(L46)を取得", map.measurers.length === 1 && Array.isArray(map.measurers[0].points));
+  compat("交易(L43)を取得", map.deals.length > 0, `n=${map.deals.length}`);
+  compat("namesbase 43件", map.namesbase.length === 43);
   check("警告なし", warnings.length === 0, warnings.slice(0, 3).join(" / "));
   check("整合性検証(形状なし)", validateMap(map).length === 0, validateMap(map).slice(0, 2).join(" / "));
 

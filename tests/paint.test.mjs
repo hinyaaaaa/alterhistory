@@ -10,7 +10,7 @@ import { checkIntegrity, snapshotBaseline } from "../js/core/edit/integrity.js";
 import { createRandom } from "../js/core/random.js";
 
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };

@@ -229,7 +229,7 @@ export function createSimActions({ store, renderer }) {
     setCurrency(stateId, patch) { withMap((map) => safeRun("通貨の設定", () => { store.commit(planSetCurrency(map, stateId, patch)); rerender(); })); },
     warNameTaken(name, exceptId) { return withMap((map) => warNameTaken(map, name, exceptId)) ?? false; },
     /** 召集する部隊（{ [国家ID]: [部隊ID...] }）を保存する */
-    setMuster(warId, muster) { withMap((map) => safeRun("部隊の召集", () => { store.commit(planSetMuster(map, warId, muster)); rerender(); })); },
+    setMuster(warId, muster) { withMap((map) => safeRun("部隊の召集", () => { store.commit(planSetMuster(map, warId, muster)); reevaluateWarIds([warId]); rerender(); })); },
     /** ある国の、その戦争に召集された部隊の合計戦力 */
     musterPower(war, stateId) {
       return withMap((map) => {

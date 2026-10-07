@@ -1,10 +1,10 @@
-// ※ リポジトリのソースが古かったため、ビルド済みの dist/app.js から復元したファイルです（動作は同じ。コメントは失われています）。
 import { byId } from "./dom.js";
 import { initWindows } from "./windows.js";
 import { UNIT_TYPES, forcePower, forceHeadcount } from "../core/sim/units.js";
 import { regimentsOf } from "../core/sim/military.js";
 import { FILL_KEY } from "../app/layers.js";
-import { BALANCE, BALANCE_META, BALANCE_DEFAULTS, setBalance, resetBalance } from "../core/sim/balance.js";
+import { BALANCE, BALANCE_META, BALANCE_DEFAULTS } from "../core/sim/balance.js";
+import { planSetBalance } from "../core/edit/balance-setting.js";
 
 const el = (tag, cls, text2) => {
   const e = document.createElement(tag);
@@ -98,13 +98,14 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
     renderMil();
     panels.military.render();
   } });
-  // ⚖ バランス調整: 経済・戦争の数値をコードを直さずに変える。この端末のブラウザに保存する（地図ファイルには入らない）
-  const BAL_KEY = "alterhistory.balance";
-  try { const saved = JSON.parse(localStorage.getItem(BAL_KEY) ?? "null"); if (saved) setBalance(saved); } catch { /* 保存が使えない環境では既定値のまま */ }
+  // ⚖ バランス調整: 経済・戦争の数値をコードを直さずに変える。値は「この地図」に保存される（地図ファイルに入る）ので、
+  // どの端末で開いても同じ歴史になる。アプリの既定値と違う項目だけが地図に記録される。
   const balBody = el("div", "balance-body");
-  function saveBalance() { try { localStorage.setItem(BAL_KEY, JSON.stringify(BALANCE)); } catch { /* 保存できなくても、このセッションでは有効 */ } }
   function renderBalance() {
-    balBody.replaceChildren(el("p", "hint", "経済・戦争の数値を調整します。変えるとすぐ反映され、この端末のブラウザに保存されます（地図ファイルには入りません）。"));
+    const map = store.getState().map;
+    if (!map) { balBody.replaceChildren(noMap()); return; }
+    const overrides = map.ext?.data?.balance ?? {};
+    balBody.replaceChildren(el("p", "hint", "経済・戦争の数値を調整します。変えるとすぐ反映され、この地図に保存されます（地図ファイルに入るので、別の端末で開いても同じ結果になります）。Azgaar互換形式で書き出すと、この設定は含まれません。"));
     const t = el("table", "win-table");
     for (const m of BALANCE_META) {
       const tr = el("tr");
@@ -112,14 +113,19 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
       th.title = m.desc;
       const input = document.createElement("input");
       input.type = "number"; input.min = m.min; input.max = m.max; input.step = m.step; input.value = BALANCE[m.key];
-      input.addEventListener("change", () => { setBalance({ [m.key]: input.value }); input.value = BALANCE[m.key]; saveBalance(); });
+      input.addEventListener("change", () => {
+        const cmd = planSetBalance(store.getState().map, { [m.key]: input.value });
+        if (cmd) store.commit(cmd);
+        input.value = BALANCE[m.key];
+        renderBalance();
+      });
       const td = el("td"); td.append(input);
-      tr.append(th, td, el("td", "muted", `既定 ${BALANCE_DEFAULTS[m.key]}`), el("td", "hint", m.desc));
+      tr.append(th, td, el("td", "muted", m.key in overrides ? `既定 ${BALANCE_DEFAULTS[m.key]}（この地図で変更）` : `既定 ${BALANCE_DEFAULTS[m.key]}`), el("td", "hint", m.desc));
       t.append(tr);
     }
     const reset = el("button", "", "すべて既定値に戻す");
     reset.type = "button";
-    reset.addEventListener("click", () => { resetBalance(); saveBalance(); renderBalance(); });
+    reset.addEventListener("click", () => { const cmd = planSetBalance(store.getState().map, null); if (cmd) store.commit(cmd); renderBalance(); });
     balBody.append(t, reset);
   }
   wins.register("balance", { title: "⚖ バランス調整", width: 860, body: balBody, onOpen: renderBalance });

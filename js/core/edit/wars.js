@@ -215,6 +215,7 @@ export function planAdvanceWars(map, date, rnd = null) {
       }
     }
     cur.monthsDone = last; cur.progress = last / dur;
+    touched.push(w.id); // 月が進んだ戦争は、毎回いまの戦力・士気・民意で判定し直す（勝敗は開戦時に固定しない）
     const col = exhaustionCollapse(map, cur, fx, addMonths(w.startedAt, last));
     if (col) { cur = col; touched.push(w.id); }
     return cur;

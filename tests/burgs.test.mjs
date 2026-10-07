@@ -8,7 +8,7 @@ import { checkIntegrity, snapshotBaseline } from "../js/core/edit/integrity.js";
 import { serializeAzgaar } from "../js/io/azgaar-writer.js";
 import { parseAzgaarText } from "../js/io/azgaar-reader.js";
 
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
@@ -106,7 +106,8 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
       store.commit(planSetCapital(map, otherState.i, otherBurgInState.i));
       check("新しい都市が首都になる", otherBurgInState.capital === 1 && otherState.capital === otherBurgInState.i);
       check("元の首都は普通の都市に戻る", oldCap.capital === 0);
-      check("首都を他国の都市にはできない", (() => { try { planSetCapital(map, otherState.i, cap.i); return false; } catch { return true; } })());
+      const foreignBurg = map.pack.burgs.find((b) => b && b.i && !b.removed && b.state && b.state !== otherState.i);
+      check("首都を他国の都市にはできない", !!foreignBurg && (() => { try { planSetCapital(map, otherState.i, foreignBurg.i); return false; } catch { return true; } })());
       store.undo();
     }
   }

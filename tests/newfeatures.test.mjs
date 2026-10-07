@@ -16,7 +16,7 @@ import { attachExtension } from "../js/io/native-format.js";
 import { ensureExt } from "../js/core/edit/ext.js";
 import { planCreateAlliance, planDissolveAlliance, listAlliances } from "../js/core/edit/alliances.js";
 
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };

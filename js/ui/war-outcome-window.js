@@ -1,4 +1,3 @@
-// ※ リポジトリのソースが古かったため、ビルド済みの dist/app.js から復元したファイルです（動作は同じ。コメントは失われています）。
 import { guardRender, keepScroll } from "./safe-render.js";
 import { EXHAUST_SUPPORT } from "../core/sim/war-engine.js";
 import { VASSAL_KINDS, VASSAL_BY_KEY } from "../core/edit/vassals.js";

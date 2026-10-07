@@ -13,6 +13,12 @@ export const BALANCE_META = Object.freeze([
 export const BALANCE_DEFAULTS = Object.freeze(Object.fromEntries(BALANCE_META.map((m) => [m.key, m.def])));
 export const BALANCE = { ...BALANCE_DEFAULTS };
 
+/** 値を、そのキーの範囲内に収める。知らないキー・数でない値は null */
+export function clampBalanceValue(key, value) {
+  const m = BALANCE_META.find((x) => x.key === key); const v = Number(value);
+  return m && Number.isFinite(v) ? Math.min(m.max, Math.max(m.min, v)) : null;
+}
+
 /** 値を範囲内に収めて反映する。知らないキー・数でない値は無視する。反映後の BALANCE を返す */
 export function setBalance(patch) {
   for (const m of BALANCE_META) {

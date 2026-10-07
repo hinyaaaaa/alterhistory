@@ -1,5 +1,4 @@
 // 隠密作戦ウィンドウ。
-// ※ このファイルはリポジトリに入っていなかったため、ビルド済みの dist/app.js から復元したものです（動作は同じ。コメントは失われています）。
 import { guardRender } from "./safe-render.js";
 
 const el = (tag, cls, text) => {

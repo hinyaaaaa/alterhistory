@@ -1,4 +1,3 @@
-// ※ リポジトリのソースが古かったため、ビルド済みの dist/app.js から復元したファイルです（動作は同じ。コメントは失われています）。
 import { formatWorldTime } from "../../core/sim/time.js";
 import { forcePower } from "../../core/sim/units.js";
 import { BALANCE } from "../../core/sim/balance.js";

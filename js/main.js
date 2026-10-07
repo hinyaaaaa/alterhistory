@@ -1,6 +1,7 @@
 // 組み立て（Composition Root）。各部品を作って配線するだけ。ロジックは持たない。
 //
 // 依存の向き:  ui → app(actions) → core / render / io
+import { applyMapBalance } from "./core/edit/balance-setting.js";
 import { createStore } from "./core/store.js";
 import { createViewport } from "./render/viewport.js";
 import { createRenderer } from "./render/renderer.js";
@@ -13,8 +14,6 @@ import { initMapView } from "./ui/map-view.js";
 import { initLegend } from "./ui/legend.js";
 import { initFontsSync } from "./ui/fonts-sync.js";
 import { initChrome } from "./ui/chrome.js";
-import { initSidebarToggle } from "./ui/sidebar-toggle.js";
-import { initPanelDock } from "./ui/panel-dock.js";
 import { initSettingsWindows } from "./ui/settings-windows.js";
 import { initEntityLists } from "./ui/entity-list-window.js";
 import { initGenealogy } from "./ui/genealogy-window.js";
@@ -139,7 +138,8 @@ function start() {
   });
   initTimeBar({ store, timeActions, editActions });
   // 新しい地図を開いたら、時間の進行を止める（前の地図の進行を引き継がない）
-  store.subscribe((_s, change) => { if (change.type === "replace") timeActions.stop(); });
+  // 地図を開いたら、シミュレーションの数値（バランス設定）を「既定値＋その地図の上書き値」にそろえる
+  store.subscribe((s, change) => { if (change.type === "replace") { timeActions.stop(); applyMapBalance(s.map); } });
   // 元に戻す／やり直すでデータは戻るが、地図は自分では描き直さないので、ここで必ず描き直す（直さないと画面だけ編集後のまま残る）
   store.subscribe((_s, change) => { if (change.type === "undo" || change.type === "redo") renderer.requestRender(); });
   initShortcuts({ ...deps, editMode, editToolbar, timeActions });

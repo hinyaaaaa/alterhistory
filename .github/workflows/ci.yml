@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      # dist/app.js は js/ から作る成果物。ソースと食い違っていたら失敗にして、
+      # 「distだけが新しい」状態（ソースの取り残し）を防ぐ。
+      - name: dist がソースと一致しているか
+        run: git diff --exit-code -- dist

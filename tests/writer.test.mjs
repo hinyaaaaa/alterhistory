@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { parseAzgaarText } from "../js/io/azgaar-reader.js";
 import { attachExtension, NATIVE_MARKER } from "../js/io/native-format.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 import { serializeAzgaar } from "../js/io/azgaar-writer.js";
 
 let failed = 0;

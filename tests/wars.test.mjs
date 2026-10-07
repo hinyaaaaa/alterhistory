@@ -12,7 +12,7 @@ import { serializeAzgaar } from "../js/io/azgaar-writer.js";
 import { parseAzgaarText } from "../js/io/azgaar-reader.js";
 import { attachExtension } from "../js/io/native-format.js";
 
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };

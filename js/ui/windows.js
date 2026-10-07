@@ -1,4 +1,3 @@
-// ※ リポジトリのソースが古かったため、ビルド済みの dist/app.js から復元したファイルです（動作は同じ。コメントは失われています）。
 import { byId } from "./dom.js";
 
 const el = (tag, cls, text2) => {

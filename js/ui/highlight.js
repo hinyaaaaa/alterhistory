@@ -1,4 +1,3 @@
-// ※ リポジトリのソースが古かったため、ビルド済みの dist/app.js から復元したファイルです（動作は同じ。コメントは失われています）。
 import { byId } from "./dom.js";
 import { ENTITY_KINDS } from "../core/query.js";
 import { entityOutlineSegments, strokeSegments } from "../render/edges.js";

@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -107,99 +107,12 @@ const state1 = map.pack.states.find((s) => s && s.i && !s.removed);
 openStateTab(state1.i);
 check("国家タブが開く（選択ツールに切替済みであること）", !$("editor-panel").hidden);
 function clickSubtab(label) { const b = qa(".dialog-tabs .tab-btn").find((x) => x.textContent.includes(label)); b?.click(); return b; }
-check("外交サブタブに切替できる", !!clickSubtab("外交"));
-check("軍事サブタブに切替できる（表示バグが直っているか）", !!clickSubtab("軍事") && !$("tab-regiments").hidden);
-
-console.log("=== 部隊の配置（地図クリック連携） ===");
-check("国家タブ内では国家セレクタは出ない（自国固定）", !q("#tab-regiments select"));
-check("この国の部隊一覧が表示される(0件でも一覧枠は出る)", $("tab-regiments").textContent.includes("まだ部隊がありません") || $("tab-regiments").querySelector(".regiment-card"));
-
-const placeBtn = [...$("tab-regiments").querySelectorAll("button")].find((b) => b.textContent.includes("新しい部隊を編成"));
-check("編成ボタンがある", !!placeBtn);
-placeBtn.click();
-check("ヒントが出る(地図クリック待ち)", !!store.getState().hint);
-
-let landCell = -1; for (let i = 0; i < map.pack.cells.biome.length; i++) if (map.pack.cells.biome[i] !== 0) { landCell = i; break; }
-const [lx, ly] = viewport.toScreen(map.geometry.pack.p[landCell][0], map.geometry.pack.p[landCell][1]);
-const canvas = $("map-canvas");
-const beforeCount = simActions.regimentsOf(state1.i).length;
-canvas.dispatchEvent(new window.MouseEvent("click", { clientX: lx, clientY: ly, button: 0, bubbles: true }));
-await sleep(50);
-check("地図クリックで部隊が作られる", simActions.regimentsOf(state1.i).length === beforeCount + 1);
-check("ヒントが消える", !store.getState().hint);
-
-console.log("=== 部隊の編集（兵力・ドクトリン） ===");
-const newRegBefore = simActions.regimentsOf(state1.i).at(-1); // 直前に配置した新規部隊のID
-const card = [...$("tab-regiments").querySelectorAll(".regiment-card")].find((c) => c.querySelector("input")?.value === newRegBefore.name);
-check("新規に置いた部隊のカードが表示される", !!card);
-const infantryInput = [...card.querySelectorAll(".unit-field")].find((f) => f.textContent.includes("歩兵")).querySelector("input");
-infantryInput.value = "3000";
-infantryInput.dispatchEvent(new window.Event("change"));
-const newReg = simActions.regimentsOf(state1.i).find((r) => r.i === newRegBefore.i);
-check("兵力が反映される", newReg.u.infantry === 3000, `実際=${newReg.u.infantry}`);
-check("総戦力の表示が更新される", card.textContent.includes("総戦力"));
-
-console.log("=== 攻撃フロー ===");
-const state2 = map.pack.states.filter((s) => s && s.i && !s.removed)[1];
-// 相手国（state2）のタブを開き、部隊を1つ置く
-openStateTab(state2.i);
-clickSubtab("軍事");
-const placeBtn2 = [...$("tab-regiments").querySelectorAll("button")].find((b) => b.textContent.includes("新しい部隊を編成"));
-placeBtn2.click();
-let landCell2 = -1; for (let i = 0; i < map.pack.cells.biome.length; i++) if (map.pack.cells.biome[i] !== 0 && i !== landCell) { landCell2 = i; break; }
-const [lx2, ly2] = viewport.toScreen(map.geometry.pack.p[landCell2][0], map.geometry.pack.p[landCell2][1]);
-canvas.dispatchEvent(new window.MouseEvent("click", { clientX: lx2, clientY: ly2, button: 0, bubbles: true }));
-await sleep(50);
-const reg2 = simActions.regimentsOf(state2.i).at(-1);
-const card2 = [...$("tab-regiments").querySelectorAll(".regiment-card")].find((c) => c.querySelector("input")?.value === reg2.name);
-const infantryInput2 = [...card2.querySelectorAll(".unit-field")].find((f) => f.textContent.includes("歩兵")).querySelector("input");
-infantryInput2.value = "100"; infantryInput2.dispatchEvent(new window.Event("change"));
-
-// 自国（state1）のタブに戻り、攻撃を始める
-openStateTab(state1.i);
-clickSubtab("軍事");
-const card1 = [...$("tab-regiments").querySelectorAll(".regiment-card")].find((c) => c.querySelector("input")?.value === newReg.name);
-const attackBtn = [...card1.querySelectorAll("button")].find((b) => b.textContent.includes("攻撃する"));
-attackBtn.click();
-check("攻撃対象を選ぶセクションが出る（自国タブからでも相手国を選べる）", !!q("#tab-regiments .attack-target-section"));
-const targetSel = q("#tab-regiments .attack-target-section select");
-targetSel.value = String(state2.i); targetSel.dispatchEvent(new window.Event("change"));
-const targetCard = [...qa("#tab-regiments .target-card")].find((c) => c.textContent.includes(reg2.name));
-check("相手国の部隊が攻撃対象として並ぶ", !!targetCard && targetCard.textContent.includes(reg2.name));
-const confirmAttack = targetCard.querySelector(".attack-target button");
-check("攻撃対象の確認ボタンがある", !!confirmAttack);
-const beforeInfantry1 = simActions.regimentsOf(state1.i).find((r) => r.i === newReg.i).u.infantry;
-confirmAttack.click();
-const afterInfantry1 = simActions.regimentsOf(state1.i).find((r) => r.i === newReg.i).u.infantry;
-check("戦闘後、兵力が減少する", afterInfantry1 < beforeInfantry1, `${beforeInfantry1} → ${afterInfantry1}`);
-
-console.log("=== 同盟タブ ===");
-clickSubtab("外交");
-const allianceForm = $("tab-alliances");
-const nameInput = allianceForm.querySelector("input[placeholder]");
-nameInput.value = "友好同盟";
-const memberBoxes = [...allianceForm.querySelectorAll(".member-picker input")];
-memberBoxes[0].checked = true; memberBoxes[1].checked = true;
-const createAllianceBtn = [...allianceForm.querySelectorAll("button")].find((b) => b.textContent.includes("同盟を結成"));
-createAllianceBtn.click();
-check("同盟が作られる", simActions.listAlliances().some((a) => a.name === "友好同盟"));
-const allianceNameInputs = [...$("tab-alliances").querySelectorAll(".alliance-card input")].filter((i) => i.type !== "checkbox");
-check("画面に同盟カードが表示される", allianceNameInputs.some((i) => i.value === "友好同盟"));
-
-console.log("=== 戦争タブ（宣戦布告） ===");
-clickSubtab("外交");
-const warForm = $("tab-wars");
-const selects = [...warForm.querySelectorAll("select")];
-const declareBtn = [...warForm.querySelectorAll("button")].find((b) => b.textContent.includes("宣戦布告する"));
-declareBtn.click();
-check("戦争が始まる", simActions.activeWars().length === 1);
-check("画面に戦争カードが表示される", $("tab-wars").querySelector(".war-card"));
-
-console.log("=== Undo/Redoとの整合 ===");
-const beforeUndoWars = simActions.listWars().length;
-window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
-await sleep(30);
-check("Ctrl+Zで宣戦布告が取り消される", simActions.listWars().length === beforeUndoWars - 1 || simActions.listWars()[0]?.endedAt === undefined);
+// 国家の詳細画面のサブタブは「基本情報」と「属州」だけ（軍事・外交・戦争は専用ウィンドウへ移した）。
+// 部隊編成・同盟・宣戦布告・戦闘記録は war-window / new-windows / war-flow の各テストで検証する。
+{
+  const labels = qa(".dialog-tabs .tab-btn").map((b) => b.textContent.trim());
+  check("国家画面のサブタブに軍事・外交・戦争が残っていない", !labels.some((l) => /軍事|外交|戦争/.test(l)), labels.join(","));
+}
 
 console.log("=== 時間設定（年月の上書き・時代区分） ===");
 $("world-date").click();

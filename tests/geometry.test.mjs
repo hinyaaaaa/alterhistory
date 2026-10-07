@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { parseAzgaarBytes } from "../js/io/azgaar-reader.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 import { buildVoronoi, rebuildPack, SEA_LEVEL } from "../js/core/geometry.js";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");

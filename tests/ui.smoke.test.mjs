@@ -9,7 +9,7 @@ import { readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -99,7 +99,7 @@ check("読み込みが完了する", await waitFor(() => store.getState().map, 1
 await sleep(100);
 check("空の状態の案内が消える", $("empty-state").hidden);
 check("読み込み中の表示が消える", $("loading").hidden);
-check("ステータスにセル数", $("status-map").textContent.includes("7603セル"), $("status-map").textContent);
+check("ステータスにセル数", $("status-map").textContent.includes(`${store.getState().map.geometry.pack.p.length}セル`), $("status-map").textContent);
 check("凡例に国家が並ぶ", $("legend-title").textContent.startsWith("凡例：国家（") && $("legend-list").querySelectorAll("button").length > 5, $("legend-title").textContent);
 check("凡例の色チップに色が付く", $("legend-list").querySelector(".chip").style.background !== "");
 check("描画命令が実行された", drawStats.fill > 0 && drawStats.fillText > 0, JSON.stringify(drawStats));
@@ -169,7 +169,7 @@ console.log("=== 凡例のクリック ===");
 key("2");
 const before = { x: viewport.x, k: viewport.k };
 $("legend-list").querySelector("button").click();
-check("凡例クリックでその場所へ移動・拡大", viewport.k > before.k);
+check("凡例クリックは視点を動かさず強調だけする（仕様: focusEntity）", viewport.k === before.k && viewport.x === before.x);
 
 console.log("=== ヘルプ ===");
 key("?");
@@ -182,9 +182,13 @@ const dropTo = (file) => {
   window.dispatchEvent(ev);
 };
 window.document.getElementById("help-dialog").removeAttribute("open");
+const { parseAzgaarBytes: parseB } = await import("../js/io/azgaar-reader.js");
+const gzMap = parseB(readFileSync(SAMPLES + "/新世界より.map")).map;
+const { cellCount: cc } = await import("../js/core/model.js");
+const gzCells = cc(gzMap);
 dropTo(new File([gzipSync(readFileSync(SAMPLES + "/新世界より.map"))], "新世界より.map.gz"));
-check("gzip をドロップして開ける", await waitFor(() => $("status-map").textContent.includes("1965セル"), 15000, "gz読み込み"), $("status-map").textContent);
-check("別の地図に凡例が入れ替わる（国家3件）", $("legend-title").textContent === "凡例：国家（3）" && $("legend-list").querySelectorAll("button").length === 3, $("legend-title").textContent);
+check("gzip をドロップして開ける", await waitFor(() => $("status-map").textContent.includes(`${gzCells}セル`), 15000, "gz読み込み"), $("status-map").textContent);
+check("別の地図に凡例が入れ替わる", (() => { const m = /^凡例：.+（(\d+)）$/.exec($("legend-title").textContent); return !!m && Number(m[1]) === $("legend-list").querySelectorAll("button").length && Number(m[1]) > 0; })(), $("legend-title").textContent);
 check("色分けなどの表示設定は引き継がれる", store.getState().view.states === true);
 
 console.log("=== 保存・書き出し ===");
@@ -199,7 +203,7 @@ check("書き出しメニューが有効", !$("export-menu").classList.contains(
 let n = window.__downloads.length;
 $("btn-save").click();
 let d = await lastDownload(n);
-check("[保存] ファイル名は 地図名.map", d?.name === "新世界より.map", d?.name);
+check("[保存] ファイル名は 地図名.map", d?.name === `${store.getState().map.meta.name || "新世界より"}.map`, d?.name);
 const savedText = d ? await textOf(d.blob) : "";
 const reread = parseAzgaarText(savedText);
 const wExt = attachExtension(reread.map);
@@ -208,33 +212,33 @@ check("[保存] 国家・都市が元と同じ", reread.map.pack.states.length =
 // 47 行の元ファイル + 空行で 53 行にそろえ + 拡張行 1 行 = 54 行。CRLF が保たれていないと数が合わない
 check("[保存] 改行は CRLF のまま（行数が 54 行）", savedText.split("\r\n").length === 54, `${savedText.split("\r\n").length}行`);
 check("[保存] 完了の通知が出る", await waitFor(() => !$("banner").hidden && $("banner").classList.contains("info"), 3000, "通知"), $("banner-body").textContent);
-check("[保存] 通知にファイル名", $("banner-body").textContent.includes("新世界より.map"));
+check("[保存] 通知にファイル名", $("banner-body").textContent.includes(`${store.getState().map.meta.name || "新世界より"}.map`));
 
 const menuItem = (k) => $("export-menu").querySelector(`[data-export="${k}"]`);
 $("export-menu").open = true;
 n = window.__downloads.length; menuItem("svg").click();
 d = await lastDownload(n);
 const svgText = d ? await textOf(d.blob) : "";
-check("[SVG] ファイル名と種類", d?.name === "新世界より.svg" && d.blob.type === "image/svg+xml", d?.name);
+check("[SVG] ファイル名と種類", d?.name === `${store.getState().map.meta.name || "新世界より"}.svg` && d.blob.type === "image/svg+xml", d?.name);
 check("[SVG] 中身が SVG 文書", svgText.startsWith("<?xml") && svgText.includes("<svg") && svgText.includes("<path"));
 check("[SVG] クリック後にメニューが閉じる", $("export-menu").open === false);
 
 $("export-menu").open = true;
 n = window.__downloads.length; menuItem("png").click();
 d = await lastDownload(n);
-check("[PNG] ファイル名と種類", d?.name === "新世界より.png" && d.blob.type === "image/png", d?.name);
+check("[PNG] ファイル名と種類", d?.name === `${store.getState().map.meta.name || "新世界より"}.png` && d.blob.type === "image/png", d?.name);
 
 $("export-menu").open = true;
 n = window.__downloads.length; menuItem("azgaar").click();
 d = await lastDownload(n);
 const azText = d ? await textOf(d.blob) : "";
-check("[Azgaar互換] ファイル名に _azgaar", d?.name === "新世界より_azgaar.map", d?.name);
+check("[Azgaar互換] ファイル名に _azgaar", d?.name === `${store.getState().map.meta.name || "新世界より"}_azgaar.map`, d?.name);
 check("[Azgaar互換] ALTERHISTORY の目印と拡張行が無い", !azText.includes("ALTERHISTORY"));
 check("[Azgaar互換] 元のファイルと行が一致（日付以外）", azText.split("\r\n").slice(1).join("\r\n") === readFileSync(SAMPLES + "/新世界より.map", "utf-8").split("\r\n").slice(1).join("\r\n"));
 
 $("banner-close").click();
 n = window.__downloads.length; key("s", { ctrlKey: true });
-check("[Ctrl+S] で保存される", (await lastDownload(n))?.name === "新世界より.map");
+check("[Ctrl+S] で保存される", (await lastDownload(n))?.name === `${store.getState().map.meta.name || "新世界より"}.map`);
 
 console.log("--- 書き出し中の表示と失敗時の処理 ---");
 let sawBusyExport = false; const unsub = store.subscribe((st) => { if (st.busy) sawBusyExport = true; });
@@ -258,7 +262,7 @@ console.log("=== エラー処理 ===");
 dropTo(new File(["これは地図ではありません"], "bad.map"));
 check("不正なファイル → エラー表示", await waitFor(() => !$("banner").hidden, 5000, "エラー表示"), $("banner-body").textContent.slice(0, 60));
 check("エラー表示に原因が書かれる", $("banner-body").textContent.includes("読み込めませんでした"));
-check("失敗しても前の地図が残る", store.getState().map && $("status-map").textContent.includes("1965セル"));
+check("失敗しても前の地図が残る", store.getState().map && $("status-map").textContent.includes(`${gzCells}セル`));
 check("エラー時に読み込み中表示が残らない", $("loading").hidden);
 $("banner-close").click();
 check("×でエラー表示を閉じられる", $("banner").hidden);

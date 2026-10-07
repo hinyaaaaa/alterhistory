@@ -5,7 +5,7 @@ import { createStore } from "../js/core/store.js";
 import { planSetNote, getNote, noteTarget, htmlToEditable, editableToHtml } from "../js/core/edit/notes.js";
 import { serializeAzgaar } from "../js/io/azgaar-writer.js";
 
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
@@ -29,12 +29,16 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
   const store = createStore({ map });
 
   // 既存のノート（マーカー）が正しく読める
-  const m3 = map.markers[3];
-  const existing = getNote(map, "marker", m3.i);
-  check("既存のマーカーの文章が読める", existing.length > 10, existing.slice(0, 30));
+  const m3 = map.markers.find((m) => m && getNote(map, "marker", m.i).length > 10);
+  if (m3) {
+    const existing = getNote(map, "marker", m3.i);
+    check("既存のマーカーの文章が読める", existing.length > 10, existing.slice(0, 30));
+  } else {
+    console.log("  SKIP 既存のマーカーの文章が読める  (文章付きマーカーが無い合成マップ。実マップ検証は npm run test:compat)");
+  }
 
   // 新規に設定 → Undo → 書き出しの一致
-  const state = map.pack.states.find((s) => s && s.i && !s.removed);
+  const state = map.pack.states.find((s) => s && s.i && !s.removed && getNote(map, "state", s.i) === "");
   check("国家に文章が無い状態", getNote(map, "state", state.i) === "");
   const c1 = planSetNote(map, "state", state.i, "この国は港湾都市が多い。");
   store.commit(c1);

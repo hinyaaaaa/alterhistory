@@ -103,14 +103,20 @@ try {
     await page.waitForTimeout(100);
   }
 
-  console.log("=== バランス調整の保存（再読込後も残る）===");
+  console.log("=== バランス調整は地図に保存される（保存→開き直しで残る／別の地図には持ち越さない）===");
   await freshPage("/tmp/e2e-map-11.map");
   await menu('[data-open-win="balance"]');
-  const noise = page.locator('.float-win[data-win="balance"] input').nth(2);
+  const noiseInput = () => page.locator('.float-win[data-win="balance"] input').nth(2);
+  const noise = noiseInput();
   await noise.fill("0.05"); await noise.dispatchEvent("change");
+  const [dlBal] = await Promise.all([page.waitForEvent("download"), page.click("#btn-save")]);
+  const balPath = "/tmp/e2e-saved-balance.map"; await dlBal.saveAs(balPath);
+  await freshPage(balPath);
+  await menu('[data-open-win="balance"]');
+  check("保存した地図を開き直すと、バランス設定が残る", (await noiseInput().inputValue()) === "0.05");
   await freshPage("/tmp/e2e-map-11.map");
   await menu('[data-open-win="balance"]');
-  check("再読込後もバランス設定が残る", (await page.locator('.float-win[data-win="balance"] input').nth(2).inputValue()) === "0.05");
+  check("上書きの無い別の地図には、前の地図の値を持ち越さない（既定値）", (await noiseInput().inputValue()) === "0.18");
   await shot(page, "34-balance");
 } catch (e) { problems.push(`スクリプト例外: ${e.message.split("\n")[0]} @ ${(e.stack.match(/edit-save[^\n)]*/) ?? [""])[0]}`); }
 const fail = done(problems);

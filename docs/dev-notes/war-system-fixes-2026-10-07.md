@@ -14,12 +14,5 @@
    - 検証：陸軍1:4・士気30:70の弱い側の勝率 56%→0%。互角なら攻撃側41%。
 6. **経過の記録のスクロールが先頭に戻らない**（`js/ui/safe-render.js` の `keepScroll`）。戦争パネル・講和ウィンドウに適用。
 
-## リポジトリに関する注意（重要）
-GitHubのソースが、動いている `dist/app.js` より古かったため、`dist/app.js` から次のファイルを復元した（動作は同じ。コメントは失われている）。
-- `js/ui/covert-window.js`（リポジトリに存在しなかった。`main.js` が読み込むためビルドできない状態だった）
-- `js/ui/highlight.js`／`js/ui/windows.js`／`js/ui/settings-windows.js`／`js/ui/panels/wars-panel.js`／`js/ui/war-outcome-window.js`
-手元に、コメント付きの最新版があるなら、GitHub Desktop の差分を見て、そちらを優先してください。
-そのうえで、`wars-panel.js` と `war-outcome-window.js` には `keepScroll` の数行だけを移してください。
-
 ## テスト
 `tests/war-fixes.test.mjs` を追加（`npm test` に登録済み）。`tests/war-progress.test.mjs` は、テスト用の国のセル数を 4→40 にした（割譲の費用が割合ベースになったため）。

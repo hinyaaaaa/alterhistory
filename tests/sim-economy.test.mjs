@@ -11,7 +11,7 @@ import { planCreateRegiment, planMoveRegiment, planEditRegiment, planDisbandRegi
 import { simulateBattle, planResolveBattle } from "../js/core/sim/battle.js";
 import { checkIntegrity, snapshotBaseline } from "../js/core/edit/integrity.js";
 
-const SAMPLES = process.env.SAMPLES_DIR ?? "/mnt/user-data/uploads";
+const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
@@ -28,7 +28,7 @@ check("techLevelの範囲", clampTech(0) === TECH_MIN && clampTech(99) === TECH_
 {
   const s = { rural: 1000, urban: 500 };
   ensureEconomy(s);
-  check("既定値が補われる", s.techLevel === 3 && s.popCarryCap === 4500);
+  check("既定値が補われる(領土不明なら人口の1.5倍)", s.techLevel === 3 && s.popCarryCap === 2250);
   const r1 = computeAnnualUpdate(s);
   check("人口が増える", r1.rural + r1.urban > 1500);
   check("産業力が正の値", r1.industry > 0);
@@ -47,9 +47,9 @@ check("techLevelの範囲", clampTech(0) === TECH_MIN && clampTech(99) === TECH_
 }
 
 console.log("=== 兵科・戦闘力 ===");
-check("兵科は7種類", UNIT_KEYS.length === 7);
+check("兵科は10種類", UNIT_KEYS.length === 10);
 check("空の兵力は戦力0", forcePower(emptyForce()) === 0);
-check("歩兵100は戦力100相当(soft=1,hard=0.1の平均0.55→丸めなしで55)", forcePower({ ...emptyForce(), infantry: 100 }) === 55);
+check("歩兵100は戦力100相当(soft=1,hard=0.1の平均0.55→丸めなしで55)", Math.abs(forcePower({ ...emptyForce(), infantry: 100 }) - 55) < 1e-9);
 check("核は圧倒的な戦力係数", UNIT_BY_KEY.nuclear.soft > UNIT_BY_KEY.armor.soft * 10);
 check("ドクトリンで戦力が変わる", forcePower({ ...emptyForce(), armor: 100 }, "mobile") > forcePower({ ...emptyForce(), armor: 100 }, "balanced"));
 check("兵員数の合算", forceHeadcount({ ...emptyForce(), infantry: 500, armor: 20 }) === 520);
@@ -92,12 +92,9 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
   store.undo(); store.undo(); store.undo(); store.undo();
   check("全てUndoで部隊が消える(最初の状態に戻る)", regimentsOf(map.pack.states[s1.i]).length === (map.pack.states[s1.i].__origCount ?? regimentsOf(map.pack.states[s1.i]).length));
 
-  console.log("--- 他国領内への配置（要件どおり自由配置） ---");
+  console.log("--- 他国領内への配置（現仕様: 自国の領土内のみ） ---");
   const foreignCell = map.pack.cells.state.findIndex((v, i) => v === s2.i && map.pack.cells.biome[i] !== 0);
-  const { command: cForeign, id: fRegId } = planCreateRegiment(map, s1.i, foreignCell);
-  store.commit(cForeign);
-  check("他国領内に部隊を置ける", regimentsOf(map.pack.states[s1.i]).find((r) => r.i === fRegId).cell === foreignCell);
-  store.undo();
+  check("他国領内には部隊を置けない", (() => { try { planCreateRegiment(map, s1.i, foreignCell); return false; } catch { return true; } })());
 
   console.log("--- 年次更新（経済+徴兵） ---");
   const before = { rural: s1.rural, urban: s1.urban, industry: s1.industry };

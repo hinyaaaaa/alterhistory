@@ -1,7 +1,7 @@
 // 上部バーの Undo/Redo・未保存表示と、メニュー（書き出し・レイヤー）の開閉。
 //
 // 上部バーと下の状態バーは常に表示する（隠せない）。パネルの出し入れは、各パネルの × と、
-// 元の場所に出る小さな展開ボタンで行う（sidebar-toggle.js / panel-dock.js）。
+// 元の場所に出る小さな展開ボタンで行う。
 import { byId } from "./dom.js";
 
 export function initChrome({ store }) {

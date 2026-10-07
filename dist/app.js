@@ -1,4 +1,142 @@
 (() => {
+  // js/core/sim/balance.js
+  var BALANCE_META = Object.freeze([
+    { key: "upkeepFactor", label: "\u8ECD\u306E\u7DAD\u6301\u8CBB\u306E\u91CD\u3055", desc: "\u5927\u304D\u3044\u307B\u3069\u3001\u8ECD\u304C\u7A0E\u53CE\u3092\u98DF\u3046\u3002\u91CD\u307F\u4ED8\u304D\u5175\u529B\u304C\u4EBA\u53E3(\u5343\u4EBA)\u3042\u305F\u308A1.0\u306E\u3068\u304D\u306E\u7A0E\u53CE\u6BD4", def: 0.2, min: 0, max: 1, step: 0.01 },
+    { key: "upkeepMax", label: "\u8ECD\u4E8B\u8CBB\u306E\u4E0A\u9650", desc: "\u8ECD\u4E8B\u8CBB\u304C\u7A0E\u53CE\u306B\u5360\u3081\u308B\u5272\u5408\u306E\u982D\u6253\u3061", def: 0.8, min: 0.1, max: 1, step: 0.05 },
+    { key: "noiseAmp", label: "\u756A\u72C2\u308F\u305B\u306E\u8D77\u304D\u3084\u3059\u3055", desc: "\u5927\u304D\u3044\u307B\u3069\u3001\u5F31\u3044\u5074\u304C\u52DD\u3064\u3053\u3068\u304C\u5897\u3048\u308B\u30020\u306B\u3059\u308B\u3068\u6226\u529B\u3069\u304A\u308A\u306B\u6C7A\u307E\u308B", def: 0.18, min: 0, max: 0.6, step: 0.01 },
+    { key: "scoreBase", label: "\u6226\u4E89\u30B9\u30B3\u30A2\u306E\u4E0B\u99C4", desc: "\u6226\u529B\u5DEE\u304C\u5C0F\u3055\u304F\u3066\u3082\u5F97\u3089\u308C\u308B\u6700\u4F4E\u9650\u306E\u5272\u5408\uFF08\u6700\u5927\u30B9\u30B3\u30A2 = 100\xD7(\u4E0B\u99C4+(1\u2212\u4E0B\u99C4)\xD7\u512A\u52E2\u5EA6)\xD7\u5F62\u614B\u4FC2\u6570\uFF09", def: 0.15, min: 0, max: 0.8, step: 0.01 },
+    { key: "scoreGrowth", label: "\u6226\u4E89\u304C\u9577\u5F15\u3044\u305F\u3068\u304D\u306E\u30B9\u30B3\u30A2\u4E0A\u6607", desc: "\u76EE\u5B89\u671F\u9593\u3092\u904E\u304E\u305F\u3042\u3068\u3001\u6BCE\u6708 \u3053\u306E\u5024\xD7\u5F62\u614B\u4FC2\u6570 \u3060\u3051\u30B9\u30B3\u30A2\u304C\u5897\u3048\u308B", def: 2, min: 0, max: 10, step: 0.1 },
+    { key: "annexMinScore", label: "\u5168\u9762\u964D\u4F0F\u306B\u5FC5\u8981\u306A\u30B9\u30B3\u30A2", desc: "\u4F75\u5408\u3092\u6C42\u3081\u308B\u306E\u306B\u5FC5\u8981\u306A\u6226\u4E89\u30B9\u30B3\u30A2", def: 70, min: 10, max: 100, step: 1 },
+    { key: "cessionCostScale", label: "\u5272\u8B72\u306E\u8CBB\u7528", desc: "\u5C0F\u3055\u3044\u307B\u3069\u3001\u540C\u3058\u30B9\u30B3\u30A2\u3067\u591A\u304F\u5272\u8B72\u3055\u305B\u3089\u308C\u308B", def: 1, min: 0.1, max: 3, step: 0.05 }
+  ]);
+  var BALANCE_DEFAULTS = Object.freeze(Object.fromEntries(BALANCE_META.map((m) => [m.key, m.def])));
+  var BALANCE = { ...BALANCE_DEFAULTS };
+  function clampBalanceValue(key, value) {
+    const m = BALANCE_META.find((x) => x.key === key);
+    const v = Number(value);
+    return m && Number.isFinite(v) ? Math.min(m.max, Math.max(m.min, v)) : null;
+  }
+  function setBalance(patch) {
+    for (const m of BALANCE_META) {
+      const v = Number(patch?.[m.key]);
+      if (patch && m.key in patch && Number.isFinite(v)) BALANCE[m.key] = Math.min(m.max, Math.max(m.min, v));
+    }
+    return BALANCE;
+  }
+  function resetBalance() {
+    Object.assign(BALANCE, BALANCE_DEFAULTS);
+    return BALANCE;
+  }
+
+  // js/core/edit/commands.js
+  function makeCommand(label, layers, parts) {
+    const bump = (state) => {
+      const r = state.map.rev;
+      for (const l of layers) r[l]++;
+    };
+    return {
+      label,
+      layers,
+      parts,
+      apply(state) {
+        for (const p of parts) p.apply(state.map);
+        bump(state);
+      },
+      revert(state) {
+        for (let i = parts.length - 1; i >= 0; i--) parts[i].revert(state.map);
+        bump(state);
+      }
+    };
+  }
+  function setIndexed(getArray, changes) {
+    return {
+      apply(map) {
+        const a = getArray(map);
+        for (const [i, , after] of changes) a[i] = after;
+      },
+      revert(map) {
+        const a = getArray(map);
+        for (const [i, before] of changes) a[i] = before;
+      }
+    };
+  }
+  function setProps(target, patch) {
+    const before = {};
+    for (const k of Object.keys(patch)) before[k] = Object.prototype.hasOwnProperty.call(target, k) ? { v: target[k] } : null;
+    return {
+      apply() {
+        for (const [k, v] of Object.entries(patch)) {
+          if (v === void 0) delete target[k];
+          else target[k] = v;
+        }
+      },
+      revert() {
+        for (const [k, b] of Object.entries(before)) {
+          if (b === null) delete target[k];
+          else target[k] = b.v;
+        }
+      }
+    };
+  }
+  function setList(get, set, after) {
+    let before = null;
+    return {
+      apply(map) {
+        if (before === null) before = get(map);
+        set(map, after);
+      },
+      revert(map) {
+        set(map, before);
+      }
+    };
+  }
+
+  // js/core/edit/ext.js
+  function ensureExt(map) {
+    var _a;
+    if (!map.ext) map.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
+    (_a = map.ext).data ?? (_a.data = {});
+    return map.ext;
+  }
+
+  // js/core/edit/balance-setting.js
+  var balanceOverrides = (map) => ({ ...map?.ext?.data?.balance ?? {} });
+  function applyMapBalance(map) {
+    resetBalance();
+    const o = map?.ext?.data?.balance;
+    if (o && typeof o === "object") setBalance(o);
+    return BALANCE;
+  }
+  var writeOverrides = (m, o) => {
+    const ext = ensureExt(m);
+    if (Object.keys(o).length) ext.data.balance = o;
+    else delete ext.data.balance;
+  };
+  function planSetBalance(map, patch) {
+    const prev = balanceOverrides(map);
+    let next = {};
+    if (patch !== null) {
+      next = { ...prev };
+      for (const [k, raw] of Object.entries(patch ?? {})) {
+        const v = clampBalanceValue(k, raw);
+        if (v === null) continue;
+        if (v === BALANCE_DEFAULTS[k]) delete next[k];
+        else next[k] = v;
+      }
+    }
+    if (JSON.stringify(next) === JSON.stringify(prev)) return null;
+    return makeCommand("\u30D0\u30E9\u30F3\u30B9\u8A2D\u5B9A\u306E\u5909\u66F4", [], [{
+      apply: (m) => {
+        writeOverrides(m, next);
+        applyMapBalance(m);
+      },
+      revert: (m) => {
+        writeOverrides(m, prev);
+        applyMapBalance(m);
+      }
+    }]);
+  }
+
   // js/core/store.js
   var DEFAULT_HISTORY_LIMIT = 200;
   var LOST = Symbol("saved-state-dropped-from-history");
@@ -1037,69 +1175,6 @@
     ctx.restore();
   }
 
-  // js/core/edit/commands.js
-  function makeCommand(label, layers, parts) {
-    const bump = (state) => {
-      const r = state.map.rev;
-      for (const l of layers) r[l]++;
-    };
-    return {
-      label,
-      layers,
-      parts,
-      apply(state) {
-        for (const p of parts) p.apply(state.map);
-        bump(state);
-      },
-      revert(state) {
-        for (let i = parts.length - 1; i >= 0; i--) parts[i].revert(state.map);
-        bump(state);
-      }
-    };
-  }
-  function setIndexed(getArray, changes) {
-    return {
-      apply(map) {
-        const a = getArray(map);
-        for (const [i, , after] of changes) a[i] = after;
-      },
-      revert(map) {
-        const a = getArray(map);
-        for (const [i, before] of changes) a[i] = before;
-      }
-    };
-  }
-  function setProps(target, patch) {
-    const before = {};
-    for (const k of Object.keys(patch)) before[k] = Object.prototype.hasOwnProperty.call(target, k) ? { v: target[k] } : null;
-    return {
-      apply() {
-        for (const [k, v] of Object.entries(patch)) {
-          if (v === void 0) delete target[k];
-          else target[k] = v;
-        }
-      },
-      revert() {
-        for (const [k, b] of Object.entries(before)) {
-          if (b === null) delete target[k];
-          else target[k] = b.v;
-        }
-      }
-    };
-  }
-  function setList(get, set, after) {
-    let before = null;
-    return {
-      apply(map) {
-        if (before === null) before = get(map);
-        set(map, after);
-      },
-      revert(map) {
-        set(map, before);
-      }
-    };
-  }
-
   // js/core/edit/zones.js
   var ZONE_TYPES = Object.freeze([
     { id: "Invasion", label: "\u4FB5\u653B", color: "#d6453d" },
@@ -1214,14 +1289,6 @@
       for (const j of adj[best]) if (ok(j) && !inSet.has(j)) frontier.add(j);
     }
     return [...inSet];
-  }
-
-  // js/core/edit/ext.js
-  function ensureExt(map) {
-    var _a;
-    if (!map.ext) map.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
-    (_a = map.ext).data ?? (_a.data = {});
-    return map.ext;
   }
 
   // js/core/edit/eras.js
@@ -3527,30 +3594,6 @@
     return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   }
 
-  // js/core/sim/balance.js
-  var BALANCE_META = Object.freeze([
-    { key: "upkeepFactor", label: "\u8ECD\u306E\u7DAD\u6301\u8CBB\u306E\u91CD\u3055", desc: "\u5927\u304D\u3044\u307B\u3069\u3001\u8ECD\u304C\u7A0E\u53CE\u3092\u98DF\u3046\u3002\u91CD\u307F\u4ED8\u304D\u5175\u529B\u304C\u4EBA\u53E3(\u5343\u4EBA)\u3042\u305F\u308A1.0\u306E\u3068\u304D\u306E\u7A0E\u53CE\u6BD4", def: 0.2, min: 0, max: 1, step: 0.01 },
-    { key: "upkeepMax", label: "\u8ECD\u4E8B\u8CBB\u306E\u4E0A\u9650", desc: "\u8ECD\u4E8B\u8CBB\u304C\u7A0E\u53CE\u306B\u5360\u3081\u308B\u5272\u5408\u306E\u982D\u6253\u3061", def: 0.8, min: 0.1, max: 1, step: 0.05 },
-    { key: "noiseAmp", label: "\u756A\u72C2\u308F\u305B\u306E\u8D77\u304D\u3084\u3059\u3055", desc: "\u5927\u304D\u3044\u307B\u3069\u3001\u5F31\u3044\u5074\u304C\u52DD\u3064\u3053\u3068\u304C\u5897\u3048\u308B\u30020\u306B\u3059\u308B\u3068\u6226\u529B\u3069\u304A\u308A\u306B\u6C7A\u307E\u308B", def: 0.18, min: 0, max: 0.6, step: 0.01 },
-    { key: "scoreBase", label: "\u6226\u4E89\u30B9\u30B3\u30A2\u306E\u4E0B\u99C4", desc: "\u6226\u529B\u5DEE\u304C\u5C0F\u3055\u304F\u3066\u3082\u5F97\u3089\u308C\u308B\u6700\u4F4E\u9650\u306E\u5272\u5408\uFF08\u6700\u5927\u30B9\u30B3\u30A2 = 100\xD7(\u4E0B\u99C4+(1\u2212\u4E0B\u99C4)\xD7\u512A\u52E2\u5EA6)\xD7\u5F62\u614B\u4FC2\u6570\uFF09", def: 0.15, min: 0, max: 0.8, step: 0.01 },
-    { key: "scoreGrowth", label: "\u6226\u4E89\u304C\u9577\u5F15\u3044\u305F\u3068\u304D\u306E\u30B9\u30B3\u30A2\u4E0A\u6607", desc: "\u76EE\u5B89\u671F\u9593\u3092\u904E\u304E\u305F\u3042\u3068\u3001\u6BCE\u6708 \u3053\u306E\u5024\xD7\u5F62\u614B\u4FC2\u6570 \u3060\u3051\u30B9\u30B3\u30A2\u304C\u5897\u3048\u308B", def: 2, min: 0, max: 10, step: 0.1 },
-    { key: "annexMinScore", label: "\u5168\u9762\u964D\u4F0F\u306B\u5FC5\u8981\u306A\u30B9\u30B3\u30A2", desc: "\u4F75\u5408\u3092\u6C42\u3081\u308B\u306E\u306B\u5FC5\u8981\u306A\u6226\u4E89\u30B9\u30B3\u30A2", def: 70, min: 10, max: 100, step: 1 },
-    { key: "cessionCostScale", label: "\u5272\u8B72\u306E\u8CBB\u7528", desc: "\u5C0F\u3055\u3044\u307B\u3069\u3001\u540C\u3058\u30B9\u30B3\u30A2\u3067\u591A\u304F\u5272\u8B72\u3055\u305B\u3089\u308C\u308B", def: 1, min: 0.1, max: 3, step: 0.05 }
-  ]);
-  var BALANCE_DEFAULTS = Object.freeze(Object.fromEntries(BALANCE_META.map((m) => [m.key, m.def])));
-  var BALANCE = { ...BALANCE_DEFAULTS };
-  function setBalance(patch) {
-    for (const m of BALANCE_META) {
-      const v = Number(patch?.[m.key]);
-      if (patch && m.key in patch && Number.isFinite(v)) BALANCE[m.key] = Math.min(m.max, Math.max(m.min, v));
-    }
-    return BALANCE;
-  }
-  function resetBalance() {
-    Object.assign(BALANCE, BALANCE_DEFAULTS);
-    return BALANCE;
-  }
-
   // js/core/names.js
   var FORM_WORDS = ["\u795E\u8056\u5E1D\u56FD", "\u795E\u8056\u56FD", "\u5E1D\u56FD", "\u738B\u56FD", "\u516C\u56FD", "\u5927\u516C\u56FD", "\u9023\u90A6", "\u5171\u548C\u56FD", "\u9023\u5408", "\u9996\u9577\u56FD", "\u8FBA\u5883\u4F2F\u9818", "\u4F2F\u9818", "\u4FAF\u56FD", "\u795E\u6A29\u56FD", "\u81EA\u6CBB\u9818", "\u9818"];
   var FORM_RE = new RegExp(`(${FORM_WORDS.join("|")})$`);
@@ -5136,6 +5179,7 @@
       }
       cur.monthsDone = last;
       cur.progress = last / dur;
+      touched.push(w.id);
       const col = exhaustionCollapse(map, cur, fx, addMonths(w.startedAt, last));
       if (col) {
         cur = col;
@@ -7605,21 +7649,15 @@
       renderMil();
       panels.military.render();
     } });
-    const BAL_KEY = "alterhistory.balance";
-    try {
-      const saved = JSON.parse(localStorage.getItem(BAL_KEY) ?? "null");
-      if (saved) setBalance(saved);
-    } catch {
-    }
     const balBody = el2("div", "balance-body");
-    function saveBalance() {
-      try {
-        localStorage.setItem(BAL_KEY, JSON.stringify(BALANCE));
-      } catch {
-      }
-    }
     function renderBalance() {
-      balBody.replaceChildren(el2("p", "hint", "\u7D4C\u6E08\u30FB\u6226\u4E89\u306E\u6570\u5024\u3092\u8ABF\u6574\u3057\u307E\u3059\u3002\u5909\u3048\u308B\u3068\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u3053\u306E\u7AEF\u672B\u306E\u30D6\u30E9\u30A6\u30B6\u306B\u4FDD\u5B58\u3055\u308C\u307E\u3059\uFF08\u5730\u56F3\u30D5\u30A1\u30A4\u30EB\u306B\u306F\u5165\u308A\u307E\u305B\u3093\uFF09\u3002"));
+      const map = store.getState().map;
+      if (!map) {
+        balBody.replaceChildren(noMap());
+        return;
+      }
+      const overrides = map.ext?.data?.balance ?? {};
+      balBody.replaceChildren(el2("p", "hint", "\u7D4C\u6E08\u30FB\u6226\u4E89\u306E\u6570\u5024\u3092\u8ABF\u6574\u3057\u307E\u3059\u3002\u5909\u3048\u308B\u3068\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u3053\u306E\u5730\u56F3\u306B\u4FDD\u5B58\u3055\u308C\u307E\u3059\uFF08\u5730\u56F3\u30D5\u30A1\u30A4\u30EB\u306B\u5165\u308B\u306E\u3067\u3001\u5225\u306E\u7AEF\u672B\u3067\u958B\u3044\u3066\u3082\u540C\u3058\u7D50\u679C\u306B\u306A\u308A\u307E\u3059\uFF09\u3002Azgaar\u4E92\u63DB\u5F62\u5F0F\u3067\u66F8\u304D\u51FA\u3059\u3068\u3001\u3053\u306E\u8A2D\u5B9A\u306F\u542B\u307E\u308C\u307E\u305B\u3093\u3002"));
       const t = el2("table", "win-table");
       for (const m of BALANCE_META) {
         const tr = el2("tr");
@@ -7632,20 +7670,21 @@
         input.step = m.step;
         input.value = BALANCE[m.key];
         input.addEventListener("change", () => {
-          setBalance({ [m.key]: input.value });
+          const cmd = planSetBalance(store.getState().map, { [m.key]: input.value });
+          if (cmd) store.commit(cmd);
           input.value = BALANCE[m.key];
-          saveBalance();
+          renderBalance();
         });
         const td = el2("td");
         td.append(input);
-        tr.append(th, td, el2("td", "muted", `\u65E2\u5B9A ${BALANCE_DEFAULTS[m.key]}`), el2("td", "hint", m.desc));
+        tr.append(th, td, el2("td", "muted", m.key in overrides ? `\u65E2\u5B9A ${BALANCE_DEFAULTS[m.key]}\uFF08\u3053\u306E\u5730\u56F3\u3067\u5909\u66F4\uFF09` : `\u65E2\u5B9A ${BALANCE_DEFAULTS[m.key]}`), el2("td", "hint", m.desc));
         t.append(tr);
       }
       const reset = el2("button", "", "\u3059\u3079\u3066\u65E2\u5B9A\u5024\u306B\u623B\u3059");
       reset.type = "button";
       reset.addEventListener("click", () => {
-        resetBalance();
-        saveBalance();
+        const cmd = planSetBalance(store.getState().map, null);
+        if (cmd) store.commit(cmd);
         renderBalance();
       });
       balBody.append(t, reset);
@@ -12677,6 +12716,7 @@ ${shown}${more}`;
       setMuster(warId, muster) {
         withMap((map) => safeRun("\u90E8\u968A\u306E\u53EC\u96C6", () => {
           store.commit(planSetMuster(map, warId, muster));
+          reevaluateWarIds([warId]);
           rerender();
         }));
       },
@@ -14446,8 +14486,11 @@ ${shown}${more}`;
       if (e.detail?.target != null) editToolbar.setTargetValue(e.detail.target);
     });
     initTimeBar({ store, timeActions, editActions });
-    store.subscribe((_s, change) => {
-      if (change.type === "replace") timeActions.stop();
+    store.subscribe((s, change) => {
+      if (change.type === "replace") {
+        timeActions.stop();
+        applyMapBalance(s.map);
+      }
     });
     store.subscribe((_s, change) => {
       if (change.type === "undo" || change.type === "redo") renderer.requestRender();
