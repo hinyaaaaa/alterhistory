@@ -26,8 +26,8 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
     window.ResizeObserver = class { observe() {} disconnect() {} };
     window.HTMLCanvasElement.prototype.getContext = function () { return (this.__ctx ??= fakeCtx()); };
     window.HTMLElement.prototype.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 700, right: 1000, bottom: 700, x: 0, y: 0 });
-    window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
-    window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); this.dispatchEvent(new window.Event("close")); };
+    window.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
+    window.window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); this.dispatchEvent(new window.Event("close")); };
     window.Element.prototype.setPointerCapture = () => {};
     window.Element.prototype.releasePointerCapture = () => {};
     window.Element.prototype.hasPointerCapture = () => false;
@@ -63,11 +63,13 @@ check("国家一覧に行があり、🔍・統合・🗑 がある", stRows.len
 check("一覧にランダム設定のボタンは無い", !win("list-state").textContent.includes("🎲"));
 
 console.log("=== 削除（確認ダイアログ→削除→Undo） ===");
-window.confirm = () => true;
+if (!window.HTMLDialogElement.prototype.showModal) { window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); }; window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); }; }
+const okConfirm = async () => { await new Promise((r) => setTimeout(r, 0)); window.document.querySelector("dialog.confirm-dialog .danger, dialog.confirm-dialog .primary")?.click(); await new Promise((r) => setTimeout(r, 0)); };
 const relBefore = store.getState().map.pack.religions.filter((r) => r && r.i > 0 && !r.removed).length;
 const relRows = win("list-religion").querySelectorAll(".ent-row");
 if (relRows.length) {
   relRows[0].querySelector(".ent-btn.danger").click();
+  await okConfirm();
   const relAfter = store.getState().map.pack.religions.filter((r) => r && r.i > 0 && !r.removed).length;
   check("宗教を削除できる", relAfter === relBefore - 1, `${relBefore}→${relAfter}`);
   store.undo();

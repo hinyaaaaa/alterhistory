@@ -1,4 +1,5 @@
 // 核作戦ウィンドウ：立案 → 実行の2段階。通常の戦争では核は使われず、ここで明示的に行う。
+import { confirmDialog } from "./dialogs.js";
 import { guardRender } from "./safe-render.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
@@ -37,7 +38,7 @@ export function initNuclearWindow({ store, simActions, wins }) {
       row.append(el("span", "ent-main", `${o.status === "executed" ? "☢ 実行済み" : "📝 立案中"}　${o.name}　${nm(map, o.attackerId)} → ${nm(map, o.targetId)}　${o.warheads}発`));
       if (o.status === "planned") {
         const run = el("button", "danger", "実行する"); run.type = "button";
-        run.addEventListener("click", () => { if (window.confirm(`「${o.name}」を実行します。${nm(map, o.targetId)}は壊滅的な被害を受けます。よろしいですか？（元に戻せます）`)) simActions.executeNuclearOp(o.id); });
+        run.addEventListener("click", async () => { if (await confirmDialog(`「${o.name}」を実行します。${nm(map, o.targetId)}は壊滅的な被害を受けます。よろしいですか？（元に戻せます）`, { okLabel: "実行する", danger: true })) simActions.executeNuclearOp(o.id); });
         const cancel = el("button", "ent-btn", "取り消し"); cancel.type = "button"; cancel.addEventListener("click", () => simActions.cancelNuclearOp(o.id));
         row.append(run, cancel);
       } else if (o.result) row.append(el("span", "ent-meta", `人口 −${o.result.populationLoss.toLocaleString()}千人 / 産業 −${Math.round(o.result.industryLossShare * 100)}%`));

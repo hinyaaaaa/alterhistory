@@ -1,10 +1,11 @@
 // ※ リポジトリのソースが古かったため、ビルド済みの dist/app.js から復元したファイルです（動作は同じ。コメントは失われています）。
 import { formatWorldTime } from "../../core/sim/time.js";
 import { forcePower } from "../../core/sim/units.js";
+import { BALANCE } from "../../core/sim/balance.js";
 import { WAR_TYPES } from "../../core/sim/war-engine.js";
 import { guardRender, keepScroll } from "../safe-render.js";
 import { byId } from "../dom.js";
-import { alertDialog } from "../dialogs.js";
+import { alertDialog, confirmDialog } from "../dialogs.js";
 
 const el = (tag, cls, text2) => {
   const e = document.createElement(tag);
@@ -18,6 +19,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
   const root = byId("tab-wars");
   let selected = null;
   let creating = false;
+  let wTab = "ov"; // 戦争ウィンドウで開いているタブ（概要・部隊・経過・講和）
   let draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set(), muster: {}, type: "conventional" };
   const stateName = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
   const monthIdx = (d) => d.year * 12 + d.month;
@@ -150,8 +152,8 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     return grid;
   }
   function warDetail(map, states, w) {
-    const grid = el("div", "war-prep");
-    const left = el("div", "war-prep-left"), right = el("div", "war-prep-right");
+    const ov = el("div", "war-tab-ov"), mu = el("div", "war-tab-mu"), lg = el("div", "war-tab-lg"), pc = el("div", "war-tab-pc");
+
     const nameIn = document.createElement("input");
     nameIn.value = w.name;
     nameIn.className = "war-name-input";
@@ -159,10 +161,10 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     const typeName = WAR_TYPES[w.type]?.label ?? "通常戦";
     const now = map.worldTime ?? { year: w.startedAt.year, month: w.startedAt.month };
     const elapsed = Math.max(0, monthIdx(w.endedAt ?? now) - monthIdx(w.startedAt));
-    left.append(el("label", "field-label", `戦争の名前（${typeName}）`), nameIn);
-    left.append(el("p", "hint", w.endedAt ? `開戦 ${fmtDate3(w.startedAt)} ／ 終戦 ${fmtDate3(w.endedAt)}（${w.lastedMonths ?? elapsed}か月）${w.treatyName ? ` ／ 講和条約：${w.treatyName}` : ""}` : `開戦 ${fmtDate3(w.startedAt)} ／ 経過 ${elapsed}か月（目安は約${w.durationMonths ?? "?"}か月。終わりは決まっておらず、講和条約を結んだ月が終戦になります）`));
+    ov.append(el("label", "field-label", `戦争の名前（${typeName}）`), nameIn);
+    ov.append(el("p", "hint", w.endedAt ? `開戦 ${fmtDate3(w.startedAt)} ／ 終戦 ${fmtDate3(w.endedAt)}（${w.lastedMonths ?? elapsed}か月）${w.treatyName ? ` ／ 講和条約：${w.treatyName}` : ""}` : `開戦 ${fmtDate3(w.startedAt)} ／ 経過 ${elapsed}か月（目安は約${w.durationMonths ?? "?"}か月。終わりは決まっておらず、講和条約を結んだ月が終戦になります）`));
     if (!w.endedAt) {
-      left.append(el("h4", "", "参戦国の部隊（チェックを外すと戦線から引き上げます）"));
+      mu.append(el("h4", "", "参戦国の部隊（チェックを外すと戦線から引き上げます）"));
       for (const id of [...w.attackers, ...w.defenders]) {
         const st = map.pack.states[id];
         if (!isLive(st)) continue;
@@ -187,42 +189,76 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
         const all = el("button", "ent-btn", "全軍撤退");
         all.type = "button";
         all.disabled = !onFront.size;
-        all.addEventListener("click", () => {
-          if (window.confirm(`${stateName(map, id)}は全軍を引き上げます。陣営の全員が撤退すると、その陣営の敗北で決着します。よろしいですか？`)) simActions.withdrawFromWar(w.id, id, []);
+        all.addEventListener("click", async () => {
+          if (await confirmDialog(`${stateName(map, id)}は全軍を引き上げます。陣営の全員が撤退すると、その陣営の敗北で決着します。よろしいですか？`, { okLabel: "撤退する", danger: true })) simActions.withdrawFromWar(w.id, id, []);
         });
         row.append(all);
-        left.append(row);
+        mu.append(row);
       }
     }
     const events = [...(w.battles ?? []).map((b) => ({ date: b.date, tag: "戦闘", text: `${b.name}　${b.text}` })), ...(w.events ?? []).map((e) => ({ date: e.date, tag: { event: "出来事", omen: "兆し", "omen-fulfilled": "的中", "omen-faded": "杞憂", withdraw: "撤退" }[e.kind] ?? "出来事", text: e.text, kind: e.kind }))];
     const reached = (d) => !d || w.endedAt || monthIdx(d) <= monthIdx(now);
     const shown = events.filter((e) => reached(e.date)).sort((x, y) => (x.date ? monthIdx(x.date) : 0) - (y.date ? monthIdx(y.date) : 0));
-    left.append(el("h4", "", "経過の記録"));
-    if (!shown.length) left.append(el("p", "muted", "まだ記録はありません。時間が進むと、戦闘や出来事が記録されます。"));
+    lg.append(el("h4", "", "経過の記録"));
+    if (!shown.length) lg.append(el("p", "muted", "まだ記録はありません。時間が進むと、戦闘や出来事が記録されます。"));
     const log = el("ol", "battle-log");
     for (const e of shown) {
       const li = el("li", e.kind ? `ev-${e.kind}` : "");
       li.append(el("span", "ev-tag", e.tag), document.createTextNode(`${e.date ? `${fmtDate3(e.date)}　` : ""}${e.text}`));
       log.append(li);
     }
-    left.append(log);
-    right.append(el("h4", "", "戦況"));
+    lg.append(log);
+    ov.append(el("h4", "", "戦況"));
     const sit = getOutcome()?.situation(map, w);
-    if (sit) right.append(sit);
-    if (w.mediator != null) right.append(el("p", "hint", `${stateName(map, w.mediator)}が調停に動いています。講和の好機かもしれません。`));
+    if (sit) ov.append(sit);
+    if (w.mediator != null) ov.append(el("p", "hint", `${stateName(map, w.mediator)}が調停に動いています。講和の好機かもしれません。`));
     if (!w.endedAt) {
       const go = el("button", "primary war-go", "📜 講和条約を結ぶ");
       go.type = "button";
       go.addEventListener("click", () => getWins()?.open("treaty"));
-      right.append(go);
+      ov.append(go);
       const fin = el("button", "", "経過を目安の終わりまで進める");
       fin.type = "button";
       fin.title = "時間を待たずに、目安の期間ぶんの損害とできごとを反映します";
       fin.addEventListener("click", () => simActions.finishWar(w.id));
-      right.append(fin);
-    } else right.append(el("p", "muted", "この戦争は終結しました。条約の中身は「講和条約」ウィンドウで確認できます。"));
-    grid.append(left, right);
-    return grid;
+      ov.append(fin);
+    } else ov.append(el("p", "muted", "この戦争は終結しました。条約の中身は「講和条約」ウィンドウで確認できます。"));
+
+
+    if (w.endedAt) mu.append(el("p", "muted", "この戦争は終結しています。部隊の招集は戦争中だけ変えられます。"));
+    if (w.result) {
+      const cur = simActions.currentWarScore(w), r = w.result, T = WAR_TYPES[w.type] ?? WAR_TYPES.conventional;
+      const dur = Math.max(1, w.durationMonths ?? 12), done = w.monthsDone ?? Math.round((w.progress ?? 0) * dur), over = Math.max(0, done - dur);
+      pc.append(el("h4", "", "戦争スコアの内訳"));
+      const tb = el("table", "win-table");
+      const row = (k, v) => { const tr = el("tr"); tr.append(el("th", "", k), el("td", "", v)); tb.append(tr); };
+      // 開戦時の記録には優勢度そのものが保存されていないので、最大スコアの式から逆算する
+      const domRaw = r.dominance ?? (r.warScore ? ((r.warScore / (100 * T.scoreScale)) - BALANCE.scoreBase) / (1 - BALANCE.scoreBase) : 0);
+      row("戦力差（優勢度）", `${Math.round(Math.min(1, Math.max(0, domRaw)) * 100)}%`);
+      row("戦争の形態", `${typeName}（係数 ${T.scoreScale}）`);
+      row("最大スコア", `${r.warScore ?? 0}　＝ 100 ×（0.15 ＋ 0.85 × 優勢度）× 係数`);
+      row("経過", `${done} / 目安 ${dur}か月${over ? `（超過 ${over}か月ぶんの占領進行を含む）` : ""}`);
+      row("現在のスコア", `${cur}${r.victory?.collapse ? "（民意の崩壊で降伏したため満額）" : ""}`);
+      tb.append((() => { const tr = el("tr"); tr.append(el("th", "", "要求できるもの"), el("td", "", cur >= BALANCE.annexMinScore ? "全面降伏（併合）まで" : `割譲・賠償・従属化（併合は${BALANCE.annexMinScore}以上）`)); return tr; })());
+      pc.append(tb);
+      pc.append(el("p", "hint", "スコアは目安の期間まで上がり、超過後も戦争が続けば毎月上がります。割譲の費用は講和条約の窓で確認できます。"));
+      const open = el("button", w.endedAt ? "" : "primary war-go", w.endedAt ? "📜 条約の中身を見る" : "📜 講和条約を結ぶ");
+      open.type = "button";
+      open.addEventListener("click", () => getWins()?.open("treaty"));
+      pc.append(open);
+    }
+    const TABS = [["ov", "概要", ov], ["mu", "部隊", mu], ["lg", "経過", lg], ["pc", "講和", pc]];
+    if (!TABS.some(([k]) => k === wTab)) wTab = "ov";
+    const wrap = el("div", "war-tabs-wrap"), bar = el("div", "war-tabs");
+    for (const [k, label, pane] of TABS) {
+      const b = el("button", k === wTab ? "active" : "", label);
+      b.type = "button";
+      pane.hidden = k !== wTab;
+      b.addEventListener("click", () => { wTab = k; render(); });
+      bar.append(b);
+    }
+    wrap.append(bar, ov, mu, lg, pc);
+    return wrap;
   }
   const safeRender = guardRender(root, () => render());
   store.subscribe((_s, change) => {

@@ -4,6 +4,7 @@ import { initWindows } from "./windows.js";
 import { UNIT_TYPES, forcePower, forceHeadcount } from "../core/sim/units.js";
 import { regimentsOf } from "../core/sim/military.js";
 import { FILL_KEY } from "../app/layers.js";
+import { BALANCE, BALANCE_META, BALANCE_DEFAULTS, setBalance, resetBalance } from "../core/sim/balance.js";
 
 const el = (tag, cls, text2) => {
   const e = document.createElement(tag);
@@ -97,6 +98,31 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
     renderMil();
     panels.military.render();
   } });
+  // ⚖ バランス調整: 経済・戦争の数値をコードを直さずに変える。この端末のブラウザに保存する（地図ファイルには入らない）
+  const BAL_KEY = "alterhistory.balance";
+  try { const saved = JSON.parse(localStorage.getItem(BAL_KEY) ?? "null"); if (saved) setBalance(saved); } catch { /* 保存が使えない環境では既定値のまま */ }
+  const balBody = el("div", "balance-body");
+  function saveBalance() { try { localStorage.setItem(BAL_KEY, JSON.stringify(BALANCE)); } catch { /* 保存できなくても、このセッションでは有効 */ } }
+  function renderBalance() {
+    balBody.replaceChildren(el("p", "hint", "経済・戦争の数値を調整します。変えるとすぐ反映され、この端末のブラウザに保存されます（地図ファイルには入りません）。"));
+    const t = el("table", "win-table");
+    for (const m of BALANCE_META) {
+      const tr = el("tr");
+      const th = el("th", "", m.label);
+      th.title = m.desc;
+      const input = document.createElement("input");
+      input.type = "number"; input.min = m.min; input.max = m.max; input.step = m.step; input.value = BALANCE[m.key];
+      input.addEventListener("change", () => { setBalance({ [m.key]: input.value }); input.value = BALANCE[m.key]; saveBalance(); });
+      const td = el("td"); td.append(input);
+      tr.append(th, td, el("td", "muted", `既定 ${BALANCE_DEFAULTS[m.key]}`), el("td", "hint", m.desc));
+      t.append(tr);
+    }
+    const reset = el("button", "", "すべて既定値に戻す");
+    reset.type = "button";
+    reset.addEventListener("click", () => { resetBalance(); saveBalance(); renderBalance(); });
+    balBody.append(t, reset);
+  }
+  wins.register("balance", { title: "⚖ バランス調整", width: 860, body: balBody, onOpen: renderBalance });
   if (warOutcome) wins.register("treaty", { title: "📜 講和条約", width: 920, body: warOutcome.treatyBody, onOpen: () => warOutcome.renderTreaty(), onClose: () => warOutcome.clearHighlight() });
   if (warOutcome) wins.register("currency", { title: "💱 通貨・為替", width: 900, body: warOutcome.currencyBody, onOpen: () => warOutcome.renderCurrency() });
   store.subscribe((_s, change) => {

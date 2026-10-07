@@ -140,6 +140,8 @@ function start() {
   initTimeBar({ store, timeActions, editActions });
   // 新しい地図を開いたら、時間の進行を止める（前の地図の進行を引き継がない）
   store.subscribe((_s, change) => { if (change.type === "replace") timeActions.stop(); });
+  // 元に戻す／やり直すでデータは戻るが、地図は自分では描き直さないので、ここで必ず描き直す（直さないと画面だけ編集後のまま残る）
+  store.subscribe((_s, change) => { if (change.type === "undo" || change.type === "redo") renderer.requestRender(); });
   initShortcuts({ ...deps, editMode, editToolbar, timeActions });
 
   new ResizeObserver(() => renderer.resize()).observe(byId("stage"));

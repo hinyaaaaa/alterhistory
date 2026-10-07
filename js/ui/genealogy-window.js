@@ -3,7 +3,7 @@
 //   ・ノードを押すと選択。下のパネルで、親の変更・名前の変更・削除ができる
 //   ・「共通の祖」に落とすと、どこからも分かれていない（原始の）系統になる
 // 輪（自分の子孫を親にする）はコア側で拒否される。
-import { promptDialog } from "./dialogs.js";
+import { promptDialog, confirmDialog } from "./dialogs.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -125,8 +125,8 @@ export function initGenealogy({ store, wins, editActions }) {
     const rename = el("button", "", "名前を変える"); rename.type = "button";
     rename.addEventListener("click", async () => { const n = await promptDialog(`${LABEL[kind]}の新しい名前`, e.fullName ?? e.name); if (n) { editActions.renameEntity(kind, id, n); render(kind); } });
     const del = el("button", "danger", "削除"); del.type = "button";
-    del.addEventListener("click", () => {
-      if (!window.confirm(`${LABEL[kind]}「${e.fullName ?? e.name}」を削除します。（元に戻せます）`)) return;
+    del.addEventListener("click", async () => {
+      if (!(await confirmDialog(`${LABEL[kind]}「${e.fullName ?? e.name}」を削除します。（元に戻せます）`, { okLabel: "削除する", danger: true }))) return;
       if (editActions.removeEntity(kind, id)) { selected[kind] = null; render(kind); }
     });
     box.append(rename, del);

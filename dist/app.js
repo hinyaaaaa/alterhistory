@@ -3527,6 +3527,30 @@
     return `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
   }
 
+  // js/core/sim/balance.js
+  var BALANCE_META = Object.freeze([
+    { key: "upkeepFactor", label: "\u8ECD\u306E\u7DAD\u6301\u8CBB\u306E\u91CD\u3055", desc: "\u5927\u304D\u3044\u307B\u3069\u3001\u8ECD\u304C\u7A0E\u53CE\u3092\u98DF\u3046\u3002\u91CD\u307F\u4ED8\u304D\u5175\u529B\u304C\u4EBA\u53E3(\u5343\u4EBA)\u3042\u305F\u308A1.0\u306E\u3068\u304D\u306E\u7A0E\u53CE\u6BD4", def: 0.2, min: 0, max: 1, step: 0.01 },
+    { key: "upkeepMax", label: "\u8ECD\u4E8B\u8CBB\u306E\u4E0A\u9650", desc: "\u8ECD\u4E8B\u8CBB\u304C\u7A0E\u53CE\u306B\u5360\u3081\u308B\u5272\u5408\u306E\u982D\u6253\u3061", def: 0.8, min: 0.1, max: 1, step: 0.05 },
+    { key: "noiseAmp", label: "\u756A\u72C2\u308F\u305B\u306E\u8D77\u304D\u3084\u3059\u3055", desc: "\u5927\u304D\u3044\u307B\u3069\u3001\u5F31\u3044\u5074\u304C\u52DD\u3064\u3053\u3068\u304C\u5897\u3048\u308B\u30020\u306B\u3059\u308B\u3068\u6226\u529B\u3069\u304A\u308A\u306B\u6C7A\u307E\u308B", def: 0.18, min: 0, max: 0.6, step: 0.01 },
+    { key: "scoreBase", label: "\u6226\u4E89\u30B9\u30B3\u30A2\u306E\u4E0B\u99C4", desc: "\u6226\u529B\u5DEE\u304C\u5C0F\u3055\u304F\u3066\u3082\u5F97\u3089\u308C\u308B\u6700\u4F4E\u9650\u306E\u5272\u5408\uFF08\u6700\u5927\u30B9\u30B3\u30A2 = 100\xD7(\u4E0B\u99C4+(1\u2212\u4E0B\u99C4)\xD7\u512A\u52E2\u5EA6)\xD7\u5F62\u614B\u4FC2\u6570\uFF09", def: 0.15, min: 0, max: 0.8, step: 0.01 },
+    { key: "scoreGrowth", label: "\u6226\u4E89\u304C\u9577\u5F15\u3044\u305F\u3068\u304D\u306E\u30B9\u30B3\u30A2\u4E0A\u6607", desc: "\u76EE\u5B89\u671F\u9593\u3092\u904E\u304E\u305F\u3042\u3068\u3001\u6BCE\u6708 \u3053\u306E\u5024\xD7\u5F62\u614B\u4FC2\u6570 \u3060\u3051\u30B9\u30B3\u30A2\u304C\u5897\u3048\u308B", def: 2, min: 0, max: 10, step: 0.1 },
+    { key: "annexMinScore", label: "\u5168\u9762\u964D\u4F0F\u306B\u5FC5\u8981\u306A\u30B9\u30B3\u30A2", desc: "\u4F75\u5408\u3092\u6C42\u3081\u308B\u306E\u306B\u5FC5\u8981\u306A\u6226\u4E89\u30B9\u30B3\u30A2", def: 70, min: 10, max: 100, step: 1 },
+    { key: "cessionCostScale", label: "\u5272\u8B72\u306E\u8CBB\u7528", desc: "\u5C0F\u3055\u3044\u307B\u3069\u3001\u540C\u3058\u30B9\u30B3\u30A2\u3067\u591A\u304F\u5272\u8B72\u3055\u305B\u3089\u308C\u308B", def: 1, min: 0.1, max: 3, step: 0.05 }
+  ]);
+  var BALANCE_DEFAULTS = Object.freeze(Object.fromEntries(BALANCE_META.map((m) => [m.key, m.def])));
+  var BALANCE = { ...BALANCE_DEFAULTS };
+  function setBalance(patch) {
+    for (const m of BALANCE_META) {
+      const v = Number(patch?.[m.key]);
+      if (patch && m.key in patch && Number.isFinite(v)) BALANCE[m.key] = Math.min(m.max, Math.max(m.min, v));
+    }
+    return BALANCE;
+  }
+  function resetBalance() {
+    Object.assign(BALANCE, BALANCE_DEFAULTS);
+    return BALANCE;
+  }
+
   // js/core/names.js
   var FORM_WORDS = ["\u795E\u8056\u5E1D\u56FD", "\u795E\u8056\u56FD", "\u5E1D\u56FD", "\u738B\u56FD", "\u516C\u56FD", "\u5927\u516C\u56FD", "\u9023\u90A6", "\u5171\u548C\u56FD", "\u9023\u5408", "\u9996\u9577\u56FD", "\u8FBA\u5883\u4F2F\u9818", "\u4F2F\u9818", "\u4FAF\u56FD", "\u795E\u6A29\u56FD", "\u81EA\u6CBB\u9818", "\u9818"];
   var FORM_RE = new RegExp(`(${FORM_WORDS.join("|")})$`);
@@ -3694,7 +3718,7 @@
     const m = T.allMuster ? null : muster;
     const { aStrength: A, dStrength: D, compare: cmp } = previewWar(map, attackers, defenders, m);
     const da = sideDoctrine(map, attackers), dd = sideDoctrine(map, defenders);
-    const noiseAmp = 0.18 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1);
+    const noiseAmp = BALANCE.noiseAmp * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1);
     const lopsided = 1 - 0.7 * Math.pow(2 * cmp.land - 1, 2);
     const noise = rnd.float(-noiseAmp * lopsided, noiseAmp * lopsided);
     let edge = edgeOf(cmp, da, dd) + noise;
@@ -3741,7 +3765,7 @@
     apply(attackers, aLoss, winner === "attacker", "attacker");
     apply(defenders, dLoss, winner === "defender", "defender");
     const dominance = clamp2(Math.abs(edge) * 6, 0, 1);
-    const warScore = winner === "stalemate" ? 0 : Math.round(clamp2(100 * (0.15 + 0.85 * dominance) * T.scoreScale, 5, 100));
+    const warScore = winner === "stalemate" ? 0 : Math.round(clamp2(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T.scoreScale, 5, 100));
     return { winner, decisiveness, dominance, warScore, type: T.key, compare: cmp, aStrength: A, dStrength: D, noise, losses, casualties, moraleDelta, popLossShare, doctrine: { attacker: da, defender: dd } };
   }
   function applyVictoryConditions(map, result, { attackers, defenders, type, supportDelta, rnd }) {
@@ -3813,7 +3837,7 @@
     const v = verdictOf(edge, r.type === "asymmetric" ? 0.05 : 0.015);
     if (r.victory && (r.victory.type === "capital" || r.victory.type === "exhaustion")) return { ...r, compare, aStrength: A, dStrength: D };
     const dominance = clamp2(Math.abs(edge) * 6, 0, 1);
-    const warScore = v.winner === "stalemate" ? 0 : Math.round(clamp2(100 * (0.15 + 0.85 * dominance) * T.scoreScale, 5, 100));
+    const warScore = v.winner === "stalemate" ? 0 : Math.round(clamp2(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T.scoreScale, 5, 100));
     return { ...r, ...v, dominance, warScore, compare, aStrength: A, dStrength: D };
   }
   function distanceFrom(map, ownerIds, targetIds, maxDepth = 40) {
@@ -5063,7 +5087,7 @@
     if (!over) return base;
     const T = WAR_TYPES[war.type] ?? WAR_TYPES.conventional;
     const cap = SCORE_CAP[T.key] ?? 100;
-    return Math.round(Math.min(Math.max(base, cap), base + over * 2 * T.scoreScale));
+    return Math.round(Math.min(Math.max(base, cap), base + over * BALANCE.scoreGrowth * T.scoreScale));
   }
   function exhaustionCollapse(map, war, fx, date) {
     const r = war.result;
@@ -5336,7 +5360,7 @@
     const set = new Set(cells);
     const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).length;
     const frac = Math.min(1, cells.length / Math.max(1, from.cells ?? cells.length));
-    return COST.landAll * frac * (1 + dens * 0.5) + burgs * COST.burg;
+    return (COST.landAll * frac * (1 + dens * 0.5) + burgs * COST.burg) * BALANCE.cessionCostScale;
   }
   function wealthOf(state) {
     const pop = (state?.rural ?? 0) + (state?.urban ?? 0);
@@ -5396,7 +5420,7 @@
       const rows = treatyBudget(map, war, { cessions, reparations, annex, vassalize });
       const over = rows.find((r) => r.spent > r.budget + 0.05);
       if (over) throw new Error(`${officialName(map.pack.states[over.stateId])}\u306E\u8981\u6C42\u304C\u6226\u4E89\u30B9\u30B3\u30A2\u3092\u8D85\u3048\u3066\u3044\u307E\u3059\uFF08\u4F7F\u7528 ${over.spent} / \u4E0A\u9650 ${over.budget}\uFF09`);
-      if (annex.length && currentWarScore(war) < COST.annexMinScore) throw new Error(`\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09\u3092\u6C42\u3081\u308B\u306B\u306F\u3001\u6226\u4E89\u30B9\u30B3\u30A2\u304C${COST.annexMinScore}\u4EE5\u4E0A\u306E\u6C7A\u5B9A\u7684\u306A\u52DD\u5229\u304C\u5FC5\u8981\u3067\u3059\u3002\u6226\u4E89\u304C\u9577\u5F15\u304F\u307B\u3069\uFF08\u5360\u9818\u304C\u9032\u3080\u307B\u3069\uFF09\u30B9\u30B3\u30A2\u306F\u4E0A\u304C\u308A\u7D9A\u3051\u307E\u3059`);
+      if (annex.length && currentWarScore(war) < BALANCE.annexMinScore) throw new Error(`\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09\u3092\u6C42\u3081\u308B\u306B\u306F\u3001\u6226\u4E89\u30B9\u30B3\u30A2\u304C${BALANCE.annexMinScore}\u4EE5\u4E0A\u306E\u6C7A\u5B9A\u7684\u306A\u52DD\u5229\u304C\u5FC5\u8981\u3067\u3059\u3002\u6226\u4E89\u304C\u9577\u5F15\u304F\u307B\u3069\uFF08\u5360\u9818\u304C\u9032\u3080\u307B\u3069\uFF09\u30B9\u30B3\u30A2\u306F\u4E0A\u304C\u308A\u7D9A\u3051\u307E\u3059`);
     }
     const c = map.pack.cells, parts = [], record = { cessions: [], reparations: [], annex: [] };
     for (const cs of cessions) {
@@ -7481,8 +7505,9 @@
     const isOpen = (id) => !!wins.get(id) && !wins.get(id).root.hidden;
     document.addEventListener("keydown", (e) => {
       if (e.key !== "Escape") return;
+      if (e.defaultPrevented || document.querySelector("dialog[open]")) return;
       const top = [...wins.values()].filter((w) => !w.root.hidden).sort((a, b) => Number(b.root.style.zIndex) - Number(a.root.style.zIndex))[0];
-      if (top && !(document.activeElement instanceof HTMLInputElement) && !document.querySelector("details.menu[open]")) top.root.hidden = true;
+      if (top && !(document.activeElement instanceof HTMLInputElement) && !document.querySelector("details.menu[open]")) closeWin([...wins.entries()].find(([, w]) => w === top)[0]);
     });
     return { register, open, close: closeWin, isOpen };
   }
@@ -7580,6 +7605,52 @@
       renderMil();
       panels.military.render();
     } });
+    const BAL_KEY = "alterhistory.balance";
+    try {
+      const saved = JSON.parse(localStorage.getItem(BAL_KEY) ?? "null");
+      if (saved) setBalance(saved);
+    } catch {
+    }
+    const balBody = el2("div", "balance-body");
+    function saveBalance() {
+      try {
+        localStorage.setItem(BAL_KEY, JSON.stringify(BALANCE));
+      } catch {
+      }
+    }
+    function renderBalance() {
+      balBody.replaceChildren(el2("p", "hint", "\u7D4C\u6E08\u30FB\u6226\u4E89\u306E\u6570\u5024\u3092\u8ABF\u6574\u3057\u307E\u3059\u3002\u5909\u3048\u308B\u3068\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u3053\u306E\u7AEF\u672B\u306E\u30D6\u30E9\u30A6\u30B6\u306B\u4FDD\u5B58\u3055\u308C\u307E\u3059\uFF08\u5730\u56F3\u30D5\u30A1\u30A4\u30EB\u306B\u306F\u5165\u308A\u307E\u305B\u3093\uFF09\u3002"));
+      const t = el2("table", "win-table");
+      for (const m of BALANCE_META) {
+        const tr = el2("tr");
+        const th = el2("th", "", m.label);
+        th.title = m.desc;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.min = m.min;
+        input.max = m.max;
+        input.step = m.step;
+        input.value = BALANCE[m.key];
+        input.addEventListener("change", () => {
+          setBalance({ [m.key]: input.value });
+          input.value = BALANCE[m.key];
+          saveBalance();
+        });
+        const td = el2("td");
+        td.append(input);
+        tr.append(th, td, el2("td", "muted", `\u65E2\u5B9A ${BALANCE_DEFAULTS[m.key]}`), el2("td", "hint", m.desc));
+        t.append(tr);
+      }
+      const reset = el2("button", "", "\u3059\u3079\u3066\u65E2\u5B9A\u5024\u306B\u623B\u3059");
+      reset.type = "button";
+      reset.addEventListener("click", () => {
+        resetBalance();
+        saveBalance();
+        renderBalance();
+      });
+      balBody.append(t, reset);
+    }
+    wins.register("balance", { title: "\u2696 \u30D0\u30E9\u30F3\u30B9\u8ABF\u6574", width: 860, body: balBody, onOpen: renderBalance });
     if (warOutcome) wins.register("treaty", { title: "\u{1F4DC} \u8B1B\u548C\u6761\u7D04", width: 920, body: warOutcome.treatyBody, onOpen: () => warOutcome.renderTreaty(), onClose: () => warOutcome.clearHighlight() });
     if (warOutcome) wins.register("currency", { title: "\u{1F4B1} \u901A\u8CA8\u30FB\u70BA\u66FF", width: 900, body: warOutcome.currencyBody, onOpen: () => warOutcome.renderCurrency() });
     store.subscribe((_s, change) => {
@@ -7601,118 +7672,12 @@
     return wins;
   }
 
-  // js/ui/entity-list-window.js
-  var el3 = (tag, cls, text2) => {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text2 != null) e.textContent = text2;
-    return e;
-  };
-  var LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
-  var CELL_KEY = { state: "state", culture: "culture", religion: "religion", province: "province" };
-  var KIND_LABEL = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" };
-  var KIND_ICON = { state: "\u{1F3F3}", culture: "\u{1F3AD}", religion: "\u2726", province: "\u25A6" };
-  function initEntityLists({ store, wins, panels, editActions, highlight }) {
-    function onMerge(fromId) {
-      const map = store.getState().map;
-      if (!map) return;
-      const others = map.pack.states.filter((s) => s && s.i > 0 && !s.removed && s.i !== fromId);
-      if (!others.length) {
-        window.alert("\u7D71\u5408\u5148\u306B\u306A\u308B\u56FD\u304C\u3042\u308A\u307E\u305B\u3093");
-        return;
-      }
-      const from = map.pack.states[fromId];
-      const sel = document.createElement("select");
-      for (const s of others) {
-        const o = document.createElement("option");
-        o.value = s.i;
-        o.textContent = s.fullName ?? s.name;
-        sel.append(o);
-      }
-      const body = el3("div", "merge-body");
-      body.append(el3("p", "", `\u300C${from.fullName ?? from.name}\u300D\u3092\u3001\u3069\u306E\u56FD\u306B\u7D71\u5408\u3057\u307E\u3059\u304B\uFF1F`), sel, el3("p", "hint", "\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u306F\u7D71\u5408\u5148\u3078\u79FB\u308A\u3001\u3053\u306E\u56FD\u306F\u6D88\u6EC5\u3057\u307E\u3059\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09\u3002"));
-      const go = el3("button", "primary", "\u7D71\u5408\u3059\u308B");
-      go.type = "button";
-      go.addEventListener("click", () => {
-        editActions.mergeStates(fromId, Number(sel.value));
-        wins.close("merge");
-        render("state");
-      });
-      body.append(go);
-      mergeHost.replaceChildren(body);
-      wins.open("merge");
-    }
-    const mergeHost = el3("div", "merge-host");
-    wins.register("merge", { title: "\u{1F3F3} \u56FD\u5BB6\u306E\u7D71\u5408", width: 420, body: mergeHost });
-    const bodies = {};
-    function render(kind) {
-      const body = bodies[kind];
-      body.replaceChildren();
-      const map = store.getState().map;
-      if (!map) {
-        body.append(el3("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
-        return;
-      }
-      const arr = map.pack.cells[CELL_KEY[kind]], counts = /* @__PURE__ */ new Map();
-      for (let i = 0; i < arr.length; i++) if (map.pack.cells.biome[i] !== 0) counts.set(arr[i], (counts.get(arr[i]) ?? 0) + 1);
-      const items = map.pack[LIST_KEY[kind]].filter((e) => e && e.i > 0 && !e.removed).map((e) => ({ e, cells: counts.get(e.i) ?? 0 })).sort((a, b) => b.cells - a.cells);
-      body.append(el3("p", "hint", `${KIND_LABEL[kind]}\u306F ${items.length} \u4EF6\u3002\u540D\u524D\u3092\u62BC\u3059\u3068\u8A73\u7D30\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002`));
-      if (!items.length) {
-        body.append(el3("p", "muted", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
-        return;
-      }
-      const ul = el3("div", "ent-list");
-      for (const { e, cells } of items) {
-        const row = el3("div", "ent-row");
-        const chip = el3("span", "chip");
-        chip.style.background = e.color ?? "#888";
-        const main = el3("button", "ent-main", e.fullName ?? e.name);
-        main.type = "button";
-        main.title = "\u8A73\u7D30\u3092\u8A2D\u5B9A\u3059\u308B";
-        main.addEventListener("click", () => panels.openEntity(kind, e.i));
-        const meta = el3("span", "ent-meta", `${cells}\u30BB\u30EB`);
-        const look = el3("button", "ent-btn", "\u{1F50D}");
-        look.type = "button";
-        look.title = "\u5730\u56F3\u4E0A\u3067\u5F37\u8ABF\u3059\u308B\uFF08\u30BA\u30FC\u30E0\u3057\u307E\u305B\u3093\uFF09";
-        look.addEventListener("click", () => highlight?.show(kind, e.i));
-        row.append(chip, main, meta, look);
-        if (kind === "state" && onMerge) {
-          const mg = el3("button", "ent-btn", "\u7D71\u5408");
-          mg.type = "button";
-          mg.title = "\u4ED6\u306E\u56FD\u306B\u7D71\u5408\u3059\u308B";
-          mg.addEventListener("click", () => onMerge(e.i));
-          row.append(mg);
-        }
-        const del = el3("button", "ent-btn danger", "\u{1F5D1}");
-        del.type = "button";
-        del.title = "\u524A\u9664\u3059\u308B\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09";
-        del.addEventListener("click", async () => {
-          if (!window.confirm(`${KIND_LABEL[kind]}\u300C${e.fullName ?? e.name}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u3002\u5C5E\u3057\u3066\u3044\u305F\u571F\u5730\u306F\u7121\u6240\u5C5E\u306B\u306A\u308A\u307E\u3059\u3002
-\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`)) return;
-          if (editActions.removeEntity(kind, e.i)) render(kind);
-        });
-        row.append(del);
-        ul.append(row);
-      }
-      body.append(ul);
-    }
-    for (const kind of Object.keys(LIST_KEY)) {
-      bodies[kind] = el3("div", "ent-body");
-      wins.register(`list-${kind}`, { title: `${KIND_ICON[kind]} ${KIND_LABEL[kind]}\u4E00\u89A7`, width: 520, body: bodies[kind], onOpen: () => render(kind) });
-    }
-    store.subscribe((_s, ch) => {
-      if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
-      for (const kind of Object.keys(LIST_KEY)) if (wins.isOpen(`list-${kind}`)) render(kind);
-    });
-    return { render };
-  }
-
   // js/ui/dialogs.js
   function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLabel, danger, suggest, hint }) {
     const dialog = document.createElement("dialog");
     dialog.className = "confirm-dialog";
-    if (title) dialog.append(el4("h2", null, title));
-    if (bodyText) dialog.append(el4("p", null, bodyText));
+    if (title) dialog.append(el3("h2", null, title));
+    if (bodyText) dialog.append(el3("p", null, bodyText));
     let input = null;
     if (showInput) {
       input = document.createElement("input");
@@ -7723,7 +7688,7 @@
     }
     let suggestBtn = null;
     if (input && suggest) {
-      suggestBtn = el4("button", "suggest-btn", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3092\u751F\u6210");
+      suggestBtn = el3("button", "suggest-btn", "\u{1F3B2} \u4EEE\u306E\u540D\u524D\u3092\u751F\u6210");
       suggestBtn.type = "button";
       suggestBtn.addEventListener("click", () => {
         const v = suggest();
@@ -7735,23 +7700,23 @@
       });
       dialog.append(suggestBtn);
     }
-    if (hint) dialog.append(el4("p", "hint", hint));
-    const actions = el4("div", "confirm-dialog-actions");
+    if (hint) dialog.append(el3("p", "hint", hint));
+    const actions = el3("div", "confirm-dialog-actions");
     let cancelBtn = null;
     if (cancelLabel !== null) {
-      cancelBtn = el4("button", "", cancelLabel ?? "\u30AD\u30E3\u30F3\u30BB\u30EB");
+      cancelBtn = el3("button", "", cancelLabel ?? "\u30AD\u30E3\u30F3\u30BB\u30EB");
       cancelBtn.type = "button";
       cancelBtn.value = "cancel";
       actions.append(cancelBtn);
     }
-    const okBtn = el4("button", danger ? "danger" : "primary", okLabel ?? "OK");
+    const okBtn = el3("button", danger ? "danger" : "primary", okLabel ?? "OK");
     okBtn.type = "button";
     actions.append(okBtn);
     dialog.append(actions);
     document.body.append(dialog);
     return { dialog, input, okBtn, cancelBtn, suggestBtn };
   }
-  function el4(tag, cls, text2) {
+  function el3(tag, cls, text2) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
@@ -7815,6 +7780,112 @@
       input.focus();
       input.select();
     });
+  }
+
+  // js/ui/entity-list-window.js
+  var el4 = (tag, cls, text2) => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  };
+  var LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+  var CELL_KEY = { state: "state", culture: "culture", religion: "religion", province: "province" };
+  var KIND_LABEL = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" };
+  var KIND_ICON = { state: "\u{1F3F3}", culture: "\u{1F3AD}", religion: "\u2726", province: "\u25A6" };
+  function initEntityLists({ store, wins, panels, editActions, highlight }) {
+    function onMerge(fromId) {
+      const map = store.getState().map;
+      if (!map) return;
+      const others = map.pack.states.filter((s) => s && s.i > 0 && !s.removed && s.i !== fromId);
+      if (!others.length) {
+        alertDialog("\u7D71\u5408\u5148\u306B\u306A\u308B\u56FD\u304C\u3042\u308A\u307E\u305B\u3093");
+        return;
+      }
+      const from = map.pack.states[fromId];
+      const sel = document.createElement("select");
+      for (const s of others) {
+        const o = document.createElement("option");
+        o.value = s.i;
+        o.textContent = s.fullName ?? s.name;
+        sel.append(o);
+      }
+      const body = el4("div", "merge-body");
+      body.append(el4("p", "", `\u300C${from.fullName ?? from.name}\u300D\u3092\u3001\u3069\u306E\u56FD\u306B\u7D71\u5408\u3057\u307E\u3059\u304B\uFF1F`), sel, el4("p", "hint", "\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u306F\u7D71\u5408\u5148\u3078\u79FB\u308A\u3001\u3053\u306E\u56FD\u306F\u6D88\u6EC5\u3057\u307E\u3059\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09\u3002"));
+      const go = el4("button", "primary", "\u7D71\u5408\u3059\u308B");
+      go.type = "button";
+      go.addEventListener("click", () => {
+        editActions.mergeStates(fromId, Number(sel.value));
+        wins.close("merge");
+        render("state");
+      });
+      body.append(go);
+      mergeHost.replaceChildren(body);
+      wins.open("merge");
+    }
+    const mergeHost = el4("div", "merge-host");
+    wins.register("merge", { title: "\u{1F3F3} \u56FD\u5BB6\u306E\u7D71\u5408", width: 420, body: mergeHost });
+    const bodies = {};
+    function render(kind) {
+      const body = bodies[kind];
+      body.replaceChildren();
+      const map = store.getState().map;
+      if (!map) {
+        body.append(el4("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
+      }
+      const arr = map.pack.cells[CELL_KEY[kind]], counts = /* @__PURE__ */ new Map();
+      for (let i = 0; i < arr.length; i++) if (map.pack.cells.biome[i] !== 0) counts.set(arr[i], (counts.get(arr[i]) ?? 0) + 1);
+      const items = map.pack[LIST_KEY[kind]].filter((e) => e && e.i > 0 && !e.removed).map((e) => ({ e, cells: counts.get(e.i) ?? 0 })).sort((a, b) => b.cells - a.cells);
+      body.append(el4("p", "hint", `${KIND_LABEL[kind]}\u306F ${items.length} \u4EF6\u3002\u540D\u524D\u3092\u62BC\u3059\u3068\u8A73\u7D30\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002`));
+      if (!items.length) {
+        body.append(el4("p", "muted", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+        return;
+      }
+      const ul = el4("div", "ent-list");
+      for (const { e, cells } of items) {
+        const row = el4("div", "ent-row");
+        const chip = el4("span", "chip");
+        chip.style.background = e.color ?? "#888";
+        const main = el4("button", "ent-main", e.fullName ?? e.name);
+        main.type = "button";
+        main.title = "\u8A73\u7D30\u3092\u8A2D\u5B9A\u3059\u308B";
+        main.addEventListener("click", () => panels.openEntity(kind, e.i));
+        const meta = el4("span", "ent-meta", `${cells}\u30BB\u30EB`);
+        const look = el4("button", "ent-btn", "\u{1F50D}");
+        look.type = "button";
+        look.title = "\u5730\u56F3\u4E0A\u3067\u5F37\u8ABF\u3059\u308B\uFF08\u30BA\u30FC\u30E0\u3057\u307E\u305B\u3093\uFF09";
+        look.addEventListener("click", () => highlight?.show(kind, e.i));
+        row.append(chip, main, meta, look);
+        if (kind === "state" && onMerge) {
+          const mg = el4("button", "ent-btn", "\u7D71\u5408");
+          mg.type = "button";
+          mg.title = "\u4ED6\u306E\u56FD\u306B\u7D71\u5408\u3059\u308B";
+          mg.addEventListener("click", () => onMerge(e.i));
+          row.append(mg);
+        }
+        const del = el4("button", "ent-btn danger", "\u{1F5D1}");
+        del.type = "button";
+        del.title = "\u524A\u9664\u3059\u308B\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09";
+        del.addEventListener("click", async () => {
+          if (!await confirmDialog(`${KIND_LABEL[kind]}\u300C${e.fullName ?? e.name}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u3002\u5C5E\u3057\u3066\u3044\u305F\u571F\u5730\u306F\u7121\u6240\u5C5E\u306B\u306A\u308A\u307E\u3059\u3002
+\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`, { okLabel: "\u524A\u9664\u3059\u308B", danger: true })) return;
+          if (editActions.removeEntity(kind, e.i)) render(kind);
+        });
+        row.append(del);
+        ul.append(row);
+      }
+      body.append(ul);
+    }
+    for (const kind of Object.keys(LIST_KEY)) {
+      bodies[kind] = el4("div", "ent-body");
+      wins.register(`list-${kind}`, { title: `${KIND_ICON[kind]} ${KIND_LABEL[kind]}\u4E00\u89A7`, width: 520, body: bodies[kind], onOpen: () => render(kind) });
+    }
+    store.subscribe((_s, ch) => {
+      if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
+      for (const kind of Object.keys(LIST_KEY)) if (wins.isOpen(`list-${kind}`)) render(kind);
+    });
+    return { render };
   }
 
   // js/ui/genealogy-window.js
@@ -7994,8 +8065,8 @@
       });
       const del = el5("button", "danger", "\u524A\u9664");
       del.type = "button";
-      del.addEventListener("click", () => {
-        if (!window.confirm(`${LABEL2[kind]}\u300C${e.fullName ?? e.name}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u3002\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`)) return;
+      del.addEventListener("click", async () => {
+        if (!await confirmDialog(`${LABEL2[kind]}\u300C${e.fullName ?? e.name}\u300D\u3092\u524A\u9664\u3057\u307E\u3059\u3002\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`, { okLabel: "\u524A\u9664\u3059\u308B", danger: true })) return;
         if (editActions.removeEntity(kind, id)) {
           selected[kind] = null;
           render(kind);
@@ -8146,8 +8217,8 @@
         if (o.status === "planned") {
           const run = el6("button", "danger", "\u5B9F\u884C\u3059\u308B");
           run.type = "button";
-          run.addEventListener("click", () => {
-            if (window.confirm(`\u300C${o.name}\u300D\u3092\u5B9F\u884C\u3057\u307E\u3059\u3002${nm(map, o.targetId)}\u306F\u58CA\u6EC5\u7684\u306A\u88AB\u5BB3\u3092\u53D7\u3051\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`)) simActions.executeNuclearOp(o.id);
+          run.addEventListener("click", async () => {
+            if (await confirmDialog(`\u300C${o.name}\u300D\u3092\u5B9F\u884C\u3057\u307E\u3059\u3002${nm(map, o.targetId)}\u306F\u58CA\u6EC5\u7684\u306A\u88AB\u5BB3\u3092\u53D7\u3051\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`, { okLabel: "\u5B9F\u884C\u3059\u308B", danger: true })) simActions.executeNuclearOp(o.id);
           });
           const cancel = el6("button", "ent-btn", "\u53D6\u308A\u6D88\u3057");
           cancel.type = "button";
@@ -10845,14 +10916,12 @@ ${shown}${more}`;
 
   // js/core/sim/world.js
   var UPKEEP_WEIGHT = { infantry: 1, armor: 8, air: 15, navy: 25, special: 3, advanced: 6, nuclear: 100 };
-  var UPKEEP_FACTOR = 0.2;
-  var UPKEEP_MAX = 0.8;
   function militaryBurden(state) {
     let weighted = 0;
     for (const reg of regimentsOf(state)) for (const [k, n] of Object.entries(reg.u ?? {})) if (UNIT_BY_KEY[k] && n > 0) weighted += n * (UPKEEP_WEIGHT[k] ?? 1);
     if (!weighted) return 0;
     const popK = Math.max(1, ((state.rural ?? 0) + (state.urban ?? 0)) / 1e3);
-    return Math.min(UPKEEP_MAX, weighted / popK * UPKEEP_FACTOR);
+    return Math.min(BALANCE.upkeepMax, weighted / popK * BALANCE.upkeepFactor);
   }
   var isLive29 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planAnnualUpdate(map, rnd = null) {
@@ -13209,6 +13278,7 @@ ${shown}${more}`;
     const root = byId("tab-wars");
     let selected = null;
     let creating = false;
+    let wTab = "ov";
     let draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set(), muster: {}, type: "conventional" };
     const stateName = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     const monthIdx = (d) => d.year * 12 + d.month;
@@ -13343,8 +13413,7 @@ ${shown}${more}`;
       return grid;
     }
     function warDetail(map, states, w) {
-      const grid = el13("div", "war-prep");
-      const left = el13("div", "war-prep-left"), right = el13("div", "war-prep-right");
+      const ov = el13("div", "war-tab-ov"), mu = el13("div", "war-tab-mu"), lg = el13("div", "war-tab-lg"), pc = el13("div", "war-tab-pc");
       const nameIn = document.createElement("input");
       nameIn.value = w.name;
       nameIn.className = "war-name-input";
@@ -13352,10 +13421,10 @@ ${shown}${more}`;
       const typeName = WAR_TYPES[w.type]?.label ?? "\u901A\u5E38\u6226";
       const now = map.worldTime ?? { year: w.startedAt.year, month: w.startedAt.month };
       const elapsed = Math.max(0, monthIdx(w.endedAt ?? now) - monthIdx(w.startedAt));
-      left.append(el13("label", "field-label", `\u6226\u4E89\u306E\u540D\u524D\uFF08${typeName}\uFF09`), nameIn);
-      left.append(el13("p", "hint", w.endedAt ? `\u958B\u6226 ${fmtDate3(w.startedAt)} \uFF0F \u7D42\u6226 ${fmtDate3(w.endedAt)}\uFF08${w.lastedMonths ?? elapsed}\u304B\u6708\uFF09${w.treatyName ? ` \uFF0F \u8B1B\u548C\u6761\u7D04\uFF1A${w.treatyName}` : ""}` : `\u958B\u6226 ${fmtDate3(w.startedAt)} \uFF0F \u7D4C\u904E ${elapsed}\u304B\u6708\uFF08\u76EE\u5B89\u306F\u7D04${w.durationMonths ?? "?"}\u304B\u6708\u3002\u7D42\u308F\u308A\u306F\u6C7A\u307E\u3063\u3066\u304A\u3089\u305A\u3001\u8B1B\u548C\u6761\u7D04\u3092\u7D50\u3093\u3060\u6708\u304C\u7D42\u6226\u306B\u306A\u308A\u307E\u3059\uFF09`));
+      ov.append(el13("label", "field-label", `\u6226\u4E89\u306E\u540D\u524D\uFF08${typeName}\uFF09`), nameIn);
+      ov.append(el13("p", "hint", w.endedAt ? `\u958B\u6226 ${fmtDate3(w.startedAt)} \uFF0F \u7D42\u6226 ${fmtDate3(w.endedAt)}\uFF08${w.lastedMonths ?? elapsed}\u304B\u6708\uFF09${w.treatyName ? ` \uFF0F \u8B1B\u548C\u6761\u7D04\uFF1A${w.treatyName}` : ""}` : `\u958B\u6226 ${fmtDate3(w.startedAt)} \uFF0F \u7D4C\u904E ${elapsed}\u304B\u6708\uFF08\u76EE\u5B89\u306F\u7D04${w.durationMonths ?? "?"}\u304B\u6708\u3002\u7D42\u308F\u308A\u306F\u6C7A\u307E\u3063\u3066\u304A\u3089\u305A\u3001\u8B1B\u548C\u6761\u7D04\u3092\u7D50\u3093\u3060\u6708\u304C\u7D42\u6226\u306B\u306A\u308A\u307E\u3059\uFF09`));
       if (!w.endedAt) {
-        left.append(el13("h4", "", "\u53C2\u6226\u56FD\u306E\u90E8\u968A\uFF08\u30C1\u30A7\u30C3\u30AF\u3092\u5916\u3059\u3068\u6226\u7DDA\u304B\u3089\u5F15\u304D\u4E0A\u3052\u307E\u3059\uFF09"));
+        mu.append(el13("h4", "", "\u53C2\u6226\u56FD\u306E\u90E8\u968A\uFF08\u30C1\u30A7\u30C3\u30AF\u3092\u5916\u3059\u3068\u6226\u7DDA\u304B\u3089\u5F15\u304D\u4E0A\u3052\u307E\u3059\uFF09"));
         for (const id of [...w.attackers, ...w.defenders]) {
           const st = map.pack.states[id];
           if (!isLive35(st)) continue;
@@ -13380,42 +13449,84 @@ ${shown}${more}`;
           const all = el13("button", "ent-btn", "\u5168\u8ECD\u64A4\u9000");
           all.type = "button";
           all.disabled = !onFront.size;
-          all.addEventListener("click", () => {
-            if (window.confirm(`${stateName(map, id)}\u306F\u5168\u8ECD\u3092\u5F15\u304D\u4E0A\u3052\u307E\u3059\u3002\u9663\u55B6\u306E\u5168\u54E1\u304C\u64A4\u9000\u3059\u308B\u3068\u3001\u305D\u306E\u9663\u55B6\u306E\u6557\u5317\u3067\u6C7A\u7740\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F`)) simActions.withdrawFromWar(w.id, id, []);
+          all.addEventListener("click", async () => {
+            if (await confirmDialog(`${stateName(map, id)}\u306F\u5168\u8ECD\u3092\u5F15\u304D\u4E0A\u3052\u307E\u3059\u3002\u9663\u55B6\u306E\u5168\u54E1\u304C\u64A4\u9000\u3059\u308B\u3068\u3001\u305D\u306E\u9663\u55B6\u306E\u6557\u5317\u3067\u6C7A\u7740\u3057\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F`, { okLabel: "\u64A4\u9000\u3059\u308B", danger: true })) simActions.withdrawFromWar(w.id, id, []);
           });
           row.append(all);
-          left.append(row);
+          mu.append(row);
         }
       }
       const events = [...(w.battles ?? []).map((b) => ({ date: b.date, tag: "\u6226\u95D8", text: `${b.name}\u3000${b.text}` })), ...(w.events ?? []).map((e) => ({ date: e.date, tag: { event: "\u51FA\u6765\u4E8B", omen: "\u5146\u3057", "omen-fulfilled": "\u7684\u4E2D", "omen-faded": "\u675E\u6182", withdraw: "\u64A4\u9000" }[e.kind] ?? "\u51FA\u6765\u4E8B", text: e.text, kind: e.kind }))];
       const reached = (d) => !d || w.endedAt || monthIdx(d) <= monthIdx(now);
       const shown = events.filter((e) => reached(e.date)).sort((x, y) => (x.date ? monthIdx(x.date) : 0) - (y.date ? monthIdx(y.date) : 0));
-      left.append(el13("h4", "", "\u7D4C\u904E\u306E\u8A18\u9332"));
-      if (!shown.length) left.append(el13("p", "muted", "\u307E\u3060\u8A18\u9332\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u6642\u9593\u304C\u9032\u3080\u3068\u3001\u6226\u95D8\u3084\u51FA\u6765\u4E8B\u304C\u8A18\u9332\u3055\u308C\u307E\u3059\u3002"));
+      lg.append(el13("h4", "", "\u7D4C\u904E\u306E\u8A18\u9332"));
+      if (!shown.length) lg.append(el13("p", "muted", "\u307E\u3060\u8A18\u9332\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u6642\u9593\u304C\u9032\u3080\u3068\u3001\u6226\u95D8\u3084\u51FA\u6765\u4E8B\u304C\u8A18\u9332\u3055\u308C\u307E\u3059\u3002"));
       const log = el13("ol", "battle-log");
       for (const e of shown) {
         const li = el13("li", e.kind ? `ev-${e.kind}` : "");
         li.append(el13("span", "ev-tag", e.tag), document.createTextNode(`${e.date ? `${fmtDate3(e.date)}\u3000` : ""}${e.text}`));
         log.append(li);
       }
-      left.append(log);
-      right.append(el13("h4", "", "\u6226\u6CC1"));
+      lg.append(log);
+      ov.append(el13("h4", "", "\u6226\u6CC1"));
       const sit = getOutcome()?.situation(map, w);
-      if (sit) right.append(sit);
-      if (w.mediator != null) right.append(el13("p", "hint", `${stateName(map, w.mediator)}\u304C\u8ABF\u505C\u306B\u52D5\u3044\u3066\u3044\u307E\u3059\u3002\u8B1B\u548C\u306E\u597D\u6A5F\u304B\u3082\u3057\u308C\u307E\u305B\u3093\u3002`));
+      if (sit) ov.append(sit);
+      if (w.mediator != null) ov.append(el13("p", "hint", `${stateName(map, w.mediator)}\u304C\u8ABF\u505C\u306B\u52D5\u3044\u3066\u3044\u307E\u3059\u3002\u8B1B\u548C\u306E\u597D\u6A5F\u304B\u3082\u3057\u308C\u307E\u305B\u3093\u3002`));
       if (!w.endedAt) {
         const go = el13("button", "primary war-go", "\u{1F4DC} \u8B1B\u548C\u6761\u7D04\u3092\u7D50\u3076");
         go.type = "button";
         go.addEventListener("click", () => getWins()?.open("treaty"));
-        right.append(go);
+        ov.append(go);
         const fin = el13("button", "", "\u7D4C\u904E\u3092\u76EE\u5B89\u306E\u7D42\u308F\u308A\u307E\u3067\u9032\u3081\u308B");
         fin.type = "button";
         fin.title = "\u6642\u9593\u3092\u5F85\u305F\u305A\u306B\u3001\u76EE\u5B89\u306E\u671F\u9593\u3076\u3093\u306E\u640D\u5BB3\u3068\u3067\u304D\u3054\u3068\u3092\u53CD\u6620\u3057\u307E\u3059";
         fin.addEventListener("click", () => simActions.finishWar(w.id));
-        right.append(fin);
-      } else right.append(el13("p", "muted", "\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u307E\u3057\u305F\u3002\u6761\u7D04\u306E\u4E2D\u8EAB\u306F\u300C\u8B1B\u548C\u6761\u7D04\u300D\u30A6\u30A3\u30F3\u30C9\u30A6\u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\u3002"));
-      grid.append(left, right);
-      return grid;
+        ov.append(fin);
+      } else ov.append(el13("p", "muted", "\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u307E\u3057\u305F\u3002\u6761\u7D04\u306E\u4E2D\u8EAB\u306F\u300C\u8B1B\u548C\u6761\u7D04\u300D\u30A6\u30A3\u30F3\u30C9\u30A6\u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\u3002"));
+      if (w.endedAt) mu.append(el13("p", "muted", "\u3053\u306E\u6226\u4E89\u306F\u7D42\u7D50\u3057\u3066\u3044\u307E\u3059\u3002\u90E8\u968A\u306E\u62DB\u96C6\u306F\u6226\u4E89\u4E2D\u3060\u3051\u5909\u3048\u3089\u308C\u307E\u3059\u3002"));
+      if (w.result) {
+        const cur = simActions.currentWarScore(w), r = w.result, T = WAR_TYPES[w.type] ?? WAR_TYPES.conventional;
+        const dur = Math.max(1, w.durationMonths ?? 12), done = w.monthsDone ?? Math.round((w.progress ?? 0) * dur), over = Math.max(0, done - dur);
+        pc.append(el13("h4", "", "\u6226\u4E89\u30B9\u30B3\u30A2\u306E\u5185\u8A33"));
+        const tb = el13("table", "win-table");
+        const row = (k, v) => {
+          const tr = el13("tr");
+          tr.append(el13("th", "", k), el13("td", "", v));
+          tb.append(tr);
+        };
+        const domRaw = r.dominance ?? (r.warScore ? (r.warScore / (100 * T.scoreScale) - BALANCE.scoreBase) / (1 - BALANCE.scoreBase) : 0);
+        row("\u6226\u529B\u5DEE\uFF08\u512A\u52E2\u5EA6\uFF09", `${Math.round(Math.min(1, Math.max(0, domRaw)) * 100)}%`);
+        row("\u6226\u4E89\u306E\u5F62\u614B", `${typeName}\uFF08\u4FC2\u6570 ${T.scoreScale}\uFF09`);
+        row("\u6700\u5927\u30B9\u30B3\u30A2", `${r.warScore ?? 0}\u3000\uFF1D 100 \xD7\uFF080.15 \uFF0B 0.85 \xD7 \u512A\u52E2\u5EA6\uFF09\xD7 \u4FC2\u6570`);
+        row("\u7D4C\u904E", `${done} / \u76EE\u5B89 ${dur}\u304B\u6708${over ? `\uFF08\u8D85\u904E ${over}\u304B\u6708\u3076\u3093\u306E\u5360\u9818\u9032\u884C\u3092\u542B\u3080\uFF09` : ""}`);
+        row("\u73FE\u5728\u306E\u30B9\u30B3\u30A2", `${cur}${r.victory?.collapse ? "\uFF08\u6C11\u610F\u306E\u5D29\u58CA\u3067\u964D\u4F0F\u3057\u305F\u305F\u3081\u6E80\u984D\uFF09" : ""}`);
+        tb.append((() => {
+          const tr = el13("tr");
+          tr.append(el13("th", "", "\u8981\u6C42\u3067\u304D\u308B\u3082\u306E"), el13("td", "", cur >= BALANCE.annexMinScore ? "\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09\u307E\u3067" : `\u5272\u8B72\u30FB\u8CE0\u511F\u30FB\u5F93\u5C5E\u5316\uFF08\u4F75\u5408\u306F${BALANCE.annexMinScore}\u4EE5\u4E0A\uFF09`));
+          return tr;
+        })());
+        pc.append(tb);
+        pc.append(el13("p", "hint", "\u30B9\u30B3\u30A2\u306F\u76EE\u5B89\u306E\u671F\u9593\u307E\u3067\u4E0A\u304C\u308A\u3001\u8D85\u904E\u5F8C\u3082\u6226\u4E89\u304C\u7D9A\u3051\u3070\u6BCE\u6708\u4E0A\u304C\u308A\u307E\u3059\u3002\u5272\u8B72\u306E\u8CBB\u7528\u306F\u8B1B\u548C\u6761\u7D04\u306E\u7A93\u3067\u78BA\u8A8D\u3067\u304D\u307E\u3059\u3002"));
+        const open = el13("button", w.endedAt ? "" : "primary war-go", w.endedAt ? "\u{1F4DC} \u6761\u7D04\u306E\u4E2D\u8EAB\u3092\u898B\u308B" : "\u{1F4DC} \u8B1B\u548C\u6761\u7D04\u3092\u7D50\u3076");
+        open.type = "button";
+        open.addEventListener("click", () => getWins()?.open("treaty"));
+        pc.append(open);
+      }
+      const TABS = [["ov", "\u6982\u8981", ov], ["mu", "\u90E8\u968A", mu], ["lg", "\u7D4C\u904E", lg], ["pc", "\u8B1B\u548C", pc]];
+      if (!TABS.some(([k]) => k === wTab)) wTab = "ov";
+      const wrap = el13("div", "war-tabs-wrap"), bar = el13("div", "war-tabs");
+      for (const [k, label, pane] of TABS) {
+        const b = el13("button", k === wTab ? "active" : "", label);
+        b.type = "button";
+        pane.hidden = k !== wTab;
+        b.addEventListener("click", () => {
+          wTab = k;
+          render();
+        });
+        bar.append(b);
+      }
+      wrap.append(bar, ov, mu, lg, pc);
+      return wrap;
     }
     const safeRender = guardRender(root, () => render());
     store.subscribe((_s, change) => {
@@ -13474,6 +13585,10 @@ ${shown}${more}`;
       }
       const r = ongoing ? { ...r0, ...simActions.previewWar(war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null, war.type) ?? {} } : r0;
       box.append(bars(r));
+      if (ongoing && r.aStrength?.support != null && r.dStrength?.support != null) {
+        const gap = (label, v) => v <= EXHAUST_SUPPORT ? `${label}\uFF1A\u6C11\u610F ${fmt5(v)}\uFF08\u964D\u4F0F\u30E9\u30A4\u30F3 ${EXHAUST_SUPPORT} \u4EE5\u4E0B\u3002\u6B21\u306E\u6708\u306E\u9032\u884C\u3067\u964D\u4F0F\u3057\u307E\u3059\uFF09` : `${label}\uFF1A\u6C11\u610F ${fmt5(v)}\uFF08\u964D\u4F0F\u307E\u3067\u3042\u3068 ${fmt5(v - EXHAUST_SUPPORT)}\uFF09`;
+        box.append(el14("p", "hint", `${gap("\u653B\u6483\u5074", r.aStrength.support)} \uFF0F ${gap("\u9632\u885B\u5074", r.dStrength.support)}\u3002\u6C11\u610F\u306F\u6226\u4E89\u304C\u9577\u5F15\u304F\u307B\u3069\u3001\u307E\u305F\u640D\u5BB3\u304C\u5927\u304D\u3044\u307B\u3069\u4E0B\u304C\u308A\u307E\u3059\u3002`));
+      }
       if (!showVerdict) box.append(el14("p", "hint", "\u6226\u4E89\u306F\u7D9A\u3044\u3066\u3044\u307E\u3059\u3002\u52DD\u6557\u306E\u898B\u901A\u3057\u306F\u3001\u8B1B\u548C\u6761\u7D04\u3092\u7D50\u3076\u6BB5\u968E\u3067\u660E\u3089\u304B\u306B\u306A\u308A\u307E\u3059\u3002"));
       else {
         if (r.victory) box.append(el14("p", "hint", `\u52DD\u5229\u6761\u4EF6\uFF1A${r.victory.text}`));
@@ -14333,6 +14448,9 @@ ${shown}${more}`;
     initTimeBar({ store, timeActions, editActions });
     store.subscribe((_s, change) => {
       if (change.type === "replace") timeActions.stop();
+    });
+    store.subscribe((_s, change) => {
+      if (change.type === "undo" || change.type === "redo") renderer.requestRender();
     });
     initShortcuts({ ...deps, editMode, editToolbar, timeActions });
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));

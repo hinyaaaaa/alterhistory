@@ -2,6 +2,7 @@
 //   ・横タブは使わない（種類ごとに別のウィンドウ）
 //   ・行を押すと詳細の設定ウィンドウが開く。🔍 は地図上で強調（ズームしない）、🗑 は削除
 //   ・ランダム生成のような誤操作しやすいボタンは、この一覧には置かない
+import { alertDialog, confirmDialog } from "./dialogs.js";
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
 const CELL_KEY = { state: "state", culture: "culture", religion: "religion", province: "province" };
@@ -13,7 +14,7 @@ export function initEntityLists({ store, wins, panels, editActions, highlight })
   function onMerge(fromId) {
     const map = store.getState().map; if (!map) return;
     const others = map.pack.states.filter((s) => s && s.i > 0 && !s.removed && s.i !== fromId);
-    if (!others.length) { window.alert("統合先になる国がありません"); return; }
+    if (!others.length) { alertDialog("統合先になる国がありません"); return; }
     const from = map.pack.states[fromId];
     const sel = document.createElement("select");
     for (const s of others) { const o = document.createElement("option"); o.value = s.i; o.textContent = s.fullName ?? s.name; sel.append(o); }
@@ -55,7 +56,7 @@ export function initEntityLists({ store, wins, panels, editActions, highlight })
       }
       const del = el("button", "ent-btn danger", "🗑"); del.type = "button"; del.title = "削除する（元に戻せます）";
       del.addEventListener("click", async () => {
-        if (!window.confirm(`${KIND_LABEL[kind]}「${e.fullName ?? e.name}」を削除します。属していた土地は無所属になります。\n（元に戻せます）`)) return;
+        if (!(await confirmDialog(`${KIND_LABEL[kind]}「${e.fullName ?? e.name}」を削除します。属していた土地は無所属になります。\n（元に戻せます）`, { okLabel: "削除する", danger: true }))) return;
         if (editActions.removeEntity(kind, e.i)) render(kind);
       });
       row.append(del); ul.append(row);

@@ -115,8 +115,9 @@ export function initWindows() {
   const isOpen = (id) => !!wins.get(id) && !wins.get(id).root.hidden;
   document.addEventListener("keydown", (e) => {
     if (e.key !== "Escape") return;
+    if (e.defaultPrevented || document.querySelector("dialog[open]")) return; // 確認ダイアログのEscは、そのダイアログだけを閉じる（背後の窓は閉じない）
     const top = [...wins.values()].filter((w) => !w.root.hidden).sort((a, b) => Number(b.root.style.zIndex) - Number(a.root.style.zIndex))[0];
-    if (top && !(document.activeElement instanceof HTMLInputElement) && !document.querySelector("details.menu[open]")) top.root.hidden = true;
+    if (top && !(document.activeElement instanceof HTMLInputElement) && !document.querySelector("details.menu[open]")) closeWin([...wins.entries()].find(([, w]) => w === top)[0]);
   });
   return { register, open, close: closeWin, isOpen };
 }

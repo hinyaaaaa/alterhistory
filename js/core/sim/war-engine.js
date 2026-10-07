@@ -6,6 +6,7 @@
 // ・核兵器は通常の戦争では使われない（core/sim/nuclear.js の核作戦で別に扱う）
 // 純粋ロジック層：DOM に依存しない。乱数は core/random.js の createRandom を注入する。
 
+import { BALANCE } from "./balance.js";
 import { UNIT_KEYS, UNIT_BY_KEY, DEFAULT_DOCTRINE, DOCTRINE_BY_KEY, stateTypeMult, forceHeadcount } from "./units.js";
 import { regimentsOf, isCoastalState } from "./military.js";
 import { officialName } from "../names.js";
@@ -146,7 +147,7 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
   const m = T.allMuster ? null : muster;
   const { aStrength: A, dStrength: D, compare: cmp } = previewWar(map, attackers, defenders, m);
   const da = sideDoctrine(map, attackers), dd = sideDoctrine(map, defenders);
-  const noiseAmp = 0.18 * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1); // 戦力差があっても、番狂わせが起こりうる大きさ
+  const noiseAmp = BALANCE.noiseAmp * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1); // 戦力差があっても、番狂わせが起こりうる大きさ
   const lopsided = 1 - 0.7 * Math.pow(2 * cmp.land - 1, 2); // 圧倒的な戦力差のときは、番狂わせが起きにくい
   const noise = rnd.float(-noiseAmp * lopsided, noiseAmp * lopsided);
   let edge = edgeOf(cmp, da, dd) + noise;
@@ -190,7 +191,7 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
   apply(defenders, dLoss, winner === "defender", "defender");
   // 戦争スコア（HoI4 の戦争スコアにあたる）。勝者が講和で「要求できる大きさ」。決着が大きいほど、形態が大きいほど高い
   const dominance = clamp(Math.abs(edge) * 6, 0, 1); // 戦力差が大きいほど、講和で要求できる範囲が広がる
-  const warScore = winner === "stalemate" ? 0 : Math.round(clamp(100 * (0.15 + 0.85 * dominance) * T.scoreScale, 5, 100));
+  const warScore = winner === "stalemate" ? 0 : Math.round(clamp(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T.scoreScale, 5, 100));
   return { winner, decisiveness, dominance, warScore, type: T.key, compare: cmp, aStrength: A, dStrength: D, noise, losses, casualties, moraleDelta, popLossShare, doctrine: { attacker: da, defender: dd } };
 }
 
@@ -270,7 +271,7 @@ export function reevaluateWar(map, war) {
   // 首都陥落・民意の崩壊で決着した戦争は、その決着を保つ（ハプニングで勝敗は覆らない）。それ以外は、いまの戦力で判定し直す
   if (r.victory && (r.victory.type === "capital" || r.victory.type === "exhaustion")) return { ...r, compare, aStrength: A, dStrength: D };
   const dominance = clamp(Math.abs(edge) * 6, 0, 1);
-  const warScore = v.winner === "stalemate" ? 0 : Math.round(clamp(100 * (0.15 + 0.85 * dominance) * T.scoreScale, 5, 100));
+  const warScore = v.winner === "stalemate" ? 0 : Math.round(clamp(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T.scoreScale, 5, 100));
   return { ...r, ...v, dominance, warScore, compare, aStrength: A, dStrength: D };
 }
 

@@ -1,5 +1,6 @@
 // ※ リポジトリのソースが古かったため、ビルド済みの dist/app.js から復元したファイルです（動作は同じ。コメントは失われています）。
 import { guardRender, keepScroll } from "./safe-render.js";
+import { EXHAUST_SUPPORT } from "../core/sim/war-engine.js";
 import { VASSAL_KINDS, VASSAL_BY_KEY } from "../core/edit/vassals.js";
 
 const el = (tag, cls, text2) => {
@@ -51,6 +52,11 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
     }
     const r = ongoing ? { ...r0, ...simActions.previewWar(war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null, war.type) ?? {} } : r0;
     box.append(bars(r));
+    if (ongoing && r.aStrength?.support != null && r.dStrength?.support != null) {
+      // 「なぜ決着しないのか／あとどれくらいで降伏するのか」を見える化する
+      const gap = (label, v) => v <= EXHAUST_SUPPORT ? `${label}：民意 ${fmt(v)}（降伏ライン ${EXHAUST_SUPPORT} 以下。次の月の進行で降伏します）` : `${label}：民意 ${fmt(v)}（降伏まであと ${fmt(v - EXHAUST_SUPPORT)}）`;
+      box.append(el("p", "hint", `${gap("攻撃側", r.aStrength.support)} ／ ${gap("防衛側", r.dStrength.support)}。民意は戦争が長引くほど、また損害が大きいほど下がります。`));
+    }
     if (!showVerdict) box.append(el("p", "hint", "戦争は続いています。勝敗の見通しは、講和条約を結ぶ段階で明らかになります。"));
     else {
       if (r.victory) box.append(el("p", "hint", `勝利条件：${r.victory.text}`));

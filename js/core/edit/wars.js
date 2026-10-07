@@ -13,6 +13,7 @@
 //
 // 純粋ロジック層：DOM に依存しない。
 
+import { BALANCE } from "../sim/balance.js";
 import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
 import { resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, applyVictoryConditions, planSupportDeltas, supportOf, EXHAUST_SUPPORT, WAR_TYPES } from "../sim/war-engine.js";
@@ -163,7 +164,7 @@ export function currentWarScore(war) {
   if (!over) return base;
   const T = WAR_TYPES[war.type] ?? WAR_TYPES.conventional;
   const cap = SCORE_CAP[T.key] ?? 100;
-  return Math.round(Math.min(Math.max(base, cap), base + over * 2 * T.scoreScale)); // 1か月あたり +1.6（通常戦）〜 +2（総力戦）
+  return Math.round(Math.min(Math.max(base, cap), base + over * BALANCE.scoreGrowth * T.scoreScale)); // 1か月あたり +1.6（通常戦）〜 +2（総力戦）
 }
 
 /**
@@ -455,7 +456,7 @@ export function cessionCost(map, fromId, cells) {
   const set = new Set(cells);
   const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).length;
   const frac = Math.min(1, cells.length / Math.max(1, from.cells ?? cells.length));
-  return COST.landAll * frac * (1 + dens * 0.5) + burgs * COST.burg;
+  return (COST.landAll * frac * (1 + dens * 0.5) + burgs * COST.burg) * BALANCE.cessionCostScale;
 }
 /** 国の富（賠償金の基準）。国庫が空の国（Azgaar 由来の国は国庫0が多い）でも、経済の大きさから見積もれるようにする */
 export function wealthOf(state) {
@@ -527,7 +528,7 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
     const rows = treatyBudget(map, war, { cessions, reparations, annex, vassalize });
     const over = rows.find((r) => r.spent > r.budget + 0.05);
     if (over) throw new Error(`${officialName(map.pack.states[over.stateId])}の要求が戦争スコアを超えています（使用 ${over.spent} / 上限 ${over.budget}）`);
-    if (annex.length && currentWarScore(war) < COST.annexMinScore) throw new Error(`全面降伏（併合）を求めるには、戦争スコアが${COST.annexMinScore}以上の決定的な勝利が必要です。戦争が長引くほど（占領が進むほど）スコアは上がり続けます`);
+    if (annex.length && currentWarScore(war) < BALANCE.annexMinScore) throw new Error(`全面降伏（併合）を求めるには、戦争スコアが${BALANCE.annexMinScore}以上の決定的な勝利が必要です。戦争が長引くほど（占領が進むほど）スコアは上がり続けます`);
   }
 
   const c = map.pack.cells, parts = [], record = { cessions: [], reparations: [], annex: [] };

@@ -1,0 +1,16 @@
+import { BALANCE, BALANCE_DEFAULTS, setBalance, resetBalance } from "../js/core/sim/balance.js";
+import { militaryBurden } from "../js/core/sim/world.js";
+let fail = 0;
+const check = (name, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${name}${ok ? "" : "  " + extra}`); if (!ok) fail++; };
+check("既定値は従来どおり", BALANCE.upkeepFactor === 0.2 && BALANCE.upkeepMax === 0.8 && BALANCE.noiseAmp === 0.18 && BALANCE.annexMinScore === 70);
+setBalance({ noiseAmp: 99, upkeepMax: "abc", unknown: 5 });
+check("範囲外は上限に丸め、数でない値と未知のキーは無視", BALANCE.noiseAmp === 0.6 && BALANCE.upkeepMax === 0.8 && !("unknown" in BALANCE));
+const st = { rural: 1000, urban: 0, military: [{ i: 0, u: { infantry: 1 } }] };
+resetBalance();
+const base = militaryBurden(st);
+setBalance({ upkeepFactor: 0.4 });
+check("維持費の係数を上げると軍事費の割合が上がる", militaryBurden(st) > base, `${base} → ${militaryBurden(st)}`);
+resetBalance();
+check("リセットで既定値に戻る", Object.keys(BALANCE_DEFAULTS).every((k) => BALANCE[k] === BALANCE_DEFAULTS[k]));
+console.log(fail ? `${fail} 件失敗` : "全て成功");
+process.exit(fail ? 1 : 0);

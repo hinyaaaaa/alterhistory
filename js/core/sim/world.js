@@ -3,6 +3,7 @@
 //
 // 純粋ロジック層：DOM に依存しない。
 
+import { BALANCE } from "./balance.js";
 import { setProps, makeCommand } from "../edit/commands.js";
 import { ensureEconomy, computeAnnualUpdate } from "./economy.js";
 import { ratesParts } from "./currency.js";
@@ -21,7 +22,7 @@ export function militaryBurden(state) {
   for (const reg of regimentsOf(state)) for (const [k, n] of Object.entries(reg.u ?? {})) if (UNIT_BY_KEY[k] && n > 0) weighted += n * (UPKEEP_WEIGHT[k] ?? 1);
   if (!weighted) return 0;
   const popK = Math.max(1, ((state.rural ?? 0) + (state.urban ?? 0)) / 1000);
-  return Math.min(UPKEEP_MAX, (weighted / popK) * UPKEEP_FACTOR);
+  return Math.min(BALANCE.upkeepMax, (weighted / popK) * BALANCE.upkeepFactor);
 }
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;

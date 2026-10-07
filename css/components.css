@@ -783,3 +783,32 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .wo-cess-row > select, .wo-cess-row > .wo-arrow { justify-self: end; width: 100%; }
 .wo-impact table { table-layout: fixed; width: 100%; } .wo-impact td, .wo-impact th { word-break: break-all; white-space: normal; vertical-align: top; }
 .wo-impact th { width: 38%; }
+
+/* ---- 狭い画面・タッチ向けの追い込み（Surface Go 4 など） ---- */
+@media (max-width: 1100px) {
+  .float-win { max-width: calc(100% - 12px); }
+  .float-win-body { overflow: auto; -webkit-overflow-scrolling: touch; }
+  .win-table { display: block; overflow-x: auto; }
+}
+@media (pointer: coarse) {
+  .float-win-bar { min-height: 40px; }
+  .confirm-dialog button { min-height: 42px; min-width: 88px; }
+}
+
+/* ---- 戦争ウィンドウのタブ ---- */
+.war-tabs { display: flex; gap: 4px; margin: 6px 0 10px; border-bottom: 1px solid var(--line); }
+.war-tabs button { border-radius: 6px 6px 0 0; border-bottom: 0; }
+.war-tabs button.active { background: rgba(212,175,90,.18); color: var(--brass, #d4af5a); }
+.war-tab-ov, .war-tab-mu, .war-tab-lg, .war-tab-pc { display: block; }
+.war-tab-ov[hidden], .war-tab-mu[hidden], .war-tab-lg[hidden], .war-tab-pc[hidden] { display: none; }
+
+/* ---- 狭い画面：メニュー（レイヤー・書き出し・設定）は画面の幅に収めて出す。
+        右寄せのままだと、折り返した上部バーの左側のボタンから開いたとき左に画面外へはみ出す ---- */
+@media (max-width: 900px) {
+  .topbar .menu { position: static; }
+  .topbar .menu-list, .topbar .menu-right .menu-list, .topbar #export-menu .menu-list {
+    position: absolute; top: 100%; margin-top: 4px; left: 8px !important; right: 8px !important; width: auto;
+    max-width: min(420px, calc(100vw - 16px)); margin-inline: auto; max-height: calc(100vh - 160px); overflow: auto;
+  }
+  .topbar .layers-pop { width: auto; }
+}
