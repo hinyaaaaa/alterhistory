@@ -8,6 +8,8 @@ import { planDeclareAndResolveWar, planDeclareWar, planRecordBattle, planSetMust
 import { forcePower } from "../core/sim/units.js";
 import { planAddMarker } from "../core/edit/markers.js";
 import { createRandom } from "../core/random.js";
+import { suggestLabel } from "../core/edit/naming.js";
+import { withEvent } from "../core/edit/history-log.js";
 import { makeCommand } from "../core/edit/commands.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
 import { planNextCollapse } from "../core/sim/collapse.js";
@@ -115,9 +117,24 @@ export function createSimActions({ store, renderer }) {
     listAlliances() { return withMap((map) => listAlliances(map)) ?? []; },
     alliancesOf(stateId) { return withMap((map) => alliancesOf(map, stateId)) ?? []; },
     createAlliance(name, memberIds, bond = "standard", leader = null) {
-      return withMap((map) => safeRun("同盟の結成", () => { const r = planCreateAlliance(map, name, memberIds, currentDate(), bond, leader); commitOrThrow(r.command); return r.id; }));
+      // 名前が空なら、盟主の文化に合わせたランダムな名前を付ける
+      return withMap((map) => safeRun("同盟の結成", () => {
+        const given = (name ?? "").trim();
+        const label = given || suggestLabel(map, { kind: "alliance", rnd, stateId: leader ?? memberIds[0] });
+        const r = planCreateAlliance(map, label, memberIds, currentDate(), bond, leader);
+        commitOrThrow(r.command); return r.id;
+      }));
     },
-    editAlliance(id, patch) { withMap((map) => safeRun("同盟の編集", () => commitOrThrow(planEditAlliance(map, id, patch)))); },
+    /** 同盟の名前をランダムに作る（盟主・加盟国の文化に合わせる） */
+    suggestAllianceName(stateId) { return withMap((map) => suggestLabel(map, { kind: "alliance", rnd, stateId })) ?? ""; },
+    editAlliance(id, patch) {
+      withMap((map) => safeRun("同盟の編集", () => {
+        const a = listAlliances(map).find((x) => x.id === id);
+        const plan = planEditAlliance(map, id, patch);
+        const renamed = a && patch.name !== undefined && (patch.name ?? "") !== a.name;
+        commitOrThrow(plan && renamed ? withEvent(map, plan, { type: "rename-alliance", title: `同盟の改称: 「${a.name}」→「${patch.name}」` }) : plan);
+      }));
+    },
     dissolveAlliance(id) { withMap((map) => safeRun("同盟の解消", () => commitOrThrow(planDissolveAlliance(map, id, currentDate())))); },
 
     // --- 戦争・講和 ---

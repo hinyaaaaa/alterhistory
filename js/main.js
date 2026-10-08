@@ -19,7 +19,7 @@ import { initEntityLists } from "./ui/entity-list-window.js";
 import { initGenealogy } from "./ui/genealogy-window.js";
 import { initNuclearWindow } from "./ui/nuclear-window.js";
 import { initCovertWindow } from "./ui/covert-window.js";
-import { makeDraggable } from "./ui/windows.js";
+import { makeDraggable, makeResizable } from "./ui/windows.js";
 import { initHighlight } from "./ui/highlight.js";
 import { initToolbar } from "./ui/toolbar.js";
 import { initStatusBar } from "./ui/status-bar.js";
@@ -31,7 +31,7 @@ import { initEditMode } from "./ui/edit-mode.js";
 import { initEditToolbar } from "./ui/edit-toolbar.js";
 import { initEditPanel } from "./ui/edit-panel.js";
 import { createBuilderActions } from "./app/builder-actions.js";
-import { initHistoryBuilder } from "./ui/history-builder.js";
+import { initWorkWindows } from "./ui/work-windows.js";
 import { createEconomyView } from "./ui/economy-view.js";
 import { createTravelView } from "./ui/travel-view.js";
 import { initEditorPanel } from "./ui/panels/editor-panel.js";
@@ -97,17 +97,19 @@ function start() {
   const highlight = initHighlight({ store, viewport, renderer }); highlightRef = highlight; // 一覧・地図クリックで、ズームせずに境界線を光らせる
   const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   winsRef = wins;
-  initEntityLists({ store, wins, panels, editActions, highlight });
+  const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
+  initEntityLists({ store, wins, panels, editActions, highlight, builderActions });
   initGenealogy({ store, wins, editActions });
   initNuclearWindow({ store, simActions, wins });
   initCovertWindow({ store, simActions, wins });
   // 地図上の国・州などを選んだときも、ズームせず強調だけする
   const rawOpen = panels.openEntity;
   panels.openEntity = (kind, id) => { if (["state", "culture", "religion", "province"].includes(kind)) highlight.show(kind, id); return rawOpen(kind, id); };
-  for (const [id, head] of [["sidebar", "#editor-panel"], ["edit-panel", ".editor-header"], ["builder-panel", ".editor-header"]]) {
+  for (const [id, head] of [["sidebar", "#editor-panel"], ["edit-panel", ".editor-header"]]) {
     const root = byId(id);
     // sidebar の中身(editor-panel)は描き直されるので、ドラッグはパネル全体の上端を掴む形にする
     makeDraggable(root, id === "sidebar" ? root : root.querySelector(head), byId("stage"), id === "sidebar" ? ".editor-header" : null);
+    makeResizable(root, byId("stage")); // 大きさも自由に変えられる
   }
   const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
 
@@ -125,10 +127,9 @@ function start() {
   const editPanel = initEditPanel();
   // 右のパネルは × で小さくでき、元の場所（右端）の小さなボタンで開き直せる
 
-  const builderActions = createBuilderActions({ store, editActions, editMode, actions });
   const economyView = createEconomyView({ store, editActions, builderActions });
   const travelView = createTravelView({ store, editActions, editMode, viewport, actions });
-  const historyBuilder = initHistoryBuilder({ store, viewport, renderer, editActions, builderActions, editMode, panels, views: { economy: economyView, travel: travelView } });
+  initWorkWindows({ store, wins, views: { economy: economyView, travel: travelView } });
   // 属州タブの「この属州を塗り直す」ボタンから、地図編集パネルを開いてツール欄を同期する
   window.addEventListener("request-edit-panel-open", () => editPanel.open());
   window.addEventListener("request-edit-panel-sync", (e) => {
@@ -148,7 +149,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions, historyBuilder };
+  globalThis.alterhistory = { store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

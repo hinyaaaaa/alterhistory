@@ -29,6 +29,54 @@ export function makeDraggable(root, handle, stage, only = null) {
     handle.addEventListener("pointerup", up);
   });
 }
+
+/**
+ * ウィンドウの大きさを変えられるようにする。四辺と四隅につまみを付け、ドラッグで広げ縮めできる。
+ * 大きさは地図の表示領域(stage)の中に収める。min は小さくしすぎて操作できなくなるのを防ぐ。
+ */
+export function makeResizable(root, stage, { minW = 280, minH = 160 } = {}) {
+  if (root.dataset.resizable) return;
+  root.dataset.resizable = "1";
+  for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+    const h = document.createElement("div");
+    h.className = `rs-handle rs-${dir}`;
+    h.dataset.dir = dir;
+    h.setAttribute("aria-hidden", "true");
+    h.style.touchAction = "none";
+    h.addEventListener("pointerdown", (e) => {
+      e.preventDefault(); e.stopPropagation();
+      const sr = stage.getBoundingClientRect(), r = root.getBoundingClientRect();
+      const start = { x: e.clientX, y: e.clientY, l: r.left - sr.left, t: r.top - sr.top, w: r.width, h: r.height };
+      // 位置は左上基準に固定し、大きさは px で持つ（right/bottom/maxHeight による自動調整をやめる）
+      root.style.right = "auto"; root.style.bottom = "auto";
+      root.style.maxHeight = "none"; root.style.maxWidth = "none";
+      root.style.left = `${start.l}px`; root.style.top = `${start.t}px`;
+      root.style.width = `${start.w}px`; root.style.height = `${start.h}px`;
+      root.classList.add("resized");
+      h.setPointerCapture?.(e.pointerId);
+      const move = (ev) => {
+        const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+        let l = start.l, t = start.t, w = start.w, hh = start.h;
+        if (dir.includes("e")) w = start.w + dx;
+        if (dir.includes("s")) hh = start.h + dy;
+        if (dir.includes("w")) { w = start.w - dx; l = start.l + dx; }
+        if (dir.includes("n")) { hh = start.h - dy; t = start.t + dy; }
+        if (w < minW) { if (dir.includes("w")) l -= minW - w; w = minW; }
+        if (hh < minH) { if (dir.includes("n")) t -= minH - hh; hh = minH; }
+        // stage の外にはみ出さない
+        if (l < 0) { if (dir.includes("w")) w += l; l = 0; }
+        if (t < 0) { if (dir.includes("n")) hh += t; t = 0; }
+        if (l + w > sr.width) w = Math.max(minW, sr.width - l);
+        if (t + hh > sr.height) hh = Math.max(minH, sr.height - t);
+        root.style.left = `${l}px`; root.style.top = `${t}px`;
+        root.style.width = `${w}px`; root.style.height = `${hh}px`;
+      };
+      const up = () => { h.removeEventListener("pointermove", move); h.removeEventListener("pointerup", up); h.removeEventListener("pointercancel", up); };
+      h.addEventListener("pointermove", move); h.addEventListener("pointerup", up); h.addEventListener("pointercancel", up);
+    });
+    root.append(h);
+  }
+}
 export function initWindows() {
   const stage = byId("stage");
   const wins = /* @__PURE__ */ new Map();
@@ -52,6 +100,7 @@ export function initWindows() {
     body.append(def.body);
     root.append(bar, body);
     stage.append(root);
+    makeResizable(root, stage);
     const w = { root, def };
     close.addEventListener("click", () => closeWin(id));
     root.addEventListener("pointerdown", () => front(w));
@@ -79,6 +128,7 @@ export function initWindows() {
   function fit(root) {
     const parent = root.offsetParent ?? root.parentElement;
     if (!parent) return;
+    if (root.classList.contains("resized")) return; // ユーザーが大きさを決めたウィンドウは、自動では縮めない
     const top = parseFloat(root.style.top) || 0;
     root.style.maxHeight = `${Math.max(240, parent.clientHeight - top - 12)}px`;
   }

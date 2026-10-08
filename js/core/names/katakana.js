@@ -187,3 +187,51 @@ export function generateProvinceName(rnd, style) {
   const stem = make(rnd, style, { shortTail: true, max: 6 });
   return stem + rnd.weighted(PROVINCE_SUFFIX.map((p) => p[0]), PROVINCE_SUFFIX.map((p) => p[1]));
 }
+
+// ---------- 最高神・同盟・ゾーン・時代 ----------
+
+const DEITY_EPITHETS = ["天空神", "太陽神", "月神", "大地母神", "海神", "戦神", "創造神", "運命神", "豊穣神", "冥府神", "風神", "炎神", "知恵の神", "光の神", "星神"];
+
+/** 宗教の最高神の名前。「アルヴァ」のような固有名か、「太陽神ソルディア」のように称号つき */
+export function generateDeityName(rnd, style) {
+  const name = generateShortName(rnd, style);
+  return rnd.chance(0.4) ? rnd.pick(DEITY_EPITHETS) + name : name;
+}
+
+const ALLIANCE_SUFFIX = [["同盟", 10], ["連合", 8], ["協商", 4], ["盟約", 4], ["条約機構", 3], ["共栄圏", 2], ["協約", 3], ["連盟", 5]];
+
+/** 同盟の名前（◯◯同盟・◯◯連合・◯◯条約機構 など） */
+export function generateAllianceName(rnd, style) {
+  const stem = make(rnd, style, { shortTail: true, max: 6 });
+  return stem + rnd.weighted(ALLIANCE_SUFFIX.map((x) => x[0]), ALLIANCE_SUFFIX.map((x) => x[1]));
+}
+
+// ゾーンの種類 → 名前の付け方（zones.js の ZONE_TYPES と同じ id）
+const ZONE_PATTERNS = {
+  Invasion: ["{s}侵攻", "{s}遠征", "{s}大侵攻"],
+  Rebels: ["{s}の乱", "{s}反乱", "{s}蜂起"],
+  Proselytism: ["{s}布教", "{s}の教え", "{s}改宗運動"],
+  Crusade: ["{s}聖戦", "{s}十字軍", "{s}の聖戦"],
+  Disease: ["{s}疫病", "{s}熱", "{s}の疫"],
+  Disaster: ["{s}大災害", "{s}の災厄", "{s}の惨禍"],
+  Eruption: ["{s}山噴火", "{s}の大噴火"],
+  Avalanche: ["{s}雪崩", "{s}大雪崩"],
+  Fault: ["{s}断層帯", "{s}大地溝"],
+  Flood: ["{s}大洪水", "{s}の氾濫"],
+  Tsunami: ["{s}大津波", "{s}沖津波"],
+  Fire: ["{s}大火", "{s}の業火"],
+  Custom: ["{s}地域", "{s}の地", "{s}圏"],
+};
+
+/** ゾーンの名前。種類に合わせた語尾が付く（疫病なら「◯◯疫病」、反乱なら「◯◯の乱」） */
+export function generateZoneName(rnd, style, type = "Custom") {
+  const stem = make(rnd, style, { shortTail: true, max: 6 });
+  return rnd.pick(ZONE_PATTERNS[type] ?? ZONE_PATTERNS.Custom).replace("{s}", stem);
+}
+
+const ERA_PATTERNS = ["{s}時代", "{s}の世", "{s}朝", "{s}期", "{s}紀"];
+
+/** 時代区分の名前（◯◯時代・◯◯紀 など） */
+export function generateEraName(rnd, style) {
+  return rnd.pick(ERA_PATTERNS).replace("{s}", make(rnd, style, { shortTail: true, max: 6 }));
+}

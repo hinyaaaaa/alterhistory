@@ -7,11 +7,11 @@ import { createRandom as createKanaRandom } from "../core/random.js";
 import { entityPosition, ENTITY_KINDS } from "../core/query.js";
 import { importAzgaarMilitary } from "../core/sim/military.js";
 import { entityOutlineSegments, segmentsBounds } from "../render/edges.js";
-import { serializeAzgaar } from "../io/azgaar-writer.js";
+import { serializeNative, NATIVE_EXT } from "../io/native-map.js";
 import { renderMapToCanvas, renderMapToSvg, canvasToPngBlob, exportFileName, todayString } from "../io/exporter.js";
 import { viewToRenderOptions } from "../render/options.js";
 import { DEFAULT_ANNOTATIONS } from "../render/layers/annotations.js";
-import { buildChronicle, serializeChronicle, chronicleToMarkdown } from "../io/chronicle.js";
+import { buildChronicle, chronicleToMarkdown } from "../io/chronicle.js";
 import { LAYERS, FILL_KEY, FILL_KINDS, isLayerOn, exclusiveFillPatch, snapshotFills } from "./layers.js";
 
 const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
@@ -144,39 +144,24 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
       return !!(map?.geometry && ENTITY_KINDS[kind] && entity);
     },
 
-    /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */
+    /** ALTERHISTORY 形式（.ahmap）で保存。Azgaar の地図は読み込めるが、保存はこの形式になる */
     saveNative() {
-      return runExport("保存ファイル", (map, fileName) => {
-        map.ext ??= { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
-        map.ext.data ??= {};
-        map.ext.data.worldTime = { ...map.worldTime };
-        return {
-          blob: textBlob(serializeAzgaar(map, { native: true, exportedAt: todayString() }), "text/plain"),
-          name: exportFileName(map, fileName, "map"),
-        };
+      return runExport("保存ファイル", async (map, fileName) => {
+        const bytes = await serializeNative(map, { savedAt: todayString() });
+        return { blob: new Blob([bytes], { type: "application/gzip" }), name: exportFileName(map, fileName, NATIVE_EXT) };
       }, () => store.markSaved());
     },
-    /** Azgaar 互換の .map（ALTERHISTORY の目印・拡張データを含めない） */
-    saveAzgaar() {
-      return runExport("Azgaar互換ファイル", (map, fileName) => ({
-        blob: textBlob(serializeAzgaar(map, { native: false, exportedAt: todayString() }), "text/plain"),
-        name: exportFileName(map, fileName, "map", "_azgaar"),
-      }));
-    },
     /**
-     * AI 向けセーブデータ（クロニクル）。Claude 等にアップロードして歴史を構築してもらうための書き出し。
-     *   .chronicle.json … 全情報（ID を名前に解決済み・年表・国家別集約・セル単位の完全データ）
-     *   .chronicle.md   … 同じ内容の読み物版（AI にも人間にも読みやすい要約）
-     * 2 ファイルを 1 回の操作でダウンロードする。
+     * クロニクル（.md 1ファイル）。Claude 等の AI に渡して歴史を読ませる・続きを書かせるための記録。
+     * 年表（すべての操作を年月順に）・国家・戦争・同盟・文化/宗教（最高神つき）・ゾーン・都市などを、
+     * 名前だけで読める形で丁寧に書く。アプリに戻すための完全データは、保存ファイル（.ahmap）のほうにある。
      */
     exportChronicle() {
-      return runExport("AI用クロニクル", (map, fileName) => {
+      return runExport("クロニクル", (map, fileName) => {
         map.ext ??= { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
-        const ch = buildChronicle(map, { fileName, exportedAt: todayString() });
+        const ch = buildChronicle(map, { fileName, includeCells: false, exportedAt: todayString() });
         const base = exportFileName(map, fileName, "x").replace(/\.x$/, "");
-        // 2 つ目（読み物版）は先にダウンロードを発火し、1 つ目（JSON）を runExport の標準経路で返す
-        download(textBlob(chronicleToMarkdown(ch), "text/markdown"), `${base}.chronicle.md`);
-        return { blob: textBlob(serializeChronicle(ch), "application/json"), name: `${base}.chronicle.json` };
+        return { blob: textBlob(chronicleToMarkdown(ch), "text/markdown"), name: `${base}.chronicle.md` };
       });
     },
     exportPng() {

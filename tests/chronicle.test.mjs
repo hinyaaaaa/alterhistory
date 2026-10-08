@@ -145,7 +145,7 @@ console.log("=== 直列化・Markdown ===");
   check("ガイドに『戦闘で国境は動かない』が明記される", parsed.guideForAI.designNotes.some((n) => n.includes("国境は動かない")));
   check("cells 行が 1 行に収まり肥大しない", json.split("\n").length < 6000, `${json.split("\n").length}行`);
   const md = chronicleToMarkdown(ch);
-  check("Markdown に年表・国家・戦争・同盟・都市・マーカー・ランキングの節がある", ["## 年表", "## 国家", "## 戦争", "## 同盟", "## 都市（全て）", "## マーカー（全て）", "## ランキング"].every((h) => md.includes(h)));
+  check("Markdown に年表・国家・戦争・同盟・都市・マーカー・ランキングの節がある", ["## 1. 年表", "## 2. 国家", "## 4. 戦争", "## 5. 同盟", "## 6. 文化・宗教・属州", "## 7. ゾーン", "## 8. 都市（全て）", "## 9. マーカー（全て）", "## 10. ランキング"].every((h) => md.includes(h)));
   check("Markdown に全国家の名前がある", liveStates.every((s) => md.includes(s.fullName ?? s.name)));
   check("Markdown に全都市の名前がある", map.pack.burgs.filter(live).every((b) => md.includes(b.name)));
   check("Markdown に全マーカーの名前がある", map.markers.every((m) => md.includes(m.name)));

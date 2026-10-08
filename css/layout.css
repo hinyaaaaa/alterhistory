@@ -87,12 +87,10 @@ main > * { min-height: 0; }
 .sidebar-fab[hidden] { display: none; }
 /* 畳んだサイドバー: 列の幅を0にして、中身は見えず・触れないようにする（display:none にすると列番号がずれる） */
 main.side-collapsed { grid-template-columns: 0 1fr !important; }
-main.side-collapsed:has(#builder-panel:not([hidden])) { grid-template-columns: 0 1fr 320px !important; }
 main.side-collapsed #sidebar { visibility: hidden; overflow: hidden; min-width: 0; pointer-events: none; box-shadow: none; border-right: 0; }
 
 @media (max-width: 720px) {
   main, main:has(#editor-panel:not([hidden])), main:has(.legend.has-map) { grid-template-columns: 1fr; }
-  main.side-collapsed, main.side-collapsed:has(#builder-panel:not([hidden])) { grid-template-columns: 1fr !important; }
   #sidebar {
     position: absolute; top: 0; bottom: 0; left: 0; z-index: 15;
     width: min(86vw, 320px); max-width: 86vw;
@@ -127,7 +125,6 @@ main { grid-row: 2; }
 .topbar select { padding-left: 8px; padding-right: 8px; }
 .topbar .icon-btn { padding-left: 9px; padding-right: 9px; }
 .topbar-group + .topbar-group:not(.topbar-time) { padding-left: 10px; border-left: 1px solid var(--line); }
-.topbar-modes .builder-fab, .topbar-modes .edit-mode-fab { position: static; right: auto; top: auto; box-shadow: none; padding-top: 0; padding-bottom: 0; padding-left: 12px; padding-right: 12px; font-size: 12.5px; }
 .topbar-modes .edit-mode-fab[aria-expanded="true"] { right: auto; }
 /* 時間バー: 中身の幅を確保し、残りの余白を左右均等に（中央寄せ）。右端のレイヤー等は右に寄せる */
 .topbar-time { flex: 0 0 auto; margin-left: auto; margin-right: auto; min-width: max-content; }
@@ -156,10 +153,9 @@ main { grid-row: 2; }
 /* ==== すべてウィンドウ形式（サイドバー・横長パネルは廃止） ====
    国家などの詳細(#sidebar)・地図編集・歴史をつくる は、地図の上に浮かぶ動かせるウィンドウにする。
    地図は常に画面いっぱいを使う。 */
-main, main:has(#editor-panel:not([hidden])), main:has(.legend.has-map), main.side-collapsed,
-main.side-collapsed:has(#builder-panel:not([hidden])) { grid-template-columns: 1fr !important; }
+main, main:has(#editor-panel:not([hidden])), main:has(.legend.has-map), main.side-collapsed { grid-template-columns: 1fr !important; }
 #stage { grid-column: 1; grid-row: 1; }
-#sidebar, .edit-panel, .builder-panel {
+#sidebar, .edit-panel {
   position: absolute !important; z-index: 22; grid-column: auto; grid-row: auto;
   max-height: calc(100% - 24px); border: 1px solid var(--brass-dim); border-radius: var(--radius);
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); overflow-y: auto; transform: none; visibility: visible;
@@ -167,6 +163,6 @@ main.side-collapsed:has(#builder-panel:not([hidden])) { grid-template-columns: 1
 #sidebar { top: 12px; left: 24px; width: min(380px, calc(100% - 24px)); }
 #sidebar:has(#editor-panel[hidden]) { display: none !important; }
 .edit-panel { top: 12px; right: 24px; bottom: auto; left: auto; width: min(320px, calc(100% - 24px)); }
-.builder-panel { top: 12px; right: 24px; left: auto; width: min(360px, calc(100% - 24px)); }
-.edit-panel[hidden], .builder-panel[hidden] { display: none !important; }
+.edit-panel[hidden] { display: none !important; }
+.topbar-modes .edit-mode-fab { position: static; right: auto; top: auto; box-shadow: none; padding-top: 0; padding-bottom: 0; padding-left: 12px; padding-right: 12px; font-size: 12.5px; }
 #legend, #btn-sidebar-toggle, #panel-tabs { display: none !important; }

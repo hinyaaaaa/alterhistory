@@ -23,6 +23,27 @@ try {
     check(`${label} はEscで閉じる`, !(await w.isVisible()));
   }
 
+  console.log("=== ウィンドウの大きさ変更（実ブラウザでドラッグ） ===");
+  {
+    await page.click("#settings-menu > summary"); await page.click('#settings-menu [data-open-win="economy"]'); await page.waitForTimeout(150);
+    const w = page.locator('.float-win[data-win="economy"]');
+    const b0 = await w.boundingBox();
+    const hb = await w.locator(".rs-se").boundingBox();
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
+    await page.mouse.down(); await page.mouse.move(hb.x + hb.width / 2 + 120, hb.y + hb.height / 2 + 60, { steps: 5 }); await page.mouse.up();
+    const b1 = await w.boundingBox();
+    check("右下のつまみをドラッグすると、ウィンドウが広がる", b1.width > b0.width + 100 && b1.height > b0.height + 40, `${Math.round(b0.width)}x${Math.round(b0.height)} → ${Math.round(b1.width)}x${Math.round(b1.height)}`);
+    const hw = await w.locator(".rs-w").boundingBox();
+    await page.mouse.move(hw.x + hw.width / 2, hw.y + hw.height / 2);
+    await page.mouse.down(); await page.mouse.move(hw.x + hw.width / 2 + 2000, hw.y + hw.height / 2, { steps: 4 }); await page.mouse.up();
+    const b2 = await w.boundingBox();
+    check("小さくしすぎても、最小幅で止まる", b2.width >= 270, `${Math.round(b2.width)}`);
+    const body = await w.locator(".float-win-body").evaluate((e) => e.scrollHeight >= e.clientHeight);
+    check("大きさを変えても中身はスクロールで見られる", body);
+    await shot(page, "12-resized");
+    await page.keyboard.press("Escape"); await page.waitForTimeout(80);
+  }
+
   console.log("=== 戦争：宣戦布告 → タブ → 時間経過 ===");
   const openWin = async (id) => { await page.click("#settings-menu > summary"); await page.click(`#settings-menu [data-open-win="${id}"]`); await page.waitForTimeout(120); };
   await openWin("war");

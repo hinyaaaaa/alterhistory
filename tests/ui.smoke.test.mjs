@@ -192,8 +192,6 @@ check("別の地図に凡例が入れ替わる", (() => { const m = /^凡例：.
 check("色分けなどの表示設定は引き継がれる", store.getState().view.states === true);
 
 console.log("=== 保存・書き出し ===");
-const { parseAzgaarText } = await import("../js/io/azgaar-reader.js");
-const { attachExtension } = await import("../js/io/native-format.js");
 const lastDownload = async (n0) => { await waitFor(() => window.__downloads.length > n0, 8000, "ダウンロード"); return window.__downloads.at(-1); };
 const textOf = async (blob) => Buffer.from(await blob.arrayBuffer()).toString("utf-8");
 
@@ -203,16 +201,16 @@ check("書き出しメニューが有効", !$("export-menu").classList.contains(
 let n = window.__downloads.length;
 $("btn-save").click();
 let d = await lastDownload(n);
-check("[保存] ファイル名は 地図名.map", d?.name === `${store.getState().map.meta.name || "新世界より"}.map`, d?.name);
-const savedText = d ? await textOf(d.blob) : "";
-const reread = parseAzgaarText(savedText);
-const wExt = attachExtension(reread.map);
-check("[保存] 中身は ALTERHISTORY 形式として読み戻せる", reread.map.meta.source === "alterhistory" && wExt.length === 0);
+check("[保存] ファイル名は 地図名.ahmap", d?.name === `${store.getState().map.meta.name || "新世界より"}.ahmap`, d?.name);
+const { gunzipSync } = await import("node:zlib");
+const { parseNativeJson } = await import("../js/io/native-map.js");
+const savedBuf = d ? Buffer.from(await d.blob.arrayBuffer()) : Buffer.alloc(0);
+const reread = parseNativeJson((savedBuf[0] === 0x1f ? gunzipSync(savedBuf) : savedBuf).toString("utf-8")) // jsdom には CompressionStream が無く、無圧縮で保存される;
+check("[保存] 中身は ALTERHISTORY 形式（gzip した JSON）として読み戻せる", reread.map.meta.source === "alterhistory");
 check("[保存] 国家・都市が元と同じ", reread.map.pack.states.length === store.getState().map.pack.states.length && reread.map.pack.burgs.length === store.getState().map.pack.burgs.length);
-// 47 行の元ファイル + 空行で 53 行にそろえ + 拡張行 1 行 = 54 行。CRLF が保たれていないと数が合わない
-check("[保存] 改行は CRLF のまま（行数が 54 行）", savedText.split("\r\n").length === 54, `${savedText.split("\r\n").length}行`);
+check("[保存] Azgaar 形式の書き出しメニューは無い", !$("export-menu").querySelector('[data-export="azgaar"]'));
 check("[保存] 完了の通知が出る", await waitFor(() => !$("banner").hidden && $("banner").classList.contains("info"), 3000, "通知"), $("banner-body").textContent);
-check("[保存] 通知にファイル名", $("banner-body").textContent.includes(`${store.getState().map.meta.name || "新世界より"}.map`));
+check("[保存] 通知にファイル名", $("banner-body").textContent.includes(`${store.getState().map.meta.name || "新世界より"}.ahmap`));
 
 const menuItem = (k) => $("export-menu").querySelector(`[data-export="${k}"]`);
 $("export-menu").open = true;
@@ -229,16 +227,15 @@ d = await lastDownload(n);
 check("[PNG] ファイル名と種類", d?.name === `${store.getState().map.meta.name || "新世界より"}.png` && d.blob.type === "image/png", d?.name);
 
 $("export-menu").open = true;
-n = window.__downloads.length; menuItem("azgaar").click();
+n = window.__downloads.length; menuItem("chronicle").click();
 d = await lastDownload(n);
-const azText = d ? await textOf(d.blob) : "";
-check("[Azgaar互換] ファイル名に _azgaar", d?.name === `${store.getState().map.meta.name || "新世界より"}_azgaar.map`, d?.name);
-check("[Azgaar互換] ALTERHISTORY の目印と拡張行が無い", !azText.includes("ALTERHISTORY"));
-check("[Azgaar互換] 元のファイルと行が一致（日付以外）", azText.split("\r\n").slice(1).join("\r\n") === readFileSync(SAMPLES + "/新世界より.map", "utf-8").split("\r\n").slice(1).join("\r\n"));
+const mdText = d ? await textOf(d.blob) : "";
+check("[クロニクル] .md の1ファイルだけが出る（JSON は出さない）", d?.name === `${store.getState().map.meta.name || "新世界より"}.chronicle.md` && window.__downloads.slice(n).length === 1, d?.name);
+check("[クロニクル] 年表と国家の節がある", mdText.includes("## 1. 年表") && mdText.includes("## 2. 国家"));
 
 $("banner-close").click();
 n = window.__downloads.length; key("s", { ctrlKey: true });
-check("[Ctrl+S] で保存される", (await lastDownload(n))?.name === `${store.getState().map.meta.name || "新世界より"}.map`);
+check("[Ctrl+S] で保存される", (await lastDownload(n))?.name === `${store.getState().map.meta.name || "新世界より"}.ahmap`);
 
 console.log("--- 書き出し中の表示と失敗時の処理 ---");
 let sawBusyExport = false; const unsub = store.subscribe((st) => { if (st.busy) sawBusyExport = true; });

@@ -105,7 +105,7 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
     const map = store.getState().map;
     if (!map) { balBody.replaceChildren(noMap()); return; }
     const overrides = map.ext?.data?.balance ?? {};
-    balBody.replaceChildren(el("p", "hint", "経済・戦争の数値を調整します。変えるとすぐ反映され、この地図に保存されます（地図ファイルに入るので、別の端末で開いても同じ結果になります）。Azgaar互換形式で書き出すと、この設定は含まれません。"));
+    balBody.replaceChildren(el("p", "hint", "経済・戦争の数値を調整します。変えるとすぐ反映され、この地図に保存されます（地図ファイルに入るので、別の端末で開いても同じ結果になります）。"));
     const t = el("table", "win-table");
     for (const m of BALANCE_META) {
       const tr = el("tr");

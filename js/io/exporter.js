@@ -60,7 +60,7 @@ export function sanitizeFileName(name) {
 
 /** 書き出しファイル名。地図の名前 → 開いたファイル名 → "map" の順で決める */
 export function exportFileName(map, openedFileName, ext, suffix = "") {
-  const fromFile = String(openedFileName ?? "").replace(/\.gz$/i, "").replace(/\.(map|png|svg)$/i, "");
+  const fromFile = String(openedFileName ?? "").replace(/\.gz$/i, "").replace(/\.(map|ahmap|png|svg)$/i, "");
   const base = sanitizeFileName(map?.meta?.name) || sanitizeFileName(fromFile) || "map";
   return `${base}${suffix}.${ext}`;
 }

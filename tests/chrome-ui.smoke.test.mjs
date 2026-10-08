@@ -68,7 +68,8 @@ check("上部バーを隠す設定（表示・設定メニュー）は無い", !
 key("h");
 check("H キーで枠が隠れたりしない", !app.className.includes("hide-"));
 check("サイドバー（凡例・☰・横の展開ボタン）は廃止されている", !!$("btn-sidebar-toggle").hidden && !!$("legend").hidden && !!$("panel-tabs").hidden);
-for (const [panel, close, open] of [["builder-panel", "builder-close", "btn-builder"], ["edit-panel", "edit-panel-close", "btn-edit-mode"]]) {
+check("「歴史をつくる」ボタンとパネルは廃止されている", !$("btn-builder") && !$("builder-panel"));
+for (const [panel, close, open] of [["edit-panel", "edit-panel-close", "btn-edit-mode"]]) {
   $(open).click();
   check(`${panel}: 開くとウィンドウとして表示される`, !$(panel).hidden);
   $(close).click(); await sleep(20);

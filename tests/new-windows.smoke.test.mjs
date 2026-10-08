@@ -60,7 +60,7 @@ for (const k of ["state", "culture", "religion", "province"]) {
 }
 const stRows = win("list-state").querySelectorAll(".ent-row");
 check("国家一覧に行があり、🔍・統合・🗑 がある", stRows.length > 0 && [...stRows[0].querySelectorAll("button")].map((b) => b.textContent).join("|").includes("統合") && stRows[0].textContent.includes("🗑"));
-check("一覧にランダム設定のボタンは無い", !win("list-state").textContent.includes("🎲"));
+check("一覧の各行にランダム設定のボタンは無い（追加バーにだけ「おまかせ」がある）", !stRows[0].textContent.includes("🎲") && win("list-state").querySelector(".ent-addbar")?.textContent.includes("おまかせ"));
 
 console.log("=== 削除（確認ダイアログ→削除→Undo） ===");
 if (!window.HTMLDialogElement.prototype.showModal) { window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); }; window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); }; }

@@ -12,13 +12,15 @@ import { listEras, eraAt, planSetEra, planRemoveEra } from "../core/edit/eras.js
 import { planSetFinance, getFinance } from "../core/edit/finance.js";
 import { planSetEntityProfile, planSetOrigin, planSetOrigins, planSetBurgProfile, originTree, descendantsOf } from "../core/edit/profile.js";
 import { planAddJourney, planEditJourney, planRemoveJourney, planAddLeg, planRemoveLeg, planChangeLegTransport } from "../core/edit/journeys.js";
-import { planAddZone, planEditZone, planRemoveZone, planPaintZone, growZoneCells } from "../core/edit/zones.js";
+import { planAddZone, planEditZone, planRemoveZone, planPaintZone, growZoneCells, zoneLabel } from "../core/edit/zones.js";
 import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
 import { planSetDoctrine, getDoctrine, DOCTRINES, DEFAULT_DOCTRINE } from "../core/edit/military-doctrine.js";
 import {
   suggestName as planSuggestName, isProvisional, planSetProvisional, withProvisional,
   getNameStyle, styleOfCulture, planSetNameStyle, NAME_STYLES, STYLE_KEYS,
 } from "../core/edit/naming.js";
+import { suggestLabel } from "../core/edit/naming.js";
+import { withEvent } from "../core/edit/history-log.js";
 import { createRandom } from "../core/random.js";
 import { cellIndexOf } from "../core/spatial.js";
 
@@ -33,6 +35,13 @@ export function createEditActions({ store, renderer }) {
     catch (e) { store.update((s) => { s.error = `${label}: ${e.message}`; }); }
   };
   const currentDate = () => store.getState().map?.worldTime ?? { year: 1, month: 1 };
+  // ---- 歴史ログ：アクションごとに「何が起きたか」を年表に残す（Undo で一緒に戻る） ----
+  const KIND_JP = { state: "国家", culture: "文化", religion: "宗教", province: "属州" };
+  const LIST_OF = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+  const nameOf = (e) => e?.fullName ?? e?.name ?? "（不明）";
+  const entOf = (map, kind, id) => map.pack[LIST_OF[kind]]?.[id];
+  /** 計画（コマンド）に出来事を足して commit する。plan が null（変化なし）なら何もしない */
+  const commitEv = (map, plan, ev) => commitOrThrow(plan && ev ? withEvent(map, plan, ev) : plan);
 
   // ---- 名前の仮生成 ----
   // 生成した名前は「最近提案した名前」として覚えておく。あとでその名前がそのまま確定（追加・改名）
@@ -78,7 +87,13 @@ export function createEditActions({ store, renderer }) {
     paintCells(kind, target, cells, opts = {}) {
       withMap((map) => safeRun("塗り替え", () => {
         const { command, report } = planPaint(map, { kind, target, cells, force: opts.force });
-        if (command) commitOrThrow(command);
+        if (command) {
+          const who = target > 0 ? nameOf(entOf(map, kind, target)) : null;
+          const ev = report.changed > 0 && KIND_JP[kind]
+            ? { type: "territory", mergeKey: `paint:${kind}:${target}`, count: report.changed, title: who ? `${KIND_JP[kind]}「${who}」の領土が広がった` : `${KIND_JP[kind]}の支配が外れた土地が出た（無所属化）` }
+            : null;
+          commitEv(map, command, ev);
+        }
         return report;
       }));
     },
@@ -101,19 +116,28 @@ export function createEditActions({ store, renderer }) {
       return withMap((map) => { let out; safeRun("都市の追加", () => {
         const n = resolveName("burg", name, { cell });
         const r = planAddBurg(map, { cell, name: n.name, rnd, ...opts });
-        commitOrThrow(n.provisional ? withProvisional(map, r.command, "burg", r.id, true) : r.command);
+        const st = map.pack.states[map.pack.cells.state[cell]];
+        const cmd = withEvent(map, r.command, { type: "created-burg", title: `${opts.capital ? "首都" : "都市"}「${n.name}」が建設された`, detail: st && st.i ? `所属: ${nameOf(st)}` : undefined });
+        commitOrThrow(n.provisional ? withProvisional(map, cmd, "burg", r.id, true) : cmd);
         out = r.id;
       }); return out; });
     },
     moveBurg(id, cell) { withMap((map) => safeRun("都市の移動", () => commitOrThrow(planMoveBurg(map, id, cell)))); },
     renameBurg(id, name) {
       withMap((map) => safeRun("都市の改名", () => {
+        const before = map.pack.burgs[id]?.name;
         const plan = planRenameBurg(map, id, name);
-        commitOrThrow(withProvisional(map, plan, "burg", id, !!takeSuggested(name, "burg")));
+        const cmd = plan && withEvent(map, plan, { type: "rename-burg", title: `都市の改名: 「${before}」→「${(name ?? "").trim()}」` });
+        commitOrThrow(withProvisional(map, cmd, "burg", id, !!takeSuggested(name, "burg")));
       }));
     },
-    removeBurg(id) { withMap((map) => safeRun("都市の削除", () => commitOrThrow(planRemoveBurg(map, id)))); },
-    setCapital(stateId, burgId) { withMap((map) => safeRun("首都の変更", () => commitOrThrow(planSetCapital(map, stateId, burgId)))); },
+    removeBurg(id) { withMap((map) => safeRun("都市の削除", () => commitEv(map, planRemoveBurg(map, id), { type: "removed-burg", title: `都市「${map.pack.burgs[id]?.name}」が失われた` }))); },
+    setCapital(stateId, burgId) {
+      withMap((map) => safeRun("首都の変更", () => {
+        const st = map.pack.states[stateId], old = map.pack.burgs[st?.capital]?.name;
+        commitEv(map, planSetCapital(map, stateId, burgId), { type: "capital", title: `${nameOf(st)}が「${map.pack.burgs[burgId]?.name}」に遷都した`, detail: old ? `旧首都: ${old}` : undefined });
+      }));
+    },
     whyCannotRemoveBurg(id) { return withMap((map) => whyCannotRemoveBurg(map, id)) ?? "地図が読み込まれていません"; },
 
     getNote(type, id) { return withMap((map) => getNote(map, type, id)) ?? ""; },
@@ -126,14 +150,20 @@ export function createEditActions({ store, renderer }) {
     /** 国家・文化・宗教・属州の名前を変える（都市は renameBurg を使う） */
     renameEntity(kind, id, name) {
       withMap((map) => safeRun("名前の変更", () => {
+        const before = nameOf(entOf(map, kind, id));
         const plan = planRenameEntity(map, kind, id, name);
-        commitOrThrow(withProvisional(map, plan, kind, id, !!takeSuggested(name, kind)));
+        const ev = { type: `rename-${kind}`, title: `${KIND_JP[kind]}の改名: 「${before}」→「${(name ?? "").trim()}」`, ref: { kind, id, from: before, to: (name ?? "").trim() } };
+        commitOrThrow(withProvisional(map, plan && withEvent(map, plan, ev), kind, id, !!takeSuggested(name, kind)));
       }));
     },
 
     /** 国家・文化・宗教・属州を削除する（Undo で戻せる）。成功したら true */
     removeEntity(kind, id) {
-      return withMap((map) => { let ok = false; safeRun("削除", () => { commitOrThrow(planRemoveEntity(map, kind, id)); ok = true; }); return ok; }) ?? false;
+      return withMap((map) => { let ok = false; safeRun("削除", () => {
+        const before = nameOf(entOf(map, kind, id));
+        commitEv(map, planRemoveEntity(map, kind, id), { type: `removed-${kind}`, title: `${KIND_JP[kind]}「${before}」が消滅した（削除）`, ref: { kind, id, from: before } });
+        ok = true;
+      }); return ok; }) ?? false;
     },
 
     /** 国家・文化・宗教を新規作成する。まだどのセルも持たない状態で作られるので、
@@ -143,7 +173,10 @@ export function createEditActions({ store, renderer }) {
         // 名前が空、または生成ボタンの名前のままなら「仮」。国家の政体・宗教の神名も一緒に付く
         const n = resolveName(kind, name, {});
         const r = planAddEntity(map, { kind, name: n.name, rnd, extra: n.extra });
-        commitOrThrow(n.provisional ? withProvisional(map, r.command, kind, r.id, true) : r.command);
+        const title = { state: `国家「${n.name}」が建国された`, culture: `文化「${n.name}」が誕生した`, religion: `宗教「${n.name}」が誕生した` }[kind] ?? `${n.name}が誕生した`;
+        const detail = kind === "religion" && n.extra?.deity ? `最高神: ${n.extra.deity}` : undefined;
+        const cmd = withEvent(map, r.command, { type: `created-${kind}`, title, detail });
+        commitOrThrow(n.provisional ? withProvisional(map, cmd, kind, r.id, true) : cmd);
         out = r.id;
       }); return out; });
     },
@@ -152,7 +185,8 @@ export function createEditActions({ store, renderer }) {
       return withMap((map) => { let out; safeRun("属州の新規作成", () => {
         const n = resolveName("province", name, { stateId });
         const r = planAddProvince(map, { state: stateId, name: n.name, rnd });
-        commitOrThrow(n.provisional ? withProvisional(map, r.command, "province", r.id, true) : r.command);
+        const cmd = withEvent(map, r.command, { type: "created-province", title: `属州「${n.name}」が${nameOf(map.pack.states[stateId])}に設置された` });
+        commitOrThrow(n.provisional ? withProvisional(map, cmd, "province", r.id, true) : cmd);
         out = r.id;
       }); return out; });
     },
@@ -178,9 +212,22 @@ export function createEditActions({ store, renderer }) {
 
     TECH_MIN, TECH_MAX,
     // ---- 政治・文化の深さ（種類・政体・起源・都市の設備） ----
-    setEntityProfile(kind, id, patch) { withMap((map) => safeRun("設定の変更", () => commitOrThrow(planSetEntityProfile(map, kind, id, patch)))); },
-    setOrigin(kind, id, parentId) { withMap((map) => safeRun("起源の変更", () => commitOrThrow(planSetOrigin(map, kind, id, parentId)))); },
-    setOrigins(kind, id, parentIds) { withMap((map) => safeRun("起源の変更", () => commitOrThrow(planSetOrigins(map, kind, id, parentIds)))); },
+    setEntityProfile(kind, id, patch) {
+      withMap((map) => safeRun("設定の変更", () => {
+        const e = entOf(map, kind, id), who = nameOf(e);
+        const FIELD = { deity: "最高神", form: "政体", formName: "政体名", type: "種類" };
+        const parts = Object.entries(patch).filter(([k, v]) => FIELD[k] && e && String(e[k] ?? "") !== String(v ?? "").trim()).map(([k, v]) => `${FIELD[k]}: ${e[k] ?? "未設定"} → ${String(v).trim()}`);
+        const ev = parts.length ? { type: `profile-${kind}`, title: `${KIND_JP[kind]}「${who}」の${Object.keys(patch).filter((k) => FIELD[k]).map((k) => FIELD[k]).join("・")}が変わった`, detail: parts.join(" / ") } : null;
+        commitEv(map, planSetEntityProfile(map, kind, id, patch), ev);
+      }));
+    },
+    setOrigin(kind, id, parentId) { this.setOrigins(kind, id, parentId ? [parentId] : [0]); },
+    setOrigins(kind, id, parentIds) {
+      withMap((map) => safeRun("起源の変更", () => {
+        const parents = parentIds.map((p) => (p ? nameOf(entOf(map, kind, p)) : "共通の祖")).join("・");
+        commitEv(map, planSetOrigins(map, kind, id, parentIds), { type: `origin-${kind}`, title: `${KIND_JP[kind]}「${nameOf(entOf(map, kind, id))}」の起源が「${parents}」になった` });
+      }));
+    },
     originsOf(kind, id) { return withMap((map) => originTree(map, kind).parents.get(id) ?? [0]) ?? [0]; },
     originOf(kind, id) { return withMap((map) => originTree(map, kind).parent.get(id) ?? 0) ?? 0; },
     descendantsOf(kind, id) { return withMap((map) => descendantsOf(map, kind, id)) ?? []; },
@@ -196,19 +243,45 @@ export function createEditActions({ store, renderer }) {
     changeLegTransport(id, index, transport) { withMap((map) => safeRun("移動手段の変更", () => commitOrThrow(planChangeLegTransport(map, id, index, transport)))); },
 
     // ---- ゾーン ----
-    addZone(opts) { return withMap((map) => { let idx = null; safeRun("ゾーンの作成", () => { const r = planAddZone(map, opts); store.commit(r.command); rerender(); idx = r.index; }); return idx; }) ?? null; },
+    addZone(opts) {
+      return withMap((map) => {
+        let idx = null;
+        safeRun("ゾーンの作成", () => {
+          const name = (opts?.name ?? "").trim() || suggestLabel(map, { kind: "zone", rnd, type: opts?.type ?? "Custom", cell: opts?.cells?.[0] });
+          const r = planAddZone(map, { ...opts, name });
+          store.commit(withEvent(map, r.command, { type: "created-zone", title: `ゾーン「${name}」（${zoneLabel({ type: opts?.type ?? "Custom" })}）が発生した` }));
+          rerender(); idx = r.index;
+        });
+        return idx;
+      }) ?? null;
+    },
     /** 種のセルから範囲を自動で決めて、新しいゾーンを作る（おまかせ） */
     addZoneAround(cell, { type, size = 24, name } = {}) {
       return withMap((map) => {
         const cells = growZoneCells(map, cell, size, rnd);
         if (!cells.length) { store.update((s) => { s.error = "ゾーンを作れませんでした（そこは水の上か、地図の外です）"; }); return null; }
         let idx = null;
-        safeRun("ゾーンの作成", () => { const r = planAddZone(map, { name, type, cells }); store.commit(r.command); rerender(); idx = r.index; });
+        safeRun("ゾーンの作成", () => {
+          const nm2 = (name ?? "").trim() || suggestLabel(map, { kind: "zone", rnd, type: type ?? "Custom", cell });
+          const r = planAddZone(map, { name: nm2, type, cells });
+          store.commit(withEvent(map, r.command, { type: "created-zone", title: `ゾーン「${nm2}」（${zoneLabel({ type: type ?? "Custom" })}）が発生した`, detail: `${cells.length}セル` }));
+          rerender(); idx = r.index;
+        });
         return idx;
       }) ?? null;
     },
-    editZone(index, patch) { withMap((map) => safeRun("ゾーンの編集", () => commitOrThrow(planEditZone(map, index, patch)))); },
-    removeZone(index) { withMap((map) => safeRun("ゾーンの削除", () => commitOrThrow(planRemoveZone(map, index)))); },
+    editZone(index, patch) {
+      withMap((map) => safeRun("ゾーンの編集", () => {
+        const z = map.zones?.[index];
+        const renamed = z && patch.name !== undefined && String(patch.name).trim() !== z.name;
+        const retyped = z && patch.type !== undefined && patch.type !== z.type;
+        const ev = renamed || retyped ? { type: "edit-zone", title: `ゾーン「${z.name}」が${renamed ? `「${String(patch.name).trim()}」と改称` : `${zoneLabel({ type: patch.type })}に変化`}された` } : null;
+        commitEv(map, planEditZone(map, index, patch), ev);
+      }));
+    },
+    removeZone(index) { withMap((map) => safeRun("ゾーンの削除", () => commitEv(map, planRemoveZone(map, index), { type: "removed-zone", title: `ゾーン「${map.zones?.[index]?.name}」が収束した` }))); },
+    /** 同盟・ゾーン・最高神・時代の名前をランダムに作る（既存の名前と被らない） */
+    suggestLabel(kind, ctx = {}) { return withMap((map) => suggestLabel(map, { kind, rnd, ...ctx })) ?? ""; },
     paintZone(index, cells, mode) { withMap((map) => safeRun("ゾーンを塗る", () => commitOrThrow(planPaintZone(map, index, cells, mode)))); },
 
     /** 国の税率・国庫（未設定なら政体から補った値） */
@@ -216,11 +289,21 @@ export function createEditActions({ store, renderer }) {
     /** patch: { salesTax?, pollTax?, treasury? }（Undo可能） */
     setFinance(stateId, patch) { withMap((map) => safeRun("財政の変更", () => commitOrThrow(planSetFinance(map, stateId, patch)))); },
     getTechLevel(stateId) { return withMap((map) => getTechLevel(map, stateId)) ?? null; },
-    setTechLevel(stateId, value) { withMap((map) => safeRun("技術水準の変更", () => commitOrThrow(planSetTechLevel(map, stateId, value)))); },
+    setTechLevel(stateId, value) {
+      withMap((map) => safeRun("技術水準の変更", () => {
+        const before = getTechLevel(map, stateId);
+        commitEv(map, planSetTechLevel(map, stateId, value), { type: "tech", title: `${nameOf(map.pack.states[stateId])}の技術水準が変わった`, detail: `Lv${before} → Lv${value}` });
+      }));
+    },
 
     DOCTRINES,
     getDoctrine(stateId) { return withMap((map) => getDoctrine(map, stateId)) ?? DEFAULT_DOCTRINE; },
-    setDoctrine(stateId, doctrineKey) { withMap((map) => safeRun("戦争ドクトリンの変更", () => commitOrThrow(planSetDoctrine(map, stateId, doctrineKey)))); },
+    setDoctrine(stateId, doctrineKey) {
+      withMap((map) => safeRun("戦争ドクトリンの変更", () => {
+        const label = (k) => DOCTRINES.find?.((d) => d.key === k)?.label ?? DOCTRINES[k]?.label ?? k;
+        commitEv(map, planSetDoctrine(map, stateId, doctrineKey), { type: "doctrine", title: `${nameOf(map.pack.states[stateId])}が戦争ドクトリンを改めた`, detail: `${label(getDoctrine(map, stateId))} → ${label(doctrineKey)}` });
+      }));
+    },
 
     /** ブラシの半径(ワールド座標)内にあるセルIDを返す */
     cellsWithin(x, y, radius) { return withMap((map) => cellIndexOf(map).findWithin(x, y, radius)) ?? []; },

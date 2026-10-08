@@ -5,6 +5,7 @@
 import { parseAzgaarBytes } from "./azgaar-reader.js";
 import { buildGeometry } from "../core/derive.js";
 import { attachExtension } from "./native-format.js";
+import { isNativeBytes, parseNativeJson } from "./native-map.js";
 
 export class LoadError extends Error {
   constructor(message, cause) { super(message); this.name = "LoadError"; this.cause = cause; }
@@ -30,9 +31,11 @@ export async function loadFromBytes(bytes, Delaunator) {
   if (isGzip(data)) data = await gunzip(data);
   if (data.length === 0) throw new LoadError("ファイルが空です");
 
+  // ALTERHISTORY 形式（.ahmap）は { で始まる JSON。Azgaar の .map は数字（バージョン）で始まる
+  const native = isNativeBytes(data);
   let parsed;
   try {
-    parsed = parseAzgaarBytes(data);
+    parsed = native ? parseNativeJson(new TextDecoder().decode(data)) : parseAzgaarBytes(data);
   } catch (e) {
     throw new LoadError(`地図として読み込めませんでした: ${e.message}`, e);
   }
@@ -47,8 +50,8 @@ export async function loadFromBytes(bytes, Delaunator) {
   if (ov.skipped > 0) parsed.warnings.push(`セル形状の手動編集（頂点の移動）のうち ${ov.skipped} 件は、再構築した形状と一致しないため適用できませんでした。境界線の形が Azgaar の表示と少し異なる場合があります`);
   if (ov.unsupported) parsed.warnings.push("未対応の形状編集（グリッドやセルの上書き）が含まれています。この部分は反映されません");
 
-  // ALTERHISTORY 形式は Azgaar 形式の上位互換。ヘッダーの目印と末尾の拡張行で見分ける
-  parsed.warnings.push(...attachExtension(parsed.map));
+  // 旧 ALTERHISTORY 形式（Azgaar の .map に拡張行を足したもの）は、末尾の拡張行から独自データを取り出す
+  if (!native) parsed.warnings.push(...attachExtension(parsed.map));
   return parsed;
 }
 

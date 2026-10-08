@@ -8,6 +8,7 @@ import { htmlToEditable, editableToHtml } from "../../core/edit/notes.js";
 import { simpleRelation, SIMPLE_LABEL } from "../../core/edit/diplomacy.js";
 import { DEFAULT_MARKER_TYPES, defaultMarkerName } from "../../core/edit/markers.js";
 import { byId } from "../dom.js";
+import { appendEntityProfile } from "../profile-fields.js";
 import { confirmDialog, promptDialog } from "../dialogs.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
@@ -77,6 +78,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(basicStatsSection(map, e));
     form.append(textField("国家名", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v), () => editActions.suggestName("state", { id: e.i })));
     form.append(...provisionalNote("state", e.i));
+    form.append(profileSection("state", e, map));
     form.append(techLevelSection(e.i));
     form.append(doctrineSection(e.i));
     form.append(noteField(map, "state", e.i));
@@ -350,8 +352,19 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(textField("名前", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v), () => editActions.suggestName(kind, { id: e.i })));
     form.append(...provisionalNote(kind, e.i));
     if (kind === "culture") form.append(nameStyleSection(e.i));
+    if (kind === "culture" || kind === "religion") form.append(profileSection(kind, e, map));
     form.append(noteField(map, kind, e.i));
     body.append(form);
+  }
+
+  /** 政体・種類・起源・最高神など、その対象の「性格」を決める欄 */
+  function profileSection(kind, e, map) {
+    const wrap = el("div", "editor-section");
+    wrap.append(el("h4", "", kind === "religion" ? "信仰" : kind === "culture" ? "文化の性格" : "政治"));
+    const d = el("div", "b-details");
+    appendEntityProfile(d, kind, e, { editActions, map, openEntity: (k, id) => open(k, id) });
+    wrap.append(d);
+    return wrap;
   }
 
   function techLevelSection(stateId) {

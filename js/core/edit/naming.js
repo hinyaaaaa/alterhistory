@@ -16,10 +16,13 @@ import { ensureExt } from "./ext.js";
 import {
   NAME_STYLES, STYLE_KEYS, DEFAULT_STYLE, isStyle,
   generatePlaceName, generateStateName, generateReligionName, generateCultureName, generateProvinceName,
+  generateDeityName, generateAllianceName, generateZoneName, generateEraName,
 } from "../names/katakana.js";
 
 export { NAME_STYLES, STYLE_KEYS };
 export const NAME_KINDS = ["burg", "state", "culture", "religion", "province"];
+/** 実体ではない「書き込み欄」の名前（同盟・ゾーン・最高神・時代）。仮フラグは付けず、既存の名前と被らないものだけを返す */
+export const LABEL_KINDS = ["alliance", "zone", "deity", "era"];
 
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 const LIST = { burg: "burgs", state: "states", culture: "cultures", religion: "religions", province: "provinces" };
@@ -144,6 +147,48 @@ export function suggestName(map, opts) {
     last = { ...last, name: `${last.name}${n}` };
   }
   return { ...last, style };
+}
+
+/** 同盟・ゾーン・時代・最高神の名前に使われている名前（被らないようにするため） */
+function takenLabels(map) {
+  const s = new Set();
+  for (const a of map.ext?.data?.alliances ?? []) if (a?.name) s.add(a.name);
+  for (const z of map.zones ?? []) if (z?.name) s.add(z.name);
+  for (const e of map.ext?.data?.eras ?? []) if (e?.name) s.add(e.name);
+  for (const r of map.pack.religions ?? []) if (isLive(r) && r.deity) s.add(r.deity);
+  return s;
+}
+
+/**
+ * 同盟・ゾーン・最高神・時代の名前を1つ作る（ランダム）。
+ * @param {object} map
+ * @param {{kind:"alliance"|"zone"|"deity"|"era", rnd:object, style?:string, cultureId?:number, stateId?:number, cell?:number, type?:string}} opts
+ *   zone は type（侵攻・疫病など）で語尾が変わる。style を省略すると、cell / stateId / cultureId から文化の系統を辿る
+ * @returns {string}
+ */
+export function suggestLabel(map, opts) {
+  const { kind, rnd } = opts;
+  if (!LABEL_KINDS.includes(kind)) throw new Error(`名前を生成できない種類です: ${kind}`);
+  if (!rnd) throw new Error("乱数(rnd)が必要です");
+  let style = opts.style;
+  if (!isStyle(style)) {
+    const cid = cultureIdFor(map, { kind: "state", ...opts });
+    style = cid ? styleOfCulture(map, cid) : rnd.pick(STYLE_KEYS);
+  }
+  const taken = takenLabels(map);
+  for (const k of NAME_KINDS) for (const e of map.pack[LIST[k]] ?? []) if (isLive(e) && e.name) taken.add(e.name);
+  const gen = () => {
+    switch (kind) {
+      case "alliance": return generateAllianceName(rnd, style);
+      case "zone": return generateZoneName(rnd, style, opts.type);
+      case "deity": return generateDeityName(rnd, style);
+      default: return generateEraName(rnd, style);
+    }
+  };
+  let name = gen();
+  for (let i = 0; i < 60 && taken.has(name); i++) name = gen();
+  if (taken.has(name)) { let n = 2; while (taken.has(`${name}${n}`)) n++; name = `${name}${n}`; }
+  return name;
 }
 
 /** 候補を複数（互いに異なるもの）作る */

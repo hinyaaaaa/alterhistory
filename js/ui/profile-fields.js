@@ -19,13 +19,22 @@ function selectField(label, options, value, onChange, hint) {
   if (hint) f.title = hint;
   return f;
 }
-function textField(label, value, onChange) {
+/** suggest を渡すと、入力欄の横に🎲（ランダムな名前を作って、すぐ反映する）が付く */
+function textField(label, value, onChange, suggest) {
   const f = el("label", "b-field");
   f.append(el("span", "b-mini", label));
   const inp = document.createElement("input");
   inp.value = value ?? "";
   inp.addEventListener("change", () => { if (inp.value.trim()) onChange(inp.value); });
-  f.append(inp);
+  if (!suggest) { f.append(inp); return f; }
+  const row = el("span", "name-row");
+  const dice = btn("suggest-mini", "🎲", "名前をランダムに決める（押すたびに変わります。元に戻せます）", (ev) => {
+    ev.preventDefault();
+    const v = suggest();
+    if (v) { inp.value = v; onChange(v); }
+  });
+  row.append(inp, dice);
+  f.append(row);
   return f;
 }
 
@@ -39,8 +48,8 @@ export function appendEntityProfile(d, kind, e, { editActions, map, openEntity }
     );
     return;
   }
+  if (kind === "religion") d.append(textField("最高神", e.deity, (v) => editActions.setEntityProfile("religion", e.i, { deity: v }), () => editActions.suggestLabel("deity", { cultureId: e.culture })));
   d.append(selectField(kind === "religion" ? "宗教の種類" : "文化の種類", kind === "religion" ? RELIGION_TYPES : CULTURE_TYPES, e.type, (v) => editActions.setEntityProfile(kind, e.i, { type: v })));
-  if (kind === "religion") d.append(textField("神・信仰の対象", e.deity, (v) => editActions.setEntityProfile("religion", e.i, { deity: v })));
 
   // 起源（系統）: 親を選ぶ。自分と子孫は選べない（選択肢から外す）
   const banned = new Set([e.i, ...editActions.descendantsOf(kind, e.i)]);

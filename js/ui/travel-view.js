@@ -212,7 +212,9 @@ export function createTravelView({ store, editActions, editMode, viewport, actio
       const input = document.createElement("input");
       input.value = z.name;
       input.addEventListener("change", () => { if (input.value.trim()) editActions.editZone(index, { name: input.value }); });
-      nameF.append(input);
+      const nameRow = el("span", "name-row");
+      nameRow.append(input, btn("suggest-mini", "🎲", "名前をランダムに決める（種類に合った名前になります）", (ev) => { ev.preventDefault(); const cell = z.cells?.[0]; editActions.editZone(index, { name: editActions.suggestLabel("zone", { type: z.type, cell }) }); }));
+      nameF.append(nameRow);
       d.append(nameF);
       const tf = el("label", "b-field");
       tf.append(el("span", "b-mini", "種類"));

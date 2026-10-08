@@ -14,7 +14,7 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
   const btnSave = byId("btn-save");
   const menu = byId("export-menu");
   btnSave.addEventListener("click", () => actions.saveNative());
-  const exporters = { chronicle: () => actions.exportChronicle(), png: () => actions.exportPng(), svg: () => actions.exportSvg(), azgaar: () => actions.saveAzgaar() };
+  const exporters = { chronicle: () => actions.exportChronicle(), png: () => actions.exportPng(), svg: () => actions.exportSvg() };
   menu.addEventListener("click", (e) => {
     const item = e.target instanceof HTMLElement ? e.target.closest("[data-export]") : null;
     if (!item) return;

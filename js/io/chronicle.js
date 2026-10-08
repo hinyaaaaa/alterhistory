@@ -22,6 +22,8 @@ import { listWars } from "../core/edit/wars.js";
 import { listAlliances } from "../core/edit/alliances.js";
 import { listDiplomacyLog, relationLabel, getRelation } from "../core/edit/diplomacy.js";
 import { listSovereigntyLog } from "../core/edit/sovereignty.js";
+import { listHistory } from "../core/edit/history-log.js";
+import { zoneLabel } from "../core/edit/zones.js";
 import { getNote, htmlToEditableText } from "./chronicle-text.js";
 import { UNIT_TYPES, DOCTRINE_BY_KEY, DEFAULT_DOCTRINE, forcePower, forceHeadcount } from "../core/sim/units.js";
 import { statePopulation } from "../core/query.js";
@@ -105,6 +107,9 @@ export function unrle(pairs) {
 /**
  * 名前引き。ID が壊れていても、必ず「読める形」を返す（AI が欠損で止まらないように）。
  */
+/** 日付つきの国名引きを、条約の整形用（namer.state が使われる所）に差し込む */
+function makeNamerAt(namer, stateAt, date) { return { ...namer, state: (id) => stateAt(id, date) }; }
+
 function makeNamer(map) {
   const P = map.pack;
   const nm = (list, id, fallbackLabel) => {
@@ -124,6 +129,72 @@ function makeNamer(map) {
   };
 }
 const ref = (namer, kind, id) => ({ id, name: namer[kind](id) });
+
+/**
+ * 「その日付の時点での国名」を返す引き。過去の出来事を現在の国名で書くと、改名や消滅が混ざって歴史が読めなくなる。
+ *   ・改名は歴史ログ（rename-state の ref）から辿る。
+ *   ・ログのない古い地図は、統合の記録に残る当時の名前（fromName / toName）から推定する。
+ *   ・「（消滅）」は、その日付より前にすでに滅んでいた国にだけ付ける。
+ */
+function makeStateNameAt(map, namer) {
+  const strip = (x) => String(x ?? "").replace(/[（(]消滅[）)]/g, "").trim();
+  const renames = new Map(), observed = new Map(), endedAt = new Map();
+  for (const h of listHistory(map)) {
+    if (h.ref?.kind !== "state") continue;
+    if (h.type === "rename-state") { const a = renames.get(h.ref.id) ?? []; a.push({ k: dateKey(h), from: strip(h.ref.from), to: strip(h.ref.to) }); renames.set(h.ref.id, a); }
+    if (h.type === "removed-state") endedAt.set(h.ref.id, dateKey(h));
+  }
+  for (const a of renames.values()) a.sort((x, y) => x.k - y.k);
+  for (const x of listSovereigntyLog(map)) {
+    if (x.type !== "merge") continue;
+    endedAt.set(x.fromState, dateKey(x));
+    for (const [id, name] of [[x.fromState, x.fromName], [x.toState, x.toName]]) if (name) { const a = observed.get(id) ?? []; a.push({ k: dateKey(x), name: strip(name) }); observed.set(id, a); }
+  }
+  for (const a of observed.values()) a.sort((x, y) => x.k - y.k);
+  // later: true のとき、その時点では存続していた国にも「（のち消滅）」を添える（戦争・同盟の一覧で、あとで滅んだ国だと分かるように）
+  return (id, date, { later = false } = {}) => {
+    if (id === 0) return "無所属";
+    const e = map.pack.states[id];
+    const k = dateKey(date);
+    if (!e || typeof e !== "object" || !Number.isFinite(k)) return namer.state(id);
+    let name = strip(e.fullName ?? e.name);
+    const rs = renames.get(id);
+    if (rs?.length) { name = rs[0].from; for (const r of rs) { if (r.k <= k) name = r.to; else break; } }
+    else {
+      const ob = observed.get(id)?.find((o) => o.k >= k); // その日以降で最初に分かっている名前（改名はそのあと）
+      if (ob) name = ob.name;
+    }
+    const end = endedAt.get(id);
+    if (end == null) return name;
+    return end < k ? `${name}（消滅）` : later ? `${name}（のち消滅）` : name;
+  };
+}
+
+const TREATY_KIND = { standard: "通常の講和", white: "白紙和平", annex: "全面降伏", vassal: "従属化" };
+const VASSAL_KIND = { puppet: "傀儡", protectorate: "保護国", vassal: "属国" };
+
+/** 講和条約を、省略なしで1つの文章にする（割譲・賠償・併合・従属・条件のすべて） */
+function describeTreaty(t, nm, namer) {
+  if (!t) return "条件の記録なし";
+  const out = [];
+  const modern = t.cessions || t.annex || Array.isArray(t.reparations) || t.vassalize;
+  const venue = t.venue?.place ? `・講和地 ${t.venue.place}` : "";
+  out.push(`${t.treatyName ?? "講和条約"}（${TREATY_KIND[t.kind ?? "standard"] ?? t.kind}${venue}）`);
+  if (modern) {
+    const cells = (c) => (Array.isArray(c.cells) ? c.cells.length : (c.cells ?? 0));
+    for (const c of t.cessions ?? []) out.push(`割譲 ${c.name || "区画"}（${cells(c)}セル）${nm(c.fromStateId)}→${nm(c.toStateId)}`);
+    for (const r of Array.isArray(t.reparations) ? t.reparations : []) out.push(`賠償 ${nm(r.fromStateId)}→${nm(r.toStateId)} ${r.amount}${r.currency ? ` ${r.currency}` : ""}${r.received != null ? `（受取 ${r.received}${r.receivedCurrency ? ` ${r.receivedCurrency}` : ""}）` : ""}`);
+    for (const x of t.annex ?? []) out.push(`併合 ${nm(x.fromStateId)}→${nm(x.toStateId)}`);
+    for (const x of t.vassalize ?? []) out.push(`従属 ${nm(x.fromStateId)} は ${nm(x.toStateId)} の${VASSAL_KIND[x.kind] ?? x.kind}`);
+  } else { // 旧形式
+    const prov = (t.provinceIds ?? []).map(namer.province);
+    if (prov.length || (t.regionCells ?? []).length) out.push(`割譲 ${[...prov, ...((t.regionCells ?? []).length ? [`未編入地域${t.regionCells.length}か所`] : [])].join("・")}→${nm(t.toStateId)}`);
+    if (typeof t.reparations === "number" && t.reparations) out.push(`賠償(産業力) ${t.reparations}`);
+  }
+  if (t.notes) out.push(`条件: ${String(t.notes).replace(/\s*\n\s*/g, " ")}`);
+  return out.join(" / ");
+}
+
 
 // ----------------------------------------------------------------------------------------------
 // 集計：セル配列から国家・文化・宗教・属州ごとの領域情報を出す
@@ -184,6 +255,7 @@ const summarizeAcc = (a, W, H) => a.n ? {
 export function buildChronicle(map, { includeCells = true, fileName = "", exportedAt = "" } = {}) {
   const P = map.pack, C = P.cells;
   const namer = makeNamer(map);
+  const stateAt = makeStateNameAt(map, namer); // 日付つきの国名（過去の出来事は当時の名前で書く）
   const T = analyzeTerritory(map);
   const W = T.W, H = T.H;
   const now = map.worldTime ?? { year: 1, month: 1 };
@@ -306,7 +378,17 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
 
   // ---- 河川・ゾーンなど地理のその他 ----
   const rivers = (P.rivers ?? []).filter((r) => r && r.i).map((r) => ({ id: r.i, name: r.name ?? null, type: r.type ?? null, length: r.length ?? null, discharge: r.discharge ?? null, sourceCell: r.source ?? null, mouthCell: r.mouth ?? null }));
-  const zones = (map.zones ?? []).filter(Boolean).map((z) => ({ name: z.name ?? null, type: z.type ?? null, cells: Array.isArray(z.cells) ? z.cells.length : null }));
+  const zones = (map.zones ?? []).filter(Boolean).map((z) => {
+    const acc = newAcc();
+    for (const c of Array.isArray(z.cells) ? z.cells : []) { const pt = map.geometry?.pack?.p?.[c]; if (pt) addPt(acc, pt[0], pt[1]); }
+    const states = new Map();
+    for (const c of Array.isArray(z.cells) ? z.cells : []) { const sid = C.state[c]; if (sid) states.set(sid, (states.get(sid) ?? 0) + 1); }
+    return {
+      name: z.name ?? null, type: z.type ?? null, typeLabel: zoneLabel(z), cells: Array.isArray(z.cells) ? z.cells.length : null, hidden: !!z.hidden,
+      position: acc.n ? describePosition(acc.sx / acc.n, acc.sy / acc.n, W, H) : null,
+      affectedStates: [...states.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ ...ref(namer, "state", id), cells: n })),
+    };
+  });
 
   // ---- 戦争 ----
   const stateNames = (ids) => ids.map((id) => ref(namer, "state", id));
@@ -316,22 +398,23 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     return {
       id: w.id, name: w.name, status: w.endedAt ? "終結" : "継続中",
       started: fmtDate(w.startedAt), startedEra: eraName(w.startedAt), ended: fmtDate(w.endedAt), endedEra: eraName(w.endedAt),
-      attackers: stateNames(w.attackers), defenders: stateNames(w.defenders),
+      attackers: w.attackers.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }) })), defenders: w.defenders.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }) })),
       battleCount: (w.battles ?? []).length, attackerWins: wins.attacker, defenderWins: wins.defender,
       type: w.type ?? null, warScore: w.result?.warScore ?? null,
       battles: (w.battles ?? []).map((b) => ({
         date: fmtDate(b.date ?? b), name: b.name ?? null, place: b.place ?? null, text: b.text ?? null,
-        attacker: namer.state(b.attackerState), defender: namer.state(b.defenderState),
-        winner: b.winner === "attacker" ? namer.state(b.attackerState) : namer.state(b.defenderState), winnerSide: b.winner,
+        attacker: stateAt(b.attackerState, b.date ?? w.startedAt), defender: stateAt(b.defenderState, b.date ?? w.startedAt),
+        winner: b.winner === "attacker" ? stateAt(b.attackerState, b.date ?? w.startedAt) : stateAt(b.defenderState, b.date ?? w.startedAt), winnerSide: b.winner,
         attackerPower: b.aPower ?? null, defenderPower: b.dPower ?? null,
       })),
-      peaceTerms: w.terms ? peaceTermsOfFactory(namer)(w.terms) : null,
+      peaceTerms: w.terms ? peaceTermsOfFactory(makeNamerAt(namer, stateAt, w.endedAt))(w.terms) : null,
+      peaceText: w.endedAt ? describeTreaty(w.terms, (id) => stateAt(id, w.endedAt), namer) : null,
     };
   });
 
   // ---- 同盟 ----
   const alliances = listAlliances(map).map((a) => ({
-    id: a.id, name: a.name, status: a.dissolvedAt ? "解消済み" : "存続中", members: stateNames(a.members),
+    id: a.id, name: a.name, status: a.dissolvedAt ? "解消済み" : "存続中", members: a.members.map((id) => ({ id, name: stateAt(id, a.formedAt, { later: true }) })),
     formed: fmtDate(a.formedAt), dissolved: fmtDate(a.dissolvedAt),
   }));
 
@@ -342,23 +425,27 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     _k: dateKey(date),
   });
   for (const e of eras) push({ year: e.fromYear, month: 1 }, "era", `時代「${e.name}」の始まり`, `${e.fromYear}年から。`);
+  // ユーザーの操作の記録（建国・宗教の誕生・改名・領土の変動・ゾーンの発生など）
+  for (const h of listHistory(map)) push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}セル` : null].filter(Boolean).join(" / ") || null);
   for (const a of listAlliances(map)) {
-    push(a.formedAt, "alliance-formed", `同盟「${a.name}」結成`, `加盟国: ${a.members.map(namer.state).join("、")}`, stateNames(a.members));
-    if (a.dissolvedAt) push(a.dissolvedAt, "alliance-dissolved", `同盟「${a.name}」解消`, `加盟国だった: ${a.members.map(namer.state).join("、")}`, stateNames(a.members));
+    push(a.formedAt, "alliance-formed", `同盟「${a.name}」結成`, `加盟国: ${a.members.map((id) => stateAt(id, a.formedAt)).join("、")}`, stateNames(a.members));
+    if (a.dissolvedAt) push(a.dissolvedAt, "alliance-dissolved", `同盟「${a.name}」解消`, `加盟国だった: ${a.members.map((id) => stateAt(id, a.dissolvedAt)).join("、")}`, stateNames(a.members));
   }
   for (const d of listDiplomacyLog(map)) {
-    push(d, "diplomacy", `外交: ${namer.state(d.a)} と ${namer.state(d.b)} の関係が変化`, `${d.from ? rel(d.from) : "未設定"} → ${rel(d.to)}（${namer.state(d.a)} から見た関係）`, [ref(namer, "state", d.a), ref(namer, "state", d.b)]);
+    push(d, "diplomacy", `外交: ${stateAt(d.a, d)} と ${stateAt(d.b, d)} の関係が変化`, `${d.from ? rel(d.from) : "未設定"} → ${rel(d.to)}（${stateAt(d.a, d)} から見た関係）`, [ref(namer, "state", d.a), ref(namer, "state", d.b)]);
   }
   for (const w of listWars(map)) {
-    push(w.startedAt, "war-declared", `戦争「${w.name}」開戦`, `攻撃側: ${w.attackers.map(namer.state).join("、")} / 防御側: ${w.defenders.map(namer.state).join("、")}`, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
-    for (const b of w.battles ?? []) push(b, "battle", `戦闘（${w.name}）`, `${namer.state(b.attackerState)}（攻）対 ${namer.state(b.defenderState)}（防）→ ${b.winner === "attacker" ? namer.state(b.attackerState) : namer.state(b.defenderState)} の勝利（戦力 ${b.aPower} 対 ${b.dPower}）`, [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)]);
-    if (w.endedAt) {
-      const t = w.terms, nm = (id) => namer.state(id);
-      const body = !t ? "条件の記録なし" : t.cessions || t.annex || Array.isArray(t.reparations)
-        ? `${t.treatyName ?? "講和条約"}（${{ standard: "通常の講和", white: "白紙和平", annex: "全面降伏" }[t.kind ?? "standard"]}）${(t.cessions ?? []).length ? ` / 割譲 ${(t.cessions ?? []).map((c) => `${c.name || "区画"}→${nm(c.toStateId)}`).join("、")}` : ""}${(t.reparations ?? []).length ? ` / 賠償 ${(t.reparations ?? []).map((r) => `${nm(r.fromStateId)}→${nm(r.toStateId)} ${r.amount}`).join("、")}` : ""}${(t.annex ?? []).length ? ` / 併合 ${(t.annex ?? []).map((x) => `${nm(x.fromStateId)}→${nm(x.toStateId)}`).join("、")}` : ""}`
-        : `割譲: ${(t.provinceIds ?? []).map(namer.province).join("、") || "属州なし"}${(t.regionCells ?? []).length ? ` ほか未編入地域${t.regionCells.length}か所` : ""} → ${namer.state(t.toStateId)}${t.reparations ? ` / 賠償(産業力) ${t.reparations}` : ""}`;
-      push(w.endedAt, "war-ended", `戦争「${w.name}」講和`, body, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+    const at = (id, date) => stateAt(id, date);
+    push(w.startedAt, "war-declared", `戦争「${w.name}」開戦`, `攻撃側: ${w.attackers.map((id) => at(id, w.startedAt)).join("、")} / 防御側: ${w.defenders.map((id) => at(id, w.startedAt)).join("、")}`, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+    for (const b of w.battles ?? []) {
+      const d = b.date ?? w.startedAt; // 戦闘の日付（無い古い記録だけ、開戦日で代用する）
+      const A = at(b.attackerState, d), D = at(b.defenderState, d), win = b.winner === "attacker" ? A : D;
+      const power = Number.isFinite(b.aPower) && Number.isFinite(b.dPower) ? ` / 戦力 ${b.aPower} 対 ${b.dPower}` : "";
+      push(d, "battle", `戦闘${b.name ? `「${b.name}」` : ""}（${w.name}）`,
+        `${A}（攻）対 ${D}（防）→ ${win} の勝利${b.place ? ` / 場所 ${b.place}` : ""}${power}${b.text ? ` / ${b.text}` : ""}`,
+        [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)]);
     }
+    if (w.endedAt) push(w.endedAt, "war-ended", `戦争「${w.name}」講和`, describeTreaty(w.terms, (id) => at(id, w.endedAt), namer), [...stateNames(w.attackers), ...stateNames(w.defenders)]);
   }
   for (const s of listSovereigntyLog(map)) {
     if (s.type === "merge") {
@@ -487,91 +574,121 @@ function buildGuide() {
 export function chronicleToMarkdown(ch) {
   const L = [];
   const w = ch.world;
+  const oneLine = (t) => String(t ?? "").replace(/\s*\n\s*/g, " ");
+  const g = ch.guideForAI;
+
   L.push(`# ${w.name}（ALTERHISTORY クロニクル）`, "");
+  L.push("> 架空世界のセーブ記録です。AI（Claude など）にそのまま渡すと、世界の歴史・地理・政治を理解して続きを書けるように、すべての ID を名前に直して書いています。", "");
+  L.push("## 0. 世界の概要", "");
   L.push(`- 現在: **${w.currentDate.text}**${w.currentDate.era ? `（${w.currentDate.era}）` : ""}`);
-  L.push(`- 地図: ${w.mapSize.width}×${w.mapSize.height} / 国家 ${w.totals.states}・都市 ${w.totals.burgs}・マーカー ${w.totals.markers}・文化 ${w.totals.cultures}・宗教 ${w.totals.religions}・属州 ${w.totals.provinces}`);
-  if (w.eras.length) L.push(`- 時代区分: ${w.eras.map((e) => `${e.name}（${e.fromYear}年〜${e.untilYear ? e.untilYear + "年" : ""}）`).join(" → ")}`);
-  L.push("", "> このファイルは AI に読ませて歴史を構築するための要約です。厳密なデータは同名の `.chronicle.json` にあります。", "");
+  L.push(`- 地図: ${w.mapSize.width}×${w.mapSize.height}（左上が原点、x は東へ・y は南へ増える） / 国家 ${w.totals.states}・都市 ${w.totals.burgs}・マーカー ${w.totals.markers}・文化 ${w.totals.cultures}・宗教 ${w.totals.religions}・属州 ${w.totals.provinces}`);
+  if (w.eras.length) L.push(`- 時代区分: ${w.eras.map((e) => `${e.name}（${e.fromYear}年〜${e.untilYear ? `${e.untilYear}年` : ""}）`).join(" → ")}`);
+  if (w.scale) L.push(`- 縮尺: 距離 ${w.scale.distance?.scale ?? "?"}${w.scale.distance?.unit ?? ""}/ピクセル（目安）`);
+  L.push("");
 
-  L.push("## 年表", "");
-  let lastEra = null;
-  for (const t of ch.timeline) {
-    if (t.era !== lastEra) { L.push("", `### ${t.era ?? "（時代区分なし）"}`, ""); lastEra = t.era; }
-    L.push(`- **${t.date ?? "日付不明"}** [${TYPE_JP[t.type] ?? t.type}] ${t.title}${t.detail ? ` — ${t.detail}` : ""}`);
-  }
+  L.push("### この文書の読み方", "");
+  for (const x of [...g.conventions.slice(0, 4), ...g.designNotes]) L.push(`- ${x}`);
+  L.push("- 「## 1. 年表」は、ユーザーが行った操作（建国・宗教の誕生・改名・領土の変動など）と、戦争・同盟・外交を、年月順に並べた記録です。歴史を掴むにはまずここを読んでください。", "- 2 章以降は「現在の姿」の詳細です。名前に（消滅）と付くものは、すでに滅びた実体です。", "");
+
+  // ---- 年表（年 → 月の順に、すべてのアクションを記録）----
+  L.push("## 1. 年表", "");
   if (!ch.timeline.length) L.push("（記録された出来事はありません）");
+  let lastEra, lastYear;
+  const dated = ch.timeline.filter((t) => t.year != null), undated = ch.timeline.filter((t) => t.year == null);
+  for (const t of dated) {
+    if (t.era !== lastEra || lastEra === undefined) { L.push("", `### ${t.era ?? "（時代区分なし）"}`); lastEra = t.era; lastYear = undefined; }
+    if (t.year !== lastYear) { L.push("", `#### ${t.year}年`, ""); lastYear = t.year; }
+    L.push(`- ${t.month}月　**[${typeJp(t.type)}]** ${t.title}${t.detail ? ` — ${oneLine(t.detail)}` : ""}`);
+  }
+  if (undated.length) {
+    L.push("", "### 日付不明", "");
+    for (const t of undated) L.push(`- **[${typeJp(t.type)}]** ${t.title}${t.detail ? ` — ${oneLine(t.detail)}` : ""}`);
+  }
 
-  L.push("", "## 国家", "");
+  // ---- 国家 ----
+  L.push("", "## 2. 国家（現存）", "");
   for (const s of ch.states) {
     L.push(`### ${s.name}（id ${s.id}）`, "");
-    L.push(`- 政体: ${s.governmentForm ?? "不明"}${s.stateType.id === "Generic" ? "" : ` / タイプ: ${s.stateType.meaning}`}`);
+    L.push(`- 政体: ${s.governmentForm ?? "不明"}${s.stateType.id === "Generic" ? "" : ` / タイプ: ${s.stateType.meaning}`}${s.dominantCulture ? ` / 主要文化: ${s.dominantCulture.name}` : ""}`);
     L.push(`- 首都: ${s.capital ? `${s.capital.name}(id${s.capital.id})` : "なし"} / 位置: ${s.territory.geography?.position ?? "不明"}${s.territory.isLandlocked ? "（内陸国）" : ""}`);
     L.push(`- 領土: ${s.territory.cells}セル（世界の陸地の${s.territory.landPercentOfWorld}%） / 隣接: ${s.territory.neighbors.map((n) => n.name).join("、") || "なし"}`);
     L.push(`- 主な地形: ${s.territory.terrain.slice(0, 3).map((t) => `${t.biome} ${t.percent}%`).join("、") || "不明"}`);
     L.push(`- 人口: ${s.population.total}（千人） / 技術水準 ${s.economy.techLevel}${s.economy.techLevelIsDefault ? "（未設定の既定値）" : ""} / 産業力 ${s.economy.industry}`);
     L.push(`- 軍事: ドクトリン「${s.military.doctrine.label}」 / 部隊 ${s.military.regimentCount} / 総兵員 ${s.military.totalHeadcount} / 戦力 ${s.military.totalPower}`);
     for (const r of s.military.regiments) L.push(`  - ${r.name}（${r.position}・${r.locatedIn.name}領内）: ${Object.entries(r.units).map(([k, v]) => `${k}${v}`).join("、") || "兵力なし"}`);
+    if (s.provinces.length) L.push(`- 属州: ${s.provinces.map((p) => p.name).join("、")}`);
     if (s.diplomacy.length) L.push(`- 外交: ${s.diplomacy.map((d) => `${d.with.name}=${d.relation}`).join("、")}`);
     if (s.alliances.length) L.push(`- 同盟: ${s.alliances.map((a) => `${a.name}${a.active ? "" : "（解消済み）"}`).join("、")}`);
-    if (s.note) L.push(`- 【ノート】${s.note.replace(/\n/g, " ")}`);
+    if (s.note) L.push(`- 【ノート】${oneLine(s.note)}`);
     L.push("");
   }
 
   if (ch.extinctStates.length) {
-    L.push("## 消滅した国家", "");
-    for (const e of ch.extinctStates) L.push(`- **${e.name}**（id ${e.id}・${e.governmentForm ?? "政体不明"}）: ${e.extinctAt ?? "時期不明"}に${e.absorbedBy ? e.absorbedBy.name + "へ併合" : "消滅"}。旧首都: ${e.formerCapital ?? "不明"}${e.note ? ` — ${e.note.replace(/\n/g, " ")}` : ""}`);
+    L.push("## 3. 消滅した国家", "");
+    for (const e of ch.extinctStates) L.push(`- **${e.name}**（id ${e.id}・${e.governmentForm ?? "政体不明"}）: ${e.extinctAt ?? "時期不明"}に${e.absorbedBy ? `${e.absorbedBy.name}へ併合` : "消滅"}。旧首都: ${e.formerCapital ?? "不明"}${e.note ? ` — ${oneLine(e.note)}` : ""}`);
     L.push("");
   }
 
-  L.push("## 戦争", "");
+  // ---- 戦争・同盟 ----
+  L.push("## 4. 戦争", "");
   for (const wr of ch.wars) {
     L.push(`### ${wr.name}（${wr.status}）`, `- 期間: ${wr.started} 〜 ${wr.ended ?? "継続中"} / 攻撃側: ${wr.attackers.map((x) => x.name).join("、")} / 防御側: ${wr.defenders.map((x) => x.name).join("、")}`);
     L.push(`- 戦闘 ${wr.battleCount} 回（攻撃側 ${wr.attackerWins} 勝・防御側 ${wr.defenderWins} 勝）`);
-    for (const b of wr.battles) L.push(`  - ${b.date}: ${b.name ? `${b.name}　` : ""}${b.attacker} 対 ${b.defender} → ${b.winner} 勝利${b.attackerPower != null ? `（戦力 ${b.attackerPower} 対 ${b.defenderPower}）` : ""}`);
-    const pt = wr.peaceTerms;
-    if (pt) {
-      if (pt.cessions?.length || pt.reparations?.length || pt.annex?.length || pt.name) {
-        L.push(`- 講和条約: ${pt.name ?? "—"}（${{ standard: "通常の講和", white: "白紙和平", vassal: "従属化", annex: "全面降伏" }[pt.kind] ?? pt.kind}${pt.venue ? `・講和地 ${pt.venue}` : ""}）`);
-        for (const c of pt.cessions) L.push(`  - 割譲: ${c.name || "区画"}（${c.cells}セル）${c.from} → ${c.to}`);
-        for (const r of pt.reparations) L.push(`  - 賠償: ${r.from} が ${r.amount} ${r.currency ?? ""} → ${r.to} が ${r.received ?? "?"} ${r.receivedCurrency ?? ""}`);
-        for (const x of pt.annex) L.push(`  - 併合: ${x.from} → ${x.to}`);
-        for (const x of pt.vassalize ?? []) L.push(`  - 従属: ${x.from} は ${x.to} の${x.kind}`);
-        if (pt.notes) L.push(`  - 条件: ${pt.notes}`);
-      } else L.push(`- 講和: 割譲 ${pt.cededProvinces.join("、") || "なし"} → ${pt.cededTo}${pt.legacyReparations ? ` / 賠償 ${pt.legacyReparations}` : ""}`);
-    }
+    for (const b of wr.battles) L.push(`  - ${b.date ?? "日付不明"}: ${b.name ? `${b.name}　` : ""}${b.attacker} 対 ${b.defender} → ${b.winner} 勝利${b.place ? `（場所 ${b.place}）` : ""}${b.attackerPower != null ? `（戦力 ${b.attackerPower} 対 ${b.defenderPower}）` : ""}${b.text ? ` — ${oneLine(b.text)}` : ""}`);
+    if (wr.peaceText) L.push(`- 講和: ${wr.peaceText}`);
     L.push("");
   }
   if (!ch.wars.length) L.push("（戦争の記録はありません）", "");
 
-  L.push("## 同盟", "");
+  L.push("## 5. 同盟", "");
   for (const a of ch.alliances) L.push(`- **${a.name}**（${a.status}）: ${a.members.map((m) => m.name).join("、")} / 結成 ${a.formed ?? "不明"}${a.dissolved ? ` / 解消 ${a.dissolved}` : ""}`);
   if (!ch.alliances.length) L.push("（同盟はありません）");
 
-  L.push("", "## 文化・宗教・属州", "");
-  for (const [label, list] of [["文化", ch.cultures], ["宗教", ch.religions], ["属州", ch.provinces]]) {
-    L.push(`### ${label}`);
-    for (const e of list) L.push(`- ${e.name}（${e.cells}セル・${e.geography?.position ?? "位置不明"}）${e.note ? ` — ${e.note.replace(/\n/g, " ")}` : ""}`);
-    L.push("");
-  }
+  // ---- 文化・宗教・属州 ----
+  L.push("", "## 6. 文化・宗教・属州", "");
+  L.push("### 文化");
+  for (const e of ch.cultures) L.push(`- **${e.name}**（${e.cells}セル・${e.geography?.position ?? "位置不明"}）${e.originCultures?.length ? ` / 起源: ${e.originCultures.join("・")}` : ""}${e.note ? ` — ${oneLine(e.note)}` : ""}`);
+  L.push("", "### 宗教");
+  for (const e of ch.religions) L.push(`- **${e.name}**（${e.cells}セル・${e.geography?.position ?? "位置不明"}）: 最高神「${e.deity ?? "未設定"}」${e.type ? ` / 種類 ${e.type}` : ""}${e.form ? ` / 形態 ${e.form}` : ""}${e.originatedInCulture ? ` / 興った文化: ${e.originatedInCulture}` : ""}${e.originReligions?.length ? ` / 起源の宗教: ${e.originReligions.join("・")}` : ""}${e.note ? ` — ${oneLine(e.note)}` : ""}`);
+  L.push("", "### 属州");
+  for (const e of ch.provinces) L.push(`- **${e.name}**（${e.state?.name ?? "所属不明"}・${e.cells}セル・${e.geography?.position ?? "位置不明"}）${e.note ? ` — ${oneLine(e.note)}` : ""}`);
+  L.push("");
 
-  L.push("## 都市（全て）", "");
-  for (const b of ch.burgs) L.push(`- ${b.name}(id${b.id})${b.isCapital ? "【首都】" : ""}${b.isPort ? "【港】" : ""}: ${b.state.name}・${b.province.name}・人口${b.population}人・${b.position}${b.note ? ` — ${b.note.replace(/\n/g, " ")}` : ""}`);
+  L.push("## 7. ゾーン（侵攻・反乱・疫病・災害など）", "");
+  for (const z of ch.zones) L.push(`- **${z.name ?? "名称なし"}**［${z.typeLabel}］${z.cells ?? 0}セル${z.position ? `・${z.position}` : ""}${z.affectedStates?.length ? ` / 影響下の国: ${z.affectedStates.map((x) => x.name).join("、")}` : ""}${z.hidden ? "（非表示）" : ""}`);
+  if (!ch.zones.length) L.push("（ゾーンはありません）");
 
-  L.push("", "## マーカー（全て）", "");
-  for (const m of ch.markers) L.push(`- ${m.icon ?? ""} ${m.name ?? m.type}（${m.position}・${m.inState.name}領内）${m.note ? ` — ${m.note.replace(/\n/g, " ")}` : ""}`);
+  L.push("", "## 8. 都市（全て）", "");
+  for (const b of ch.burgs) L.push(`- ${b.name}(id${b.id})${b.isCapital ? "【首都】" : ""}${b.isPort ? "【港】" : ""}: ${b.state.name}・${b.province.name}・人口${b.population}人・${b.position}${b.note ? ` — ${oneLine(b.note)}` : ""}`);
+
+  L.push("", "## 9. マーカー（全て）", "");
+  for (const m of ch.markers) L.push(`- ${m.icon ?? ""} ${m.name ?? m.type}（${m.position}・${m.inState.name}領内）${m.note ? ` — ${oneLine(m.note)}` : ""}`);
   if (!ch.markers.length) L.push("（マーカーはありません）");
 
-  L.push("", "## ランキング", "");
+  L.push("", "## 10. ランキング", "");
   for (const [label, key] of [["領土", "byTerritory"], ["人口", "byPopulation"], ["軍事力", "byMilitaryPower"], ["技術水準", "byTechLevel"]]) L.push(`- ${label}: ${ch.ranking[key].map((r) => `${r.rank}位 ${r.name}(${r.value})`).join(" / ")}`);
 
-  L.push("", "## データの整合性", "", ch.consistencyChecks.ok ? "- 異常は検出されませんでした。" : ch.consistencyChecks.issues.map((i) => `- ⚠ ${i}`).join("\n"));
+  L.push("", "## 11. データの整合性", "", ch.consistencyChecks.ok ? "- 異常は検出されませんでした。" : ch.consistencyChecks.issues.map((i) => `- ⚠ ${i}`).join("\n"));
+
+  L.push("", "## 12. AI への依頼の例", "");
+  for (const x of g.suggestedTasks) L.push(`- ${x}`);
+  for (const x of g.doNot) L.push(`- 注意: ${x}`);
   return L.join("\n") + "\n";
 }
 
 const TYPE_JP = {
   era: "時代", "alliance-formed": "同盟結成", "alliance-dissolved": "同盟解消", diplomacy: "外交", "war-declared": "開戦", battle: "戦闘",
   "war-ended": "講和", independence: "独立", "state-merged": "統合", sovereignty: "主権",
+  "created-state": "建国", "created-culture": "文化の誕生", "created-religion": "宗教の誕生", "created-province": "属州の設置",
+  "created-burg": "都市の建設", "created-zone": "ゾーン発生", "edit-zone": "ゾーン変化", "removed-zone": "ゾーン収束",
+  capital: "遷都", territory: "領土", tech: "技術", doctrine: "軍事", "rename-alliance": "同盟改称",
 };
+/** 出来事の種類の日本語。未知の種類も、接頭辞（rename- / removed- / profile- / origin-）から読める名前にする */
+function typeJp(t) {
+  if (TYPE_JP[t]) return TYPE_JP[t];
+  const head = String(t ?? "").split("-")[0];
+  return { rename: "改名", removed: "消滅", profile: "設定変更", origin: "系統の変更" }[head] ?? String(t ?? "出来事");
+}
 
 /** クロニクルを JSON 文字列にする（人間も読めるよう整形。cells だけは巨大になるので1行にまとめる） */
 export function serializeChronicle(ch, { pretty = true } = {}) {

@@ -376,32 +376,10 @@ table.diplomacy-matrix select.rel-picker { font-size: 11px; width: 100%; }
 /* ==========================================================================
    歴史ビルダー（右スライドパネル）。「楽に作る」が主役、細部は畳んでおく。
    ========================================================================== */
-.builder-fab {
-  position: absolute; top: 12px; right: 118px; z-index: 17;
-  display: flex; align-items: center; gap: 6px;
-  padding: 7px 12px; font-size: 12px;
-  background: linear-gradient(180deg, var(--brass-bright), var(--brass));
-  color: var(--accent-text); border: 1px solid var(--brass-dim);
-  box-shadow: var(--shadow-panel);
-  transition: right 0.15s ease;
-}
-.builder-fab:hover { filter: brightness(1.06); }
 /* 地図編集パネルが開いているときは、そのパネル(280px)ぶん左へずらす */
-.edit-mode-fab[aria-expanded="true"] ~ .builder-fab { right: 404px; }
 
 /* 地図を隠さないよう、ビルダーは地図の右に「押し出す」形で並べる（地図編集パネルのような重ね表示にしない）。
    狭い画面だけは地図を優先して重ね表示にする。 */
-.builder-panel {
-  grid-column: 3; grid-row: 1; position: relative;
-  width: 320px; min-width: 0;
-  background: var(--panel); border-left: 1px solid var(--line);
-  box-shadow: -6px 0 16px rgba(0, 0, 0, 0.4);
-  overflow-y: auto; display: flex; flex-direction: column; z-index: 2;
-}
-main:has(#builder-panel:not([hidden])) { grid-template-columns: 0fr 1fr 320px; }
-main:has(#builder-panel:not([hidden])):has(.legend.has-map),
-main:has(#builder-panel:not([hidden])):has(#editor-panel:not([hidden])) { grid-template-columns: 300px 1fr 320px; }
-.builder-body { flex: 1; padding: 10px 12px 18px; display: flex; flex-direction: column; gap: 12px; }
 .b-lead { margin: 0; color: var(--text-dim); font-size: 11.5px; line-height: 1.6; }
 .b-hint { margin: 4px 0 0; color: var(--muted); font-size: 10.5px; line-height: 1.5; }
 .b-mini { color: var(--muted); font-size: 10.5px; }
@@ -483,8 +461,6 @@ main:has(#builder-panel:not([hidden])):has(#editor-panel:not([hidden])) { grid-t
 .b-tray-text { flex: 1; font-size: 11.5px; color: var(--text); }
 
 @media (max-width: 720px) {
-  .builder-panel { position: absolute; top: 0; right: 0; bottom: 0; z-index: 16; width: min(88vw, 320px); }
-  main:has(#builder-panel:not([hidden])) { grid-template-columns: 1fr; }
 }
 
 /* 書き出しメニューの「画像に入れるもの」 */
@@ -812,3 +788,22 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
   }
   .topbar .layers-pop { width: auto; }
 }
+
+/* ==== ウィンドウの大きさ変更（四辺・四隅のつまみ） ==== */
+.float-win, #sidebar, .edit-panel { position: absolute; }
+.float-win.resized { display: flex; flex-direction: column; }
+.float-win[hidden] { display: none !important; }
+.rs-handle { position: absolute; z-index: 5; background: transparent; }
+.rs-n, .rs-s { left: 10px; right: 10px; height: 8px; cursor: ns-resize; }
+.rs-e, .rs-w { top: 10px; bottom: 10px; width: 8px; cursor: ew-resize; }
+.rs-n { top: -4px; } .rs-s { bottom: -4px; } .rs-e { right: -4px; } .rs-w { left: -4px; }
+.rs-ne, .rs-nw, .rs-se, .rs-sw { width: 16px; height: 16px; }
+.rs-ne { top: -5px; right: -5px; cursor: nesw-resize; } .rs-nw { top: -5px; left: -5px; cursor: nwse-resize; }
+.rs-se { bottom: -5px; right: -5px; cursor: nwse-resize; } .rs-sw { bottom: -5px; left: -5px; cursor: nesw-resize; }
+.rs-se::after { content: ""; position: absolute; right: 6px; bottom: 6px; width: 8px; height: 8px; border-right: 2px solid var(--brass-dim); border-bottom: 2px solid var(--brass-dim); opacity: 0.8; }
+#sidebar.resized, .edit-panel.resized { display: flex; flex-direction: column; overflow: hidden; }
+#sidebar.resized #editor-panel, .edit-panel.resized .edit-panel-body { overflow: auto; min-height: 0; flex: 1; }
+@media (max-width: 720px) { .rs-handle { display: none; } }
+
+.ent-addbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+.ent-addbar select { width: auto; }

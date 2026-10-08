@@ -2234,7 +2234,7 @@
       );
     }
     const warnings = [];
-    const json2 = (line, fallback, label) => tryJson(line, fallback, label, warnings);
+    const json = (line, fallback, label) => tryJson(line, fallback, label, warnings);
     const map = createEmptyMap();
     map.meta.source = "azgaar";
     map.meta.lineCount = lines.length;
@@ -2253,19 +2253,19 @@
       }));
       map.meta.biomesLegacy = true;
     } else {
-      map.biomesData = json2(biomeLine, [], "\u30D0\u30A4\u30AA\u30FC\u30E0");
+      map.biomesData = json(biomeLine, [], "\u30D0\u30A4\u30AA\u30FC\u30E0");
     }
-    map.notes = json2(lines[LINE.NOTES], [], "\u30CE\u30FC\u30C8");
+    map.notes = json(lines[LINE.NOTES], [], "\u30CE\u30FC\u30C8");
     map.rawLines[LINE.SVG] = lines[LINE.SVG] ?? "";
-    parseGrid(lines, map, json2);
+    parseGrid(lines, map, json);
     const p = map.pack;
-    p.features = json2(lines[LINE.FEATURES], [], "\u5730\u5F62\u30D5\u30A3\u30FC\u30C1\u30E3");
-    p.cultures = json2(lines[LINE.CULTURES], [], "\u6587\u5316");
-    p.states = json2(lines[LINE.STATES], [], "\u56FD\u5BB6");
-    p.burgs = json2(lines[LINE.BURGS], [], "\u90FD\u5E02");
-    p.religions = json2(lines[LINE.RELIGIONS], [], "\u5B97\u6559");
-    p.provinces = json2(lines[LINE.PROVINCES], [], "\u5C5E\u5DDE");
-    p.rivers = json2(lines[LINE.RIVERS], [], "\u6CB3\u5DDD");
+    p.features = json(lines[LINE.FEATURES], [], "\u5730\u5F62\u30D5\u30A3\u30FC\u30C1\u30E3");
+    p.cultures = json(lines[LINE.CULTURES], [], "\u6587\u5316");
+    p.states = json(lines[LINE.STATES], [], "\u56FD\u5BB6");
+    p.burgs = json(lines[LINE.BURGS], [], "\u90FD\u5E02");
+    p.religions = json(lines[LINE.RELIGIONS], [], "\u5B97\u6559");
+    p.provinces = json(lines[LINE.PROVINCES], [], "\u5C5E\u5DDE");
+    p.rivers = json(lines[LINE.RIVERS], [], "\u6CB3\u5DDD");
     const c = p.cells;
     c.biome = parseNumbers(lines[LINE.CELL_BIOME]);
     c.burg = parseNumbers(lines[LINE.CELL_BURG]);
@@ -2277,17 +2277,17 @@
     c.religion = lines[LINE.CELL_RELIGION] ? parseNumbers(lines[LINE.CELL_RELIGION]) : new Array(n).fill(0);
     c.province = lines[LINE.CELL_PROVINCE] ? parseNumbers(lines[LINE.CELL_PROVINCE]) : new Array(n).fill(0);
     map.namesbase = parseNamesbase(lines[LINE.NAMESBASE]);
-    map.markers = json2(lines[LINE.MARKERS], [], "\u30DE\u30FC\u30AB\u30FC");
-    map.cellRoutes = json2(lines[LINE.CELL_ROUTES], {}, "\u30BB\u30EB\u5225\u30EB\u30FC\u30C8");
-    map.routes = json2(lines[LINE.ROUTES], [], "\u30EB\u30FC\u30C8");
-    map.zones = json2(lines[LINE.ZONES], [], "\u30BE\u30FC\u30F3");
-    map.ice = json2(lines[LINE.ICE], [], "\u6C37");
-    map.goods = json2(lines[LINE.GOODS], [], "\u4EA4\u6613\u54C1");
-    map.markets = json2(lines[LINE.MARKETS], [], "\u5E02\u5834");
-    map.deals = json2(lines[LINE.DEALS], [], "\u4EA4\u6613");
-    map.measurers = json2(lines[LINE.MEASURERS], [], "\u8A08\u6E2C\u7DDA");
-    map.relief = json2(lines[LINE.RELIEF], [], "\u5730\u5F62\u30A2\u30A4\u30B3\u30F3");
-    map.graphOverride = json2(lines[LINE.GRAPH_OVERRIDE], {}, "\u5F62\u72B6\u306E\u624B\u52D5\u7DE8\u96C6");
+    map.markers = json(lines[LINE.MARKERS], [], "\u30DE\u30FC\u30AB\u30FC");
+    map.cellRoutes = json(lines[LINE.CELL_ROUTES], {}, "\u30BB\u30EB\u5225\u30EB\u30FC\u30C8");
+    map.routes = json(lines[LINE.ROUTES], [], "\u30EB\u30FC\u30C8");
+    map.zones = json(lines[LINE.ZONES], [], "\u30BE\u30FC\u30F3");
+    map.ice = json(lines[LINE.ICE], [], "\u6C37");
+    map.goods = json(lines[LINE.GOODS], [], "\u4EA4\u6613\u54C1");
+    map.markets = json(lines[LINE.MARKETS], [], "\u5E02\u5834");
+    map.deals = json(lines[LINE.DEALS], [], "\u4EA4\u6613");
+    map.measurers = json(lines[LINE.MEASURERS], [], "\u8A08\u6E2C\u7DDA");
+    map.relief = json(lines[LINE.RELIEF], [], "\u5730\u5F62\u30A2\u30A4\u30B3\u30F3");
+    map.graphOverride = json(lines[LINE.GRAPH_OVERRIDE], {}, "\u5F62\u72B6\u306E\u624B\u52D5\u7DE8\u96C6");
     for (const i of PASSTHROUGH_LINES) if (i < lines.length) map.passthrough[i] = lines[i];
     for (let i = KNOWN_LINE_COUNT; i < lines.length; i++) map.passthrough[i] = lines[i];
     return { map, warnings };
@@ -2367,8 +2367,8 @@
       burgs: opt.burgs
     };
   }
-  function parseGrid(lines, map, json2) {
-    const g = json2(lines[LINE.GRID], {}, "\u30B0\u30EA\u30C3\u30C9");
+  function parseGrid(lines, map, json) {
+    const g = json(lines[LINE.GRID], {}, "\u30B0\u30EA\u30C3\u30C9");
     map.grid.spacing = g.spacing ?? 0;
     map.grid.cellsX = g.cellsX ?? 0;
     map.grid.cellsY = g.cellsY ?? 0;
@@ -2577,7 +2577,6 @@
   }
 
   // js/io/native-format.js
-  var NATIVE_MARKER = "ALTERHISTORY/1";
   var APP_NAME = "ALTERHISTORY";
   var EXT_FORMAT = 1;
   var MIN_EXT_INDEX = 53;
@@ -2624,6 +2623,133 @@
     return warnings;
   }
 
+  // js/io/native-map.js
+  var NATIVE_FORMAT = "alterhistory-map";
+  var NATIVE_VERSION = 1;
+  var NATIVE_EXT = "ahmap";
+  var CELL_KEYS = ["biome", "burg", "culture", "pop", "river", "state", "religion", "province"];
+  var GRID_KEYS = ["h", "prec", "f", "t", "temp"];
+  function rleFlat(arr) {
+    const out = [];
+    for (let i = 0; i < arr.length; ) {
+      let j = i + 1;
+      while (j < arr.length && arr[j] === arr[i]) j++;
+      out.push(arr[i], j - i);
+      i = j;
+    }
+    return out;
+  }
+  function unrleFlat(flat) {
+    const out = [];
+    for (let i = 0; i + 1 < flat.length; i += 2) for (let k = 0; k < flat[i + 1]; k++) out.push(flat[i]);
+    return out;
+  }
+  function serializeNativeJson(map, { savedAt = "" } = {}) {
+    const g = map.grid, p = map.pack;
+    const { source: _s, extraHeader: _e, lineCount: _l, biomesLegacy: _b, ...meta } = map.meta;
+    const doc = {
+      format: NATIVE_FORMAT,
+      formatVersion: NATIVE_VERSION,
+      app: APP_NAME,
+      savedAt,
+      world: { ...meta, time: { ...map.worldTime } },
+      settings: map.settings.options ?? null,
+      coordinates: map.coordinates ?? null,
+      biomes: map.biomesData,
+      notes: map.notes ?? [],
+      grid: {
+        spacing: g.spacing,
+        cellsX: g.cellsX,
+        cellsY: g.cellsY,
+        boundary: g.boundary,
+        points: g.points,
+        features: g.features,
+        ...g.cellsDesired !== void 0 ? { cellsDesired: g.cellsDesired } : {},
+        ...Object.fromEntries(GRID_KEYS.map((k) => [k, rleFlat(g[k] ?? [])]))
+      },
+      cells: Object.fromEntries(CELL_KEYS.map((k) => [k, rleFlat(p.cells[k] ?? [])])),
+      pack: {
+        features: p.features,
+        states: p.states,
+        cultures: p.cultures,
+        religions: p.religions,
+        provinces: p.provinces,
+        burgs: p.burgs,
+        rivers: p.rivers
+      },
+      markers: map.markers,
+      zones: map.zones,
+      routes: map.routes,
+      cellRoutes: map.cellRoutes,
+      relief: map.relief,
+      ice: map.ice,
+      measurers: map.measurers,
+      goods: map.goods,
+      markets: map.markets,
+      deals: map.deals,
+      namesbase: map.namesbase,
+      graphOverride: map.graphOverride ?? {},
+      data: map.ext?.data ?? {}
+    };
+    return JSON.stringify(doc);
+  }
+  async function gzip(text2) {
+    if (typeof CompressionStream === "undefined") return new TextEncoder().encode(text2);
+    const stream = new Blob([text2]).stream().pipeThrough(new CompressionStream("gzip"));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  async function serializeNative(map, opts) {
+    return gzip(serializeNativeJson(map, opts));
+  }
+  function isNativeBytes(bytes) {
+    for (let i = 0; i < Math.min(bytes.length, 16); i++) {
+      const c = bytes[i];
+      if (c === 32 || c === 10 || c === 13 || c === 9 || c === 239 || c === 187 || c === 191) continue;
+      return c === 123;
+    }
+    return false;
+  }
+  function parseNativeJson(text2) {
+    let doc;
+    try {
+      doc = JSON.parse(text2);
+    } catch (e) {
+      throw new Error(`ALTERHISTORY \u30D5\u30A1\u30A4\u30EB\u306E JSON \u304C\u58CA\u308C\u3066\u3044\u307E\u3059: ${e.message}`);
+    }
+    if (doc?.format !== NATIVE_FORMAT) throw new Error("ALTERHISTORY \u5F62\u5F0F\u3067\u306F\u3042\u308A\u307E\u305B\u3093");
+    const warnings = [];
+    if (typeof doc.formatVersion === "number" && doc.formatVersion > NATIVE_VERSION) {
+      warnings.push(`\u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u65B0\u3057\u3044\u7248\u306E ALTERHISTORY (\u5F62\u5F0F${doc.formatVersion}) \u3067\u4FDD\u5B58\u3055\u308C\u3066\u3044\u307E\u3059\u3002\u4E00\u90E8\u306E\u60C5\u5831\u304C\u5931\u308F\u308C\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059`);
+    }
+    const map = createEmptyMap();
+    const { time, ...meta } = doc.world ?? {};
+    Object.assign(map.meta, meta, { source: "alterhistory", extraHeader: [], lineCount: 53 });
+    map.settings = { format: "json", raw: "", options: doc.settings ?? null };
+    map.coordinates = doc.coordinates ?? null;
+    map.biomesData = doc.biomes ?? [];
+    map.notes = doc.notes ?? [];
+    const g = doc.grid ?? {};
+    Object.assign(map.grid, {
+      spacing: g.spacing ?? 0,
+      cellsX: g.cellsX ?? 0,
+      cellsY: g.cellsY ?? 0,
+      boundary: g.boundary ?? [],
+      points: g.points ?? [],
+      features: g.features ?? [],
+      cellsDesired: g.cellsDesired
+    });
+    for (const k of GRID_KEYS) map.grid[k] = unrleFlat(g[k] ?? []);
+    const pk = doc.pack ?? {};
+    for (const k of ["features", "states", "cultures", "religions", "provinces", "burgs", "rivers"]) map.pack[k] = pk[k] ?? [];
+    for (const k of CELL_KEYS) map.pack.cells[k] = unrleFlat(doc.cells?.[k] ?? []);
+    for (const k of ["markers", "zones", "routes", "relief", "ice", "measurers", "goods", "markets", "deals", "namesbase"]) map[k] = doc[k] ?? [];
+    map.cellRoutes = doc.cellRoutes ?? {};
+    map.graphOverride = doc.graphOverride ?? {};
+    map.ext = { ...createExtension(), format: EXT_FORMAT, savedAt: doc.savedAt ?? "", data: doc.data ?? {} };
+    if (Number.isInteger(time?.year) && Number.isInteger(time?.month)) map.worldTime = { year: time.year, month: time.month };
+    return { map, warnings };
+  }
+
   // js/io/loader.js
   var LoadError = class extends Error {
     constructor(message, cause) {
@@ -2644,9 +2770,10 @@
     let data = bytes;
     if (isGzip(data)) data = await gunzip(data);
     if (data.length === 0) throw new LoadError("\u30D5\u30A1\u30A4\u30EB\u304C\u7A7A\u3067\u3059");
+    const native = isNativeBytes(data);
     let parsed;
     try {
-      parsed = parseAzgaarBytes(data);
+      parsed = native ? parseNativeJson(new TextDecoder().decode(data)) : parseAzgaarBytes(data);
     } catch (e) {
       throw new LoadError(`\u5730\u56F3\u3068\u3057\u3066\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3067\u3057\u305F: ${e.message}`, e);
     }
@@ -2658,7 +2785,7 @@
     const ov = parsed.map.geometry.overrideReport;
     if (ov.skipped > 0) parsed.warnings.push(`\u30BB\u30EB\u5F62\u72B6\u306E\u624B\u52D5\u7DE8\u96C6\uFF08\u9802\u70B9\u306E\u79FB\u52D5\uFF09\u306E\u3046\u3061 ${ov.skipped} \u4EF6\u306F\u3001\u518D\u69CB\u7BC9\u3057\u305F\u5F62\u72B6\u3068\u4E00\u81F4\u3057\u306A\u3044\u305F\u3081\u9069\u7528\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u5883\u754C\u7DDA\u306E\u5F62\u304C Azgaar \u306E\u8868\u793A\u3068\u5C11\u3057\u7570\u306A\u308B\u5834\u5408\u304C\u3042\u308A\u307E\u3059`);
     if (ov.unsupported) parsed.warnings.push("\u672A\u5BFE\u5FDC\u306E\u5F62\u72B6\u7DE8\u96C6\uFF08\u30B0\u30EA\u30C3\u30C9\u3084\u30BB\u30EB\u306E\u4E0A\u66F8\u304D\uFF09\u304C\u542B\u307E\u308C\u3066\u3044\u307E\u3059\u3002\u3053\u306E\u90E8\u5206\u306F\u53CD\u6620\u3055\u308C\u307E\u305B\u3093");
-    parsed.warnings.push(...attachExtension(parsed.map));
+    if (!native) parsed.warnings.push(...attachExtension(parsed.map));
     return parsed;
   }
   async function loadFromFile(file, Delaunator) {
@@ -2806,9 +2933,43 @@
     const stem = make(rnd, style, { shortTail: true, max: 6 });
     return stem + rnd.weighted(PROVINCE_SUFFIX.map((p) => p[0]), PROVINCE_SUFFIX.map((p) => p[1]));
   }
+  var DEITY_EPITHETS = ["\u5929\u7A7A\u795E", "\u592A\u967D\u795E", "\u6708\u795E", "\u5927\u5730\u6BCD\u795E", "\u6D77\u795E", "\u6226\u795E", "\u5275\u9020\u795E", "\u904B\u547D\u795E", "\u8C4A\u7A63\u795E", "\u51A5\u5E9C\u795E", "\u98A8\u795E", "\u708E\u795E", "\u77E5\u6075\u306E\u795E", "\u5149\u306E\u795E", "\u661F\u795E"];
+  function generateDeityName(rnd, style) {
+    const name = generateShortName(rnd, style);
+    return rnd.chance(0.4) ? rnd.pick(DEITY_EPITHETS) + name : name;
+  }
+  var ALLIANCE_SUFFIX = [["\u540C\u76DF", 10], ["\u9023\u5408", 8], ["\u5354\u5546", 4], ["\u76DF\u7D04", 4], ["\u6761\u7D04\u6A5F\u69CB", 3], ["\u5171\u6804\u570F", 2], ["\u5354\u7D04", 3], ["\u9023\u76DF", 5]];
+  function generateAllianceName(rnd, style) {
+    const stem = make(rnd, style, { shortTail: true, max: 6 });
+    return stem + rnd.weighted(ALLIANCE_SUFFIX.map((x) => x[0]), ALLIANCE_SUFFIX.map((x) => x[1]));
+  }
+  var ZONE_PATTERNS = {
+    Invasion: ["{s}\u4FB5\u653B", "{s}\u9060\u5F81", "{s}\u5927\u4FB5\u653B"],
+    Rebels: ["{s}\u306E\u4E71", "{s}\u53CD\u4E71", "{s}\u8702\u8D77"],
+    Proselytism: ["{s}\u5E03\u6559", "{s}\u306E\u6559\u3048", "{s}\u6539\u5B97\u904B\u52D5"],
+    Crusade: ["{s}\u8056\u6226", "{s}\u5341\u5B57\u8ECD", "{s}\u306E\u8056\u6226"],
+    Disease: ["{s}\u75AB\u75C5", "{s}\u71B1", "{s}\u306E\u75AB"],
+    Disaster: ["{s}\u5927\u707D\u5BB3", "{s}\u306E\u707D\u5384", "{s}\u306E\u60E8\u798D"],
+    Eruption: ["{s}\u5C71\u5674\u706B", "{s}\u306E\u5927\u5674\u706B"],
+    Avalanche: ["{s}\u96EA\u5D29", "{s}\u5927\u96EA\u5D29"],
+    Fault: ["{s}\u65AD\u5C64\u5E2F", "{s}\u5927\u5730\u6E9D"],
+    Flood: ["{s}\u5927\u6D2A\u6C34", "{s}\u306E\u6C3E\u6FEB"],
+    Tsunami: ["{s}\u5927\u6D25\u6CE2", "{s}\u6C96\u6D25\u6CE2"],
+    Fire: ["{s}\u5927\u706B", "{s}\u306E\u696D\u706B"],
+    Custom: ["{s}\u5730\u57DF", "{s}\u306E\u5730", "{s}\u570F"]
+  };
+  function generateZoneName(rnd, style, type = "Custom") {
+    const stem = make(rnd, style, { shortTail: true, max: 6 });
+    return rnd.pick(ZONE_PATTERNS[type] ?? ZONE_PATTERNS.Custom).replace("{s}", stem);
+  }
+  var ERA_PATTERNS = ["{s}\u6642\u4EE3", "{s}\u306E\u4E16", "{s}\u671D", "{s}\u671F", "{s}\u7D00"];
+  function generateEraName(rnd, style) {
+    return rnd.pick(ERA_PATTERNS).replace("{s}", make(rnd, style, { shortTail: true, max: 6 }));
+  }
 
   // js/core/edit/naming.js
   var NAME_KINDS = ["burg", "state", "culture", "religion", "province"];
+  var LABEL_KINDS = ["alliance", "zone", "deity", "era"];
   var isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   var LIST = { burg: "burgs", state: "states", culture: "cultures", religion: "religions", province: "provinces" };
   function takenNames(map) {
@@ -2913,6 +3074,46 @@
       last = { ...last, name: `${last.name}${n}` };
     }
     return { ...last, style };
+  }
+  function takenLabels(map) {
+    const s = /* @__PURE__ */ new Set();
+    for (const a of map.ext?.data?.alliances ?? []) if (a?.name) s.add(a.name);
+    for (const z of map.zones ?? []) if (z?.name) s.add(z.name);
+    for (const e of map.ext?.data?.eras ?? []) if (e?.name) s.add(e.name);
+    for (const r of map.pack.religions ?? []) if (isLive(r) && r.deity) s.add(r.deity);
+    return s;
+  }
+  function suggestLabel(map, opts) {
+    const { kind, rnd } = opts;
+    if (!LABEL_KINDS.includes(kind)) throw new Error(`\u540D\u524D\u3092\u751F\u6210\u3067\u304D\u306A\u3044\u7A2E\u985E\u3067\u3059: ${kind}`);
+    if (!rnd) throw new Error("\u4E71\u6570(rnd)\u304C\u5FC5\u8981\u3067\u3059");
+    let style = opts.style;
+    if (!isStyle(style)) {
+      const cid = cultureIdFor(map, { kind: "state", ...opts });
+      style = cid ? styleOfCulture(map, cid) : rnd.pick(STYLE_KEYS);
+    }
+    const taken = takenLabels(map);
+    for (const k of NAME_KINDS) for (const e of map.pack[LIST[k]] ?? []) if (isLive(e) && e.name) taken.add(e.name);
+    const gen = () => {
+      switch (kind) {
+        case "alliance":
+          return generateAllianceName(rnd, style);
+        case "zone":
+          return generateZoneName(rnd, style, opts.type);
+        case "deity":
+          return generateDeityName(rnd, style);
+        default:
+          return generateEraName(rnd, style);
+      }
+    };
+    let name = gen();
+    for (let i = 0; i < 60 && taken.has(name); i++) name = gen();
+    if (taken.has(name)) {
+      let n = 2;
+      while (taken.has(`${name}${n}`)) n++;
+      name = `${name}${n}`;
+    }
+    return name;
   }
   var provKey = (kind, id) => `${kind}:${id}`;
   function isProvisional(map, kind, id) {
@@ -3252,99 +3453,6 @@
     return changed;
   }
 
-  // js/io/azgaar-writer.js
-  var CRLF2 = "\r\n";
-  var json = (v) => JSON.stringify(v);
-  var nums = (arr) => Array.from(arr).join(",");
-  function serializeAzgaar(map, { native = false, exportedAt } = {}) {
-    const m = map.meta;
-    const limit = m.lineCount;
-    const isLegacy2 = map.settings.format === "legacy";
-    const g = map.grid, p = map.pack, c = p.cells;
-    const pt = (i) => map.passthrough[i] ?? "";
-    const header = [m.version, m.description, exportedAt ?? m.exportedAt, m.seed, m.width, m.height, m.mapId];
-    let extra = m.extraHeader.slice();
-    if (native) extra[0] = NATIVE_MARKER;
-    else if ((extra[0] ?? "").startsWith("ALTERHISTORY")) extra = extra.slice(1);
-    header.push(...extra);
-    const gridGeneral = {
-      spacing: g.spacing,
-      cellsX: g.cellsX,
-      cellsY: g.cellsY,
-      boundary: g.boundary,
-      points: g.points,
-      features: g.features
-    };
-    if (g.cellsDesired !== void 0) gridGeneral.cellsDesired = g.cellsDesired;
-    const L = /* @__PURE__ */ new Map();
-    L.set(LINE.PARAMS, header.join("|"));
-    L.set(LINE.SETTINGS, isLegacy2 ? map.settings.raw : json(map.settings.options));
-    L.set(LINE.COORDINATES, isLegacy2 ? json(map.coordinates) : "");
-    L.set(LINE.BIOMES, map.meta.biomesLegacy ? [map.biomesData.map((b) => b.color), map.biomesData.map((b) => b.habitability ?? 0), map.biomesData.map((b) => b.name)].map((col) => col.join(",")).join("|") : json(map.biomesData));
-    L.set(LINE.NOTES, isLegacy2 ? json(map.notes) : "");
-    L.set(LINE.SVG, map.rawLines[LINE.SVG] ?? "");
-    L.set(LINE.GRID, json(gridGeneral));
-    L.set(LINE.GRID_H, nums(g.h));
-    L.set(LINE.GRID_PREC, nums(g.prec));
-    L.set(LINE.GRID_F, nums(g.f));
-    L.set(LINE.GRID_T, nums(g.t));
-    L.set(LINE.GRID_TEMP, nums(g.temp));
-    L.set(LINE.FEATURES, json(p.features));
-    L.set(LINE.CULTURES, json(p.cultures));
-    L.set(LINE.STATES, json(p.states));
-    L.set(LINE.BURGS, json(p.burgs));
-    L.set(LINE.CELL_BIOME, nums(c.biome));
-    L.set(LINE.CELL_BURG, nums(c.burg));
-    L.set(LINE.CELL_CULTURE, nums(c.culture));
-    L.set(LINE.CELL_POP, nums(c.pop));
-    L.set(LINE.CELL_RIVER, nums(c.river));
-    L.set(LINE.CELL_STATE, nums(c.state));
-    L.set(LINE.CELL_RELIGION, nums(c.religion));
-    L.set(LINE.CELL_PROVINCE, nums(c.province));
-    L.set(LINE.RELIGIONS, json(p.religions));
-    L.set(LINE.PROVINCES, json(p.provinces));
-    L.set(LINE.NAMESBASE, serializeNamesbase(map.namesbase));
-    L.set(LINE.RIVERS, json(p.rivers));
-    L.set(LINE.MARKERS, json(map.markers));
-    L.set(LINE.CELL_ROUTES, json(map.cellRoutes));
-    L.set(LINE.ROUTES, json(map.routes));
-    L.set(LINE.ZONES, json(map.zones));
-    L.set(LINE.ICE, json(map.ice));
-    L.set(LINE.GOODS, json(map.goods));
-    L.set(LINE.MARKETS, json(map.markets));
-    L.set(LINE.DEALS, json(map.deals));
-    L.set(LINE.MEASURERS, json(map.measurers));
-    L.set(LINE.RELIEF, json(map.relief));
-    const ext = native ? createExtension() : null;
-    const known = LINE.JOURNEYS + 1;
-    const nonEmptyMax = Math.max(-1, ...Object.entries(map.passthrough).filter(([, v]) => v !== "").map(([k]) => Number(k)));
-    const bodyCount = Math.max(limit, nonEmptyMax + 1);
-    const lines = new Array(bodyCount);
-    for (let i = 0; i < bodyCount; i++) {
-      if (i >= limit && !map.passthrough[i] && !L.has(i)) {
-        lines[i] = "";
-        continue;
-      }
-      if (i >= limit && i < known) {
-        lines[i] = "";
-        continue;
-      }
-      lines[i] = L.has(i) ? L.get(i) : pt(i);
-    }
-    if (ext) {
-      ext.savedAt = exportedAt ?? m.exportedAt;
-      ext.data = map.ext?.data ?? {};
-      ext.lineCount = bodyCount;
-      const extIndex = Math.max(MIN_EXT_INDEX, bodyCount);
-      while (lines.length < extIndex) lines.push("");
-      lines.push(json(ext));
-    }
-    return lines.join(CRLF2);
-  }
-  function serializeNamesbase(list) {
-    return list.map((b) => `${b.name}|${b.min}|${b.max}|${b.d}|${b.m}|${b.words.join(",")}`).join("/");
-  }
-
   // js/render/svg-context.js
   var num = (v) => (Math.round(v * 100) / 100).toString();
   var esc = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -3586,7 +3694,7 @@
     return s.slice(0, 80);
   }
   function exportFileName(map, openedFileName, ext, suffix = "") {
-    const fromFile = String(openedFileName ?? "").replace(/\.gz$/i, "").replace(/\.(map|png|svg)$/i, "");
+    const fromFile = String(openedFileName ?? "").replace(/\.gz$/i, "").replace(/\.(map|ahmap|png|svg)$/i, "");
     const base = sanitizeFileName(map?.meta?.name) || sanitizeFileName(fromFile) || "map";
     return `${base}${suffix}.${ext}`;
   }
@@ -6323,6 +6431,44 @@
     return makeCommand(`\u300C${fromState.fullName ?? fromState.name}\u300D\u3092\u300C${toState.fullName ?? toState.name}\u300D\u306B\u7D71\u5408`, ["politics"], parts);
   }
 
+  // js/core/edit/history-log.js
+  var listHistory = (map) => map?.ext?.data?.historyLog ?? [];
+  var nowOf = (map) => map?.worldTime ?? { year: 1, month: 1 };
+  function eventPart(entry) {
+    let before = null;
+    const write = (m, list) => {
+      const ext = ensureExt(m);
+      if (list.length) ext.data.historyLog = list;
+      else delete ext.data.historyLog;
+    };
+    return {
+      apply(m) {
+        before = listHistory(m);
+        const last = before[before.length - 1];
+        let next;
+        if (entry.mergeKey && last && last.mergeKey === entry.mergeKey && last.year === entry.year && last.month === entry.month) {
+          next = [...before.slice(0, -1), { ...last, count: (last.count ?? 0) + (entry.count ?? 0) }];
+        } else {
+          next = [...before, entry];
+        }
+        write(m, next);
+      },
+      revert(m) {
+        write(m, before ?? []);
+      }
+    };
+  }
+  function withEvent(map, command, event) {
+    if (!command || !event) return command;
+    const { year, month } = nowOf(map);
+    const entry = { year, month, type: event.type, title: event.title };
+    if (event.detail) entry.detail = event.detail;
+    if (event.count != null) entry.count = event.count;
+    if (event.mergeKey) entry.mergeKey = event.mergeKey;
+    if (event.ref) entry.ref = event.ref;
+    return makeCommand(command.label, command.layers, [...command.parts, eventPart(entry)]);
+  }
+
   // js/io/chronicle-text.js
   var getNote2 = getNote;
   var ENTITIES2 = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&#39;": "'", "&nbsp;": " " };
@@ -6421,6 +6567,9 @@
     }
     return out;
   }
+  function makeNamerAt(namer, stateAt, date) {
+    return { ...namer, state: (id) => stateAt(id, date) };
+  }
   function makeNamer(map) {
     const P = map.pack;
     const nm = (list, id, fallbackLabel) => {
@@ -6439,6 +6588,73 @@
     };
   }
   var ref = (namer, kind, id) => ({ id, name: namer[kind](id) });
+  function makeStateNameAt(map, namer) {
+    const strip = (x) => String(x ?? "").replace(/[（(]消滅[）)]/g, "").trim();
+    const renames = /* @__PURE__ */ new Map(), observed = /* @__PURE__ */ new Map(), endedAt = /* @__PURE__ */ new Map();
+    for (const h of listHistory(map)) {
+      if (h.ref?.kind !== "state") continue;
+      if (h.type === "rename-state") {
+        const a = renames.get(h.ref.id) ?? [];
+        a.push({ k: dateKey(h), from: strip(h.ref.from), to: strip(h.ref.to) });
+        renames.set(h.ref.id, a);
+      }
+      if (h.type === "removed-state") endedAt.set(h.ref.id, dateKey(h));
+    }
+    for (const a of renames.values()) a.sort((x, y) => x.k - y.k);
+    for (const x of listSovereigntyLog(map)) {
+      if (x.type !== "merge") continue;
+      endedAt.set(x.fromState, dateKey(x));
+      for (const [id, name] of [[x.fromState, x.fromName], [x.toState, x.toName]]) if (name) {
+        const a = observed.get(id) ?? [];
+        a.push({ k: dateKey(x), name: strip(name) });
+        observed.set(id, a);
+      }
+    }
+    for (const a of observed.values()) a.sort((x, y) => x.k - y.k);
+    return (id, date, { later = false } = {}) => {
+      if (id === 0) return "\u7121\u6240\u5C5E";
+      const e = map.pack.states[id];
+      const k = dateKey(date);
+      if (!e || typeof e !== "object" || !Number.isFinite(k)) return namer.state(id);
+      let name = strip(e.fullName ?? e.name);
+      const rs = renames.get(id);
+      if (rs?.length) {
+        name = rs[0].from;
+        for (const r of rs) {
+          if (r.k <= k) name = r.to;
+          else break;
+        }
+      } else {
+        const ob = observed.get(id)?.find((o) => o.k >= k);
+        if (ob) name = ob.name;
+      }
+      const end = endedAt.get(id);
+      if (end == null) return name;
+      return end < k ? `${name}\uFF08\u6D88\u6EC5\uFF09` : later ? `${name}\uFF08\u306E\u3061\u6D88\u6EC5\uFF09` : name;
+    };
+  }
+  var TREATY_KIND = { standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", annex: "\u5168\u9762\u964D\u4F0F", vassal: "\u5F93\u5C5E\u5316" };
+  var VASSAL_KIND = { puppet: "\u5080\u5121", protectorate: "\u4FDD\u8B77\u56FD", vassal: "\u5C5E\u56FD" };
+  function describeTreaty(t, nm, namer) {
+    if (!t) return "\u6761\u4EF6\u306E\u8A18\u9332\u306A\u3057";
+    const out = [];
+    const modern = t.cessions || t.annex || Array.isArray(t.reparations) || t.vassalize;
+    const venue = t.venue?.place ? `\u30FB\u8B1B\u548C\u5730 ${t.venue.place}` : "";
+    out.push(`${t.treatyName ?? "\u8B1B\u548C\u6761\u7D04"}\uFF08${TREATY_KIND[t.kind ?? "standard"] ?? t.kind}${venue}\uFF09`);
+    if (modern) {
+      const cells = (c) => Array.isArray(c.cells) ? c.cells.length : c.cells ?? 0;
+      for (const c of t.cessions ?? []) out.push(`\u5272\u8B72 ${c.name || "\u533A\u753B"}\uFF08${cells(c)}\u30BB\u30EB\uFF09${nm(c.fromStateId)}\u2192${nm(c.toStateId)}`);
+      for (const r of Array.isArray(t.reparations) ? t.reparations : []) out.push(`\u8CE0\u511F ${nm(r.fromStateId)}\u2192${nm(r.toStateId)} ${r.amount}${r.currency ? ` ${r.currency}` : ""}${r.received != null ? `\uFF08\u53D7\u53D6 ${r.received}${r.receivedCurrency ? ` ${r.receivedCurrency}` : ""}\uFF09` : ""}`);
+      for (const x of t.annex ?? []) out.push(`\u4F75\u5408 ${nm(x.fromStateId)}\u2192${nm(x.toStateId)}`);
+      for (const x of t.vassalize ?? []) out.push(`\u5F93\u5C5E ${nm(x.fromStateId)} \u306F ${nm(x.toStateId)} \u306E${VASSAL_KIND[x.kind] ?? x.kind}`);
+    } else {
+      const prov = (t.provinceIds ?? []).map(namer.province);
+      if (prov.length || (t.regionCells ?? []).length) out.push(`\u5272\u8B72 ${[...prov, ...(t.regionCells ?? []).length ? [`\u672A\u7DE8\u5165\u5730\u57DF${t.regionCells.length}\u304B\u6240`] : []].join("\u30FB")}\u2192${nm(t.toStateId)}`);
+      if (typeof t.reparations === "number" && t.reparations) out.push(`\u8CE0\u511F(\u7523\u696D\u529B) ${t.reparations}`);
+    }
+    if (t.notes) out.push(`\u6761\u4EF6: ${String(t.notes).replace(/\s*\n\s*/g, " ")}`);
+    return out.join(" / ");
+  }
   function analyzeTerritory(map) {
     const c = map.pack.cells;
     const { p, cells: gc } = map.geometry.pack;
@@ -6498,6 +6714,7 @@
   function buildChronicle(map, { includeCells = true, fileName = "", exportedAt = "" } = {}) {
     const P = map.pack, C = P.cells;
     const namer = makeNamer(map);
+    const stateAt = makeStateNameAt(map, namer);
     const T = analyzeTerritory(map);
     const W = T.W, H = T.H;
     const now = map.worldTime ?? { year: 1, month: 1 };
@@ -6644,7 +6861,27 @@
       note: noteOf("marker", m.i)
     }));
     const rivers = (P.rivers ?? []).filter((r) => r && r.i).map((r) => ({ id: r.i, name: r.name ?? null, type: r.type ?? null, length: r.length ?? null, discharge: r.discharge ?? null, sourceCell: r.source ?? null, mouthCell: r.mouth ?? null }));
-    const zones = (map.zones ?? []).filter(Boolean).map((z) => ({ name: z.name ?? null, type: z.type ?? null, cells: Array.isArray(z.cells) ? z.cells.length : null }));
+    const zones = (map.zones ?? []).filter(Boolean).map((z) => {
+      const acc = newAcc();
+      for (const c of Array.isArray(z.cells) ? z.cells : []) {
+        const pt = map.geometry?.pack?.p?.[c];
+        if (pt) addPt(acc, pt[0], pt[1]);
+      }
+      const states2 = /* @__PURE__ */ new Map();
+      for (const c of Array.isArray(z.cells) ? z.cells : []) {
+        const sid = C.state[c];
+        if (sid) states2.set(sid, (states2.get(sid) ?? 0) + 1);
+      }
+      return {
+        name: z.name ?? null,
+        type: z.type ?? null,
+        typeLabel: zoneLabel(z),
+        cells: Array.isArray(z.cells) ? z.cells.length : null,
+        hidden: !!z.hidden,
+        position: acc.n ? describePosition(acc.sx / acc.n, acc.sy / acc.n, W, H) : null,
+        affectedStates: [...states2.entries()].sort((a, b) => b[1] - a[1]).map(([id, n]) => ({ ...ref(namer, "state", id), cells: n }))
+      };
+    });
     const stateNames = (ids2) => ids2.map((id) => ref(namer, "state", id));
     const wars = listWars(map).map((w) => {
       const wins = { attacker: 0, defender: 0 };
@@ -6657,8 +6894,8 @@
         startedEra: eraName(w.startedAt),
         ended: fmtDate(w.endedAt),
         endedEra: eraName(w.endedAt),
-        attackers: stateNames(w.attackers),
-        defenders: stateNames(w.defenders),
+        attackers: w.attackers.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }) })),
+        defenders: w.defenders.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }) })),
         battleCount: (w.battles ?? []).length,
         attackerWins: wins.attacker,
         defenderWins: wins.defender,
@@ -6669,21 +6906,22 @@
           name: b.name ?? null,
           place: b.place ?? null,
           text: b.text ?? null,
-          attacker: namer.state(b.attackerState),
-          defender: namer.state(b.defenderState),
-          winner: b.winner === "attacker" ? namer.state(b.attackerState) : namer.state(b.defenderState),
+          attacker: stateAt(b.attackerState, b.date ?? w.startedAt),
+          defender: stateAt(b.defenderState, b.date ?? w.startedAt),
+          winner: b.winner === "attacker" ? stateAt(b.attackerState, b.date ?? w.startedAt) : stateAt(b.defenderState, b.date ?? w.startedAt),
           winnerSide: b.winner,
           attackerPower: b.aPower ?? null,
           defenderPower: b.dPower ?? null
         })),
-        peaceTerms: w.terms ? peaceTermsOfFactory(namer)(w.terms) : null
+        peaceTerms: w.terms ? peaceTermsOfFactory(makeNamerAt(namer, stateAt, w.endedAt))(w.terms) : null,
+        peaceText: w.endedAt ? describeTreaty(w.terms, (id) => stateAt(id, w.endedAt), namer) : null
       };
     });
     const alliances = listAlliances(map).map((a) => ({
       id: a.id,
       name: a.name,
       status: a.dissolvedAt ? "\u89E3\u6D88\u6E08\u307F" : "\u5B58\u7D9A\u4E2D",
-      members: stateNames(a.members),
+      members: a.members.map((id) => ({ id, name: stateAt(id, a.formedAt, { later: true }) })),
       formed: fmtDate(a.formedAt),
       dissolved: fmtDate(a.dissolvedAt)
     }));
@@ -6700,21 +6938,30 @@
       _k: dateKey(date)
     });
     for (const e of eras) push({ year: e.fromYear, month: 1 }, "era", `\u6642\u4EE3\u300C${e.name}\u300D\u306E\u59CB\u307E\u308A`, `${e.fromYear}\u5E74\u304B\u3089\u3002`);
+    for (const h of listHistory(map)) push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}\u30BB\u30EB` : null].filter(Boolean).join(" / ") || null);
     for (const a of listAlliances(map)) {
-      push(a.formedAt, "alliance-formed", `\u540C\u76DF\u300C${a.name}\u300D\u7D50\u6210`, `\u52A0\u76DF\u56FD: ${a.members.map(namer.state).join("\u3001")}`, stateNames(a.members));
-      if (a.dissolvedAt) push(a.dissolvedAt, "alliance-dissolved", `\u540C\u76DF\u300C${a.name}\u300D\u89E3\u6D88`, `\u52A0\u76DF\u56FD\u3060\u3063\u305F: ${a.members.map(namer.state).join("\u3001")}`, stateNames(a.members));
+      push(a.formedAt, "alliance-formed", `\u540C\u76DF\u300C${a.name}\u300D\u7D50\u6210`, `\u52A0\u76DF\u56FD: ${a.members.map((id) => stateAt(id, a.formedAt)).join("\u3001")}`, stateNames(a.members));
+      if (a.dissolvedAt) push(a.dissolvedAt, "alliance-dissolved", `\u540C\u76DF\u300C${a.name}\u300D\u89E3\u6D88`, `\u52A0\u76DF\u56FD\u3060\u3063\u305F: ${a.members.map((id) => stateAt(id, a.dissolvedAt)).join("\u3001")}`, stateNames(a.members));
     }
     for (const d of listDiplomacyLog(map)) {
-      push(d, "diplomacy", `\u5916\u4EA4: ${namer.state(d.a)} \u3068 ${namer.state(d.b)} \u306E\u95A2\u4FC2\u304C\u5909\u5316`, `${d.from ? rel(d.from) : "\u672A\u8A2D\u5B9A"} \u2192 ${rel(d.to)}\uFF08${namer.state(d.a)} \u304B\u3089\u898B\u305F\u95A2\u4FC2\uFF09`, [ref(namer, "state", d.a), ref(namer, "state", d.b)]);
+      push(d, "diplomacy", `\u5916\u4EA4: ${stateAt(d.a, d)} \u3068 ${stateAt(d.b, d)} \u306E\u95A2\u4FC2\u304C\u5909\u5316`, `${d.from ? rel(d.from) : "\u672A\u8A2D\u5B9A"} \u2192 ${rel(d.to)}\uFF08${stateAt(d.a, d)} \u304B\u3089\u898B\u305F\u95A2\u4FC2\uFF09`, [ref(namer, "state", d.a), ref(namer, "state", d.b)]);
     }
     for (const w of listWars(map)) {
-      push(w.startedAt, "war-declared", `\u6226\u4E89\u300C${w.name}\u300D\u958B\u6226`, `\u653B\u6483\u5074: ${w.attackers.map(namer.state).join("\u3001")} / \u9632\u5FA1\u5074: ${w.defenders.map(namer.state).join("\u3001")}`, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
-      for (const b of w.battles ?? []) push(b, "battle", `\u6226\u95D8\uFF08${w.name}\uFF09`, `${namer.state(b.attackerState)}\uFF08\u653B\uFF09\u5BFE ${namer.state(b.defenderState)}\uFF08\u9632\uFF09\u2192 ${b.winner === "attacker" ? namer.state(b.attackerState) : namer.state(b.defenderState)} \u306E\u52DD\u5229\uFF08\u6226\u529B ${b.aPower} \u5BFE ${b.dPower}\uFF09`, [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)]);
-      if (w.endedAt) {
-        const t = w.terms, nm = (id) => namer.state(id);
-        const body = !t ? "\u6761\u4EF6\u306E\u8A18\u9332\u306A\u3057" : t.cessions || t.annex || Array.isArray(t.reparations) ? `${t.treatyName ?? "\u8B1B\u548C\u6761\u7D04"}\uFF08${{ standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", annex: "\u5168\u9762\u964D\u4F0F" }[t.kind ?? "standard"]}\uFF09${(t.cessions ?? []).length ? ` / \u5272\u8B72 ${(t.cessions ?? []).map((c) => `${c.name || "\u533A\u753B"}\u2192${nm(c.toStateId)}`).join("\u3001")}` : ""}${(t.reparations ?? []).length ? ` / \u8CE0\u511F ${(t.reparations ?? []).map((r) => `${nm(r.fromStateId)}\u2192${nm(r.toStateId)} ${r.amount}`).join("\u3001")}` : ""}${(t.annex ?? []).length ? ` / \u4F75\u5408 ${(t.annex ?? []).map((x) => `${nm(x.fromStateId)}\u2192${nm(x.toStateId)}`).join("\u3001")}` : ""}` : `\u5272\u8B72: ${(t.provinceIds ?? []).map(namer.province).join("\u3001") || "\u5C5E\u5DDE\u306A\u3057"}${(t.regionCells ?? []).length ? ` \u307B\u304B\u672A\u7DE8\u5165\u5730\u57DF${t.regionCells.length}\u304B\u6240` : ""} \u2192 ${namer.state(t.toStateId)}${t.reparations ? ` / \u8CE0\u511F(\u7523\u696D\u529B) ${t.reparations}` : ""}`;
-        push(w.endedAt, "war-ended", `\u6226\u4E89\u300C${w.name}\u300D\u8B1B\u548C`, body, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+      const at = (id, date) => stateAt(id, date);
+      push(w.startedAt, "war-declared", `\u6226\u4E89\u300C${w.name}\u300D\u958B\u6226`, `\u653B\u6483\u5074: ${w.attackers.map((id) => at(id, w.startedAt)).join("\u3001")} / \u9632\u5FA1\u5074: ${w.defenders.map((id) => at(id, w.startedAt)).join("\u3001")}`, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+      for (const b of w.battles ?? []) {
+        const d = b.date ?? w.startedAt;
+        const A = at(b.attackerState, d), D = at(b.defenderState, d), win = b.winner === "attacker" ? A : D;
+        const power = Number.isFinite(b.aPower) && Number.isFinite(b.dPower) ? ` / \u6226\u529B ${b.aPower} \u5BFE ${b.dPower}` : "";
+        push(
+          d,
+          "battle",
+          `\u6226\u95D8${b.name ? `\u300C${b.name}\u300D` : ""}\uFF08${w.name}\uFF09`,
+          `${A}\uFF08\u653B\uFF09\u5BFE ${D}\uFF08\u9632\uFF09\u2192 ${win} \u306E\u52DD\u5229${b.place ? ` / \u5834\u6240 ${b.place}` : ""}${power}${b.text ? ` / ${b.text}` : ""}`,
+          [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)]
+        );
       }
+      if (w.endedAt) push(w.endedAt, "war-ended", `\u6226\u4E89\u300C${w.name}\u300D\u8B1B\u548C`, describeTreaty(w.terms, (id) => at(id, w.endedAt), namer), [...stateNames(w.attackers), ...stateNames(w.defenders)]);
     }
     for (const s of listSovereigntyLog(map)) {
       if (s.type === "merge") {
@@ -6863,77 +7110,94 @@
   function chronicleToMarkdown(ch) {
     const L = [];
     const w = ch.world;
+    const oneLine = (t) => String(t ?? "").replace(/\s*\n\s*/g, " ");
+    const g = ch.guideForAI;
     L.push(`# ${w.name}\uFF08ALTERHISTORY \u30AF\u30ED\u30CB\u30AF\u30EB\uFF09`, "");
+    L.push("> \u67B6\u7A7A\u4E16\u754C\u306E\u30BB\u30FC\u30D6\u8A18\u9332\u3067\u3059\u3002AI\uFF08Claude \u306A\u3069\uFF09\u306B\u305D\u306E\u307E\u307E\u6E21\u3059\u3068\u3001\u4E16\u754C\u306E\u6B74\u53F2\u30FB\u5730\u7406\u30FB\u653F\u6CBB\u3092\u7406\u89E3\u3057\u3066\u7D9A\u304D\u3092\u66F8\u3051\u308B\u3088\u3046\u306B\u3001\u3059\u3079\u3066\u306E ID \u3092\u540D\u524D\u306B\u76F4\u3057\u3066\u66F8\u3044\u3066\u3044\u307E\u3059\u3002", "");
+    L.push("## 0. \u4E16\u754C\u306E\u6982\u8981", "");
     L.push(`- \u73FE\u5728: **${w.currentDate.text}**${w.currentDate.era ? `\uFF08${w.currentDate.era}\uFF09` : ""}`);
-    L.push(`- \u5730\u56F3: ${w.mapSize.width}\xD7${w.mapSize.height} / \u56FD\u5BB6 ${w.totals.states}\u30FB\u90FD\u5E02 ${w.totals.burgs}\u30FB\u30DE\u30FC\u30AB\u30FC ${w.totals.markers}\u30FB\u6587\u5316 ${w.totals.cultures}\u30FB\u5B97\u6559 ${w.totals.religions}\u30FB\u5C5E\u5DDE ${w.totals.provinces}`);
-    if (w.eras.length) L.push(`- \u6642\u4EE3\u533A\u5206: ${w.eras.map((e) => `${e.name}\uFF08${e.fromYear}\u5E74\u301C${e.untilYear ? e.untilYear + "\u5E74" : ""}\uFF09`).join(" \u2192 ")}`);
-    L.push("", "> \u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306F AI \u306B\u8AAD\u307E\u305B\u3066\u6B74\u53F2\u3092\u69CB\u7BC9\u3059\u308B\u305F\u3081\u306E\u8981\u7D04\u3067\u3059\u3002\u53B3\u5BC6\u306A\u30C7\u30FC\u30BF\u306F\u540C\u540D\u306E `.chronicle.json` \u306B\u3042\u308A\u307E\u3059\u3002", "");
-    L.push("## \u5E74\u8868", "");
-    let lastEra = null;
-    for (const t of ch.timeline) {
-      if (t.era !== lastEra) {
-        L.push("", `### ${t.era ?? "\uFF08\u6642\u4EE3\u533A\u5206\u306A\u3057\uFF09"}`, "");
-        lastEra = t.era;
-      }
-      L.push(`- **${t.date ?? "\u65E5\u4ED8\u4E0D\u660E"}** [${TYPE_JP[t.type] ?? t.type}] ${t.title}${t.detail ? ` \u2014 ${t.detail}` : ""}`);
-    }
+    L.push(`- \u5730\u56F3: ${w.mapSize.width}\xD7${w.mapSize.height}\uFF08\u5DE6\u4E0A\u304C\u539F\u70B9\u3001x \u306F\u6771\u3078\u30FBy \u306F\u5357\u3078\u5897\u3048\u308B\uFF09 / \u56FD\u5BB6 ${w.totals.states}\u30FB\u90FD\u5E02 ${w.totals.burgs}\u30FB\u30DE\u30FC\u30AB\u30FC ${w.totals.markers}\u30FB\u6587\u5316 ${w.totals.cultures}\u30FB\u5B97\u6559 ${w.totals.religions}\u30FB\u5C5E\u5DDE ${w.totals.provinces}`);
+    if (w.eras.length) L.push(`- \u6642\u4EE3\u533A\u5206: ${w.eras.map((e) => `${e.name}\uFF08${e.fromYear}\u5E74\u301C${e.untilYear ? `${e.untilYear}\u5E74` : ""}\uFF09`).join(" \u2192 ")}`);
+    if (w.scale) L.push(`- \u7E2E\u5C3A: \u8DDD\u96E2 ${w.scale.distance?.scale ?? "?"}${w.scale.distance?.unit ?? ""}/\u30D4\u30AF\u30BB\u30EB\uFF08\u76EE\u5B89\uFF09`);
+    L.push("");
+    L.push("### \u3053\u306E\u6587\u66F8\u306E\u8AAD\u307F\u65B9", "");
+    for (const x of [...g.conventions.slice(0, 4), ...g.designNotes]) L.push(`- ${x}`);
+    L.push("- \u300C## 1. \u5E74\u8868\u300D\u306F\u3001\u30E6\u30FC\u30B6\u30FC\u304C\u884C\u3063\u305F\u64CD\u4F5C\uFF08\u5EFA\u56FD\u30FB\u5B97\u6559\u306E\u8A95\u751F\u30FB\u6539\u540D\u30FB\u9818\u571F\u306E\u5909\u52D5\u306A\u3069\uFF09\u3068\u3001\u6226\u4E89\u30FB\u540C\u76DF\u30FB\u5916\u4EA4\u3092\u3001\u5E74\u6708\u9806\u306B\u4E26\u3079\u305F\u8A18\u9332\u3067\u3059\u3002\u6B74\u53F2\u3092\u63B4\u3080\u306B\u306F\u307E\u305A\u3053\u3053\u3092\u8AAD\u3093\u3067\u304F\u3060\u3055\u3044\u3002", "- 2 \u7AE0\u4EE5\u964D\u306F\u300C\u73FE\u5728\u306E\u59FF\u300D\u306E\u8A73\u7D30\u3067\u3059\u3002\u540D\u524D\u306B\uFF08\u6D88\u6EC5\uFF09\u3068\u4ED8\u304F\u3082\u306E\u306F\u3001\u3059\u3067\u306B\u6EC5\u3073\u305F\u5B9F\u4F53\u3067\u3059\u3002", "");
+    L.push("## 1. \u5E74\u8868", "");
     if (!ch.timeline.length) L.push("\uFF08\u8A18\u9332\u3055\u308C\u305F\u51FA\u6765\u4E8B\u306F\u3042\u308A\u307E\u305B\u3093\uFF09");
-    L.push("", "## \u56FD\u5BB6", "");
+    let lastEra, lastYear;
+    const dated = ch.timeline.filter((t) => t.year != null), undated = ch.timeline.filter((t) => t.year == null);
+    for (const t of dated) {
+      if (t.era !== lastEra || lastEra === void 0) {
+        L.push("", `### ${t.era ?? "\uFF08\u6642\u4EE3\u533A\u5206\u306A\u3057\uFF09"}`);
+        lastEra = t.era;
+        lastYear = void 0;
+      }
+      if (t.year !== lastYear) {
+        L.push("", `#### ${t.year}\u5E74`, "");
+        lastYear = t.year;
+      }
+      L.push(`- ${t.month}\u6708\u3000**[${typeJp(t.type)}]** ${t.title}${t.detail ? ` \u2014 ${oneLine(t.detail)}` : ""}`);
+    }
+    if (undated.length) {
+      L.push("", "### \u65E5\u4ED8\u4E0D\u660E", "");
+      for (const t of undated) L.push(`- **[${typeJp(t.type)}]** ${t.title}${t.detail ? ` \u2014 ${oneLine(t.detail)}` : ""}`);
+    }
+    L.push("", "## 2. \u56FD\u5BB6\uFF08\u73FE\u5B58\uFF09", "");
     for (const s of ch.states) {
       L.push(`### ${s.name}\uFF08id ${s.id}\uFF09`, "");
-      L.push(`- \u653F\u4F53: ${s.governmentForm ?? "\u4E0D\u660E"}${s.stateType.id === "Generic" ? "" : ` / \u30BF\u30A4\u30D7: ${s.stateType.meaning}`}`);
+      L.push(`- \u653F\u4F53: ${s.governmentForm ?? "\u4E0D\u660E"}${s.stateType.id === "Generic" ? "" : ` / \u30BF\u30A4\u30D7: ${s.stateType.meaning}`}${s.dominantCulture ? ` / \u4E3B\u8981\u6587\u5316: ${s.dominantCulture.name}` : ""}`);
       L.push(`- \u9996\u90FD: ${s.capital ? `${s.capital.name}(id${s.capital.id})` : "\u306A\u3057"} / \u4F4D\u7F6E: ${s.territory.geography?.position ?? "\u4E0D\u660E"}${s.territory.isLandlocked ? "\uFF08\u5185\u9678\u56FD\uFF09" : ""}`);
       L.push(`- \u9818\u571F: ${s.territory.cells}\u30BB\u30EB\uFF08\u4E16\u754C\u306E\u9678\u5730\u306E${s.territory.landPercentOfWorld}%\uFF09 / \u96A3\u63A5: ${s.territory.neighbors.map((n) => n.name).join("\u3001") || "\u306A\u3057"}`);
       L.push(`- \u4E3B\u306A\u5730\u5F62: ${s.territory.terrain.slice(0, 3).map((t) => `${t.biome} ${t.percent}%`).join("\u3001") || "\u4E0D\u660E"}`);
       L.push(`- \u4EBA\u53E3: ${s.population.total}\uFF08\u5343\u4EBA\uFF09 / \u6280\u8853\u6C34\u6E96 ${s.economy.techLevel}${s.economy.techLevelIsDefault ? "\uFF08\u672A\u8A2D\u5B9A\u306E\u65E2\u5B9A\u5024\uFF09" : ""} / \u7523\u696D\u529B ${s.economy.industry}`);
       L.push(`- \u8ECD\u4E8B: \u30C9\u30AF\u30C8\u30EA\u30F3\u300C${s.military.doctrine.label}\u300D / \u90E8\u968A ${s.military.regimentCount} / \u7DCF\u5175\u54E1 ${s.military.totalHeadcount} / \u6226\u529B ${s.military.totalPower}`);
       for (const r of s.military.regiments) L.push(`  - ${r.name}\uFF08${r.position}\u30FB${r.locatedIn.name}\u9818\u5185\uFF09: ${Object.entries(r.units).map(([k, v]) => `${k}${v}`).join("\u3001") || "\u5175\u529B\u306A\u3057"}`);
+      if (s.provinces.length) L.push(`- \u5C5E\u5DDE: ${s.provinces.map((p) => p.name).join("\u3001")}`);
       if (s.diplomacy.length) L.push(`- \u5916\u4EA4: ${s.diplomacy.map((d) => `${d.with.name}=${d.relation}`).join("\u3001")}`);
       if (s.alliances.length) L.push(`- \u540C\u76DF: ${s.alliances.map((a) => `${a.name}${a.active ? "" : "\uFF08\u89E3\u6D88\u6E08\u307F\uFF09"}`).join("\u3001")}`);
-      if (s.note) L.push(`- \u3010\u30CE\u30FC\u30C8\u3011${s.note.replace(/\n/g, " ")}`);
+      if (s.note) L.push(`- \u3010\u30CE\u30FC\u30C8\u3011${oneLine(s.note)}`);
       L.push("");
     }
     if (ch.extinctStates.length) {
-      L.push("## \u6D88\u6EC5\u3057\u305F\u56FD\u5BB6", "");
-      for (const e of ch.extinctStates) L.push(`- **${e.name}**\uFF08id ${e.id}\u30FB${e.governmentForm ?? "\u653F\u4F53\u4E0D\u660E"}\uFF09: ${e.extinctAt ?? "\u6642\u671F\u4E0D\u660E"}\u306B${e.absorbedBy ? e.absorbedBy.name + "\u3078\u4F75\u5408" : "\u6D88\u6EC5"}\u3002\u65E7\u9996\u90FD: ${e.formerCapital ?? "\u4E0D\u660E"}${e.note ? ` \u2014 ${e.note.replace(/\n/g, " ")}` : ""}`);
+      L.push("## 3. \u6D88\u6EC5\u3057\u305F\u56FD\u5BB6", "");
+      for (const e of ch.extinctStates) L.push(`- **${e.name}**\uFF08id ${e.id}\u30FB${e.governmentForm ?? "\u653F\u4F53\u4E0D\u660E"}\uFF09: ${e.extinctAt ?? "\u6642\u671F\u4E0D\u660E"}\u306B${e.absorbedBy ? `${e.absorbedBy.name}\u3078\u4F75\u5408` : "\u6D88\u6EC5"}\u3002\u65E7\u9996\u90FD: ${e.formerCapital ?? "\u4E0D\u660E"}${e.note ? ` \u2014 ${oneLine(e.note)}` : ""}`);
       L.push("");
     }
-    L.push("## \u6226\u4E89", "");
+    L.push("## 4. \u6226\u4E89", "");
     for (const wr of ch.wars) {
       L.push(`### ${wr.name}\uFF08${wr.status}\uFF09`, `- \u671F\u9593: ${wr.started} \u301C ${wr.ended ?? "\u7D99\u7D9A\u4E2D"} / \u653B\u6483\u5074: ${wr.attackers.map((x) => x.name).join("\u3001")} / \u9632\u5FA1\u5074: ${wr.defenders.map((x) => x.name).join("\u3001")}`);
       L.push(`- \u6226\u95D8 ${wr.battleCount} \u56DE\uFF08\u653B\u6483\u5074 ${wr.attackerWins} \u52DD\u30FB\u9632\u5FA1\u5074 ${wr.defenderWins} \u52DD\uFF09`);
-      for (const b of wr.battles) L.push(`  - ${b.date}: ${b.name ? `${b.name}\u3000` : ""}${b.attacker} \u5BFE ${b.defender} \u2192 ${b.winner} \u52DD\u5229${b.attackerPower != null ? `\uFF08\u6226\u529B ${b.attackerPower} \u5BFE ${b.defenderPower}\uFF09` : ""}`);
-      const pt = wr.peaceTerms;
-      if (pt) {
-        if (pt.cessions?.length || pt.reparations?.length || pt.annex?.length || pt.name) {
-          L.push(`- \u8B1B\u548C\u6761\u7D04: ${pt.name ?? "\u2014"}\uFF08${{ standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", vassal: "\u5F93\u5C5E\u5316", annex: "\u5168\u9762\u964D\u4F0F" }[pt.kind] ?? pt.kind}${pt.venue ? `\u30FB\u8B1B\u548C\u5730 ${pt.venue}` : ""}\uFF09`);
-          for (const c of pt.cessions) L.push(`  - \u5272\u8B72: ${c.name || "\u533A\u753B"}\uFF08${c.cells}\u30BB\u30EB\uFF09${c.from} \u2192 ${c.to}`);
-          for (const r of pt.reparations) L.push(`  - \u8CE0\u511F: ${r.from} \u304C ${r.amount} ${r.currency ?? ""} \u2192 ${r.to} \u304C ${r.received ?? "?"} ${r.receivedCurrency ?? ""}`);
-          for (const x of pt.annex) L.push(`  - \u4F75\u5408: ${x.from} \u2192 ${x.to}`);
-          for (const x of pt.vassalize ?? []) L.push(`  - \u5F93\u5C5E: ${x.from} \u306F ${x.to} \u306E${x.kind}`);
-          if (pt.notes) L.push(`  - \u6761\u4EF6: ${pt.notes}`);
-        } else L.push(`- \u8B1B\u548C: \u5272\u8B72 ${pt.cededProvinces.join("\u3001") || "\u306A\u3057"} \u2192 ${pt.cededTo}${pt.legacyReparations ? ` / \u8CE0\u511F ${pt.legacyReparations}` : ""}`);
-      }
+      for (const b of wr.battles) L.push(`  - ${b.date ?? "\u65E5\u4ED8\u4E0D\u660E"}: ${b.name ? `${b.name}\u3000` : ""}${b.attacker} \u5BFE ${b.defender} \u2192 ${b.winner} \u52DD\u5229${b.place ? `\uFF08\u5834\u6240 ${b.place}\uFF09` : ""}${b.attackerPower != null ? `\uFF08\u6226\u529B ${b.attackerPower} \u5BFE ${b.defenderPower}\uFF09` : ""}${b.text ? ` \u2014 ${oneLine(b.text)}` : ""}`);
+      if (wr.peaceText) L.push(`- \u8B1B\u548C: ${wr.peaceText}`);
       L.push("");
     }
     if (!ch.wars.length) L.push("\uFF08\u6226\u4E89\u306E\u8A18\u9332\u306F\u3042\u308A\u307E\u305B\u3093\uFF09", "");
-    L.push("## \u540C\u76DF", "");
+    L.push("## 5. \u540C\u76DF", "");
     for (const a of ch.alliances) L.push(`- **${a.name}**\uFF08${a.status}\uFF09: ${a.members.map((m) => m.name).join("\u3001")} / \u7D50\u6210 ${a.formed ?? "\u4E0D\u660E"}${a.dissolved ? ` / \u89E3\u6D88 ${a.dissolved}` : ""}`);
     if (!ch.alliances.length) L.push("\uFF08\u540C\u76DF\u306F\u3042\u308A\u307E\u305B\u3093\uFF09");
-    L.push("", "## \u6587\u5316\u30FB\u5B97\u6559\u30FB\u5C5E\u5DDE", "");
-    for (const [label, list] of [["\u6587\u5316", ch.cultures], ["\u5B97\u6559", ch.religions], ["\u5C5E\u5DDE", ch.provinces]]) {
-      L.push(`### ${label}`);
-      for (const e of list) L.push(`- ${e.name}\uFF08${e.cells}\u30BB\u30EB\u30FB${e.geography?.position ?? "\u4F4D\u7F6E\u4E0D\u660E"}\uFF09${e.note ? ` \u2014 ${e.note.replace(/\n/g, " ")}` : ""}`);
-      L.push("");
-    }
-    L.push("## \u90FD\u5E02\uFF08\u5168\u3066\uFF09", "");
-    for (const b of ch.burgs) L.push(`- ${b.name}(id${b.id})${b.isCapital ? "\u3010\u9996\u90FD\u3011" : ""}${b.isPort ? "\u3010\u6E2F\u3011" : ""}: ${b.state.name}\u30FB${b.province.name}\u30FB\u4EBA\u53E3${b.population}\u4EBA\u30FB${b.position}${b.note ? ` \u2014 ${b.note.replace(/\n/g, " ")}` : ""}`);
-    L.push("", "## \u30DE\u30FC\u30AB\u30FC\uFF08\u5168\u3066\uFF09", "");
-    for (const m of ch.markers) L.push(`- ${m.icon ?? ""} ${m.name ?? m.type}\uFF08${m.position}\u30FB${m.inState.name}\u9818\u5185\uFF09${m.note ? ` \u2014 ${m.note.replace(/\n/g, " ")}` : ""}`);
+    L.push("", "## 6. \u6587\u5316\u30FB\u5B97\u6559\u30FB\u5C5E\u5DDE", "");
+    L.push("### \u6587\u5316");
+    for (const e of ch.cultures) L.push(`- **${e.name}**\uFF08${e.cells}\u30BB\u30EB\u30FB${e.geography?.position ?? "\u4F4D\u7F6E\u4E0D\u660E"}\uFF09${e.originCultures?.length ? ` / \u8D77\u6E90: ${e.originCultures.join("\u30FB")}` : ""}${e.note ? ` \u2014 ${oneLine(e.note)}` : ""}`);
+    L.push("", "### \u5B97\u6559");
+    for (const e of ch.religions) L.push(`- **${e.name}**\uFF08${e.cells}\u30BB\u30EB\u30FB${e.geography?.position ?? "\u4F4D\u7F6E\u4E0D\u660E"}\uFF09: \u6700\u9AD8\u795E\u300C${e.deity ?? "\u672A\u8A2D\u5B9A"}\u300D${e.type ? ` / \u7A2E\u985E ${e.type}` : ""}${e.form ? ` / \u5F62\u614B ${e.form}` : ""}${e.originatedInCulture ? ` / \u8208\u3063\u305F\u6587\u5316: ${e.originatedInCulture}` : ""}${e.originReligions?.length ? ` / \u8D77\u6E90\u306E\u5B97\u6559: ${e.originReligions.join("\u30FB")}` : ""}${e.note ? ` \u2014 ${oneLine(e.note)}` : ""}`);
+    L.push("", "### \u5C5E\u5DDE");
+    for (const e of ch.provinces) L.push(`- **${e.name}**\uFF08${e.state?.name ?? "\u6240\u5C5E\u4E0D\u660E"}\u30FB${e.cells}\u30BB\u30EB\u30FB${e.geography?.position ?? "\u4F4D\u7F6E\u4E0D\u660E"}\uFF09${e.note ? ` \u2014 ${oneLine(e.note)}` : ""}`);
+    L.push("");
+    L.push("## 7. \u30BE\u30FC\u30F3\uFF08\u4FB5\u653B\u30FB\u53CD\u4E71\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\uFF09", "");
+    for (const z of ch.zones) L.push(`- **${z.name ?? "\u540D\u79F0\u306A\u3057"}**\uFF3B${z.typeLabel}\uFF3D${z.cells ?? 0}\u30BB\u30EB${z.position ? `\u30FB${z.position}` : ""}${z.affectedStates?.length ? ` / \u5F71\u97FF\u4E0B\u306E\u56FD: ${z.affectedStates.map((x) => x.name).join("\u3001")}` : ""}${z.hidden ? "\uFF08\u975E\u8868\u793A\uFF09" : ""}`);
+    if (!ch.zones.length) L.push("\uFF08\u30BE\u30FC\u30F3\u306F\u3042\u308A\u307E\u305B\u3093\uFF09");
+    L.push("", "## 8. \u90FD\u5E02\uFF08\u5168\u3066\uFF09", "");
+    for (const b of ch.burgs) L.push(`- ${b.name}(id${b.id})${b.isCapital ? "\u3010\u9996\u90FD\u3011" : ""}${b.isPort ? "\u3010\u6E2F\u3011" : ""}: ${b.state.name}\u30FB${b.province.name}\u30FB\u4EBA\u53E3${b.population}\u4EBA\u30FB${b.position}${b.note ? ` \u2014 ${oneLine(b.note)}` : ""}`);
+    L.push("", "## 9. \u30DE\u30FC\u30AB\u30FC\uFF08\u5168\u3066\uFF09", "");
+    for (const m of ch.markers) L.push(`- ${m.icon ?? ""} ${m.name ?? m.type}\uFF08${m.position}\u30FB${m.inState.name}\u9818\u5185\uFF09${m.note ? ` \u2014 ${oneLine(m.note)}` : ""}`);
     if (!ch.markers.length) L.push("\uFF08\u30DE\u30FC\u30AB\u30FC\u306F\u3042\u308A\u307E\u305B\u3093\uFF09");
-    L.push("", "## \u30E9\u30F3\u30AD\u30F3\u30B0", "");
+    L.push("", "## 10. \u30E9\u30F3\u30AD\u30F3\u30B0", "");
     for (const [label, key] of [["\u9818\u571F", "byTerritory"], ["\u4EBA\u53E3", "byPopulation"], ["\u8ECD\u4E8B\u529B", "byMilitaryPower"], ["\u6280\u8853\u6C34\u6E96", "byTechLevel"]]) L.push(`- ${label}: ${ch.ranking[key].map((r) => `${r.rank}\u4F4D ${r.name}(${r.value})`).join(" / ")}`);
-    L.push("", "## \u30C7\u30FC\u30BF\u306E\u6574\u5408\u6027", "", ch.consistencyChecks.ok ? "- \u7570\u5E38\u306F\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002" : ch.consistencyChecks.issues.map((i) => `- \u26A0 ${i}`).join("\n"));
+    L.push("", "## 11. \u30C7\u30FC\u30BF\u306E\u6574\u5408\u6027", "", ch.consistencyChecks.ok ? "- \u7570\u5E38\u306F\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002" : ch.consistencyChecks.issues.map((i) => `- \u26A0 ${i}`).join("\n"));
+    L.push("", "## 12. AI \u3078\u306E\u4F9D\u983C\u306E\u4F8B", "");
+    for (const x of g.suggestedTasks) L.push(`- ${x}`);
+    for (const x of g.doNot) L.push(`- \u6CE8\u610F: ${x}`);
     return L.join("\n") + "\n";
   }
   var TYPE_JP = {
@@ -6946,19 +7210,25 @@
     "war-ended": "\u8B1B\u548C",
     independence: "\u72EC\u7ACB",
     "state-merged": "\u7D71\u5408",
-    sovereignty: "\u4E3B\u6A29"
+    sovereignty: "\u4E3B\u6A29",
+    "created-state": "\u5EFA\u56FD",
+    "created-culture": "\u6587\u5316\u306E\u8A95\u751F",
+    "created-religion": "\u5B97\u6559\u306E\u8A95\u751F",
+    "created-province": "\u5C5E\u5DDE\u306E\u8A2D\u7F6E",
+    "created-burg": "\u90FD\u5E02\u306E\u5EFA\u8A2D",
+    "created-zone": "\u30BE\u30FC\u30F3\u767A\u751F",
+    "edit-zone": "\u30BE\u30FC\u30F3\u5909\u5316",
+    "removed-zone": "\u30BE\u30FC\u30F3\u53CE\u675F",
+    capital: "\u9077\u90FD",
+    territory: "\u9818\u571F",
+    tech: "\u6280\u8853",
+    doctrine: "\u8ECD\u4E8B",
+    "rename-alliance": "\u540C\u76DF\u6539\u79F0"
   };
-  function serializeChronicle(ch, { pretty = true } = {}) {
-    if (!pretty) return JSON.stringify(ch);
-    const { cells, ...rest } = ch;
-    let body = JSON.stringify(rest, null, 2);
-    if (cells) {
-      const cellsBody = "{\n" + Object.entries(cells).map(([k, v]) => `    ${JSON.stringify(k)}: ${JSON.stringify(v)}`).join(",\n") + "\n  }";
-      body = body.replace(/\n}$/, `,
-  "cells": ${cellsBody}
-}`);
-    }
-    return body + "\n";
+  function typeJp(t) {
+    if (TYPE_JP[t]) return TYPE_JP[t];
+    const head = String(t ?? "").split("-")[0];
+    return { rename: "\u6539\u540D", removed: "\u6D88\u6EC5", profile: "\u8A2D\u5B9A\u5909\u66F4", origin: "\u7CFB\u7D71\u306E\u5909\u66F4" }[head] ?? String(t ?? "\u51FA\u6765\u4E8B");
   }
 
   // js/app/actions.js
@@ -7106,39 +7376,24 @@
         const map = store.getState().map;
         return !!(map?.geometry && ENTITY_KINDS[kind] && entity);
       },
-      /** ALTERHISTORY 形式で保存（Azgaar 形式の上位互換。Azgaar でも開ける） */
+      /** ALTERHISTORY 形式（.ahmap）で保存。Azgaar の地図は読み込めるが、保存はこの形式になる */
       saveNative() {
-        return runExport("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB", (map, fileName) => {
-          var _a;
-          map.ext ?? (map.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} });
-          (_a = map.ext).data ?? (_a.data = {});
-          map.ext.data.worldTime = { ...map.worldTime };
-          return {
-            blob: textBlob(serializeAzgaar(map, { native: true, exportedAt: todayString() }), "text/plain"),
-            name: exportFileName(map, fileName, "map")
-          };
+        return runExport("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB", async (map, fileName) => {
+          const bytes = await serializeNative(map, { savedAt: todayString() });
+          return { blob: new Blob([bytes], { type: "application/gzip" }), name: exportFileName(map, fileName, NATIVE_EXT) };
         }, () => store.markSaved());
       },
-      /** Azgaar 互換の .map（ALTERHISTORY の目印・拡張データを含めない） */
-      saveAzgaar() {
-        return runExport("Azgaar\u4E92\u63DB\u30D5\u30A1\u30A4\u30EB", (map, fileName) => ({
-          blob: textBlob(serializeAzgaar(map, { native: false, exportedAt: todayString() }), "text/plain"),
-          name: exportFileName(map, fileName, "map", "_azgaar")
-        }));
-      },
       /**
-       * AI 向けセーブデータ（クロニクル）。Claude 等にアップロードして歴史を構築してもらうための書き出し。
-       *   .chronicle.json … 全情報（ID を名前に解決済み・年表・国家別集約・セル単位の完全データ）
-       *   .chronicle.md   … 同じ内容の読み物版（AI にも人間にも読みやすい要約）
-       * 2 ファイルを 1 回の操作でダウンロードする。
+       * クロニクル（.md 1ファイル）。Claude 等の AI に渡して歴史を読ませる・続きを書かせるための記録。
+       * 年表（すべての操作を年月順に）・国家・戦争・同盟・文化/宗教（最高神つき）・ゾーン・都市などを、
+       * 名前だけで読める形で丁寧に書く。アプリに戻すための完全データは、保存ファイル（.ahmap）のほうにある。
        */
       exportChronicle() {
-        return runExport("AI\u7528\u30AF\u30ED\u30CB\u30AF\u30EB", (map, fileName) => {
+        return runExport("\u30AF\u30ED\u30CB\u30AF\u30EB", (map, fileName) => {
           map.ext ?? (map.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} });
-          const ch = buildChronicle(map, { fileName, exportedAt: todayString() });
+          const ch = buildChronicle(map, { fileName, includeCells: false, exportedAt: todayString() });
           const base = exportFileName(map, fileName, "x").replace(/\.x$/, "");
-          download(textBlob(chronicleToMarkdown(ch), "text/markdown"), `${base}.chronicle.md`);
-          return { blob: textBlob(serializeChronicle(ch), "application/json"), name: `${base}.chronicle.json` };
+          return { blob: textBlob(chronicleToMarkdown(ch), "text/markdown"), name: `${base}.chronicle.md` };
         });
       },
       exportPng() {
@@ -7310,9 +7565,9 @@
       const frag = document.createDocumentFragment();
       for (const it of items) {
         const li = document.createElement("li");
-        const btn3 = document.createElement("button");
-        btn3.type = "button";
-        btn3.title = `${it.name}\uFF08${it.cells}\u30BB\u30EB\uFF09\u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u79FB\u52D5\u3057\u3066\u5883\u754C\u7DDA\u3092\u5149\u3089\u305B\u308B\u3001\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u7DE8\u96C6`;
+        const btn2 = document.createElement("button");
+        btn2.type = "button";
+        btn2.title = `${it.name}\uFF08${it.cells}\u30BB\u30EB\uFF09\u2014 \u30AF\u30EA\u30C3\u30AF\u3067\u79FB\u52D5\u3057\u3066\u5883\u754C\u7DDA\u3092\u5149\u3089\u305B\u308B\u3001\u53F3\u30AF\u30EA\u30C3\u30AF\u3067\u7DE8\u96C6`;
         const chip = document.createElement("span");
         chip.className = "chip";
         chip.style.background = it.color;
@@ -7322,24 +7577,24 @@
         const count = document.createElement("span");
         count.className = "legend-count";
         count.textContent = String(it.cells);
-        btn3.append(chip, name);
+        btn2.append(chip, name);
         if (false) {
           const tag = document.createElement("span");
           tag.className = "legend-prov";
           tag.textContent = "\u4EEE";
           tag.title = "\u4EEE\u306E\u540D\u524D\uFF08\u7DE8\u96C6\u30D1\u30CD\u30EB\u3067\u78BA\u5B9A\u3067\u304D\u307E\u3059\uFF09";
-          btn3.append(tag);
+          btn2.append(tag);
         }
-        btn3.append(count);
-        btn3.addEventListener("click", () => {
+        btn2.append(count);
+        btn2.addEventListener("click", () => {
           actions.focusEntity(kind, it);
           highlight?.show(kind, it.id);
         });
-        btn3.addEventListener("contextmenu", (e) => {
+        btn2.addEventListener("contextmenu", (e) => {
           e.preventDefault();
           panels?.openEntity(kind, it.id);
         });
-        li.append(btn3);
+        li.append(btn2);
         frag.append(li);
       }
       list.append(frag);
@@ -7464,6 +7719,78 @@
       handle.addEventListener("pointerup", up);
     });
   }
+  function makeResizable(root, stage, { minW = 280, minH = 160 } = {}) {
+    if (root.dataset.resizable) return;
+    root.dataset.resizable = "1";
+    for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
+      const h = document.createElement("div");
+      h.className = `rs-handle rs-${dir}`;
+      h.dataset.dir = dir;
+      h.setAttribute("aria-hidden", "true");
+      h.style.touchAction = "none";
+      h.addEventListener("pointerdown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const sr = stage.getBoundingClientRect(), r = root.getBoundingClientRect();
+        const start2 = { x: e.clientX, y: e.clientY, l: r.left - sr.left, t: r.top - sr.top, w: r.width, h: r.height };
+        root.style.right = "auto";
+        root.style.bottom = "auto";
+        root.style.maxHeight = "none";
+        root.style.maxWidth = "none";
+        root.style.left = `${start2.l}px`;
+        root.style.top = `${start2.t}px`;
+        root.style.width = `${start2.w}px`;
+        root.style.height = `${start2.h}px`;
+        root.classList.add("resized");
+        h.setPointerCapture?.(e.pointerId);
+        const move = (ev) => {
+          const dx = ev.clientX - start2.x, dy = ev.clientY - start2.y;
+          let l = start2.l, t = start2.t, w = start2.w, hh = start2.h;
+          if (dir.includes("e")) w = start2.w + dx;
+          if (dir.includes("s")) hh = start2.h + dy;
+          if (dir.includes("w")) {
+            w = start2.w - dx;
+            l = start2.l + dx;
+          }
+          if (dir.includes("n")) {
+            hh = start2.h - dy;
+            t = start2.t + dy;
+          }
+          if (w < minW) {
+            if (dir.includes("w")) l -= minW - w;
+            w = minW;
+          }
+          if (hh < minH) {
+            if (dir.includes("n")) t -= minH - hh;
+            hh = minH;
+          }
+          if (l < 0) {
+            if (dir.includes("w")) w += l;
+            l = 0;
+          }
+          if (t < 0) {
+            if (dir.includes("n")) hh += t;
+            t = 0;
+          }
+          if (l + w > sr.width) w = Math.max(minW, sr.width - l);
+          if (t + hh > sr.height) hh = Math.max(minH, sr.height - t);
+          root.style.left = `${l}px`;
+          root.style.top = `${t}px`;
+          root.style.width = `${w}px`;
+          root.style.height = `${hh}px`;
+        };
+        const up = () => {
+          h.removeEventListener("pointermove", move);
+          h.removeEventListener("pointerup", up);
+          h.removeEventListener("pointercancel", up);
+        };
+        h.addEventListener("pointermove", move);
+        h.addEventListener("pointerup", up);
+        h.addEventListener("pointercancel", up);
+      });
+      root.append(h);
+    }
+  }
   function initWindows() {
     const stage = byId("stage");
     const wins = /* @__PURE__ */ new Map();
@@ -7487,6 +7814,7 @@
       body.append(def.body);
       root.append(bar, body);
       stage.append(root);
+      makeResizable(root, stage);
       const w = { root, def };
       close.addEventListener("click", () => closeWin(id));
       root.addEventListener("pointerdown", () => front(w));
@@ -7514,6 +7842,7 @@
     function fit(root) {
       const parent = root.offsetParent ?? root.parentElement;
       if (!parent) return;
+      if (root.classList.contains("resized")) return;
       const top = parseFloat(root.style.top) || 0;
       root.style.maxHeight = `${Math.max(240, parent.clientHeight - top - 12)}px`;
     }
@@ -7657,7 +7986,7 @@
         return;
       }
       const overrides = map.ext?.data?.balance ?? {};
-      balBody.replaceChildren(el2("p", "hint", "\u7D4C\u6E08\u30FB\u6226\u4E89\u306E\u6570\u5024\u3092\u8ABF\u6574\u3057\u307E\u3059\u3002\u5909\u3048\u308B\u3068\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u3053\u306E\u5730\u56F3\u306B\u4FDD\u5B58\u3055\u308C\u307E\u3059\uFF08\u5730\u56F3\u30D5\u30A1\u30A4\u30EB\u306B\u5165\u308B\u306E\u3067\u3001\u5225\u306E\u7AEF\u672B\u3067\u958B\u3044\u3066\u3082\u540C\u3058\u7D50\u679C\u306B\u306A\u308A\u307E\u3059\uFF09\u3002Azgaar\u4E92\u63DB\u5F62\u5F0F\u3067\u66F8\u304D\u51FA\u3059\u3068\u3001\u3053\u306E\u8A2D\u5B9A\u306F\u542B\u307E\u308C\u307E\u305B\u3093\u3002"));
+      balBody.replaceChildren(el2("p", "hint", "\u7D4C\u6E08\u30FB\u6226\u4E89\u306E\u6570\u5024\u3092\u8ABF\u6574\u3057\u307E\u3059\u3002\u5909\u3048\u308B\u3068\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u3053\u306E\u5730\u56F3\u306B\u4FDD\u5B58\u3055\u308C\u307E\u3059\uFF08\u5730\u56F3\u30D5\u30A1\u30A4\u30EB\u306B\u5165\u308B\u306E\u3067\u3001\u5225\u306E\u7AEF\u672B\u3067\u958B\u3044\u3066\u3082\u540C\u3058\u7D50\u679C\u306B\u306A\u308A\u307E\u3059\uFF09\u3002"));
       const t = el2("table", "win-table");
       for (const m of BALANCE_META) {
         const tr = el2("tr");
@@ -7832,7 +8161,7 @@
   var CELL_KEY = { state: "state", culture: "culture", religion: "religion", province: "province" };
   var KIND_LABEL = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" };
   var KIND_ICON = { state: "\u{1F3F3}", culture: "\u{1F3AD}", religion: "\u2726", province: "\u25A6" };
-  function initEntityLists({ store, wins, panels, editActions, highlight }) {
+  function initEntityLists({ store, wins, panels, editActions, highlight, builderActions }) {
     function onMerge(fromId) {
       const map = store.getState().map;
       if (!map) return;
@@ -7865,6 +8194,49 @@
     const mergeHost = el4("div", "merge-host");
     wins.register("merge", { title: "\u{1F3F3} \u56FD\u5BB6\u306E\u7D71\u5408", width: 420, body: mergeHost });
     const bodies = {};
+    const sizeOf = {};
+    function addBar(kind) {
+      const bar = el4("div", "ent-addbar");
+      if (kind === "province" || !builderActions) {
+        bar.append(el4("span", "hint", "\u5C5E\u5DDE\u306F\u3001\u56FD\u5BB6\u306E\u8A73\u7D30\u30A6\u30A3\u30F3\u30C9\u30A6\u306E\u300C\u65B0\u3057\u3044\u5C5E\u5DDE\u300D\u304B\u3089\u4F5C\u308C\u307E\u3059\u3002"));
+        return bar;
+      }
+      const add2 = (auto) => {
+        const id = builderActions.create(kind);
+        if (id == null) return;
+        if (auto) {
+          const r = builderActions.autoClaim(kind, id, sizeOf[kind] ?? "m");
+          if (!r.ok) {
+            alertDialog(r.reason === "no-free-land" ? "\u7A7A\u304D\u5730\uFF08\u7121\u6240\u5C5E\u306E\u9678\uFF09\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u7DE8\u96C6\u306E\u5857\u308A\u30C4\u30FC\u30EB\u3067\u9818\u571F\u3092\u6C7A\u3081\u3066\u304F\u3060\u3055\u3044\u3002" : "\u9818\u571F\u3092\u81EA\u52D5\u3067\u306F\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002\u5730\u56F3\u7DE8\u96C6\u306E\u5857\u308A\u30C4\u30FC\u30EB\u3067\u6C7A\u3081\u3066\u304F\u3060\u3055\u3044\u3002");
+          } else if (kind === "state") builderActions.autoCapital(id);
+        } else {
+          builderActions.beginPaint(kind, id);
+          window.dispatchEvent(new CustomEvent("request-edit-panel-open"));
+          window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: `paint:${kind}`, target: id } }));
+        }
+        render(kind);
+      };
+      const mk = (text2, title, fn, cls = "") => {
+        const b = el4("button", cls, text2);
+        b.type = "button";
+        b.title = title;
+        b.addEventListener("click", fn);
+        return b;
+      };
+      bar.append(
+        mk(`\uFF0B ${KIND_LABEL[kind]}\u3092\u8FFD\u52A0`, "\u540D\u524D\u306F\u304A\u307E\u304B\u305B\u3067\u4F5C\u308A\u3001\u305D\u306E\u307E\u307E\u5730\u56F3\u306B\u5857\u3063\u3066\u9818\u571F\u3092\u6C7A\u3081\u307E\u3059", () => add2(false), "primary"),
+        mk("\u{1F3B2} \u304A\u307E\u304B\u305B\u9818\u571F\u3064\u304D", "\u7A7A\u304D\u5730\u304B\u3089\u3001\u5730\u5F62\u306B\u6CBF\u3063\u3066\u9818\u571F\u3092\u81EA\u52D5\u3067\u6C7A\u3081\u307E\u3059\uFF08\u56FD\u5BB6\u306F\u9996\u90FD\u3082\u7F6E\u304D\u307E\u3059\uFF09", () => add2(true))
+      );
+      const sel = document.createElement("select");
+      sel.title = "\u304A\u307E\u304B\u305B\u9818\u571F\u306E\u5927\u304D\u3055";
+      for (const [k, v] of Object.entries(builderActions.TERRITORY_SIZES)) sel.append(new Option(`\u9818\u571F\uFF1A${v.label}`, k));
+      sel.value = sizeOf[kind] ?? "m";
+      sel.addEventListener("change", () => {
+        sizeOf[kind] = sel.value;
+      });
+      bar.append(sel);
+      return bar;
+    }
     function render(kind) {
       const body = bodies[kind];
       body.replaceChildren();
@@ -7876,6 +8248,7 @@
       const arr = map.pack.cells[CELL_KEY[kind]], counts = /* @__PURE__ */ new Map();
       for (let i = 0; i < arr.length; i++) if (map.pack.cells.biome[i] !== 0) counts.set(arr[i], (counts.get(arr[i]) ?? 0) + 1);
       const items = map.pack[LIST_KEY[kind]].filter((e) => e && e.i > 0 && !e.removed).map((e) => ({ e, cells: counts.get(e.i) ?? 0 })).sort((a, b) => b.cells - a.cells);
+      body.append(addBar(kind));
       body.append(el4("p", "hint", `${KIND_LABEL[kind]}\u306F ${items.length} \u4EF6\u3002\u540D\u524D\u3092\u62BC\u3059\u3068\u8A73\u7D30\u3092\u8A2D\u5B9A\u3067\u304D\u307E\u3059\u3002`));
       if (!items.length) {
         body.append(el4("p", "muted", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
@@ -8518,7 +8891,7 @@
     const btnSave = byId("btn-save");
     const menu = byId("export-menu");
     btnSave.addEventListener("click", () => actions.saveNative());
-    const exporters = { chronicle: () => actions.exportChronicle(), png: () => actions.exportPng(), svg: () => actions.exportSvg(), azgaar: () => actions.saveAzgaar() };
+    const exporters = { chronicle: () => actions.exportChronicle(), png: () => actions.exportPng(), svg: () => actions.exportSvg() };
     menu.addEventListener("click", (e) => {
       const item = e.target instanceof HTMLElement ? e.target.closest("[data-export]") : null;
       if (!item) return;
@@ -8577,10 +8950,10 @@
       btnSave.disabled = !hasMap;
       menu.classList.toggle("disabled", !hasMap);
       if (!hasMap) menu.open = false;
-      for (const [key, btn3] of layerBtns) {
+      for (const [key, btn2] of layerBtns) {
         const on = isLayerOn(v, key);
-        btn3.classList.toggle("active", on);
-        btn3.setAttribute("aria-pressed", String(on));
+        btn2.classList.toggle("active", on);
+        btn2.setAttribute("aria-pressed", String(on));
       }
       for (const seg of segs) {
         const cur = byId(seg.dataset.segFor).value;
@@ -9482,9 +9855,6 @@ ${shown}${more}`;
     if (JSON.stringify(cur) === JSON.stringify(ps) && Array.isArray(e.origins) && e.origins.length === ps.length) return null;
     return makeCommand(`${KIND_LABEL2[kind]}\u306E\u8D77\u6E90\u3092\u5909\u66F4\uFF08${e.name}\uFF09`, ["politics"], [setProps(e, { origins: ps })]);
   }
-  function planSetOrigin(map, kind, id, parentId) {
-    return planSetOrigins(map, kind, id, [parentId]);
-  }
   function planSetBurgProfile(map, burgId, patch) {
     const b = map.pack.burgs[burgId];
     if (!b || b.removed || !b.i) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u90FD\u5E02\u3067\u3059");
@@ -9577,6 +9947,11 @@ ${shown}${more}`;
       }
     };
     const currentDate = () => store.getState().map?.worldTime ?? { year: 1, month: 1 };
+    const KIND_JP = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" };
+    const LIST_OF = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+    const nameOf2 = (e) => e?.fullName ?? e?.name ?? "\uFF08\u4E0D\u660E\uFF09";
+    const entOf = (map, kind, id) => map.pack[LIST_OF[kind]]?.[id];
+    const commitEv = (map, plan, ev) => commitOrThrow(plan && ev ? withEvent(map, plan, ev) : plan);
     const suggested = /* @__PURE__ */ new Map();
     const MAX_REMEMBERED = 200;
     function suggestName2(kind, ctx = {}) {
@@ -9625,7 +10000,11 @@ ${shown}${more}`;
       paintCells(kind, target, cells, opts = {}) {
         withMap((map) => safeRun("\u5857\u308A\u66FF\u3048", () => {
           const { command, report } = planPaint(map, { kind, target, cells, force: opts.force });
-          if (command) commitOrThrow(command);
+          if (command) {
+            const who = target > 0 ? nameOf2(entOf(map, kind, target)) : null;
+            const ev = report.changed > 0 && KIND_JP[kind] ? { type: "territory", mergeKey: `paint:${kind}:${target}`, count: report.changed, title: who ? `${KIND_JP[kind]}\u300C${who}\u300D\u306E\u9818\u571F\u304C\u5E83\u304C\u3063\u305F` : `${KIND_JP[kind]}\u306E\u652F\u914D\u304C\u5916\u308C\u305F\u571F\u5730\u304C\u51FA\u305F\uFF08\u7121\u6240\u5C5E\u5316\uFF09` } : null;
+            commitEv(map, command, ev);
+          }
           return report;
         }));
       },
@@ -9662,7 +10041,9 @@ ${shown}${more}`;
           safeRun("\u90FD\u5E02\u306E\u8FFD\u52A0", () => {
             const n = resolveName("burg", name, { cell });
             const r = planAddBurg(map, { cell, name: n.name, rnd, ...opts });
-            commitOrThrow(n.provisional ? withProvisional(map, r.command, "burg", r.id, true) : r.command);
+            const st = map.pack.states[map.pack.cells.state[cell]];
+            const cmd = withEvent(map, r.command, { type: "created-burg", title: `${opts.capital ? "\u9996\u90FD" : "\u90FD\u5E02"}\u300C${n.name}\u300D\u304C\u5EFA\u8A2D\u3055\u308C\u305F`, detail: st && st.i ? `\u6240\u5C5E: ${nameOf2(st)}` : void 0 });
+            commitOrThrow(n.provisional ? withProvisional(map, cmd, "burg", r.id, true) : cmd);
             out = r.id;
           });
           return out;
@@ -9673,15 +10054,20 @@ ${shown}${more}`;
       },
       renameBurg(id, name) {
         withMap((map) => safeRun("\u90FD\u5E02\u306E\u6539\u540D", () => {
+          const before = map.pack.burgs[id]?.name;
           const plan = planRenameBurg(map, id, name);
-          commitOrThrow(withProvisional(map, plan, "burg", id, !!takeSuggested(name, "burg")));
+          const cmd = plan && withEvent(map, plan, { type: "rename-burg", title: `\u90FD\u5E02\u306E\u6539\u540D: \u300C${before}\u300D\u2192\u300C${(name ?? "").trim()}\u300D` });
+          commitOrThrow(withProvisional(map, cmd, "burg", id, !!takeSuggested(name, "burg")));
         }));
       },
       removeBurg(id) {
-        withMap((map) => safeRun("\u90FD\u5E02\u306E\u524A\u9664", () => commitOrThrow(planRemoveBurg(map, id))));
+        withMap((map) => safeRun("\u90FD\u5E02\u306E\u524A\u9664", () => commitEv(map, planRemoveBurg(map, id), { type: "removed-burg", title: `\u90FD\u5E02\u300C${map.pack.burgs[id]?.name}\u300D\u304C\u5931\u308F\u308C\u305F` })));
       },
       setCapital(stateId, burgId) {
-        withMap((map) => safeRun("\u9996\u90FD\u306E\u5909\u66F4", () => commitOrThrow(planSetCapital(map, stateId, burgId))));
+        withMap((map) => safeRun("\u9996\u90FD\u306E\u5909\u66F4", () => {
+          const st = map.pack.states[stateId], old = map.pack.burgs[st?.capital]?.name;
+          commitEv(map, planSetCapital(map, stateId, burgId), { type: "capital", title: `${nameOf2(st)}\u304C\u300C${map.pack.burgs[burgId]?.name}\u300D\u306B\u9077\u90FD\u3057\u305F`, detail: old ? `\u65E7\u9996\u90FD: ${old}` : void 0 });
+        }));
       },
       whyCannotRemoveBurg(id) {
         return withMap((map) => whyCannotRemoveBurg(map, id)) ?? "\u5730\u56F3\u304C\u8AAD\u307F\u8FBC\u307E\u308C\u3066\u3044\u307E\u305B\u3093";
@@ -9704,8 +10090,10 @@ ${shown}${more}`;
       /** 国家・文化・宗教・属州の名前を変える（都市は renameBurg を使う） */
       renameEntity(kind, id, name) {
         withMap((map) => safeRun("\u540D\u524D\u306E\u5909\u66F4", () => {
+          const before = nameOf2(entOf(map, kind, id));
           const plan = planRenameEntity(map, kind, id, name);
-          commitOrThrow(withProvisional(map, plan, kind, id, !!takeSuggested(name, kind)));
+          const ev = { type: `rename-${kind}`, title: `${KIND_JP[kind]}\u306E\u6539\u540D: \u300C${before}\u300D\u2192\u300C${(name ?? "").trim()}\u300D`, ref: { kind, id, from: before, to: (name ?? "").trim() } };
+          commitOrThrow(withProvisional(map, plan && withEvent(map, plan, ev), kind, id, !!takeSuggested(name, kind)));
         }));
       },
       /** 国家・文化・宗教・属州を削除する（Undo で戻せる）。成功したら true */
@@ -9713,7 +10101,8 @@ ${shown}${more}`;
         return withMap((map) => {
           let ok = false;
           safeRun("\u524A\u9664", () => {
-            commitOrThrow(planRemoveEntity(map, kind, id));
+            const before = nameOf2(entOf(map, kind, id));
+            commitEv(map, planRemoveEntity(map, kind, id), { type: `removed-${kind}`, title: `${KIND_JP[kind]}\u300C${before}\u300D\u304C\u6D88\u6EC5\u3057\u305F\uFF08\u524A\u9664\uFF09`, ref: { kind, id, from: before } });
             ok = true;
           });
           return ok;
@@ -9727,7 +10116,10 @@ ${shown}${more}`;
           safeRun(`${{ state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559" }[kind] ?? "\u5B9F\u4F53"}\u306E\u65B0\u898F\u4F5C\u6210`, () => {
             const n = resolveName(kind, name, {});
             const r = planAddEntity(map, { kind, name: n.name, rnd, extra: n.extra });
-            commitOrThrow(n.provisional ? withProvisional(map, r.command, kind, r.id, true) : r.command);
+            const title = { state: `\u56FD\u5BB6\u300C${n.name}\u300D\u304C\u5EFA\u56FD\u3055\u308C\u305F`, culture: `\u6587\u5316\u300C${n.name}\u300D\u304C\u8A95\u751F\u3057\u305F`, religion: `\u5B97\u6559\u300C${n.name}\u300D\u304C\u8A95\u751F\u3057\u305F` }[kind] ?? `${n.name}\u304C\u8A95\u751F\u3057\u305F`;
+            const detail = kind === "religion" && n.extra?.deity ? `\u6700\u9AD8\u795E: ${n.extra.deity}` : void 0;
+            const cmd = withEvent(map, r.command, { type: `created-${kind}`, title, detail });
+            commitOrThrow(n.provisional ? withProvisional(map, cmd, kind, r.id, true) : cmd);
             out = r.id;
           });
           return out;
@@ -9740,7 +10132,8 @@ ${shown}${more}`;
           safeRun("\u5C5E\u5DDE\u306E\u65B0\u898F\u4F5C\u6210", () => {
             const n = resolveName("province", name, { stateId });
             const r = planAddProvince(map, { state: stateId, name: n.name, rnd });
-            commitOrThrow(n.provisional ? withProvisional(map, r.command, "province", r.id, true) : r.command);
+            const cmd = withEvent(map, r.command, { type: "created-province", title: `\u5C5E\u5DDE\u300C${n.name}\u300D\u304C${nameOf2(map.pack.states[stateId])}\u306B\u8A2D\u7F6E\u3055\u308C\u305F` });
+            commitOrThrow(n.provisional ? withProvisional(map, cmd, "province", r.id, true) : cmd);
             out = r.id;
           });
           return out;
@@ -9781,13 +10174,22 @@ ${shown}${more}`;
       TECH_MAX,
       // ---- 政治・文化の深さ（種類・政体・起源・都市の設備） ----
       setEntityProfile(kind, id, patch) {
-        withMap((map) => safeRun("\u8A2D\u5B9A\u306E\u5909\u66F4", () => commitOrThrow(planSetEntityProfile(map, kind, id, patch))));
+        withMap((map) => safeRun("\u8A2D\u5B9A\u306E\u5909\u66F4", () => {
+          const e = entOf(map, kind, id), who = nameOf2(e);
+          const FIELD = { deity: "\u6700\u9AD8\u795E", form: "\u653F\u4F53", formName: "\u653F\u4F53\u540D", type: "\u7A2E\u985E" };
+          const parts = Object.entries(patch).filter(([k, v]) => FIELD[k] && e && String(e[k] ?? "") !== String(v ?? "").trim()).map(([k, v]) => `${FIELD[k]}: ${e[k] ?? "\u672A\u8A2D\u5B9A"} \u2192 ${String(v).trim()}`);
+          const ev = parts.length ? { type: `profile-${kind}`, title: `${KIND_JP[kind]}\u300C${who}\u300D\u306E${Object.keys(patch).filter((k) => FIELD[k]).map((k) => FIELD[k]).join("\u30FB")}\u304C\u5909\u308F\u3063\u305F`, detail: parts.join(" / ") } : null;
+          commitEv(map, planSetEntityProfile(map, kind, id, patch), ev);
+        }));
       },
       setOrigin(kind, id, parentId) {
-        withMap((map) => safeRun("\u8D77\u6E90\u306E\u5909\u66F4", () => commitOrThrow(planSetOrigin(map, kind, id, parentId))));
+        this.setOrigins(kind, id, parentId ? [parentId] : [0]);
       },
       setOrigins(kind, id, parentIds) {
-        withMap((map) => safeRun("\u8D77\u6E90\u306E\u5909\u66F4", () => commitOrThrow(planSetOrigins(map, kind, id, parentIds))));
+        withMap((map) => safeRun("\u8D77\u6E90\u306E\u5909\u66F4", () => {
+          const parents = parentIds.map((p) => p ? nameOf2(entOf(map, kind, p)) : "\u5171\u901A\u306E\u7956").join("\u30FB");
+          commitEv(map, planSetOrigins(map, kind, id, parentIds), { type: `origin-${kind}`, title: `${KIND_JP[kind]}\u300C${nameOf2(entOf(map, kind, id))}\u300D\u306E\u8D77\u6E90\u304C\u300C${parents}\u300D\u306B\u306A\u3063\u305F` });
+        }));
       },
       originsOf(kind, id) {
         return withMap((map) => originTree(map, kind).parents.get(id) ?? [0]) ?? [0];
@@ -9842,8 +10244,9 @@ ${shown}${more}`;
         return withMap((map) => {
           let idx = null;
           safeRun("\u30BE\u30FC\u30F3\u306E\u4F5C\u6210", () => {
-            const r = planAddZone(map, opts);
-            store.commit(r.command);
+            const name = (opts?.name ?? "").trim() || suggestLabel(map, { kind: "zone", rnd, type: opts?.type ?? "Custom", cell: opts?.cells?.[0] });
+            const r = planAddZone(map, { ...opts, name });
+            store.commit(withEvent(map, r.command, { type: "created-zone", title: `\u30BE\u30FC\u30F3\u300C${name}\u300D\uFF08${zoneLabel({ type: opts?.type ?? "Custom" })}\uFF09\u304C\u767A\u751F\u3057\u305F` }));
             rerender();
             idx = r.index;
           });
@@ -9862,8 +10265,9 @@ ${shown}${more}`;
           }
           let idx = null;
           safeRun("\u30BE\u30FC\u30F3\u306E\u4F5C\u6210", () => {
-            const r = planAddZone(map, { name, type, cells });
-            store.commit(r.command);
+            const nm2 = (name ?? "").trim() || suggestLabel(map, { kind: "zone", rnd, type: type ?? "Custom", cell });
+            const r = planAddZone(map, { name: nm2, type, cells });
+            store.commit(withEvent(map, r.command, { type: "created-zone", title: `\u30BE\u30FC\u30F3\u300C${nm2}\u300D\uFF08${zoneLabel({ type: type ?? "Custom" })}\uFF09\u304C\u767A\u751F\u3057\u305F`, detail: `${cells.length}\u30BB\u30EB` }));
             rerender();
             idx = r.index;
           });
@@ -9871,10 +10275,20 @@ ${shown}${more}`;
         }) ?? null;
       },
       editZone(index, patch) {
-        withMap((map) => safeRun("\u30BE\u30FC\u30F3\u306E\u7DE8\u96C6", () => commitOrThrow(planEditZone(map, index, patch))));
+        withMap((map) => safeRun("\u30BE\u30FC\u30F3\u306E\u7DE8\u96C6", () => {
+          const z = map.zones?.[index];
+          const renamed = z && patch.name !== void 0 && String(patch.name).trim() !== z.name;
+          const retyped = z && patch.type !== void 0 && patch.type !== z.type;
+          const ev = renamed || retyped ? { type: "edit-zone", title: `\u30BE\u30FC\u30F3\u300C${z.name}\u300D\u304C${renamed ? `\u300C${String(patch.name).trim()}\u300D\u3068\u6539\u79F0` : `${zoneLabel({ type: patch.type })}\u306B\u5909\u5316`}\u3055\u308C\u305F` } : null;
+          commitEv(map, planEditZone(map, index, patch), ev);
+        }));
       },
       removeZone(index) {
-        withMap((map) => safeRun("\u30BE\u30FC\u30F3\u306E\u524A\u9664", () => commitOrThrow(planRemoveZone(map, index))));
+        withMap((map) => safeRun("\u30BE\u30FC\u30F3\u306E\u524A\u9664", () => commitEv(map, planRemoveZone(map, index), { type: "removed-zone", title: `\u30BE\u30FC\u30F3\u300C${map.zones?.[index]?.name}\u300D\u304C\u53CE\u675F\u3057\u305F` })));
+      },
+      /** 同盟・ゾーン・最高神・時代の名前をランダムに作る（既存の名前と被らない） */
+      suggestLabel(kind, ctx = {}) {
+        return withMap((map) => suggestLabel(map, { kind, rnd, ...ctx })) ?? "";
       },
       paintZone(index, cells, mode) {
         withMap((map) => safeRun("\u30BE\u30FC\u30F3\u3092\u5857\u308B", () => commitOrThrow(planPaintZone(map, index, cells, mode))));
@@ -9894,14 +10308,20 @@ ${shown}${more}`;
         return withMap((map) => getTechLevel(map, stateId)) ?? null;
       },
       setTechLevel(stateId, value) {
-        withMap((map) => safeRun("\u6280\u8853\u6C34\u6E96\u306E\u5909\u66F4", () => commitOrThrow(planSetTechLevel(map, stateId, value))));
+        withMap((map) => safeRun("\u6280\u8853\u6C34\u6E96\u306E\u5909\u66F4", () => {
+          const before = getTechLevel(map, stateId);
+          commitEv(map, planSetTechLevel(map, stateId, value), { type: "tech", title: `${nameOf2(map.pack.states[stateId])}\u306E\u6280\u8853\u6C34\u6E96\u304C\u5909\u308F\u3063\u305F`, detail: `Lv${before} \u2192 Lv${value}` });
+        }));
       },
       DOCTRINES,
       getDoctrine(stateId) {
         return withMap((map) => getDoctrine(map, stateId)) ?? DEFAULT_DOCTRINE;
       },
       setDoctrine(stateId, doctrineKey) {
-        withMap((map) => safeRun("\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u5909\u66F4", () => commitOrThrow(planSetDoctrine(map, stateId, doctrineKey))));
+        withMap((map) => safeRun("\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u5909\u66F4", () => {
+          const label = (k) => DOCTRINES.find?.((d) => d.key === k)?.label ?? DOCTRINES[k]?.label ?? k;
+          commitEv(map, planSetDoctrine(map, stateId, doctrineKey), { type: "doctrine", title: `${nameOf2(map.pack.states[stateId])}\u304C\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u3092\u6539\u3081\u305F`, detail: `${label(getDoctrine(map, stateId))} \u2192 ${label(doctrineKey)}` });
+        }));
       },
       /** ブラシの半径(ワールド座標)内にあるセルIDを返す */
       cellsWithin(x, y, radius) {
@@ -10332,625 +10752,47 @@ ${shown}${more}`;
     };
   }
 
-  // js/ui/kit.js
-  function el8(tag, cls, text2) {
+  // js/ui/work-windows.js
+  var el8 = (tag, cls, text2) => {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
     if (text2 != null) e.textContent = text2;
     return e;
-  }
-  function btn(cls, text2, title, onClick) {
-    const b = el8("button", cls, text2);
-    b.type = "button";
-    if (title) b.title = title;
-    b.addEventListener("click", onClick);
-    return b;
-  }
-  function swatch(color, tall = true) {
-    const s = el8("span", "b-swatch");
-    s.style.background = color ?? "#888";
-    if (!tall) s.style.height = "14px";
-    return s;
-  }
-  function slider({ label, min, max, step, value, format, onCommit }) {
-    const wrap = el8("label", "b-field");
-    const val = el8("span", "b-mini", `${label} ${format(value)}`);
-    const r = document.createElement("input");
-    r.type = "range";
-    r.min = String(min);
-    r.max = String(max);
-    r.step = String(step);
-    r.value = String(value);
-    r.addEventListener("input", () => {
-      val.textContent = `${label} ${format(Number(r.value))}`;
-    });
-    r.addEventListener("change", () => onCommit(Number(r.value)));
-    wrap.append(val, r);
-    return wrap;
-  }
-  var isLive27 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-
-  // js/ui/profile-fields.js
-  var LIST_KEY4 = { state: "states", culture: "cultures", religion: "religions" };
-  var live2 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  function selectField(label, options, value, onChange, hint) {
-    const f = el8("label", "b-field");
-    f.append(el8("span", "b-mini", label));
-    const sel = document.createElement("select");
-    for (const o of options) sel.append(new Option(o.label, String(o.id)));
-    if (!options.some((o) => String(o.id) === String(value))) sel.append(new Option(String(value ?? "\uFF08\u672A\u8A2D\u5B9A\uFF09"), String(value ?? "")));
-    sel.value = String(value ?? "");
-    sel.addEventListener("change", () => onChange(sel.value));
-    f.append(sel);
-    if (hint) f.title = hint;
-    return f;
-  }
-  function textField(label, value, onChange) {
-    const f = el8("label", "b-field");
-    f.append(el8("span", "b-mini", label));
-    const inp = document.createElement("input");
-    inp.value = value ?? "";
-    inp.addEventListener("change", () => {
-      if (inp.value.trim()) onChange(inp.value);
-    });
-    f.append(inp);
-    return f;
-  }
-  function appendEntityProfile(d, kind, e, { editActions, map, openEntity }) {
-    if (kind === "state") {
-      d.append(
-        selectField("\u653F\u4F53", STATE_FORMS, e.form, (v) => editActions.setEntityProfile("state", e.i, { form: v }), "\u653F\u4F53\u3092\u5909\u3048\u308B\u3068\u3001\u56FD\u306E\u57FA\u6E96\u306E\u7A0E\u7387\u306E\u76EE\u5B89\u3082\u5909\u308F\u308A\u307E\u3059\uFF08\u7A0E\u7387\u305D\u306E\u3082\u306E\u306F\u7D4C\u6E08\u30BF\u30D6\u3067\u8ABF\u6574\uFF09"),
-        textField("\u653F\u4F53\u540D\uFF08\u56FD\u540D\u306B\u3064\u304F\u8A9E\uFF09", e.formName, (v) => editActions.setEntityProfile("state", e.i, { formName: v })),
-        selectField("\u56FD\u306E\u7A2E\u985E", CULTURE_TYPES, e.type, (v) => editActions.setEntityProfile("state", e.i, { type: v }))
-      );
-      return;
-    }
-    d.append(selectField(kind === "religion" ? "\u5B97\u6559\u306E\u7A2E\u985E" : "\u6587\u5316\u306E\u7A2E\u985E", kind === "religion" ? RELIGION_TYPES : CULTURE_TYPES, e.type, (v) => editActions.setEntityProfile(kind, e.i, { type: v })));
-    if (kind === "religion") d.append(textField("\u795E\u30FB\u4FE1\u4EF0\u306E\u5BFE\u8C61", e.deity, (v) => editActions.setEntityProfile("religion", e.i, { deity: v })));
-    const banned = /* @__PURE__ */ new Set([e.i, ...editActions.descendantsOf(kind, e.i)]);
-    const opts = [{ id: 0, label: kind === "religion" ? "\u306A\u3057\uFF08\u5171\u901A\u306E\u7956\u30FB\u539F\u59CB\u4FE1\u4EF0\uFF09" : "\u306A\u3057\uFF08\u5171\u901A\u306E\u7956\uFF09" }];
-    for (const x of map.pack[LIST_KEY4[kind]]) if (live2(x) && !banned.has(x.i)) opts.push({ id: x.i, label: x.name });
-    d.append(selectField("\u8D77\u6E90\uFF08\u3069\u3053\u304B\u3089\u5206\u304B\u308C\u305F\u304B\uFF09", opts, editActions.originOf(kind, e.i), (v) => editActions.setOrigin(kind, e.i, Number(v))));
-    const kids = editActions.descendantsOf(kind, e.i).map((i) => map.pack[LIST_KEY4[kind]][i]).filter(live2);
-    if (kids.length) {
-      const row = el8("div", "b-kids");
-      row.append(el8("span", "b-mini", "\u3053\u3053\u304B\u3089\u5206\u304B\u308C\u305F"));
-      for (const k of kids.slice(0, 8)) row.append(btn("b-chip", k.name, "\u3053\u306E\u9805\u76EE\u3092\u958B\u304F", () => openEntity?.(kind, k.i)));
-      if (kids.length > 8) row.append(el8("span", "b-mini", `\u307B\u304B${kids.length - 8}`));
-      d.append(row);
-    }
-  }
-  function burgDetails(b, { editActions, map }) {
-    const d = el8("div", "b-details");
-    const pop = el8("label", "b-field");
-    pop.append(el8("span", "b-mini", "\u4EBA\u53E3\uFF08\u5343\u4EBA\u3002\u56FD\u306E\u90FD\u5E02\u4EBA\u53E3\u306B\u3082\u53CD\u6620\uFF09"));
-    const inp = document.createElement("input");
-    inp.type = "number";
-    inp.min = "0";
-    inp.step = "0.1";
-    inp.value = String(Math.round((b.population ?? 0) * 100) / 100);
-    inp.addEventListener("change", () => editActions.setBurgProfile(b.i, { population: inp.value }));
-    pop.append(inp);
-    d.append(pop);
-    d.append(selectField("\u533A\u5206", BURG_GROUPS, b.group, (v) => editActions.setBurgProfile(b.i, { group: v }), b.capital ? "\u9996\u90FD\u306E\u533A\u5206\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093" : ""));
-    d.querySelector("select:last-of-type")?.toggleAttribute("disabled", !!b.capital);
-    d.append(selectField("\u7A2E\u985E", CULTURE_TYPES, b.type ?? "Generic", (v) => editActions.setBurgProfile(b.i, { type: v })));
-    const feats = el8("div", "b-feats");
-    feats.append(el8("span", "b-mini", "\u8A2D\u5099"));
-    for (const f of BURG_FEATURES) {
-      const lab = el8("label", "b-feat");
-      const cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.checked = !!b[f.id];
-      cb.addEventListener("change", () => editActions.setBurgProfile(b.i, { [f.id]: cb.checked }));
-      lab.append(cb, el8("span", "", `${f.icon} ${f.label}`));
-      feats.append(lab);
-    }
-    d.append(feats);
-    if (b.port) d.append(el8("p", "b-hint", "\u2693 \u6E2F\u304C\u3042\u308A\u307E\u3059\uFF08\u6E2F\u306E\u6709\u7121\u306F\u3001\u3053\u3053\u3067\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093\uFF09"));
-    const foot = el8("div", "b-actions");
-    const st = map.pack.states[b.state];
-    if (!b.capital && st && st.i) foot.append(btn("", "\u9996\u90FD\u306B\u3059\u308B", `${st.name}\u306E\u9996\u90FD\u3092\u3053\u306E\u90FD\u5E02\u306B\u3059\u308B`, () => editActions.setCapital(b.state, b.i)));
-    d.append(foot);
-    return d;
-  }
-  var featureIcons = (b) => BURG_FEATURES.filter((f) => b[f.id]).map((f) => f.icon).join("") + (b.port ? "\u2693" : "");
-
-  // js/ui/history-builder.js
-  var LIST_KEY5 = { state: "states", culture: "cultures", religion: "religions" };
-  var ICON = { state: "\u{1F3F3}", religion: "\u2628", culture: "\u2616" };
-  var isLive28 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  function el9(tag, cls, text2) {
-    const e = document.createElement(tag);
-    if (cls) e.className = cls;
-    if (text2 != null) e.textContent = text2;
-    return e;
-  }
-  function btn2(cls, text2, title, onClick) {
-    const b = el9("button", cls, text2);
-    b.type = "button";
-    if (title) b.title = title;
-    b.addEventListener("click", onClick);
-    return b;
-  }
-  function initHistoryBuilder({ store, viewport, renderer, editActions, builderActions, editMode, panels, views = {} }) {
-    const panel2 = byId("builder-panel");
-    const fab = byId("btn-builder");
-    const body = byId("builder-body");
-    const editFab = byId("btn-edit-mode");
-    let task = null;
-    let tab = "state";
-    let nameStyle = "";
-    const openCards = /* @__PURE__ */ new Set();
-    let scheduled = false;
-    let mode = "build";
-    let cellCounts = /* @__PURE__ */ new Map();
-    const getMap = () => store.getState().map;
-    const ent = (kind, id) => getMap()?.pack[LIST_KEY5[kind]]?.[id];
-    const nameOf2 = (e) => e.fullName ?? e.name;
-    const styleOpt = () => nameStyle ? { style: nameStyle } : {};
-    const MODES = [["build", "\u3064\u304F\u308B"], ["economy", "\u7D4C\u6E08\u30FB\u4EA4\u6613"], ["travel", "\u65C5\u30FB\u30BE\u30FC\u30F3"]];
-    function setMode(next) {
-      if (next === mode) return;
-      views[mode]?.leave?.();
-      if (mode === "build" && task) finishTask();
-      mode = next;
-      render();
-    }
-    function modeTabs() {
-      const bar = el9("div", "b-modes");
-      for (const [key, label] of MODES) {
-        if (key !== "build" && !views[key]) continue;
-        bar.append(btn2(`b-mode${mode === key ? " on" : ""}`, label, "", () => setMode(key)));
+  };
+  function initWorkWindows({ store, wins, views }) {
+    const hosts = {};
+    const defs = { economy: ["\u{1F4B0} \u7D4C\u6E08\u30FB\u8CBF\u6613", 520], travel: ["\u{1F9ED} \u65C5\u30FB\u30BE\u30FC\u30F3", 480] };
+    function render(key) {
+      const host = hosts[key];
+      host.replaceChildren();
+      if (!store.getState().map) {
+        host.append(el8("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
+        return;
       }
-      return bar;
+      views[key].render(host);
     }
-    function isOpen() {
-      return !panel2.hidden;
-    }
-    function refitIfWasFit(wasFit) {
-      if (!wasFit) return;
-      requestAnimationFrame(() => requestAnimationFrame(() => {
-        renderer.resize();
-        viewport.fit();
-        renderer.requestRender();
-      }));
-    }
-    const isFit = () => Math.abs(viewport.k - viewport.fitK) < 1e-6;
-    function open() {
-      if (editFab.getAttribute("aria-expanded") === "true") editFab.click();
-      const wasFit = isFit();
-      panel2.hidden = false;
-      fab.setAttribute("aria-expanded", "true");
-      render();
-      refitIfWasFit(wasFit);
-    }
-    function close() {
-      views[mode]?.leave?.();
-      mode = "build";
-      const wasFit = isFit();
-      panel2.hidden = true;
-      fab.setAttribute("aria-expanded", "false");
-      refitIfWasFit(wasFit);
-    }
-    fab.addEventListener("click", () => isOpen() ? close() : open());
-    byId("builder-close").addEventListener("click", close);
-    editFab.addEventListener("click", () => {
-      if (isOpen() && editFab.getAttribute("aria-expanded") !== "true") close();
-    }, true);
-    function swatch2(e) {
-      const s = el9("span", "b-swatch");
-      s.style.background = e.color ?? "#888";
-      return s;
-    }
-    function provBadge() {
-      return null;
-    }
-    function startPaint(kind, id) {
-      task = { kind, id, size: task?.size ?? "m", autoCapital: task?.autoCapital ?? true, status: "\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u3001\u9818\u571F\u3092\u5857\u3063\u3066\u304F\u3060\u3055\u3044" };
-      builderActions.beginPaint(kind, id);
-      render();
-    }
-    function runAuto(kind, id, size) {
-      const r = builderActions.autoClaim(kind, id, size);
-      if (!task || task.id !== id) task = { kind, id, size, autoCapital: true, status: "" };
-      task.size = size;
-      task.mode = r.ok ? "auto" : "drag";
-      if (r.ok) task.status = `\u304A\u307E\u304B\u305B\u3067 ${r.count} \u30BB\u30EB\u3092\u9818\u571F\u306B\u3057\u307E\u3057\u305F\uFF08Ctrl+Z \u3067\u53D6\u308A\u6D88\u3057\uFF09`;
-      else if (r.reason === "no-adjacent-free-land") task.status = "\u96A3\u308A\u5408\u3046\u7A7A\u304D\u5730\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5857\u308A\u8DB3\u3057\u3066\u304F\u3060\u3055\u3044";
-      else if (r.reason === "no-free-land") task.status = "\u7A7A\u304D\u5730\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5857\u3063\u3066\u304F\u3060\u3055\u3044";
-      else task.status = "\u9818\u571F\u3092\u6C7A\u3081\u3089\u308C\u307E\u305B\u3093\u3067\u3057\u305F";
-      if (!r.ok) builderActions.beginPaint(kind, id);
-      render();
-    }
-    function finishTask() {
-      if (!task) return;
-      const { kind, id, autoCapital } = task;
-      if (kind === "state" && autoCapital) builderActions.autoCapital(id);
-      builderActions.endPaint();
-      task = null;
-      render();
-    }
-    function cancelFresh() {
-      store.undo();
-      builderActions.endPaint();
-      task = null;
-      render();
-    }
-    function quickSection() {
-      const sec = el9("section", "b-sec");
-      sec.append(el9("h4", "b-title", "\u304B\u3093\u305F\u3093\u4F5C\u6210"));
-      const grid = el9("div", "b-quick");
-      const defs = [
-        ["state", "\u56FD\u3092\u5EFA\u3066\u308B", "\u4EEE\u306E\u540D\u524D\u3067\u56FD\u3092\u4F5C\u308A\u3001\u9818\u571F\u3092\u6C7A\u3081\u308B"],
-        ["religion", "\u5B97\u6559\u3092\u8208\u3059", "\u4EEE\u306E\u540D\u524D\u3067\u5B97\u6559\u3092\u4F5C\u308A\u3001\u4FE1\u8005\u306E\u571F\u5730\u3092\u6C7A\u3081\u308B"],
-        ["culture", "\u6587\u5316\u3092\u52A0\u3048\u308B", "\u4EEE\u306E\u540D\u524D\u3067\u6587\u5316\u3092\u4F5C\u308A\u3001\u305D\u306E\u571F\u5730\u3092\u6C7A\u3081\u308B"]
-      ];
-      for (const [kind, label, tip] of defs) {
-        const b = el9("button", "b-quick-btn");
-        b.type = "button";
-        b.title = tip;
-        b.append(el9("span", "b-quick-icon", ICON[kind]), el9("span", "b-quick-label", label));
-        b.addEventListener("click", () => {
-          const id = builderActions.create(kind, styleOpt());
-          if (id == null) return;
-          tab = kind;
-          startPaint(kind, id);
-        });
-        grid.append(b);
-      }
-      sec.append(grid);
-      const more = el9("details", "b-more");
-      if (nameStyle) more.open = true;
-      more.append(el9("summary", "", nameStyle ? `\u540D\u524D\u306E\u96F0\u56F2\u6C17\uFF1A${NAME_STYLES[nameStyle].label}` : "\u540D\u524D\u306E\u96F0\u56F2\u6C17\u3092\u6307\u5B9A\u3059\u308B\uFF08\u4EFB\u610F\uFF09"));
-      const sel = document.createElement("select");
-      sel.append(new Option("\u304A\u307E\u304B\u305B\uFF08\u6BCE\u56DE\u3070\u3089\u3070\u3089\uFF09", ""));
-      for (const k of STYLE_KEYS) sel.append(new Option(NAME_STYLES[k].label, k));
-      sel.value = nameStyle;
-      sel.addEventListener("change", () => {
-        nameStyle = sel.value;
-        render();
-      });
-      more.append(sel, el9("p", "b-hint", "\u6307\u5B9A\u3059\u308B\u3068\u3001\u3053\u308C\u304B\u3089\u4F5C\u308B\u540D\u524D\u3068\u{1F3B2}\u304C\u305D\u306E\u96F0\u56F2\u6C17\u306B\u306A\u308A\u307E\u3059\u3002"));
-      sec.append(more);
-      return sec;
-    }
-    function taskSection() {
-      if (!task) return null;
-      const e = ent(task.kind, task.id);
-      if (!isLive28(e)) {
-        task = null;
-        return null;
-      }
-      const label = builderActions.KIND_LABEL[task.kind];
-      const sec = el9("section", "b-task");
-      const head = el9("div", "b-task-head");
-      head.append(swatch2(e), el9("span", "b-task-kind", `${label}\u3092\u4F5C\u6210\u4E2D`));
-      sec.append(head);
-      const nameRow = el9("div", "b-namerow");
-      const input = document.createElement("input");
-      input.value = nameOf2(e);
-      input.setAttribute("aria-label", `${label}\u306E\u540D\u524D`);
-      input.addEventListener("change", () => {
-        if (input.value.trim()) editActions.renameEntity(task.kind, task.id, input.value);
-      });
-      nameRow.append(input, btn2("suggest-mini", "\u{1F3B2}", "\u540D\u524D\u3092\u5F15\u304D\u76F4\u3059", () => {
-        builderActions.rerollName(task.kind, task.id, styleOpt());
-      }));
-      const badge = provBadge(task.kind, task.id);
-      if (badge) nameRow.append(badge);
-      sec.append(nameRow);
-      sec.append(el9("p", "b-status", task.status));
-      const free = builderActions.freeLand(task.kind);
-      const how = el9("div", "b-how");
-      const drag = btn2(`b-seg${task.mode === "auto" ? "" : " active"}`, "\u270B \u30C9\u30E9\u30C3\u30B0\u3067\u5857\u308B", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u9818\u571F\u3092\u6C7A\u3081\u308B", () => {
-        task.mode = "drag";
-        task.status = "\u5730\u56F3\u3092\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u3001\u9818\u571F\u3092\u5857\u3063\u3066\u304F\u3060\u3055\u3044";
-        builderActions.beginPaint(task.kind, task.id);
-        render();
-      });
-      const auto = btn2(`b-seg${task.mode === "auto" ? " active" : ""}`, "\u{1F3B2} \u304A\u307E\u304B\u305B\u3067\u6C7A\u3081\u308B", free ? `\u7A7A\u304D\u5730\uFF08${free}\u30BB\u30EB\uFF09\u304B\u3089\u81EA\u52D5\u3067\u6C7A\u3081\u308B` : "\u7A7A\u304D\u5730\u304C\u3042\u308A\u307E\u305B\u3093", () => runAuto(task.kind, task.id, task.size));
-      auto.disabled = !free;
-      how.append(drag, auto);
-      sec.append(how);
-      const sizeRow = el9("div", "b-sizes");
-      sizeRow.append(el9("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5927\u304D\u3055"));
-      for (const [k, v] of Object.entries(builderActions.TERRITORY_SIZES)) {
-        sizeRow.append(btn2(`b-chip${task.size === k ? " on" : ""}`, v.label, "", () => {
-          task.size = k;
-          render();
-        }));
-      }
-      sec.append(sizeRow);
-      const brush = el9("label", "b-brush");
-      brush.append(el9("span", "b-mini", "\u30D6\u30E9\u30B7"));
-      const rng = document.createElement("input");
-      rng.type = "range";
-      rng.min = "10";
-      rng.max = "200";
-      rng.value = String(store.getState().brushRadius ?? 40);
-      rng.addEventListener("input", () => editMode.setRadius(Number(rng.value)));
-      brush.append(rng);
-      sec.append(brush);
-      if (task.kind === "state") {
-        const lab = el9("label", "b-check");
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = task.autoCapital;
-        cb.addEventListener("change", () => {
-          task.autoCapital = cb.checked;
-        });
-        lab.append(cb, el9("span", "", "\u5B8C\u4E86\u3057\u305F\u3089\u9996\u90FD\u3092\u81EA\u52D5\u3067\u7F6E\u304F\uFF08\u4EEE\u306E\u540D\u524D\uFF09"));
-        sec.append(lab);
-      }
-      const actions = el9("div", "b-actions");
-      const fresh = e.cells === 0 && store.peekUndoLabel() === `${label}\u3092\u65B0\u898F\u4F5C\u6210`;
-      if (fresh) actions.append(btn2("", "\u3084\u3081\u308B", "\u4F5C\u6210\u3092\u53D6\u308A\u6D88\u3059", cancelFresh));
-      actions.append(btn2("primary", "\u5B8C\u4E86", "\u3053\u306E\u5185\u5BB9\u3067\u78BA\u5B9A\u3057\u3066\u3001\u30C4\u30FC\u30EB\u3092\u7D42\u3048\u308B", finishTask));
-      sec.append(actions);
-      return sec;
-    }
-    function listSection() {
-      const map = getMap();
-      const sec = el9("section", "b-sec");
-      sec.append(el9("h4", "b-title", "\u3064\u304F\u3063\u305F\u6B74\u53F2"));
-      const kindSel = document.createElement("select");
-      kindSel.className = "b-kind-select";
-      for (const k of ["state", "religion", "culture"]) {
-        const n = map.pack[LIST_KEY5[k]].filter(isLive28).length;
-        const o = document.createElement("option");
-        o.value = k;
-        o.textContent = `${builderActions.KIND_LABEL[k]}\uFF08${n}\uFF09`;
-        kindSel.append(o);
-      }
-      const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed);
-      {
-        const o = document.createElement("option");
-        o.value = "burg";
-        o.textContent = `\u90FD\u5E02\uFF08${burgs.length}\uFF09`;
-        kindSel.append(o);
-      }
-      kindSel.value = tab;
-      kindSel.addEventListener("change", () => {
-        tab = kindSel.value;
-        render();
-      });
-      sec.append(kindSel);
-      if (tab === "burg") {
-        const list2 = el9("div", "b-cards");
-        for (const b of burgs.sort((a, c) => (c.population ?? 0) - (a.population ?? 0)).slice(0, 80)) list2.append(burgCard(b));
-        if (!burgs.length) sec.append(el9("p", "b-hint", "\u307E\u3060\u90FD\u5E02\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u5730\u56F3\u7DE8\u96C6\u306E\u300C\u90FD\u5E02\u300D\u3067\u7F6E\u3051\u307E\u3059\u3002"));
-        sec.append(list2);
-        if (burgs.length > 80) sec.append(el9("p", "b-hint", `\u4EBA\u53E3\u306E\u591A\u304480\u4EF6\u3092\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF08\u5168${burgs.length}\u4EF6\uFF09\u3002`));
-        return sec;
-      }
-      cellCounts = new Map(listEntities(map, tab).map((x) => [x.id, x.cells]));
-      const items = map.pack[LIST_KEY5[tab]].filter(isLive28).sort((a, b) => b.i - a.i);
-      if (!items.length) sec.append(el9("p", "b-hint", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u30DC\u30BF\u30F3\u3067\u4F5C\u308C\u307E\u3059\u3002"));
-      const list = el9("div", "b-cards");
-      for (const e of items) list.append(card(tab, e));
-      sec.append(list);
-      return sec;
-    }
-    function burgCard(b) {
-      const key = `burg:${b.i}`;
-      const wrap = el9("div", "b-card");
-      const row = el9("div", "b-row b-click");
-      const st = getMap().pack.states[b.state];
-      row.append(swatch2({ color: st?.color ?? "#888" }));
-      const main = el9("div", "b-row-main");
-      const nm = el9("div", "b-row-name");
-      nm.append(el9("span", "", `${b.capital ? "\u{1F3F0} " : ""}${b.name}`));
-      const badge = provBadge("burg", b.i);
-      if (badge) nm.append(badge);
-      main.append(nm, el9("div", "b-row-meta", `${st?.name ?? "\u7121\u6240\u5C5E"}\u30FB\u4EBA\u53E3 ${Math.round((b.population ?? 0) * 10) / 10}${featureIcons(b) ? "\u30FB" + featureIcons(b) : ""}`));
-      const open2 = openCards.has(key);
-      row.append(main, el9("span", "b-chev", open2 ? "\u25B4" : "\u25BE"));
-      row.addEventListener("click", () => {
-        if (open2) openCards.delete(key);
-        else openCards.add(key);
-        render();
-      });
-      wrap.append(row);
-      if (open2) wrap.append(burgDetails(b, { editActions, map: getMap() }));
-      return wrap;
-    }
-    function card(kind, e) {
-      const key = `${kind}:${e.i}`;
-      const wrap = el9("div", "b-card");
-      const active = task && task.kind === kind && task.id === e.i;
-      if (active) wrap.classList.add("active");
-      const row = el9("div", "b-row");
-      row.append(swatch2(e));
-      const main = el9("div", "b-row-main");
-      const nm = el9("div", "b-row-name");
-      nm.append(el9("span", "", nameOf2(e)));
-      const badge = provBadge(kind, e.i);
-      if (badge) nm.append(badge);
-      main.append(nm, el9("div", "b-row-meta", metaText(kind, e)));
-      row.append(main);
-      const ops = el9("div", "b-row-ops");
-      if (badge) ops.append(btn2("suggest-mini", "\u2713", "\u3053\u306E\u540D\u524D\u3067\u78BA\u5B9A", () => editActions.confirmName(kind, e.i)));
-      const isOpenCard = openCards.has(key);
-      ops.append(btn2("suggest-mini b-more-btn", isOpenCard ? "\u25B4" : "\u25BE", "\u8A73\u3057\u304F\u8A2D\u5B9A", () => {
-        if (openCards.has(key)) openCards.delete(key);
-        else openCards.add(key);
-        render();
-      }));
-      row.append(ops);
-      wrap.append(row);
-      if (isOpenCard) wrap.append(details(kind, e));
-      return wrap;
-    }
-    function metaText(kind, e) {
-      const parts = [`${cellCounts.get(e.i) ?? 0}\u30BB\u30EB`];
-      if (kind === "state") {
-        const cap = getMap().pack.burgs[e.capital];
-        parts.push(cap && cap.i && !cap.removed ? `\u9996\u90FD ${cap.name}` : "\u9996\u90FD\u306A\u3057");
-      }
-      return parts.join("\u30FB");
-    }
-    function details(kind, e) {
-      const d = el9("div", "b-details");
-      const nameF = el9("label", "b-field");
-      nameF.append(el9("span", "b-mini", "\u540D\u524D"));
-      const input = document.createElement("input");
-      input.value = nameOf2(e);
-      input.addEventListener("change", () => {
-        if (input.value.trim()) editActions.renameEntity(kind, e.i, input.value);
-      });
-      nameF.append(input);
-      d.append(nameF);
-      if (kind === "state") {
-        const tech = el9("label", "b-field");
-        const val = el9("span", "b-mini", `\u6280\u8853\u6C34\u6E96 ${editActions.getTechLevel(e.i) ?? 3}`);
-        const r = document.createElement("input");
-        r.type = "range";
-        r.min = String(editActions.TECH_MIN);
-        r.max = String(editActions.TECH_MAX);
-        r.value = String(editActions.getTechLevel(e.i) ?? 3);
-        r.addEventListener("input", () => {
-          val.textContent = `\u6280\u8853\u6C34\u6E96 ${r.value}`;
-        });
-        r.addEventListener("change", () => editActions.setTechLevel(e.i, Number(r.value)));
-        tech.append(val, r);
-        d.append(tech);
-        const doc = el9("label", "b-field");
-        doc.append(el9("span", "b-mini", "\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3"));
-        const sel = document.createElement("select");
-        for (const x of editActions.DOCTRINES) sel.append(new Option(x.label, x.key));
-        sel.value = editActions.getDoctrine(e.i);
-        sel.addEventListener("change", () => editActions.setDoctrine(e.i, sel.value));
-        doc.append(sel);
-        d.append(doc);
-        const burgs = getMap().pack.burgs.filter((b) => b && b.i && !b.removed && b.state === e.i);
-        if (burgs.length) {
-          const cap = el9("label", "b-field");
-          cap.append(el9("span", "b-mini", "\u9996\u90FD"));
-          const cs = document.createElement("select");
-          for (const b of burgs) cs.append(new Option(b.name, String(b.i)));
-          cs.value = String(e.capital);
-          cs.addEventListener("change", () => editActions.setCapital(e.i, Number(cs.value)));
-          cap.append(cs);
-          d.append(cap);
-        }
-      }
-      if (kind === "culture") {
-        const f = el9("label", "b-field");
-        f.append(el9("span", "b-mini", "\u540D\u524D\u306E\u7CFB\u7D71\uFF08\u3053\u306E\u6587\u5316\u306E\u5730\u540D\u306E\u96F0\u56F2\u6C17\uFF09"));
-        const sel = document.createElement("select");
-        for (const k of STYLE_KEYS) sel.append(new Option(NAME_STYLES[k].label, k));
-        sel.value = editActions.effectiveNameStyle(e.i);
-        sel.addEventListener("change", () => editActions.setNameStyle(e.i, sel.value));
-        f.append(sel);
-        d.append(f);
-      }
-      appendEntityProfile(d, kind, e, { editActions, map: getMap(), openEntity: (k, i) => {
-        tab = k;
-        openCards.add(`${k}:${i}`);
-        render();
+    for (const [key, [title, width]] of Object.entries(defs)) {
+      if (!views[key]) continue;
+      hosts[key] = el8("div", `work-host b-modebody work-${key}`);
+      wins.register(key, { title, width, body: hosts[key], onOpen: () => render(key), onClose: () => {
+        views[key].leave?.();
+        hosts[key].replaceChildren();
       } });
-      const terr = el9("div", "b-how");
-      terr.append(btn2("b-seg", "\u270B \u5857\u308A\u8DB3\u3059", "\u3053\u306E\u571F\u5730\u3092\u5730\u56F3\u3067\u30C9\u30E9\u30C3\u30B0\u3057\u3066\u5E83\u3052\u308B\u30FB\u76F4\u3059", () => startPaint(kind, e.i)));
-      d.append(terr);
-      const rnd = document.createElement("details");
-      rnd.className = "b-random";
-      rnd.append(el9("summary", "", "\u{1F3B2} \u30E9\u30F3\u30C0\u30E0\u8A2D\u5B9A"));
-      const rndRow = el9("div", "b-how");
-      rndRow.append(
-        btn2("b-seg", "\u{1F3B2} \u540D\u524D\u3092\u5F15\u304D\u76F4\u3059", "\u540D\u524D\u3092\u65B0\u3057\u304F\u30E9\u30F3\u30C0\u30E0\u306B\u6C7A\u3081\u308B\uFF08\u4ECA\u306E\u540D\u524D\u306F\u7F6E\u304D\u63DB\u308F\u308A\u307E\u3059\uFF09", () => builderActions.rerollName(kind, e.i, styleOpt())),
-        btn2("b-seg", "\u{1F3B2} \u96A3\u306E\u7A7A\u304D\u5730\u3078\u5E83\u3052\u308B", "\u3053\u306E\u571F\u5730\u306B\u63A5\u3057\u305F\u7A7A\u304D\u5730\u3078\u3001\u5730\u5F62\u306B\u6CBF\u3063\u3066\u81EA\u52D5\u3067\u5E83\u3052\u308B", () => runAuto(kind, e.i, task?.size ?? "m"))
-      );
-      rnd.append(rndRow);
-      d.append(rnd);
-      const foot = el9("div", "b-actions");
-      foot.append(btn2("", "\u5168\u8A2D\u5B9A\u3092\u958B\u304F \u2197", "\u6587\u7AE0\u30FB\u5916\u4EA4\u306A\u3069\u3001\u3059\u3079\u3066\u306E\u8A2D\u5B9A\u3092\u5DE6\u306E\u30D1\u30CD\u30EB\u3067\u958B\u304F", () => panels.openEntity(kind, e.i)));
-      d.append(foot);
-      return d;
     }
-    const PROV_KINDS = { state: ["states", "\u56FD\u5BB6"], culture: ["cultures", "\u6587\u5316"], religion: ["religions", "\u5B97\u6559"], province: ["provinces", "\u5C5E\u5DDE"], burg: ["burgs", "\u90FD\u5E02"] };
-    let provOpen = false;
-    function provisionalSection() {
-      return null;
-      const list = builderActions.provisional();
-      if (!list.length) return null;
-      const box = el9("section", "b-tray b-tray-col");
-      const head = el9("div", "b-tray-head");
-      head.append(el9("span", "b-tray-text", `\u{1F3B2} \u4EEE\u306E\u540D\u524D\u304C ${list.length} \u4EF6\u3042\u308A\u307E\u3059`));
-      head.append(btn2("", provOpen ? "\u4E00\u89A7\u3092\u9589\u3058\u308B" : "\u4E00\u89A7\u3092\u898B\u308B", "\u3069\u308C\u304C\u4EEE\u306E\u540D\u524D\u304B\u78BA\u8A8D\u3059\u308B", () => {
-        provOpen = !provOpen;
-        schedule();
-      }));
-      head.append(btn2("primary", "\u3059\u3079\u3066\u78BA\u5B9A", "\u540D\u524D\u306F\u305D\u306E\u307E\u307E\u3001\u300C\u4EEE\u300D\u306E\u5370\u3060\u3051\u5916\u3059\uFF08Undo 1\u56DE\u3067\u623B\u305B\u307E\u3059\uFF09", () => {
-        builderActions.confirmAll();
-      }));
-      box.append(head);
-      if (provOpen) {
-        const map = getMap();
-        const ul = el9("ul", "b-prov-list");
-        for (const { kind, id } of list) {
-          const [key, label] = PROV_KINDS[kind] ?? [null, kind];
-          const name = key && map?.pack?.[key]?.[id]?.name || `#${id}`;
-          const li = el9("li", "b-prov-item");
-          li.append(el9("span", "b-prov-kind", label), el9("span", "b-prov-name", name));
-          li.append(btn2("", "\u2713 \u78BA\u5B9A", `${name} \u306E\u300C\u4EEE\u300D\u306E\u5370\u3092\u5916\u3059`, () => {
-            editActions.confirmName(kind, id);
-          }));
-          ul.append(li);
-        }
-        box.append(ul);
+    let scheduled = false;
+    store.subscribe((_s, change) => {
+      if (change.type === "replace") for (const key of Object.keys(hosts)) {
+        views[key].leave?.();
+        if (wins.isOpen(key)) render(key);
       }
-      return box;
-    }
-    function render() {
-      scheduled = false;
-      if (!isOpen()) return;
-      const map = getMap();
-      const scrollTop = panel2.scrollTop;
-      body.replaceChildren();
-      if (!map) {
-        body.append(el9("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
-        return;
-      }
-      body.append(modeTabs());
-      if (mode !== "build" && views[mode]) {
-        const c = el9("div", "b-modebody");
-        body.append(c);
-        views[mode].render(c);
-        panel2.scrollTop = scrollTop;
-        return;
-      }
-      body.append(el9("p", "b-lead", "\u30DC\u30BF\u30F31\u3064\u3067\u3001\u307E\u305A\u5F62\u306B\u306A\u308A\u307E\u3059\u3002\u540D\u524D\u30FB\u9818\u571F\u30FB\u8A2D\u5B9A\u306F\u3001\u3044\u3064\u3067\u3082\u81EA\u7531\u306B\u76F4\u305B\u307E\u3059\u3002"));
-      body.append(quickSection());
-      const t = taskSection();
-      if (t) body.append(t);
-      body.append(listSection());
-      const p = provisionalSection();
-      if (p) body.append(p);
-      panel2.scrollTop = scrollTop;
-    }
-    const safeBuilderRender = guardRender(panel2, () => render());
-    function schedule() {
-      if (scheduled || !isOpen()) return;
+      if (!["commit", "undo", "redo"].includes(change.type)) return;
+      if (scheduled) return;
       scheduled = true;
       requestAnimationFrame(() => {
         scheduled = false;
-        safeBuilderRender();
+        for (const key of Object.keys(hosts)) if (wins.isOpen(key)) render(key);
       });
-    }
-    store.subscribe((_s, change) => {
-      if (change.type === "replace") {
-        task = null;
-        openCards.clear();
-        for (const v of Object.values(views)) v.leave?.();
-        mode = "build";
-      }
-      if (change.type === "batch" || change.type === "update") return;
-      schedule();
     });
-    return { open, close, toggle: () => isOpen() ? close() : open(), get isOpen() {
-      return isOpen();
-    }, _state: () => ({ task, tab, nameStyle }) };
   }
 
   // js/core/sim/world.js
@@ -10962,12 +10804,12 @@ ${shown}${more}`;
     const popK = Math.max(1, ((state.rural ?? 0) + (state.urban ?? 0)) / 1e3);
     return Math.min(BALANCE.upkeepMax, weighted / popK * BALANCE.upkeepFactor);
   }
-  var isLive29 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive27 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function planAnnualUpdate(map, rnd = null) {
     const parts = [];
     const trade = computeTrade(map);
     for (const state of map.pack.states) {
-      if (!isLive29(state)) continue;
+      if (!isLive27(state)) continue;
       ensureEconomy(state);
       const revenue = annualRevenue(trade.states.get(state.i));
       if (revenue > 0) {
@@ -10990,6 +10832,44 @@ ${shown}${more}`;
     return makeCommand("\u5E74\u6B21\u66F4\u65B0\uFF08\u4EBA\u53E3\u30FB\u7523\u696D\u30FB\u5FB4\u5175\u30FB\u7A0E\u53CE\u30FB\u70BA\u66FF\uFF09", ["politics", "places"], parts);
   }
 
+  // js/ui/kit.js
+  function el9(tag, cls, text2) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text2 != null) e.textContent = text2;
+    return e;
+  }
+  function btn(cls, text2, title, onClick) {
+    const b = el9("button", cls, text2);
+    b.type = "button";
+    if (title) b.title = title;
+    b.addEventListener("click", onClick);
+    return b;
+  }
+  function swatch(color, tall = true) {
+    const s = el9("span", "b-swatch");
+    s.style.background = color ?? "#888";
+    if (!tall) s.style.height = "14px";
+    return s;
+  }
+  function slider({ label, min, max, step, value, format, onCommit }) {
+    const wrap = el9("label", "b-field");
+    const val = el9("span", "b-mini", `${label} ${format(value)}`);
+    const r = document.createElement("input");
+    r.type = "range";
+    r.min = String(min);
+    r.max = String(max);
+    r.step = String(step);
+    r.value = String(value);
+    r.addEventListener("input", () => {
+      val.textContent = `${label} ${format(Number(r.value))}`;
+    });
+    r.addEventListener("change", () => onCommit(Number(r.value)));
+    wrap.append(val, r);
+    return wrap;
+  }
+  var isLive28 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+
   // js/ui/economy-view.js
   var fmt2 = (v) => (Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString("ja-JP");
   var signed = (v) => v > 0.05 ? `+${fmt2(v)}` : v < -0.05 ? `${fmt2(v)}` : "\xB10";
@@ -10997,7 +10877,7 @@ ${shown}${more}`;
     let selected = null;
     function summary(eco, states) {
       const total = eco.trade.deals.reduce((a, d) => a + d.value, 0);
-      const box = el8("div", "b-eco-sum");
+      const box = el9("div", "b-eco-sum");
       box.append(
         stat("\u53D6\u5F15", `${eco.trade.deals.length}\u4EF6`),
         stat("\u53D6\u5F15\u984D", fmt2(total)),
@@ -11006,23 +10886,23 @@ ${shown}${more}`;
       return box;
     }
     const stat = (k, v) => {
-      const d = el8("div", "b-stat");
-      d.append(el8("div", "b-stat-v", v), el8("div", "b-mini", k));
+      const d = el9("div", "b-stat");
+      d.append(el9("div", "b-stat-v", v), el9("div", "b-mini", k));
       return d;
     };
     function stateRow(map, eco, s) {
       const f = editActions.getFinance(s.i);
       const info = eco.trade.states.get(s.i);
-      const card = el8("div", `b-card${selected === s.i ? " active" : ""}`);
-      const row = el8("div", "b-row b-click");
+      const card = el9("div", `b-card${selected === s.i ? " active" : ""}`);
+      const row = el9("div", "b-row b-click");
       row.append(swatch(s.color));
-      const main = el8("div", "b-row-main");
-      main.append(el8("div", "b-row-name", s.fullName ?? s.name));
+      const main = el9("div", "b-row-main");
+      main.append(el9("div", "b-row-name", s.fullName ?? s.name));
       const rev = eco.revenue(s.i);
       const burden = militaryBurden(s);
       const upkeep = burden > 0 ? `\uFF08\u8ECD\u4E8B\u8CBB ${Math.round(burden * 100)}% \u2192 \u624B\u53D6\u308A +${fmt2(rev * (1 - burden))}\uFF09` : "";
-      main.append(el8("div", "b-row-meta", `\u56FD\u5EAB ${fmt2(f.treasury)}\u30FB\u5E74\u53CE +${fmt2(rev)}${upkeep}\u30FB\u8CBF\u6613 ${signed(info.exportValue - info.importValue)}`));
-      row.append(main, el8("span", "b-chev", selected === s.i ? "\u25B4" : "\u25BE"));
+      main.append(el9("div", "b-row-meta", `\u56FD\u5EAB ${fmt2(f.treasury)}\u30FB\u5E74\u53CE +${fmt2(rev)}${upkeep}\u30FB\u8CBF\u6613 ${signed(info.exportValue - info.importValue)}`));
+      row.append(main, el9("span", "b-chev", selected === s.i ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         selected = selected === s.i ? null : s.i;
         if (selected == null) builderActions.showTradeLines(null);
@@ -11033,16 +10913,16 @@ ${shown}${more}`;
       return card;
     }
     function detail(map, eco, s, f, info) {
-      const d = el8("div", "b-details");
-      const rates = el8("div", "b-tax");
+      const d = el9("div", "b-details");
+      const rates = el9("div", "b-tax");
       rates.append(
         slider({ label: "\u58F2\u4E0A\u7A0E\uFF08\u8F38\u51FA\u306B\u304B\u304B\u308B\uFF09", min: 0, max: 0.6, step: 0.01, value: f.salesTax, format: (v) => `${Math.round(v * 100)}%`, onCommit: (v) => editActions.setFinance(s.i, { salesTax: v }) }),
         slider({ label: "\u4EBA\u982D\u7A0E\uFF08\u4EBA\u53E3\u306B\u304B\u304B\u308B\uFF09", min: 0, max: 0.5, step: 0.01, value: f.pollTax, format: (v) => `${Math.round(v * 100)}%`, onCommit: (v) => editActions.setFinance(s.i, { pollTax: v }) })
       );
       d.append(rates);
-      d.append(el8("p", "b-hint", `\u5E74\u53CE\u306E\u898B\u8FBC\u307F: \u4EBA\u982D\u7A0E ${fmt2(info.pollTaxRevenue)} + \u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E ${fmt2(info.salesTaxRevenue)} = ${fmt2(eco.revenue(s.i))}`));
-      const tre = el8("label", "b-field");
-      tre.append(el8("span", "b-mini", "\u56FD\u5EAB\uFF08\u76F4\u63A5\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u3059\uFF09"));
+      d.append(el9("p", "b-hint", `\u5E74\u53CE\u306E\u898B\u8FBC\u307F: \u4EBA\u982D\u7A0E ${fmt2(info.pollTaxRevenue)} + \u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E ${fmt2(info.salesTaxRevenue)} = ${fmt2(eco.revenue(s.i))}`));
+      const tre = el9("label", "b-field");
+      tre.append(el9("span", "b-mini", "\u56FD\u5EAB\uFF08\u76F4\u63A5\u66F8\u304D\u63DB\u3048\u3089\u308C\u307E\u3059\uFF09"));
       const inp = document.createElement("input");
       inp.type = "number";
       inp.min = "0";
@@ -11051,34 +10931,34 @@ ${shown}${more}`;
       inp.addEventListener("change", () => editActions.setFinance(s.i, { treasury: inp.value }));
       tre.append(inp);
       d.append(tre);
-      const tbl = el8("div", "b-goods");
-      const head = el8("div", "b-goods-row b-goods-head");
-      head.append(el8("span", "", "\u7523\u7269"), el8("span", "", "\u7523"), el8("span", "", "\u9700"), el8("span", "", "\u5DEE"));
+      const tbl = el9("div", "b-goods");
+      const head = el9("div", "b-goods-row b-goods-head");
+      head.append(el9("span", "", "\u7523\u7269"), el9("span", "", "\u7523"), el9("span", "", "\u9700"), el9("span", "", "\u5DEE"));
       tbl.append(head);
       for (const g of eco.goods) {
         const p = info.production[g.id], dm = info.demand[g.id], net = info.net[g.id];
         if (p < 0.05 && dm < 0.05) continue;
-        const r = el8("div", "b-goods-row");
-        const diff = el8("span", net >= 0 ? "pos" : "neg", signed(net));
-        r.append(el8("span", "", `${g.icon} ${g.label}`), el8("span", "", fmt2(p)), el8("span", "", fmt2(dm)), diff);
+        const r = el9("div", "b-goods-row");
+        const diff = el9("span", net >= 0 ? "pos" : "neg", signed(net));
+        r.append(el9("span", "", `${g.icon} ${g.label}`), el9("span", "", fmt2(p)), el9("span", "", fmt2(dm)), diff);
         tbl.append(r);
       }
       d.append(tbl);
       const partners = eco.partners(s.i);
-      d.append(el8("h5", "b-sub", "\u8CBF\u6613\u76F8\u624B"));
-      if (!partners.length) d.append(el8("p", "b-hint", "\u53D6\u5F15\u76F8\u624B\u304C\u3044\u307E\u305B\u3093\uFF08\u6226\u4E89\u4E2D\u30FB\u5B64\u7ACB\u30FB\u4F59\u5270\u306A\u3057\uFF09\u3002"));
+      d.append(el9("h5", "b-sub", "\u8CBF\u6613\u76F8\u624B"));
+      if (!partners.length) d.append(el9("p", "b-hint", "\u53D6\u5F15\u76F8\u624B\u304C\u3044\u307E\u305B\u3093\uFF08\u6226\u4E89\u4E2D\u30FB\u5B64\u7ACB\u30FB\u4F59\u5270\u306A\u3057\uFF09\u3002"));
       for (const p of partners.slice(0, 5)) {
         const ps = map.pack.states[p.partner];
-        const r = el8("div", "b-partner");
+        const r = el9("div", "b-partner");
         r.append(
           swatch(ps.color, false),
-          el8("span", "b-partner-name", ps.name),
-          el8("span", "b-mini", `\u8F38\u51FA ${fmt2(p.exportValue)} / \u8F38\u5165 ${fmt2(p.importValue)}`),
-          el8("span", "b-partner-goods", p.goods.map((id) => eco.goods.find((g) => g.id === id)?.icon ?? "").join(""))
+          el9("span", "b-partner-name", ps.name),
+          el9("span", "b-mini", `\u8F38\u51FA ${fmt2(p.exportValue)} / \u8F38\u5165 ${fmt2(p.importValue)}`),
+          el9("span", "b-partner-goods", p.goods.map((id) => eco.goods.find((g) => g.id === id)?.icon ?? "").join(""))
         );
         d.append(r);
       }
-      d.append(el8("p", "b-hint", "\u5730\u56F3\u306E\u91D1\u306E\u7DDA\u306F\u8F38\u51FA\u8D85\u904E\u3001\u9752\u7DD1\u306E\u7DDA\u306F\u8F38\u5165\u8D85\u904E\u306E\u76F8\u624B\u3067\u3059\u3002"));
+      d.append(el9("p", "b-hint", "\u5730\u56F3\u306E\u91D1\u306E\u7DDA\u306F\u8F38\u51FA\u8D85\u904E\u3001\u9752\u7DD1\u306E\u7DDA\u306F\u8F38\u5165\u8D85\u904E\u306E\u76F8\u624B\u3067\u3059\u3002"));
       return d;
     }
     function render(container) {
@@ -11088,19 +10968,19 @@ ${shown}${more}`;
       c.replaceChildren();
       const map = store.getState().map;
       if (!map) {
-        c.append(el8("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        c.append(el9("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
       const eco = builderActions.economy();
-      const states = map.pack.states.filter(isLive27).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
+      const states = map.pack.states.filter(isLive28).sort((a, b) => eco.revenue(b.i) - eco.revenue(a.i));
       if (selected != null && !states.some((s) => s.i === selected)) selected = null;
       if (selected != null) builderActions.showTradeLines(selected, eco);
-      c.append(el8("p", "b-lead", "\u56FD\u306E\u8CA1\u653F\u3068\u4EA4\u6613\u3092\u898B\u307E\u3059\u3002\u5E74\u304C\u5909\u308F\u308B\u305F\u3073\u306B\u3001\u4EBA\u982D\u7A0E\u3068\u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E\u304B\u3089\u8ECD\u306E\u7DAD\u6301\u8CBB\u3092\u5F15\u3044\u305F\u5206\u304C\u56FD\u5EAB\u306B\u305F\u307E\u308A\u307E\u3059\u3002"));
+      c.append(el9("p", "b-lead", "\u56FD\u306E\u8CA1\u653F\u3068\u4EA4\u6613\u3092\u898B\u307E\u3059\u3002\u5E74\u304C\u5909\u308F\u308B\u305F\u3073\u306B\u3001\u4EBA\u982D\u7A0E\u3068\u8F38\u51FA\u306E\u58F2\u4E0A\u7A0E\u304B\u3089\u8ECD\u306E\u7DAD\u6301\u8CBB\u3092\u5F15\u3044\u305F\u5206\u304C\u56FD\u5EAB\u306B\u305F\u307E\u308A\u307E\u3059\u3002"));
       c.append(summary(eco, states));
-      const list = el8("div", "b-cards");
+      const list = el9("div", "b-cards");
       for (const s of states) list.append(stateRow(map, eco, s));
       c.append(list);
-      c.append(el8("p", "b-hint", "\u7523\u7269\u306F\u5730\u56F3\uFF08\u30D0\u30A4\u30AA\u30FC\u30E0\u30FB\u4EBA\u53E3\u30FB\u6D77\u5CB8\uFF09\u304B\u3089\u8A08\u7B97\u3057\u305F\u7C21\u6613\u30E2\u30C7\u30EB\u3067\u3059\u3002\u6226\u4E89\u4E2D\u306E\u56FD\u3069\u3046\u3057\u306F\u53D6\u5F15\u3057\u307E\u305B\u3093\u3002"));
+      c.append(el9("p", "b-hint", "\u7523\u7269\u306F\u5730\u56F3\uFF08\u30D0\u30A4\u30AA\u30FC\u30E0\u30FB\u4EBA\u53E3\u30FB\u6D77\u5CB8\uFF09\u304B\u3089\u8A08\u7B97\u3057\u305F\u7C21\u6613\u30E2\u30C7\u30EB\u3067\u3059\u3002\u6226\u4E89\u4E2D\u306E\u56FD\u3069\u3046\u3057\u306F\u53D6\u5F15\u3057\u307E\u305B\u3093\u3002"));
     }
     return { render, leave() {
       selected = null;
@@ -11129,7 +11009,7 @@ ${shown}${more}`;
       actions.setView({ journeySelected: selJourney, zoneSelected: selZone });
     }
     function journeySection(map) {
-      const sec = el8("section", "b-sec");
+      const sec = el9("section", "b-sec");
       sec.append(btn("b-quick-btn b-wide", "\uFF0B \u65C5\u3092\u3064\u304F\u308B", "\u7A7A\u306E\u65C5\u3092\u4F5C\u308B\u3002\u305D\u306E\u3042\u3068\u533A\u9593\u3092\u8DB3\u3059", () => {
         const id = editActions.addJourney({});
         if (id != null) {
@@ -11139,26 +11019,26 @@ ${shown}${more}`;
         }
       }));
       const sc = travelScale(map);
-      if (sc.usedDefault) sec.append(el8("p", "b-hint", "\u3053\u306E\u5730\u56F3\u306B\u306F\u7E2E\u5C3A\u306E\u60C5\u5831\u304C\u306A\u3044\u305F\u3081\u3001\u6A19\u6E96\uFF081\u753B\u7D20\uFF1D3km\uFF09\u3067\u8A08\u7B97\u3057\u307E\u3059\u3002"));
+      if (sc.usedDefault) sec.append(el9("p", "b-hint", "\u3053\u306E\u5730\u56F3\u306B\u306F\u7E2E\u5C3A\u306E\u60C5\u5831\u304C\u306A\u3044\u305F\u3081\u3001\u6A19\u6E96\uFF081\u753B\u7D20\uFF1D3km\uFF09\u3067\u8A08\u7B97\u3057\u307E\u3059\u3002"));
       const list = listJourneys(map);
-      if (!list.length) sec.append(el8("p", "b-hint", "\u307E\u3060\u65C5\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8ECD\u306E\u9060\u5F81\u3001\u5546\u4EBA\u306E\u884C\u304D\u6765\u3001\u5192\u967A\u8005\u306E\u9053\u306E\u308A\u306A\u3069\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
-      const cards = el8("div", "b-cards");
+      if (!list.length) sec.append(el9("p", "b-hint", "\u307E\u3060\u65C5\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u8ECD\u306E\u9060\u5F81\u3001\u5546\u4EBA\u306E\u884C\u304D\u6765\u3001\u5192\u967A\u8005\u306E\u9053\u306E\u308A\u306A\u3069\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
+      const cards = el9("div", "b-cards");
       for (const j of list.slice().reverse()) cards.append(journeyCard(map, j));
       sec.append(cards);
       return sec;
     }
     function journeyCard(map, j) {
       const open = selJourney === j.id;
-      const card = el8("div", `b-card${open ? " active" : ""}`);
-      const row = el8("div", "b-row b-click");
+      const card = el9("div", `b-card${open ? " active" : ""}`);
+      const row = el9("div", "b-row b-click");
       const sw = swatch(j.color);
-      const main = el8("div", "b-row-main");
+      const main = el9("div", "b-row-main");
       const tot = journeyTotals(map, j);
       main.append(
-        el8("div", "b-row-name", j.name),
-        el8("div", "b-row-meta", j.legs.length ? `${j.type}\u30FB${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}` : `${j.type}\u30FB\u533A\u9593\u306A\u3057`)
+        el9("div", "b-row-name", j.name),
+        el9("div", "b-row-meta", j.legs.length ? `${j.type}\u30FB${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}` : `${j.type}\u30FB\u533A\u9593\u306A\u3057`)
       );
-      row.append(sw, main, el8("span", "b-chev", open ? "\u25B4" : "\u25BE"));
+      row.append(sw, main, el9("span", "b-chev", open ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         selJourney = open ? null : j.id;
         setHighlight();
@@ -11169,9 +11049,9 @@ ${shown}${more}`;
       return card;
     }
     function journeyDetail(map, j) {
-      const d = el8("div", "b-details");
-      const nameF = el8("label", "b-field");
-      nameF.append(el8("span", "b-mini", "\u540D\u524D"));
+      const d = el9("div", "b-details");
+      const nameF = el9("label", "b-field");
+      nameF.append(el9("span", "b-mini", "\u540D\u524D"));
       const input = document.createElement("input");
       input.value = j.name;
       input.addEventListener("change", () => {
@@ -11179,20 +11059,20 @@ ${shown}${more}`;
       });
       nameF.append(input);
       d.append(nameF);
-      d.append(el8("h5", "b-sub", "\u533A\u9593"));
-      if (!j.legs.length) d.append(el8("p", "b-hint", "\u307E\u3060\u533A\u9593\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u3067\u624B\u6BB5\u3092\u9078\u3093\u3067\u300C\u533A\u9593\u3092\u8DB3\u3059\u300D\u3092\u62BC\u3057\u3001\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3073\u307E\u3059\u3002"));
+      d.append(el9("h5", "b-sub", "\u533A\u9593"));
+      if (!j.legs.length) d.append(el9("p", "b-hint", "\u307E\u3060\u533A\u9593\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0B\u3067\u624B\u6BB5\u3092\u9078\u3093\u3067\u300C\u533A\u9593\u3092\u8DB3\u3059\u300D\u3092\u62BC\u3057\u3001\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3073\u307E\u3059\u3002"));
       j.legs.forEach((leg, idx) => {
         const t = TRANSPORT_BY_ID[leg.transport];
         const st = t ? legStats(map, leg, t) : { distance: 0, days: 0, unit: "" };
-        const row = el8("div", "b-leg");
-        const head = el8("div", "b-leg-head");
+        const row = el9("div", "b-leg");
+        const head = el9("div", "b-leg-head");
         head.append(
-          el8("span", "b-leg-ico", t?.icon ?? "?"),
-          el8("span", "b-leg-route", t?.domain === "stay" ? `${placeName(map, leg.from)}\u3067\u6EDE\u5728` : `${placeName(map, leg.from)} \u2192 ${placeName(map, leg.to)}`),
+          el9("span", "b-leg-ico", t?.icon ?? "?"),
+          el9("span", "b-leg-route", t?.domain === "stay" ? `${placeName(map, leg.from)}\u3067\u6EDE\u5728` : `${placeName(map, leg.from)} \u2192 ${placeName(map, leg.to)}`),
           btn("suggest-mini", "\xD7", "\u3053\u306E\u533A\u9593\u3092\u524A\u9664", () => editActions.removeLeg(j.id, idx))
         );
         row.append(head);
-        const meta = el8("div", "b-row-meta", t?.domain === "stay" ? formatDuration(st.days) : `${fmt3(st.distance)}${st.unit}\u30FB${formatDuration(st.days)}`);
+        const meta = el9("div", "b-row-meta", t?.domain === "stay" ? formatDuration(st.days) : `${fmt3(st.distance)}${st.unit}\u30FB${formatDuration(st.days)}`);
         const sel = document.createElement("select");
         sel.title = "\u79FB\u52D5\u624B\u6BB5\u3092\u5909\u3048\u308B\u3068\u3001\u7D4C\u8DEF\u3092\u5F15\u304D\u76F4\u3057\u307E\u3059";
         for (const x of TRANSPORTS) sel.append(new Option(`${x.icon} ${x.label}`, x.id));
@@ -11201,7 +11081,7 @@ ${shown}${more}`;
         row.append(meta, sel);
         d.append(row);
       });
-      const add2 = el8("div", "b-addleg");
+      const add2 = el9("div", "b-addleg");
       const tsel = document.createElement("select");
       for (const x of TRANSPORTS) tsel.append(new Option(`${x.icon} ${x.label}`, x.id));
       tsel.value = transport;
@@ -11210,10 +11090,10 @@ ${shown}${more}`;
       });
       add2.append(tsel, btn("b-seg", picking ? "\u9078\u629E\u4E2D\u2026\uFF08Esc \u3067\u53D6\u6D88\uFF09" : "\uFF0B \u533A\u9593\u3092\u8DB3\u3059", "\u5730\u56F3\u3067\u5834\u6240\u3092\u9078\u3076", () => startPick(map, j)));
       d.append(add2);
-      if (picking) d.append(el8("p", "b-status", picking.text));
+      if (picking) d.append(el9("p", "b-status", picking.text));
       const tot = journeyTotals(map, j);
-      if (j.legs.length) d.append(el8("p", "b-hint", `\u5408\u8A08 ${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}`));
-      const foot = el8("div", "b-actions");
+      if (j.legs.length) d.append(el9("p", "b-hint", `\u5408\u8A08 ${fmt3(tot.distance)}${tot.unit}\u30FB${formatDuration(tot.days)}`));
+      const foot = el9("div", "b-actions");
       foot.append(btn("", "\u65C5\u3092\u524A\u9664", "\u3053\u306E\u65C5\u3092\u3059\u3079\u3066\u6D88\u3059\uFF08Undo\u3067\u623B\u305B\u307E\u3059\uFF09", () => {
         selJourney = null;
         editActions.removeJourney(j.id);
@@ -11274,8 +11154,8 @@ ${shown}${more}`;
       renderOnce();
     }
     function zoneSection(map) {
-      const sec = el8("section", "b-sec");
-      const row = el8("div", "b-addleg");
+      const sec = el9("section", "b-sec");
+      const row = el9("div", "b-addleg");
       const tsel = document.createElement("select");
       for (const t of ZONE_TYPES) tsel.append(new Option(t.label, t.id));
       tsel.value = zoneType;
@@ -11284,7 +11164,7 @@ ${shown}${more}`;
       });
       row.append(tsel);
       sec.append(row);
-      const how = el8("div", "b-how");
+      const how = el9("div", "b-how");
       how.append(
         btn("b-seg", "\u270B \u5857\u3063\u3066\u4F5C\u308B", "\u7A7A\u306E\u30BE\u30FC\u30F3\u3092\u4F5C\u308A\u3001\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u6C7A\u3081\u308B", () => {
           const idx = editActions.addZone({ type: zoneType });
@@ -11314,17 +11194,17 @@ ${shown}${more}`;
         })
       );
       sec.append(how);
-      if (picking) sec.append(el8("p", "b-status", picking.text));
-      const sizeRow = el8("div", "b-sizes");
-      sizeRow.append(el8("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5E83\u3055"));
+      if (picking) sec.append(el9("p", "b-status", picking.text));
+      const sizeRow = el9("div", "b-sizes");
+      sizeRow.append(el9("span", "b-mini", "\u304A\u307E\u304B\u305B\u306E\u5E83\u3055"));
       for (const [n, label] of [[10, "\u5C0F"], [24, "\u4E2D"], [60, "\u5927"]]) sizeRow.append(btn(`b-chip${zoneSize === n ? " on" : ""}`, label, `${n}\u30BB\u30EB`, () => {
         zoneSize = n;
         renderOnce();
       }));
       sec.append(sizeRow);
       const zones = (map.zones ?? []).map((z, index) => ({ z, index })).filter((x) => x.z && Array.isArray(x.z.cells));
-      if (!zones.length) sec.append(el8("p", "b-hint", "\u307E\u3060\u30BE\u30FC\u30F3\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4FB5\u653B\u30FB\u53CD\u4E71\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\u306E\u7BC4\u56F2\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
-      const cards = el8("div", "b-cards");
+      if (!zones.length) sec.append(el9("p", "b-hint", "\u307E\u3060\u30BE\u30FC\u30F3\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4FB5\u653B\u30FB\u53CD\u4E71\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\u306E\u7BC4\u56F2\u3092\u8A18\u9332\u3067\u304D\u307E\u3059\u3002"));
+      const cards = el9("div", "b-cards");
       for (const { z, index } of zones.slice().reverse()) cards.append(zoneCard(map, z, index));
       sec.append(cards);
       return sec;
@@ -11346,11 +11226,11 @@ ${shown}${more}`;
     }
     function zoneCard(map, z, index) {
       const open = selZone === index;
-      const card = el8("div", `b-card${open ? " active" : ""}`);
-      const row = el8("div", "b-row b-click");
-      const main = el8("div", "b-row-main");
-      main.append(el8("div", "b-row-name", z.name), el8("div", "b-row-meta", `${zoneLabel(z)}\u30FB${z.cells.length}\u30BB\u30EB${z.hidden ? "\u30FB\u975E\u8868\u793A" : ""}`));
-      row.append(swatch(zoneColor(z)), main, el8("span", "b-chev", open ? "\u25B4" : "\u25BE"));
+      const card = el9("div", `b-card${open ? " active" : ""}`);
+      const row = el9("div", "b-row b-click");
+      const main = el9("div", "b-row-main");
+      main.append(el9("div", "b-row-name", z.name), el9("div", "b-row-meta", `${zoneLabel(z)}\u30FB${z.cells.length}\u30BB\u30EB${z.hidden ? "\u30FB\u975E\u8868\u793A" : ""}`));
+      row.append(swatch(zoneColor(z)), main, el9("span", "b-chev", open ? "\u25B4" : "\u25BE"));
       row.addEventListener("click", () => {
         if (open) endPaint();
         selZone = open ? null : index;
@@ -11359,18 +11239,24 @@ ${shown}${more}`;
       });
       card.append(row);
       if (open) {
-        const d = el8("div", "b-details");
-        const nameF = el8("label", "b-field");
-        nameF.append(el8("span", "b-mini", "\u540D\u524D"));
+        const d = el9("div", "b-details");
+        const nameF = el9("label", "b-field");
+        nameF.append(el9("span", "b-mini", "\u540D\u524D"));
         const input = document.createElement("input");
         input.value = z.name;
         input.addEventListener("change", () => {
           if (input.value.trim()) editActions.editZone(index, { name: input.value });
         });
-        nameF.append(input);
+        const nameRow = el9("span", "name-row");
+        nameRow.append(input, btn("suggest-mini", "\u{1F3B2}", "\u540D\u524D\u3092\u30E9\u30F3\u30C0\u30E0\u306B\u6C7A\u3081\u308B\uFF08\u7A2E\u985E\u306B\u5408\u3063\u305F\u540D\u524D\u306B\u306A\u308A\u307E\u3059\uFF09", (ev) => {
+          ev.preventDefault();
+          const cell = z.cells?.[0];
+          editActions.editZone(index, { name: editActions.suggestLabel("zone", { type: z.type, cell }) });
+        }));
+        nameF.append(nameRow);
         d.append(nameF);
-        const tf = el8("label", "b-field");
-        tf.append(el8("span", "b-mini", "\u7A2E\u985E"));
+        const tf = el9("label", "b-field");
+        tf.append(el9("span", "b-mini", "\u7A2E\u985E"));
         const tsel = document.createElement("select");
         for (const t of ZONE_TYPES) tsel.append(new Option(t.label, t.id));
         if (!ZONE_TYPES.some((t) => t.id === z.type)) tsel.append(new Option(z.type, z.type));
@@ -11378,14 +11264,14 @@ ${shown}${more}`;
         tsel.addEventListener("change", () => editActions.editZone(index, { type: tsel.value }));
         tf.append(tsel);
         d.append(tf);
-        const ops = el8("div", "b-how");
+        const ops = el9("div", "b-how");
         const painting = paintingZone === index;
         ops.append(
           btn(`b-seg${painting ? " active" : ""}`, painting ? "\u270B \u5857\u3063\u3066\u3044\u307E\u3059\uFF08\u5B8C\u4E86\u3067\u7D42\u4E86\uFF09" : "\u270B \u5857\u308A\u8DB3\u3059", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u5E83\u3052\u308B", () => painting ? (endPaint(), renderOnce()) : startPaint(index, "add")),
           btn("b-seg", "\u{1F9FD} \u6D88\u3059", "\u5730\u56F3\u3092\u306A\u305E\u3063\u3066\u7BC4\u56F2\u3092\u6E1B\u3089\u3059", () => startPaint(index, "erase"))
         );
         d.append(ops);
-        const foot = el8("div", "b-actions");
+        const foot = el9("div", "b-actions");
         foot.append(
           btn("", z.hidden ? "\u8868\u793A\u3059\u308B" : "\u96A0\u3059", "\u5730\u56F3\u306B\u51FA\u3059\u304B\u3069\u3046\u304B", () => editActions.editZone(index, { hidden: !z.hidden })),
           btn("", "\u524A\u9664", "\u3053\u306E\u30BE\u30FC\u30F3\u3092\u6D88\u3059\uFF08Undo\u3067\u623B\u305B\u307E\u3059\uFF09", () => {
@@ -11410,11 +11296,11 @@ ${shown}${more}`;
       c.replaceChildren();
       const map = getMap();
       if (!map) {
-        c.append(el8("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
+        c.append(el9("p", "b-hint", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044\u3002"));
         return;
       }
-      c.append(el8("p", "b-lead", "\u65C5\u306E\u9053\u306E\u308A\u3068\u3001\u30BE\u30FC\u30F3\uFF08\u4FB5\u653B\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\uFF09\u3092\u8A18\u9332\u3057\u307E\u3059\u3002"));
-      const tabs = el8("div", "b-tabs");
+      c.append(el9("p", "b-lead", "\u65C5\u306E\u9053\u306E\u308A\u3068\u3001\u30BE\u30FC\u30F3\uFF08\u4FB5\u653B\u30FB\u75AB\u75C5\u30FB\u707D\u5BB3\u306A\u3069\uFF09\u3092\u8A18\u9332\u3057\u307E\u3059\u3002"));
+      const tabs = el9("div", "b-tabs");
       for (const [k, label] of [["journey", "\u65C5"], ["zone", "\u30BE\u30FC\u30F3"]]) {
         tabs.append(btn(`b-tab${section === k ? " on" : ""}`, label, "", () => {
           if (section !== k) {
@@ -11440,6 +11326,71 @@ ${shown}${more}`;
     };
   }
 
+  // js/ui/profile-fields.js
+  var LIST_KEY4 = { state: "states", culture: "cultures", religion: "religions" };
+  var live2 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  function selectField(label, options, value, onChange, hint) {
+    const f = el9("label", "b-field");
+    f.append(el9("span", "b-mini", label));
+    const sel = document.createElement("select");
+    for (const o of options) sel.append(new Option(o.label, String(o.id)));
+    if (!options.some((o) => String(o.id) === String(value))) sel.append(new Option(String(value ?? "\uFF08\u672A\u8A2D\u5B9A\uFF09"), String(value ?? "")));
+    sel.value = String(value ?? "");
+    sel.addEventListener("change", () => onChange(sel.value));
+    f.append(sel);
+    if (hint) f.title = hint;
+    return f;
+  }
+  function textField(label, value, onChange, suggest) {
+    const f = el9("label", "b-field");
+    f.append(el9("span", "b-mini", label));
+    const inp = document.createElement("input");
+    inp.value = value ?? "";
+    inp.addEventListener("change", () => {
+      if (inp.value.trim()) onChange(inp.value);
+    });
+    if (!suggest) {
+      f.append(inp);
+      return f;
+    }
+    const row = el9("span", "name-row");
+    const dice = btn("suggest-mini", "\u{1F3B2}", "\u540D\u524D\u3092\u30E9\u30F3\u30C0\u30E0\u306B\u6C7A\u3081\u308B\uFF08\u62BC\u3059\u305F\u3073\u306B\u5909\u308F\u308A\u307E\u3059\u3002\u5143\u306B\u623B\u305B\u307E\u3059\uFF09", (ev) => {
+      ev.preventDefault();
+      const v = suggest();
+      if (v) {
+        inp.value = v;
+        onChange(v);
+      }
+    });
+    row.append(inp, dice);
+    f.append(row);
+    return f;
+  }
+  function appendEntityProfile(d, kind, e, { editActions, map, openEntity }) {
+    if (kind === "state") {
+      d.append(
+        selectField("\u653F\u4F53", STATE_FORMS, e.form, (v) => editActions.setEntityProfile("state", e.i, { form: v }), "\u653F\u4F53\u3092\u5909\u3048\u308B\u3068\u3001\u56FD\u306E\u57FA\u6E96\u306E\u7A0E\u7387\u306E\u76EE\u5B89\u3082\u5909\u308F\u308A\u307E\u3059\uFF08\u7A0E\u7387\u305D\u306E\u3082\u306E\u306F\u7D4C\u6E08\u30BF\u30D6\u3067\u8ABF\u6574\uFF09"),
+        textField("\u653F\u4F53\u540D\uFF08\u56FD\u540D\u306B\u3064\u304F\u8A9E\uFF09", e.formName, (v) => editActions.setEntityProfile("state", e.i, { formName: v })),
+        selectField("\u56FD\u306E\u7A2E\u985E", CULTURE_TYPES, e.type, (v) => editActions.setEntityProfile("state", e.i, { type: v }))
+      );
+      return;
+    }
+    if (kind === "religion") d.append(textField("\u6700\u9AD8\u795E", e.deity, (v) => editActions.setEntityProfile("religion", e.i, { deity: v }), () => editActions.suggestLabel("deity", { cultureId: e.culture })));
+    d.append(selectField(kind === "religion" ? "\u5B97\u6559\u306E\u7A2E\u985E" : "\u6587\u5316\u306E\u7A2E\u985E", kind === "religion" ? RELIGION_TYPES : CULTURE_TYPES, e.type, (v) => editActions.setEntityProfile(kind, e.i, { type: v })));
+    const banned = /* @__PURE__ */ new Set([e.i, ...editActions.descendantsOf(kind, e.i)]);
+    const opts = [{ id: 0, label: kind === "religion" ? "\u306A\u3057\uFF08\u5171\u901A\u306E\u7956\u30FB\u539F\u59CB\u4FE1\u4EF0\uFF09" : "\u306A\u3057\uFF08\u5171\u901A\u306E\u7956\uFF09" }];
+    for (const x of map.pack[LIST_KEY4[kind]]) if (live2(x) && !banned.has(x.i)) opts.push({ id: x.i, label: x.name });
+    d.append(selectField("\u8D77\u6E90\uFF08\u3069\u3053\u304B\u3089\u5206\u304B\u308C\u305F\u304B\uFF09", opts, editActions.originOf(kind, e.i), (v) => editActions.setOrigin(kind, e.i, Number(v))));
+    const kids = editActions.descendantsOf(kind, e.i).map((i) => map.pack[LIST_KEY4[kind]][i]).filter(live2);
+    if (kids.length) {
+      const row = el9("div", "b-kids");
+      row.append(el9("span", "b-mini", "\u3053\u3053\u304B\u3089\u5206\u304B\u308C\u305F"));
+      for (const k of kids.slice(0, 8)) row.append(btn("b-chip", k.name, "\u3053\u306E\u9805\u76EE\u3092\u958B\u304F", () => openEntity?.(kind, k.i)));
+      if (kids.length > 8) row.append(el9("span", "b-mini", `\u307B\u304B${kids.length - 8}`));
+      d.append(row);
+    }
+  }
+
   // js/ui/panels/editor-panel.js
   var el10 = (tag, cls, text2) => {
     const e = document.createElement(tag);
@@ -11447,7 +11398,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive30 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive29 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initEditorPanel({ store, editActions, editMode, panels: initialPanels }) {
     const root = byId("editor-panel");
     const sidebar = byId("sidebar");
@@ -11511,7 +11462,7 @@ ${shown}${more}`;
     }
     function renderStateTabs(map, title, root2) {
       const e = map.pack.states[current.id];
-      if (!isLive30(e)) {
+      if (!isLive29(e)) {
         close();
         return;
       }
@@ -11536,6 +11487,7 @@ ${shown}${more}`;
       form.append(basicStatsSection(map, e));
       form.append(textField2("\u56FD\u5BB6\u540D", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v), () => editActions.suggestName("state", { id: e.i })));
       form.append(...provisionalNote("state", e.i));
+      form.append(profileSection("state", e, map));
       form.append(techLevelSection(e.i));
       form.append(doctrineSection(e.i));
       form.append(noteField(map, "state", e.i));
@@ -11570,7 +11522,7 @@ ${shown}${more}`;
     function diplomacyMatrix(map, focusId) {
       const wrap = el10("div", "editor-section diplomacy-matrix-wrap");
       wrap.append(el10("h4", "", "\u5916\u4EA4\u4E00\u89A7\uFF08\u5168\u56FD\u5BB6\uFF09"), el10("p", "hint", "\u540C\u76DF\u3092\u7D50\u3076\u3068\u300C\u540C\u76DF\u300D\u3001\u6226\u4E89\u3092\u3059\u308B\u3068\u300C\u6575\u5BFE\u300D\u306B\u306A\u308A\u3001\u8B1B\u548C\u3059\u308B\u3068\u4E2D\u7ACB\u306B\u623B\u308A\u307E\u3059\u3002\u3053\u3053\u3067\u306F\u8A2D\u5B9A\u3057\u307E\u305B\u3093\u3002"));
-      const states = map.pack.states.filter(isLive30).sort((a, b) => a.i - b.i);
+      const states = map.pack.states.filter(isLive29).sort((a, b) => a.i - b.i);
       if (states.length < 2) {
         wrap.append(el10("p", "hint", "\u56FD\u5BB6\u304C2\u3064\u4EE5\u4E0A\u306A\u3044\u3068\u8868\u306B\u306A\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
@@ -11622,7 +11574,7 @@ ${shown}${more}`;
     function renderStateProvinces(map, e, body) {
       const form = el10("div", "editor-form");
       form.append(newProvinceSection(e));
-      const provinces = map.pack.provinces.filter((p) => isLive30(p) && p.state === e.i);
+      const provinces = map.pack.provinces.filter((p) => isLive29(p) && p.state === e.i);
       if (!provinces.length) {
         form.append(el10("p", "muted", "\u3053\u306E\u56FD\u5BB6\u306B\u306F\u307E\u3060\u5C5E\u5DDE\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E0A\u306E\u300C\u4F5C\u308B\u300D\u3067\u65B0\u898F\u4F5C\u6210\u3057\u3001\u300C\u5857\u308B\u300D\u30C4\u30FC\u30EB\u3067\u5730\u56F3\u4E0A\u306B\u9818\u571F\u3092\u5272\u308A\u5F53\u3066\u3089\u308C\u307E\u3059\u3002"));
       } else {
@@ -11673,9 +11625,9 @@ ${shown}${more}`;
         input.value = editActions.suggestName("province", { stateId: e.i });
       });
       row.append(dice);
-      const btn3 = el10("button", "", "\u4F5C\u308B");
-      btn3.type = "button";
-      btn3.addEventListener("click", () => {
+      const btn2 = el10("button", "", "\u4F5C\u308B");
+      btn2.type = "button";
+      btn2.addEventListener("click", () => {
         const newId = editActions.addProvince(e.i, input.value);
         input.value = "";
         if (newId != null) {
@@ -11684,14 +11636,14 @@ ${shown}${more}`;
           window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: newId } }));
         }
       });
-      row.append(btn3);
+      row.append(btn2);
       wrap.append(row);
       return wrap;
     }
     function mergeSection(map, e) {
       const wrap = el10("div", "editor-section");
       wrap.append(el10("h4", "", "\u56FD\u5BB6\u306E\u7D71\u5408"));
-      const others = map.pack.states.filter((s) => isLive30(s) && s.i !== e.i && s.i > 0);
+      const others = map.pack.states.filter((s) => isLive29(s) && s.i !== e.i && s.i > 0);
       if (!others.length) {
         wrap.append(el10("p", "hint", "\u7D71\u5408\u3067\u304D\u308B\u4ED6\u306E\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
         return wrap;
@@ -11705,9 +11657,9 @@ ${shown}${more}`;
         sel.append(o);
       }
       row.append(sel);
-      const btn3 = el10("button", "danger", "\u3053\u306E\u56FD\u5BB6\u3092\u7D71\u5408\u3055\u305B\u308B\uFF08\u89E3\u6563\uFF09");
-      btn3.type = "button";
-      btn3.addEventListener("click", async () => {
+      const btn2 = el10("button", "danger", "\u3053\u306E\u56FD\u5BB6\u3092\u7D71\u5408\u3055\u305B\u308B\uFF08\u89E3\u6563\uFF09");
+      btn2.type = "button";
+      btn2.addEventListener("click", async () => {
         const target = map.pack.states[Number(sel.value)];
         const ok = await confirmDialog(
           `\u300C${e.fullName ?? e.name}\u300D\u3092\u300C${target?.fullName ?? target?.name}\u300D\u306B\u7D71\u5408\u3057\u307E\u3059\u3002\u300C${e.fullName ?? e.name}\u300D\u306F\u89E3\u6563\u3057\u3001\u6D88\u6EC5\u3057\u307E\u3059\u3002\u3053\u306E\u64CD\u4F5C\u306F\u5143\u306B\u623B\u305B\u307E\u3059\uFF08Undo\uFF09\u304C\u3001\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F`,
@@ -11716,7 +11668,7 @@ ${shown}${more}`;
         if (!ok) return;
         editActions.mergeStates(e.i, Number(sel.value));
       });
-      row.append(btn3);
+      row.append(btn2);
       wrap.append(row);
       wrap.append(el10("p", "hint", "\u3053\u306E\u56FD\u5BB6\u306E\u5168\u9818\u571F\u30FB\u90FD\u5E02\u30FB\u5C5E\u5DDE\u30FB\u90E8\u968A\u3092\u9078\u3093\u3060\u56FD\u5BB6\u306B\u7D71\u5408\u3057\u3001\u3053\u306E\u56FD\u5BB6\u81EA\u4F53\u306F\u89E3\u6563\u3057\u307E\u3059\u3002"));
       return wrap;
@@ -11796,14 +11748,14 @@ ${shown}${more}`;
     }
     function renderBurg(map, title, body) {
       const b = map.pack.burgs[current.id];
-      if (!isLive30(b)) {
+      if (!isLive29(b)) {
         close();
         return;
       }
       title.textContent = `${b.capital ? "\u{1F3F0} " : "\u{1F3D8}\uFE0F "}${b.name}`;
       const form = el10("div", "editor-form");
       form.append(table([
-        ["\u56FD\u5BB6", isLive30(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
+        ["\u56FD\u5BB6", isLive29(map.pack.states[b.state]) ? map.pack.states[b.state].name : "\u7121\u6240\u5C5E"],
         ["\u6587\u5316", map.pack.cultures[b.culture]?.name ?? ""],
         ["\u4EBA\u53E3(\u6982\u7B97)", (b.population ?? 0).toFixed(2)]
       ]));
@@ -11834,7 +11786,7 @@ ${shown}${more}`;
     function renderEntity(map, kind, title, body) {
       const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
       const e = list?.[current.id];
-      if (!isLive30(e)) {
+      if (!isLive29(e)) {
         close();
         return;
       }
@@ -11846,8 +11798,17 @@ ${shown}${more}`;
       form.append(textField2("\u540D\u524D", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v), () => editActions.suggestName(kind, { id: e.i })));
       form.append(...provisionalNote(kind, e.i));
       if (kind === "culture") form.append(nameStyleSection(e.i));
+      if (kind === "culture" || kind === "religion") form.append(profileSection(kind, e, map));
       form.append(noteField(map, kind, e.i));
       body.append(form);
+    }
+    function profileSection(kind, e, map) {
+      const wrap = el10("div", "editor-section");
+      wrap.append(el10("h4", "", kind === "religion" ? "\u4FE1\u4EF0" : kind === "culture" ? "\u6587\u5316\u306E\u6027\u683C" : "\u653F\u6CBB"));
+      const d = el10("div", "b-details");
+      appendEntityProfile(d, kind, e, { editActions, map, openEntity: (k, id) => open(k, id) });
+      wrap.append(d);
+      return wrap;
     }
     function techLevelSection(stateId) {
       const wrap = el10("div", "editor-section");
@@ -12141,17 +12102,17 @@ ${shown}${more}`;
   }
 
   // js/core/sim/collapse.js
-  var isLive31 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive30 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var COLLAPSE_RATIO = 0.25;
   var popOf = (s) => (s.rural ?? 0) + (s.urban ?? 0);
   function findCollapse(map) {
     for (const s of map.pack.states) {
-      if (!isLive31(s)) continue;
+      if (!isLive30(s)) continue;
       const peak = s.popPeak ?? 0;
       if (peak > 0 && popOf(s) < peak * COLLAPSE_RATIO) {
         const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt && (w.attackers.includes(s.i) || w.defenders.includes(s.i)));
         const enemies = /* @__PURE__ */ new Set();
-        for (const w of wars) for (const e of w.attackers.includes(s.i) ? w.defenders : w.attackers) if (isLive31(map.pack.states[e])) enemies.add(e);
+        for (const w of wars) for (const e of w.attackers.includes(s.i) ? w.defenders : w.attackers) if (isLive30(map.pack.states[e])) enemies.add(e);
         const strength = (id) => regimentsOf(map.pack.states[id]).reduce((n, r) => n + forceHeadcount({ ...r.u, nuclear: 0 }), 0);
         const annexer = [...enemies].sort((a, b) => strength(b) - strength(a))[0] ?? null;
         return { stateId: s.i, annexer };
@@ -12168,7 +12129,7 @@ ${shown}${more}`;
   }
 
   // js/core/sim/covert.js
-  var isLive32 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive31 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var clamp7 = (v, a, b) => Math.min(b, Math.max(a, v));
   var COVERT_KINDS = Object.freeze([
     { key: "command", label: "\u6307\u63EE\u901A\u4FE1\u7DB2\u3078\u306E\u4FB5\u5165", icon: "\u{1F4E1}", desc: "\u8ECD\u306E\u6307\u63EE\u30FB\u901A\u4FE1\u3092\u4E71\u3059\u3002\u6A19\u7684\u56FD\u306E\u58EB\u6C17\u3068\u5175\u529B\u304C\u4E0B\u304C\u308B\u3002\u6226\u4E89\u4E2D\u306E\u76F8\u624B\u306B\u7279\u306B\u52B9\u304F\u3002" },
@@ -12196,7 +12157,7 @@ ${shown}${more}`;
   }
   function planCovertOp(map, { attackerId, targetId, kind, date, rnd }) {
     const A = map.pack.states[attackerId], T = map.pack.states[targetId];
-    if (!isLive32(A) || !isLive32(T)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive31(A) || !isLive31(T)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (attackerId === targetId) throw new Error("\u81EA\u56FD\u3092\u6A19\u7684\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
     const def = COVERT_BY_KEY[kind];
     if (!def) throw new Error("\u4F5C\u6226\u306E\u7A2E\u985E\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093");
@@ -12205,7 +12166,7 @@ ${shown}${more}`;
     const detected = rnd.next() < clamp7(odds.detect + (ok ? 0 : 0.3), 0, 0.95);
     let blamed = null;
     if (detected) {
-      const others = map.pack.states.filter((s) => isLive32(s) && s.i !== attackerId && s.i !== targetId);
+      const others = map.pack.states.filter((s) => isLive31(s) && s.i !== attackerId && s.i !== targetId);
       blamed = rnd.next() < 0.7 || !others.length ? attackerId : rnd.pick(others).i;
     }
     const effects = {};
@@ -12245,7 +12206,7 @@ ${shown}${more}`;
   }
 
   // js/core/sim/nuclear.js
-  var isLive33 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive32 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   function warheadSpec(tech) {
     const t = Math.max(1, Math.min(10, tech ?? 3));
     const yieldK = 0.06 + 0.012 * t;
@@ -12282,7 +12243,7 @@ ${shown}${more}`;
   }
   function planDraftNuclearOp(map, { attackerId, targetId, warheads = 1 }) {
     const A = map.pack.states[attackerId], T = map.pack.states[targetId];
-    if (!isLive33(A) || !isLive33(T)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive32(A) || !isLive32(T)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (attackerId === targetId) throw new Error("\u81EA\u56FD\u3092\u6A19\u7684\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
     if (!Number.isInteger(warheads) || warheads < 1) throw new Error("\u767A\u6570\u306F1\u4EE5\u4E0A\u306E\u6574\u6570\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     if (nuclearStock(A) < warheads) throw new Error(`\u4FDD\u6709\u3059\u308B\u6838\u304C\u8DB3\u308A\u307E\u305B\u3093\uFF08\u4FDD\u6709 ${nuclearStock(A)} \u767A\uFF09`);
@@ -12301,7 +12262,7 @@ ${shown}${more}`;
     if (!op) throw new Error("\u305D\u306E\u4F5C\u6226\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (op.status !== "planned") throw new Error("\u3059\u3067\u306B\u5B9F\u884C\u3055\u308C\u305F\u4F5C\u6226\u3067\u3059");
     const A = map.pack.states[op.attackerId], T = map.pack.states[op.targetId];
-    if (!isLive33(A) || !isLive33(T)) throw new Error("\u95A2\u4FC2\u3059\u308B\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!isLive32(A) || !isLive32(T)) throw new Error("\u95A2\u4FC2\u3059\u308B\u56FD\u5BB6\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (nuclearStock(A) < op.warheads) throw new Error("\u4FDD\u6709\u3059\u308B\u6838\u304C\u8DB3\u308A\u307E\u305B\u3093");
     const parts = [];
     let left = op.warheads;
@@ -12485,13 +12446,24 @@ ${shown}${more}`;
       },
       createAlliance(name, memberIds, bond = "standard", leader = null) {
         return withMap((map) => safeRun("\u540C\u76DF\u306E\u7D50\u6210", () => {
-          const r = planCreateAlliance(map, name, memberIds, currentDate(), bond, leader);
+          const given = (name ?? "").trim();
+          const label = given || suggestLabel(map, { kind: "alliance", rnd, stateId: leader ?? memberIds[0] });
+          const r = planCreateAlliance(map, label, memberIds, currentDate(), bond, leader);
           commitOrThrow(r.command);
           return r.id;
         }));
       },
+      /** 同盟の名前をランダムに作る（盟主・加盟国の文化に合わせる） */
+      suggestAllianceName(stateId) {
+        return withMap((map) => suggestLabel(map, { kind: "alliance", rnd, stateId })) ?? "";
+      },
       editAlliance(id, patch) {
-        withMap((map) => safeRun("\u540C\u76DF\u306E\u7DE8\u96C6", () => commitOrThrow(planEditAlliance(map, id, patch))));
+        withMap((map) => safeRun("\u540C\u76DF\u306E\u7DE8\u96C6", () => {
+          const a = listAlliances(map).find((x) => x.id === id);
+          const plan = planEditAlliance(map, id, patch);
+          const renamed = a && patch.name !== void 0 && (patch.name ?? "") !== a.name;
+          commitOrThrow(plan && renamed ? withEvent(map, plan, { type: "rename-alliance", title: `\u540C\u76DF\u306E\u6539\u79F0: \u300C${a.name}\u300D\u2192\u300C${patch.name}\u300D` }) : plan);
+        }));
       },
       dissolveAlliance(id) {
         withMap((map) => safeRun("\u540C\u76DF\u306E\u89E3\u6D88", () => commitOrThrow(planDissolveAlliance(map, id, currentDate()))));
@@ -12956,25 +12928,27 @@ ${shown}${more}`;
     dialog.append(eraList);
     const newRow = el11("div", "time-settings-row");
     const nameInput = document.createElement("input");
-    nameInput.placeholder = "\u6642\u4EE3\u306E\u540D\u524D\uFF08\u4F8B: \u6C5F\u6238\u6642\u4EE3\uFF09";
+    nameInput.placeholder = "\u6642\u4EE3\u306E\u540D\u524D\uFF08\u4F8B: \u6C5F\u6238\u6642\u4EE3\u3002\u7A7A\u6B04\u306A\u3089\u304A\u307E\u304B\u305B\uFF09";
+    const eraDice = el11("button", "suggest-mini", "\u{1F3B2}");
+    eraDice.type = "button";
+    eraDice.title = "\u6642\u4EE3\u306E\u540D\u524D\u3092\u30E9\u30F3\u30C0\u30E0\u306B\u6C7A\u3081\u308B";
+    eraDice.addEventListener("click", () => {
+      nameInput.value = editActions.suggestLabel("era");
+    });
     const fromInput = document.createElement("input");
     fromInput.type = "number";
     fromInput.min = "1";
     fromInput.step = "1";
     fromInput.placeholder = "\u958B\u59CB\u5E74";
     const fromSuffix = el11("span", "", "\u5E74\u304B\u3089");
-    newRow.append(nameInput, fromInput, fromSuffix);
+    newRow.append(nameInput, eraDice, fromInput, fromSuffix);
     dialog.append(newRow);
     const eraMsg = el11("p", "hint era-msg", "");
     let editingId = null;
     const addEraBtn = el11("button", "primary", "\u6642\u4EE3\u3092\u8FFD\u52A0");
     addEraBtn.type = "button";
     addEraBtn.addEventListener("click", () => {
-      if (!nameInput.value.trim()) {
-        eraMsg.textContent = "\u6642\u4EE3\u306E\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044";
-        nameInput.focus();
-        return;
-      }
+      if (!nameInput.value.trim()) nameInput.value = editActions.suggestLabel("era");
       if (!fromInput.value || Number(fromInput.value) < 1) {
         eraMsg.textContent = "\u958B\u59CB\u5E74\u30921\u4EE5\u4E0A\u306E\u6570\u5B57\u3067\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044";
         fromInput.focus();
@@ -13085,7 +13059,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive34 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive33 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initMilitaryPanel({ store, simActions, editActions }) {
     const root = byId("tab-regiments");
     let selectedState = null;
@@ -13111,7 +13085,7 @@ ${shown}${more}`;
         cardCache.clear();
         return;
       }
-      const states = map.pack.states.filter(isLive34);
+      const states = map.pack.states.filter(isLive33);
       if (selectedState == null || !states.some((s) => s.i === selectedState)) selectedState = states[0]?.i ?? null;
       root.replaceChildren();
       const picker = el12("div", "state-picker");
@@ -13313,7 +13287,7 @@ ${shown}${more}`;
     return e;
   };
   var fmt4 = (n) => Math.round(n).toLocaleString("ja-JP");
-  var isLive35 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive34 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initWarsPanel({ store, simActions, getOutcome = () => null, getWins = () => null }) {
     const root = byId("tab-wars");
     let selected = null;
@@ -13333,7 +13307,7 @@ ${shown}${more}`;
         root.append(el13("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive35);
+      const states = map.pack.states.filter(isLive34);
       const wars = simActions.listWars().slice().reverse();
       if (selected != null && !wars.some((w) => w.id === selected)) selected = null;
       if (!creating && selected == null && wars.length) selected = (wars.find((w) => !w.endedAt) ?? wars[0]).id;
@@ -13467,7 +13441,7 @@ ${shown}${more}`;
         mu.append(el13("h4", "", "\u53C2\u6226\u56FD\u306E\u90E8\u968A\uFF08\u30C1\u30A7\u30C3\u30AF\u3092\u5916\u3059\u3068\u6226\u7DDA\u304B\u3089\u5F15\u304D\u4E0A\u3052\u307E\u3059\uFF09"));
         for (const id of [...w.attackers, ...w.defenders]) {
           const st = map.pack.states[id];
-          if (!isLive35(st)) continue;
+          if (!isLive34(st)) continue;
           const regs = Array.isArray(st.military) ? st.military : [];
           const onFront = new Set(w.muster?.[id] ?? regs.map((r) => r.i));
           const row = el13("div", "muster-state");
@@ -13582,7 +13556,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive36 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive35 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var pct2 = (v) => `${Math.round(v * 100)}%`;
   var fmt5 = (n, d = 0) => Number(n).toLocaleString("ja-JP", { maximumFractionDigits: d, minimumFractionDigits: d });
   var fmtDate2 = (d) => d ? `${d.year}\u5E74${d.month}\u6708` : "\u2014";
@@ -14040,7 +14014,7 @@ ${shown}${more}`;
         currencyBody.append(el14("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive36);
+      const states = map.pack.states.filter(isLive35);
       if (!states.length) {
         currencyBody.append(el14("p", "muted", "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093"));
         return;
@@ -14166,7 +14140,7 @@ ${shown}${more}`;
     if (text2 != null) e.textContent = text2;
     return e;
   };
-  var isLive37 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive36 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initAlliancesPanel({ store, simActions }) {
     const root = byId("tab-alliances");
     function render() {
@@ -14176,7 +14150,7 @@ ${shown}${more}`;
         root.append(el15("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive37);
+      const states = map.pack.states.filter(isLive36);
       root.append(createForm(map, states));
       const list = simActions.listAlliances();
       const active = list.filter((a) => !a.dissolvedAt);
@@ -14276,8 +14250,17 @@ ${shown}${more}`;
       const wrap = el15("div", "editor-section");
       wrap.append(el15("h4", "", "\u65B0\u3057\u3044\u540C\u76DF"));
       const nameInput = document.createElement("input");
-      nameInput.placeholder = "\u540C\u76DF\u306E\u540D\u524D";
-      wrap.append(nameInput);
+      nameInput.placeholder = "\u540C\u76DF\u306E\u540D\u524D\uFF08\u7A7A\u6B04\u306A\u3089\u304A\u307E\u304B\u305B\uFF09";
+      const nameRow = el15("span", "name-row");
+      const dice = el15("button", "suggest-mini", "\u{1F3B2}");
+      dice.type = "button";
+      dice.title = "\u540D\u524D\u3092\u30E9\u30F3\u30C0\u30E0\u306B\u6C7A\u3081\u308B\uFF08\u62BC\u3059\u305F\u3073\u306B\u5909\u308F\u308A\u307E\u3059\uFF09";
+      dice.addEventListener("click", () => {
+        const chosen = boxes.find((b) => b.checked);
+        nameInput.value = simActions.suggestAllianceName(chosen ? Number(chosen.value) : void 0);
+      });
+      nameRow.append(nameInput, dice);
+      wrap.append(nameRow);
       const { wrap: picker, boxes } = memberPicker(states);
       wrap.append(picker);
       const bp = bondPicker("standard", () => {
@@ -14307,6 +14290,7 @@ ${shown}${more}`;
           return;
         }
         simActions.createAlliance(nameInput.value, ids2, bp.value, leaderSel.value ? Number(leaderSel.value) : ids2[0]);
+        nameInput.value = "";
       });
       wrap.append(go);
       return wrap;
@@ -14322,9 +14306,16 @@ ${shown}${more}`;
       nameInput.style.border = "0";
       nameInput.style.flex = "1";
       nameInput.disabled = dissolved;
-      nameInput.addEventListener("change", () => simActions.editAlliance(a.id, { name: nameInput.value }));
+      nameInput.addEventListener("change", () => {
+        if (nameInput.value.trim()) simActions.editAlliance(a.id, { name: nameInput.value });
+      });
       head.append(nameInput);
       if (!dissolved) {
+        const re = el15("button", "suggest-mini", "\u{1F3B2}");
+        re.type = "button";
+        re.title = "\u540D\u524D\u3092\u30E9\u30F3\u30C0\u30E0\u306B\u6C7A\u3081\u76F4\u3059";
+        re.addEventListener("click", () => simActions.editAlliance(a.id, { name: simActions.suggestAllianceName(simActions.allianceLeader(a)) }));
+        head.append(re);
         const delBtn = el15("button", "danger", "\u89E3\u6D88");
         delBtn.type = "button";
         delBtn.addEventListener("click", async () => {
@@ -14449,7 +14440,8 @@ ${shown}${more}`;
     highlightRef = highlight;
     const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome });
     winsRef = wins;
-    initEntityLists({ store, wins, panels, editActions, highlight });
+    const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
+    initEntityLists({ store, wins, panels, editActions, highlight, builderActions });
     initGenealogy({ store, wins, editActions });
     initNuclearWindow({ store, simActions, wins });
     initCovertWindow({ store, simActions, wins });
@@ -14458,9 +14450,10 @@ ${shown}${more}`;
       if (["state", "culture", "religion", "province"].includes(kind)) highlight.show(kind, id);
       return rawOpen(kind, id);
     };
-    for (const [id, head] of [["sidebar", "#editor-panel"], ["edit-panel", ".editor-header"], ["builder-panel", ".editor-header"]]) {
+    for (const [id, head] of [["sidebar", "#editor-panel"], ["edit-panel", ".editor-header"]]) {
       const root = byId(id);
       makeDraggable(root, id === "sidebar" ? root : root.querySelector(head), byId("stage"), id === "sidebar" ? ".editor-header" : null);
+      makeResizable(root, byId("stage"));
     }
     const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
     deps.highlight = highlight;
@@ -14475,10 +14468,9 @@ ${shown}${more}`;
     editModeRef = editMode;
     const editToolbar = initEditToolbar({ store, editMode, editActions });
     const editPanel = initEditPanel();
-    const builderActions = createBuilderActions({ store, editActions, editMode, actions });
     const economyView = createEconomyView({ store, editActions, builderActions });
     const travelView = createTravelView({ store, editActions, editMode, viewport, actions });
-    const historyBuilder = initHistoryBuilder({ store, viewport, renderer, editActions, builderActions, editMode, panels, views: { economy: economyView, travel: travelView } });
+    initWorkWindows({ store, wins, views: { economy: economyView, travel: travelView } });
     window.addEventListener("request-edit-panel-open", () => editPanel.open());
     window.addEventListener("request-edit-panel-sync", (e) => {
       editToolbar.fillTargets(e.detail?.tool ?? editMode.tool);
@@ -14498,7 +14490,7 @@ ${shown}${more}`;
     initShortcuts({ ...deps, editMode, editToolbar, timeActions });
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
     renderer.resize();
-    globalThis.alterhistory = { store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions, historyBuilder };
+    globalThis.alterhistory = { store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

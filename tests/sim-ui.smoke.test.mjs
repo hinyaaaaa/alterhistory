@@ -126,7 +126,7 @@ check("年月を直接上書きできる（1ヶ月ずつ進める以外の手段
 check("上部バーの表示にも反映される", $("world-date").textContent.includes("1700年 6月"), $("world-date").textContent);
 $("btn-time-step").click();
 check("上書きした年月から進行が続く", store.getState().map.worldTime.year === 1700 && store.getState().map.worldTime.month === 7);
-tsd.querySelector('input[placeholder="時代の名前（例: 江戸時代）"]').value = "江戸時代";
+tsd.querySelector('input[placeholder^="時代の名前"]').value = "江戸時代";
 tsd.querySelector('input[placeholder="開始年"]').value = "1603";
 [...tsd.querySelectorAll("button")].find((b) => b.textContent.includes("時代を追加")).click();
 check("時代を追加すると一覧に出る", tsd.querySelector(".era-list").textContent.includes("江戸時代（1603年〜）"));

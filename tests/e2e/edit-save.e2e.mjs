@@ -84,7 +84,7 @@ try {
   const warName = await page.locator("#tab-wars .war-band button").nth(1).textContent();
   const dateBefore = await page.textContent("#world-date");
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#btn-save")]);
-  const savePath = "/tmp/e2e-saved.map"; await dl.saveAs(savePath);
+  const savePath = "/tmp/e2e-saved.ahmap"; await dl.saveAs(savePath);
   check("保存ファイルができる（空でない）", statSync(savePath).size > 10000, String(statSync(savePath).size));
   await freshPage(savePath); // 前のタブを閉じて、新しいタブで保存ファイルを開く
   check("開き直しても同じ年月", (await page.textContent("#world-date")) === dateBefore, `${dateBefore} → ${await page.textContent("#world-date")}`);
@@ -94,7 +94,7 @@ try {
   check("開き直しても戦況が出る（経過が復元される）", (await page.locator("#tab-wars .war-tab-ov").textContent()).includes("降伏まであと"));
 
   console.log("=== 書き出し ===");
-  for (const [kind, min, head] of [["png", 5000, "PNG"], ["svg", 2000, "<svg"], ["azgaar", 10000, null], ["chronicle", 200, null]]) {
+  for (const [kind, min, head] of [["png", 5000, "PNG"], ["svg", 2000, "<svg"], ["chronicle", 200, null]]) {
     await page.click("#export-menu > summary");
     const [d] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click(`#export-menu [data-export="${kind}"]`)]);
     const pth = `/tmp/e2e-export.${kind}`; await d.saveAs(pth);
@@ -110,7 +110,7 @@ try {
   const noise = noiseInput();
   await noise.fill("0.05"); await noise.dispatchEvent("change");
   const [dlBal] = await Promise.all([page.waitForEvent("download"), page.click("#btn-save")]);
-  const balPath = "/tmp/e2e-saved-balance.map"; await dlBal.saveAs(balPath);
+  const balPath = "/tmp/e2e-saved-balance.ahmap"; await dlBal.saveAs(balPath);
   await freshPage(balPath);
   await menu('[data-open-win="balance"]');
   check("保存した地図を開き直すと、バランス設定が残る", (await noiseInput().inputValue()) === "0.05");

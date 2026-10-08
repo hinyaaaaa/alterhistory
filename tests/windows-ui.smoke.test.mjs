@@ -104,5 +104,26 @@ await sleep(50);
 check("横タブは廃止（国家の詳細にタブボタンは無い）", qa("#editor-panel .tab-btn").length === 0);
 check("属州は基本情報の下に折りたたみで続く", !!q("#editor-panel .state-prov-fold"));
 
+console.log("=== ウィンドウの大きさ変更 ===");
+{
+  const stage = q("#stage"), w = win("military");
+  stage.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 700, right: 1000, bottom: 700 });
+  w.getBoundingClientRect = () => ({ left: 100, top: 50, width: parseFloat(w.style.width) || 400, height: parseFloat(w.style.height) || 300, right: 0, bottom: 0 });
+  check("四辺と四隅に8個のつまみがある", w.querySelectorAll(".rs-handle").length === 8);
+  const fire = (el, type, x, y) => { const e = new window.Event(type, { bubbles: true }); e.clientX = x; e.clientY = y; e.pointerId = 1; el.dispatchEvent(e); };
+  const se = w.querySelector(".rs-se");
+  fire(se, "pointerdown", 500, 350); fire(se, "pointermove", 700, 450); fire(se, "pointerup", 700, 450);
+  check("右下をドラッグすると広がる（400×300 → 600×400）", w.style.width === "600px" && w.style.height === "400px", `${w.style.width}×${w.style.height}`);
+  const nw = w.querySelector(".rs-nw");
+  fire(nw, "pointerdown", 100, 50); fire(nw, "pointermove", 160, 90);
+  check("左上をドラッグすると位置も動く", w.style.left === "160px" && w.style.top === "90px" && w.style.width === "540px", `${w.style.left},${w.style.top} ${w.style.width}`);
+  fire(nw, "pointermove", 900, 600); fire(nw, "pointerup", 900, 600);
+  check("小さくしすぎない（最小幅280・最小高さ160）", parseFloat(w.style.width) >= 280 && parseFloat(w.style.height) >= 160, `${w.style.width}×${w.style.height}`);
+  const e2 = w.querySelector(".rs-e");
+  fire(e2, "pointerdown", 0, 0); fire(e2, "pointermove", 5000, 0); fire(e2, "pointerup", 5000, 0);
+  check("地図の表示領域の外へははみ出さない", parseFloat(w.style.left) + parseFloat(w.style.width) <= 1000, `${w.style.left}+${w.style.width}`);
+  check("国家の詳細・地図編集パネルにもつまみがある", q("#sidebar .rs-handle") != null && q("#edit-panel .rs-handle") != null);
+}
+
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");
 process.exit(failed ? 1 : 0);

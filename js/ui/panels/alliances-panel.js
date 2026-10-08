@@ -87,8 +87,12 @@ export function initAlliancesPanel({ store, simActions }) {
   function createForm(map, states) {
     const wrap = el("div", "editor-section");
     wrap.append(el("h4", "", "新しい同盟"));
-    const nameInput = document.createElement("input"); nameInput.placeholder = "同盟の名前";
-    wrap.append(nameInput);
+    const nameInput = document.createElement("input"); nameInput.placeholder = "同盟の名前（空欄ならおまかせ）";
+    const nameRow = el("span", "name-row");
+    const dice = el("button", "suggest-mini", "🎲"); dice.type = "button"; dice.title = "名前をランダムに決める（押すたびに変わります）";
+    dice.addEventListener("click", () => { const chosen = boxes.find((b) => b.checked); nameInput.value = simActions.suggestAllianceName(chosen ? Number(chosen.value) : undefined); });
+    nameRow.append(nameInput, dice);
+    wrap.append(nameRow);
     const { wrap: picker, boxes } = memberPicker(states);
     wrap.append(picker);
     const bp = bondPicker("standard", () => {});
@@ -104,6 +108,7 @@ export function initAlliancesPanel({ store, simActions }) {
       const ids = boxes.filter((b) => b.checked).map((b) => Number(b.value));
       if (ids.length < 2) { await alertDialog("2カ国以上を選んでください"); return; }
       simActions.createAlliance(nameInput.value, ids, bp.value, leaderSel.value ? Number(leaderSel.value) : ids[0]);
+      nameInput.value = "";
     });
     wrap.append(go);
     return wrap;
@@ -116,9 +121,12 @@ export function initAlliancesPanel({ store, simActions }) {
     const nameInput = document.createElement("input");
     nameInput.value = a.name; nameInput.style.fontWeight = "600"; nameInput.style.background = "transparent"; nameInput.style.border = "0"; nameInput.style.flex = "1";
     nameInput.disabled = dissolved;
-    nameInput.addEventListener("change", () => simActions.editAlliance(a.id, { name: nameInput.value }));
+    nameInput.addEventListener("change", () => { if (nameInput.value.trim()) simActions.editAlliance(a.id, { name: nameInput.value }); });
     head.append(nameInput);
     if (!dissolved) {
+      const re = el("button", "suggest-mini", "🎲"); re.type = "button"; re.title = "名前をランダムに決め直す";
+      re.addEventListener("click", () => simActions.editAlliance(a.id, { name: simActions.suggestAllianceName(simActions.allianceLeader(a)) }));
+      head.append(re);
       const delBtn = el("button", "danger", "解消");
       delBtn.type = "button";
       delBtn.addEventListener("click", async () => { if (await confirmDialog(`「${a.name}」を解消しますか？`, { danger: true, okLabel: "解消" })) simActions.dissolveAlliance(a.id); });

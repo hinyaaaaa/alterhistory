@@ -19,14 +19,13 @@
 
     <div class="topbar-group" role="group" aria-label="ファイル">
       <button id="btn-open" class="primary" title="地図ファイルを開く (O)">開く</button>
-      <button id="btn-save" title="ALTERHISTORY 形式で保存 (Ctrl+S)" disabled>保存</button>
+      <button id="btn-save" title="ALTERHISTORY 形式（.ahmap）で保存 (Ctrl+S)" disabled>保存</button>
       <details id="export-menu" class="menu">
         <summary aria-disabled="true" title="画像や他のソフト向けに書き出す">書き出し ▾</summary>
         <div class="menu-list" role="menu">
-          <button role="menuitem" data-export="chronicle" title="Claude 等の AI にアップロードして歴史を構築してもらうための、意味が全て書かれたデータ（JSON と読み物の2ファイル）">AI 用データ（クロニクル）</button>
+          <button role="menuitem" data-export="chronicle" title="年表（すべての操作を年月順に）・国家・宗教・戦争などを丁寧に書いた .md 1ファイル。Claude 等の AI に渡して歴史を読ませられます">クロニクル（.md）</button>
           <button role="menuitem" data-export="png">PNG 画像（2倍の解像度）</button>
           <button role="menuitem" data-export="svg">SVG 画像（拡大しても劣化しない）</button>
-          <button role="menuitem" data-export="azgaar">Azgaar 互換の .map</button>
           <div class="menu-opts" role="group" aria-label="画像に入れるもの">
             <span class="menu-opts-title">PNG・SVG に入れるもの</span>
             <label><input type="checkbox" data-annot="title" checked> 題名・年月</label>
@@ -44,18 +43,14 @@
 
     <!-- 地図を開いたあとの主な作業場所。ここから右のパネルを開く -->
     <div class="topbar-group topbar-modes" role="group" aria-label="作業の種類">
-      <button id="btn-builder" class="builder-fab" hidden title="歴史をつくる — 国・宗教・文化をかんたんに作る" aria-expanded="false" aria-controls="builder-panel">
-        <span class="tool-icon">🏛</span> 歴史をつくる
-      </button>
-      <button id="btn-edit-mode" class="edit-mode-fab" hidden title="地図編集モード — レイヤー・文化・宗教・地形・都市建設・目印" aria-expanded="false" aria-controls="edit-panel">
+      <button id="btn-edit-mode" class="edit-mode-fab" title="地図編集モード — レイヤー・文化・宗教・地形・都市建設・目印" aria-expanded="false" aria-controls="edit-panel">
         <span class="tool-icon">✎</span> 地図編集
       </button>
       <!-- 設定：各設定のウィンドウへ飛ぶ入口（Azgaar の Overview に相当）。地図の上に重ねて開く -->
       <details id="settings-menu" class="menu">
         <summary title="国家・戦争・外交・軍事などの設定画面を開く">設定 ▾</summary>
         <div class="menu-list settings-pop" role="menu" aria-label="設定">
-          <span class="lp-group">つくる・編集する</span>
-          <button type="button" role="menuitem" data-click="btn-builder">🏛 歴史をつくる</button>
+          <span class="lp-group">編集する</span>
           <button type="button" role="menuitem" data-click="btn-edit-mode">✎ 地図編集</button>
           <span class="lp-group">一覧（開いて各要素を設定）</span>
           <button type="button" role="menuitem" data-open-win="list-state">🏳 国家</button>
@@ -72,6 +67,8 @@
           <button type="button" role="menuitem" data-open-win="covert">🕶 隠密作戦（サイバー攻撃）</button>
           <button type="button" role="menuitem" data-open-win="nuclear">☢ 核作戦</button>
           <button type="button" role="menuitem" data-open-win="currency">💱 通貨・為替</button>
+          <button type="button" role="menuitem" data-open-win="economy">💰 経済・貿易</button>
+          <button type="button" role="menuitem" data-open-win="travel">🧭 旅・ゾーン</button>
           <button type="button" role="menuitem" data-open-win="balance">⚖ バランス調整</button>
           <button type="button" role="menuitem" data-click="world-date">⏳ 時間・時代区分</button>
         </div>
@@ -142,7 +139,7 @@
            この画面にドラッグ＆ドロップするか、下のボタンから選んでください。</p>
         <ol class="empty-steps">
           <li><b>地図を開く</b> — 上のボタンかドラッグ＆ドロップ</li>
-          <li><b>歴史をつくる</b> — 上のバーの「歴史をつくる」で、国・宗教・文化をボタン1つで追加</li>
+          <li><b>設定 ▾</b> — 国家・文化・宗教の一覧で「＋ 追加」を押すと、名前はおまかせで新しく作れます</li>
           <li><b>時間を進める</b> — 上のバーの ▶ で年月が進み、戦争や経済が動く</li>
           <li><b>保存する</b> — 「保存」でいつでも続きから再開できる</li>
         </ol>
@@ -157,10 +154,9 @@
         <div id="banner-body"></div>
         <button id="banner-close" aria-label="閉じる">×</button>
       </div>
-      <!-- 右のパネル（地図編集・歴史をつくる）を × で小さくしたあと、元の場所（右端）に出る展開ボタン -->
+      <!-- 右のパネル（地図編集）を × で小さくしたあと、元の場所（右端）に出る展開ボタン -->
       <div id="panel-tabs" class="panel-tabs" hidden>
         <button id="tab-edit-panel" class="panel-tab" title="地図編集を開く" aria-label="地図編集を開く" hidden>✎</button>
-        <button id="tab-builder-panel" class="panel-tab" title="歴史をつくるを開く" aria-label="歴史をつくるを開く" hidden>🏛</button>
       </div>
       <div id="drop-hint" hidden>ここにドロップして開く</div>
 
@@ -201,14 +197,6 @@
         <p class="tool-hint layers-note">表示の切り替え（色分け・川・道路・地名など）は、上のバーの「レイヤー」から行えます。</p>
       </div>
     </aside>
-    <!-- 右側スライドパネル：歴史ビルダー。ボタンを押した時だけ表示。 -->
-    <aside id="builder-panel" class="builder-panel" aria-label="歴史をつくる" hidden>
-      <div class="editor-header">
-        <h3>🏛 歴史をつくる</h3>
-        <button id="builder-close" class="editor-close" aria-label="閉じる">×</button>
-      </div>
-      <div id="builder-body" class="builder-body"></div>
-    </aside>
   </main>
 
   <footer class="statusbar">
@@ -217,7 +205,7 @@
     <span id="status-zoom"></span>
   </footer>
 
-  <input type="file" id="file-input" accept=".map,.gz" hidden>
+  <input type="file" id="file-input" accept=".ahmap,.map,.gz" hidden>
 
   <!-- 軍事・外交・属州の各パネルの中身が実際に入る場所。国家タブ（editor-panel.js）が
        サブタブを開いたときに、ここから該当パネルの要素を取り出して差し込む。

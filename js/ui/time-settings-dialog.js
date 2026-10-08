@@ -47,19 +47,22 @@ export function openTimeSettingsDialog({ store, timeActions, editActions }) {
 
   const newRow = el("div", "time-settings-row");
   const nameInput = document.createElement("input");
-  nameInput.placeholder = "時代の名前（例: 江戸時代）";
+  nameInput.placeholder = "時代の名前（例: 江戸時代。空欄ならおまかせ）";
+  const eraDice = el("button", "suggest-mini", "🎲");
+  eraDice.type = "button"; eraDice.title = "時代の名前をランダムに決める";
+  eraDice.addEventListener("click", () => { nameInput.value = editActions.suggestLabel("era"); });
   const fromInput = document.createElement("input");
   fromInput.type = "number"; fromInput.min = "1"; fromInput.step = "1";
   fromInput.placeholder = "開始年";
   const fromSuffix = el("span", "", "年から");
-  newRow.append(nameInput, fromInput, fromSuffix);
+  newRow.append(nameInput, eraDice, fromInput, fromSuffix);
   dialog.append(newRow);
   const eraMsg = el("p", "hint era-msg", ""); // 入力不足などを、押したその場で見える位置に出す
   let editingId = null; // null=新規追加 / 数値=その時代を更新
   const addEraBtn = el("button", "primary", "時代を追加");
   addEraBtn.type = "button";
   addEraBtn.addEventListener("click", () => {
-    if (!nameInput.value.trim()) { eraMsg.textContent = "時代の名前を入力してください"; nameInput.focus(); return; }
+    if (!nameInput.value.trim()) nameInput.value = editActions.suggestLabel("era"); // 空欄ならおまかせの名前
     if (!fromInput.value || Number(fromInput.value) < 1) { eraMsg.textContent = "開始年を1以上の数字で入力してください"; fromInput.focus(); return; }
     editActions.setEra({ id: editingId ?? undefined, name: nameInput.value, fromYear: fromInput.value });
     // 操作が失敗した場合（画面上部のエラー欄に出る）でも、ここで気づけるよう一覧を再描画する
