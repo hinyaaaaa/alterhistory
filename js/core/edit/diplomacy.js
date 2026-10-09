@@ -71,7 +71,7 @@ export function planSetDiplomacy(map, a, b, relation, date) {
   // 構造化ログにも年月付きで記録する（同盟・戦争と同様、年表に使うため）
   if (date) {
     const before = listDiplomacyLog(map);
-    const entry = { year: date.year, month: date.month, a, b, from: old, to: relation };
+    const entry = { year: date.year, month: date.month, a, b, aName: A.fullName ?? A.name, bName: B.fullName ?? B.name, from: old, to: relation };
     parts.push({
       apply: (m) => { ensureExt(m).data.diplomacyLog = [...before, entry]; },
       revert: (m) => { const ext = ensureExt(m); if (before.length) ext.data.diplomacyLog = before; else delete ext.data.diplomacyLog; },

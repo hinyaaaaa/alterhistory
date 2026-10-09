@@ -22,6 +22,7 @@ import { computePole } from "./pole.js";
 import { cellAreas } from "../geometry.js";
 import { ensureExt } from "./ext.js";
 import { defaultMarkerName } from "./markers.js";
+import { retargetParts, reconcileParts } from "./relations.js";
 
 const round6 = (v) => Math.round(v * 1e6) / 1e6;
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
@@ -227,13 +228,22 @@ export function planMergeStates(map, { from, to, date }) {
   else if (Array.isArray(toState.burgs)) toPatch.burgs = [...toState.burgs, ...movedBurgIds];
   // 部隊も引き継ぐ（吸収した国の軍をそのまま編入する）
   if (Array.isArray(fromState.military) && fromState.military.length) {
-    toPatch.military = [...(Array.isArray(toState.military) ? toState.military : []), ...fromState.military];
+    // 部隊IDは国ごとに0から振られているので、そのまま足すと重なる。統合先の最大ID+1から振り直し、所属(state)も統合先に直す
+    const base = Array.isArray(toState.military) ? toState.military : [];
+    let nextId = base.length ? Math.max(...base.map((r) => r.i ?? 0)) + 1 : 0;
+    toPatch.military = [...base, ...fromState.military.map((r) => ({ ...r, i: nextId++, state: to }))];
   }
   if (Object.keys(toPatch).length) parts.push(setProps(toState, toPatch));
 
   // from は解散する（削除フラグ。属していたセル・都市・属州は全て to に移した後なので、
   // 統計は0に揃えておく。neighbors 等は触らない＝そのまま残置される点に注意）
   parts.push(setProps(fromState, { removed: true, cells: 0, area: 0, rural: 0, urban: 0, burgs: 0, capital: 0, military: [] }));
+
+  // 同盟・従属・戦争は、統合先の国に付け替える。そのうえで、統合先の外交表の行を、付け替えた事実に合わせる
+  const link = retargetParts(map, from, to, date ?? null);
+  parts.push(...link.parts);
+  const dipParts = reconcileParts(map, [to], link.facts);
+  parts.push(...dipParts);
 
   if (date) {
     parts.push(logEntry(map, {

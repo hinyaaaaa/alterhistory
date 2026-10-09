@@ -102,7 +102,7 @@ export function parseNativeJson(text) {
   if (doc?.format !== NATIVE_FORMAT) throw new Error("ALTERHISTORY 形式ではありません");
   const warnings = [];
   if (typeof doc.formatVersion === "number" && doc.formatVersion > NATIVE_VERSION) {
-    warnings.push(`このファイルは新しい版の ALTERHISTORY (形式${doc.formatVersion}) で保存されています。一部の情報が失われる可能性があります`);
+    warnings.push(`このファイルは、より新しい版の ALTERHISTORY（ファイル形式 ${doc.formatVersion}。このアプリは ${NATIVE_VERSION} まで対応）で保存されています。読めない項目は無視され、このまま保存すると、その情報が失われる可能性があります。先に別名でコピーを取っておくと安全です`);
   }
   const map = createEmptyMap();
   const { time, ...meta } = doc.world ?? {};

@@ -6,6 +6,7 @@ import { planAddMarker, planMoveMarker, planEditMarker, planRemoveMarker } from 
 import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapital, whyCannotRemoveBurg } from "../core/edit/burgs.js";
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
 import { planSetDiplomacy, getRelation } from "../core/edit/diplomacy.js";
+import { diplomacyMismatches, planReconcileDiplomacy } from "../core/edit/relations.js";
 import { planRenameEntity, planAddEntity, planAddProvince, planRemoveEntity } from "../core/edit/entities.js";
 import { planDeclareIndependence, planMergeStates } from "../core/edit/sovereignty.js";
 import { listEras, eraAt, planSetEra, planRemoveEra } from "../core/edit/eras.js";
@@ -20,7 +21,7 @@ import {
   getNameStyle, styleOfCulture, planSetNameStyle, NAME_STYLES, STYLE_KEYS,
 } from "../core/edit/naming.js";
 import { suggestLabel } from "../core/edit/naming.js";
-import { withEvent } from "../core/edit/history-log.js";
+import { withEvent, planLogEvent } from "../core/edit/history-log.js";
 import { createRandom } from "../core/random.js";
 import { cellIndexOf } from "../core/spatial.js";
 
@@ -41,6 +42,11 @@ export function createEditActions({ store, renderer }) {
   const nameOf = (e) => e?.fullName ?? e?.name ?? "（不明）";
   const entOf = (map, kind, id) => map.pack[LIST_OF[kind]]?.[id];
   /** 計画（コマンド）に出来事を足して commit する。plan が null（変化なし）なら何もしない */
+  const NOTE_JP = { state: "国家", culture: "文化", religion: "宗教", province: "属州", burg: "都市", marker: "マーカー", world: "世界" };
+  const markerOf = (map, id) => (map.markers ?? []).find((m) => m && m.i === id);
+  const markerName = (map, id) => markerOf(map, id)?.name || markerOf(map, id)?.type || "マーカー";
+  const stateAtCell = (map, cell) => { const s = cell != null ? map.pack.cells.state[cell] : 0; return s ? [s] : []; };
+  const noteTargetName = (map, type, id) => { const list = { state: map.pack.states, culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces, burg: map.pack.burgs }[type]; return list ? nameOf(list[id]) : (type === "marker" ? markerName(map, id) : ""); };
   const commitEv = (map, plan, ev) => commitOrThrow(plan && ev ? withEvent(map, plan, ev) : plan);
 
   // ---- 名前の仮生成 ----
@@ -105,11 +111,23 @@ export function createEditActions({ store, renderer }) {
     },
 
     addMarker(cell, opts) {
-      return withMap((map) => { let out; safeRun("マーカーの追加", () => { const r = planAddMarker(map, { cell, ...opts }); commitOrThrow(r.command); out = r.id; }); return out; });
+      return withMap((map) => { let out; safeRun("マーカーの追加", () => {
+        const r = planAddMarker(map, { cell, ...opts });
+        const label = opts?.name || opts?.type || "マーカー";
+        commitEv(map, r.command, { type: "marker-added", title: `マーカー「${label}」が置かれた`, cell, states: stateAtCell(map, cell) });
+        out = r.id;
+      }); return out; });
     },
-    moveMarker(id, cell) { withMap((map) => safeRun("マーカーの移動", () => commitOrThrow(planMoveMarker(map, id, cell)))); },
-    editMarker(id, patch) { withMap((map) => safeRun("マーカーの編集", () => commitOrThrow(planEditMarker(map, id, patch)))); },
-    removeMarker(id) { withMap((map) => safeRun("マーカーの削除", () => commitOrThrow(planRemoveMarker(map, id)))); },
+    moveMarker(id, cell) { withMap((map) => safeRun("マーカーの移動", () => commitEv(map, planMoveMarker(map, id, cell), { type: "marker-moved", title: `マーカー「${markerName(map, id)}」が移された`, cell, states: stateAtCell(map, cell) }))); },
+    editMarker(id, patch) { withMap((map) => safeRun("マーカーの編集", () => { const m = markerOf(map, id); commitEv(map, planEditMarker(map, id, patch), { type: "marker-edited", title: `マーカー「${markerName(map, id)}」が書き換えられた`, detail: patch?.name != null && m && patch.name !== m.name ? `「${m.name ?? ""}」→「${patch.name}」` : undefined, cell: m?.cell, states: stateAtCell(map, m?.cell) }); })); },
+    removeMarker(id) { withMap((map) => safeRun("マーカーの削除", () => { const m = markerOf(map, id); commitEv(map, planRemoveMarker(map, id), { type: "marker-removed", title: `マーカー「${markerName(map, id)}」が取り除かれた`, cell: m?.cell, states: stateAtCell(map, m?.cell) }); })); },
+    /** 手書きの出来事を年表に足す。date を省くと今の日付。cell・states は、地図での位置と関係する国（任意） */
+    addHistoryEvent({ title, detail, date, cell, states }) {
+      return withMap((map) => safeRun("出来事の記録", () => {
+        const t = String(title ?? "").trim(); if (!t) throw new Error("出来事の題を入れてください");
+        commitOrThrow(planLogEvent(map, { type: "manual", title: t, detail: String(detail ?? "").trim() || undefined, date, cell, states }));
+      }));
+    },
 
     /** name が空なら、その土地の文化に合わせた仮の名前を付ける */
     addBurg(cell, name, opts = {}) {
@@ -141,9 +159,20 @@ export function createEditActions({ store, renderer }) {
     whyCannotRemoveBurg(id) { return withMap((map) => whyCannotRemoveBurg(map, id)) ?? "地図が読み込まれていません"; },
 
     getNote(type, id) { return withMap((map) => getNote(map, type, id)) ?? ""; },
-    setNote(type, id, text) { withMap((map) => safeRun("文章の保存", () => commitOrThrow(planSetNote(map, type, id, text)))); },
+    setNote(type, id, text) {
+      withMap((map) => safeRun("文章の保存", () => {
+        const plan = planSetNote(map, type, id, text);
+        const label = NOTE_JP[type] ?? type;
+        const who = noteTargetName(map, type, id);
+        commitEv(map, plan, plan && { type: "note", title: `${label}${who ? `「${who}」` : ""}の記録が書き換えられた`, ref: ["state", "culture", "religion", "province", "burg"].includes(type) ? { kind: type, id } : undefined });
+      }));
+    },
     noteTarget(type, id) { return withMap((map) => noteTarget(map, type, id)) ?? null; },
 
+    /** 外交表が、同盟・従属・戦争（正本）と食い違っている組の数 */
+    diplomacyMismatchCount() { return withMap((map) => diplomacyMismatches(map).length) ?? 0; },
+    /** 外交表を、同盟・従属・戦争に合わせて直す。直した組の数を返す（無ければ 0） */
+    reconcileDiplomacy() { return withMap((map) => { const n = diplomacyMismatches(map).length; if (n) safeRun("外交表の修正", () => { const c = planReconcileDiplomacy(map); if (c) commitOrThrow(c); }); return n; }) ?? 0; },
     getRelation(a, b) { return withMap((map) => getRelation(map, a, b)) ?? null; },
     setDiplomacy(a, b, relation) { withMap((map) => safeRun("外交関係の変更", () => commitOrThrow(planSetDiplomacy(map, a, b, relation, currentDate())))); },
 
@@ -234,7 +263,7 @@ export function createEditActions({ store, renderer }) {
     setBurgProfile(id, patch) { withMap((map) => safeRun("都市の設定", () => commitOrThrow(planSetBurgProfile(map, id, patch)))); },
 
     // ---- 旅 ----
-    addJourney(opts) { return withMap((map) => { let id = null; safeRun("旅の作成", () => { const r = planAddJourney(map, opts); store.commit(r.command); rerender(); id = r.id; }); return id; }) ?? null; },
+    addJourney(opts) { return withMap((map) => { let id = null; safeRun("旅の作成", () => { const r = planAddJourney(map, opts); store.commit(withEvent(map, r.command, { type: "journey", title: `旅「${opts?.name ?? "名もなき旅"}」が始まった` })); rerender(); id = r.id; }); return id; }) ?? null; },
     editJourney(id, patch) { withMap((map) => safeRun("旅の編集", () => commitOrThrow(planEditJourney(map, id, patch)))); },
     removeJourney(id) { withMap((map) => safeRun("旅の削除", () => commitOrThrow(planRemoveJourney(map, id)))); },
     /** 区間を足す。成功なら true。経路が無いときは理由を画面に出して false */

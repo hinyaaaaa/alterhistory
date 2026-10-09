@@ -3,7 +3,7 @@ import { formatWorldTime } from "../core/sim/time.js";
 import { byId } from "./dom.js";
 import { openTimeSettingsDialog } from "./time-settings-dialog.js";
 
-export function initTimeBar({ store, timeActions, editActions }) {
+export function initTimeBar({ store, timeActions, editActions, simActions = null }) {
   const toggleBtn = byId("btn-time-toggle");
   const stepBtn = byId("btn-time-step");
   const dateEl = byId("world-date");
@@ -12,7 +12,7 @@ export function initTimeBar({ store, timeActions, editActions }) {
   toggleBtn.addEventListener("click", () => { if (timeActions.isRunning()) timeActions.stop(); else timeActions.start(); });
   stepBtn.addEventListener("click", () => timeActions.stepMonth());
   speedSel.addEventListener("change", () => timeActions.setSpeedPerYear(Number(speedSel.value)));
-  dateEl.addEventListener("click", () => { if (store.getState().map) openTimeSettingsDialog({ store, timeActions, editActions }); });
+  dateEl.addEventListener("click", () => { if (store.getState().map) openTimeSettingsDialog({ store, timeActions, editActions, simActions }); });
 
   function sync() {
     const state = store.getState();

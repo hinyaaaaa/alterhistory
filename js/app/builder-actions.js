@@ -117,9 +117,7 @@ export function createBuilderActions({ store, editActions, editMode, actions }) 
     confirmAll() {
       const list = withMap((m) => listProvisional(m)) ?? [];
       if (!list.length) return 0;
-      store.beginBatch("仮の名前をすべて確定");
-      try { for (const { kind, id } of list) editActions.confirmName(kind, id); }
-      finally { store.endBatch(); }
+      store.transaction("仮の名前をすべて確定", () => { for (const { kind, id } of list) editActions.confirmName(kind, id); });
       return list.length;
     },
   };

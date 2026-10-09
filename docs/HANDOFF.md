@@ -17,6 +17,67 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
+## 追加済み：原子性・当時の事実・年表ウィンドウ・外交の正本・自然発生イベント（いちばん新しい）
+
+方針（変えない）: 乱数は固定しない／年表は圧縮・要約・省略しない（件数の上限なし）／保存は独自の `.ahmap`、Azgaar の `.map` は読み込みのみ／ボタンを増やさず既存のウィンドウと設定メニューに寄せる／新しい操作は `app/edit-actions.js` の `commitEv`（または `withEvent`）で歴史ログにも足す。
+
+**着手前の確認で分かったこと**
+- 外部レビューの「最新CIが赤」は正しかった。原因は廃止済みの `builder-panel` を探す `tests/builder-ui.smoke.test.mjs`。テストを現行の導線（設定メニュー→一覧ウィンドウの「＋ 追加」）に書き換え、使われていない `js/ui/history-builder.js` を削除した。閾値は緩めていない。
+- 指示書の `app/...` は、実際は `js/app/...`。
+
+**A. 複合操作の原子化**
+- `core/store.js` に `transaction(label, fn)` を追加。途中で例外が出たら、適用済みの変更を逆順に戻し、履歴にも残さず、例外を投げ直す（`beginBatch` の中でも入れ子にできる）。`makeCommand` の `apply` も、途中の部品が失敗したら適用済みの部品を戻す。
+- `app/sim-actions.js` の複合操作（戦闘・会戦・開戦・講和＋併合・隠密作戦・核作戦・軍の引き上げ・召集・戦況の進行）を `atomic()`（= transaction）に載せ替えた。`signTreaty` の「併合の失敗を握りつぶす catch」は無くした。併合が失敗すれば、講和ごと取り消されて、失敗が画面に出る。
+- テスト: `tests/atomic.test.mjs`。
+
+**B. 当時の事実で記録**
+- 戦争（`names`）・戦闘（`attackerName`/`defenderName`/`aPower`/`dPower`）・条約（`terms.names`）・同盟（`memberNames`）・外交ログ（`aName`/`bName`）に、当時の国名を保存。
+- 手で戦わせた戦闘（`attack`/`recordBattle`）は、もともと戦力を持っていた。開戦時に作る想定の戦闘ログには、開戦時の両陣営の戦力（陸＋海＋空）を `powerBasis: "war-start"` つきで入れた（1戦ごとの戦力ではない点に注意）。
+- `io/chronicle.js` は保存された名前を優先し、無い古いデータだけ `makeStateNameAt` の推定に戻す（`stateAtFor`）。「（消滅）」「（のち消滅）」の印は、いまの状態から足す。
+- テスト: `tests/history-facts.test.mjs`。
+
+**C. 読み込み時の検査**
+- `io/loader.js` の `inspectLoaded` が、`validateMap`・`checkIntegrity`・新設の `checkHistoryRefs`（`core/edit/integrity.js`）・外交表の食い違いを実行し、**警告として**出す（開けなくはしない）。件数は1行にまとめる。
+- `validateMap` に、宗教の参照範囲と、数値列の非数値（NaN/null）の検査を追加。Azgaar の数値列に数値でない値があれば「0として読み込んだ」旨の警告を出す。
+- 新しい形式版の `.ahmap` は、対応版・コピーを取る案内つきの警告を出す。
+- テスト: `tests/load-validation.test.mjs`。
+
+**D. 年表ウィンドウ**
+- 設定メニューの「📜 年表」（`ui/timeline-window.js`）。種類・国・年・語で絞り込み、項目を押すと地図がその場所へ移り、手書きの出来事も足せる。全件を表示し、仮想スクロール（見える行だけを描く）で速度を保つ。
+- 年表の組み立ては `io/chronicle.js` の `timelineOf` に切り出し、`buildTimeline(map)` で単独に呼べる。各項目は `cell`（移る場所）と `stateIds`（関係する国）を持つ。
+- 歴史ログ（`core/edit/history-log.js`）の出来事は、`date`・`cell`・`states` を持てる。マーカーの設置・移動・編集・削除、ノートの書き換え、旅の作成、戦争の細かい動き（`war.events`）、隠密作戦・核作戦も年表に載る。
+- テスト: `tests/timeline-window.smoke.test.mjs`。
+
+**E. 外交の正本**
+- `core/edit/relations.js` の `relationOf` が正本。順序は 戦争 > 従属 > 同盟 > 外交表。外交表（`states[].diplomacy`）は、導いた値を写す表（Azgaar 互換の保存先）として残す。貿易・年表は `relationOf` を読む。`planSetDiplomacy`/`getRelation` は、外交表そのものを扱う従来のAPIのまま。
+- 国家統合（`planMergeStates`）が、続いている同盟・従属・戦争を統合先に付け替える（`retargetParts`）。2か国未満になった同盟は解消、敵と味方が1つの国になる戦争は終結（白紙和平）。終わった戦争・解消済みの同盟は書き換えない。
+- テスト: `tests/relations.test.mjs`。
+
+**F. 戦争の整合**
+- 開戦時に作る戦闘ログは `war.forecast`（想定）に、実際に起きた戦闘は `war.battles` に分けた。古い保存（`forecast` が無い）は `battles` に混ざったまま読める。再判定の理由は戦闘ではなく `war.events`（`kind: "reevaluate"`）に残る。
+- 戦争を500回ずつ自動で回す `tests/war-statistics.test.mjs`（乱数は固定しない）。互角なら攻撃側41%・防御側40%・引き分け19%、2倍の差で強い側が約76%、4倍で100%。
+
+**G. 自然発生イベント**
+- `core/sim/natural-events.js`（何が起きるかの決定、疫病・反乱の計画）と、`app/sim-actions.js` の `applyNaturalEvents`（独立・分派を、全部成功か全部取り消しで実行）。年が変わるときに `app/time-actions.js` から呼ぶ。
+- オン／オフと頻度（まれ・ふつう・多い）は、時間設定ダイアログ（上部バーの年月 → 「自然に起きる出来事」）。地図に保存（`ext.data.naturalEvents`）。既定はオン・ふつう。
+- 乱数は固定しない。疫病・反乱・分派は歴史ログ、独立は主権の記録として年表に載る。
+- テスト: `tests/natural-events.test.mjs`。
+
+**修正の追記（その後）**
+- 統合された国の部隊: 部隊IDが統合先と重ならないよう振り直し、所属（`state`）も統合先に直すようにした（`planMergeStates`）。以前は、双方に0番の部隊があると、IDが重複していた。
+- 外交表の食い違い: 外交・同盟ウィンドウに、食い違いがあるときだけ「同盟・従属・戦争に合わせて直す」が出る（`editActions.diplomacyMismatchCount` / `reconcileDiplomacy`）。普段は何も出ない。Undoできる。
+- 疫病: セルの人口（`pop`）・都市の人口・国／属州／宗教の集計をいっしょに減らす。疫病のあとも整合性の検査は崩れない。
+- 戦争の長さ（`estimateDurationMonths`）: 僅差・膠着ほど長く、圧勝ほど短く、ばらつきは対数正規（短期決着も長期戦もまれに出る）。平均は元の手触りを保つよう係数0.68で調整。互角で中央値14か月、10%点8〜90%点27か月。圧勝（4倍）は平均で約17%短い。
+- 自然発生イベントの確率: 反乱の基本確率を0.04→0.025にし、民意が低いときの上乗せに上限（2.5倍）を付けた。以前は、民意20の世界で、国あたり約10年に1回起きていた。いまは、民意がどれだけ低くても、1国あたり ふつう で年6.25%、多い で年12.5%が上限。疫病は世界全体で約19年に1回、独立は不安定な国で数十年に1回、宗教の分派は約40年に1回。**確率は、数値を見て決めた初期値で、実際の遊びの手触りは確認していない。**
+
+**まだ直せていない点・注意**
+- `.ahmap` を無圧縮で保存するのは、`CompressionStream` が無い環境（jsdom）だけ。
+- 外交表の食い違いは、読み込み時に警告するだけで、自動では直さない（直す入口は外交・同盟ウィンドウ）。
+- 統合した国の部隊を、続いている戦争の召集リスト（`muster`）に自動では加えない（統合元の召集リストは捨てる）。
+- 自然発生イベントの確率は、実際に遊んでの調整が必要かもしれない（`BASE_RATE`、`REBELLION_BOOST_MAX`）。
+
+---
+
 ## 追加済み：UI簡素化・歴史ログ・名前の自動生成・.ahmap（最新）
 
 **「歴史をつくる」ボタンとパネル（`ui/history-builder.js`）は廃止した。** 機能は次のとおり移した。

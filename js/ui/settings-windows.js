@@ -36,6 +36,15 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
       dipHost.append(el("p", "muted", "国家がありません"));
       return;
     }
+    // 外交表が、同盟・従属・戦争と食い違っているときだけ、知らせて直せるようにする（普段は何も出さない）
+    const gap = editActions.diplomacyMismatchCount?.() ?? 0;
+    if (gap > 0) {
+      const warn = el("div", "dip-mismatch");
+      const fix = el("button", "", "同盟・従属・戦争に合わせて直す"); fix.type = "button";
+      fix.addEventListener("click", () => { editActions.reconcileDiplomacy(); renderDip(); });
+      warn.append(el("span", "hint", `外交表が、同盟・従属・戦争と食い違っている組が ${gap} 件あります。`), fix);
+      dipHost.append(warn);
+    }
     const row = el("div", "state-picker");
     row.append(el("span", "field-label", "関係を設定する国"));
     const sel = document.createElement("select");

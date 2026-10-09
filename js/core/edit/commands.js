@@ -14,7 +14,13 @@ export function makeCommand(label, layers, parts) {
   const bump = (state) => { const r = state.map.rev; for (const l of layers) r[l]++; };
   return {
     label, layers, parts,
-    apply(state) { for (const p of parts) p.apply(state.map); bump(state); },
+    // 途中の部品が例外を出したら、適用済みの部品を逆順に戻してから投げ直す（半分だけ変わった状態を残さない）
+    apply(state) {
+      let done = 0;
+      try { for (const p of parts) { p.apply(state.map); done++; } }
+      catch (e) { for (let i = done - 1; i >= 0; i--) { try { parts[i].revert(state.map); } catch { /* 続行 */ } } throw e; }
+      bump(state);
+    },
     revert(state) { for (let i = parts.length - 1; i >= 0; i--) parts[i].revert(state.map); bump(state); },
   };
 }

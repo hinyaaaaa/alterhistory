@@ -9,7 +9,7 @@
 //
 // 純粋ロジック層：DOM に依存しない。map を変更しない。
 
-import { getRelation } from "../edit/diplomacy.js";
+import { relationOf } from "../edit/relations.js";
 import { blockedPairs, isBlockaded } from "./sanctions.js";
 import { activeWars } from "../edit/wars.js";
 
@@ -142,7 +142,7 @@ export function tradeAffinity(map, a, b, ctx) {
   const pa = map.pack.states[a].pole ?? [0, 0], pb = map.pack.states[b].pole ?? [0, 0];
   const dist = Math.hypot(pa[0] - pb[0], pa[1] - pb[1]);
   const base = near ? 1 : 0.2 + 0.5 * Math.exp(-dist / (0.3 * ctx.diag));
-  const rel = RELATION_FACTOR[getRelation(map, a, b)] ?? 1;
+  const rel = RELATION_FACTOR[relationOf(map, a, b)] ?? 1;
   return Math.min(1.3, base * rel);
 }
 

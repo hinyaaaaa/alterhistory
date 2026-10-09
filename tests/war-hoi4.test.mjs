@@ -36,7 +36,8 @@ const m = store.getState().map;
 assert.equal(m.pack.states[1].military[1].u.infantry, 3000, "招集しなかった部隊は損耗しない");
 assert.ok(m.pack.states[1].military[0].u.infantry < 3000, "招集した部隊は損耗する");
 const w = listWars(m)[0];
-assert.ok(w.battles.length >= 2 && w.battles.every((b) => b.name && b.text && b.date), "戦闘の記録が自動生成される");
+assert.ok(w.forecast.length >= 2 && w.forecast.every((b) => b.name && b.text && b.date), "想定の戦闘ログが自動生成される");
+  assert.equal(w.battles.length, 0, "実際の戦闘は、まだ記録されていない");
 assert.ok(w.result.casualties[2].lost > 0 && w.result.casualties[1].before === 3000, "各国の消耗が記録される");
 // --- 士気が変動する ---
 assert.notEqual(m.pack.states[1].morale, 70, "戦争で士気が動く");
@@ -73,7 +74,7 @@ const w2b = listWars(s2.getState().map)[0];
 assert.ok(s2.getState().map.pack.states[2].morale < moraleBefore, "標的国の士気が下がる");
 assert.ok(w2b.result.compare.land > landBefore, "核の打撃で陸軍力のバーが攻撃側へ動く");
 assert.ok(w2b.result.compare.morale > w2.result.compare.morale, "士気のバーも動く");
-assert.ok(w2b.battles.some((b) => b.text.includes("☢")), "戦闘の記録に核使用が残る");
+assert.ok(w2b.events.some((e) => e.kind === "reevaluate" && e.text.includes("☢")), "戦争の出来事に核使用が残る（戦闘の記録とは別）");
 
 // --- 人口の大部分が消えた国は崩壊（敵に併合） ---
 const s3 = createStore({ map: mk() });

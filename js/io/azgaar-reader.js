@@ -66,6 +66,7 @@ export function parseAzgaarText(text) {
 
   // 警告は呼び出しごとに独立して集める（グローバルに溜めない）
   const warnings = [];
+  nonNumericCount = 0;
   const json = (line, fallback, label) => tryJson(line, fallback, label, warnings);
 
   const map = createEmptyMap();
@@ -131,6 +132,7 @@ export function parseAzgaarText(text) {
   // 既知の範囲より後ろの行（将来の版で追加された行）も失わない
   for (let i = KNOWN_LINE_COUNT; i < lines.length; i++) map.passthrough[i] = lines[i];
 
+  if (nonNumericCount) warnings.push(`数値の列に、数値でない値が ${nonNumericCount} 個ありました。0として読み込んでいます`);
   return { map, warnings };
 }
 
@@ -259,6 +261,7 @@ export function parseNamesbase(line) {
 // ---------- 共通ヘルパー ----------
 
 /** カンマ区切りの数値列 → 配列。空文字は空配列 */
+let nonNumericCount = 0; // 数値でなかった値の数（読み込みごとに集計し、警告にする）
 export function parseNumbers(line, allowFloat = false) {
   const s = (line ?? "").trim();
   if (!s) return [];
@@ -266,6 +269,7 @@ export function parseNumbers(line, allowFloat = false) {
   const out = new Array(parts.length);
   for (let i = 0; i < parts.length; i++) {
     const v = Number(parts[i]);
+    if (Number.isNaN(v)) nonNumericCount++;
     out[i] = Number.isNaN(v) ? 0 : allowFloat ? v : Math.trunc(v);
   }
   return out;

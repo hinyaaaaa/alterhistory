@@ -16,7 +16,12 @@ import { planNextCollapse } from "../core/sim/collapse.js";
 import { leaderOf } from "../core/edit/alliances.js";
 import { planCovertOp, covertOdds, listCovertOps, COVERT_KINDS } from "../core/sim/covert.js";
 import { planSetVassal, planReleaseVassal, vassalInfo } from "../core/edit/vassals.js";
-import { planMergeStates } from "../core/edit/sovereignty.js";
+import { planMergeStates, planDeclareIndependence } from "../core/edit/sovereignty.js";
+import { rollNaturalEvents, planPlague, planRebellion, getNaturalSettings, planSetNaturalSettings } from "../core/sim/natural-events.js";
+import { planAddEntity } from "../core/edit/entities.js";
+import { planPaint } from "../core/edit/paint.js";
+import { planSetOrigins } from "../core/edit/profile.js";
+import { suggestName as planSuggestName, withProvisional } from "../core/edit/naming.js";
 import { strikeEffects } from "../core/sim/nuclear.js";
 import { planDraftNuclearOp, planCancelNuclearOp, planExecuteNuclearOp, listNuclearOps, nuclearStock } from "../core/sim/nuclear.js";
 
@@ -28,6 +33,11 @@ export function createSimActions({ store, renderer }) {
   const safeRun = (label, fn) => {
     try { return fn(); }
     catch (e) { store.update((s) => { s.error = `${label}: ${e.message}`; }); return undefined; }
+  };
+  /** 複数の変更を「全部成功か、全部取り消し」で行う。途中で失敗したら画面も元に戻して例外を投げ直す */
+  const atomic = (label, fn) => {
+    try { return store.transaction(label, fn); }
+    catch (e) { rerender(); throw e; }
   };
   const currentDate = () => store.getState().map?.worldTime ?? { year: 1, month: 1 };
   const dateLabel = () => { const d = currentDate(); return `${d.year}年${d.month}月`; };
@@ -77,14 +87,15 @@ export function createSimActions({ store, renderer }) {
       return withMap((map) => safeRun("戦闘", () => {
         const { command, result } = planResolveBattle(map, a, b, rnd);
         const spot = regimentCell(map, b), title = battleName(map, a, b);
-        store.beginBatch(`戦闘（${map.pack.states[a.stateId].name} vs ${map.pack.states[b.stateId].name}）`);
-        store.commit(command);
-        if (warId != null) putMarker("battlefields", "⚔️", spot, title);
-        if (warId != null) {
-          const recCmd = planRecordBattle(map, warId, { attackerState: a.stateId, defenderState: b.stateId, result, date: currentDate() });
-          if (recCmd) store.commit(recCmd);
-        }
-        store.endBatch();
+        // 戦闘そのもの・マーカー・戦績の記録は、全部成功か全部取り消し
+        atomic(`戦闘（${map.pack.states[a.stateId].name} vs ${map.pack.states[b.stateId].name}）`, () => {
+          store.commit(command);
+          if (warId != null) putMarker("battlefields", "⚔️", spot, title);
+          if (warId != null) {
+            const recCmd = planRecordBattle(map, warId, { attackerState: a.stateId, defenderState: b.stateId, result, date: currentDate() });
+            if (recCmd) store.commit(recCmd);
+          }
+        });
         rerender();
         return result;
       }));
@@ -100,14 +111,15 @@ export function createSimActions({ store, renderer }) {
       return withMap((map) => safeRun("会戦", () => {
         const { command, result } = planResolveMuster(map, a, b, rnd);
         const spot = regimentCell(map, b), title = battleName(map, a, b);
-        store.beginBatch(`会戦（${map.pack.states[a.stateId].name} vs ${map.pack.states[b.stateId].name}）`);
-        store.commit(command);
-        if (warId != null) putMarker("battlefields", "⚔️", spot, title);
-        if (warId != null) {
-          const recCmd = planRecordBattle(map, warId, { attackerState: a.stateId, defenderState: b.stateId, result, date: currentDate() });
-          if (recCmd) store.commit(recCmd);
-        }
-        store.endBatch();
+        // 戦闘そのもの・マーカー・戦績の記録は、全部成功か全部取り消し
+        atomic(`会戦（${map.pack.states[a.stateId].name} vs ${map.pack.states[b.stateId].name}）`, () => {
+          store.commit(command);
+          if (warId != null) putMarker("battlefields", "⚔️", spot, title);
+          if (warId != null) {
+            const recCmd = planRecordBattle(map, warId, { attackerState: a.stateId, defenderState: b.stateId, result, date: currentDate() });
+            if (recCmd) store.commit(recCmd);
+          }
+        });
         rerender();
         return result;
       }));
@@ -145,12 +157,11 @@ export function createSimActions({ store, renderer }) {
       return withMap((map) => safeRun("宣戦布告", () => {
         const r = planDeclareWar(map, { name, attackers, defenders, date: currentDate() });
         const war = r.command.label ?? "宣戦布告";
-        store.beginBatch(war);
-        try {
+        atomic(war, () => {
           store.commit(r.command);
           const m = store.getState().map;
           putMarker("war", "⚔️", capitalCell(m, attackers[0]), `${dateLabel()} ${listWars(m).find((w) => w.id === r.id)?.name ?? "開戦"}（開戦）`);
-        } finally { store.endBatch(); }
+        });
         rerender();
         return r.id;
       }));
@@ -163,13 +174,12 @@ export function createSimActions({ store, renderer }) {
         let out;
         safeRun("戦争開始", () => {
           const r = planDeclareAndResolveWar(map, { attackers, defenders, date: currentDate(), rnd, muster, type });
-          store.beginBatch(r.command.label ?? "戦争開始");
           let collapsed = [];
-          try {
+          atomic(r.command.label ?? "戦争開始", () => {
             store.commit(r.command);
             putMarker("war", "⚔️", capitalCell(store.getState().map, attackers[0]), `${dateLabel()} ${r.name}`);
             collapsed = runCollapses(); // 人口の大部分を失った国は、ここで崩壊する
-          } finally { store.endBatch(); }
+          });
           rerender();
           out = { id: r.id, name: r.name, result: r.result, joined: r.joined, endsAt: r.endsAt, battles: r.battles, collapsed };
         });
@@ -183,20 +193,65 @@ export function createSimActions({ store, renderer }) {
     warsOngoing() { return withMap((map) => warsOngoing(map)) ?? []; },
     /** 戦闘を最後まで進める */
     /** 経過を、目安の期間の終わりまで進める（時間を待たずに確かめたいとき） */
-    finishWar(warId) { withMap((map) => safeRun("経過を進める", () => { const c = planFinishWar(map, warId, rnd); if (c) { store.commit(c); reevaluateTouched(c); runCollapses(); rerender(); } })); },
+    finishWar(warId) { withMap((map) => safeRun("経過を進める", () => { const c = planFinishWar(map, warId, rnd); if (c) { atomic("経過を進める", () => { store.commit(c); reevaluateTouched(c); runCollapses(); }); rerender(); } })); },
     /** 月が進むたびの、戦争の損害とハプニングの展開（時間経過）。崩壊した国名を返す */
+    /** 自然発生イベントの設定（オン／オフ・頻度） */
+    getNaturalEvents() { const m = store.getState().map; return m ? getNaturalSettings(m) : null; },
+    setNaturalEvents(patch) { safeRun("自然発生イベントの設定", () => { const m = store.getState().map; const c = m && planSetNaturalSettings(m, patch); if (c) store.commit(c); }); },
+
+    /**
+     * 年が変わったときに呼ぶ。独立・疫病・反乱・宗教の分派が、確率で起きる（乱数は固定しない）。
+     * 1つの出来事は「全部成功か全部取り消し」。ひとつが失敗しても、ほかの出来事は続ける。
+     * @returns {{kind:string, title:string}[]} 実際に起きた出来事
+     */
+    applyNaturalEvents(date, rng = rnd) {
+      const done = [];
+      const first = store.getState().map; if (!first) return done;
+      for (const ev of rollNaturalEvents(first, rng)) {
+        try {
+          const title = atomic(`自然発生イベント（${ev.kind}）`, () => {
+            const map = store.getState().map;
+            if (ev.kind === "plague") { store.commit(planPlague(map, ev, date)); return "疫病"; }
+            if (ev.kind === "rebellion") { store.commit(planRebellion(map, ev, date)); return "反乱"; }
+            if (ev.kind === "independence") {
+              const nm = planSuggestName(map, { kind: "state", rnd: rng, stateId: ev.stateId });
+              const r = planDeclareIndependence(map, { provinceId: ev.provinceId, name: nm.name, rnd: rng, date });
+              store.commit(withProvisional(map, r.command, "state", r.id, true));
+              return "属州の独立";
+            }
+            if (ev.kind === "schism") {
+              const parent = map.pack.religions[ev.religionId];
+              const nm = planSuggestName(map, { kind: "religion", rnd: rng, id: ev.religionId });
+              const add = planAddEntity(map, { kind: "religion", name: nm.name, rnd: rng, extra: nm.extra });
+              const entry = { type: "schism", title: `宗教「${parent.fullName ?? parent.name}」から「${nm.name}」が分かれた`, detail: `${ev.cells.length}セルの信徒が新しい宗派に移った`, date, states: [ev.stateId], cell: ev.cells[0], ref: { kind: "religion", id: add.id } };
+              store.commit(withProvisional(map, withEvent(map, add.command, entry), "religion", add.id, true));
+              const paint = planPaint(store.getState().map, { kind: "religion", target: add.id, cells: ev.cells });
+              if (!paint.command) throw new Error("分派の領土を塗れませんでした");
+              store.commit(paint.command);
+              const org = planSetOrigins(store.getState().map, "religion", add.id, [ev.religionId]);
+              if (org) store.commit(org);
+              return "宗教の分派";
+            }
+            return null;
+          });
+          if (title) done.push({ kind: ev.kind, title });
+        } catch { /* この出来事は取り消された（世界は元のまま）。ほかの出来事は続ける */ }
+      }
+      if (done.length) rerender();
+      return done;
+    },
+
     advanceWars(date) {
       return withMap((map) => {
         const c = planAdvanceWars(map, date, rnd); if (!c) return [];
-        store.commit(c); reevaluateTouched(c);
-        return runCollapses();
+        return atomic("戦争の経過", () => { store.commit(c); reevaluateTouched(c); return runCollapses(); });
       }) ?? [];
     },
     /** 軍を引き上げる。regIds は戦線に残す部隊（空なら全軍撤退） */
     withdrawFromWar(warId, stateId, regIds) {
       return withMap((map) => { let ok = false; safeRun("軍の引き上げ", () => {
         const c = planWithdraw(map, warId, stateId, regIds, currentDate()); if (!c) return;
-        store.commit(c); reevaluateWarIds([warId]); rerender(); ok = true;
+        atomic("軍の引き上げ", () => { store.commit(c); reevaluateWarIds([warId]); }); rerender(); ok = true;
       }); return ok; }) ?? false;
     },
     currentWarScore(war) { return currentWarScore(war); },
@@ -207,8 +262,7 @@ export function createSimActions({ store, renderer }) {
     runCovertOp(attackerId, targetId, kind) {
       return withMap((map) => { let op = null; safeRun("隠密作戦", () => {
         const r = planCovertOp(map, { attackerId, targetId, kind, date: currentDate(), rnd });
-        store.beginBatch(r.command.label ?? "隠密作戦");
-        try { store.commit(r.command); reevaluateStates([attackerId, targetId]); runCollapses(); } finally { store.endBatch(); }
+        atomic(r.command.label ?? "隠密作戦", () => { store.commit(r.command); reevaluateStates([attackerId, targetId]); runCollapses(); });
         rerender(); op = r.op;
       }); return op; }) ?? null;
     },
@@ -227,16 +281,15 @@ export function createSimActions({ store, renderer }) {
     executeNuclearOp(id) {
       withMap((map) => safeRun("核作戦の実行", () => {
         const cmd = planExecuteNuclearOp(map, id, currentDate());
-        store.beginBatch(cmd.label ?? "核作戦の実行");
-        try {
+        atomic(cmd.label ?? "核作戦の実行", () => {
           store.commit(cmd);
           const op = listNuclearOps(store.getState().map).find((o) => o.id === id);
           putMarker("nuclear", "☢️", capitalCell(store.getState().map, op.targetId), `${dateLabel()} ${op.name}`);
           // まだ講和していない戦争は、いまの戦力・士気で判定し直す（核の打撃が戦況・勝敗に反映される）
-          const re = planReevaluateWars(store.getState().map, [op.targetId, op.attackerId], `☢ ${op.name}：${op.warheads}発が使用された`);
+          const re = planReevaluateWars(store.getState().map, [op.targetId, op.attackerId], `☢ ${op.name}：${op.warheads}発が使用された`, currentDate());
           if (re) store.commit(makeCommand("核作戦による戦況の変化", [], [re]));
           runCollapses();
-        } finally { store.endBatch(); }
+        });
         rerender();
       }));
     },
@@ -246,7 +299,7 @@ export function createSimActions({ store, renderer }) {
     setCurrency(stateId, patch) { withMap((map) => safeRun("通貨の設定", () => { store.commit(planSetCurrency(map, stateId, patch)); rerender(); })); },
     warNameTaken(name, exceptId) { return withMap((map) => warNameTaken(map, name, exceptId)) ?? false; },
     /** 召集する部隊（{ [国家ID]: [部隊ID...] }）を保存する */
-    setMuster(warId, muster) { withMap((map) => safeRun("部隊の召集", () => { store.commit(planSetMuster(map, warId, muster)); reevaluateWarIds([warId]); rerender(); })); },
+    setMuster(warId, muster) { withMap((map) => safeRun("部隊の召集", () => { atomic("部隊の召集", () => { store.commit(planSetMuster(map, warId, muster)); reevaluateWarIds([warId]); }); rerender(); })); },
     /** ある国の、その戦争に召集された部隊の合計戦力 */
     musterPower(war, stateId) {
       return withMap((map) => {
@@ -274,14 +327,15 @@ export function createSimActions({ store, renderer }) {
       return withMap((map) => { let ok = false; safeRun("講和条約", () => {
         const war = listWars(map).find((w) => w.id === warId);
         const cmd = planSignTreaty(map, warId, terms, currentDate());
-        store.beginBatch(cmd.label ?? "講和条約");
-        try {
+        // 講和の記録・マーカー・併合・崩壊は、全部成功か全部取り消し。
+        // 併合だけが失敗して講和だけ成立する（記録と実際の状態がずれる）ことを防ぐ。
+        atomic(cmd.label ?? "講和条約", () => {
           store.commit(cmd);
           const to = terms.cessions?.[0]?.toStateId ?? terms.annex?.[0]?.toStateId ?? terms.reparations?.[0]?.toStateId ?? war?.attackers?.[0];
           putMarker("peace", "🕊️", capitalCell(store.getState().map, to), `${dateLabel()} ${war?.name ?? "戦争"}の講和`);
-          for (const x of terms.annex ?? []) { try { store.commit(planMergeStates(store.getState().map, { from: x.fromStateId, to: x.toStateId, date: currentDate() })); } catch (e) { /* 併合できなければ通常の講和のまま */ } }
+          for (const x of terms.annex ?? []) store.commit(planMergeStates(store.getState().map, { from: x.fromStateId, to: x.toStateId, date: currentDate() }));
           runCollapses();
-        } finally { store.endBatch(); }
+        });
         rerender(); ok = true;
       }); return ok; }) ?? false;
     },
@@ -290,8 +344,7 @@ export function createSimActions({ store, renderer }) {
       withMap((map) => safeRun("講和条約", () => {
         const war = listWars(map).find((w) => w.id === warId);
         const cmd = planSignPeace(map, warId, terms, currentDate());
-        store.beginBatch(cmd.label ?? "講和条約");
-        try { store.commit(cmd); putMarker("peace", "🕊️", capitalCell(store.getState().map, terms.toStateId), `${dateLabel()} ${war?.name ?? "戦争"}の講和`); runCollapses(); } finally { store.endBatch(); }
+        atomic(cmd.label ?? "講和条約", () => { store.commit(cmd); putMarker("peace", "🕊️", capitalCell(store.getState().map, terms.toStateId), `${dateLabel()} ${war?.name ?? "戦争"}の講和`); runCollapses(); });
         rerender();
       }));
     },

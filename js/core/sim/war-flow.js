@@ -65,7 +65,7 @@ export function addMonths(date, n) {
 
 /**
  * 終戦日（開戦から何ヶ月で決着するか）を自動で決める。
- * 動員規模が大きいほど、地形が険しいほど、決着が僅差なほど長引く。世界大戦規模は特に長い。乱数で±25%。
+ * 動員規模が大きいほど、地形が険しいほど、決着が僅差なほど（膠着ならなおさら）長引く。世界大戦規模は特に長い。乱数のばらつきは対数正規（短期決着も長期戦もまれに出る）。
  */
 export function estimateDurationMonths(map, attackers, defenders, result, rnd) {
   const ids = [...attackers, ...defenders];
@@ -77,10 +77,15 @@ export function estimateDurationMonths(map, attackers, defenders, result, rnd) {
   let total = 0, rough = 0;
   if (h) for (let i = 0; i < c.state.length; i++) if (defenders.includes(c.state[i])) { total++; if (h[i] >= 55) rough++; }
   const terrain = 1 + (total ? rough / total : 0) * 0.8;
-  const closeness = 1 + (1 - clamp(result.decisiveness ?? 0.5, 0, 1)) * 1.2;
+  // 決着が僅差なほど長引く（圧勝は短く、接戦は長い）。決着つかず（膠着）は、さらに長引く
+  const closeness = 1 + (1 - clamp(result.decisiveness ?? 0.5, 0, 1)) * 2.2;
+  const stalemate = result.winner === "stalemate" ? 1.5 : 1;
   const world = ids.length >= 5 ? 1.6 : 1;
-  const base = (2 + scale * 2.5) * terrain * closeness * world;
-  return clamp(Math.round(base * rnd.float(0.75, 1.25)), 1, 120);
+  const base = (2 + scale * 2.5) * 0.68 * terrain * closeness * stalemate * world; // 0.68: 平均の長さを、これまでの手触り（互角で1年半ほど）に保つ係数
+  // 長さのばらつき：対数正規（平均1）。たいていは目安の近くで終わるが、まれに短期で決着し、まれに長期戦になる
+  const z = Math.sqrt(-2 * Math.log(1 - rnd.next() * 0.999999)) * Math.cos(2 * Math.PI * rnd.next());
+  const SIGMA = 0.45;
+  return clamp(Math.round(base * Math.exp(SIGMA * z - (SIGMA * SIGMA) / 2)), 1, 120);
 }
 
 // ---- 講和地 ----

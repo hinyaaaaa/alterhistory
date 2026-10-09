@@ -127,8 +127,16 @@ export function validateMap(map) {
   };
   refCheck("state", map.pack.cells.state, map.pack.states.length);
   refCheck("culture", map.pack.cells.culture, map.pack.cultures.length);
+  refCheck("religion", map.pack.cells.religion, map.pack.religions.length);
   refCheck("burg", map.pack.cells.burg, map.pack.burgs.length);
   refCheck("province", map.pack.cells.province, map.pack.provinces.length);
+
+  // 数値でない値（NaN・null・文字列）。黙って0として扱われないように報告する
+  for (const [key, arr] of Object.entries(map.pack.cells)) {
+    let bad = 0, first = -1;
+    for (let i = 0; i < arr.length; i++) if (typeof arr[i] !== "number" || !Number.isFinite(arr[i])) { if (first < 0) first = i; bad++; }
+    if (bad) problems.push(`pack.cells.${key} に数値でない値が ${bad} 個あります（最初はセル${first}）`);
+  }
 
   // 形状が作られている場合は、属性配列と形状のセル数が一致していること
   if (map.geometry && map.geometry.pack.p.length !== n) {

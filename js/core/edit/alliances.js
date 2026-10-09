@@ -32,7 +32,7 @@ export function planCreateAlliance(map, name, memberIds, date, bond = "standard"
   for (const id of uniq) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
   if (!BOND_BY_KEY[bond]) throw new Error("同盟の拘束力は 緩やか・標準・強固 から選んでください");
   if (leader != null && !uniq.includes(leader)) throw new Error("盟主は加盟国の中から選んでください");
-  const alliance = { id: nextAllianceId(map), name: name || "新しい同盟", members: uniq, bond, leader: leader ?? uniq[0], formedAt: date ?? null, dissolvedAt: null };
+  const alliance = { id: nextAllianceId(map), name: name || "新しい同盟", members: uniq, memberNames: Object.fromEntries(uniq.map((id) => [id, map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `国家#${id}`])), bond, leader: leader ?? uniq[0], formedAt: date ?? null, dissolvedAt: null };
   const pairs = []; for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) pairs.push([uniq[i], uniq[j]]);
   const before = listAlliances(map);
   const write = (m, list) => { const ext = ensureExt(m); ext.data.alliances = list; if (!list.length) delete ext.data.alliances; };

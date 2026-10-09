@@ -4,7 +4,8 @@
 //   ext.data.wars = [{
 //     id, name, attackers:[stateId], defenders:[stateId],
 //     startedAt: {year, month}, endedAt: {year, month}|null,
-//     battles: [{ year, month, attackerState, defenderState, winner, ... }],  // 戦績の記録
+//     battles: [{ year, month, attackerState, defenderState, winner, ... }],  // 実際に起きた戦闘の記録（利用者が戦わせた・記録したもの）
+//     forecast: [{ date, name, place, winner, ... }],                           // 開戦時に作った「想定の戦闘ログ」（実際の戦闘とは別。古い保存には無く、そのときは battles に混ざっている）
 //     advantage: { [stateId]: number },  // 講和候補の算出に使う「優勢度」の累積
 //   }]
 //
@@ -57,6 +58,9 @@ function uniqueDefaultName(map, base) {
   for (let k = 2; ; k++) { const n = `${base}（第${k}次）`; if (!warNameTaken(map, n)) return n; }
 }
 
+/** その時点の国名を { 国ID: 名前 } で控える（のちに改名・消滅しても、当時の名前で歴史を書けるように） */
+export const snapshotNames = (map, ids) => Object.fromEntries([...new Set(ids)].map((id) => [id, officialName(map.pack.states[id], `国家#${id}`)]));
+
 export function planDeclareWar(map, { name, attackers, defenders, date }) {
   const a = [...new Set(attackers)], d = [...new Set(defenders)];
   if (!a.length || !d.length) throw new Error("攻撃側・防御側とも1カ国以上必要です");
@@ -68,6 +72,7 @@ export function planDeclareWar(map, { name, attackers, defenders, date }) {
   const war = {
     id: nextWarId(map), name: explicit || uniqueDefaultName(map, `${aNames[0]}対${dNames[0]}戦争`),
     attackers: a, defenders: d, startedAt: date, endedAt: null, battles: [], advantage: {},
+    names: snapshotNames(map, [...a, ...d]), // 開戦時の国名
     muster: {}, // 召集する部隊: { [国家ID]: [部隊ID, ...] }（チェックを付けた部隊がこの戦争の戦力）
   };
   const before = listWars(map);
@@ -108,12 +113,16 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
   const supportDelta2 = planSupportDeltas(result, { attackers: a, defenders: d, months, type: T.key }); // 勝者が確定したので、勝者の民意の回復を反映して計算し直す
   const endsAt = addMonths(date, months);
   const battles = generateBattleLog(map, { attackers: a, defenders: d, result, startedAt: date, durationMonths: months, capitalFall: vic.capitalFall }, rnd, addMonths);
+  // 予想の戦闘ログにも、当時の国名と、開戦時の両陣営の戦力（陸・海・空の合計）を残す
+  const sidePower = (S) => Math.round((S?.land ?? 0) + (S?.sea ?? 0) + (S?.air ?? 0));
+  const names0 = snapshotNames(map, [...a, ...d]);
+  for (const b of battles) Object.assign(b, { attackerName: names0[b.attackerState], defenderName: names0[b.defenderState], aPower: sidePower(result.aStrength), dPower: sidePower(result.dStrength), powerBasis: "war-start" });
   // 戦争の名前は、実際に戦いが行われた場所から付ける
   const name = nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key });
   const war = {
-    id: nextWarId(map), name, type: T.key, attackers: a, defenders: d, startedAt: date, endsAt, durationMonths: months, endedAt: null,
+    id: nextWarId(map), name, type: T.key, attackers: a, defenders: d, names: names0, startedAt: date, endsAt, durationMonths: months, endedAt: null,
     progress: 0, monthsDone: 0, events: [], omens: [], edgeShift: 0, withdrawn: {}, // progress: 経過月数 ÷ 目安の月数（1を超えて長引くこともある）。終わりは決まっておらず、講和条約を結んだ月が終戦の月になる
-    joinedAllies: joined, battles, advantage: {}, muster: cleanMuster,
+    joinedAllies: joined, battles: [], forecast: battles, advantage: {}, muster: cleanMuster, // 想定の戦闘ログ(forecast)と、実際の戦闘(battles)は別に持つ
     result: {
       winner: result.winner, decisiveness: result.decisiveness, warScore: result.warScore, type: T.key, compare: result.compare, aStrength: result.aStrength, dStrength: result.dStrength,
       noise: result.noise, doctrine: result.doctrine, casualties: result.casualties, moraleDelta: result.moraleDelta, popLossShare: result.popLossShare, losses: result.losses,
@@ -249,14 +258,15 @@ export function planWarPreview(map, { attackers, defenders, muster = null, type 
 }
 
 /** 核作戦などのあとで、まだ講和していない戦争の結果を、いまの戦力・士気で再判定する（記録も残す） */
-export function planReevaluateWars(map, stateIds, note) {
+export function planReevaluateWars(map, stateIds, note, date = null) {
   const list = listWars(map);
   let changed = false;
   const after = list.map((w) => {
     if (w.endedAt || !w.result || ![...w.attackers, ...w.defenders].some((id) => stateIds.includes(id))) return w;
     const r = reevaluateWar(map, w); if (!r) return w;
     changed = true;
-    return { ...w, result: { ...w.result, ...r }, battles: note ? [...w.battles, { date: null, name: note, place: "", winner: r.winner === "defender" ? "defender" : "attacker", text: note, attackerState: w.attackers[0], defenderState: w.defenders[0] }] : w.battles };
+    // 再判定の理由は「戦闘」ではなく、戦争の出来事として残す（実際の戦闘の記録に混ぜない）
+    return { ...w, result: { ...w.result, ...r }, events: note ? [...(w.events ?? []), { date, kind: "reevaluate", title: "戦況の再判定", text: `${note}（結果: ${r.winner === "defender" ? "防御側" : r.winner === "attacker" ? "攻撃側" : "決着つかず"}の優勢）` }] : (w.events ?? []) };
   });
   return changed ? { apply: (m) => writeWars(m, after), revert: (m) => writeWars(m, list) } : null;
 }
@@ -368,7 +378,8 @@ export function planRecordBattle(map, warId, { attackerState, defenderState, res
   const war = list.find((w) => w.id === warId);
   if (!war) throw new Error("その戦争は存在しません");
   if (war.endedAt) throw new Error("終結した戦争には記録できません");
-  const entry = { year: date.year, month: date.month, attackerState, defenderState, winner: result.winner, aPower: result.aPower, dPower: result.dPower };
+  const nm = snapshotNames(map, [attackerState, defenderState]);
+  const entry = { year: date.year, month: date.month, attackerState, defenderState, attackerName: nm[attackerState], defenderName: nm[defenderState], winner: result.winner, aPower: result.aPower, dPower: result.dPower };
   const advGain = result.winner === "attacker" ? 1 : -1;
   const before = list;
   const after = list.map((w) => w.id !== warId ? w : {
@@ -558,7 +569,7 @@ export function planSignTreaty(map, warId, terms, date, { enforceBudget = true, 
   }
 
   const treatyName = uniqueTreatyName(map, terms.treatyName || `${war.name}の講和条約`);
-  const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, ...record, score: { total: currentWarScore(war), max: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex, vassalize }) : [] } };
+  const full = { kind, treatyName, venue: terms.venue ?? null, notes: terms.notes ?? "", signedAt: date, names: snapshotNames(map, all), ...record, score: { total: currentWarScore(war), max: war.result?.warScore ?? 0, byWinner: war.result ? treatyBudget(map, war, { cessions, reparations, annex, vassalize }) : [] } };
   // 終戦の月は、実際に講和条約を結んだ月。経過した月数も記録する
   const endDate = date;
   const after = list.map((w) => (w.id !== warId ? w : { ...w, endedAt: endDate, lastedMonths: Math.max(0, monthsBetween(w.startedAt, date)), terms: full, treatyName, treatyVenue: terms.venue?.place ?? null }));

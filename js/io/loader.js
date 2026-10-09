@@ -6,6 +6,9 @@ import { parseAzgaarBytes } from "./azgaar-reader.js";
 import { buildGeometry } from "../core/derive.js";
 import { attachExtension } from "./native-format.js";
 import { isNativeBytes, parseNativeJson } from "./native-map.js";
+import { validateMap } from "../core/model.js";
+import { checkIntegrity, checkHistoryRefs } from "../core/edit/integrity.js";
+import { diplomacyMismatches } from "../core/edit/relations.js";
 
 export class LoadError extends Error {
   constructor(message, cause) { super(message); this.name = "LoadError"; this.cause = cause; }
@@ -52,7 +55,28 @@ export async function loadFromBytes(bytes, Delaunator) {
 
   // 旧 ALTERHISTORY 形式（Azgaar の .map に拡張行を足したもの）は、末尾の拡張行から独自データを取り出す
   if (!native) parsed.warnings.push(...attachExtension(parsed.map));
+  parsed.warnings.push(...inspectLoaded(parsed.map));
   return parsed;
+}
+
+/**
+ * 開いた地図を検査し、問題は警告として返す（開けなくはしない）。
+ * 手で編集された Azgaar の地図には、最初から小さな食い違いがあるので、件数は短くまとめて知らせる。
+ */
+export function inspectLoaded(map) {
+  const run = (label, fn) => { try { return fn(); } catch (e) { return [`${label}の検査中にエラーが起きました: ${e.message}`]; } };
+  const groups = [
+    ["構造", run("構造", () => validateMap(map))],
+    ["整合性", run("整合性", () => checkIntegrity(map, null, { skipEconomyChecks: true }))],
+    ["歴史の記録", run("歴史の記録", () => checkHistoryRefs(map))],
+    ["外交表", run("外交表", () => diplomacyMismatches(map).map((x) => `国家#${x.a}と#${x.b}は、外交表では「${x.table ?? "未設定"}」だが、同盟・従属・戦争からは「${x.truth}」になる`))],
+  ];
+  const out = [];
+  for (const [label, list] of groups) {
+    if (!list.length) continue;
+    out.push(`${label}の検査で ${list.length} 件の問題が見つかりました（地図は開けます）: ${list[0]}${list.length > 1 ? ` ほか${list.length - 1}件` : ""}`);
+  }
+  return out;
 }
 
 /** @param {File|Blob} file */

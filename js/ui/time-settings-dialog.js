@@ -7,7 +7,7 @@ import { formatWorldTime } from "../core/sim/time.js";
 
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
-export function openTimeSettingsDialog({ store, timeActions, editActions }) {
+export function openTimeSettingsDialog({ store, timeActions, editActions, simActions = null }) {
   const map = store.getState().map;
   if (!map) return;
 
@@ -93,6 +93,21 @@ export function openTimeSettingsDialog({ store, timeActions, editActions }) {
     }
   }
   renderEraList();
+
+  // --- 自然に起きる出来事（独立・疫病・反乱・宗教の分派） ---
+  dialog.append(el("h3", "dialog-subhead", "自然に起きる出来事"));
+  dialog.append(el("p", "hint", "年が進むと、独立・疫病・反乱・宗教の分派が、確率で起きます。起きたことは年表に載ります。"));
+  const natRow = el("div", "time-settings-row");
+  const natOn = document.createElement("input"); natOn.type = "checkbox"; natOn.id = "natural-events-on";
+  const natLabel = el("label", "", " 自然に起きる出来事を有効にする"); natLabel.htmlFor = "natural-events-on";
+  const natFreq = document.createElement("select"); natFreq.id = "natural-events-freq"; natFreq.setAttribute("aria-label", "頻度");
+  for (const [k, v] of [["low", "まれ"], ["normal", "ふつう"], ["high", "多い"]]) natFreq.append(new Option(v, k));
+  const syncNat = () => { const s = simActions?.getNaturalEvents?.(); if (!s) return; natOn.checked = s.enabled; natFreq.value = s.frequency; natFreq.disabled = !s.enabled; };
+  natOn.addEventListener("change", () => { simActions?.setNaturalEvents?.({ enabled: natOn.checked }); syncNat(); });
+  natFreq.addEventListener("change", () => { simActions?.setNaturalEvents?.({ frequency: natFreq.value }); syncNat(); });
+  natRow.append(natOn, natLabel, natFreq);
+  if (simActions) dialog.append(natRow);
+  syncNat();
 
   const actions = el("div", "confirm-dialog-actions");
   const closeBtn = el("button", "primary", "閉じる");

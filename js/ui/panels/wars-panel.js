@@ -195,7 +195,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
         mu.append(row);
       }
     }
-    const events = [...(w.battles ?? []).map((b) => ({ date: b.date, tag: "戦闘", text: `${b.name}　${b.text}` })), ...(w.events ?? []).map((e) => ({ date: e.date, tag: { event: "出来事", omen: "兆し", "omen-fulfilled": "的中", "omen-faded": "杞憂", withdraw: "撤退" }[e.kind] ?? "出来事", text: e.text, kind: e.kind }))];
+    const events = [...(w.forecast ?? []).map((b) => ({ date: b.date, tag: "戦闘（想定）", text: `${b.name}　${b.text}` })), ...(w.battles ?? []).map((b) => ({ date: b.date ?? (b.year != null ? { year: b.year, month: b.month } : null), tag: "戦闘", text: `${b.name ?? "戦闘"}　${b.text ?? ""}` })), ...(w.events ?? []).map((e) => ({ date: e.date, tag: { event: "出来事", omen: "兆し", "omen-fulfilled": "的中", "omen-faded": "杞憂", withdraw: "撤退", reevaluate: "再判定" }[e.kind] ?? "出来事", text: e.text, kind: e.kind }))];
     const reached = (d) => !d || w.endedAt || monthIdx(d) <= monthIdx(now);
     const shown = events.filter((e) => reached(e.date)).sort((x, y) => (x.date ? monthIdx(x.date) : 0) - (y.date ? monthIdx(y.date) : 0));
     lg.append(el("h4", "", "経過の記録"));

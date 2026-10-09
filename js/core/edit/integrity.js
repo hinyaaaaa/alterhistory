@@ -90,6 +90,33 @@ function problemsPoles(map) {
   return out;
 }
 
+/**
+ * 歴史の記録（戦争・条約・同盟・外交・統合・従属・歴史ログ）が、存在しない国などを参照していないか。
+ * 消滅した国（removed）は、歴史に残る国なので参照してよい。配列に存在しない番号だけを問題にする。
+ */
+export function checkHistoryRefs(map) {
+  const P = map.pack, out = [], data = map.ext?.data ?? {};
+  const has = (list, id) => Number.isInteger(id) && id > 0 && !!list?.[id] && typeof list[id] === "object";
+  const st = (id) => has(P.states, id);
+  const wars = Array.isArray(data.wars) ? data.wars : [];
+  for (const w of wars) {
+    const tag = `戦争#${w.id}「${w.name ?? ""}」`;
+    for (const id of [...(w.attackers ?? []), ...(w.defenders ?? [])]) if (!st(id)) out.push(`${tag}が存在しない国家#${id}を参照しています`);
+    for (const b of [...(w.battles ?? []), ...(w.forecast ?? [])]) for (const k of ["attackerState", "defenderState"]) if (b[k] != null && !st(b[k])) out.push(`${tag}の戦闘が存在しない国家#${b[k]}を参照しています`);
+    const t = w.terms;
+    if (t) for (const list of [t.cessions, t.reparations, t.annex, t.vassalize]) for (const x of Array.isArray(list) ? list : []) for (const k of ["fromStateId", "toStateId"]) if (x[k] != null && !st(x[k])) out.push(`${tag}の条約が存在しない国家#${x[k]}を参照しています`);
+  }
+  for (const a of Array.isArray(data.alliances) ? data.alliances : []) for (const id of a.members ?? []) if (!st(id)) out.push(`同盟「${a.name ?? a.id}」が存在しない国家#${id}を参照しています`);
+  for (const d of Array.isArray(data.diplomacyLog) ? data.diplomacyLog : []) for (const k of ["a", "b"]) if (d[k] != null && !st(d[k])) out.push(`外交の記録が存在しない国家#${d[k]}を参照しています`);
+  for (const x of Array.isArray(data.sovereigntyLog) ? data.sovereigntyLog : []) for (const k of ["fromState", "toState"]) if (x[k] != null && !st(x[k])) out.push(`主権の記録が存在しない国家#${x[k]}を参照しています`);
+  for (const s of P.states) if (isLive(s) && s.i && s.vassal?.overlord != null && !st(s.vassal.overlord)) out.push(`国家#${s.i}の宗主国#${s.vassal.overlord}が存在しません`);
+  const LISTS = { state: P.states, culture: P.cultures, religion: P.religions, province: P.provinces, burg: P.burgs };
+  for (const h of Array.isArray(data.historyLog) ? data.historyLog : []) {
+    const r = h.ref; if (r?.kind && LISTS[r.kind] && r.id != null && !has(LISTS[r.kind], r.id)) out.push(`歴史ログ「${h.title}」が存在しない${r.kind}#${r.id}を参照しています`);
+  }
+  return out;
+}
+
 /** @returns {string[]} 問題の一覧（空なら健全） */
 export function checkIntegrity(map, baseline = null, { skipEconomyChecks = false } = {}) {
   const c = map.pack.cells, problems = [];

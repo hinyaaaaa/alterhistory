@@ -46,12 +46,14 @@ function eventPart(entry) {
  * コマンドに「出来事の記録」を足す。command が null（変化なし）ならそのまま null。
  * @param {object} map
  * @param {object|null} command
- * @param {{type:string, title:string, detail?:string, count?:number, mergeKey?:string, ref?:{kind:string,id:number,from?:string,to?:string}}} event
+ * @param {{type:string, title:string, detail?:string, count?:number, mergeKey?:string, date?:{year:number,month:number}, cell?:number, states?:number[], ref?:{kind:string,id:number,from?:string,to?:string}}} event
  */
 export function withEvent(map, command, event) {
   if (!command || !event) return command;
-  const { year, month } = nowOf(map);
+  const { year, month } = event.date && Number.isFinite(event.date.year) && Number.isFinite(event.date.month) ? event.date : nowOf(map);
   const entry = { year, month, type: event.type, title: event.title };
+  if (Number.isInteger(event.cell)) entry.cell = event.cell;       // 地図で場所へ移るための目印
+  if (Array.isArray(event.states) && event.states.length) entry.states = [...new Set(event.states)]; // 関係する国（年表の絞り込み用）
   if (event.detail) entry.detail = event.detail;
   if (event.count != null) entry.count = event.count;
   if (event.mergeKey) entry.mergeKey = event.mergeKey;

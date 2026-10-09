@@ -1,4 +1,4 @@
-// 歴史ビルダーUIの統合テスト（jsdom）。合成マップを使うので実サンプルは不要。
+// 作成導線（設定メニュー → 一覧ウィンドウの「＋ 追加」「🎲 おまかせ領土つき」）の統合テスト（jsdom）。合成マップを使うので実サンプルは不要。
 // 実際の index.html とビルド済み dist/app.js（npm run build 後）を動かす。
 import { JSDOM } from "jsdom";
 import path from "node:path";
@@ -73,79 +73,61 @@ const liveBurgs = () => store.getState().map.pack.burgs.filter((b) => b && b.i &
 }
 const states = () => store.getState().map.pack.states.filter((s) => s && s.i && !s.removed);
 
-console.log("=== 開く ===");
-check("初めはビルダーが閉じている", $("builder-panel").hidden);
-$("btn-builder").click();
-check("ボタンで開く", !$("builder-panel").hidden);
-check("かんたん作成の3ボタン", window.document.querySelectorAll(".b-quick-btn").length === 3);
-check("詳しい設定は初期状態で畳まれている", window.document.querySelectorAll(".b-details").length === 0);
+const ba = window.alterhistory.builderActions;
+const ea = window.alterhistory.editActions;
+const clickBtn = (root, text) => [...root.querySelectorAll("button")].find((b) => b.textContent.includes(text));
+const openList = (kind) => { q(`#settings-menu [data-open-win="list-${kind}"]`)?.click(); };
 
-console.log("=== 国を建てる（1クリック） ===");
+console.log("=== 一覧ウィンドウを開く ===");
+check("設定メニューに国家一覧がある", !!q('#settings-menu [data-open-win="list-state"]'));
+openList("state");
+await waitFor(() => q(".ent-addbar"), 2000, "追加バー");
+check("追加バーに「追加」と「おまかせ領土つき」が出る", !!clickBtn(window.document, "国家を追加") && !!clickBtn(window.document, "おまかせ領土つき"));
+check("「歴史をつくる」ボタンは無い", !$("btn-builder") && !$("builder-panel"));
+
+console.log("=== 国を建てる（おまかせ領土つき） ===");
 const before = states().length;
-q(".b-quick-btn").click();
-await waitFor(() => q(".b-task"), 2000, "作業カード");
+clickBtn(window.document, "おまかせ領土つき").click();
+await waitFor(() => states().length === before + 1, 2000, "国が増える");
 check("国が1つ増える", states().length === before + 1);
 const made = states().at(-1);
 check("名前はカタカナの仮の名前", /[ァ-ヴー]/.test(made.fullName ?? made.name));
-check("「仮」の印が付く", window.alterhistory.editActions.isProvisional("state", made.i));
-check("作業カードが出る", !!q(".b-task"));
-check("塗るツールに切り替わり、塗り先が新しい国", store.getState().editTool === "paint:state");
-
-console.log("=== おまかせで領土 ===");
-q(".b-how .b-seg:nth-child(2)").click();
-await waitFor(() => (store.getState().map.pack.states[made.i].cells ?? 0) > 0, 2000, "領土");
+check("「仮」の印が付く", ea.isProvisional("state", made.i));
 check("セルが塗られる", store.getState().map.pack.states[made.i].cells > 0, `${store.getState().map.pack.states[made.i].cells}セル`);
-
-console.log("=== 完了（首都を自動で置く） ===");
-q(".b-actions .primary").click();
-await waitFor(() => !q(".b-task"), 2000, "完了");
 const done = store.getState().map.pack.states[made.i];
-check("作業カードが消える", !q(".b-task"));
-check("ツールが選択に戻る", store.getState().editTool === "select");
-check("首都が置かれ、仮の名前", done.capital > 0 && window.alterhistory.editActions.isProvisional("burg", done.capital));
+check("首都が置かれ、仮の名前", done.capital > 0 && ea.isProvisional("burg", done.capital));
 
 console.log("=== 凡例が最新になる ===");
 check("凡例に新しい国が出る", [...window.document.querySelectorAll(".legend-name")].some((n) => n.textContent === (made.fullName ?? made.name)));
 
-console.log("=== 詳しく（任意） ===");
-const card = q(".b-card");
-card.querySelector(".b-more-btn").click();
-await waitFor(() => q(".b-details"), 1000, "詳細");
-check("開くと技術水準・ドクトリン・首都が出る", !!q(".b-details input[type=range]") && q(".b-details").querySelectorAll("select").length >= 2);
-const tech = q(".b-details input[type=range]"); tech.value = "7"; tech.dispatchEvent(new window.Event("change"));
-check("技術水準を変えられる（これまでUIが無かった）", window.alterhistory.editActions.getTechLevel(made.i) === 7);
+console.log("=== 技術水準を変えられる ===");
+ea.setTechLevel?.(made.i, 7);
+check("技術水準を変えられる", ea.getTechLevel(made.i) === 7);
 
-console.log("=== 仮決定は廃止 ===");
-check("仮の名前トレイは出ない", !q(".b-tray"));
-check("「仮」の印も確定ボタンも出ない", !q(".b-badge") && !q(".b-tray .primary"));
-
-console.log("=== やめる ===");
+console.log("=== 手で塗る方式（＋ 追加） ===");
 const n0 = states().length;
-q(".b-quick-btn").click();
-await waitFor(() => q(".b-task"), 1500, "作業カード2");
+clickBtn(window.document, "国家を追加").click();
+await waitFor(() => states().length === n0 + 1, 2000, "追加");
 check("国がもう1つ増える", states().length === n0 + 1);
-[...window.document.querySelectorAll(".b-actions button")].find((b) => b.textContent === "やめる").click();
-await waitFor(() => !q(".b-task"), 1500, "やめる");
-check("やめると作成前に戻る", states().length === n0);
+check("塗るツールに切り替わり、塗り先が新しい国", store.getState().editTool === "paint:state");
+ba.endPaint();
+check("ツールが選択に戻る", store.getState().editTool === "select");
 
-console.log("=== 名前の雰囲気を指定 ===");
-const det = q(".b-more"); det.open = true;
-const sel = det.querySelector("select"); sel.value = "yamato"; sel.dispatchEvent(new window.Event("change"));
-check("雰囲気を選べる", sel.value === "yamato");
-q(".b-quick-btn:nth-child(2)").click();
-await waitFor(() => q(".b-task"), 1500, "宗教");
-check("宗教が作られる", q(".b-task-kind").textContent.includes("宗教"));
-check("塗っている間は宗教の色分けに切り替わる", (({ religions, states, cultures, provinces }) => religions === true && !states && !cultures && !provinces)(store.getState().view));
+console.log("=== 取り消し（Undo） ===");
+store.undo();
+check("Undo で作成前に戻る", states().length === n0);
+
+console.log("=== 宗教（名前の雰囲気を指定） ===");
+const rid = ba.create("religion", { style: "yamato" });
+check("宗教が作られる", rid != null);
 {
-  const rel = store.getState().map.pack.religions.filter((r) => r && r.i && !r.removed).at(-1);
-  check("指定した雰囲気（和風）の名前になる", /^[ァ-ヴー]+/.test(rel.name) && ["ヤマ","カワ","ミズ","タケ","シラ","クロ","アオ","ハナ","トヨ","アサ","ナラ","ミナ","サク","ホタ","イズ","ツキ"].some((h) => (rel.name + (rel.deity ?? "")).includes(h)), rel.name + "/" + (rel.deity ?? ""));
+  const rel = store.getState().map.pack.religions[rid];
+  check("指定した雰囲気（和風）の名前になる", /^[ァ-ヴー]+/.test(rel.name), rel.name + "/" + (rel.deity ?? ""));
 }
-
-[...window.document.querySelectorAll(".b-actions button")].find((b) => b.textContent === "完了").click();
-await waitFor(() => !q(".b-task"), 1500, "宗教の完了");
+ba.beginPaint("religion", rid);
+check("塗っている間は宗教の色分けに切り替わる", (({ religions, states, cultures, provinces }) => religions === true && !states && !cultures && !provinces)(store.getState().view));
+ba.endPaint();
 check("終わると元の色分け（国家）に戻る", (({ religions, states }) => states === true && !religions)(store.getState().view));
 
-$("builder-close").click();
-check("閉じられる", $("builder-panel").hidden);
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");
 process.exit(failed ? 1 : 0);

@@ -17,6 +17,7 @@ import { initChrome } from "./ui/chrome.js";
 import { initSettingsWindows } from "./ui/settings-windows.js";
 import { initEntityLists } from "./ui/entity-list-window.js";
 import { initGenealogy } from "./ui/genealogy-window.js";
+import { initTimelineWindow } from "./ui/timeline-window.js";
 import { initNuclearWindow } from "./ui/nuclear-window.js";
 import { initCovertWindow } from "./ui/covert-window.js";
 import { makeDraggable, makeResizable } from "./ui/windows.js";
@@ -100,6 +101,7 @@ function start() {
   const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
   initEntityLists({ store, wins, panels, editActions, highlight, builderActions });
   initGenealogy({ store, wins, editActions });
+  initTimelineWindow({ store, wins, editActions, viewport, renderer });
   initNuclearWindow({ store, simActions, wins });
   initCovertWindow({ store, simActions, wins });
   // 地図上の国・州などを選んだときも、ズームせず強調だけする
@@ -137,7 +139,7 @@ function start() {
     editToolbar.sync();
     if (e.detail?.target != null) editToolbar.setTargetValue(e.detail.target);
   });
-  initTimeBar({ store, timeActions, editActions });
+  initTimeBar({ store, timeActions, editActions, simActions });
   // 新しい地図を開いたら、時間の進行を止める（前の地図の進行を引き継がない）
   // 地図を開いたら、シミュレーションの数値（バランス設定）を「既定値＋その地図の上書き値」にそろえる
   store.subscribe((s, change) => { if (change.type === "replace") { timeActions.stop(); applyMapBalance(s.map); } });

@@ -87,6 +87,31 @@ export function createStore(initialState, { historyLimit = DEFAULT_HISTORY_LIMIT
       notify({ type: "commit", label });
     },
 
+    /**
+     * 複数の commit を「全部成功か、全部取り消し」にする。1つのUndo単位にもなる。
+     * fn の途中で例外が起きたら、それまでに適用した変更を逆順に戻し、履歴にも通知にも残さず、例外をそのまま投げ直す。
+     * すでに beginBatch の中にいるときは、その中で今回の分だけを戻す（入れ子にできる）。
+     */
+    transaction(label, fn) {
+      const own = !batch;
+      if (own) batch = { label, commands: [] };
+      const start = batch.commands.length;
+      let result;
+      try {
+        result = fn();
+      } catch (e) {
+        const done = batch.commands.splice(start);
+        for (let i = done.length - 1; i >= 0; i--) {
+          try { done[i].revert(state); } catch { /* 戻せなかった分は諦めて、残りを戻す */ }
+        }
+        if (own) batch = null;
+        notify({ type: "rollback", label });
+        throw e;
+      }
+      if (own) this.endBatch();
+      return result;
+    },
+
     /** 未保存の変更があるか（ブラシ操作の途中も含む） */
     isDirty: () => (batch?.commands.length ?? 0) > 0 || (undoStack.at(-1) ?? null) !== savedTop,
     /** 今の状態を「保存済み」とする。保存が成功した直後に呼ぶ */

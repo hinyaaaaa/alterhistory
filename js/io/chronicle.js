@@ -20,7 +20,8 @@ import { cellAreas } from "../core/geometry.js";
 import { listEras, eraAt } from "../core/edit/eras.js";
 import { listWars } from "../core/edit/wars.js";
 import { listAlliances } from "../core/edit/alliances.js";
-import { listDiplomacyLog, relationLabel, getRelation } from "../core/edit/diplomacy.js";
+import { listDiplomacyLog, relationLabel } from "../core/edit/diplomacy.js";
+import { relationOf } from "../core/edit/relations.js";
 import { listSovereigntyLog } from "../core/edit/sovereignty.js";
 import { listHistory } from "../core/edit/history-log.js";
 import { zoneLabel } from "../core/edit/zones.js";
@@ -252,10 +253,32 @@ const summarizeAcc = (a, W, H) => a.n ? {
  * @param {string}  [opts.exportedAt]
  * @returns {object} クロニクル（JSON にできるプレーンなオブジェクト）
  */
+/**
+ * 日付つきの国名引き。保存された当時の名前（stored）があればそれを使い、無い古いデータだけ推定に戻す。
+ * 「（消滅）」「（のち消滅）」の印だけは、いまの状態から足す。
+ */
+function stateAtFor(map, namer) {
+  const est = makeStateNameAt(map, namer);
+  return (id, date, opts, stored = null) => {
+    const e = est(id, date, opts);
+    if (!stored) return e;
+    const mark = /（(?:のち)?消滅）$/.exec(e)?.[0] ?? "";
+    return String(stored).replace(/[（(]消滅[）)]/g, "").trim() + mark;
+  };
+}
+
+/** アプリ内の年表ウィンドウ用。クロニクル全体を作らずに、年表だけを軽く作る */
+export function buildTimeline(map) {
+  const namer = makeNamer(map);
+  const eras = listEras(map);
+  const eraName = (d) => (validDate(d) ? eraAt(map, d.year)?.name ?? null : null);
+  return timelineOf(map, { namer, stateAt: stateAtFor(map, namer), eraName, eras });
+}
+
 export function buildChronicle(map, { includeCells = true, fileName = "", exportedAt = "" } = {}) {
   const P = map.pack, C = P.cells;
   const namer = makeNamer(map);
-  const stateAt = makeStateNameAt(map, namer); // 日付つきの国名（過去の出来事は当時の名前で書く）
+  const stateAt = stateAtFor(map, namer); // 日付つきの国名（過去の出来事は、保存された当時の名前を優先して書く）
   const T = analyzeTerritory(map);
   const W = T.W, H = T.H;
   const now = map.worldTime ?? { year: 1, month: 1 };
@@ -277,7 +300,7 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     const diplomacy = [];
     for (const o of liveStates) {
       if (o.i === s.i) continue;
-      const r = getRelation(map, s.i, o.i);
+      const r = relationOf(map, s.i, o.i);
       if (r) diplomacy.push({ with: ref(namer, "state", o.i), relation: rel(r), relationId: r });
     }
     return {
@@ -398,70 +421,29 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     return {
       id: w.id, name: w.name, status: w.endedAt ? "終結" : "継続中",
       started: fmtDate(w.startedAt), startedEra: eraName(w.startedAt), ended: fmtDate(w.endedAt), endedEra: eraName(w.endedAt),
-      attackers: w.attackers.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }) })), defenders: w.defenders.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }) })),
+      attackers: w.attackers.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }, w.names?.[id]) })), defenders: w.defenders.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }, w.names?.[id]) })),
       battleCount: (w.battles ?? []).length, attackerWins: wins.attacker, defenderWins: wins.defender,
       type: w.type ?? null, warScore: w.result?.warScore ?? null,
+      forecast: (w.forecast ?? []).map((b) => ({ date: fmtDate(b.date), name: b.name ?? null, place: b.place ?? null, text: b.text ?? null, attacker: stateAt(b.attackerState, b.date ?? w.startedAt, undefined, b.attackerName ?? w.names?.[b.attackerState]), defender: stateAt(b.defenderState, b.date ?? w.startedAt, undefined, b.defenderName ?? w.names?.[b.defenderState]), winnerSide: b.winner, attackerPower: b.aPower ?? null, defenderPower: b.dPower ?? null, note: "開戦時に作られた想定の戦闘ログ（実際の戦闘ではない）" })),
       battles: (w.battles ?? []).map((b) => ({
         date: fmtDate(b.date ?? b), name: b.name ?? null, place: b.place ?? null, text: b.text ?? null,
-        attacker: stateAt(b.attackerState, b.date ?? w.startedAt), defender: stateAt(b.defenderState, b.date ?? w.startedAt),
-        winner: b.winner === "attacker" ? stateAt(b.attackerState, b.date ?? w.startedAt) : stateAt(b.defenderState, b.date ?? w.startedAt), winnerSide: b.winner,
+        attacker: stateAt(b.attackerState, b.date ?? w.startedAt, undefined, b.attackerName ?? w.names?.[b.attackerState]), defender: stateAt(b.defenderState, b.date ?? w.startedAt, undefined, b.defenderName ?? w.names?.[b.defenderState]),
+        winner: b.winner === "attacker" ? stateAt(b.attackerState, b.date ?? w.startedAt, undefined, b.attackerName ?? w.names?.[b.attackerState]) : stateAt(b.defenderState, b.date ?? w.startedAt, undefined, b.defenderName ?? w.names?.[b.defenderState]), winnerSide: b.winner,
         attackerPower: b.aPower ?? null, defenderPower: b.dPower ?? null,
       })),
-      peaceTerms: w.terms ? peaceTermsOfFactory(makeNamerAt(namer, stateAt, w.endedAt))(w.terms) : null,
-      peaceText: w.endedAt ? describeTreaty(w.terms, (id) => stateAt(id, w.endedAt), namer) : null,
+      peaceTerms: w.terms ? peaceTermsOfFactory(makeNamerAt(namer, (id, d) => stateAt(id, d, undefined, w.terms?.names?.[id] ?? w.names?.[id]), w.endedAt))(w.terms) : null,
+      peaceText: w.endedAt ? describeTreaty(w.terms, (id) => stateAt(id, w.endedAt, undefined, w.terms?.names?.[id] ?? w.names?.[id]), namer) : null,
     };
   });
 
   // ---- 同盟 ----
   const alliances = listAlliances(map).map((a) => ({
-    id: a.id, name: a.name, status: a.dissolvedAt ? "解消済み" : "存続中", members: a.members.map((id) => ({ id, name: stateAt(id, a.formedAt, { later: true }) })),
+    id: a.id, name: a.name, status: a.dissolvedAt ? "解消済み" : "存続中", members: a.members.map((id) => ({ id, name: stateAt(id, a.formedAt, { later: true }, a.memberNames?.[id]) })),
     formed: fmtDate(a.formedAt), dissolved: fmtDate(a.dissolvedAt),
   }));
 
   // ---- 統合年表（全ての出来事を時系列に。AI が「歴史」を掴む最重要部分） ----
-  const timeline = [];
-  const push = (date, type, title, detail, involved = []) => timeline.push({
-    date: fmtDate(date), year: validDate(date) ? date.year : null, month: validDate(date) ? date.month : null, era: eraName(date), type, title, detail: detail ?? null, involvedStates: involved,
-    _k: dateKey(date),
-  });
-  for (const e of eras) push({ year: e.fromYear, month: 1 }, "era", `時代「${e.name}」の始まり`, `${e.fromYear}年から。`);
-  // ユーザーの操作の記録（建国・宗教の誕生・改名・領土の変動・ゾーンの発生など）
-  for (const h of listHistory(map)) push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}セル` : null].filter(Boolean).join(" / ") || null);
-  for (const a of listAlliances(map)) {
-    push(a.formedAt, "alliance-formed", `同盟「${a.name}」結成`, `加盟国: ${a.members.map((id) => stateAt(id, a.formedAt)).join("、")}`, stateNames(a.members));
-    if (a.dissolvedAt) push(a.dissolvedAt, "alliance-dissolved", `同盟「${a.name}」解消`, `加盟国だった: ${a.members.map((id) => stateAt(id, a.dissolvedAt)).join("、")}`, stateNames(a.members));
-  }
-  for (const d of listDiplomacyLog(map)) {
-    push(d, "diplomacy", `外交: ${stateAt(d.a, d)} と ${stateAt(d.b, d)} の関係が変化`, `${d.from ? rel(d.from) : "未設定"} → ${rel(d.to)}（${stateAt(d.a, d)} から見た関係）`, [ref(namer, "state", d.a), ref(namer, "state", d.b)]);
-  }
-  for (const w of listWars(map)) {
-    const at = (id, date) => stateAt(id, date);
-    push(w.startedAt, "war-declared", `戦争「${w.name}」開戦`, `攻撃側: ${w.attackers.map((id) => at(id, w.startedAt)).join("、")} / 防御側: ${w.defenders.map((id) => at(id, w.startedAt)).join("、")}`, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
-    for (const b of w.battles ?? []) {
-      const d = b.date ?? w.startedAt; // 戦闘の日付（無い古い記録だけ、開戦日で代用する）
-      const A = at(b.attackerState, d), D = at(b.defenderState, d), win = b.winner === "attacker" ? A : D;
-      const power = Number.isFinite(b.aPower) && Number.isFinite(b.dPower) ? ` / 戦力 ${b.aPower} 対 ${b.dPower}` : "";
-      push(d, "battle", `戦闘${b.name ? `「${b.name}」` : ""}（${w.name}）`,
-        `${A}（攻）対 ${D}（防）→ ${win} の勝利${b.place ? ` / 場所 ${b.place}` : ""}${power}${b.text ? ` / ${b.text}` : ""}`,
-        [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)]);
-    }
-    if (w.endedAt) push(w.endedAt, "war-ended", `戦争「${w.name}」講和`, describeTreaty(w.terms, (id) => at(id, w.endedAt), namer), [...stateNames(w.attackers), ...stateNames(w.defenders)]);
-  }
-  for (const s of listSovereigntyLog(map)) {
-    if (s.type === "merge") {
-      push(s, "state-merged", `国家の統合: ${s.fromName ?? namer.state(s.fromState)} が ${s.toName ?? namer.state(s.toState)} に併合`,
-        `${s.fromName ?? namer.state(s.fromState)} は解散し、全領土・都市・属州・部隊が ${s.toName ?? namer.state(s.toState)} に移った。`,
-        [ref(namer, "state", s.fromState), ref(namer, "state", s.toState)]);
-    } else if (s.type === "independence") {
-      push(s, "independence", `属州の独立: ${s.provinceName ?? namer.province(s.provinceId)} が ${namer.state(s.fromState)} から独立し「${s.name ?? namer.state(s.newState)}」を建国`,
-        `新国家「${s.name ?? namer.state(s.newState)}」は ${namer.state(s.fromState)} の ${s.provinceName ?? namer.province(s.provinceId)} の全領土を引き継いだ。`,
-        [ref(namer, "state", s.fromState), ref(namer, "state", s.newState)]);
-    } else {
-      push(s, "sovereignty", `主権の変動（${s.type ?? "不明"}）`, JSON.stringify(s));
-    }
-  }
-  timeline.sort((a, b) => a._k - b._k);
-  for (const t of timeline) delete t._k;
+  const timeline = timelineOf(map, { namer, stateAt, eraName, eras }).map(({ cell, stateIds, ...t }) => t); // 場所・国IDは、アプリ内の年表ウィンドウ用
 
   // ---- 完全なセル単位データ（アプリへ戻す・厳密な検証用。RLE で小さく） ----
   const cells = includeCells ? {
@@ -497,6 +479,90 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     consistencyChecks: buildChecks(map, states, T),
     cells,
   };
+}
+
+/**
+ * 年表（全ての出来事を時系列に）。クロニクルのJSONと、アプリ内の年表ウィンドウの両方がこれを使う。
+ * 各項目は { date, year, month, era, type, title, detail, involvedStates, cell, stateIds }。
+ * cell は地図で移る場所（無ければ null）、stateIds は関係する国のID。件数は削らない。
+ */
+function timelineOf(map, { namer, stateAt, eraName, eras }) {
+  const P = map.pack;
+  const stateNames = (ids) => ids.map((id) => ref(namer, "state", id));
+  const capitalCellOf = (id) => { const b = P.burgs[P.states[id]?.capital]; return b && !b.removed ? b.cell : null; };
+  const timeline = [];
+  /** extra: { cell?, states? }。cell が無ければ、関係する国の首都の場所を使う */
+  const push = (date, type, title, detail, involved = [], extra = {}) => {
+    const stateIds = [...new Set([...(extra.states ?? []), ...involved.map((x) => x.id)])].filter((id) => Number.isInteger(id) && id > 0);
+    let cell = Number.isInteger(extra.cell) ? extra.cell : null;
+    if (cell == null) for (const id of stateIds) { cell = capitalCellOf(id); if (cell != null) break; }
+    timeline.push({
+      date: fmtDate(date), year: validDate(date) ? date.year : null, month: validDate(date) ? date.month : null, era: eraName(date), type, title, detail: detail ?? null, involvedStates: involved,
+      cell, stateIds, _k: dateKey(date),
+    });
+  };
+  for (const e of eras) push({ year: e.fromYear, month: 1 }, "era", `時代「${e.name}」の始まり`, `${e.fromYear}年から。`);
+  // ユーザーの操作の記録（建国・宗教の誕生・改名・領土の変動・ゾーンの発生など）
+  for (const h of listHistory(map)) {
+    let cell = Number.isInteger(h.cell) ? h.cell : null;
+    if (cell == null && h.ref?.kind === "burg" && P.burgs[h.ref.id] && !P.burgs[h.ref.id].removed) cell = P.burgs[h.ref.id].cell;
+    const states = [...(h.states ?? []), ...(h.ref?.kind === "state" ? [h.ref.id] : [])];
+    push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}セル` : null].filter(Boolean).join(" / ") || null, [], { cell, states });
+  }
+  for (const a of listAlliances(map)) {
+    push(a.formedAt, "alliance-formed", `同盟「${a.name}」結成`, `加盟国: ${a.members.map((id) => stateAt(id, a.formedAt, undefined, a.memberNames?.[id])).join("、")}`, stateNames(a.members));
+    if (a.dissolvedAt) push(a.dissolvedAt, "alliance-dissolved", `同盟「${a.name}」解消`, `加盟国だった: ${a.members.map((id) => stateAt(id, a.dissolvedAt, undefined, a.memberNames?.[id])).join("、")}`, stateNames(a.members));
+  }
+  for (const d of listDiplomacyLog(map)) {
+    push(d, "diplomacy", `外交: ${stateAt(d.a, d, undefined, d.aName)} と ${stateAt(d.b, d, undefined, d.bName)} の関係が変化`, `${d.from ? rel(d.from) : "未設定"} → ${rel(d.to)}（${stateAt(d.a, d, undefined, d.aName)} から見た関係）`, [ref(namer, "state", d.a), ref(namer, "state", d.b)]);
+  }
+  for (const w of listWars(map)) {
+    const at = (id, date, stored = w.names?.[id]) => stateAt(id, date, undefined, stored);
+    push(w.startedAt, "war-declared", `戦争「${w.name}」開戦`, `攻撃側: ${w.attackers.map((id) => at(id, w.startedAt)).join("、")} / 防御側: ${w.defenders.map((id) => at(id, w.startedAt)).join("、")}`, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+    for (const b of w.battles ?? []) {
+      const d = b.date ?? w.startedAt; // 戦闘の日付（無い古い記録だけ、開戦日で代用する）
+      const A = at(b.attackerState, d, b.attackerName ?? w.names?.[b.attackerState]), D = at(b.defenderState, d, b.defenderName ?? w.names?.[b.defenderState]), win = b.winner === "attacker" ? A : D;
+      const power = Number.isFinite(b.aPower) && Number.isFinite(b.dPower) ? ` / 戦力 ${b.aPower} 対 ${b.dPower}` : "";
+      push(d, "battle", `戦闘${b.name ? `「${b.name}」` : ""}（${w.name}）`,
+        `${A}（攻）対 ${D}（防）→ ${win} の勝利${b.place ? ` / 場所 ${b.place}` : ""}${power}${b.text ? ` / ${b.text}` : ""}`,
+        [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)], { cell: P.burgs[b.burgId] && !P.burgs[b.burgId].removed ? P.burgs[b.burgId].cell : null });
+    }
+    for (const b of w.forecast ?? []) { // 開戦時に作った想定の戦闘ログ。実際の戦闘とは別の種類で載せる
+      const d = b.date ?? w.startedAt;
+      const A = at(b.attackerState, d, b.attackerName ?? w.names?.[b.attackerState]), D = at(b.defenderState, d, b.defenderName ?? w.names?.[b.defenderState]);
+      push(d, "battle-forecast", `想定の戦闘${b.name ? `「${b.name}」` : ""}（${w.name}）`, `${A}（攻）対 ${D}（防）→ ${b.winner === "attacker" ? A : D} の勝利と想定${b.place ? ` / 場所 ${b.place}` : ""}${b.text ? ` / ${b.text}` : ""}`,
+        [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)], { cell: P.burgs[b.burgId] && !P.burgs[b.burgId].removed ? P.burgs[b.burgId].cell : null });
+    }
+    for (const ev of w.events ?? []) { // 戦争の細かい動き（ハプニング・撤退・増派・決着）
+      if (!validDate(ev.date)) continue;
+      push(ev.date, "war-event", `${ev.title ?? "戦況の変化"}（${w.name}）`, ev.text ?? null, [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+    }
+    if (w.endedAt) push(w.endedAt, "war-ended", `戦争「${w.name}」講和`, describeTreaty(w.terms, (id) => at(id, w.endedAt, w.terms?.names?.[id] ?? w.names?.[id]), namer), [...stateNames(w.attackers), ...stateNames(w.defenders)]);
+  }
+  for (const s of listSovereigntyLog(map)) {
+    if (s.type === "merge") {
+      push(s, "state-merged", `国家の統合: ${s.fromName ?? namer.state(s.fromState)} が ${s.toName ?? namer.state(s.toState)} に併合`,
+        `${s.fromName ?? namer.state(s.fromState)} は解散し、全領土・都市・属州・部隊が ${s.toName ?? namer.state(s.toState)} に移った。`,
+        [ref(namer, "state", s.fromState), ref(namer, "state", s.toState)]);
+    } else if (s.type === "independence") {
+      push(s, "independence", `属州の独立: ${s.provinceName ?? namer.province(s.provinceId)} が ${namer.state(s.fromState)} から独立し「${s.name ?? namer.state(s.newState)}」を建国`,
+        `新国家「${s.name ?? namer.state(s.newState)}」は ${namer.state(s.fromState)} の ${s.provinceName ?? namer.province(s.provinceId)} の全領土を引き継いだ。`,
+        [ref(namer, "state", s.fromState), ref(namer, "state", s.newState)]);
+    } else {
+      push(s, "sovereignty", `主権の変動（${s.type ?? "不明"}）`, JSON.stringify(s));
+    }
+  }
+  for (const o of map.ext?.data?.covertOps ?? []) {
+    if (!validDate(o.date)) continue;
+    push(o.date, "covert-op", `隠密作戦（${o.kind ?? "不明"}）: ${stateAt(o.attackerId, o.date)} → ${stateAt(o.targetId, o.date)}`, [o.success ? "成功" : "失敗", o.detected ? "発覚" : "発覚せず", o.text].filter(Boolean).join(" / "), [ref(namer, "state", o.attackerId), ref(namer, "state", o.targetId)]);
+  }
+  for (const o of map.ext?.data?.nuclearOps ?? []) {
+    if (o.status !== "executed" || !validDate(o.executedAt)) continue;
+    push(o.executedAt, "nuclear-op", `核作戦「${o.name}」: ${stateAt(o.attackerId, o.executedAt)} → ${stateAt(o.targetId, o.executedAt)}（${o.warheads}発）`, null, [ref(namer, "state", o.attackerId), ref(namer, "state", o.targetId)], { cell: capitalCellOf(o.targetId) });
+  }
+  timeline.sort((a, b) => a._k - b._k);
+  for (const t of timeline) delete t._k;
+  return timeline;
 }
 
 /** 統合マーカー（名前に「<国名>が…に統合」を含む）のセルにある都市を、旧首都とみなす。復元できなければ null */

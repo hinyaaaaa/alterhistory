@@ -31,6 +31,7 @@ export function createTimeActions({ store, renderer, simActions = null }) {
     if (yearChanged) {
       const cmd = planAnnualUpdate(map, rates);
       if (cmd) store.commit(cmd);
+      simActions?.applyNaturalEvents?.(time, rates); // 独立・疫病・反乱・宗教の分派（オフにもできる）
       { const tc = planTribute(store.getState().map, (st) => getFinance(st).treasury, convert); if (tc) store.commit(tc); } // 従属国の貢納
       // 人口の大部分を失った国は崩壊する（無くなるまで繰り返す）
       for (let guard = 0; guard < 8; guard++) {
