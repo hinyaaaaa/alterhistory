@@ -10,7 +10,8 @@ import { planAddMarker } from "../core/edit/markers.js";
 import { createRandom } from "../core/random.js";
 import { suggestLabel } from "../core/edit/naming.js";
 import { withEvent } from "../core/edit/history-log.js";
-import { makeCommand } from "../core/edit/commands.js";
+import { makeCommand, setProps } from "../core/edit/commands.js";
+import { planSplitArmy } from "../core/edit/rebellion.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
 import { planNextCollapse } from "../core/sim/collapse.js";
 import { leaderOf } from "../core/edit/alliances.js";
@@ -70,6 +71,39 @@ export function createSimActions({ store, renderer }) {
     }
     return names;
   };
+
+  /**
+   * 反乱・独立：属州（複数可）を新しい国家として切り離す。「全部成功か全部取り消し」。
+   *   civil: true なら HoI4 のように、軍が割れて、元の国との内戦（戦争）が始まる。false なら話し合いによる平和的な独立
+   * 失敗したら例外を投げる（何も変わらない）。
+   * @returns {{id:number, name:string, provinceNames:string[], warId:number|null, fromId:number}}
+   */
+  function breakaway({ provinceIds, name, color, civil, provisional = false, date, rng = rnd }) {
+    const first = store.getState().map; if (!first) throw new Error("地図を開いてください");
+    const fromId = first.pack.provinces[provinceIds?.[0]]?.state;
+    if (!(fromId > 0)) throw new Error("属州が存在しません");
+    const nm = (name ?? "").trim() || planSuggestName(first, { kind: "state", rnd: rng, stateId: fromId }).name;
+    const out = atomic(civil ? "反乱（内戦）" : "属州の独立", () => {
+      const map = store.getState().map;
+      const r = planDeclareIndependence(map, { provinceIds, name: nm, rnd: rng, date, cause: civil ? "rebellion" : "peaceful" });
+      store.commit(provisional ? withProvisional(map, r.command, "state", r.id, true) : r.command);
+      if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) store.commit(makeCommand("国の色", ["politics"], [setProps(store.getState().map.pack.states[r.id], { color: color.toLowerCase() })]));
+      let warId = null;
+      if (civil) {
+        const split = planSplitArmy(store.getState().map, fromId, r.id); if (split.command) store.commit(split.command);
+        const w = planDeclareAndResolveWar(store.getState().map, { attackers: [r.id], defenders: [fromId], date, rnd: rng, type: "civil" });
+        store.commit(w.command); warId = w.id;
+        const m2 = store.getState().map, fromName = m2.pack.states[fromId].fullName ?? m2.pack.states[fromId].name;
+        let wn = `${fromName}内戦`; if (warNameTaken(m2, wn, warId)) wn = `${date.year}年の${fromName}内戦`;
+        if (!warNameTaken(m2, wn, warId)) { const rn = planRenameWar(m2, warId, wn); if (rn) store.commit(rn); }
+        putMarker("war", "⚔️", capitalCell(store.getState().map, r.id), `${date.year}年${date.month}月 ${wn}`);
+        runCollapses();
+      }
+      return { id: r.id, name: nm, provinceNames: r.provinceNames, warId, fromId };
+    });
+    rerender();
+    return out;
+  }
 
   return {
     // --- 部隊 ---
@@ -195,6 +229,8 @@ export function createSimActions({ store, renderer }) {
     /** 経過を、目安の期間の終わりまで進める（時間を待たずに確かめたいとき） */
     finishWar(warId) { withMap((map) => safeRun("経過を進める", () => { const c = planFinishWar(map, warId, rnd); if (c) { atomic("経過を進める", () => { store.commit(c); reevaluateTouched(c); runCollapses(); }); rerender(); } })); },
     /** 月が進むたびの、戦争の損害とハプニングの展開（時間経過）。崩壊した国名を返す */
+    /** 反乱・独立（手動）。失敗したら例外。ウィンドウ側でメッセージを出す */
+    rebel(opts) { return breakaway({ ...opts, date: currentDate() }); },
     /** 自然発生イベントの設定（オン／オフ・頻度） */
     getNaturalEvents() { const m = store.getState().map; return m ? getNaturalSettings(m) : null; },
     setNaturalEvents(patch) { safeRun("自然発生イベントの設定", () => { const m = store.getState().map; const c = m && planSetNaturalSettings(m, patch); if (c) store.commit(c); }); },
@@ -214,10 +250,8 @@ export function createSimActions({ store, renderer }) {
             if (ev.kind === "plague") { store.commit(planPlague(map, ev, date)); return "疫病"; }
             if (ev.kind === "rebellion") { store.commit(planRebellion(map, ev, date)); return "反乱"; }
             if (ev.kind === "independence") {
-              const nm = planSuggestName(map, { kind: "state", rnd: rng, stateId: ev.stateId });
-              const r = planDeclareIndependence(map, { provinceId: ev.provinceId, name: nm.name, rnd: rng, date });
-              store.commit(withProvisional(map, r.command, "state", r.id, true));
-              return "属州の独立";
+              breakaway({ provinceIds: ev.provinceIds ?? [ev.provinceId], civil: !!ev.civil, provisional: true, date, rng });
+              return ev.civil ? "反乱（内戦）" : "属州の独立";
             }
             if (ev.kind === "schism") {
               const parent = map.pack.religions[ev.religionId];

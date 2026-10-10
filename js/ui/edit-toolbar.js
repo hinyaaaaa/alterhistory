@@ -14,7 +14,7 @@ const TARGET_LIST = { state: "states", culture: "cultures", religion: "religions
 const isLive = (e) => !!e && typeof e === "object" && !e.removed;
 const NEW_VALUE = "__new__";
 
-export function initEditToolbar({ store, editMode, editActions }) {
+export function initEditToolbar({ store, editMode, editActions, openSetup }) {
   const buttons = [...document.querySelectorAll("#edit-panel [data-tool]")];
   const targetGroup = byId("tool-target-group");
   const targetSel = byId("tool-target");
@@ -60,14 +60,12 @@ export function initEditToolbar({ store, editMode, editActions }) {
     if (list[0]) targetSel.value = String(list[0].i);
   }
 
+  /** 塗り先を新しく作る：共通の初期設定ウィンドウを開く。確定されたらそのID、キャンセルなら null */
   async function createNewTarget(kind) {
+    if (openSetup) return openSetup(kind);
     const label = PAINT_KINDS[kind].label;
-    const name = await promptDialog(`新しい${label}の名前`, "", {
-      suggest: () => editActions.suggestName(kind),
-      hint: "空欄のまま OK を押すと、仮の名前が自動で付きます（あとから変更・確定できます）",
-    });
-    if (name == null) return null; // キャンセル
-    return editActions.addEntity(kind, name); // 空欄なら仮の名前が付く
+    const name = await promptDialog(`新しい${label}の名前`, "", { suggest: () => editActions.suggestName(kind), hint: "空欄のまま OK を押すと、仮の名前が自動で付きます（あとから変更・確定できます）" });
+    return name == null ? null : editActions.addEntity(kind, name);
   }
 
   function sync() {

@@ -18,7 +18,7 @@ const STATE_SUBTABS = [
   { key: "provinces", label: "属州", icon: "▦" },
 ];
 
-export function initEditorPanel({ store, editActions, editMode, panels: initialPanels }) {
+export function initEditorPanel({ store, editActions, editMode, panels: initialPanels, openSetup, openRebellion }) {
   const root = byId("editor-panel");
   const sidebar = byId("sidebar");
   let current = null; // { kind: "cell"|"burg"|"marker"|"state"|..., id }
@@ -78,6 +78,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(basicStatsSection(map, e));
     form.append(textField("国家名", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v), () => editActions.suggestName("state", { id: e.i })));
     form.append(...provisionalNote("state", e.i));
+    if (e.parentState > 0) { const pr = map.pack.states[e.parentState]; if (pr) form.append(el("p", "hint", `分離元: ${pr.fullName ?? pr.name}（反乱・独立で成立）`)); }
     form.append(profileSection("state", e, map));
     form.append(techLevelSection(e.i));
     form.append(doctrineSection(e.i));
@@ -188,17 +189,12 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
           window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
         });
         row.append(repaint);
-        const independence = el("button", "", "独立させる");
+        const independence = el("button", "", "反乱・独立…");
         independence.type = "button";
-        independence.title = "この属州の領土を切り離し、新しい独立国家にします";
-        independence.addEventListener("click", async () => {
-          const name = await promptDialog(`独立させて作る新国家の名前`, `${p.fullName ?? p.name}`, {
-            suggest: () => editActions.suggestName("state", { stateId: e.i }),
-            hint: "空欄にすると、仮の名前が自動で付きます",
-          });
-          if (name == null) return;
-          if (!(await confirmDialog(`属州「${p.fullName ?? p.name}」を独立させ、新国家${name.trim() ? `「${name}」` : "（仮の名前）"}を作ります。よろしいですか？`))) return;
-          editActions.declareIndependence(p.i, name);
+        independence.title = "この属州が離反して別の国になります（内戦にするか、平和的な独立かを選べます）";
+        independence.addEventListener("click", () => {
+          if (openRebellion) openRebellion({ stateId: e.i, provinceId: p.i });
+          else promptDialog(`独立させて作る新国家の名前`, `${p.fullName ?? p.name}`, { suggest: () => editActions.suggestName("state", { stateId: e.i }) }).then((name) => { if (name != null) editActions.declareIndependence(p.i, name); });
         });
         row.append(independence);
         list.append(row);
@@ -215,19 +211,11 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     const wrap = el("div", "editor-section");
     wrap.append(el("h4", "", "新しい属州"));
     const row = el("div", "diplomacy-row");
-    const input = document.createElement("input");
-    input.placeholder = "属州の名前（空欄なら仮の名前）";
-    row.append(input);
-    const dice = el("button", "suggest-mini", "🎲");
-    dice.type = "button";
-    dice.title = "仮の名前を生成";
-    dice.addEventListener("click", () => { input.value = editActions.suggestName("province", { stateId: e.i }); });
-    row.append(dice);
-    const btn = el("button", "", "作る");
+    const btn = el("button", "", "＋ 属州を追加…");
     btn.type = "button";
-    btn.addEventListener("click", () => {
-      const newId = editActions.addProvince(e.i, input.value);
-      input.value = "";
+    btn.title = "初期設定のウィンドウで、名前・色を入力して確定します";
+    btn.addEventListener("click", async () => {
+      const newId = openSetup ? await openSetup("province", { stateId: e.i }) : editActions.addProvince(e.i, "");
       if (newId != null) {
         // 作った直後、そのまま塗れるように地図編集パネルの「属州を塗る」に切り替える
         editMode?.setTool?.("paint:province");

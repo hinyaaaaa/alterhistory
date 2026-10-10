@@ -64,7 +64,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     const go = el("button", "danger war-go", "⚔ 戦争開始");
     go.type = "button";
     const typeSel = document.createElement("select");
-    for (const T of Object.values(WAR_TYPES)) {
+    for (const T of Object.values(WAR_TYPES).filter((x) => !x.civilOnly)) {
       const o = document.createElement("option");
       o.value = T.key;
       o.textContent = T.label;

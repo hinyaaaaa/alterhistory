@@ -34,6 +34,9 @@ export const WAR_TYPES = Object.freeze({
     desc: "国のすべてを注ぎ込む。全部隊が参戦し、損害も民間の被害も大きい。全面降伏まで要求できる。" },
   asymmetric: { key: "asymmetric", label: "非対称戦（ゲリラ・占領戦）", weary: 1.4, capitalFall: 0, lossScale: 0.9, popScale: 1.3, duration: 2.2, scoreScale: 0.5, allMuster: false,
     desc: "弱い側が地形と民衆を盾にゲリラ戦を行う。強い側は制空・制海が効きにくく、士気が長期で削られる。決着がつきにくく、長引く。" },
+  // 反乱で国が割れたときに自動で始まる戦争。手で宣戦する形態の一覧には出さない（civilOnly）
+  civil: { key: "civil", label: "内戦（反乱）", weary: 1.2, capitalFall: 1.2, lossScale: 0.9, popScale: 1.3, duration: 1, scoreScale: 0.9, allMuster: true, civilOnly: true,
+    desc: "国が割れて、互いの全部隊で戦う。決着は、鎮圧（併合）か独立の承認か、講和で決まる。" },
 });
 export const warTypeOf = (key) => WAR_TYPES[key] ?? WAR_TYPES.conventional;
 

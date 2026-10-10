@@ -7,6 +7,7 @@
 //
 // 純粋ロジック層：DOM に依存しない。
 
+import { pickBreakawayProvinces } from "../edit/rebellion.js";
 import { makeCommand, setProps, setIndexed } from "../edit/commands.js";
 import { ensureExt } from "../edit/ext.js";
 import { withEvent } from "../edit/history-log.js";
@@ -99,8 +100,10 @@ export function rollNaturalEvents(map, rnd, settings = null) {
     // 反乱：民意が低い国で起きる
     if (sup < 45 && rnd.next() < BASE_RATE.rebellion * f * Math.min(REBELLION_BOOST_MAX, 1 + (45 - sup) / 15)) out.push({ kind: "rebellion", stateId: s.i, supportDrop: Math.round(6 + rnd.next() * 8) });
     // 独立：民意が低く、属州が複数ある国で、遠い属州が独立する
+    // 民意が低いほど、話し合いではなく武力で割れる（内戦になる）ことが多い。分かれるのは、首都から遠い属州をいくつか
     if (sup < 55 && rnd.next() < BASE_RATE.independence * f * (1 + (55 - sup) / 20)) {
-      const cand = independenceCandidate(map, s.i); if (cand) out.push({ kind: "independence", stateId: s.i, provinceId: cand.provinceId });
+      const provs = pickBreakawayProvinces(map, s.i, rnd);
+      if (provs.length) out.push({ kind: "independence", stateId: s.i, provinceId: provs[0], provinceIds: provs, civil: rnd.next() < Math.min(0.9, 0.55 + (55 - sup) / 100) });
     }
   }
   for (const r of map.pack.religions) {

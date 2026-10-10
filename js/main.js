@@ -32,6 +32,10 @@ import { initEditMode } from "./ui/edit-mode.js";
 import { initEditToolbar } from "./ui/edit-toolbar.js";
 import { initEditPanel } from "./ui/edit-panel.js";
 import { createBuilderActions } from "./app/builder-actions.js";
+import { createSetupActions } from "./app/setup-actions.js";
+import { initSetupWindow } from "./ui/setup-window.js";
+import { initRebellionWindow } from "./ui/rebellion-window.js";
+import { alertDialog } from "./ui/dialogs.js";
 import { initWorkWindows } from "./ui/work-windows.js";
 import { createEconomyView } from "./ui/economy-view.js";
 import { createTravelView } from "./ui/travel-view.js";
@@ -84,8 +88,12 @@ function start() {
   // editMode は editorPanel より後に作るが、editorPanel（国家タブの属州サブタブ）から
   // 「属州を塗るツールに切り替える」ために参照したいので、後で編集パネルに差し込む
   let editModeRef = null;
+  let openSetupRef = null; // 共通の初期設定ウィンドウ（ウィンドウ管理ができたあとで入る）
+  const openSetup = (kind, opts) => (openSetupRef ? openSetupRef(kind, opts) : Promise.resolve(null));
+  let openRebellionRef = null; // 反乱・独立ウィンドウ
+  const openRebellion = (opts) => openRebellionRef?.(opts);
   const editorPanel = initEditorPanel({
-    store, editActions, panels: null,
+    store, editActions, panels: null, openSetup, openRebellion,
     editMode: { setTool: (t) => editModeRef?.setTool(t) },
   });
   const panels = {
@@ -99,7 +107,14 @@ function start() {
   const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   winsRef = wins;
   const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
-  initEntityLists({ store, wins, panels, editActions, highlight, builderActions });
+  const setupActions = createSetupActions({ store, renderer });
+  const setupWindow = initSetupWindow({
+    wins, setupActions, store,
+    onCreated: (_kind, _id, r) => { if (r?.warning === "no-free-land") alertDialog("空き地（無所属の陸）が無かったため、領土は決まっていません。地図編集の塗りツールで決めてください。"); },
+  });
+  openSetupRef = setupWindow.open;
+  openRebellionRef = initRebellionWindow({ wins, store, simActions, setupActions }).open;
+  initEntityLists({ store, wins, panels, editActions, highlight, builderActions, openSetup });
   initGenealogy({ store, wins, editActions });
   initTimelineWindow({ store, wins, editActions, viewport, renderer });
   initNuclearWindow({ store, simActions, wins });
@@ -125,7 +140,7 @@ function start() {
   initFontsSync(deps);
   const editMode = initEditMode(deps);
   editModeRef = editMode;
-  const editToolbar = initEditToolbar({ store, editMode, editActions });
+  const editToolbar = initEditToolbar({ store, editMode, editActions, openSetup });
   const editPanel = initEditPanel();
   // 右のパネルは × で小さくでき、元の場所（右端）の小さなボタンで開き直せる
 
@@ -151,7 +166,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

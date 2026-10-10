@@ -830,3 +830,9 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 
 .ent-addbar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
 .ent-addbar select { width: auto; }
+
+/* 共通の初期設定ウィンドウ（新規作成） */
+.setup-body { display: flex; flex-direction: column; gap: 10px; padding: 10px; }
+.setup-body .name-row { display: flex; gap: 6px; }
+.setup-body .name-row input { flex: 1; }
+.setup-body .b-actions { display: flex; gap: 8px; }

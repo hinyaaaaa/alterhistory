@@ -545,9 +545,16 @@ function timelineOf(map, { namer, stateAt, eraName, eras }) {
         `${s.fromName ?? namer.state(s.fromState)} は解散し、全領土・都市・属州・部隊が ${s.toName ?? namer.state(s.toState)} に移った。`,
         [ref(namer, "state", s.fromState), ref(namer, "state", s.toState)]);
     } else if (s.type === "independence") {
-      push(s, "independence", `属州の独立: ${s.provinceName ?? namer.province(s.provinceId)} が ${namer.state(s.fromState)} から独立し「${s.name ?? namer.state(s.newState)}」を建国`,
-        `新国家「${s.name ?? namer.state(s.newState)}」は ${namer.state(s.fromState)} の ${s.provinceName ?? namer.province(s.provinceId)} の全領土を引き継いだ。`,
-        [ref(namer, "state", s.fromState), ref(namer, "state", s.newState)]);
+      const provName = s.provinceName ?? namer.province(s.provinceId), newName = s.name ?? namer.state(s.newState), fromName = namer.state(s.fromState);
+      if (s.cause === "rebellion") {
+        push(s, "independence", `反乱: ${provName} が ${fromName} から離反し、「${newName}」として分離（内戦）`,
+          `「${newName}」は ${fromName} の ${provName} の全領土を引き継ぎ、軍の一部も反乱側に移った。${fromName} との内戦が始まった。`,
+          [ref(namer, "state", s.fromState), ref(namer, "state", s.newState)]);
+      } else {
+        push(s, "independence", `属州の独立: ${provName} が ${fromName} から独立し「${newName}」を建国`,
+          `新国家「${newName}」は ${fromName} の ${provName} の全領土を引き継いだ。`,
+          [ref(namer, "state", s.fromState), ref(namer, "state", s.newState)]);
+      }
     } else {
       push(s, "sovereignty", `主権の変動（${s.type ?? "不明"}）`, JSON.stringify(s));
     }

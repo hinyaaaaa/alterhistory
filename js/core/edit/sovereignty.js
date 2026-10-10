@@ -77,23 +77,30 @@ export function listSovereigntyLog(map) {
 }
 
 /**
- * 属州を独立させ、新しい国家として切り出す。
+ * 属州を独立させ、新しい国家として切り出す。反乱による分離（複数の属州をまとめて）にも使う。
  * @param {object} map
- * @param {{provinceId:number, name:string, rnd?:object, date?:{year:number,month:number}}} opts
- * @returns {{command:object, id:number}} id は新しく作られた国家のID
+ * @param {{provinceId?:number, provinceIds?:number[], name:string, rnd?:object, date?:{year:number,month:number}, cause?:"peaceful"|"rebellion"}} opts
+ *   provinceIds を渡すと、同じ国家の複数の属州をまとめて切り離す（先頭が中心の属州）。cause は年表の書き分け用
+ * @returns {{command:object, id:number, provinceNames:string[]}} id は新しく作られた国家のID
  */
-export function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
-  const province = map.pack.provinces[provinceId];
-  if (!isLive(province) || !province.i) throw new Error("その属州は存在しません");
+export function planDeclareIndependence(map, { provinceId, provinceIds, name, rnd, date, cause = "peaceful" }) {
+  const ids = [...new Set((Array.isArray(provinceIds) && provinceIds.length ? provinceIds : [provinceId]).map(Number))];
+  const provinces = ids.map((id) => map.pack.provinces[id]);
+  if (provinces.some((p) => !isLive(p) || !p.i)) throw new Error("その属州は存在しません");
+  const province = provinces[0];
   const fromState = map.pack.states[province.state];
   if (!isLiveState(fromState)) throw new Error("属州の所属国家が存在しません");
+  if (provinces.some((p) => p.state !== fromState.i)) throw new Error("別々の国家の属州はまとめて独立させられません");
   const trimmed = (name ?? "").trim();
   if (!trimmed) throw new Error("新しい国家の名前を入力してください");
 
   const c = map.pack.cells;
+  const idSet = new Set(ids);
   const cells = [];
-  for (let i = 0; i < c.province.length; i++) if (c.province[i] === provinceId) cells.push(i);
+  for (let i = 0; i < c.province.length; i++) if (idSet.has(c.province[i]) && c.state[i] === fromState.i) cells.push(i);
   if (!cells.length) throw new Error("その属州にはセルがありません（独立させる領土がありません）");
+  const provinceId0 = province.i; // 以降の記録・計算用（先頭の属州）
+  provinceId = provinceId0;
 
   const areas = cellAreas(map.geometry);
   const newId = map.pack.states.length || 1;
@@ -133,6 +140,7 @@ export function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
     i: newId, name: trimmed, fullName: trimmed, color: pickColor(liveCount, rnd),
     cells: cells.length, area: round6(area), rural: round6(rural), urban: round6(urban),
     burgs: burgIds.length, capital: capitalBurg.i, neighbors: [],
+    parentState: fromState.i, // どの国から分かれたか（反乱・独立で成立した国の印）
   };
   const statesList = map.pack.states.length ? map.pack.states.slice() : [null];
   statesList[newId] = newState;
@@ -141,7 +149,7 @@ export function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
     setList((m) => m.pack.states, (m, v) => { m.pack.states = v; }, statesList),
     setIndexed((m) => m.pack.cells.state, cells.map((i) => [i, c.state[i], newId])),
     // 属州はそのまま新国家に付け替える（独立した属州は、新国家の中心的な属州として引き継ぐ）
-    setProps(province, { state: newId }),
+    ...provinces.map((p) => setProps(p, { state: newId })),
   ];
   // 都市は新国家の所属に。首都フラグは新首都だけに立てる（旧首都が独立側にあった場合の取り残しを防ぐ）
   for (const bid of burgIds) parts.push(setProps(map.pack.burgs[bid], { state: newId, capital: bid === capitalBurg.i ? 1 : 0 }));
@@ -174,7 +182,8 @@ export function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
   if (date) {
     parts.push(logEntry(map, {
       type: "independence", year: date.year, month: date.month,
-      fromState: fromState.i, newState: newId, provinceId, provinceName: province.fullName ?? province.name, name: trimmed,
+      fromState: fromState.i, newState: newId, provinceId, provinceName: provinces.map((p) => p.fullName ?? p.name).join("・"),
+      ...(ids.length > 1 ? { provinceIds: ids } : {}), ...(cause !== "peaceful" ? { cause } : {}), name: trimmed,
     }));
   }
   // 独立を示すマーカーを、新国家の中心（首都があればそこ、無ければ切り出した領土の代表セル）に立てる
@@ -182,7 +191,8 @@ export function planDeclareIndependence(map, { provinceId, name, rnd, date }) {
   const markerPart = addEventMarker(map, { cell: markerCell, type: "independence", name: `${trimmed}独立宣言${date ? `（${date.year}年${date.month}月）` : ""}` });
   if (markerPart) parts.push(markerPart);
 
-  return { command: makeCommand(`属州「${province.fullName ?? province.name}」の独立`, ["politics"], parts), id: newId };
+  const provinceNames = provinces.map((p) => p.fullName ?? p.name);
+  return { command: makeCommand(cause === "rebellion" ? `反乱：${provinceNames.join("・")}の分離` : `属州「${provinceNames.join("・")}」の独立`, ["politics"], parts), id: newId, provinceNames };
 }
 
 /**

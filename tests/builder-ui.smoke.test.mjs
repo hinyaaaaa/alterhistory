@@ -1,4 +1,4 @@
-// 作成導線（設定メニュー → 一覧ウィンドウの「＋ 追加」「🎲 おまかせ領土つき」）の統合テスト（jsdom）。合成マップを使うので実サンプルは不要。
+// 作成導線（設定メニュー → 一覧ウィンドウの「＋ 追加」→ 共通の初期設定ウィンドウで入力して確定）の統合テスト（jsdom）。合成マップを使うので実サンプルは不要。
 // 実際の index.html とビルド済み dist/app.js（npm run build 後）を動かす。
 import { JSDOM } from "jsdom";
 import path from "node:path";
@@ -82,20 +82,41 @@ console.log("=== 一覧ウィンドウを開く ===");
 check("設定メニューに国家一覧がある", !!q('#settings-menu [data-open-win="list-state"]'));
 openList("state");
 await waitFor(() => q(".ent-addbar"), 2000, "追加バー");
-check("追加バーに「追加」と「おまかせ領土つき」が出る", !!clickBtn(window.document, "国家を追加") && !!clickBtn(window.document, "おまかせ領土つき"));
+check("追加バーには「追加」だけが出る（作成は共通の初期設定ウィンドウで行う）", !!clickBtn(window.document, "国家を追加") && !clickBtn(window.document, "おまかせ領土つき"));
 check("「歴史をつくる」ボタンは無い", !$("btn-builder") && !$("builder-panel"));
 
-console.log("=== 国を建てる（おまかせ領土つき） ===");
-const before = states().length;
-clickBtn(window.document, "おまかせ領土つき").click();
+console.log("=== 初期設定ウィンドウ：キャンセルすると何も作られない ===");
+const setupWin = () => q('[data-win="setup"]');
+const histLen = () => (store.getState().map.ext?.data?.historyLog ?? []).length;
+const selOf = (root, text) => [...root.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.textContent.includes(text)));
+const before = states().length, log0 = histLen();
+clickBtn(window.document, "国家を追加").click();
+check("初期設定ウィンドウが開く", await waitFor(() => setupWin() && !setupWin().hidden, 2000, "開く"));
+check("開いただけでは国は増えず、年表にも載らない", states().length === before && histLen() === log0);
+setupWin().querySelector(".name-row input").value = "キャンセル王国";
+clickBtn(setupWin(), "キャンセル").click();
+check("キャンセルで閉じ、国も年表の記録も増えない", setupWin().hidden && states().length === before && histLen() === log0);
+clickBtn(window.document, "国家を追加").click();
+setupWin().querySelector(".name-row input").value = "ばつ王国";
+setupWin().querySelector(".panel-close").click();
+check("× で閉じても、何も作られない", setupWin().hidden && states().length === before && histLen() === log0);
+
+console.log("=== 国を建てる（初期設定で入力 → 確定。おまかせ領土・首都つき） ===");
+clickBtn(window.document, "国家を追加").click();
+await waitFor(() => setupWin() && !setupWin().hidden, 2000, "開く");
+const terr = selOf(setupWin(), "おまかせ（中）"); terr.value = "m";
+check("項目がそろっている（名前・色・政体・領土）", !!setupWin().querySelector(".name-row input") && !!setupWin().querySelector('input[type="color"]') && !!selOf(setupWin(), "君主制") && !!selOf(setupWin(), "あとで地図に塗る"));
+setupWin().querySelector('input[type="color"]').value = "#3366cc";
+clickBtn(setupWin(), "確定して作成").click(); // 名前は空欄 → おまかせの名前
 await waitFor(() => states().length === before + 1, 2000, "国が増える");
-check("国が1つ増える", states().length === before + 1);
+check("確定すると国が1つ増え、ウィンドウは閉じる", states().length === before + 1 && setupWin().hidden);
 const made = states().at(-1);
-check("名前はカタカナの仮の名前", /[ァ-ヴー]/.test(made.fullName ?? made.name));
-check("「仮」の印が付く", ea.isProvisional("state", made.i));
+check("名前はカタカナ（おまかせ）で、「仮」の印は付かない", /[ァ-ヴー]/.test(made.fullName ?? made.name) && !ea.isProvisional("state", made.i));
+check("指定した色になる", store.getState().map.pack.states[made.i].color === "#3366cc");
 check("セルが塗られる", store.getState().map.pack.states[made.i].cells > 0, `${store.getState().map.pack.states[made.i].cells}セル`);
 const done = store.getState().map.pack.states[made.i];
-check("首都が置かれ、仮の名前", done.capital > 0 && ea.isProvisional("burg", done.capital));
+check("首都が置かれる", done.capital > 0 && !ea.isProvisional("burg", done.capital));
+check("年表には「建国」が1件だけ増える", histLen() === log0 + 1 && store.getState().map.ext.data.historyLog.at(-1).type === "created-state");
 
 console.log("=== 凡例が最新になる ===");
 check("凡例に新しい国が出る", [...window.document.querySelectorAll(".legend-name")].some((n) => n.textContent === (made.fullName ?? made.name)));
@@ -104,11 +125,15 @@ console.log("=== 技術水準を変えられる ===");
 ea.setTechLevel?.(made.i, 7);
 check("技術水準を変えられる", ea.getTechLevel(made.i) === 7);
 
-console.log("=== 手で塗る方式（＋ 追加） ===");
+console.log("=== 手で塗る方式（領土は「あとで地図に塗る」） ===");
 const n0 = states().length;
 clickBtn(window.document, "国家を追加").click();
+await waitFor(() => setupWin() && !setupWin().hidden, 2000, "開く");
+check("領土の既定は「あとで地図に塗る」", selOf(setupWin(), "あとで地図に塗る").value === "later");
+clickBtn(setupWin(), "確定して作成").click();
 await waitFor(() => states().length === n0 + 1, 2000, "追加");
 check("国がもう1つ増える", states().length === n0 + 1);
+await waitFor(() => store.getState().editTool === "paint:state", 2000, "塗るツール");
 check("塗るツールに切り替わり、塗り先が新しい国", store.getState().editTool === "paint:state");
 ba.endPaint();
 check("ツールが選択に戻る", store.getState().editTool === "select");

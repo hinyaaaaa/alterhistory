@@ -28,7 +28,14 @@ export function planRenameEntity(map, kind, id, name) {
 
 const EXTRA_KEYS = ["name", "form", "formName", "deity", "type"];
 
-/** 新しい実体の色。HSLで均等に散らし、既存の実体数から角度をずらして被りにくくする */
+const HEX = /^#[0-9a-f]{6}$/i;
+/** 初期設定ウィンドウで選ばれた色。正しい #rrggbb だけを使い、無ければ null（自動で決める） */
+const chosenColor = (c) => (typeof c === "string" && HEX.test(c.trim()) ? c.trim().toLowerCase() : null);
+/** 新しい実体の色。HSLで均等に散らし、既存の実体数から角度をずらして被りにくくする。pickColor は自動で決める側 */
+export function pickNewColor(map, kind, rnd) {
+  const list = map.pack[LIST_KEY[kind]] ?? [];
+  return pickColor(list.filter(isLive).length, rnd);
+}
 function pickColor(existingCount, rnd) {
   const golden = 137.508; // 黄金角。均等に色相を散らす定番の手法
   const hue = Math.round((existingCount * golden + (rnd ? rnd.float(0, 360) : 0)) % 360);
@@ -53,11 +60,12 @@ const LABEL_OF = { state: "国家", culture: "文化", religion: "宗教", provi
  * 作った時点ではどのセルも持たない（cells:0 等）。続けて「塗る」ツール（core/edit/paint.js の
  * planPaint）で、作成した実体をセルに塗って初めて地図上に反映される。
  * @param {object} map
- * @param {{kind:"state"|"culture"|"religion", name:string, rnd?:object, extra?:{name?:string,form?:string,formName?:string,deity?:string,type?:string}}} opts
+ * @param {{kind:"state"|"culture"|"religion", name:string, color?:string, rnd?:object, extra?:{name?:string,form?:string,formName?:string,deity?:string,type?:string}}} opts
+ *   color: 初期設定ウィンドウで選んだ色（#rrggbb）。省略すると自動で決める
  *   extra: 国家の短縮名・政体、宗教の神名・種別など。名前の仮生成（naming.js）が渡す
  * @returns {{command:object, id:number}}
  */
-export function planAddEntity(map, { kind, name, rnd, extra }) {
+export function planAddEntity(map, { kind, name, rnd, extra, color }) {
   if (kind === "province") throw new Error("属州は所属する国家が必要です。planAddProvince を使ってください");
   const listKey = LIST_KEY[kind];
   if (!listKey) throw new Error(`未対応の種類です: ${kind}`);
@@ -68,7 +76,7 @@ export function planAddEntity(map, { kind, name, rnd, extra }) {
   const id = existing.length || 1; // 0番は「所属なし」のための空要素
   const liveCount = existing.filter(isLive).length;
   const entity = {
-    i: id, name: trimmed, fullName: trimmed, color: pickColor(liveCount, rnd),
+    i: id, name: trimmed, fullName: trimmed, color: chosenColor(color) ?? pickColor(liveCount, rnd),
     cells: 0, area: 0, rural: 0, urban: 0, burgs: 0,
   };
   if (kind === "state") { entity.capital = 0; entity.neighbors = []; }
@@ -85,10 +93,10 @@ export function planAddEntity(map, { kind, name, rnd, extra }) {
 /**
  * 属州を新規作成する。属州は必ず1つの国家に属する。
  * @param {object} map
- * @param {{state:number, name:string, rnd?:object}} opts
+ * @param {{state:number, name:string, color?:string, rnd?:object}} opts
  * @returns {{command:object, id:number}}
  */
-export function planAddProvince(map, { state, name, rnd }) {
+export function planAddProvince(map, { state, name, rnd, color }) {
   const owner = map.pack.states[state];
   if (!isLive(owner) || !owner.i) throw new Error("その国家は存在しません");
   const trimmed = (name ?? "").trim();
@@ -98,7 +106,7 @@ export function planAddProvince(map, { state, name, rnd }) {
   const id = existing.length || 1;
   const liveCount = existing.filter(isLive).length;
   const entity = {
-    i: id, state, name: trimmed, fullName: trimmed, color: pickColor(liveCount, rnd),
+    i: id, state, name: trimmed, fullName: trimmed, color: chosenColor(color) ?? pickColor(liveCount, rnd),
     cells: 0, area: 0, rural: 0, urban: 0, burgs: [],
   };
 
