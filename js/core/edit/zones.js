@@ -6,6 +6,7 @@
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand } from "./commands.js";
+import { withEvent } from "./history-log.js";
 
 export const ZONE_TYPES = Object.freeze([
   { id: "Invasion", label: "侵攻", color: "#d6453d" },
@@ -14,7 +15,11 @@ export const ZONE_TYPES = Object.freeze([
   { id: "Crusade", label: "聖戦", color: "#a3243b" },
   { id: "Disease", label: "疫病", color: "#7cb342" },
   { id: "Disaster", label: "災害", color: "#8d6e63" },
-  { id: "Eruption", label: "噴火", color: "#ff5722" },
+  { id: "Eruption", label: "火山", color: "#ff5722" },
+  { id: "Quake", label: "地震", color: "#b07a3c" },
+  { id: "Famine", label: "飢饉", color: "#a1887f" },
+  { id: "Drought", label: "干ばつ", color: "#d4a24c" },
+  { id: "Storm", label: "嵐", color: "#5c7cfa" },
   { id: "Avalanche", label: "雪崩", color: "#90a4ae" },
   { id: "Fault", label: "断層", color: "#6d4c41" },
   { id: "Flood", label: "洪水", color: "#1e88e5" },
@@ -25,6 +30,24 @@ export const ZONE_TYPES = Object.freeze([
 export const ZONE_TYPE_BY_ID = Object.freeze(Object.fromEntries(ZONE_TYPES.map((t) => [t.id, t])));
 export const MAX_ZONES = 300;
 
+/** 疫病・災害として手で記録できる種類（選択式）。ほかの種類は、読み込んだ地図のゾーンを表示するためだけに残してある */
+export const TEMP_ZONE_TYPES = Object.freeze(["Disease", "Quake", "Flood", "Famine", "Drought", "Eruption", "Fire", "Storm"]);
+/** 続く期間の選択肢（月数） */
+export const ZONE_PERIODS = Object.freeze([
+  { months: 3, label: "3か月" }, { months: 6, label: "半年" }, { months: 12, label: "1年" }, { months: 24, label: "2年" }, { months: 60, label: "5年" },
+]);
+
+const monthKey = (t) => t.year * 12 + (t.month - 1);
+export const addMonthsTo = (t, n) => { const k = monthKey(t) + n; return { year: Math.floor(k / 12), month: (k % 12) + 1 }; };
+
+/** いま（now）このゾーンを地図に出すか。期間の無いゾーン（読み込んだ地図のもの）は、いつでも出す */
+export function zoneActive(zone, now) {
+  if (!zone?.endAt) return true;
+  if (!now) return true;
+  const k = monthKey(now);
+  return k < monthKey(zone.endAt) && (!zone.startAt || k >= monthKey(zone.startAt));
+}
+
 /** 表示に使う色。本家の斜線パターン（url(...)）や未設定のときは、種類の色 */
 export function zoneColor(zone) {
   if (typeof zone?.color === "string" && /^#[0-9a-f]{3,8}$/i.test(zone.color)) return zone.color;
@@ -33,88 +56,61 @@ export function zoneColor(zone) {
 export function zoneLabel(zone) { return ZONE_TYPE_BY_ID[zone?.type]?.label ?? zone?.type ?? "ゾーン"; }
 
 export function listZones(map) { return (map.zones ?? []).map((z, index) => ({ ...z, index })).filter((z) => z && Array.isArray(z.cells)); }
+/** 出来事が持つゾーンの id から、ゾーンを探す（期間が過ぎて表示から外れていても見つかる） */
+export function findZoneByZid(map, zid) { return zid ? (map.zones ?? []).find((z) => z && z.zid === zid) ?? null : null; }
+
+function nextZid(map) {
+  let max = 0;
+  for (const z of map.zones ?? []) { const m = /^z(\d+)$/.exec(z?.zid ?? ""); if (m) max = Math.max(max, +m[1]); }
+  return `z${max + 1}`;
+}
+
+/** 範囲の選択（国全体・属州を選ぶ・地図で囲む）から、セルと名前、関係する国を決める */
+export function resolveZoneScope(map, scope) {
+  const c = map.pack.cells, n = c.biome.length, out = { cells: [], name: "", states: [] };
+  if (scope?.kind === "state") {
+    const st = map.pack.states[scope.id]; if (!st || st.removed || !(st.i > 0)) throw new Error("存在しない国家です");
+    for (let i = 0; i < n; i++) if (c.state[i] === scope.id && c.biome[i] !== 0) out.cells.push(i);
+    out.name = st.fullName ?? st.name; out.states = [scope.id];
+  } else if (scope?.kind === "provinces") {
+    const ids = new Set(scope.ids ?? []); const names = [];
+    for (const id of ids) { const p = map.pack.provinces[id]; if (p && !p.removed) names.push(p.fullName ?? p.name); }
+    if (!names.length) throw new Error("属州を選んでください");
+    const st = new Set();
+    for (let i = 0; i < n; i++) if (ids.has(c.province[i]) && c.biome[i] !== 0) { out.cells.push(i); if (c.state[i] > 0) st.add(c.state[i]); }
+    out.name = names.length > 2 ? `${names[0]}ほか${names.length - 1}州` : names.join("・"); out.states = [...st];
+  } else if (scope?.kind === "cells") {
+    const st = new Set();
+    for (const i of scope.cells ?? []) if (Number.isInteger(i) && i >= 0 && i < n && c.biome[i] !== 0) { out.cells.push(i); if (c.state[i] > 0) st.add(c.state[i]); }
+    out.name = scope.name || (st.size === 1 ? (map.pack.states[[...st][0]]?.name ?? "指定の範囲") : "指定の範囲"); out.states = [...st];
+  } else throw new Error("範囲を選んでください");
+  if (!out.cells.length) throw new Error("範囲に陸のセルがありません");
+  return out;
+}
 
 function replace(map, label, after) {
   const before = map.zones ?? [];
   return makeCommand(label, [], [{ apply: (m) => { m.zones = after; }, revert: (m) => { m.zones = before; } }]);
 }
 
-export function planAddZone(map, { name, type = "Custom", cells = [] } = {}) {
+/**
+ * 疫病・災害のゾーンを、期間つきで作る（一時表示）。年表に1件（テンプレートの文）とゾーンが同時にできる。
+ * logEvent=false のときは、呼び出し側（自然発生の疫病など）が年表の記録を持つので、ゾーンだけ作る。
+ * @returns {{command, zid, zone}}
+ */
+export function planAddTemporaryZone(map, { type, cells, months, date = null, name = "", scopeName = "", states = [], logEvent = true } = {}) {
+  const t = ZONE_TYPE_BY_ID[type]; if (!t) throw new Error("未知のゾーンの種類です");
+  if (!Array.isArray(cells) || !cells.length) throw new Error("範囲が空です");
+  if (!ZONE_PERIODS.some((p) => p.months === months)) throw new Error("期間は 3か月・半年・1年・2年・5年 から選んでください");
   const list = map.zones ?? [];
   if (list.length >= MAX_ZONES) throw new Error(`ゾーンは${MAX_ZONES}件までです`);
-  const t = ZONE_TYPE_BY_ID[type] ?? ZONE_TYPE_BY_ID.Custom;
-  const zone = { name: (name ?? "").trim() || `${t.label}${list.length + 1}`, type: t.id, cells: [...new Set(cells)], color: t.color };
-  return { command: replace(map, `ゾーン「${zone.name}」を作成`, [...list, zone]), index: list.length };
-}
-
-export function planEditZone(map, index, patch) {
-  const list = map.zones ?? [];
-  const z = list[index];
-  if (!z) throw new Error("存在しないゾーンです");
-  const next = { ...z };
-  if (patch.name !== undefined) { const n = String(patch.name).trim(); if (!n) throw new Error("ゾーンの名前を入力してください"); next.name = n; }
-  if (patch.type !== undefined) {
-    if (!ZONE_TYPE_BY_ID[patch.type]) throw new Error("未知のゾーンの種類です");
-    next.type = patch.type;
-    // 種類を変えたら、色も種類の色に合わせる（色を直接指定した場合はそちらを優先）
-    if (patch.color === undefined) next.color = ZONE_TYPE_BY_ID[patch.type].color;
-  }
-  if (patch.color !== undefined) next.color = String(patch.color);
-  if (patch.hidden !== undefined) { if (patch.hidden) next.hidden = true; else delete next.hidden; }
-  if (JSON.stringify(next) === JSON.stringify(z)) return null;
-  return replace(map, `ゾーン「${next.name}」を編集`, list.map((x, i) => (i === index ? next : x)));
-}
-
-export function planRemoveZone(map, index) {
-  const list = map.zones ?? [];
-  const z = list[index];
-  if (!z) throw new Error("存在しないゾーンです");
-  return replace(map, `ゾーン「${z.name}」を削除`, list.filter((_, i) => i !== index));
-}
-
-/** セルを足す／消す。変化が無ければ null。mode: "add" | "erase" */
-export function planPaintZone(map, index, cells, mode = "add") {
-  const list = map.zones ?? [];
-  const z = list[index];
-  if (!z) throw new Error("存在しないゾーンです");
-  const n = map.pack.cells.biome.length;
-  const valid = cells.filter((c) => Number.isInteger(c) && c >= 0 && c < n);
-  const cur = new Set(z.cells);
-  let changed = false;
-  for (const c of valid) {
-    if (mode === "erase") { if (cur.delete(c)) changed = true; }
-    else if (!cur.has(c)) { cur.add(c); changed = true; }
-  }
-  if (!changed) return null;
-  const next = { ...z, cells: [...cur] };
-  return replace(map, `ゾーン「${z.name}」を${mode === "erase" ? "消す" : "塗る"}`, list.map((x, i) => (i === index ? next : x)));
-}
-
-/**
- * 種になるセルから、まとまった範囲を自動で決める（「おまかせ」用）。
- * 種から近い順に、乱数でゆらしながら隣へ広げる。landOnly=true なら陸だけ。
- * @returns {number[]} セル番号（種を含む）
- */
-export function growZoneCells(map, seed, size, rnd, { landOnly = true } = {}) {
-  const { biome } = map.pack.cells;
-  const { c: adj } = map.geometry.pack.cells;
-  const p = map.geometry.pack.p;
-  const ok = (i) => (landOnly ? biome[i] !== 0 : true);
-  if (seed == null || seed < 0 || !ok(seed)) return [];
-  const want = Math.max(1, Math.round(size));
-  const inSet = new Set([seed]);
-  const frontier = new Set(adj[seed].filter(ok));
-  const [sx, sy] = p[seed];
-  while (inSet.size < want && frontier.size) {
-    let best = -1, bestKey = Infinity;
-    for (const j of frontier) {
-      const key = Math.hypot(p[j][0] - sx, p[j][1] - sy) * (0.75 + 0.5 * rnd.next());
-      if (key < bestKey) { bestKey = key; best = j; }
-    }
-    frontier.delete(best);
-    if (inSet.has(best)) continue;
-    inSet.add(best);
-    for (const j of adj[best]) if (ok(j) && !inSet.has(j)) frontier.add(j);
-  }
-  return [...inSet];
+  const start = date ?? map.worldTime ?? { year: 1, month: 1 };
+  const zid = nextZid(map);
+  const zone = { name: name || `${scopeName || "指定の範囲"}の${t.label}`, type: t.id, cells: [...new Set(cells)], color: t.color, zid, startAt: { ...start }, endAt: addMonthsTo(start, months) };
+  const cmd = replace(map, `${zone.name}（${t.label}）を記録`, [...list, zone]);
+  const periodLabel = ZONE_PERIODS.find((p) => p.months === months).label;
+  const command = logEvent
+    ? withEvent(map, cmd, { type: "zone-start", title: `${scopeName || "指定の範囲"}で${t.label}が発生`, detail: `${periodLabel}続く / ${zone.cells.length}セル`, date: start, cell: zone.cells[0], states, zoneId: zid })
+    : cmd;
+  return { command, zid, zone };
 }

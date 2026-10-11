@@ -1,9 +1,19 @@
 // パネル用の小さな部品（要素の作成・ボタン・色見本・スライダー付き入力）。
+import { icon, parseIconText } from "./icons.js";
 export function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
+  const ic = parseIconText(text);
+  if (ic) setIconText(e, ic);
+  else if (text != null) e.textContent = text;
   return e;
+}
+/** 「@名前 ラベル」を、細線アイコン＋ラベルとして描く（絵文字は使わない） */
+export function setIconText(e, ic) {
+  e.innerHTML = icon(ic.name, 16);
+  if (ic.label) { const s = document.createElement("span"); s.className = "ico-label"; s.textContent = ic.label; e.append(s); }
+  else if (!e.title) e.setAttribute("aria-label", ic.name);
+  e.classList.add("has-ico");
 }
 export function btn(cls, text, title, onClick) {
   const b = el("button", cls, text);

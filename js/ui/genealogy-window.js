@@ -4,9 +4,9 @@
 //   ・「共通の祖」に落とすと、どこからも分かれていない（原始の）系統になる
 // 輪（自分の子孫を親にする）はコア側で拒否される。
 import { promptDialog, confirmDialog } from "./dialogs.js";
+import { el } from "./kit.js";
 
 const NS = "http://www.w3.org/2000/svg";
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const sv = (tag, attrs = {}, text) => { const e = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); if (text != null) e.textContent = text; return e; };
 const LIST_KEY = { religion: "religions", culture: "cultures" };
 const LABEL = { religion: "宗教", culture: "文化" };
@@ -135,7 +135,7 @@ export function initGenealogy({ store, wins, editActions }) {
 
   for (const kind of Object.keys(LIST_KEY)) {
     bodies[kind] = el("div", "gen-body");
-    wins.register(`genealogy-${kind}`, { title: `🌳 ${LABEL[kind]}の系譜図`, width: 760, body: bodies[kind], onOpen: () => render(kind) });
+    wins.register(`genealogy-${kind}`, { title: `${LABEL[kind]}の系譜図`, width: 760, body: bodies[kind], onOpen: () => render(kind) });
   }
   store.subscribe((_s, ch) => {
     if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;

@@ -1,13 +1,8 @@
 import { guardRender, keepScroll } from "./safe-render.js";
 import { EXHAUST_SUPPORT } from "../core/sim/war-engine.js";
 import { VASSAL_KINDS, VASSAL_BY_KEY } from "../core/edit/vassals.js";
+import { el } from "./kit.js";
 
-const el = (tag, cls, text2) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text2 != null) e.textContent = text2;
-  return e;
-};
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const pct = (v) => `${Math.round(v * 100)}%`;
 const fmt = (n, d = 0) => Number(n).toLocaleString("ja-JP", { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -93,7 +88,7 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
     }
     const band = el("div", "war-band");
     for (const w of all) {
-      const b = el("button", `${w.id === sel ? "active" : ""}${w.endedAt ? " ended" : ""}`, `${w.endedAt ? "✅" : "📜"} ${w.endedAt && w.treatyName ? w.treatyName : w.name}`);
+      const b = el("button", `${w.id === sel ? "active" : ""}${w.endedAt ? " ended" : ""}`, `${w.endedAt && w.treatyName ? w.treatyName : w.name}`);
       b.type = "button";
       b.title = w.endedAt ? "締結済みの条約（中身を確認できます）" : "戦争中（いつでも講和できます）";
       b.addEventListener("click", () => {
@@ -288,7 +283,7 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
         const over = r.spent > r.budget + 0.05;
         overAny || (overAny = over);
         const tr = el("tr");
-        tr.append(el("td", "", `${isLeader(r.stateId) ? "★ " : ""}${sname(map, r.stateId)}`), el("td", "", pct(r.share)), el("td", over ? "cur-chg down" : "", `${fmt(r.spent, 1)} / ${fmt(r.budget, 1)}${over ? " ⚠" : ""}`));
+        tr.append(el("td", "", `${isLeader(r.stateId) ? "" : ""}${sname(map, r.stateId)}`), el("td", "", pct(r.share)), el("td", over ? "cur-chg down" : "", `${fmt(r.spent, 1)} / ${fmt(r.budget, 1)}${over ? " ⚠" : ""}`));
         t.append(tr);
       }
       meter.append(el("h4", "", `戦争スコアの使い道（現在 ${simActions.currentWarScore(war)}）`), t);
@@ -422,7 +417,7 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
       draft = null;
       renderTreaty();
     });
-    const signBtn = el("button", "primary war-go", "📜 この内容で講和条約を締結する");
+    const signBtn = el("button", "primary war-go", "この内容で講和条約を締結する");
     signBtn.type = "button";
     signBtn.addEventListener("click", () => {
       const ok = simActions.signTreaty(war.id, { ...currentTerms(), treatyName: draft.treatyName.trim(), notes: draft.notes.trim(), venue: draft.venue ? { place: draft.venue.place, stateId: draft.venue.stateId } : null });

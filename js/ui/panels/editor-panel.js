@@ -10,12 +10,12 @@ import { DEFAULT_MARKER_TYPES, defaultMarkerName } from "../../core/edit/markers
 import { byId } from "../dom.js";
 import { appendEntityProfile } from "../profile-fields.js";
 import { confirmDialog, promptDialog } from "../dialogs.js";
+import { el } from "../kit.js";
 
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0; // 0番（Neutrals＝無所属）は外交などの対象にしない
 const STATE_SUBTABS = [
-  { key: "info", label: "基本情報", icon: "⛭" },
-  { key: "provinces", label: "属州", icon: "▦" },
+  { key: "info", label: "基本情報", icon: "info" },
+  { key: "provinces", label: "属州", icon: "province" },
 ];
 
 export function initEditorPanel({ store, editActions, editMode, panels: initialPanels, openSetup, openRebellion }) {
@@ -58,7 +58,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   function renderStateTabs(map, title, root) {
     const e = map.pack.states[current.id];
     if (!isLive(e)) { close(); return; }
-    title.textContent = `🏳 ${e.fullName ?? e.name}`;
+    title.textContent = `${e.fullName ?? e.name}`;
 
     // 横タブは使わない：基本情報の下に、属州を折りたたみの欄として続ける
     const body = el("div", "editor-body");
@@ -189,19 +189,11 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
           window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:province", target: p.i } }));
         });
         row.append(repaint);
-        const independence = el("button", "", "反乱・独立…");
-        independence.type = "button";
-        independence.title = "この属州が離反して別の国になります（内戦にするか、平和的な独立かを選べます）";
-        independence.addEventListener("click", () => {
-          if (openRebellion) openRebellion({ stateId: e.i, provinceId: p.i });
-          else promptDialog(`独立させて作る新国家の名前`, `${p.fullName ?? p.name}`, { suggest: () => editActions.suggestName("state", { stateId: e.i }) }).then((name) => { if (name != null) editActions.declareIndependence(p.i, name); });
-        });
-        row.append(independence);
         list.append(row);
       }
       form.append(list);
     }
-    form.append(mergeSection(map, e));
+    form.append(operationsSection(map, e));
     body.append(form);
   }
 
@@ -228,10 +220,27 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     return wrap;
   }
 
+  /**
+   * 国家の「操作」欄。国家一覧・詳細からの入口はここだけ（同じ操作の入口を二重に作らない）。
+   *   ・反乱・独立: 属州を選んで離反させる（反乱・独立ウィンドウを開く）
+   *   ・国家の統合: 他の国へ吸収させる
+   */
+  function operationsSection(map, e) {
+    const ops = el("div", "editor-section ops-section");
+    ops.append(el("h4", "", "操作"));
+    const reb = el("div", "diplomacy-row");
+    const rb = el("button", "", "反乱・独立…"); rb.type = "button";
+    rb.title = "属州が離反して別の国になります（内戦にするか、平和的な独立かを選べます）";
+    rb.addEventListener("click", () => { if (openRebellion) openRebellion({ stateId: e.i }); });
+    reb.append(rb); ops.append(reb);
+    ops.append(mergeSection(map, e));
+    return ops;
+  }
+
   /** 国家統合：この国家を、選んだ他の国家に吸収させる（この国家は解散する） */
   function mergeSection(map, e) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "国家の統合"));
+    const wrap = el("div", "ops-merge");
+    wrap.append(el("h5", "", "国家の統合"));
     const others = map.pack.states.filter((s) => isLive(s) && s.i !== e.i && s.i > 0);
     if (!others.length) {
       wrap.append(el("p", "hint", "統合できる他の国家がありません。"));
@@ -298,7 +307,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   function renderBurg(map, title, body) {
     const b = map.pack.burgs[current.id];
     if (!isLive(b)) { close(); return; }
-    title.textContent = `${b.capital ? "🏰 " : "🏘️ "}${b.name}`;
+    title.textContent = `${b.capital ? "首都 ・ " : ""}${b.name}`;
     const form = el("div", "editor-form");
     form.append(table([
       ["国家", isLive(map.pack.states[b.state]) ? map.pack.states[b.state].name : "無所属"],
@@ -399,7 +408,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
       const radio = document.createElement("input"); radio.type = "radio"; radio.name = `doctrine-${stateId}`; radio.checked = d.key === current;
       radio.addEventListener("change", () => editActions.setDoctrine(stateId, d.key));
       const body = el("div", "doctrine-body");
-      body.append(el("strong", "", d.label), el("p", "hint", d.desc ?? ""), el("p", "doctrine-merit", `👍 良さ: ${d.merit ?? ""}`));
+      body.append(el("strong", "", d.label), el("p", "hint", d.desc ?? ""), el("p", "doctrine-merit", `良さ: ${d.merit ?? ""}`));
       const chips = el("div", "doctrine-chips");
       for (const e of doctrineEffects(d)) chips.append(el("span", `doctrine-chip ${e.up ? "up" : "down"}`, e.text));
       if (!chips.children.length) chips.append(el("span", "doctrine-chip", "効果の偏りなし"));
@@ -431,7 +440,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     input.addEventListener("change", () => onChange(input.value));
     if (!suggest) { row.append(input); return row; }
     const box = el("span", "name-row");
-    const dice = el("button", "suggest-mini", "🎲");
+    const dice = el("button", "suggest-mini", "@dice");
     dice.type = "button";
     dice.title = "仮の名前を生成（押すたびに変わります。Undo で戻せます）";
     dice.addEventListener("click", (ev) => {
@@ -450,7 +459,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     // eslint-disable-next-line no-unreachable
     if (!editActions.isProvisional(kind, id)) return [];
     const box = el("div", "provisional-note");
-    box.append(el("span", "", "🎲 仮の名前です。"));
+    box.append(el("span", "", "仮の名前です。"));
     const ok = el("button", "", "この名前で確定");
     ok.type = "button";
     ok.addEventListener("click", () => editActions.confirmName(kind, id));

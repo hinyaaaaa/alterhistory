@@ -70,12 +70,12 @@ const rows = () => [...window.document.querySelectorAll(".tl-row")];
 const total = () => store.getState().map && buildTimeline(store.getState().map).length;
 
 console.log("=== 年表ウィンドウを開く ===");
-check("設定メニューに年表がある", !!q('#settings-menu [data-open-win="timeline"]'));
+check("ハブに年表の入口がある", !!q('[data-open-win="timeline"]'));
 // 年表に出来事を作っておく
 const ids = [...store.getState().map.pack.states].filter((s) => s && s.i > 0 && !s.removed).map((s) => s.i);
 ea.addHistoryEvent({ title: "手書きの出来事A", detail: "説明A", date: { year: 3, month: 4 }, states: [ids[0]] });
 ea.addHistoryEvent({ title: "手書きの出来事B", date: { year: 9, month: 1 } });
-q('#settings-menu [data-open-win="timeline"]').click();
+q('[data-open-win="timeline"]').click();
 await waitFor(() => rows().length > 0, 3000, "行");
 check("年表に件数が出る", count().includes(`${total()} 件`), count());
 check("手書きの出来事が年表にある", buildTimeline(store.getState().map).some((e) => e.title === "手書きの出来事A" && e.year === 3 && e.month === 4));
@@ -105,7 +105,7 @@ check("押すと表示位置が動く", viewport.x !== before[0] || viewport.y !
 
 console.log("=== 手書きの出来事を足す ===");
 const n0 = total();
-const add = q(".tl-add"); add.open = true;
+const add = q(".tl-add:not(.tl-rec)"); add.open = true;
 const inputs = add.querySelectorAll("input");
 inputs[0].value = "画面から足した出来事"; inputs[1].value = "テスト"; 
 add.querySelector("button.primary").click();
@@ -139,7 +139,7 @@ console.log("=== 外交表の食い違いを直す入口（外交・同盟ウィ
   m.ext.data.alliances = [...(m.ext.data.alliances ?? []), { id: 901, name: "食い違い同盟", members: [ids[0], ids[1]], formedAt: { year: 1, month: 1 }, dissolvedAt: null }];
   m.pack.states[ids[0]].diplomacy = []; m.pack.states[ids[1]].diplomacy = [];
   check("食い違いが数えられる", ea.diplomacyMismatchCount() >= 1);
-  q('#settings-menu [data-open-win="diplomacy"]').click();
+  q('[data-open-win="diplomacy"]').click();
   await waitFor(() => q(".dip-mismatch button"), 2000, "直すボタン");
   check("食い違いがあるときだけ、「直す」が出る", !!q(".dip-mismatch button"));
   q(".dip-mismatch button").click();

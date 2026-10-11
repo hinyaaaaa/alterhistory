@@ -4,8 +4,8 @@ import { UNIT_TYPES, forcePower, forceHeadcount } from "../../core/sim/units.js"
 import { guardRender } from "../safe-render.js";
 import { byId } from "../dom.js";
 import { confirmDialog, alertDialog } from "../dialogs.js";
+import { el } from "../kit.js";
 
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 
 export function initMilitaryPanel({ store, simActions, editActions }) {
@@ -98,7 +98,7 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
     nameInput.value = reg.name; nameInput.dataset.field = "name"; nameInput.className = "mini-name";
     nameInput.addEventListener("change", () => simActions.editRegiment(stateId, reg.i, { name: nameInput.value }));
     const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
-    const moveBtn = el("button", "mini-btn", isMovePicking ? "📍…" : "📍");
+    const moveBtn = el("button", "mini-btn", isMovePicking ? "@pin …" : "@pin");
     moveBtn.dataset.field = "move-btn"; moveBtn.type = "button"; moveBtn.title = "移動：押してから、自国の領土内の移動先を地図でクリック";
     moveBtn.addEventListener("click", () => {
       pending = { type: "move", stateId, regId: reg.i };
@@ -155,7 +155,7 @@ export function initMilitaryPanel({ store, simActions, editActions }) {
 
     const isMovePicking = pending && pending.type === "move" && pending.stateId === stateId && pending.regId === reg.i;
     const moveBtn = card.querySelector('[data-field="move-btn"]');
-    if (moveBtn) moveBtn.textContent = isMovePicking ? "📍…" : "📍";
+    if (moveBtn) moveBtn.textContent = isMovePicking ? "@pin …" : "@pin";
 
   }
 

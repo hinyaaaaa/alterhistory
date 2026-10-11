@@ -1,3 +1,4 @@
+import { icon } from "./icons.js";
 // 時間バー：開始/停止・速度・現在の年月表示。クリックで年月の直接指定・時代区分の設定を開く。
 import { formatWorldTime } from "../core/sim/time.js";
 import { byId } from "./dom.js";
@@ -22,7 +23,7 @@ export function initTimeBar({ store, timeActions, editActions, simActions = null
     speedSel.disabled = !hasMap;
     dateEl.disabled = !hasMap;
     const running = !!state.timeRunning;
-    toggleBtn.textContent = running ? "⏸" : "▶";
+    toggleBtn.innerHTML = icon(running ? "pause" : "play", 16);
     toggleBtn.title = running ? "停止 (Space)" : "開始 (Space)";
     toggleBtn.classList.toggle("running", running);
     dateEl.replaceChildren();

@@ -12,8 +12,7 @@ import { planDeclareIndependence, planMergeStates } from "../core/edit/sovereign
 import { listEras, eraAt, planSetEra, planRemoveEra } from "../core/edit/eras.js";
 import { planSetFinance, getFinance } from "../core/edit/finance.js";
 import { planSetEntityProfile, planSetOrigin, planSetOrigins, planSetBurgProfile, originTree, descendantsOf } from "../core/edit/profile.js";
-import { planAddJourney, planEditJourney, planRemoveJourney, planAddLeg, planRemoveLeg, planChangeLegTransport } from "../core/edit/journeys.js";
-import { planAddZone, planEditZone, planRemoveZone, planPaintZone, growZoneCells, zoneLabel } from "../core/edit/zones.js";
+import { planAddTemporaryZone, resolveZoneScope } from "../core/edit/zones.js";
 import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
 import { planSetDoctrine, getDoctrine, DOCTRINES, DEFAULT_DOCTRINE } from "../core/edit/military-doctrine.js";
 import {
@@ -262,56 +261,21 @@ export function createEditActions({ store, renderer }) {
     descendantsOf(kind, id) { return withMap((map) => descendantsOf(map, kind, id)) ?? []; },
     setBurgProfile(id, patch) { withMap((map) => safeRun("都市の設定", () => commitOrThrow(planSetBurgProfile(map, id, patch)))); },
 
-    // ---- 旅 ----
-    addJourney(opts) { return withMap((map) => { let id = null; safeRun("旅の作成", () => { const r = planAddJourney(map, opts); store.commit(withEvent(map, r.command, { type: "journey", title: `旅「${opts?.name ?? "名もなき旅"}」が始まった` })); rerender(); id = r.id; }); return id; }) ?? null; },
-    editJourney(id, patch) { withMap((map) => safeRun("旅の編集", () => commitOrThrow(planEditJourney(map, id, patch)))); },
-    removeJourney(id) { withMap((map) => safeRun("旅の削除", () => commitOrThrow(planRemoveJourney(map, id)))); },
-    /** 区間を足す。成功なら true。経路が無いときは理由を画面に出して false */
-    addLeg(id, leg) { return withMap((map) => { let ok = false; safeRun("区間の追加", () => { commitOrThrow(planAddLeg(map, id, leg)); ok = true; }); return ok; }) ?? false; },
-    removeLeg(id, index) { withMap((map) => safeRun("区間の削除", () => commitOrThrow(planRemoveLeg(map, id, index)))); },
-    changeLegTransport(id, index, transport) { withMap((map) => safeRun("移動手段の変更", () => commitOrThrow(planChangeLegTransport(map, id, index, transport)))); },
-
-    // ---- ゾーン ----
-    addZone(opts) {
+    // ---- ゾーン（疫病・災害の一時表示）。年表の「＋ 出来事を記録」から、選択だけで作る。確定するまで何も残さない ----
+    /** 種類・範囲・期間を選んで確定する。年表に1件とゾーンが同時にでき、Undo は1回。成功なら zid、失敗なら null */
+    recordZoneEvent({ type, scope, months, date = null } = {}) {
       return withMap((map) => {
-        let idx = null;
-        safeRun("ゾーンの作成", () => {
-          const name = (opts?.name ?? "").trim() || suggestLabel(map, { kind: "zone", rnd, type: opts?.type ?? "Custom", cell: opts?.cells?.[0] });
-          const r = planAddZone(map, { ...opts, name });
-          store.commit(withEvent(map, r.command, { type: "created-zone", title: `ゾーン「${name}」（${zoneLabel({ type: opts?.type ?? "Custom" })}）が発生した` }));
-          rerender(); idx = r.index;
+        let zid = null;
+        safeRun("疫病・災害の記録", () => {
+          const sc = resolveZoneScope(map, scope);
+          const r = planAddTemporaryZone(map, { type, cells: sc.cells, months, date, scopeName: sc.name, states: sc.states });
+          store.commit(r.command); rerender(); zid = r.zid;
         });
-        return idx;
+        return zid;
       }) ?? null;
     },
-    /** 種のセルから範囲を自動で決めて、新しいゾーンを作る（おまかせ） */
-    addZoneAround(cell, { type, size = 24, name } = {}) {
-      return withMap((map) => {
-        const cells = growZoneCells(map, cell, size, rnd);
-        if (!cells.length) { store.update((s) => { s.error = "ゾーンを作れませんでした（そこは水の上か、地図の外です）"; }); return null; }
-        let idx = null;
-        safeRun("ゾーンの作成", () => {
-          const nm2 = (name ?? "").trim() || suggestLabel(map, { kind: "zone", rnd, type: type ?? "Custom", cell });
-          const r = planAddZone(map, { name: nm2, type, cells });
-          store.commit(withEvent(map, r.command, { type: "created-zone", title: `ゾーン「${nm2}」（${zoneLabel({ type: type ?? "Custom" })}）が発生した`, detail: `${cells.length}セル` }));
-          rerender(); idx = r.index;
-        });
-        return idx;
-      }) ?? null;
-    },
-    editZone(index, patch) {
-      withMap((map) => safeRun("ゾーンの編集", () => {
-        const z = map.zones?.[index];
-        const renamed = z && patch.name !== undefined && String(patch.name).trim() !== z.name;
-        const retyped = z && patch.type !== undefined && patch.type !== z.type;
-        const ev = renamed || retyped ? { type: "edit-zone", title: `ゾーン「${z.name}」が${renamed ? `「${String(patch.name).trim()}」と改称` : `${zoneLabel({ type: patch.type })}に変化`}された` } : null;
-        commitEv(map, planEditZone(map, index, patch), ev);
-      }));
-    },
-    removeZone(index) { withMap((map) => safeRun("ゾーンの削除", () => commitEv(map, planRemoveZone(map, index), { type: "removed-zone", title: `ゾーン「${map.zones?.[index]?.name}」が収束した` }))); },
     /** 同盟・ゾーン・最高神・時代の名前をランダムに作る（既存の名前と被らない） */
     suggestLabel(kind, ctx = {}) { return withMap((map) => suggestLabel(map, { kind, rnd, ...ctx })) ?? ""; },
-    paintZone(index, cells, mode) { withMap((map) => safeRun("ゾーンを塗る", () => commitOrThrow(planPaintZone(map, index, cells, mode)))); },
 
     /** 国の税率・国庫（未設定なら政体から補った値） */
     getFinance(stateId) { return withMap((map) => { const s = map.pack.states[stateId]; return s ? getFinance(s) : null; }) ?? null; },

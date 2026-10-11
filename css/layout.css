@@ -1,168 +1,42 @@
-/* #app の直下は3要素: header(上部バー) / main(サイドバー・地図) / footer(ステータス)。
-   時間バーは topbar 内に統合済み。地図編集パネルは main 内で地図に重ねるオーバーレイなので
-   グリッドの行・列は増えない（子要素を増減したらトラック数を必ず合わせること）。 */
-#app {
-  display: grid;
-  grid-template-rows:
-    [topbar-start] auto [topbar-end main-start] 1fr
-    [main-end statusbar-start] auto [statusbar-end];
-  height: 100vh;
-  background: var(--bg-map);
-}
-
-/* --- 上部バー：高さを控えめに（旧デザインの半分程度） --- */
-.topbar {
-  display: flex; align-items: center; gap: 10px; padding: 4px 12px;
-  background: linear-gradient(180deg, var(--panel-2), var(--panel));
-  border-bottom: 1px solid var(--line);
-  box-shadow: var(--shadow-panel);
-  position: relative; z-index: 30;
-  min-height: 0;
-}
-.topbar::after {
-  content: "";
-  position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--brass-dim) 8%, var(--brass-dim) 92%, transparent);
-  opacity: 0.55;
-}
-.topbar-group { display: flex; align-items: center; gap: 6px; }
-
-/* 中央の時間ミニバー。旧・下部時間バーをここへ統合し、大幅に小さくする */
-.topbar-time {
-  flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px;
-  min-width: 0;
-}
-
-/* --- main: 左サイドバー(国家/都市タブ)／地図の2列。地図編集パネルは地図の上に重ねる ---
-   サイドバーは何も選んでいない間は幅0にして、地図をできるだけ広く使う（editor-panel.js が
-   #sidebar に .has-content を付け外しする） */
-main { display: grid; grid-template-columns: 0fr 1fr; min-height: 0; overflow: hidden; position: relative; transition: grid-template-columns 0.15s ease; }
-/* サイドバーは、対象が選ばれて editor-panel が開いているか、
-   凡例を表示できる（地図が読み込まれている）間、幅を確保する */
-main:has(#editor-panel:not([hidden])), main:has(.legend.has-map) { grid-template-columns: 300px 1fr; }
-main > * { min-height: 0; }
-
-#stage {
-  position: relative; min-width: 0; min-height: 0;
-  background: var(--bg-map);
-  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.6);
-}
+/* ==========================================================================
+   画面の骨組み（v2.0.0「静かな戦略卓」）
+   地図は常に画面いっぱい（ハブの収縮時は、横幅の95%以上）。ハブ・時計・ニュース・戦争状況・
+   ウィンドウは、地図の上に重なる。上部バー・ステータスバー・凡例サイドバーは廃止した。
+   ========================================================================== */
+:root { --rail: 56px; --win-top: 76px; }
+#app { position: relative; height: 100vh; background: var(--bg-map); overflow: hidden; }
+main { position: absolute; inset: 0 0 0 var(--rail); display: block; margin: 0; overflow: hidden; }
+#stage { position: absolute; inset: 0; min-width: 0; min-height: 0; background: var(--bg-map); }
 #map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; outline: none; }
 #map-canvas.dragging { cursor: grabbing; }
 
-#sidebar {
-  background: var(--panel);
-  border-right: 1px solid var(--line);
-  box-shadow: 6px 0 16px rgba(0, 0, 0, 0.35);
-  overflow-y: auto;
-  padding: 0;
-  position: relative;
-  z-index: 2;
+/* 地図の隅の小さな表示（地図名・ホバー中のセル・拡大率）。ステータスバーの代わり */
+.map-corner {
+  position: fixed; left: calc(var(--rail) + 12px); bottom: 8px; z-index: 30; display: flex; gap: 14px; align-items: baseline;
+  max-width: calc(100vw - var(--rail) - 360px); color: var(--muted); font-size: 11px; letter-spacing: .04em; pointer-events: none;
+  text-shadow: 0 0 4px rgba(0,0,0,.7);
 }
-#sidebar:has(#editor-panel[hidden]):not(:has(.legend.has-map)) { padding: 0; }
+.map-corner #status-hover { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.map-corner #status-zoom, .map-corner #status-map { white-space: nowrap; font-family: var(--font-mono); }
 
-.statusbar {
-  display: flex; gap: 20px; padding: 3px 14px; background: var(--panel);
-  border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; min-height: 20px;
-  text-transform: uppercase; letter-spacing: 0.04em;
+/* 詳細(#sidebar)・地図編集は、地図の上に浮かぶ動かせるウィンドウ */
+#sidebar, .edit-panel {
+  position: absolute; z-index: 22; max-height: calc(100% - var(--win-top) - 12px);
+  background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-win);
+  box-shadow: var(--shadow-panel); overflow-y: auto;
 }
-#status-hover { flex: 1; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: none; letter-spacing: 0.01em; }
-#status-map { white-space: nowrap; }
+#sidebar { top: var(--win-top); left: 24px; width: min(380px, calc(100% - 24px)); }
+#sidebar:has(#editor-panel[hidden]) { display: none !important; }
+.edit-panel { top: var(--win-top); right: 340px; bottom: auto; left: auto; width: min(320px, calc(100% - 24px)); }
+.edit-panel[hidden] { display: none !important; }
 
-/* --- 狭い画面幅（スマートフォン等）向けの安全策 ---
-   これまでこのファイルには @media が一切なく、狭い画面幅での挙動は未検証だった。
-   サイドバー(300px固定)と地図編集パネル(280px)が両方幅を取り合うと、地図が極端に
-   狭くなったりタブが潰れて見える恐れがあるため、狭い画面ではサイドバーを地図に重ねる
-   オーバーレイに切り替え、地図の表示幅を犠牲にしないようにする。 */
-/* サイドバー（凡例・国家編集）は、凡例の × で畳める。畳むと幅0になり、元の場所（左上）に小さな ☰ が出る。
-   広い画面では常設（既定は開いている）、狭い画面（スマートフォン等）では地図に重ねて出し入れする（既定は閉じている）。 */
-.sidebar-fab {
-  position: absolute; top: 10px; left: 10px; z-index: 16;
-  width: 34px; height: 34px; padding: 0; font-size: 16px;
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(180deg, var(--panel-3), var(--panel-2));
-  border: 1px solid var(--brass-dim);
-  box-shadow: var(--shadow-panel);
-}
-.sidebar-fab[hidden] { display: none; }
-/* 畳んだサイドバー: 列の幅を0にして、中身は見えず・触れないようにする（display:none にすると列番号がずれる） */
-main.side-collapsed { grid-template-columns: 0 1fr !important; }
-main.side-collapsed #sidebar { visibility: hidden; overflow: hidden; min-width: 0; pointer-events: none; box-shadow: none; border-right: 0; }
-
-@media (max-width: 720px) {
-  main, main:has(#editor-panel:not([hidden])), main:has(.legend.has-map) { grid-template-columns: 1fr; }
-  #sidebar {
-    position: absolute; top: 0; bottom: 0; left: 0; z-index: 15;
-    width: min(86vw, 320px); max-width: 86vw;
-    box-shadow: 6px 0 20px rgba(0, 0, 0, 0.5);
-    transition: transform 0.15s ease;
-  }
-  main.side-collapsed #sidebar { transform: translateX(-100%); visibility: visible; box-shadow: none; }
-  #sidebar:has(#editor-panel[hidden]):not(:has(.legend.has-map)) { display: none; }
-  .edit-panel { width: min(86vw, 320px); }
-}
-
-/* --- 上部バー・下の状態バーは常に表示する（隠せない）。main の位置がずれないよう行を明示する --- */
-.topbar { grid-row: 1; }
-main { grid-row: 2; }
-.statusbar { grid-row: 3; }
-.icon-btn { min-width: 32px; padding-left: 8px; padding-right: 8px; font-size: 15px; line-height: 1; }
-.icon-btn:disabled { opacity: 0.35; cursor: default; }
-.menu-check { display: flex; align-items: center; gap: 8px; padding: 8px 11px; font-size: 12px; cursor: pointer; white-space: nowrap; }
-.menu-check:hover { background: var(--panel-2); }
-.menu-right .menu-list { left: auto; right: 0; }
-
-/* --- 上部バーの並び：ファイル｜取り消し｜作業の種類 … 時間 … 表示 ---
-   どの幅でも部品どうしが重ならないことが最優先。部品は縮めず（flex-shrink:0）、入りきらなければ
-   折り返して2段にする。全部品の高さを揃え、文字は折り返さない（以前は幅1280px前後で時間バーが
-   潰れ、「+1ヶ月」が縦に割れ、▶ と速度選択が隣のボタンに重なっていた）。 */
-.topbar { flex-wrap: wrap; row-gap: 4px; --ctl-h: 32px; }
-.topbar > *, .topbar-group > *, .topbar-time > * { flex-shrink: 0; }
-.topbar button, .topbar .menu > summary, .topbar select, .topbar .world-date-sm {
-  box-sizing: border-box; height: var(--ctl-h); white-space: nowrap; line-height: 1.2;
-  display: inline-flex; align-items: center; justify-content: center; padding-top: 0; padding-bottom: 0;
-}
-.topbar select { padding-left: 8px; padding-right: 8px; }
-.topbar .icon-btn { padding-left: 9px; padding-right: 9px; }
-.topbar-group + .topbar-group:not(.topbar-time) { padding-left: 10px; border-left: 1px solid var(--line); }
-.topbar-modes .edit-mode-fab[aria-expanded="true"] { right: auto; }
-/* 時間バー: 中身の幅を確保し、残りの余白を左右均等に（中央寄せ）。右端のレイヤー等は右に寄せる */
-.topbar-time { flex: 0 0 auto; margin-left: auto; margin-right: auto; min-width: max-content; }
-.topbar-time .time-btn { min-width: var(--ctl-h); }
-.topbar-time .world-date-sm { min-width: 6.4em; flex-direction: column; overflow: hidden; }
-.topbar-time .time-speed-sm { width: 7.6em; }
-.topbar .topbar-group:last-child { margin-left: 0; }
-@media (max-width: 1500px) { .brand-name { display: none; } .brand { padding-right: 10px; } }
-@media (max-width: 1360px) { .icon-btn .lbl { display: none; } }
-@media (max-width: 720px) {
-  .topbar { padding: 4px 8px; }
-  .brand { display: none !important; }
-  .topbar-time { order: 9; flex-basis: 100%; justify-content: center; margin: 0; }
-  .topbar-group + .topbar-group:not(.topbar-time) { padding-left: 0; border-left: 0; }
-  .topbar-group { gap: 4px; }
-}
 /* --- 地図を開く前の案内（元の #empty-state に手順を足した） --- */
 .empty-steps { margin: 14px auto 18px; padding: 0; list-style: none; max-width: 30em; text-align: left; font-size: 13px; line-height: 1.8; counter-reset: step; color: var(--muted); }
 .empty-steps li { counter-increment: step; padding-left: 2em; position: relative; }
 .empty-steps li::before { content: counter(step); position: absolute; left: 0; top: 0.35em; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; border: 1px solid var(--brass-dim); border-radius: 50%; font-size: 11px; color: var(--brass); }
 .empty-steps b { color: var(--text); }
-.menu-sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
-.topbar { position: relative; z-index: 40; } /* メニューの一覧は、地図の上のウィンドウ(z-index 20〜)より手前に出す */
 
-
-/* ==== すべてウィンドウ形式（サイドバー・横長パネルは廃止） ====
-   国家などの詳細(#sidebar)・地図編集・歴史をつくる は、地図の上に浮かぶ動かせるウィンドウにする。
-   地図は常に画面いっぱいを使う。 */
-main, main:has(#editor-panel:not([hidden])), main:has(.legend.has-map), main.side-collapsed { grid-template-columns: 1fr !important; }
-#stage { grid-column: 1; grid-row: 1; }
-#sidebar, .edit-panel {
-  position: absolute !important; z-index: 22; grid-column: auto; grid-row: auto;
-  max-height: calc(100% - 24px); border: 1px solid var(--brass-dim); border-radius: var(--radius);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55); overflow-y: auto; transform: none; visibility: visible;
+@media (max-width: 720px) {
+  .map-corner { display: none; }
+  .edit-panel { right: 12px; width: min(86vw, 320px); }
 }
-#sidebar { top: 12px; left: 24px; width: min(380px, calc(100% - 24px)); }
-#sidebar:has(#editor-panel[hidden]) { display: none !important; }
-.edit-panel { top: 12px; right: 24px; bottom: auto; left: auto; width: min(320px, calc(100% - 24px)); }
-.edit-panel[hidden] { display: none !important; }
-.topbar-modes .edit-mode-fab { position: static; right: auto; top: auto; box-shadow: none; padding-top: 0; padding-bottom: 0; padding-left: 12px; padding-right: 12px; font-size: 12.5px; }
-#legend, #btn-sidebar-toggle, #panel-tabs { display: none !important; }

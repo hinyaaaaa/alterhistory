@@ -1,7 +1,7 @@
 // 核作戦ウィンドウ：立案 → 実行の2段階。通常の戦争では核は使われず、ここで明示的に行う。
 import { confirmDialog } from "./dialogs.js";
 import { guardRender } from "./safe-render.js";
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+import { el } from "./kit.js";
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
 export function initNuclearWindow({ store, simActions, wins }) {
@@ -35,7 +35,7 @@ export function initNuclearWindow({ store, simActions, wins }) {
     if (!ops.length) body.append(el("p", "muted", "立案された作戦はありません"));
     for (const o of ops) {
       const row = el("div", "ent-row");
-      row.append(el("span", "ent-main", `${o.status === "executed" ? "☢ 実行済み" : "📝 立案中"}　${o.name}　${nm(map, o.attackerId)} → ${nm(map, o.targetId)}　${o.warheads}発`));
+      row.append(el("span", "ent-main", `${o.status === "executed" ? "実行済み" : "立案中"}　${o.name}　${nm(map, o.attackerId)} → ${nm(map, o.targetId)}　${o.warheads}発`));
       if (o.status === "planned") {
         const run = el("button", "danger", "実行する"); run.type = "button";
         run.addEventListener("click", async () => { if (await confirmDialog(`「${o.name}」を実行します。${nm(map, o.targetId)}は壊滅的な被害を受けます。よろしいですか？（元に戻せます）`, { okLabel: "実行する", danger: true })) simActions.executeNuclearOp(o.id); });
@@ -45,7 +45,7 @@ export function initNuclearWindow({ store, simActions, wins }) {
       body.append(row);
     }
   }
-  wins.register("nuclear", { title: "☢ 核作戦", width: 720, body, onOpen: render });
+  wins.register("nuclear", { title: "核作戦", width: 720, body, onOpen: render });
   const safe = guardRender(body, () => render());
   store.subscribe((_s, ch) => { if (["replace", "commit", "undo", "redo"].includes(ch.type) && wins.isOpen("nuclear")) safe(); });
 }

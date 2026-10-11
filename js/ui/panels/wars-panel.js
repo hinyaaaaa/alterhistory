@@ -5,13 +5,8 @@ import { WAR_TYPES } from "../../core/sim/war-engine.js";
 import { guardRender, keepScroll } from "../safe-render.js";
 import { byId } from "../dom.js";
 import { alertDialog, confirmDialog } from "../dialogs.js";
+import { el } from "../kit.js";
 
-const el = (tag, cls, text2) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text2 != null) e.textContent = text2;
-  return e;
-};
 const fmt4 = (n) => Math.round(n).toLocaleString("ja-JP");
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 export function initWarsPanel({ store, simActions, getOutcome = () => null, getWins = () => null }) {
@@ -45,7 +40,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     });
     band.append(add2);
     for (const w of wars) {
-      const b = el("button", `${w.id === selected && !creating ? "active" : ""}${w.endedAt ? " ended" : ""}`, `${w.endedAt ? "🕊 " : "⚔ "}${w.name}`);
+      const b = el("button", `${w.id === selected && !creating ? "active" : ""}${w.endedAt ? " ended" : ""}`, `${w.name}`);
       b.type = "button";
       b.addEventListener("click", () => {
         selected = w.id;
@@ -61,7 +56,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
   function declareForm(map, states) {
     const grid = el("div", "war-prep");
     const left = el("div", "war-prep-left"), right = el("div", "war-prep-right");
-    const go = el("button", "danger war-go", "⚔ 戦争開始");
+    const go = el("button", "danger war-go", "@war 戦争開始");
     go.type = "button";
     const typeSel = document.createElement("select");
     for (const T of Object.values(WAR_TYPES).filter((x) => !x.civilOnly)) {
@@ -137,7 +132,11 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     } else right.append(el("p", "muted", "攻撃側と防御側の国を選ぶと、ここに戦力の比較が出ます。"));
     right.append(el("p", "hint", "「戦争開始」で戦闘が始まり、時間とともに損害・ハプニングが積み重なります。終わりは決まっていません。いつでも講和条約を結べます（結んだ月が終戦の月です）。"));
     go.disabled = !draft.attackers.size || !draft.defenders.size;
-    go.addEventListener("click", () => {
+    // 不可侵条約への違約: 宣戦の前に警告を出す（実行すると、条約は破棄され、民意と信用が下がる）
+    const breaches = draft.attackers.size && draft.defenders.size ? simActions.treatyWarnings([...draft.attackers], [...draft.defenders]) : [];
+    if (breaches.length) { const warn = el("p", "war-breach", `警告: 不可侵条約に違反します（${[...new Set(breaches.map((b) => b.treaty))].join("、")}）。開戦すると条約は破棄され、攻める国の民意と信用が下がります。`); right.append(warn); }
+    go.addEventListener("click", async () => {
+      if (breaches.length && !(await confirmDialog(`不可侵条約「${[...new Set(breaches.map((b) => b.treaty))].join("、")}」に違反する宣戦です。\n条約は破棄され、攻める国の民意と信用が下がります。開戦しますか？`, { danger: true, okLabel: "違約して開戦する" }))) return;
       const out = simActions.declareWarInstant([...draft.attackers], [...draft.defenders], draft.muster, draft.type);
       if (!out) return;
       selected = out.id;
@@ -212,7 +211,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     if (sit) ov.append(sit);
     if (w.mediator != null) ov.append(el("p", "hint", `${stateName(map, w.mediator)}が調停に動いています。講和の好機かもしれません。`));
     if (!w.endedAt) {
-      const go = el("button", "primary war-go", "📜 講和条約を結ぶ");
+      const go = el("button", "primary war-go", "講和条約を結ぶ");
       go.type = "button";
       go.addEventListener("click", () => getWins()?.open("treaty"));
       ov.append(go);
@@ -241,7 +240,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
       tb.append((() => { const tr = el("tr"); tr.append(el("th", "", "要求できるもの"), el("td", "", cur >= BALANCE.annexMinScore ? "全面降伏（併合）まで" : `割譲・賠償・従属化（併合は${BALANCE.annexMinScore}以上）`)); return tr; })());
       pc.append(tb);
       pc.append(el("p", "hint", "スコアは目安の期間まで上がり、超過後も戦争が続けば毎月上がります。割譲の費用は講和条約の窓で確認できます。"));
-      const open = el("button", w.endedAt ? "" : "primary war-go", w.endedAt ? "📜 条約の中身を見る" : "📜 講和条約を結ぶ");
+      const open = el("button", w.endedAt ? "" : "primary war-go", w.endedAt ? "条約の中身を見る" : "講和条約を結ぶ");
       open.type = "button";
       open.addEventListener("click", () => getWins()?.open("treaty"));
       pc.append(open);
@@ -263,5 +262,5 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
   store.subscribe((_s, change) => {
     if (["replace", "commit", "undo", "redo"].includes(change.type)) safeRender();
   });
-  return { render };
+  return { render, select(id) { creating = false; selected = id; render(); } };
 }

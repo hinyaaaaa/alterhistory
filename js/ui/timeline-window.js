@@ -1,11 +1,12 @@
-// 年表ウィンドウ（設定メニュー →「📜 年表」）。
+// 年表ウィンドウ（ハブ →「年表」）。
 //   ・歴史の出来事を、全件、時系列で見る。種類・国・年で絞り込める。件数は削らない。
 //   ・項目を押すと、地図がその場所へ移る。手書きの出来事も足せる。
 //   ・件数が多くても重くならないよう、画面に見える行だけを描く（仮想スクロール）。行の数は減らさない。
 import { buildTimeline } from "../io/chronicle.js";
 import { cellIndexOf } from "../core/spatial.js";
+import { el } from "./kit.js";
+import { TEMP_ZONE_TYPES, ZONE_TYPE_BY_ID, ZONE_PERIODS, findZoneByZid } from "../core/edit/zones.js";
 
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 const ROW_H = 58; // 1行の高さ（px）。固定にして、見える範囲を計算で出す
 const BUFFER = 8;
 
@@ -15,7 +16,7 @@ export const TIMELINE_KINDS = [
   { key: "diplomacy", label: "外交・同盟", test: (t) => /^(diplomacy|alliance-)/.test(t) },
   { key: "state", label: "国家の変動", test: (t) => /^(state-merged|independence|sovereignty|created-state|removed-state|rename-state|capital|tech|doctrine|origin-state)/.test(t) },
   { key: "culture", label: "文化・宗教", test: (t) => /(culture|religion)/.test(t) },
-  { key: "place", label: "都市・地図", test: (t) => /(burg|province|zone|marker|journey)/.test(t) },
+  { key: "place", label: "都市・地図", test: (t) => /(burg|province|zone|marker)/.test(t) },
   { key: "era", label: "時代", test: (t) => t === "era" },
   { key: "natural", label: "自然発生", test: (t) => /^(plague|rebellion|schism)/.test(t) },
   { key: "note", label: "記録・手書き", test: (t) => t === "note" || t === "manual" },
@@ -42,7 +43,7 @@ export function visibleRange(scrollTop, viewH, total, rowH = ROW_H, buffer = BUF
   return [first, Math.max(first, last)];
 }
 
-export function initTimelineWindow({ store, wins, editActions, viewport, renderer }) {
+export function initTimelineWindow({ store, wins, editActions, viewport, renderer, actions }) {
   const body = el("div", "tl-body");
   const filters = el("div", "tl-filters");
   const kindSel = el("select"); kindSel.title = "出来事の種類";
@@ -65,7 +66,44 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
   const fGo = el("button", "primary", "年表に足す"); fGo.type = "button";
   const dateRow = el("div", "tl-date"); dateRow.append(fYear, el("span", "", "年"), fMonth, el("span", "", "月"));
   addBox.append(fTitle, fDetail, dateRow, fState, fHere, fGo);
-  body.append(filters, count, scroller, addBox);
+  // ---- ＋ 出来事を記録（疫病・災害）: 種類を選ぶ → 範囲を選ぶ → 期間を選ぶ → 確定。確定するまで何も残さない ----
+  const recBox = el("details", "tl-add tl-rec");
+  recBox.append(el("summary", "", "＋ 出来事を記録（疫病・災害）"));
+  const rType = el("select"); rType.title = "種類";
+  for (const id of TEMP_ZONE_TYPES) rType.append(new Option(ZONE_TYPE_BY_ID[id].label, id));
+  const rScope = el("select"); rScope.title = "範囲";
+  rScope.append(new Option("国全体", "state"), new Option("属州を選ぶ", "provinces"));
+  const rState = el("select"); rState.title = "国";
+  const rProvs = el("div", "tl-rec-provs"); rProvs.hidden = true;
+  const rPeriod = el("select"); rPeriod.title = "続く期間";
+  for (const p of ZONE_PERIODS) rPeriod.append(new Option(p.label, String(p.months)));
+  rPeriod.value = "12";
+  const rGo = el("button", "primary", "記録する"); rGo.type = "button";
+  recBox.append(rType, rScope, rState, rProvs, rPeriod, rGo);
+  function fillRec(map) {
+    const prev = rState.value;
+    const states = live(map).filter((s) => !s.removed);
+    rState.replaceChildren(...states.map((s) => new Option(nameOf(s), String(s.i)))); if (prev) rState.value = prev;
+    fillProvs(map);
+  }
+  function fillProvs(map) {
+    const sid = +rState.value; rProvs.replaceChildren();
+    for (const p of map.pack.provinces) if (p && !p.removed && p.i > 0 && p.state === sid) {
+      const lab = el("label"); const cb = el("input"); cb.type = "checkbox"; cb.value = String(p.i); lab.append(cb, document.createTextNode(" " + (p.fullName ?? p.name))); rProvs.append(lab);
+    }
+    if (!rProvs.children.length) rProvs.append(el("span", "hint", "この国には属州がありません"));
+  }
+  rScope.addEventListener("change", () => { rProvs.hidden = rScope.value !== "provinces"; });
+  rState.addEventListener("change", () => { const m = store.getState().map; if (m) fillProvs(m); });
+  rGo.addEventListener("click", () => {
+    const map = store.getState().map; if (!map) return;
+    const scope = rScope.value === "provinces"
+      ? { kind: "provinces", ids: [...rProvs.querySelectorAll("input:checked")].map((c) => +c.value) }
+      : { kind: "state", id: +rState.value };
+    const zid = editActions.recordZoneEvent({ type: rType.value, scope, months: +rPeriod.value });
+    if (zid) { actions?.setView({ zoneFocus: null }); recBox.open = false; }
+  });
+  body.append(filters, count, scroller, recBox, addBox);
 
   let all = [], shown = [], mapRef = null;
   const live = (map) => map.pack.states.filter((s) => s && s.i > 0);
@@ -84,7 +122,7 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
   function build() {
     const map = store.getState().map; mapRef = map;
     if (!map) { all = []; shown = []; count.textContent = "地図を開いてください"; spacer.style.height = "0px"; rowsHost.replaceChildren(); return; }
-    fillSelects(map);
+    fillSelects(map); fillRec(map);
     all = buildTimeline(map);
     const now = map.worldTime ?? { year: 1, month: 1 };
     if (!fYear.value) fYear.value = now.year; if (!fMonth.value) fMonth.value = now.month;
@@ -100,6 +138,20 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
 
   function jump(entry) {
     const map = store.getState().map; if (!map) return;
+    // ゾーンのついた出来事: そのゾーンの輪郭を赤い線で強調し、地図をその範囲へ移す（期間が過ぎて消えていても、選んでいる間は出す）
+    const zone = findZoneByZid(map, entry.zoneId);
+    if (zone && zone.cells?.length) {
+      actions?.setView({ zoneFocus: zone.zid });
+      const P = map.geometry.pack.p; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const i of zone.cells) { const p = P[i]; if (!p) continue; x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+      if (Number.isFinite(x0)) {
+        const w = Math.max(40, x1 - x0), h = Math.max(40, y1 - y0);
+        const k = Math.min(viewport.screenWidth / (w * 1.8), viewport.screenHeight / (h * 1.8));
+        viewport.centerOn((x0 + x1) / 2, (y0 + y1) / 2, Math.max(viewport.fitK, Math.min(k, viewport.fitK * 8)));
+      }
+      renderer.requestRender(); return;
+    }
+    actions?.setView({ zoneFocus: null });
     if (entry.cell == null) { count.textContent = "この出来事には、地図上の場所がありません"; return; }
     const pt = map.geometry.pack.p[entry.cell]; if (!pt) return;
     viewport.centerOn(pt[0], pt[1], Math.max(viewport.k, viewport.fitK * 2.5));
@@ -114,12 +166,15 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
       const e = shown[i];
       const row = el("button", `tl-row tl-${kindOfType(e.type)}${e.cell == null ? " tl-nowhere" : ""}`); row.type = "button";
       row.title = [e.title, e.detail].filter(Boolean).join("\n");
+      row.classList.toggle("tl-zone", !!e.zoneId);
       row.append(el("span", "tl-date-col", e.date ?? "日付不明"), el("span", "tl-title", e.title), el("span", "tl-detail", e.detail ?? ""));
       row.addEventListener("click", () => jump(e));
       frag.append(row);
     }
     rowsHost.replaceChildren(frag);
   }
+  // 戦争の窓などから「この種類で年表を見る」と頼まれたら、絞り込みを合わせる
+  window.addEventListener("timeline-filter", (ev) => { const k = ev.detail?.kind ?? ""; if (wins.isOpen("timeline")) { build(); } kindSel.value = k; stateSel.value = ""; apply(); });
   scroller.addEventListener("scroll", paint);
   for (const c of [kindSel, stateSel, fromIn, toIn]) c.addEventListener("change", apply);
   textIn.addEventListener("input", apply);
@@ -134,7 +189,7 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
     if (!store.getState().error) { fTitle.value = ""; fDetail.value = ""; }
   });
 
-  wins.register("timeline", { title: "📜 年表", width: 780, body, onOpen: build });
+  wins.register("timeline", { title: "年表", width: 780, body, onOpen: build, onClose: () => { if (store.getState().view.zoneFocus) actions?.setView({ zoneFocus: null }); } });
   store.subscribe((_s, ch) => { if (["replace", "commit", "undo", "redo"].includes(ch.type) && wins.isOpen("timeline")) build(); });
   return { build };
 }

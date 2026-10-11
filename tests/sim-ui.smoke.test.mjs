@@ -80,11 +80,11 @@ for (let i = 0; i < 11; i++) $("btn-time-step").click();
 check("年をまたぐと2年になる", store.getState().map.worldTime.year === 2 && store.getState().map.worldTime.month === 1, JSON.stringify(store.getState().map.worldTime));
 
 console.log("=== 開始/停止 ===");
-check("最初は停止表示", $("btn-time-toggle").textContent.includes("▶"));
+check("最初は停止表示", !!$("btn-time-toggle").querySelector(".ico-play"));
 $("btn-time-toggle").click();
-check("開始すると表示が変わる", $("btn-time-toggle").textContent.includes("⏸") && timeActions.isRunning());
+check("開始すると表示が変わる", !!$("btn-time-toggle").querySelector(".ico-pause") && timeActions.isRunning());
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
-check("[Space]で停止する", !timeActions.isRunning() && $("btn-time-toggle").textContent.includes("▶"));
+check("[Space]で停止する", !timeActions.isRunning() && !!$("btn-time-toggle").querySelector(".ico-play"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true }));
 check("[Space]でもう一度開始する", timeActions.isRunning());
 timeActions.stop();

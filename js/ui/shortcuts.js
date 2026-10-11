@@ -1,4 +1,4 @@
-// キーボードショートカット。ヘルプ（index.html の #help-dialog）の内容と一致させること。
+// キーボードショートカット（一覧の画面は廃止。必要最小限だけ残す）。
 import { byId } from "./dom.js";
 import { TOOLS } from "./edit-mode.js";
 
@@ -7,7 +7,7 @@ const PAN_STEP = 80;
 const LAYER_KEYS = { 1: "states", 2: "cultures", 3: "religions", 4: "provinces", 5: "heights", b: "biomes", c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
 const TOOL_KEYS = { 1: TOOLS.PAINT_STATE, 2: TOOLS.PAINT_CULTURE, 3: TOOLS.PAINT_RELIGION, 4: TOOLS.PAINT_PROVINCE, 5: TOOLS.PAINT_BIOME, 6: TOOLS.ADD_BURG, 7: TOOLS.ADD_MARKER };
 
-export function initShortcuts({ store, actions, openFileDialog, openHelp, editMode, editToolbar, timeActions, panels }) {
+export function initShortcuts({ store, actions, openFileDialog, editMode, editToolbar, timeActions, panels }) {
   document.addEventListener("keydown", (e) => {
     if (e.ctrlKey || e.metaKey || e.altKey) {
       if ((e.ctrlKey || e.metaKey) && !e.altKey) {
@@ -37,7 +37,6 @@ export function initShortcuts({ store, actions, openFileDialog, openHelp, editMo
       return;
     }
     if (key === "Escape") { panels?.military?.cancelPending(); }
-    if (key === "?" ) { e.preventDefault(); openHelp(); return; }
     if (!hasMap) return; // 以降は地図が読み込まれているときだけ
 
     if (key === "v") { editMode?.setTool(TOOLS.SELECT); editToolbar?.sync(); return; }
@@ -54,9 +53,4 @@ export function initShortcuts({ store, actions, openFileDialog, openHelp, editMo
     else if (key === "ArrowDown") { e.preventDefault(); actions.pan(0, -PAN_STEP); }
     else if (key in LAYER_KEYS) actions.toggle(LAYER_KEYS[key]);
   });
-}
-
-export function initHelpDialog() {
-  const dialog = byId("help-dialog");
-  return { open: () => { if (!dialog.open) dialog.showModal(); } };
 }

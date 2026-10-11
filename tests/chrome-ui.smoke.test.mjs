@@ -49,25 +49,25 @@ const app = $("app");
 const mainEl = q("main"); // サイドバーの畳み状態は main に付く
 const key = (k) => window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: k, bubbles: true }));
 
-console.log("=== Undo/Redo・未保存 ===");
-check("初めは Undo/Redo とも押せない", $("btn-undo").disabled && $("btn-redo").disabled);
-check("初めは未保存マークなし", $("btn-save").textContent === "保存");
+console.log("=== 元に戻す・やり直す（画面のボタンは廃止。内部の履歴とキー操作は残す）・未保存 ===");
+check("元に戻す・やり直すのボタンが画面のどこにも無い", !$("btn-undo") && !$("btn-redo") && ![...window.document.querySelectorAll("button")].some((b) => /元に戻す|やり直す/.test(b.title + b.textContent)));
+check("初めは内部の履歴が空", !store.canUndo() && !store.canRedo());
+check("初めは未保存マークなし", !$("btn-save").classList.contains("dirty"));
 const cells = []; const st = store.getState().map.pack.cells.state;
 for (let i = 0; i < st.length && cells.length < 5; i++) if (st[i] === 1) cells.push(i);
 editActions.paintCells("state", 2, cells);
-check("編集すると Undo が押せる", !$("btn-undo").disabled);
-check("編集すると「保存 ●」になる", $("btn-save").textContent === "保存 ●");
-check("Undo のツールチップに操作名が出る", /元に戻す：/.test($("btn-undo").title), $("btn-undo").title);
-$("btn-undo").click();
-check("Undo ボタンで戻る（Redo が押せる）", $("btn-undo").disabled && !$("btn-redo").disabled);
-$("btn-redo").click();
-check("Redo ボタンでやり直せる", !$("btn-undo").disabled && $("btn-redo").disabled);
+check("編集すると内部の履歴に積まれる", store.canUndo());
+check("編集すると保存ボタンに未保存の印が付く", $("btn-save").classList.contains("dirty"));
+window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "z", ctrlKey: true, bubbles: true }));
+check("Ctrl+Z で戻る（画面に出さないまま残してある）", !store.canUndo() && store.canRedo());
+window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "y", ctrlKey: true, bubbles: true }));
+check("Ctrl+Y でやり直せる", store.canUndo() && !store.canRedo());
 
 console.log("=== 上部・下部バー（隠せない）と、パネルの × ===");
 check("上部バーを隠す設定（表示・設定メニュー）は無い", !q("#view-menu") && !q("[data-chrome]") && !$("btn-chrome-restore"));
 key("h");
 check("H キーで枠が隠れたりしない", !app.className.includes("hide-"));
-check("サイドバー（凡例・☰・横の展開ボタン）は廃止されている", !!$("btn-sidebar-toggle").hidden && !!$("legend").hidden && !!$("panel-tabs").hidden);
+check("凡例サイドバー・上部バー・ステータスバーは廃止されている", !$("btn-sidebar-toggle") && !$("legend") && !q(".topbar") && !q(".statusbar") && !!q("#hub"));
 check("「歴史をつくる」ボタンとパネルは廃止されている", !$("btn-builder") && !$("builder-panel"));
 for (const [panel, close, open] of [["edit-panel", "edit-panel-close", "btn-edit-mode"]]) {
   $(open).click();

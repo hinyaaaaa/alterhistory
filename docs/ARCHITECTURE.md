@@ -195,3 +195,10 @@ alterhistory/
   ここで直接勝敗を決めてはいない。
 - **バランス設定**（`core/sim/balance.js`）: 実行時の値は `BALANCE`。アプリの既定値＋その地図の上書き値
   （`map.ext.data.balance`。`core/edit/balance-setting.js`）で作る。地図を開く・Undo/Redo のたびに作り直す。
+
+
+## v2.0.0 で足した層（画面の外枠・条約・ゾーン）
+- `ui/hub.js`（左ハブ。窓の入口はここだけ）／`ui/news.js`（新聞風イベント。文面は `io/chronicle.js` の `buildTimeline` と共通）／`ui/war-status.js`（右下の戦争状況）／`ui/hover-connector.js`（ホバー連動型コネクターライン）／`ui/icons.js`（細線 SVG）／`ui/diplomacy-window.js`（外交と条約）／`css/shell.css`（外枠の寸法と挙動）。
+- `core/edit/treaties.js`（条約。DOM に依存しない）。既存の `alliances.js`・`vassals.js`・`wars.js` と、`core/sim/trade.js`（経済協力の補正）につながる。
+- `core/edit/zones.js`（期間つきの一時ゾーン）／`render/layers/zones.js`。
+- 版: `js/version.js`、保存形式の版は `core/edit/treaties.js` の `SAVE_FORMAT`。

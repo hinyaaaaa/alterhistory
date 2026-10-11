@@ -12,7 +12,7 @@ let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
 
 console.log("=== レイヤーの既定 ===");
-check("14個のレイヤーがある", LAYERS.length === 14 && new Set(LAYERS.map((l) => l.key)).size === 14);
+check("13個のレイヤーがある（旅の線は廃止）", LAYERS.length === 13 && new Set(LAYERS.map((l) => l.key)).size === 13);
 check("未設定の既定は 国家・地形・国境・海岸線…がオン、文化・宗教・属州・標高がオフ",
   isLayerOn({}, "states") && isLayerOn({}, "biomes") && isLayerOn({}, "borders") && !isLayerOn({}, "cultures") && !isLayerOn({}, "heights"));
 check("色分けは重ねられる（描く順は 文化→宗教→属州→国家）", JSON.stringify(activeFills({ cultures: true, religions: true, states: true })) === '["culture","religion","state"]');

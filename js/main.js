@@ -11,7 +11,6 @@ import { createActions } from "./app/actions.js";
 import { byId } from "./ui/dom.js";
 import { downloadBlob, createBrowserCanvas } from "./ui/download.js";
 import { initMapView } from "./ui/map-view.js";
-import { initLegend } from "./ui/legend.js";
 import { initFontsSync } from "./ui/fonts-sync.js";
 import { initChrome } from "./ui/chrome.js";
 import { initSettingsWindows } from "./ui/settings-windows.js";
@@ -26,7 +25,11 @@ import { initToolbar } from "./ui/toolbar.js";
 import { initStatusBar } from "./ui/status-bar.js";
 import { initBanner } from "./ui/banner.js";
 import { initFileInput } from "./ui/file-input.js";
-import { initShortcuts, initHelpDialog } from "./ui/shortcuts.js";
+import { initShortcuts } from "./ui/shortcuts.js";
+import { initHub } from "./ui/hub.js";
+import { initNews } from "./ui/news.js";
+import { initHoverConnector } from "./ui/hover-connector.js";
+import { initWarStatus } from "./ui/war-status.js";
 import { createEditActions } from "./app/edit-actions.js";
 import { initEditMode } from "./ui/edit-mode.js";
 import { initEditToolbar } from "./ui/edit-toolbar.js";
@@ -38,7 +41,6 @@ import { initRebellionWindow } from "./ui/rebellion-window.js";
 import { alertDialog } from "./ui/dialogs.js";
 import { initWorkWindows } from "./ui/work-windows.js";
 import { createEconomyView } from "./ui/economy-view.js";
-import { createTravelView } from "./ui/travel-view.js";
 import { initEditorPanel } from "./ui/panels/editor-panel.js";
 import { createSimActions } from "./app/sim-actions.js";
 import { createTimeActions } from "./app/time-actions.js";
@@ -46,7 +48,6 @@ import { initTimeBar } from "./ui/time-bar.js";
 import { initMilitaryPanel } from "./ui/panels/military-panel.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
 import { initWarOutcome } from "./ui/war-outcome-window.js";
-import { initAlliancesPanel } from "./ui/panels/alliances-panel.js";
 
 function start() {
   const Delaunator = globalThis.Delaunator;
@@ -74,7 +75,6 @@ function start() {
     download: downloadBlob, createCanvas: createBrowserCanvas,
   });
 
-  const help = initHelpDialog();
   const files = initFileInput({ actions });
   const editActions = createEditActions({ store, renderer });
   const simActions = createSimActions({ store, renderer });
@@ -84,7 +84,6 @@ function start() {
   const warOutcome = initWarOutcome({ store, simActions, getHighlight: () => highlightRef });
   let winsRef = null;
   const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome, getWins: () => winsRef });
-  const alliancesPanel = initAlliancesPanel({ store, simActions });
   // editMode は editorPanel より後に作るが、editorPanel（国家タブの属州サブタブ）から
   // 「属州を塗るツールに切り替える」ために参照したいので、後で編集パネルに差し込む
   let editModeRef = null;
@@ -97,7 +96,7 @@ function start() {
     editMode: { setTool: (t) => editModeRef?.setTool(t) },
   });
   const panels = {
-    ...editorPanel, simActions, military: militaryPanel, wars: warsPanel, alliances: alliancesPanel,
+    ...editorPanel, simActions, military: militaryPanel, wars: warsPanel,
     // edit-mode.js が地図クリックを「部隊の配置/移動」として消費するために使う
     regimentPending: () => militaryPanel.regimentPending(),
     consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell),
@@ -106,6 +105,7 @@ function start() {
   const highlight = initHighlight({ store, viewport, renderer }); highlightRef = highlight; // 一覧・地図クリックで、ズームせずに境界線を光らせる
   const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   winsRef = wins;
+  initHub({ store, wins }); // 左ハブ。ファイル・地図・各窓の入口（ボタンの id を持つので、ツールバー等の配線より先に作る）
   const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
   const setupActions = createSetupActions({ store, renderer });
   const setupWindow = initSetupWindow({
@@ -116,7 +116,7 @@ function start() {
   openRebellionRef = initRebellionWindow({ wins, store, simActions, setupActions }).open;
   initEntityLists({ store, wins, panels, editActions, highlight, builderActions, openSetup });
   initGenealogy({ store, wins, editActions });
-  initTimelineWindow({ store, wins, editActions, viewport, renderer });
+  initTimelineWindow({ store, wins, editActions, viewport, renderer, actions });
   initNuclearWindow({ store, simActions, wins });
   initCovertWindow({ store, simActions, wins });
   // 地図上の国・州などを選んだときも、ズームせず強調だけする
@@ -128,14 +128,16 @@ function start() {
     makeDraggable(root, id === "sidebar" ? root : root.querySelector(head), byId("stage"), id === "sidebar" ? ".editor-header" : null);
     makeResizable(root, byId("stage")); // 大きさも自由に変えられる
   }
-  const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, openFileDialog: files.open, openHelp: help.open };
+  const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, wins, openFileDialog: files.open };
 
   deps.highlight = highlight;
   initBanner(deps);
   initToolbar(deps);
   initStatusBar(deps);
   initMapView(deps);
-  initLegend(deps);
+  initNews(deps);
+  initHoverConnector(deps);
+  initWarStatus(deps);
   initChrome(deps);
   initFontsSync(deps);
   const editMode = initEditMode(deps);
@@ -145,8 +147,7 @@ function start() {
   // 右のパネルは × で小さくでき、元の場所（右端）の小さなボタンで開き直せる
 
   const economyView = createEconomyView({ store, editActions, builderActions });
-  const travelView = createTravelView({ store, editActions, editMode, viewport, actions });
-  initWorkWindows({ store, wins, views: { economy: economyView, travel: travelView } });
+  initWorkWindows({ store, wins, views: { economy: economyView }, extras: { economy: [{ title: "通貨・為替", body: warOutcome.currencyBody, render: () => warOutcome.renderCurrency() }] } });
   // 属州タブの「この属州を塗り直す」ボタンから、地図編集パネルを開いてツール欄を同期する
   window.addEventListener("request-edit-panel-open", () => editPanel.open());
   window.addEventListener("request-edit-panel-sync", (e) => {
@@ -166,7 +167,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { wins, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

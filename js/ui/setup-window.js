@@ -7,7 +7,6 @@
 import { CULTURE_TYPES, RELIGION_TYPES, STATE_FORMS } from "../core/edit/profile.js";
 import { el, btn } from "./kit.js";
 
-const ICON = { state: "🏳", culture: "🎭", religion: "✦", province: "▦" };
 
 function field(label, control, hint) {
   const f = el("label", "b-field");
@@ -46,7 +45,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
   }
 
   wins.register("setup", {
-    title: "✦ 新規作成",
+    title: "新規作成",
     width: 440,
     body,
     onClose() {
@@ -59,7 +58,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
   function render(kind, opts) {
     body.replaceChildren();
     const label = setupActions.SETUP_LABEL[kind];
-    if (titleEl()) titleEl().textContent = `${ICON[kind]} 新しい${label}の初期設定`;
+    if (titleEl()) titleEl().textContent = `新しい${label}の初期設定`;
     body.append(el("p", "hint", `すべて入力して「確定」を押すと、${label}が作られ、年表に記録されます。それまでは何も作られません。`));
 
     // 属州は所属する国が必要
@@ -76,7 +75,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
     const row = el("span", "name-row");
     const state = { extra: {}, lastName: null };
     const fields = {};
-    const dice = btn("suggest-mini", "🎲", "名前をランダムに決める（政体や神名もいっしょに入ります）", (ev) => {
+    const dice = btn("suggest-mini", "@dice", "名前をランダムに決める（政体や神名もいっしょに入ります）", (ev) => {
       ev.preventDefault();
       const g = setupActions.suggest(kind, kind === "province" ? { stateId: Number(ownerSel.value) } : {});
       if (!g) return;

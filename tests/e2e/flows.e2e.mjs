@@ -7,10 +7,9 @@ try {
   console.log("=== 画面の基本構成 ===");
   check("起動直後は地図が画面いっぱい（サイドバー・凡例は出ない設計）", !(await vis("#sidebar")) && (await page.locator("#stage").boundingBox()).width > 1200);
   console.log("=== 設定メニューの全ウィンドウ ===");
-  const wins = await page.$$eval("#settings-menu [data-open-win]", (bs) => bs.map((b) => [b.dataset.openWin, b.textContent.trim()]));
+  const wins = await page.$$eval("#hub [data-open-win]", (bs) => bs.map((b) => [b.dataset.openWin, b.textContent.trim()]));
   for (const [id, label] of wins) {
-    await page.click("#settings-menu > summary");
-    await page.click(`#settings-menu [data-open-win="${id}"]`);
+    await page.evaluate((i) => window.alterhistory.wins.open(i), id);
     await page.waitForTimeout(150);
     const w = page.locator(`.float-win[data-win="${id}"]`);
     const ok = await w.isVisible();
@@ -25,8 +24,8 @@ try {
 
   console.log("=== ウィンドウの大きさ変更（実ブラウザでドラッグ） ===");
   {
-    await page.click("#settings-menu > summary"); await page.click('#settings-menu [data-open-win="economy"]'); await page.waitForTimeout(150);
-    const w = page.locator('.float-win[data-win="economy"]');
+    await page.evaluate(() => window.alterhistory.wins.open("list-state")); await page.waitForTimeout(150);
+    const w = page.locator('.float-win[data-win="list-state"]');
     const b0 = await w.boundingBox();
     const hb = await w.locator(".rs-se").boundingBox();
     await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
@@ -45,7 +44,7 @@ try {
   }
 
   console.log("=== 戦争：宣戦布告 → タブ → 時間経過 ===");
-  const openWin = async (id) => { await page.click("#settings-menu > summary"); await page.click(`#settings-menu [data-open-win="${id}"]`); await page.waitForTimeout(120); };
+  const openWin = async (id) => { await page.evaluate((i) => window.alterhistory.wins.open(i), id); await page.waitForTimeout(120); };
   await openWin("war");
   const newBtn = page.locator("#tab-wars .war-band button", { hasText: "新しい戦争" });
   if (await newBtn.count()) await newBtn.click();

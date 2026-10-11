@@ -97,7 +97,7 @@ store.update((s) => { s.view.burgLabels = "auto"; });
 
 console.log("=== レイヤーのポップアップ（Azgaar 方式） ===");
 const layer = (k) => q(`[data-layer="${k}"]`);
-check("レイヤーのボタンが14個ある", window.document.querySelectorAll("[data-layer]").length === 14);
+check("レイヤーのボタンが13個ある", window.document.querySelectorAll("[data-layer]").length === 13);
 layer("cultures").click();
 check("文化をオンにしても国家は消えない（重ねられる）", store.getState().view.cultures === true && store.getState().view.states !== false);
 check("オンのボタンは選択状態になる", layer("cultures").classList.contains("active") && layer("states").classList.contains("active"));
@@ -111,10 +111,7 @@ const seg = (id, val) => q(`[data-seg-for="${id}"] [data-value="${val}"]`);
 seg("sel-burg-labels", "capitals").click();
 check("名前の表示は区切りボタンで切り替わる", store.getState().view.burgLabels === "capitals" && seg("sel-burg-labels", "capitals").classList.contains("active"));
 seg("sel-burg-labels", "auto").click();
-const menus = [...window.document.querySelectorAll("details.menu")];
-menus[0].open = true; menus[0].dispatchEvent(new window.Event("toggle"));
-menus[1].open = true; menus[1].dispatchEvent(new window.Event("toggle"));
-check("メニューは同時に1つだけ開く", menus.filter((m) => m.open).length === 1);
+check("上部バーのドロップダウンメニューは廃止（ハブに集約）", window.document.querySelectorAll("details.menu").length === 0);
 check("地図編集パネルには色分け・下地のセレクトが残っていない", !$("edit-panel").querySelector("[data-layer], #layer-toggles"));
 
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");

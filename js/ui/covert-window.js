@@ -1,12 +1,7 @@
 // 隠密作戦ウィンドウ。
 import { guardRender } from "./safe-render.js";
+import { el } from "./kit.js";
 
-const el = (tag, cls, text) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-};
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const pct = (v) => `${Math.round(v * 100)}%`;
 export function initCovertWindow({ store, simActions, wins }) {
@@ -69,7 +64,7 @@ export function initCovertWindow({ store, simActions, wins }) {
       kinds.append(l);
     }
     body.append(kinds);
-    const go = el("button", "primary", "🕶 作戦を実行する");
+    const go = el("button", "primary", "@covert 作戦を実行する");
     go.type = "button";
     go.addEventListener("click", () => {
       const op = simActions.runCovertOp(atk, tgt, kind);
@@ -92,7 +87,7 @@ export function initCovertWindow({ store, simActions, wins }) {
       body.append(row);
     }
   }
-  wins.register("covert", { title: "🕶 隠密作戦", width: 720, body, onOpen: render });
+  wins.register("covert", { title: "隠密作戦", width: 720, body, onOpen: render });
   const safe = guardRender(body, () => render());
   store.subscribe((_s, ch) => {
     if (["replace", "commit", "undo", "redo"].includes(ch.type) && wins.isOpen("covert")) safe();

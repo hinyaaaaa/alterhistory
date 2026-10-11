@@ -5,32 +5,43 @@ import { LAYERS, isLayerOn, legendKindOf } from "../app/layers.js";
 
 const GROUP_TITLE = { base: "下地", fill: "色分け", line: "線", mark: "記号・文字" };
 
-export function initToolbar({ store, actions, openFileDialog, openHelp }) {
+export function initToolbar({ store, actions, openFileDialog, wins }) {
   byId("btn-open").addEventListener("click", openFileDialog);
   byId("btn-open-empty").addEventListener("click", openFileDialog);
   byId("btn-fit").addEventListener("click", () => actions.fit());
-  byId("btn-help").addEventListener("click", openHelp);
 
   const btnSave = byId("btn-save");
-  const menu = byId("export-menu");
   btnSave.addEventListener("click", () => actions.saveNative());
+
+  // ---- 書き出し: ハブの「書き出し」から開くウィンドウ ----
+  const exportBody = document.createElement("div"); exportBody.className = "export-body";
   const exporters = { chronicle: () => actions.exportChronicle(), png: () => actions.exportPng(), svg: () => actions.exportSvg() };
-  menu.addEventListener("click", (e) => {
-    const item = e.target instanceof HTMLElement ? e.target.closest("[data-export]") : null;
+  const EXPORTS = [
+    ["chronicle", "クロニクル（.md）", "年表（すべての操作を年月順に）・国家・宗教・戦争などを丁寧に書いた .md 1ファイル。Claude 等の AI に渡して歴史を読ませられます"],
+    ["png", "PNG 画像（2倍の解像度）", "地図を画像として書き出す"],
+    ["svg", "SVG 画像（拡大しても劣化しない）", "拡大しても劣化しない画像"],
+  ];
+  for (const [key, label, tip] of EXPORTS) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.export = key; b.textContent = label; b.title = tip; exportBody.append(b);
+  }
+  const opts = document.createElement("div"); opts.className = "menu-opts"; opts.setAttribute("role", "group"); opts.setAttribute("aria-label", "画像に入れるもの");
+  opts.innerHTML = `<span class="menu-opts-title">PNG・SVG に入れるもの</span>
+    <label><input type="checkbox" data-annot="title" checked> 題名・年月</label>
+    <label><input type="checkbox" data-annot="legend" checked> 凡例</label>
+    <label><input type="checkbox" data-annot="scaleBar" checked> スケールバー</label>`;
+  exportBody.append(opts);
+  wins.register("export", { title: "書き出し", width: 420, body: exportBody });
+  exportBody.addEventListener("click", (e) => {
+    const item = e.target instanceof Element ? e.target.closest("[data-export]") : null;
     if (!item) return;
-    menu.open = false;              // 選んだらメニューを閉じる
+    wins.close("export");
     exporters[item.dataset.export]?.();
   });
-  // メニューの外を押したとき / Esc で閉じる（書き出しメニュー）
-  document.addEventListener("pointerdown", (e) => { if (menu.open && !menu.contains(e.target)) menu.open = false; });
-  document.addEventListener("keydown", (e) => {
-    if (e.key !== "Escape") return;
-    if (menu.open) { menu.open = false; menu.querySelector("summary").focus(); }
-  });
-
-  // 書き出し画像に入れるもの（題名・凡例・スケールバー）。メニューを開いたまま切り替えられる
-  const annotBoxes = [...menu.querySelectorAll("[data-annot]")];
+  // 書き出し画像に入れるもの（題名・凡例・スケールバー）
+  const annotBoxes = [...exportBody.querySelectorAll("[data-annot]")];
   for (const box of annotBoxes) box.addEventListener("change", () => actions.setExportOption(box.dataset.annot, box.checked));
+  const exportHubBtn = document.querySelector('[data-open-win="export"]');
+  const layersHubBtn = document.getElementById("hub-layers");
 
   // ---- レイヤー（Azgaar 方式）：独立したオン/オフのボタン。複数を同時に重ねられる ----
   const toggleBox = byId("layer-toggles");
@@ -55,7 +66,7 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
   const segs = [...document.querySelectorAll("[data-seg-for]")];
   for (const seg of segs) {
     seg.addEventListener("click", (e) => {
-      const b = e.target instanceof HTMLElement ? e.target.closest("button[data-value]") : null;
+      const b = e.target instanceof Element ? e.target.closest("button[data-value]") : null;
       if (!b) return;
       const sel = byId(seg.dataset.segFor);
       sel.value = b.dataset.value;
@@ -69,8 +80,9 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
     if (v.burgLabels && selBurgLabels.value !== v.burgLabels) selBurgLabels.value = v.burgLabels;
     const hasMap = !!state.map;
     btnSave.disabled = !hasMap;
-    menu.classList.toggle("disabled", !hasMap);
-    if (!hasMap) menu.open = false;
+    if (exportHubBtn) exportHubBtn.disabled = !hasMap;
+    if (layersHubBtn) layersHubBtn.disabled = !hasMap;
+    if (!hasMap && wins.isOpen("export")) wins.close("export");
     for (const [key, btn] of layerBtns) {
       const on = isLayerOn(v, key);
       btn.classList.toggle("active", on); btn.setAttribute("aria-pressed", String(on));
@@ -79,7 +91,6 @@ export function initToolbar({ store, actions, openFileDialog, openHelp }) {
       const cur = byId(seg.dataset.segFor).value;
       for (const b of seg.querySelectorAll("button[data-value]")) { const on = b.dataset.value === cur; b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on)); }
     }
-    byId("layers-menu").classList.toggle("disabled", !hasMap);
     // 書き出しの付属物: 凡例は色分け「なし」だと出せず、スケールバーは縮尺の無い地図だと出せない（理由を表示）
     const eo = state.exportOpts ?? {};
     for (const box of annotBoxes) {

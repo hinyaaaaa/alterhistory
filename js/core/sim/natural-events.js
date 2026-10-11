@@ -11,6 +11,7 @@ import { pickBreakawayProvinces } from "../edit/rebellion.js";
 import { makeCommand, setProps, setIndexed } from "../edit/commands.js";
 import { ensureExt } from "../edit/ext.js";
 import { withEvent } from "../edit/history-log.js";
+import { planAddTemporaryZone, resolveZoneScope } from "../edit/zones.js";
 
 export const FREQUENCIES = Object.freeze({
   low: { label: "まれ", factor: 0.5 },
@@ -151,8 +152,15 @@ export function planPlague(map, { stateId, ruralLoss, urbanLoss }, date) {
       if (Object.keys(patch).length) parts.push(setProps(e, patch));
     }
   }
+  // 疫病は、影響を受けた国の範囲に、半年だけ地図へ重ねる（期間が過ぎれば自動で消える。記録は年表に残る）
+  let zoneId = null;
+  try {
+    const scope = resolveZoneScope(map, { kind: "state", id: stateId });
+    const z = planAddTemporaryZone(map, { type: "Disease", cells: scope.cells, months: 6, date, scopeName: scope.name, states: [stateId], logEvent: false });
+    parts.push(...z.command.parts); zoneId = z.zid;
+  } catch { /* 範囲が取れないときは、ゾーン無しで疫病だけ記録する */ }
   const cmd = makeCommand(`疫病（${nameOf(st)}）`, ["politics"], parts);
-  return withEvent(map, cmd, { type: "plague", title: `疫病が${nameOf(st)}で流行した`, detail: `農村人口 −${Math.round(ruralLoss * 100)}% / 都市人口 −${Math.round(urbanLoss * 100)}%`, date, states: [stateId], cell: capitalCell(map, st) });
+  return withEvent(map, cmd, { type: "plague", title: `疫病が${nameOf(st)}で流行した`, detail: `農村人口 −${Math.round(ruralLoss * 100)}% / 都市人口 −${Math.round(urbanLoss * 100)}%`, date, states: [stateId], cell: capitalCell(map, st), zoneId });
 }
 
 /** 反乱：国の民意が下がり、軍の士気も落ちる */

@@ -17,6 +17,7 @@
 
 import { createEmptyMap } from "../core/model.js";
 import { createExtension, APP_NAME, EXT_FORMAT } from "./native-format.js";
+import { migrateLegacyToTreaties, SAVE_FORMAT } from "../core/edit/treaties.js";
 
 export const NATIVE_FORMAT = "alterhistory-map";
 export const NATIVE_VERSION = 1;
@@ -68,7 +69,7 @@ export function serializeNativeJson(map, { savedAt = "" } = {}) {
     markers: map.markers, zones: map.zones, routes: map.routes, cellRoutes: map.cellRoutes, relief: map.relief, ice: map.ice,
     measurers: map.measurers, goods: map.goods, markets: map.markets, deals: map.deals,
     namesbase: map.namesbase, graphOverride: map.graphOverride ?? {},
-    data: map.ext?.data ?? {},
+    data: { ...(map.ext?.data ?? {}), saveFormat: SAVE_FORMAT }, // 保存形式の版（旧形式 = 1、条約を導入した形式 = 2）
   };
   return JSON.stringify(doc);
 }
@@ -124,6 +125,8 @@ export function parseNativeJson(text) {
   map.cellRoutes = doc.cellRoutes ?? {};
   map.graphOverride = doc.graphOverride ?? {};
   map.ext = { ...createExtension(), format: EXT_FORMAT, savedAt: doc.savedAt ?? "", data: doc.data ?? {} };
+  migrateLegacyToTreaties(map); // 旧形式（保存形式の版 1）の同盟・従属・講和を、条約に変換する。保存し直すと新形式になる
+  delete map.ext.data.journeys; // 旅の機能は v2.0.0 で廃止。旅の記録を持つ旧ファイルは壊れずに開け、旅の記録は無視される（保存し直すと消える）
   if (Number.isInteger(time?.year) && Number.isInteger(time?.month)) map.worldTime = { year: time.year, month: time.month };
   return { map, warnings };
 }

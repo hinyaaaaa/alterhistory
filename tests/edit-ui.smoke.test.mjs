@@ -161,10 +161,8 @@ window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "2", bu
 check("配置ツール中の[2]は文化を塗るツールに切り替わる", q('[data-tool="paint:culture"]').classList.contains("active"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "v", bubbles: true }));
 
-console.log("=== ヘルプに編集操作が載っている ===");
-window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "?", bubbles: true }));
-check("ヘルプに塗るツールの説明がある", $("help-dialog").textContent.includes("塗る"));
-$("help-dialog").removeAttribute("open");
+console.log("=== ショートカット一覧は廃止 ===");
+check("ヘルプのダイアログは無い", !$("help-dialog"));
 
 console.log("=== 保存に編集内容が反映される ===");
 const blobs = new Map();

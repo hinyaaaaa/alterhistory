@@ -17,6 +17,29 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
+## 追加済み：v2.0.0「静かな戦略卓」（いちばん新しい）
+
+最終実装指示書（v2.0.0）の 5〜9章をすべて実装した。詳細は `docs/CHANGELOG.md`。要点だけ。
+
+- **画面**: `index.html` は `#hub`（`ui/hub.js` が作る）・`#clock`・`#news`・`#war-status`・`.map-corner` だけの骨組み。窓の入口は **ハブだけ**（`data-open-win` を持つボタン）。ハブにない窓（`balance`・`covert`・`nuclear`・`treaty-new`・`treaty-detail`・`genealogy-*`・`export`）は、他の窓から `wins.open(id)` で開く。`window.alterhistory.wins` を公開してあり、テストはこれで窓を開く。
+- **既存のボタンの id は保った**: `btn-open`・`btn-save`・`btn-fit`・`btn-edit-mode`・`btn-time-toggle`・`world-date`・`btn-time-step`・`sel-time-speed`・`layer-toggles`・`status-map` は、新しい場所（ハブ・時計・地図の隅）で同じ id のまま動く。保存ボタンの「未保存」は `.dirty` クラス。
+- **アイコン**: `el("button", "", "@dice ラベル")` のように「@名前」で SVG を描く（`ui/icons.js`、`kit.js` の `el`）。絵文字は UI に使わない。`el` は `kit.js` の1つだけを使う（ローカルの重複定義は消した）。クリックの対象判定は `instanceof Element`（SVG の子要素も対象）にする。HTMLElement だとアイコンの上のクリックが無視される（実ブラウザで見つけた不具合）。
+- **条約**（`core/edit/treaties.js`）: 同盟・従属は既存の仕組み（`alliances.js`・`vassals.js`）が効果の正本。条約を結ぶと両方に書く。`sim-actions` の `createAlliance` / `dissolveAlliance` も条約経由。宣戦（`declareWar`・`declareWarInstant`）は `planWarBreach` を `joinCommands` で同じ操作にまとめる（Undo 1回）。内戦は `planDeclareAndResolveWar` で `treatySettings.civilCallsAllies` を見て、既定では参戦招集しない。経済協力は `core/sim/trade.js` の `pairBoost`。
+- **ゾーン**（`core/edit/zones.js`）: `planAddTemporaryZone`（期間つき・年表1件・Undo 1回）。`zoneActive` で期間を判定、描画は `render/layers/zones.js`（`view.zoneFocus` の id は期間が過ぎていても輪郭を赤で出す）。自然発生の疫病（`planPlague`）にも付く。
+- **版**: `js/version.js`（`package.json` と `tests/version.test.mjs` で一致を確認）。保存形式の版は `SAVE_FORMAT = 2`。
+- **実ブラウザ**: `tests/e2e/shell.e2e.mjs` が受け入れ基準（地図の横幅95%以上、時計とハブが隠れない、絵文字なし、元に戻すボタンなし、タッチの大きさ、新聞・戦争状況・ホバー）を確かめる。
+- テストの癖: 「講和タブの優勢度」（`flows.e2e.mjs`）は、決着の乱数で 0% になることがあり、まれに落ちる（今回の変更とは無関係。元の版でも同じ）。
+
+### v2.0.0 でまだ手を付けていないこと
+- 指示書 10〜11章（v2.1.0 以降）: 原因リンク・君主と継承・国の連続性／新規作成の統一・世界情報・国史／内戦の補完・整合性検査の拡張／国境の年代再生。
+- 条約の「領土・国境の画定」は記録のみ（領土移転は未接続）。期限切れの条約を `expired` に書き換える処理は無い（判定は計算で行う）。
+- 国家詳細の「系譜」の節（文化・宗教は一覧から系譜図の窓を開く形。国の前身・後継は v2.1.0 の機能C）。
+- 君主交代（国家の「操作」欄に置く予定。機能B）。
+- 新聞の「〜を受けて」の一文（原因リンク＝機能Aが前提）。
+- 旧UIの説明が残る古い節（以下の「追加済み」の節）には、上部バー・設定メニュー・旅・ゾーン窓の記述が残っている。履歴として残したので、現状は上の節を正とする。
+
+---
+
 ## 追加済み：反乱・分離（HoI4 風・いちばん新しい）
 
 属州が離反すると、別の国家として成立し、軍が割れて元の国との内戦になる。理想は「補給や物資の細かい設定がない HoI4」なので、領土・都市・属州・軍の割れ方と、内戦という1つの戦争だけで表し、補給は持たない。

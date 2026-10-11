@@ -4,8 +4,8 @@
 // 見た目は js/ui/dialogs.js と同じ流儀（<dialog> を都度生成して使う）。
 
 import { formatWorldTime } from "../core/sim/time.js";
+import { el } from "./kit.js";
 
-const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
 export function openTimeSettingsDialog({ store, timeActions, editActions, simActions = null }) {
   const map = store.getState().map;
@@ -48,7 +48,7 @@ export function openTimeSettingsDialog({ store, timeActions, editActions, simAct
   const newRow = el("div", "time-settings-row");
   const nameInput = document.createElement("input");
   nameInput.placeholder = "時代の名前（例: 江戸時代。空欄ならおまかせ）";
-  const eraDice = el("button", "suggest-mini", "🎲");
+  const eraDice = el("button", "suggest-mini", "@dice");
   eraDice.type = "button"; eraDice.title = "時代の名前をランダムに決める";
   eraDice.addEventListener("click", () => { nameInput.value = editActions.suggestLabel("era"); });
   const fromInput = document.createElement("input");

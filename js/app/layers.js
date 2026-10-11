@@ -30,7 +30,6 @@ export const LAYERS = Object.freeze([
   { key: "routes",    label: "道路",       group: "line", on: true },
   { key: "burgs",     label: "都市",       group: "mark", on: true,  title: "都市の記号" },
   { key: "zones",     label: "ゾーン",     group: "mark", on: true },
-  { key: "journeys",  label: "旅の線",     group: "mark", on: true },
   { key: "labels",    label: "名前",       group: "mark", on: true,  title: "国・属州・都市の名前" },
 ]);
 const DEFAULT_ON = new Map(LAYERS.map((l) => [l.key, l.on]));

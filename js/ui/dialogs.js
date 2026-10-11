@@ -1,3 +1,4 @@
+import { el } from "./kit.js";
 // ブラウザ標準の alert()/confirm()/prompt() の代替。
 // 見た目がアプリのスタイルから浮くのを避けるため、既存の <dialog> スタイル
 // （css/components.css の `dialog` / `.wide-dialog` まわり）に乗る形で、
@@ -24,7 +25,7 @@ function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLa
   // 名前の仮生成ボタン: 押すたびに入力欄を新しい候補で埋める（確定は OK を押したとき）
   let suggestBtn = null;
   if (input && suggest) {
-    suggestBtn = el("button", "suggest-btn", "🎲 仮の名前を生成");
+    suggestBtn = el("button", "suggest-btn", "@dice 仮の名前を生成");
     suggestBtn.type = "button";
     suggestBtn.addEventListener("click", () => {
       const v = suggest();
@@ -51,12 +52,6 @@ function buildDialog({ title, bodyText, showInput, inputValue, okLabel, cancelLa
   return { dialog, input, okBtn, cancelBtn, suggestBtn };
 }
 
-function el(tag, cls, text) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text != null) e.textContent = text;
-  return e;
-}
 
 /** confirm() の代替。OK なら true、キャンセル/Escなら false を解決する Promise を返す */
 export function confirmDialog(message, opts = {}) {

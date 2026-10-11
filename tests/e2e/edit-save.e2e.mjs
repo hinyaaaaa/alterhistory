@@ -15,7 +15,7 @@ async function freshPage(file) {
   await page.waitForFunction(() => /セル/.test(document.getElementById("status-map")?.textContent ?? ""), null, { timeout: 30000, polling: 100 });
 }
 const { check, done } = reporter();
-const menu = async (sel) => { await page.click("#settings-menu > summary"); await page.click(`#settings-menu ${sel}`); await page.waitForTimeout(150); };
+const menu = async (sel) => { await page.click(sel.replace('[data-click="btn-edit-mode"]', "#btn-edit-mode")); await page.waitForTimeout(150); };
 const mapBox = async () => page.locator("#map-canvas").boundingBox();
 page.on("dialog", (d) => d.accept()); // 未保存の変更がある状態での再読込（beforeunload）を許可する
 try {
@@ -23,7 +23,7 @@ try {
   console.log("=== 編集：塗る・都市を置く・Undo ===");
   await menu('[data-click="btn-edit-mode"]');
   check("編集パネルが開く", await page.locator("#edit-panel").isVisible());
-  const undoDisabled = () => page.locator("#btn-undo").isDisabled();
+  const undoDisabled = async () => !(await page.evaluate(() => window.alterhistory.store.canUndo()));
   check("編集前は Undo できない", await undoDisabled());
   await page.locator('#edit-panel [data-tool="paint:state"]').click();
   const b = await mapBox();
@@ -36,10 +36,10 @@ try {
   await shot(page, "31-painted");
   const pxPainted = await px();
   check("塗った場所の色が変わる", pxPainted !== px0, `${px0} → ${pxPainted}`);
-  await page.click("#btn-undo"); await page.waitForTimeout(250);
+  await page.keyboard.press("Control+z"); await page.waitForTimeout(250);
   check("Undo で元に戻る", await undoDisabled());
   check("Undo で地図の見た目も元に戻る（再描画される）", (await px()) === px0, `${await px()} vs ${px0}`);
-  await page.click("#btn-redo"); await page.waitForTimeout(250);
+  await page.keyboard.press("Control+y"); await page.waitForTimeout(250);
   check("Redo でやり直せる（見た目も）", !(await undoDisabled()) && (await px()) === pxPainted);
   await page.keyboard.press("Control+z"); await page.waitForTimeout(250);
   check("Ctrl+Z でも見た目が戻る", (await px()) === px0);
@@ -95,8 +95,8 @@ try {
 
   console.log("=== 書き出し ===");
   for (const [kind, min, head] of [["png", 5000, "PNG"], ["svg", 2000, "<svg"], ["chronicle", 200, null]]) {
-    await page.click("#export-menu > summary");
-    const [d] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click(`#export-menu [data-export="${kind}"]`)]);
+    await page.evaluate(() => window.alterhistory.wins.open("export"));
+    const [d] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click(`[data-win="export"] [data-export="${kind}"]`)]);
     const pth = `/tmp/e2e-export.${kind}`; await d.saveAs(pth);
     const buf = readFileSync(pth);
     check(`${kind} を書き出せる`, buf.length > min && (!head || buf.slice(0, 200).toString("latin1").includes(head)), `${buf.length}`);
@@ -105,17 +105,17 @@ try {
 
   console.log("=== バランス調整は地図に保存される（保存→開き直しで残る／別の地図には持ち越さない）===");
   await freshPage("/tmp/e2e-map-11.map");
-  await menu('[data-open-win="balance"]');
+  await page.evaluate(() => window.alterhistory.wins.open("balance"));
   const noiseInput = () => page.locator('.float-win[data-win="balance"] input').nth(2);
   const noise = noiseInput();
   await noise.fill("0.05"); await noise.dispatchEvent("change");
   const [dlBal] = await Promise.all([page.waitForEvent("download"), page.click("#btn-save")]);
   const balPath = "/tmp/e2e-saved-balance.ahmap"; await dlBal.saveAs(balPath);
   await freshPage(balPath);
-  await menu('[data-open-win="balance"]');
+  await page.evaluate(() => window.alterhistory.wins.open("balance"));
   check("保存した地図を開き直すと、バランス設定が残る", (await noiseInput().inputValue()) === "0.05");
   await freshPage("/tmp/e2e-map-11.map");
-  await menu('[data-open-win="balance"]');
+  await page.evaluate(() => window.alterhistory.wins.open("balance"));
   check("上書きの無い別の地図には、前の地図の値を持ち越さない（既定値）", (await noiseInput().inputValue()) === "0.18");
   await shot(page, "34-balance");
 } catch (e) { problems.push(`スクリプト例外: ${e.message.split("\n")[0]} @ ${(e.stack.match(/edit-save[^\n)]*/) ?? [""])[0]}`); }

@@ -13,9 +13,6 @@ export function viewToRenderOptions(view) {
     burgs: isLayerOn(view, "burgs"),
     tradeLines: view.tradeLines ?? null,
     zones: isLayerOn(view, "zones"),
-    zoneSelected: view.zoneSelected ?? null,
-    journeys: isLayerOn(view, "journeys"),
-    journeySelected: view.journeySelected ?? null,
     labels: isLayerOn(view, "labels")
       ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : view.burgLabels === "auto" ? "auto" : true }
       : false,

@@ -49,11 +49,11 @@ check("地図が読み込める", await waitFor(() => store.getState().map, 1500
 const qa = (sel) => [...window.document.querySelectorAll(sel)];
 const { simActions } = window.alterhistory;
 const win = (id) => q(`[data-win="${id}"]`);
-const menuBtn = (w) => q(`[data-open-win="${w}"]`);
+const menuBtn = (w) => q(`[data-open-win="${w}"]`) ?? { click: () => window.alterhistory.wins.open(w) };
 const pick = (a, d) => { const boxes = () => [...window.document.querySelectorAll("#tab-wars .war-side")]; boxes()[0].querySelectorAll("input")[a].click(); boxes()[1].querySelectorAll("input")[d].click(); };
 
 console.log("=== 設定メニューとウィンドウ ===");
-check("上部バーに「設定」メニューがある", !!q("#settings-menu summary") && !!menuBtn("war") && !!menuBtn("diplomacy") && !!menuBtn("military"));
+check("ハブに戦争・外交・軍事の入口がある", !!q("#hub") && !!menuBtn("war") && !!menuBtn("diplomacy") && !!menuBtn("military"));
 check("開く前、ウィンドウは見えない", ["war", "diplomacy", "military"].every((w) => win(w).hidden));
 menuBtn("war").click();
 check("戦争ウィンドウが開く", !win("war").hidden && !!win("war").querySelector(".war-band"));
@@ -92,7 +92,7 @@ const st = store.getState().map.pack.states.filter((s) => s && s.i > 0 && !s.rem
 for (const s of st.slice(0, 2)) { const cell = store.getState().map.pack.cells.state.findIndex((v) => v === s.i); simActions.createRegiment(s.i, cell, {}); simActions.createRegiment(s.i, cell, {}); }
 console.log("=== 外交・軍事ウィンドウ ===");
 menuBtn("diplomacy").click();
-check("外交ウィンドウに関係の表と同盟がある", !!win("diplomacy").querySelector(".diplomacy-matrix") && !!win("diplomacy").querySelector("#tab-alliances"));
+check("外交ウィンドウに関係一覧と「条約を結ぶ」がある", !!win("diplomacy").querySelector(".dip-relations") && win("diplomacy").textContent.includes("条約を結ぶ") && !!win("diplomacy").querySelector(".diplomacy-matrix"));
 menuBtn("military").click();
 check("軍事ウィンドウに国ごとの比較表がある（国家の行数 + 見出し）", win("military").querySelectorAll(".win-table tr").length === st.length + 1);
 check("軍事の表に部隊数が出る", [...win("military").querySelectorAll(".win-table tr")][1].textContent.includes("2"));

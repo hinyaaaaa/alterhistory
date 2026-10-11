@@ -76,10 +76,10 @@ const states = () => store.getState().map.pack.states.filter((s) => s && s.i && 
 const ba = window.alterhistory.builderActions;
 const ea = window.alterhistory.editActions;
 const clickBtn = (root, text) => [...root.querySelectorAll("button")].find((b) => b.textContent.includes(text));
-const openList = (kind) => { q(`#settings-menu [data-open-win="list-${kind}"]`)?.click(); };
+const openList = (kind) => { q(`[data-open-win="list-${kind}"]`)?.click(); };
 
 console.log("=== 一覧ウィンドウを開く ===");
-check("設定メニューに国家一覧がある", !!q('#settings-menu [data-open-win="list-state"]'));
+check("ハブに国家一覧の入口がある", !!q('[data-open-win="list-state"]'));
 openList("state");
 await waitFor(() => q(".ent-addbar"), 2000, "追加バー");
 check("追加バーには「追加」だけが出る（作成は共通の初期設定ウィンドウで行う）", !!clickBtn(window.document, "国家を追加") && !clickBtn(window.document, "おまかせ領土つき"));
@@ -118,8 +118,8 @@ const done = store.getState().map.pack.states[made.i];
 check("首都が置かれる", done.capital > 0 && !ea.isProvisional("burg", done.capital));
 check("年表には「建国」が1件だけ増える", histLen() === log0 + 1 && store.getState().map.ext.data.historyLog.at(-1).type === "created-state");
 
-console.log("=== 凡例が最新になる ===");
-check("凡例に新しい国が出る", [...window.document.querySelectorAll(".legend-name")].some((n) => n.textContent === (made.fullName ?? made.name)));
+console.log("=== 国家一覧が最新になる ===");
+check("国家一覧に新しい国が出る", q('[data-win="list-state"]').textContent.includes(made.fullName ?? made.name));
 
 console.log("=== 技術水準を変えられる ===");
 ea.setTechLevel?.(made.i, 7);

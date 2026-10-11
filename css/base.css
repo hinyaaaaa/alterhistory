@@ -1,49 +1,49 @@
 /* ==========================================================================
-   ALTERHISTORY — 意匠設計 (HOI4 風・戦略卓上ゲーム UI)
+   ALTERHISTORY v2.0.0「静かな戦略卓」— デザイントークンと基本部品
 
-   コンセプト:
-   ・「作戦司令室の卓上地図」をテーマにした、鋼板・羊皮紙・真鍮金具の質感。
-   ・地図(#stage)を常に主役にし、周囲の帯(ツールバー・時間バー・サイドバー)は
-     すべて同じ「鋼板パネル」語彙(角ばった枠・二重罫線・真鍮アクセント線)で統一する。
-   ・色は数値で語る: 強調=真鍮(--accent)、危険/宣戦=緋色(--danger)、
-     注意=琥珀(--warn)、平時の情報=鋼青(--info)。
+   方針:
+   ・地図が主役。周りの要素は薄く、細く、静かにする。装飾で雰囲気を作らない。
+   ・色は意味を持たせる: 薄い青緑=主役・選択、抑えた朱=戦争・危険だけ、
+     琥珀=注意、鋼青=情報、緑=同盟。
+   ・変数名 --brass* は互換のため残す（中身は薄い青緑）。新規コードは --accent を使う。
    ========================================================================== */
 :root {
-  /* --- 基調（鋼板の暗色階調） --- */
-  --bg: #14171c;
-  --bg-map: #0d1013;
-  --panel: #1b1e24;
-  --panel-2: #22262e;
-  --panel-3: #2a2f38;
-  --line: #3d4149;
-  --line-strong: #565b64;
+  /* --- 地・面・罫線 --- */
+  --bg: #0e1112;
+  --bg-map: #0b0e0f;
+  --panel: #14181a;
+  --panel-2: #1a1f21;
+  --panel-3: #21272a;
+  --line: #262d30;
+  --line-strong: #38434a;
 
-  /* --- 真鍮（アクセント・強調） --- */
-  --brass: #c9a24b;
-  --brass-bright: #e6c877;
-  --brass-dim: #8a7238;
-  --brass-text: #241a05;
+  /* --- アクセント（薄い青緑。名前は互換のため brass のまま） --- */
+  --brass: #8fb8b0;
+  --brass-bright: #b9d8d1;
+  --brass-dim: #3a5654;
+  --brass-text: #0b1413;
 
-  /* --- テキスト --- */
-  --text: #e7e2d3;
-  --text-dim: #c7c2b3;
-  --muted: #8a8d92;
+  /* --- 文字 --- */
+  --text: #e6e4dc;
+  --text-dim: #b4b9b4;
+  --muted: #7b8584;
 
   /* --- 意味色 --- */
   --accent: var(--brass);
   --accent-text: var(--brass-text);
-  --danger: #b3392c;
-  --danger-bright: #e2503f;
-  --warn: #c9922f;
-  --info: #4c7fa6;
-  --ally: #4c8a5e;
+  --danger: #c4624f;
+  --danger-bright: #d97d6a;
+  --warn: #c9a45a;
+  --info: #6f9bb0;
+  --ally: #6fa48a;
 
   --font: "Noto Sans JP", "Yu Gothic UI", "Meiryo UI", "Hiragino Sans", "Noto Sans CJK JP", system-ui, sans-serif;
   --font-serif: "Shippori Mincho", "Noto Serif JP", "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "MS PMincho", serif;
+  --font-mono: "JetBrains Mono", "Consolas", "SFMono-Regular", "Menlo", monospace;
 
-  --radius: 2px;
-  --shadow-panel: 0 2px 0 rgba(0, 0, 0, 0.55), 0 6px 16px rgba(0, 0, 0, 0.35);
-  --shadow-inset: inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  --radius: 4px;
+  --radius-win: 6px;
+  --shadow-panel: 0 8px 28px rgba(0, 0, 0, 0.38);
 }
 
 * { box-sizing: border-box; }
@@ -56,16 +56,6 @@ body {
   letter-spacing: 0.01em;
 }
 
-/* 卓上地図らしい微細な鋼板ノイズ（画像なし・CSSのみ） */
-body::before {
-  content: "";
-  position: fixed; inset: 0; pointer-events: none; z-index: 9999;
-  background-image:
-    repeating-linear-gradient(0deg, rgba(255,255,255,0.012) 0px, rgba(255,255,255,0.012) 1px, transparent 1px, transparent 3px);
-  mix-blend-mode: overlay;
-  opacity: 0.5;
-}
-
 /* [hidden] を必ず非表示にする。
    ブラウザ標準の [hidden]{display:none} は詳細度が低く、.foo{display:flex} のような
    クラス指定に負けて「hidden なのに表示される」。地図編集パネルがこれで常時開きっぱなしになり、
@@ -76,7 +66,7 @@ body::before {
 button, select, input { font: inherit; color: inherit; }
 
 button {
-  background: linear-gradient(180deg, var(--panel-3), var(--panel-2));
+  background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 6px 14px;
@@ -84,20 +74,19 @@ button {
   color: var(--text-dim);
   font-weight: 600;
   letter-spacing: 0.02em;
-  box-shadow: var(--shadow-inset);
   transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
 }
-button:hover { border-color: var(--brass-dim); color: var(--text); }
-button:active { background: linear-gradient(180deg, var(--panel-2), var(--panel-3)); }
+button:hover { border-color: var(--line-strong); color: var(--text); }
+button:active { background: var(--panel-3); }
 
 button.primary {
-  background: linear-gradient(180deg, var(--brass-bright), var(--brass));
+  background: var(--brass);
   color: var(--accent-text);
   border-color: var(--brass-dim);
   font-weight: 700;
-  text-shadow: 0 1px 0 rgba(255,255,255,0.25);
+  
 }
-button.primary:hover { background: linear-gradient(180deg, var(--brass-bright), var(--brass-bright)); border-color: var(--brass-bright); }
+button.primary:hover { background: var(--brass-bright); border-color: var(--brass-bright); }
 
 button.large { padding: 12px 28px; font-size: 15px; letter-spacing: 0.04em; }
 
@@ -106,7 +95,6 @@ select {
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 5px 8px;
-  box-shadow: var(--shadow-inset);
 }
 select:hover { border-color: var(--brass-dim); }
 
@@ -114,7 +102,6 @@ input[type="text"], input[type="number"], input:not([type]) {
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-inset);
 }
 
 input[type="range"] { accent-color: var(--brass); }
@@ -125,10 +112,10 @@ input[type="checkbox"] { accent-color: var(--brass); }
 code, kbd {
   background: var(--panel-3);
   border: 1px solid var(--line-strong);
-  border-radius: 3px;
+  border-radius: var(--radius);
   padding: 1px 6px;
   font-size: 11px;
-  font-family: "Consolas", "SFMono-Regular", monospace;
+  font-family: var(--font-mono);
   color: var(--brass-bright);
 }
 

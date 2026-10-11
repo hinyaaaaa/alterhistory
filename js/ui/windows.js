@@ -1,17 +1,12 @@
 import { byId } from "./dom.js";
+import { el } from "./kit.js";
 
-const el = (tag, cls, text2) => {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (text2 != null) e.textContent = text2;
-  return e;
-};
 export function makeDraggable(root, handle, stage, only = null) {
   handle.style.cursor = "move";
   handle.style.touchAction = "none";
   handle.addEventListener("pointerdown", (e) => {
-    if (e.target instanceof HTMLElement && e.target.closest("button, input, select, textarea")) return;
-    if (only && !(e.target instanceof HTMLElement && e.target.closest(only))) return;
+    if (e.target instanceof Element && e.target.closest("button, input, select, textarea")) return;
+    if (only && !(e.target instanceof Element && e.target.closest(only))) return;
     const sr = stage.getBoundingClientRect(), r = root.getBoundingClientRect();
     const dx = e.clientX - r.left, dy = e.clientY - r.top;
     root.style.right = "auto";
@@ -80,6 +75,8 @@ export function makeResizable(root, stage, { minW = 280, minH = 160 } = {}) {
 export function initWindows() {
   const stage = byId("stage");
   const wins = /* @__PURE__ */ new Map();
+  const listeners = new Set();
+  const notify = () => { for (const fn of listeners) fn(); };
   let z = 20;
   function front(w) {
     w.root.style.zIndex = String(++z);
@@ -147,18 +144,20 @@ export function initWindows() {
       if (!w.root.style.left) {
         const n = [...wins.values()].filter((x) => x !== w && !x.root.hidden).length % 5;
         w.root.style.left = `${24 + n * 28}px`;
-        w.root.style.top = `${16 + n * 28}px`;
+        w.root.style.top = `${76 + n * 28}px`; // 時計の下に開く
       }
       fit(w.root);
     }
     w.def.onOpen?.();
     front(w);
+    notify();
   }
   function closeWin(id) {
     const w = wins.get(id);
     if (w) {
       w.root.hidden = true;
       w.def.onClose?.();
+      notify();
     }
   }
   const isOpen = (id) => !!wins.get(id) && !wins.get(id).root.hidden;
@@ -168,5 +167,6 @@ export function initWindows() {
     const top = [...wins.values()].filter((w) => !w.root.hidden).sort((a, b) => Number(b.root.style.zIndex) - Number(a.root.style.zIndex))[0];
     if (top && !(document.activeElement instanceof HTMLInputElement) && !document.querySelector("details.menu[open]")) closeWin([...wins.entries()].find(([, w]) => w === top)[0]);
   });
-  return { register, open, close: closeWin, isOpen };
+  const openIds = () => [...wins.entries()].filter(([, x]) => !x.root.hidden).map(([id]) => id);
+  return { register, open, close: closeWin, isOpen, openIds, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); } };
 }

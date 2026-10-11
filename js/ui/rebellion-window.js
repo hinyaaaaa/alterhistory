@@ -14,7 +14,7 @@ const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
  */
 export function initRebellionWindow({ wins, store, simActions, setupActions }) {
   const body = el("div", "setup-body");
-  wins.register("rebellion", { title: "🏴 反乱・独立", width: 440, body });
+  wins.register("rebellion", { title: "反乱・独立", width: 440, body });
 
   function render({ stateId, provinceId }) {
     body.replaceChildren();
@@ -40,7 +40,7 @@ export function initRebellionWindow({ wins, store, simActions, setupActions }) {
 
     // 名前・色
     const nameIn = document.createElement("input"); nameIn.placeholder = "空欄なら、おまかせで決めます";
-    const dice = btn("suggest-mini", "🎲", "名前をランダムに決める", (ev) => { ev.preventDefault(); const g = setupActions.suggest("state", { stateId }); if (g) nameIn.value = g.name; });
+    const dice = btn("suggest-mini", "@dice", "名前をランダムに決める", (ev) => { ev.preventDefault(); const g = setupActions.suggest("state", { stateId }); if (g) nameIn.value = g.name; });
     const row = el("span", "name-row"); row.append(nameIn, dice);
     const nameField = el("label", "b-field"); nameField.append(el("span", "b-mini", "新しい国の名前"), row);
     const color = document.createElement("input"); color.type = "color"; color.value = setupActions.suggestColor("state");

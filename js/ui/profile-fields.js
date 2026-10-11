@@ -28,7 +28,7 @@ function textField(label, value, onChange, suggest) {
   inp.addEventListener("change", () => { if (inp.value.trim()) onChange(inp.value); });
   if (!suggest) { f.append(inp); return f; }
   const row = el("span", "name-row");
-  const dice = btn("suggest-mini", "🎲", "名前をランダムに決める（押すたびに変わります。元に戻せます）", (ev) => {
+  const dice = btn("suggest-mini", "@dice", "名前をランダムに決める（押すたびに変わります。元に戻せます）", (ev) => {
     ev.preventDefault();
     const v = suggest();
     if (v) { inp.value = v; onChange(v); }
@@ -92,7 +92,7 @@ export function burgDetails(b, { editActions, map }) {
     feats.append(lab);
   }
   d.append(feats);
-  if (b.port) d.append(el("p", "b-hint", "⚓ 港があります（港の有無は、ここでは変えられません）"));
+  if (b.port) d.append(el("p", "b-hint", "港があります（港の有無は、ここでは変えられません）"));
 
   const foot = el("div", "b-actions");
   const st = map.pack.states[b.state];

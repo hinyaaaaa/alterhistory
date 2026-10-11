@@ -182,3 +182,21 @@ ALTERHISTORY は、適用できなかった件数を読み込み時の警告と�
 
 **書き出しの保証（テストで検証）:** 編集していない地図は、Azgaar 形式でも ALTERHISTORY 形式でも、
 元のファイルと **1文字も違わずに** 書き戻せる（日付・目印・拡張行を除く）。
+
+
+## 保存形式の版と条約（v2.0.0）
+
+`.ahmap`（ALTERHISTORY 形式）の `data`（拡張データ）に、次を持つ。どれも無くても開ける。
+
+- `saveFormat`: 保存形式の版。旧形式 = 1（無い場合も 1 とみなす）、条約を導入した形式 = 2。保存すると必ず 2 を書く。
+- `treaties`: 条約の配列。`{ id, kind, name, parties:[{state, role}], signedAt, expiresAt|null, status, endedAt, brokenBy, terms, originWar|null, text|null, ref }`
+  - `kind`: `alliance`（軍事同盟・安全保障条約）／`nonaggression`／`economic`／`vassal`／`border`／`declaration`／`peace`
+  - `status`: `active`／`expired`／`broken`。期限切れは、`expiresAt` と世界の時刻から計算して判定する（保存値が `active` のままでも期限後は失効として扱う）。
+  - `terms`: 種類ごとの条項。同盟 `{bind: strong|medium|weak}`、経済協力 `{tariff: low|mid|high}`、従属 `{kind}`、共同宣言 `{declaration}`、講和 `{kind, notes}`。
+  - `ref`: 既存の仕組みとのつながり。`{allianceId}`（`data.alliances`）、`{vassalState}`（国家の `vassal`）、`{warId}`（`data.wars`）。同盟・従属は、既存のデータが引き続き効果の正本で、条約はその「取り決め」の記録と条項を持つ。
+- `treatySettings`: `{ civilCallsAllies: boolean }`。内戦（反乱で始まる戦争）でも同盟国を参戦に招集するか。既定は false。
+- ゾーン（`zones`）に、疫病・災害の一時表示用の任意項目: `zid`（安定した id）、`startAt` / `endAt`（`{year, month}`）。無いゾーン（読み込んだ地図のもの）は、期間なしで常に表示する。年表の出来事（`historyLog`）に `zoneId` を持てる。
+- 旅の記録（`journeys`）は廃止。読み込み時に無視し、保存し直すと消える。
+
+### 読み込み時の変換（版 1 → 2）
+`migrateLegacyToTreaties`（`core/edit/treaties.js`）が、`data.alliances`・国家の `vassal`・講和済みの戦争（`data.wars[].terms.treatyName`）を、条約に変換する。冪等（もう一度かけても増えない）。元の同盟・従属・戦争のデータは変えない。

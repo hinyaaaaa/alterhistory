@@ -17,6 +17,7 @@ import { planNextCollapse } from "../core/sim/collapse.js";
 import { leaderOf } from "../core/edit/alliances.js";
 import { planCovertOp, covertOdds, listCovertOps, COVERT_KINDS } from "../core/sim/covert.js";
 import { planSetVassal, planReleaseVassal, vassalInfo } from "../core/edit/vassals.js";
+import { planConcludeTreaty, planBreakTreaty, planAmendTreaty, planWarBreach, findWarViolations, joinCommands, listTreaties, planSetTreatySettings, getTreatySettings, BIND_LEVELS } from "../core/edit/treaties.js";
 import { planMergeStates, planDeclareIndependence } from "../core/edit/sovereignty.js";
 import { rollNaturalEvents, planPlague, planRebellion, getNaturalSettings, planSetNaturalSettings } from "../core/sim/natural-events.js";
 import { planAddEntity } from "../core/edit/entities.js";
@@ -163,14 +164,26 @@ export function createSimActions({ store, renderer }) {
     listAlliances() { return withMap((map) => listAlliances(map)) ?? []; },
     alliancesOf(stateId) { return withMap((map) => alliancesOf(map, stateId)) ?? []; },
     createAlliance(name, memberIds, bond = "standard", leader = null) {
-      // 名前が空なら、盟主の文化に合わせたランダムな名前を付ける
+      // 同盟は条約の一種。名前が空なら、盟主の文化に合わせたランダムな名前を付ける
       return withMap((map) => safeRun("同盟の結成", () => {
         const given = (name ?? "").trim();
         const label = given || suggestLabel(map, { kind: "alliance", rnd, stateId: leader ?? memberIds[0] });
-        const r = planCreateAlliance(map, label, memberIds, currentDate(), bond, leader);
-        commitOrThrow(r.command); return r.id;
+        const bind = BIND_LEVELS.find((b) => b.bond === bond)?.key ?? "medium";
+        const lead = leader ?? memberIds[0];
+        const r = planConcludeTreaty(map, { kind: "alliance", name: label, parties: memberIds.map((id) => ({ state: id, role: id === lead ? "盟主" : "加盟" })), terms: { bind }, date: currentDate() });
+        commitOrThrow(r.command); return r.treaty.ref.allianceId;
       }));
     },
+    // --- 条約（同盟・不可侵・経済協力・従属・国境・共同宣言・講和）。確定するまで何も残さない ---
+    listTreaties() { return withMap((map) => listTreaties(map)) ?? []; },
+    /** 条約を結ぶ。成功なら条約の id、失敗なら null（理由は画面に出る） */
+    concludeTreaty(opts) { return withMap((map) => { let id = null; safeRun("条約の締結", () => { const r = planConcludeTreaty(map, { ...opts, date: currentDate() }); commitOrThrow(r.command); id = r.id; rerender(); }); return id; }) ?? null; },
+    breakTreaty(id, by = null) { return withMap((map) => { let ok = false; safeRun("条約の破棄", () => { commitOrThrow(planBreakTreaty(map, id, { by, date: currentDate() })); ok = true; rerender(); }); return ok; }) ?? false; },
+    amendTreaty(id, patch) { return withMap((map) => { let ok = false; safeRun("条約の改定", () => { const c = planAmendTreaty(map, id, patch); if (c) commitOrThrow(c); ok = true; }); return ok; }) ?? false; },
+    /** 宣戦が、有効な不可侵条約に反するか（画面の警告用。副作用なし） */
+    treatyWarnings(attackers, defenders) { return withMap((map) => findWarViolations(map, attackers, defenders).map((v) => ({ treaty: v.treaty.name, aggressor: v.aggressor, target: v.target }))) ?? []; },
+    treatySettings() { return withMap((map) => getTreatySettings(map)) ?? { civilCallsAllies: false }; },
+    setTreatySettings(patch) { withMap((map) => safeRun("条約の設定", () => { const c = planSetTreatySettings(map, patch); if (c) commitOrThrow(c); })); },
     /** 同盟の名前をランダムに作る（盟主・加盟国の文化に合わせる） */
     suggestAllianceName(stateId) { return withMap((map) => suggestLabel(map, { kind: "alliance", rnd, stateId })) ?? ""; },
     editAlliance(id, patch) {
@@ -181,7 +194,12 @@ export function createSimActions({ store, renderer }) {
         commitOrThrow(plan && renamed ? withEvent(map, plan, { type: "rename-alliance", title: `同盟の改称: 「${a.name}」→「${patch.name}」` }) : plan);
       }));
     },
-    dissolveAlliance(id) { withMap((map) => safeRun("同盟の解消", () => commitOrThrow(planDissolveAlliance(map, id, currentDate())))); },
+    dissolveAlliance(id) {
+      withMap((map) => safeRun("同盟の解消", () => {
+        const t = listTreaties(map).find((x) => x.kind === "alliance" && x.ref?.allianceId === id && x.status !== "broken");
+        commitOrThrow(t ? planBreakTreaty(map, t.id, { date: currentDate() }) : planDissolveAlliance(map, id, currentDate()));
+      }));
+    },
 
     // --- 戦争・講和 ---
     listWars() { return withMap((map) => listWars(map)) ?? []; },
@@ -191,8 +209,9 @@ export function createSimActions({ store, renderer }) {
       return withMap((map) => safeRun("宣戦布告", () => {
         const r = planDeclareWar(map, { name, attackers, defenders, date: currentDate() });
         const war = r.command.label ?? "宣戦布告";
+        const cmd = joinCommands(r.command, planWarBreach(map, attackers, defenders, currentDate())); // 不可侵条約への違約（あれば）を同じ操作にまとめる
         atomic(war, () => {
-          store.commit(r.command);
+          store.commit(cmd);
           const m = store.getState().map;
           putMarker("war", "⚔️", capitalCell(m, attackers[0]), `${dateLabel()} ${listWars(m).find((w) => w.id === r.id)?.name ?? "開戦"}（開戦）`);
         });
@@ -209,8 +228,9 @@ export function createSimActions({ store, renderer }) {
         safeRun("戦争開始", () => {
           const r = planDeclareAndResolveWar(map, { attackers, defenders, date: currentDate(), rnd, muster, type });
           let collapsed = [];
+          const cmd = joinCommands(r.command, planWarBreach(map, attackers, defenders, currentDate())); // 不可侵条約への違約（あれば）
           atomic(r.command.label ?? "戦争開始", () => {
-            store.commit(r.command);
+            store.commit(cmd);
             putMarker("war", "⚔️", capitalCell(store.getState().map, attackers[0]), `${dateLabel()} ${r.name}`);
             collapsed = runCollapses(); // 人口の大部分を失った国は、ここで崩壊する
           });
@@ -367,6 +387,12 @@ export function createSimActions({ store, renderer }) {
           store.commit(cmd);
           const to = terms.cessions?.[0]?.toStateId ?? terms.annex?.[0]?.toStateId ?? terms.reparations?.[0]?.toStateId ?? war?.attackers?.[0];
           putMarker("peace", "🕊️", capitalCell(store.getState().map, to), `${dateLabel()} ${war?.name ?? "戦争"}の講和`);
+          // 講和は条約の一種として、外交の条約一覧に入る（年表の記録は講和の側にあるので、重ねて記録しない）
+          const m2 = store.getState().map, w2 = listWars(m2).find((x) => x.id === warId);
+          if (w2?.terms?.treatyName) {
+            const all = [...new Set([...(w2.attackers ?? []), ...(w2.defenders ?? [])])];
+            store.commit(planConcludeTreaty(m2, { kind: "peace", name: w2.terms.treatyName, parties: all.map((id) => ({ state: id, role: (w2.attackers ?? []).includes(id) ? "攻撃側" : "防御側" })), terms: { kind: w2.terms.kind ?? "standard", notes: w2.terms.notes ?? "" }, originWar: warId, date: currentDate() }, { logEvent: false }).command);
+          }
           for (const x of terms.annex ?? []) store.commit(planMergeStates(store.getState().map, { from: x.fromStateId, to: x.toStateId, date: currentDate() }));
           runCollapses();
         });

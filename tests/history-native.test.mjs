@@ -49,9 +49,9 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
   check("宗教の誕生が最高神つきで残る", log.at(-1).type === "created-religion" && log.at(-1).detail?.includes(rel.deity ?? "?"), JSON.stringify(log.at(-1)));
   ea.setEntityProfile("religion", rid, { deity: "新しい神" });
   check("最高神の変更が残る", listHistory(M()).at(-1).type === "profile-religion" && listHistory(M()).at(-1).detail.includes("新しい神"));
-  const zi = ea.addZoneAround(live(M().pack.burgs)[0].cell, { type: "Disease", size: 10 });
-  const z = M().zones[zi];
-  check("ゾーンは名前を省くと種類に合った名前が付き、年表に残る", !!z.name && z.name !== "" && listHistory(M()).at(-1).type === "created-zone", z?.name);
+  const zid = ea.recordZoneEvent({ type: "Disease", scope: { kind: "state", id: live(M().pack.burgs)[0].state }, months: 6 });
+  const z = M().zones.find((x) => x.zid === zid);
+  check("疫病・災害のゾーンは名前が自動で付き、年表に残る（ゾーンの id つき）", !!z.name && listHistory(M()).at(-1).type === "zone-start" && listHistory(M()).at(-1).zoneId === zid, z?.name);
   // 領土の塗り足しは同じ日・同じ対象なら1件にまとまる
   const c = M().pack.cells, land = []; for (let i = 0; i < c.biome.length && land.length < 40; i++) if (c.biome[i] !== 0 && c.state[i] === 0) land.push(i);
   const n0 = listHistory(M()).length;
@@ -79,7 +79,8 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   check("セル配列が一致", ["biome", "burg", "culture", "pop", "river", "state", "religion", "province"].every((k) => same(back.pack.cells[k], M().pack.cells[k])));
   check("国家・宗教・都市・属州・河川が一致", ["states", "cultures", "religions", "provinces", "burgs", "rivers"].every((k) => same(back.pack[k], M().pack[k])));
-  check("歴史ログ・世界の時刻・ゾーン・マーカーが一致", same(back.ext.data, M().ext.data) && same(back.worldTime, M().worldTime) && same(back.zones, M().zones) && same(back.markers, M().markers));
+  check("歴史ログ・世界の時刻・ゾーン・マーカーが一致", same(back.ext.data, { ...M().ext.data, saveFormat: 2 }) && // 保存すると、保存形式の版 2 が付く
+     same(back.worldTime, M().worldTime) && same(back.zones, M().zones) && same(back.markers, M().markers));
   check("格子（標高・降水・点）が一致", same(back.grid.h, M().grid.h) && same(back.grid.points, M().grid.points));
   check("Azgaar 形式より読みやすい（改行なしの1つの JSON・数字の羅列の行ではない）", json.startsWith("{") && !json.includes("\n"));
   const bytes = await serializeNative(M(), { savedAt: "x" });

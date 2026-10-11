@@ -12,6 +12,7 @@
 import { relationOf } from "../edit/relations.js";
 import { blockedPairs, isBlockaded } from "./sanctions.js";
 import { activeWars } from "../edit/wars.js";
+import { pairBoost } from "../edit/treaties.js";
 
 // ---------- 産物（ALTERHISTORY 独自の小さなカタログ） ----------
 // out: バイオームid → 人口1あたりの年産量。coast: 海岸セルの人口1あたりの追加産量。
@@ -188,11 +189,12 @@ export function computeTrade(map) {
         const left = remaining.get(c.e);
         if (left < 0.01) continue;
         // 取引のしやすさが低いほど、まかなえる割合が下がる（距離・関係・関税の摩擦）
-        const units = round2(Math.min(left, need * Math.min(1, c.score * 1.1)));
+        const boost = pairBoost(map, c.e, imp.i); // 経済協力・自由貿易の条約: 当事国どうしの貿易量と税収に補正
+        const units = round2(Math.min(left, need * Math.min(1, c.score * 1.1 * boost)));
         if (units < 0.01) continue;
         const price = round2(g.value * (1 + 0.15 * (1 - Math.min(1, c.aff)))); // 疎遠なほど割高
         const value = round2(units * price);
-        const tax = round2(value * c.tax);
+        const tax = round2(value * c.tax * boost);
         deals.push({ from: c.e, to: imp.i, good: g.id, units, price, value, tax });
         remaining.set(c.e, round2(left - units));
         need = round2(need - units);

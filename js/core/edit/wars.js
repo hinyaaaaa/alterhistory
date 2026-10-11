@@ -23,6 +23,7 @@ import { newFx, rollWarMonth, fxParts, addMorale, addSupport, mulPop, mulTroops 
 import { regimentsOf } from "../sim/military.js";
 import { convert, getCurrency } from "../sim/currency.js";
 import { getFinance } from "../sim/trade.js";
+import { getTreatySettings } from "./treaties.js";
 import { expandWithAllies, estimateDurationMonths, addMonths, proposePeaceVenue, peaceImpact } from "../sim/war-flow.js";
 import { diplomacyParts, crossPairs } from "./diplomacy.js";
 import { VASSAL_BY_KEY, vassalInfo } from "./vassals.js";
@@ -91,7 +92,9 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
   if (a0.some((id) => d0.includes(id))) throw new Error("同じ国家が両陣営に入っています");
   const T = warTypeOf(type);
   // 同盟の拘束力に従って、同盟国が自動で参戦する（参戦した国は全部隊で戦う）
-  const { attackers: a, defenders: d, joined } = expandWithAllies(map, a0, d0);
+  // 内戦は、既定では同盟の参戦招集の対象外（設定で変えられる）
+  const noCall = T.key === "civil" && !getTreatySettings(map).civilCallsAllies;
+  const { attackers: a, defenders: d, joined } = noCall ? { attackers: a0, defenders: d0, joined: [] } : expandWithAllies(map, a0, d0);
   const cleanMuster = {};
   if (!T.allMuster) for (const [sid, ids] of Object.entries(muster ?? {})) {
     const id = Number(sid);

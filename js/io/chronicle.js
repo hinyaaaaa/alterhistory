@@ -498,7 +498,7 @@ function timelineOf(map, { namer, stateAt, eraName, eras }) {
     if (cell == null) for (const id of stateIds) { cell = capitalCellOf(id); if (cell != null) break; }
     timeline.push({
       date: fmtDate(date), year: validDate(date) ? date.year : null, month: validDate(date) ? date.month : null, era: eraName(date), type, title, detail: detail ?? null, involvedStates: involved,
-      cell, stateIds, _k: dateKey(date),
+      cell, stateIds, zoneId: extra.zoneId ?? null, _k: dateKey(date),
     });
   };
   for (const e of eras) push({ year: e.fromYear, month: 1 }, "era", `時代「${e.name}」の始まり`, `${e.fromYear}年から。`);
@@ -507,7 +507,7 @@ function timelineOf(map, { namer, stateAt, eraName, eras }) {
     let cell = Number.isInteger(h.cell) ? h.cell : null;
     if (cell == null && h.ref?.kind === "burg" && P.burgs[h.ref.id] && !P.burgs[h.ref.id].removed) cell = P.burgs[h.ref.id].cell;
     const states = [...(h.states ?? []), ...(h.ref?.kind === "state" ? [h.ref.id] : [])];
-    push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}セル` : null].filter(Boolean).join(" / ") || null, [], { cell, states });
+    push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}セル` : null].filter(Boolean).join(" / ") || null, [], { cell, states, zoneId: h.zoneId ?? null });
   }
   for (const a of listAlliances(map)) {
     push(a.formedAt, "alliance-formed", `同盟「${a.name}」結成`, `加盟国: ${a.members.map((id) => stateAt(id, a.formedAt, undefined, a.memberNames?.[id])).join("、")}`, stateNames(a.members));
