@@ -9,6 +9,7 @@ import { BALANCE, BALANCE_META, BALANCE_DEFAULTS } from "../core/sim/balance.js"
 import { planSetBalance } from "../core/edit/balance-setting.js";
 import { el } from "./kit.js";
 import { initDiplomacyWindow } from "./diplomacy-window.js";
+import { createCivilSection } from "./civil-section.js";
 
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 export function initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }) {
@@ -21,8 +22,9 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
   const nb = el("button", "", "@nuclear 核作戦を立案・実行する"); nb.type = "button"; nb.addEventListener("click", () => wins.open("nuclear"));
   const tb = el("button", "", "@timeline 戦争の経過を年表で見る"); tb.type = "button"; tb.addEventListener("click", () => { wins.open("timeline"); window.dispatchEvent(new CustomEvent("timeline-filter", { detail: { kind: "war" } })); });
   const opsRow = el("div", "diplomacy-row"); opsRow.append(nb, tb); warOps.append(opsRow);
-  warBody.append(byId("tab-wars"), warOps);
-  wins.register("war", { title: "戦争", width: 820, body: warBody, onOpen: () => panels.wars.render() });
+  const civil = createCivilSection({ store, simActions: panels.simActions });
+  warBody.append(byId("tab-wars"), warOps, civil.box);
+  wins.register("war", { title: "戦争", width: 820, body: warBody, onOpen: () => { panels.wars.render(); civil.render(); } });
   // 外交: 同盟・不可侵・協力・従属・講和は、すべて「条約」。条約の窓は ui/diplomacy-window.js
   const dip = initDiplomacyWindow({ store, wins, simActions: panels.simActions, editorPanel, editActions });
   wins.register("diplomacy", { title: "外交", width: 860, body: dip.body, onOpen: () => dip.render() });

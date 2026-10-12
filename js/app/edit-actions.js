@@ -1,3 +1,5 @@
+import { planSetWorldInfo } from "../core/edit/world-info.js";
+import { planChangeMonarch } from "../core/edit/lineage.js";
 // 編集アクション：編集ツールの操作を Store の commit に変換する。
 // UI から呼ばれる。ロジック自体は core/edit/* にあり、ここは配線と通知だけ。
 
@@ -261,6 +263,9 @@ export function createEditActions({ store, renderer }) {
     descendantsOf(kind, id) { return withMap((map) => descendantsOf(map, kind, id)) ?? []; },
     setBurgProfile(id, patch) { withMap((map) => safeRun("都市の設定", () => commitOrThrow(planSetBurgProfile(map, id, patch)))); },
 
+    setWorldInfo(kind, id, patch) { return !!withMap((map) => { let ok = false; safeRun("情報の変更", () => { const c = planSetWorldInfo(map, kind, id, patch); if (c) { store.commit(c); rerender(); } ok = true; }); return ok; }); },
+    /** 君主交代（国家の「操作」から）。成功なら true */
+    changeMonarch(stateId, opts) { return !!withMap((map) => { let ok = false; safeRun("君主交代", () => { store.commit(planChangeMonarch(map, stateId, opts)); rerender(); ok = true; }); return ok; }); },
     // ---- ゾーン（疫病・災害の一時表示）。年表の「＋ 出来事を記録」から、選択だけで作る。確定するまで何も残さない ----
     /** 種類・範囲・期間を選んで確定する。年表に1件とゾーンが同時にでき、Undo は1回。成功なら zid、失敗なら null */
     recordZoneEvent({ type, scope, months, date = null } = {}) {

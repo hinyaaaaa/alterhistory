@@ -1,3 +1,4 @@
+import { checkRecords } from "./records-check.js";
 // 整合性の検査：編集後の地図が、実データで成り立つ決まりを守っているかを調べる。
 //
 // baseline（編集前の状態）を渡すと、「編集前から成り立っていなかったもの」は問題にしない。
@@ -157,5 +158,6 @@ export function checkIntegrity(map, baseline = null, { skipEconomyChecks = false
     if (!baseline || !baseline.stats.has(p.key)) problems.push(p.msg);
   }
   for (const p of problemsPoles(map)) if (!baseline || !baseline.poles.has(p.key)) problems.push(p.msg);
+  problems.push(...checkRecords(map)); // 君主・参照・原因リンク・系譜・条約（v2.3.0）
   return problems;
 }

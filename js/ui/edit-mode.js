@@ -1,3 +1,4 @@
+import { DEFAULT_MARKER_TYPES } from "../core/edit/markers.js";
 // 編集モード：地図上でのツール操作（塗り・都市/マーカーの配置・選択）。
 // map-view.js のポインタイベントに割り込み、編集ツールが選ばれている間だけ動作する。
 
@@ -20,7 +21,7 @@ const PAINT_TOOL_KIND = {
   [TOOLS.PAINT_RELIGION]: "religion", [TOOLS.PAINT_PROVINCE]: "province",
 };
 
-export function initEditMode({ store, viewport, editActions, panels }) {
+export function initEditMode({ store, viewport, editActions, panels, openSetup }) {
   const canvas = byId("map-canvas");
   let tool = TOOLS.SELECT;
   let target = 0;          // 塗る先の実体ID（0=消す）。パネルで選ぶ
@@ -83,12 +84,12 @@ export function initEditMode({ store, viewport, editActions, panels }) {
     if (cell < 0) return;
 
     if (tool === TOOLS.ADD_BURG) {
-      panels.promptBurgName((name) => { if (name != null) { const id = editActions.addBurg(cell, name); if (id != null) panels.openBurg(id); } }, cell);
+      // 置く場所を決める → 初期設定ウィンドウで名前・種類を入力 → 確定（確定するまで何も残さない。Undo は1回）
+      openSetup("burg", { cell, create: (spec) => store.transaction("都市を新規作成", () => { const id = editActions.addBurg(cell, spec.name); if (id != null && spec.kind) editActions.setWorldInfo("burg", id, { kind: spec.kind }); return id; }) }).then((id) => { if (id != null) panels.openBurg(id); });
       return;
     }
     if (tool === TOOLS.ADD_MARKER) {
-      const id = editActions.addMarker(cell, markerType);
-      if (id != null) panels.openMarker(id);
+      openSetup("marker", { cell, markerType: markerType.type, create: (spec) => editActions.addMarker(cell, { type: spec.type || markerType.type, icon: DEFAULT_MARKER_TYPES.find((x) => x.type === spec.type)?.icon ?? markerType.icon, name: spec.name || undefined }) }).then((id) => { if (id != null) panels.openMarker(id); });
       return;
     }
     e.preventDefault();

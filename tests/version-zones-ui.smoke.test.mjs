@@ -57,7 +57,7 @@ console.log("=== 詳細設定と版の表示 ===");
 wins.open("settings"); await sleep(50);
 const sw = win("settings");
 check("詳細設定に、バランス調整・時間と時代区分・データ検査・このアプリについて がある", ["バランス調整", "時間・時代区分", "データ検査", "このアプリについて"].every((t) => sw.textContent.includes(t)));
-check("「このアプリについて」に「v2.0.0 静かな戦略卓」と出る", sw.querySelector(".about-version").textContent === "v2.0.0 静かな戦略卓");
+check("「このアプリについて」に「v2.3.0 内戦と検査」と出る", sw.querySelector(".about-version").textContent === "v2.3.0 内戦と検査");
 clickBtn(sw, "検査を実行する").click(); await sleep(30);
 check("データ検査を実行できる", !sw.querySelector(".settings-check").hidden && sw.querySelector(".settings-check").textContent.length > 0);
 clickBtn(sw, "バランス調整を開く").click(); await sleep(30);

@@ -128,7 +128,7 @@ function start() {
     makeDraggable(root, id === "sidebar" ? root : root.querySelector(head), byId("stage"), id === "sidebar" ? ".editor-header" : null);
     makeResizable(root, byId("stage")); // 大きさも自由に変えられる
   }
-  const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, wins, openFileDialog: files.open };
+  const deps = { store, viewport, renderer, actions, editActions, simActions, timeActions, panels, wins, openSetup, openFileDialog: files.open };
 
   deps.highlight = highlight;
   initBanner(deps);
@@ -167,7 +167,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { wins, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

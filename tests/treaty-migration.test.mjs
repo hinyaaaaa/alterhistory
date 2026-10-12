@@ -38,7 +38,7 @@ check("新形式を開き直しても、条約は増えも減りもしない", l
 check("版 1 のファイル（saveFormat なし）でも、版 2 の判定で壊れない", parseNativeJson(json).map.ext.data.saveFormat === 2);
 
 console.log("=== 条約の種類と条項 ===");
-check("条約の種類は7つ（同盟・不可侵・協力・従属・国境・共同宣言・講和）", TREATY_KINDS.length === 7 && SIGNABLE_KINDS.length === 6 && !SIGNABLE_KINDS.includes("peace"));
+check("条約の種類は8つ（同盟・不可侵・協力・従属・国境・共同宣言・外国の支援・講和）。締結の窓から選べるのは6つ", TREATY_KINDS.length === 8 && SIGNABLE_KINDS.length === 6 && !SIGNABLE_KINDS.includes("peace") && !SIGNABLE_KINDS.includes("support"));
 const map2 = await load(); const st2 = { map: map2 };
 const r1 = planConcludeTreaty(map2, { kind: "nonaggression", parties: [{ state: A }, { state: B }], months: 60, date: { year: 10, month: 1 } });
 check("確定するまで、何も残らない", listTreaties(map2).length === 0);

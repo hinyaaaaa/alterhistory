@@ -17,7 +17,16 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
-## 追加済み：v2.0.0「静かな戦略卓」（いちばん新しい）
+## 追加済み：v2.3.0「内戦と検査」（いちばん新しい）
+`ui/civil-section.js`（内戦の決着・外国の支援。戦争の窓の下）、`sim-actions` の `resolveCivilWar` / `recordCivilSupport`（`signTreaty` は第3引数で `enforceBudget` / `allowOngoing` を渡せる）、`core/edit/records-check.js`（整合性検査の拡張）、条約の種類 `support`（締結の窓には出さない）。未着手: v2.4.0（国境の年代再生。着手前に方針を短く確認する）。
+
+## 追加済み：v2.2.0「世界を詳しく」
+`core/edit/world-info.js`（特色・都市の種類・属州の称号・資源。エンティティの `tags` / `kind` / `title` / `resources` に直接保存）、`io/state-history.js`（国史）。都市・マーカーは `setup-window.js` の `place` 分岐（`opts.create` を呼び出し側が渡す。`edit-mode.js` が `openSetup` で呼ぶ）。国家・都市・属州の詳細に選択式の「特色／情報」欄（`editor-panel.js` の `worldInfoSection`）。未着手: v2.3.0 以降。
+
+## 追加済み：v2.1.0「因果と人物」
+`core/edit/lineage.js`（原因リンク・君主・系譜。DOM 非依存）。年表は `buildTimeline` が `attachCauses` を通す（`causeKey` / `causeText` が付く）。君主は `data.monarchs[stateId] = {current, history}`。画面は `ui/panels/editor-panel.js` の `monarchLine` / `monarchSection` / `lineageSection`。`window.alterhistory.panels` を公開。未着手: 手で記録する出来事の「きっかけ」選択（保存は対応済み、画面の選択肢が未）、新聞の原因文は年表と共通。次は v2.2.0。
+
+## 追加済み：v2.0.0「静かな戦略卓」
 
 最終実装指示書（v2.0.0）の 5〜9章をすべて実装した。詳細は `docs/CHANGELOG.md`。要点だけ。
 

@@ -5,6 +5,8 @@
 // open(kind, opts) は、作られた実体のID（キャンセルなら null）で解決する Promise を返す。
 
 import { CULTURE_TYPES, RELIGION_TYPES, STATE_FORMS } from "../core/edit/profile.js";
+import { BURG_KINDS } from "../core/edit/world-info.js";
+import { DEFAULT_MARKER_TYPES } from "../core/edit/markers.js";
 import { el, btn } from "./kit.js";
 
 
@@ -59,7 +61,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
     body.replaceChildren();
     const label = setupActions.SETUP_LABEL[kind];
     if (titleEl()) titleEl().textContent = `新しい${label}の初期設定`;
-    body.append(el("p", "hint", `すべて入力して「確定」を押すと、${label}が作られ、年表に記録されます。それまでは何も作られません。`));
+    body.append(el("p", "hint", `すべて入力して「確定」を押すと、${label}が作られ、年表に記録されます。それまでは何も作られません。${kind === "burg" || kind === "marker" ? "（置く場所は、クリックした地点です）" : ""}`));
 
     // 属州は所属する国が必要
     let ownerSel = null;
@@ -70,6 +72,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
       body.append(field("所属する国家", ownerSel));
     }
 
+    const place = kind === "burg" || kind === "marker"; // 地図クリックで置くもの（領土・色は無い）
     // 名前 + 🎲
     const nameIn = input("", "空欄なら、おまかせで決めます");
     const row = el("span", "name-row");
@@ -77,7 +80,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
     const fields = {};
     const dice = btn("suggest-mini", "@dice", "名前をランダムに決める（政体や神名もいっしょに入ります）", (ev) => {
       ev.preventDefault();
-      const g = setupActions.suggest(kind, kind === "province" ? { stateId: Number(ownerSel.value) } : {});
+      const g = setupActions.suggest(kind === "marker" ? "burg" : kind, kind === "province" ? { stateId: Number(ownerSel.value) } : place ? { cell: opts.cell } : {});
       if (!g) return;
       nameIn.value = g.name; state.extra = g.extra ?? {}; state.lastName = g.name;
       if (fields.formName && g.extra?.formName) fields.formName.value = g.extra.formName;
@@ -89,11 +92,15 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
     body.append(field("名前", row));
 
     // 色
-    const color = document.createElement("input"); color.type = "color"; color.value = setupActions.suggestColor(kind);
-    body.append(field("色", color));
+    const color = document.createElement("input"); color.type = "color"; color.value = place ? "#888888" : setupActions.suggestColor(kind);
+    if (!place) body.append(field("色", color));
 
     // 種類ごとの項目
-    if (kind === "state") {
+    if (kind === "burg") {
+      fields.bkind = select(BURG_KINDS.map((x) => ({ id: x.key, label: x.label })), ""); body.append(field("都市の種類", fields.bkind));
+    } else if (kind === "marker") {
+      fields.mtype = select(DEFAULT_MARKER_TYPES.map((x) => ({ id: x.type, label: `${x.icon} ${x.label}` })), opts.markerType ?? DEFAULT_MARKER_TYPES[0].type); body.append(field("種類", fields.mtype));
+    } else if (kind === "state") {
       fields.form = select(STATE_FORMS, "");
       fields.form.prepend(new Option("（おまかせ）", ""));
       fields.form.value = "";
@@ -118,7 +125,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
 
     // 領土（属州以外）
     let terr = null, capitalCb = null;
-    if (kind !== "province") {
+    if (kind !== "province" && !place) {
       const free = setupActions.freeLand(kind);
       const opts2 = [{ id: "later", label: "あとで地図に塗る" }];
       if (free > 0) for (const [k, v] of Object.entries(setupActions.TERRITORY_SIZES)) opts2.push({ id: k, label: `おまかせ（${v.label}）` });
@@ -144,6 +151,10 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
           // 🎲 で決めた名前のままなら、その案の付属項目（国の短い名前など）も引き継ぐ
           baseExtra: state.lastName && nameIn.value.trim() === state.lastName ? state.extra : undefined,
         };
+        if (place) { // 都市・マーカー: 呼び出し側（地図クリック）が、確定のときに1回の操作で作る
+          const id = opts.create({ name: nameIn.value, kind: fields.bkind?.value, type: fields.mtype?.value });
+          if (id == null) throw new Error("置けませんでした"); finish(id, { id }); return;
+        }
         const r = setupActions.create(kind, spec); // 名前が空なら、ここでおまかせの名前になる
         finish(r.id, r);
       } catch (e) { msg.textContent = `作成できませんでした: ${e.message}`; }
@@ -156,7 +167,7 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
   return {
     /** 開く。確定なら作られたID、キャンセルなら null で解決する */
     open(kind, opts = {}) {
-      if (!setupActions.SETUP_KINDS.includes(kind)) return Promise.resolve(null);
+      if (!setupActions.SETUP_KINDS.includes(kind) && !setupActions.PLACE_KINDS.includes(kind)) return Promise.resolve(null);
       if (!store.getState().map) return Promise.resolve(null);
       if (pending) { const p = pending; pending = null; p.resolve(null); } // 開いたまま別の種類を開いたら、前の入力は破棄する
       return new Promise((resolve) => { pending = { kind, resolve }; render(kind, opts); wins.open("setup"); });

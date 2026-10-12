@@ -136,9 +136,11 @@ const [lx, ly] = viewport.toScreen(map.geometry.pack.p[landCell][0], map.geometr
 const beforeBurgCount = store.getState().map.pack.burgs.filter((b) => b && b.i && !b.removed).length;
 pointer(canvas, "pointerdown", lx, ly); pointer(canvas, "click", lx, ly); pointer(canvas, "pointerup", lx, ly);
 await sleep(50);
+check("確定するまで都市は増えない（初期設定ウィンドウが開く）", store.getState().map.pack.burgs.filter((b) => b && b.i && !b.removed).length === beforeBurgCount);
+[...window.document.querySelectorAll('[data-win="setup"] button')].find((b) => b.textContent.includes("確定して作成")).click(); await sleep(80);
 const afterBurgCount = store.getState().map.pack.burgs.filter((b) => b && b.i && !b.removed).length;
 check("都市が1つ増える", afterBurgCount === beforeBurgCount + 1, `${beforeBurgCount}→${afterBurgCount}`);
-check("新しい都市のパネルが自動で開く", !$("editor-panel").hidden && $("editor-panel").textContent.includes("新しい村"));
+check("新しい都市のパネルが自動で開く", !$("editor-panel").hidden && !!$("editor-panel").querySelector(".name-row input") && $("editor-panel").querySelector(".name-row input").value.length > 0);
 
 console.log("=== マーカーを置く ===");
 q('[data-tool="add:marker"]').click();
@@ -147,6 +149,7 @@ const [mx, my] = viewport.toScreen(map.geometry.pack.p[landCell2][0], map.geomet
 const beforeMarkers = store.getState().map.markers.length;
 pointer(canvas, "pointerdown", mx, my); pointer(canvas, "click", mx, my); pointer(canvas, "pointerup", mx, my);
 await sleep(50);
+[...window.document.querySelectorAll('[data-win="setup"] button')].find((b) => b.textContent.includes("確定して作成")).click(); await sleep(80);
 check("マーカーが1つ増える", store.getState().map.markers.length === beforeMarkers + 1);
 check("マーカーのパネルが開く", !$("editor-panel").hidden && $("editor-panel").querySelector("h3"));
 

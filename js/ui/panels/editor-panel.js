@@ -1,3 +1,6 @@
+import { STATE_TAGS, BURG_KINDS, PROVINCE_TITLES, RESOURCES } from "../../core/edit/world-info.js";
+import { TITLES, REASONS, STABILITY, monarchRecord, lineageOf, causeChain } from "../../core/edit/lineage.js";
+import { buildTimeline } from "../../io/chronicle.js";
 // エディタパネル：選ばれた対象（セル・都市・マーカー・国家など）の情報と編集フォームを表示する。
 // 左サイドバーに差し込む1枚のパネル。DOMを直接組み立てる（フレームワーク不使用）。
 // 国家（kind === "state"）はサブタブ化して、基本情報・外交・軍事・属州を1つのタブ内に集約する。
@@ -79,7 +82,8 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(textField("国家名", e.fullName ?? e.name, (v) => editActions.renameEntity("state", e.i, v), () => editActions.suggestName("state", { id: e.i })));
     form.append(...provisionalNote("state", e.i));
     if (e.parentState > 0) { const pr = map.pack.states[e.parentState]; if (pr) form.append(el("p", "hint", `分離元: ${pr.fullName ?? pr.name}（反乱・独立で成立）`)); }
-    form.append(profileSection("state", e, map));
+    form.append(monarchLine(map, e)); form.append(lineageSection(map, e));
+    form.append(profileSection("state", e, map)); form.append(worldInfoSection("state", e));
     form.append(techLevelSection(e.i));
     form.append(doctrineSection(e.i));
     form.append(noteField(map, "state", e.i));
@@ -233,8 +237,53 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     rb.title = "属州が離反して別の国になります（内戦にするか、平和的な独立かを選べます）";
     rb.addEventListener("click", () => { if (openRebellion) openRebellion({ stateId: e.i }); });
     reb.append(rb); ops.append(reb);
+    ops.append(monarchSection(map, e));
     ops.append(mergeSection(map, e));
     return ops;
+  }
+
+  const sel = (opts, v) => { const s = el("select"); for (const [k, l] of opts) s.append(new Option(l, k)); if (v) s.value = v; return s; };
+  /** 世界情報（選択式）: 国の特色・都市の種類・属州の称号・資源。数値にはつながず、表示と文のテンプレートに使う */
+  function worldInfoSection(kind, e) {
+    const box = el("div", "editor-section world-info"); if (!e) return box;
+    box.append(el("h4", "", kind === "state" ? "特色" : "情報"));
+    const chips = (list, key, on) => { const w = el("div", "tl-rec-provs"); for (const o of list) { const lab = el("label"); const cb = el("input"); cb.type = "checkbox"; cb.checked = (e[key] ?? []).includes(o.key); cb.addEventListener("change", () => { const cur = new Set(e[key] ?? []); if (cb.checked) cur.add(o.key); else cur.delete(o.key); editActions.setWorldInfo(kind, e.i, { [key]: [...cur] }); }); lab.append(cb, document.createTextNode(" " + o.label)); w.append(lab); } return w; };
+    if (kind === "state") box.append(chips(STATE_TAGS, "tags"));
+    if (kind === "burg") { const s = sel(BURG_KINDS.map((x) => [x.key, x.label]), e.kind ?? ""); s.addEventListener("change", () => editActions.setWorldInfo("burg", e.i, { kind: s.value })); box.append(el("span", "field-label", "都市の種類"), s); }
+    if (kind === "province") { const s = sel(PROVINCE_TITLES.map((x) => [x.key, x.label]), e.title ?? ""); s.addEventListener("change", () => editActions.setWorldInfo("province", e.i, { title: s.value })); box.append(el("span", "field-label", "称号"), s); }
+    if (kind !== "state") { box.append(el("span", "field-label", "資源・特産")); box.append(chips(RESOURCES, "resources")); }
+    return box;
+  }
+  /** 現在の君主と歴代 */
+  function monarchLine(map, e) {
+    const r = monarchRecord(map, e.i); const box = el("div", "editor-section monarch-line");
+    box.append(el("h4", "", "君主"));
+    box.append(el("p", "hint", r.current ? `${r.current.title}${r.current.name}（${r.current.since.year}年${r.current.since.month}月〜）` : "君主の記録はまだありません（「操作」で君主交代を記録できます）"));
+    if (r.history.length) box.append(el("p", "hint", "歴代: " + r.history.map((x) => `${x.title}${x.name}（${x.since.year}〜${x.until.year}年）`).join(" → ")));
+    return box;
+  }
+  /** 君主交代: 理由・称号・名前（任意）・継承の安定度を選んで確定。「大きな混乱」なら、反乱・独立の窓への入口を出す（自動では起こさない） */
+  function monarchSection(map, e) {
+    const w = el("div", "ops-monarch"); w.append(el("h5", "", "君主交代"));
+    const reason = sel(REASONS.map((r) => [r.key, r.label])), title = sel(TITLES.map((t) => [t, t])), stab = sel(STABILITY.map((s) => [s.key, s.label]));
+    const name = el("input"); name.placeholder = "名前（空なら自動）";
+    const go = el("button", "primary", "君主交代を記録する"); go.type = "button";
+    const row = el("div", "diplomacy-row"); row.append(reason, title, stab, name, go); w.append(row);
+    go.addEventListener("click", () => { editActions.changeMonarch(e.i, { reason: reason.value, title: title.value, name: name.value, stability: stab.value }); });
+    // 継承が「大きな混乱」の間は、反乱・独立への入口を出す（自動では起こさない）
+    if (monarchRecord(map, e.i).current?.stability === "chaos" && openRebellion) { const b = el("button", "", "継承の混乱から、反乱・独立を起こす…"); b.type = "button"; b.addEventListener("click", () => openRebellion({ stateId: e.i })); w.append(b); }
+    return w;
+  }
+  /** 系譜（前身・後継・国名の変遷）と、この国の因果の流れ */
+  function lineageSection(map, e) {
+    const L = lineageOf(map, e.i); const box = el("div", "editor-section lineage-section"); box.append(el("h4", "", "系譜"));
+    const line = (label, arr) => arr.length && box.append(el("p", "hint", `${label}: ${arr.map((x) => `${x.name}（${x.how}）`).join("、")}`));
+    line("前身", L.predecessors); line("後継", L.successors);
+    if (L.names.length) box.append(el("p", "hint", "国名の変遷: " + L.names.map((n) => `${n.year}年 ${n.from}→${n.to}`).join("、")));
+    if (!L.predecessors.length && !L.successors.length && !L.names.length) box.append(el("p", "hint", "前身・後継の記録はありません"));
+    const tl = buildTimeline(map).filter((x) => x.stateIds?.includes(e.i) && x.causeKey).slice(-4);
+    for (const x of tl) box.append(el("p", "hint", `${x.date} ${x.title}（${x.causeText}）`));
+    return box;
   }
 
   /** 国家統合：この国家を、選んだ他の国家に吸収させる（この国家は解散する） */
@@ -305,6 +354,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   }
 
   function renderBurg(map, title, body) {
+    body.append(worldInfoSection("burg", map.pack.burgs[current.id]));
     const b = map.pack.burgs[current.id];
     if (!isLive(b)) { close(); return; }
     title.textContent = `${b.capital ? "首都 ・ " : ""}${b.name}`;
@@ -338,6 +388,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
 
   /** 文化・宗教・属州（単独）用。国家は renderStateTabs 側でサブタブ表示する */
   function renderEntity(map, kind, title, body) {
+    if (kind === "province") body.append(worldInfoSection("province", map.pack.provinces[current.id]));
     const list = { culture: map.pack.cultures, religion: map.pack.religions, province: map.pack.provinces }[kind];
     const e = list?.[current.id];
     if (!isLive(e)) { close(); return; }

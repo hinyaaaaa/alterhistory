@@ -35,11 +35,12 @@ export const TREATY_KINDS = Object.freeze([
   { key: "vassal", label: "従属（保護国・属国・傀儡）", short: "従属", color: "info", min: 2, max: 2, desc: "宗主国と従属国。貢納が経済に反映され、宗主国の戦争に従う。" },
   { key: "border", label: "領土・国境の画定", short: "国境", color: "info", min: 2, desc: "国境を取り決めた記録。領土の移転は、地図編集の割譲と同じ仕組みで行う。" },
   { key: "declaration", label: "共同宣言", short: "宣言", color: "brass", min: 2, desc: "定型文を選んで出す。効果は記録と年表のみ。" },
+  { key: "support", label: "外国の支援（内戦）", short: "支援", color: "info", min: 2, max: 2, desc: "内戦の反乱側または元の国側を、外国が支援した記録（国の選択だけで記録する）。" },
   { key: "peace", label: "講和条約", short: "講和", color: "brass", min: 2, desc: "戦争の終わりに、戦争ウィンドウから結ぶ。" },
 ]);
 export const TREATY_BY_KEY = Object.fromEntries(TREATY_KINDS.map((k) => [k.key, k]));
 /** 外交ウィンドウの「条約を結ぶ」から選べる種類（講和は戦争ウィンドウから） */
-export const SIGNABLE_KINDS = Object.freeze(TREATY_KINDS.filter((k) => k.key !== "peace").map((k) => k.key));
+export const SIGNABLE_KINDS = Object.freeze(TREATY_KINDS.filter((k) => k.key !== "peace" && k.key !== "support").map((k) => k.key));
 
 /** 同盟の拘束力 → 既存の同盟の拘束（loose/standard/strict） */
 export const BIND_LEVELS = Object.freeze([
@@ -96,6 +97,7 @@ export function autoName(map, kind, parties, terms = {}) {
     border: `${two}国境画定条約`,
     declaration: `${two}共同宣言`,
     peace: `${two}講和条約`,
+    support: `${names[0]}の${terms.side === "rebel" ? "反乱側" : "元の国側"}支援`,
   }[kind] ?? `${two}条約`;
   return base;
 }
@@ -120,6 +122,7 @@ export function treatyText(map, t) {
   else if (t.kind === "vassal") { const o = t.parties.find((p) => p.role === "宗主国"), v = t.parties.find((p) => p.role !== "宗主国"); bits.push(`${nameOf(map.pack.states[v?.state])}は${nameOf(map.pack.states[o?.state])}の${VASSAL_BY_KEY[term.kind]?.label ?? "属国"}となった。`); }
   else if (t.kind === "border") bits.push(`${names}は、国境を取り決めた。${term.note ? term.note : ""}`);
   else if (t.kind === "declaration") bits.push(DECLARATION_BY_KEY[term.declaration]?.text ?? `${names}は共同宣言を出した。`);
+  else if (t.kind === "support") bits.push(`${names}: ${nameOf(map.pack.states[t.parties[0]?.state])}が内戦で${term.side === "rebel" ? "反乱側" : "元の国側"}を支援した。`);
   else if (t.kind === "peace") bits.push(`${names}の戦争は、${t.name}をもって終結した。${term.notes ?? ""}`);
   bits.push(t.expiresAt ? `期限は${fmtDate(t.expiresAt)}まで。` : "期限の定めはない。");
   return bits.join("");
@@ -270,6 +273,14 @@ export function pairBoost(map, a, b, now = nowOf(map)) {
   let x = 0;
   for (const t of activeTreaties(map, now, "economic")) { const ids = partyIds(t); if (ids.includes(a) && ids.includes(b)) x += TARIFF_BY_KEY[t.terms?.tariff]?.boost ?? 0.06; }
   return 1 + Math.min(0.3, x);
+}
+
+/** 戦争が終わったとき、その戦争に結びついた外国の支援を「失効」にする。無ければ null */
+export function planExpireWarSupport(map, warId, date = null) {
+  const list = listTreaties(map); const now = date ?? nowOf(map);
+  if (!list.some((t) => t.kind === "support" && t.originWar === warId && t.status === "active")) return null;
+  const after = list.map((t) => (t.kind === "support" && t.originWar === warId && t.status === "active" ? { ...t, status: "expired", endedAt: { ...now } } : t));
+  return makeCommand("外国の支援が失効", [], [{ apply: (m) => writeTreaties(m, after), revert: (m) => writeTreaties(m, list) }]);
 }
 
 // ---- 設定: 内戦で、同盟の参戦招集を行うか（既定は行わない） ----

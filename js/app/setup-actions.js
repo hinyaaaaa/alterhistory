@@ -17,7 +17,9 @@ import { planLogEvent } from "../core/edit/history-log.js";
 import { createRandom } from "../core/random.js";
 
 export const SETUP_KINDS = Object.freeze(["state", "culture", "religion", "province"]);
-export const SETUP_LABEL = Object.freeze({ state: "国家", culture: "文化", religion: "宗教", province: "属州" });
+export const SETUP_LABEL = Object.freeze({ state: "国家", culture: "文化", religion: "宗教", province: "属州", burg: "都市", marker: "マーカー" });
+/** 地図クリックで置くもの。置く場所を決めてから、同じ初期設定ウィンドウで名前・種類を入力して確定する */
+export const PLACE_KINDS = Object.freeze(["burg", "marker"]);
 export { TERRITORY_SIZES };
 
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
@@ -32,7 +34,7 @@ export function createSetupActions({ store, renderer }) {
   const mapOf = () => store.getState().map;
 
   return {
-    SETUP_KINDS, SETUP_LABEL, TERRITORY_SIZES,
+    SETUP_KINDS, SETUP_LABEL, TERRITORY_SIZES, PLACE_KINDS,
 
     /** 入力欄を埋めるための名前の案（地図は変えない）。{ name, extra } */
     suggest(kind, ctx = {}) {

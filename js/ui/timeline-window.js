@@ -5,6 +5,8 @@
 import { buildTimeline } from "../io/chronicle.js";
 import { cellIndexOf } from "../core/spatial.js";
 import { el } from "./kit.js";
+import { buildStateHistory } from "../io/state-history.js";
+import { causeChain } from "../core/edit/lineage.js";
 import { TEMP_ZONE_TYPES, ZONE_TYPE_BY_ID, ZONE_PERIODS, findZoneByZid } from "../core/edit/zones.js";
 
 const ROW_H = 58; // 1行の高さ（px）。固定にして、見える範囲を計算で出す
@@ -48,10 +50,10 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
   const filters = el("div", "tl-filters");
   const kindSel = el("select"); kindSel.title = "出来事の種類";
   const stateSel = el("select"); stateSel.title = "国";
-  const fromIn = el("input"); fromIn.type = "number"; fromIn.placeholder = "から（年）"; fromIn.title = "この年から";
-  const toIn = el("input"); toIn.type = "number"; toIn.placeholder = "まで（年）"; toIn.title = "この年まで";
   const textIn = el("input"); textIn.type = "search"; textIn.placeholder = "語で探す"; textIn.title = "題や説明に含まれる語";
   const reset = el("button", "", "絞り込みを外す"); reset.type = "button";
+  const fromIn = el("input"); fromIn.type = "number"; fromIn.placeholder = "から（年）"; fromIn.title = "この年から";
+  const toIn = el("input"); toIn.type = "number"; toIn.placeholder = "まで（年）"; toIn.title = "この年まで";
   filters.append(kindSel, stateSel, fromIn, toIn, textIn, reset);
   const count = el("p", "hint tl-count");
   const scroller = el("div", "tl-scroll"); const spacer = el("div", "tl-spacer"); const rowsHost = el("div", "tl-rows");
@@ -128,6 +130,14 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
     if (!fYear.value) fYear.value = now.year; if (!fMonth.value) fMonth.value = now.month;
     apply();
   }
+  // 期間で絞る・国史として書き出し（窓は増やさない）
+  const hist = el("button", "", "国史として書き出し（Markdown）"); hist.type = "button"; hist.title = "「国」で選んだ国の歴史を .md に書き出す（文章は自動生成）";
+  hist.addEventListener("click", () => {
+    const map = store.getState().map; const id = +stateSel.value; if (!map || !id) { count.textContent = "「国」を選んでから書き出してください"; return; }
+    const md = buildStateHistory(map, id, { from: fromIn.value === "" ? null : +fromIn.value, to: toIn.value === "" ? null : +toIn.value });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([md], { type: "text/markdown" })); a.download = `${(map.pack.states[id].name || "国")}の歴史.md`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  });
+  filters.append(hist);
   function apply() {
     shown = filterTimeline(all, criteria());
     const filtered = shown.length !== all.length;
@@ -167,7 +177,8 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
       const row = el("button", `tl-row tl-${kindOfType(e.type)}${e.cell == null ? " tl-nowhere" : ""}`); row.type = "button";
       row.title = [e.title, e.detail].filter(Boolean).join("\n");
       row.classList.toggle("tl-zone", !!e.zoneId);
-      row.append(el("span", "tl-date-col", e.date ?? "日付不明"), el("span", "tl-title", e.title), el("span", "tl-detail", e.detail ?? ""));
+      if (e.causeText) row.title = "経緯: " + causeChain(all, e).map((x) => x.title).concat(e.title).join(" → ");
+      row.append(el("span", "tl-date-col", e.date ?? "日付不明"), el("span", "tl-title", e.title), el("span", "tl-detail", [e.detail, e.causeText ? "↳ " + e.causeText : ""].filter(Boolean).join("　")));
       row.addEventListener("click", () => jump(e));
       frag.append(row);
     }

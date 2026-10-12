@@ -17,7 +17,7 @@ import { planNextCollapse } from "../core/sim/collapse.js";
 import { leaderOf } from "../core/edit/alliances.js";
 import { planCovertOp, covertOdds, listCovertOps, COVERT_KINDS } from "../core/sim/covert.js";
 import { planSetVassal, planReleaseVassal, vassalInfo } from "../core/edit/vassals.js";
-import { planConcludeTreaty, planBreakTreaty, planAmendTreaty, planWarBreach, findWarViolations, joinCommands, listTreaties, planSetTreatySettings, getTreatySettings, BIND_LEVELS } from "../core/edit/treaties.js";
+import { planConcludeTreaty, planBreakTreaty, planAmendTreaty, planWarBreach, findWarViolations, joinCommands, listTreaties, planSetTreatySettings, getTreatySettings, planExpireWarSupport, BIND_LEVELS } from "../core/edit/treaties.js";
 import { planMergeStates, planDeclareIndependence } from "../core/edit/sovereignty.js";
 import { rollNaturalEvents, planPlague, planRebellion, getNaturalSettings, planSetNaturalSettings } from "../core/sim/natural-events.js";
 import { planAddEntity } from "../core/edit/entities.js";
@@ -377,10 +377,29 @@ export function createSimActions({ store, renderer }) {
     estimatePeace(warId, args) { return withMap((map) => estimatePeace(map, warId, args)); },
     suggestCessions(attackerId, defenderId) { return withMap((map) => suggestCessions(map, attackerId, defenderId)) ?? []; },
     /** 講和条約を締結する。新しい形式 { kind, cessions, reparations, annex, treatyName, venue, notes } */
-    signTreaty(warId, terms) {
+    /** 内戦の決着を、選択だけで自動処理する。outcome: "suppress"（鎮圧: 反乱側の国を解体して属州を取り戻す）/ "independence"（独立を承認） */
+    resolveCivilWar(warId, outcome) {
+      const map = store.getState().map; const war = map && listWars(map).find((w) => w.id === warId);
+      if (!war || war.type !== "civil" || war.endedAt) return false;
+      const rebel = war.attackers[0], parent = war.defenders[0];
+      const terms = outcome === "suppress"
+        ? { kind: "annex", treatyName: `${war.name}の終結（鎮圧）`, annex: [{ fromStateId: rebel, toStateId: parent }], notes: "反乱側の国を解体し、属州を取り戻した" }
+        : { kind: "white", treatyName: `${war.name}の終結（独立承認）`, notes: "元の国は、反乱側の独立を承認した" };
+      const ok = !!this.signTreaty(warId, terms, { enforceBudget: false, allowOngoing: true });
+      if (ok) { const c = planExpireWarSupport(store.getState().map, warId, currentDate()); if (c) { store.commit(c); rerender(); } } // 戦争が終われば、外国の支援は失効する
+      return ok;
+    },
+    /** 外国の支援（内戦）を、国の選択だけで記録する（条約の一種） */
+    recordCivilSupport(warId, supporterId, side) {
+      const map = store.getState().map; const war = map && listWars(map).find((w) => w.id === warId);
+      if (!war || war.type !== "civil") return null;
+      const target = side === "rebel" ? war.attackers[0] : war.defenders[0];
+      return this.concludeTreaty({ kind: "support", parties: [{ state: supporterId, role: "支援国" }, { state: target, role: side === "rebel" ? "反乱側" : "元の国側" }], terms: { side, warId }, originWar: warId });
+    },
+    signTreaty(warId, terms, opts = {}) {
       return withMap((map) => { let ok = false; safeRun("講和条約", () => {
         const war = listWars(map).find((w) => w.id === warId);
-        const cmd = planSignTreaty(map, warId, terms, currentDate());
+        const cmd = planSignTreaty(map, warId, terms, currentDate(), opts);
         // 講和の記録・マーカー・併合・崩壊は、全部成功か全部取り消し。
         // 併合だけが失敗して講和だけ成立する（記録と実際の状態がずれる）ことを防ぐ。
         atomic(cmd.label ?? "講和条約", () => {
