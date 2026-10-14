@@ -11,7 +11,7 @@ import {
   NAME_STYLES, STYLE_KEYS, validate, generatePlaceName, generateStateName,
   generateReligionName, generateCultureName, generateProvinceName, stateForms,
 } from "../js/core/names/katakana.js";
-import { suggestName, suggestNames, takenNames, styleOfCulture, planSetNameStyle, isProvisional, listProvisional } from "../js/core/edit/naming.js";
+import { suggestName, suggestNames, takenNames, isProvisional, listProvisional } from "../js/core/edit/naming.js";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;
@@ -53,11 +53,7 @@ const rnd = createRandom(1);
   const five = suggestNames(map, { kind: "burg", rnd }, 8);
   check("複数候補は互いに異なる", new Set(five.map((x) => x.name)).size === 8);
 
-  const cid = map.pack.cultures.find((c) => live(c))?.i;
-  check("文化の系統が既定で決まる（同じ文化は常に同じ）", styleOfCulture(map, cid) === styleOfCulture(map, cid) && STYLE_KEYS.includes(styleOfCulture(map, cid)));
-  const cell = map.pack.cells.culture.findIndex((c) => c === cid);
-  const viaCell = suggestName(map, { kind: "burg", rnd, cell });
-  check("セルの文化から系統を辿る", viaCell.style === styleOfCulture(map, cid));
+  check("系統は毎回ランダム（同じ土地でも複数の系統が出る）", new Set(Array.from({ length: 40 }, () => suggestName(map, { kind: "burg", rnd }).style)).size >= 3);
   const s = suggestName(map, { kind: "state", rnd, style: "yamato" });
   check("国家の提案に短縮名・政体が付く", s.extra.name && s.extra.form && s.name.startsWith(s.extra.name));
   const rel = suggestName(map, { kind: "religion", rnd });
@@ -122,19 +118,7 @@ console.log("\n=== 編集アクション（仮フラグ・Undo・保存）===");
   const pid = act.addProvince(home.i, "");
   check("属州も仮生成できる", pid != null && /(州|地方|領)$/.test(map.pack.provinces[pid].name) && act.isProvisional("province", pid));
 
-  // 系統の変更
-  const cultId = map.pack.cultures.find((c) => live(c)).i;
-  act.setNameStyle(cultId, "arabic");
-  check("文化の系統を変更できる", act.getNameStyle(cultId) === "arabic" && act.effectiveNameStyle(cultId) === "arabic");
-  const cc = map.pack.cells.culture.findIndex((c) => c === cultId);
-  if (cc >= 0) {
-    const ok = Array.from({ length: 20 }, () => act.suggestName("burg", { cell: cc })).every((n) => validate(n));
-    check("系統を変えた文化の土地で名前が生成できる", ok);
-  }
-  store.undo();
-  check("系統変更を Undo できる", act.getNameStyle(cultId) == null);
-  let bad = false; try { planSetNameStyle(map, cultId, "klingon"); } catch { bad = true; }
-  check("未知の系統は拒否", bad);
+  check("系統の指定APIは無い（「〇〇風」の選択は廃止）", act.setNameStyle === undefined && act.getNameStyle === undefined);
 
   // 保存 → 再読み込み
   const beforeList = listProvisional(map).length;

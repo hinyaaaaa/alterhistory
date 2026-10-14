@@ -6,6 +6,7 @@
 // ・核兵器は通常の戦争では使われない（core/sim/nuclear.js の核作戦で別に扱う）
 // 純粋ロジック層：DOM に依存しない。乱数は core/random.js の createRandom を注入する。
 
+import { effectiveDoctrineKey } from "../edit/doctrines.js";
 import { BALANCE } from "./balance.js";
 import { UNIT_KEYS, UNIT_BY_KEY, DEFAULT_DOCTRINE, DOCTRINE_BY_KEY, stateTypeMult, forceHeadcount } from "./units.js";
 import { regimentsOf, isCoastalState } from "./military.js";
@@ -32,15 +33,37 @@ export const WAR_TYPES = Object.freeze({
     desc: "招集した部隊どうしの正規戦。標準的な損害と期間。" },
   total: { key: "total", label: "総力戦", weary: 0.8, capitalFall: 1.3, lossScale: 1.2, popScale: 1.6, duration: 1.3, scoreScale: 1, allMuster: true,
     desc: "国のすべてを注ぎ込む。全部隊が参戦し、損害も民間の被害も大きい。全面降伏まで要求できる。" },
-  asymmetric: { key: "asymmetric", label: "非対称戦（ゲリラ・占領戦）", weary: 1.4, capitalFall: 0, lossScale: 0.9, popScale: 1.3, duration: 2.2, scoreScale: 0.5, allMuster: false,
+  asymmetric: { key: "asymmetric", asym: true, label: "非対称戦（ゲリラ・占領戦）", weary: 1.4, capitalFall: 0, lossScale: 0.9, popScale: 1.3, duration: 2.2, scoreScale: 0.5, allMuster: false,
     desc: "弱い側が地形と民衆を盾にゲリラ戦を行う。強い側は制空・制海が効きにくく、士気が長期で削られる。決着がつきにくく、長引く。" },
   // 反乱で国が割れたときに自動で始まる戦争。手で宣戦する形態の一覧には出さない（civilOnly）
   civil: { key: "civil", label: "内戦（反乱）", weary: 1.2, capitalFall: 1.2, lossScale: 0.9, popScale: 1.3, duration: 1, scoreScale: 0.9, allMuster: true, civilOnly: true,
     desc: "国が割れて、互いの全部隊で戦う。決着は、鎮圧（併合）か独立の承認か、講和で決まる。" },
 });
-export const warTypeOf = (key) => WAR_TYPES[key] ?? WAR_TYPES.conventional;
+const BLEND = new Map();
+/** 双方が別の形態を選んだとき（例: A国は総力戦、B国は非対称戦）の「合成された形態」。数値は平均、非対称なら特殊な出来事が起きる */
+function blendType(key) {
+  if (BLEND.has(key)) return BLEND.get(key);
+  const [a, b] = key.split("+").map((k) => WAR_TYPES[k]);
+  if (!a || !b) return WAR_TYPES.conventional;
+  const o = { key, label: `${a.label.replace(/（.*/, "")}／${b.label.replace(/（.*/, "")}`, desc: "双方が別の形態を選んだ戦い。", allMuster: !!(a.allMuster || b.allMuster), asym: !!(a.asym || b.asym) };
+  for (const f of ["weary", "capitalFall", "lossScale", "popScale", "duration", "scoreScale"]) o[f] = Math.round(((a[f] + b[f]) / 2) * 1000) / 1000;
+  BLEND.set(key, o); return o;
+}
+export const warTypeOf = (key) => WAR_TYPES[key] ?? (typeof key === "string" && key.includes("+") ? blendType(key) : WAR_TYPES.conventional);
+/** 形態のキー（合成を含む）に、非対称戦が入っているか */
+export const asymOf = (key) => typeof key === "string" && key.split("+").includes("asymmetric");
+/** 両陣営の先頭の国が選んだ形態から、戦争全体の形態のキーを作る（同じなら、そのまま） */
+export function warTypeKey(types, attackers, defenders, fallback = "conventional") {
+  const a = types?.[attackers?.[0]] ?? fallback, d = types?.[defenders?.[0]] ?? fallback;
+  const ok = (k) => (WAR_TYPES[k] && !WAR_TYPES[k].civilOnly ? k : fallback);
+  const A = ok(a), D = ok(d);
+  return A === D ? A : [A, D].sort().join("+");
+}
+/** 形態を上げたとき（限定戦 → 通常戦 → 総力戦）の、国への追加の負荷（民意の低下）。下げるときは負荷なし */
+export const ESCALATION = Object.freeze({ limited: 0, conventional: 1, asymmetric: 1, total: 2 });
+export const escalationPenalty = (from, to) => Math.max(0, (ESCALATION[to] ?? 1) - (ESCALATION[from] ?? 1)) * 4;
 
-export const doctrineOf = (state) => DOCTRINE_BY_KEY[state?.doctrine] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
+export const doctrineOf = (state) => DOCTRINE_BY_KEY[effectiveDoctrineKey(state)] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
 export const moraleOf = (state) => clamp(state?.morale ?? BASE_MORALE, 0, 100);
 
 /** その国から戦争に出る部隊。muster[国ID] が配列ならその部隊だけ、無ければ全部隊 */
@@ -150,13 +173,13 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
   const m = T.allMuster ? null : muster;
   const { aStrength: A, dStrength: D, compare: cmp } = previewWar(map, attackers, defenders, m);
   const da = sideDoctrine(map, attackers), dd = sideDoctrine(map, defenders);
-  const noiseAmp = BALANCE.noiseAmp * ((da.noise + dd.noise) / 2) * (T.key === "asymmetric" ? 1.5 : 1); // 戦力差があっても、番狂わせが起こりうる大きさ
+  const noiseAmp = BALANCE.noiseAmp * ((da.noise + dd.noise) / 2) * (T.asym ? 1.5 : 1); // 戦力差があっても、番狂わせが起こりうる大きさ
   const lopsided = 1 - 0.7 * Math.pow(2 * cmp.land - 1, 2); // 圧倒的な戦力差のときは、番狂わせが起きにくい
   const noise = rnd.float(-noiseAmp * lopsided, noiseAmp * lopsided);
   let edge = edgeOf(cmp, da, dd) + noise;
   // 非対称戦：弱い側はゲリラ戦で戦力差を縮める（制空・制海は強い側の頼みにならない）。決着は僅差になりやすい
   let strongIsAttacker = A.land >= D.land;
-  if (T.key === "asymmetric") {
+  if (T.asym) {
     const weakIds = strongIsAttacker ? defenders : attackers;
     const h = map.geometry?.pack?.h, st = map.pack.cells.state; let tot = 0, rough = 0;
     if (h) for (let i = 0; i < st.length; i++) if (weakIds.includes(st[i])) { tot++; if (h[i] >= 55) rough++; }
@@ -164,7 +187,7 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
     const gap = Math.min(1, Math.abs(2 * cmp.land - 1) * 3); // 強い側がはっきりしているときだけ、ゲリラ戦の効果が出る
     edge = edge * 0.7 + (strongIsAttacker ? -guerrilla : guerrilla) * gap;
   }
-  const verdict = verdictOf(edge, T.key === "asymmetric" ? 0.05 : 0.015);
+  const verdict = verdictOf(edge, T.asym ? 0.05 : 0.015);
   const { winner, decisiveness } = verdict;
 
   // 消耗: 敗者ほど重く、僅差（長期戦）ほど双方が重い。ドクトリンと戦争の形態で変わる
@@ -172,7 +195,7 @@ export function resolveWar(map, attackers, defenders, rnd, muster = null, type =
   const lossFor = (isWinner) => clamp(isWinner ? base * 0.5 : base * (1 + decisiveness), 0.02, 0.6);
   const aBase = winner === "stalemate" ? base : lossFor(winner === "attacker");
   const dBase = winner === "stalemate" ? base : lossFor(winner === "defender");
-  const asym = T.key === "asymmetric";
+  const asym = T.asym;
   const aMul = asym ? (strongIsAttacker ? 1.2 : 0.6) : 1, dMul = asym ? (strongIsAttacker ? 0.6 : 1.2) : 1;
   const aLoss = clamp(aBase * da.ownLoss * dd.enemyLoss * aMul, 0.02, 0.6), dLoss = clamp(dBase * dd.ownLoss * da.enemyLoss * dMul, 0.02, 0.6);
   const losses = {}, casualties = {}, moraleDelta = {}, popLossShare = {};
@@ -248,15 +271,17 @@ export function applyVictoryConditions(map, result, { attackers, defenders, type
 }
 
 /** 戦争中の民意の変化（期間全体の合計）。損害が大きく、長引くほど下がる。攻撃側は下がりやすく、防衛側は守る戦いで一時的に結束する */
-export function planSupportDeltas(result, { attackers, defenders, months, type }) {
-  const T = warTypeOf(type), out = {};
+export function planSupportDeltas(result, { attackers, defenders, months, type, types = null, map = null }) {
+  const out = {};
   const strongIsAttacker = (result.aStrength?.land ?? 0) >= (result.dStrength?.land ?? 0);
   for (const [ids, side] of [[attackers, "attacker"], [defenders, "defender"]]) {
     for (const id of ids) {
-      const lost = result.losses?.[id] ?? 0;
-      let d = -(lost * (side === "attacker" ? 55 : 50) + months * (side === "attacker" ? 0.3 : 0.18) * T.weary);
+      const T = warTypeOf(types?.[id] ?? type); // 国ごとの形態（食い違ってよい）
+      const lost = (result.losses?.[id] ?? 0) * (T.lossScale / Math.max(0.3, warTypeOf(type).lossScale));
+      const load = map ? doctrineOf(map.pack.states[id]).moraleLoss ?? 1 : 1; // 軍事ドクトリンと戦争形態の2つで、国への負荷が変わる
+      let d = -(lost * (side === "attacker" ? 55 : 50) + months * (side === "attacker" ? 0.3 : 0.18) * T.weary * load);
       if (side === "defender") d += 6;
-      if (T.key === "asymmetric" && (side === "attacker") === strongIsAttacker) d -= months * 0.35; // 長引く占領・掃討で、強い側の民意が削られる
+      if (T.asym && (side === "attacker") === strongIsAttacker) d -= months * 0.35; // 長引く占領・掃討で、強い側の民意が削られる
       if (result.winner === side) d += 8;
       out[id] = Math.round(d);
     }
@@ -270,7 +295,7 @@ export function reevaluateWar(map, war) {
   const T = warTypeOf(r.type);
   const { aStrength: A, dStrength: D, compare } = previewWar(map, war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null);
   const edge = edgeOf(compare, r.doctrine?.attacker ?? sideDoctrine(map, war.attackers), r.doctrine?.defender ?? sideDoctrine(map, war.defenders)) + (r.noise ?? 0) + (war.edgeShift ?? 0);
-  const v = verdictOf(edge, r.type === "asymmetric" ? 0.05 : 0.015);
+  const v = verdictOf(edge, asymOf(r.type) ? 0.05 : 0.015);
   // 首都陥落・民意の崩壊で決着した戦争は、その決着を保つ（ハプニングで勝敗は覆らない）。それ以外は、いまの戦力で判定し直す
   if (r.victory && (r.victory.type === "capital" || r.victory.type === "exhaustion")) return { ...r, compare, aStrength: A, dStrength: D };
   const dominance = clamp(Math.abs(edge) * 6, 0, 1);
@@ -339,7 +364,7 @@ export function nameWar(map, { attackers, defenders, rnd, existingNames = [], ba
     const place = key?.place ?? pickPlace(map, defenders[0], rnd) ?? officialName(map.pack.states[defenders[0]], "国境");
     const isCapital = burg && [...attackers, ...defenders].some((id) => map.pack.states[id]?.capital === burg.i);
     const kinds = [];
-    if (type === "asymmetric") kinds.push(`${place}紛争`, `${place}掃討戦`);
+    if (asymOf(type)) kinds.push(`${place}紛争`, `${place}掃討戦`);
     else if (type === "limited") kinds.push(`${place}国境紛争`, `${place}の戦い`);
     else {
       kinds.push(`${place}戦争`, `${place}の戦い`);
@@ -395,13 +420,13 @@ export function generateBattleLog(map, { attackers, defenders, result, startedAt
     if (!burg && pool.length) burg = pool[Math.min(maxIdx, Math.floor(rnd.next() * (maxIdx + 1)))]; // 都市が少ないときは同じ都市で再び戦う
     if (burg) used.add(burg.i);
     const place = burg?.name ?? officialName(map.pack.states[counter ? attackers[0] : defenders[0]], "国境地帯");
-    const dk = doctrineOf(map.pack.states[wId]).key;
+    const dk = doctrineOf(map.pack.states[wId]).baseKey ?? doctrineOf(map.pack.states[wId]).key;
     const story = DOCTRINE_STORY[dk] ?? DOCTRINE_STORY.balanced;
     let kind = rnd.pick([`${place}の戦い`, `${place}会戦`, `${place}攻防戦`]);
     for (let k = 2; log.some((x) => x.name === kind); k++) kind = `第${k}次${place}の戦い`; // 同じ場所で再び戦うときは番号を付ける
     const t = Math.min(durationMonths, Math.max(0, Math.round(((i + 1) / (n + 1)) * durationMonths)));
     log.push({ date: addMonths(startedAt, t), name: kind, place, burgId: burg?.i ?? null, winner: side, attackerState: attackers[0], defenderState: defenders[0], winnerState: wId, loserState: lId,
-      text: `${officialName(map.pack.states[wId])}軍：${rnd.pick(story.win)}（${officialName(map.pack.states[lId])}軍：${rnd.pick((DOCTRINE_STORY[doctrineOf(map.pack.states[lId]).key] ?? DOCTRINE_STORY.balanced).lose)}）` });
+      text: `${officialName(map.pack.states[wId])}軍：${rnd.pick(story.win)}（${officialName(map.pack.states[lId])}軍：${rnd.pick((DOCTRINE_STORY[doctrineOf(map.pack.states[lId]).baseKey ?? doctrineOf(map.pack.states[lId]).key] ?? DOCTRINE_STORY.balanced).lose)}）` });
   }
   if (capitalFall) { // 首都陥落：最後の戦いは首都で起き、これで決着する
     const w = result.winner === "defender" ? defenders : attackers, l = capitalFall.stateId;

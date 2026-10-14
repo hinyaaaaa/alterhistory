@@ -73,7 +73,7 @@ const clickBtn = (root, text) => [...root.querySelectorAll("button")].find((b) =
 const openWin = (name) => q(`[data-open-win="${name}"]`).click();
 const closeWin = (name) => q(`.float-win[data-win="${name}"] .panel-close`).click();
 
-check("「歴史をつくる」は無く、経済・旅は設定メニューから開く", !$("btn-builder") && !!q('[data-open-win="economy"]') && !!q('[data-open-win="travel"]'));
+check("「歴史をつくる」は無く、経済は設定メニューから開く", !$("btn-builder") && !!q('[data-open-win="economy"]'));
 
 console.log("=== 経済・交易 ===");
 openWin("economy");
@@ -98,64 +98,8 @@ store.undo();
 closeWin("economy");
 check("経済ウィンドウを閉じると貿易線が消える", S().view.tradeLines == null);
 
-console.log("=== 旅 ===");
-openWin("travel");
-await waitFor(() => q(".b-wide"), 1000, "旅");
-q(".b-wide").click();
-await waitFor(() => q(".b-leg, .b-addleg"), 1000, "旅カード");
-check("旅が作られ、カードが開く", (M().ext?.data?.journeys ?? []).length === 1 && !!q(".b-addleg"));
-// 地図でのセル選択を模擬: editMode.pickCell の待ちに、直接セルを渡す
-const c = M().pack.cells, land = []; for (let i = 0; i < c.biome.length; i++) if (c.biome[i] !== 0 && c.state[i] === 1) land.push(i);
-const A = land[0], B = land[land.length - 1];
-clickBtn(q(".b-addleg"), "＋ 区間を足す").click();
-check("出発点の選択待ちになる", S().pickingCell === true);
-const canvas = $("map-canvas");
-const clickCell = (cell) => {
-  const p = M().geometry.pack.p[cell]; const v = window.alterhistory.viewport; const [sx, sy] = v.toScreen(p[0], p[1]);
-  canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 700, right: 1000, bottom: 700 });
-  canvas.dispatchEvent(new window.MouseEvent("click", { clientX: sx, clientY: sy, bubbles: true }));
-};
-clickCell(A);
-await waitFor(() => S().pickingCell === true && q(".b-status"), 1000, "目的地待ち");
-check("次は目的地の選択待ち", /どこへ/.test(q(".b-status").textContent));
-clickCell(B);
-await waitFor(() => (M().ext.data.journeys[0].legs.length === 1), 1500, "区間");
-const leg = M().ext.data.journeys[0].legs[0];
-check("区間が追加され、経路が保存される", leg.path.length > 1 && S().pickingCell === false);
-check("カードに距離と所要日数が出る", /km/.test(q(".b-leg .b-row-meta").textContent) && /日|時間/.test(q(".b-leg .b-row-meta").textContent), q(".b-leg .b-row-meta").textContent);
-const sel = q(".b-leg select"); sel.value = "horse"; sel.dispatchEvent(new window.Event("change"));
-check("区間の移動手段を変えられる", M().ext.data.journeys[0].legs[0].transport === "horse");
-clickBtn(q(".b-addleg"), "＋ 区間を足す").click();
-const w = []; for (let i = 0; i < c.biome.length; i++) if (c.biome[i] === 0) w.push(i);
-clickCell(w[0]);
-await waitFor(() => S().error, 1000, "エラー");
-check("行けない場所を選ぶと、理由が出て区間は増えない", /水の上/.test(S().error) && M().ext.data.journeys[0].legs.length === 1, S().error);
-store.update((s) => { s.error = null; });
 
-console.log("=== ゾーン ===");
-clickBtn(window.document.querySelector(".b-tabs"), "ゾーン").click();
-await waitFor(() => window.document.querySelector(".b-how"), 1000, "ゾーン");
-const zsel = q(".b-addleg select"); zsel.value = "Disease"; zsel.dispatchEvent(new window.Event("change"));
-clickBtn(q(".b-how"), "🎲 1点から広げる").click();
-check("中心の選択待ちになる", S().pickingCell === true);
-clickCell(land[5]);
-await waitFor(() => (M().zones ?? []).length === 1, 1500, "ゾーン");
-check("1点から広がったゾーンができる（疫病・24セル）", M().zones[0].type === "Disease" && M().zones[0].cells.length === 24, `${M().zones[0].cells.length}`);
-check("カードが開き、種類・塗り足し・削除が使える", !!q(".b-card.active select") && !!clickBtn(q(".b-card.active"), "✋ 塗り足す") && !!clickBtn(q(".b-card.active"), "削除"));
-clickBtn(q(".b-card.active"), "✋ 塗り足す").click();
-check("塗り足しを押すと、ゾーンを塗るツールになる", S().editTool === "paint:zone");
-closeWin("travel");
-check("旅・ゾーンのウィンドウを閉じるとツールが選択に戻る", S().editTool === "select");
-openWin("travel");
-await waitFor(() => window.document.querySelector(".b-tabs"), 1000, "戻る");
-clickBtn(window.document.querySelector(".b-tabs"), "ゾーン").click();
-await waitFor(() => window.document.querySelector(".b-card"), 1000, "カード");
-window.document.querySelector(".b-card .b-row").click();
-await waitFor(() => clickBtn(q(".b-card.active"), "削除"), 1000, "削除");
-clickBtn(q(".b-card.active"), "削除").click();
-check("削除できる", (M().zones ?? []).length === 0);
-store.undo();
-check("Undo で戻る", M().zones.length === 1);
+
 
 console.log("=== 政治・文化の深さ（詳細ウィンドウ） ===");
 const ep = window.alterhistory.editorPanel;

@@ -134,7 +134,7 @@ export function checkIntegrity(map, baseline = null, { skipEconomyChecks = false
     if (c.burg[b.cell] !== b.i) problems.push(`都市#${b.i} のセルの都市IDが一致しません`);
     if ((!baseline || baseline.burgState.has(b.i)) && c.state[b.cell] !== b.state) problems.push(`都市#${b.i}「${b.name}」の国家(${b.state})がセルの国家(${c.state[b.cell]})と違います`);
     if ((!baseline || baseline.burgCulture.has(b.i)) && c.culture[b.cell] !== b.culture) problems.push(`都市#${b.i}「${b.name}」の文化がセルの文化と違います`);
-    if (b.state === 0 && (!baseline || baseline.burgState.has(b.i))) problems.push(`都市#${b.i} が無所属の土地にあります`);
+    // 無所属の土地は、エラーではない（国が成立していないだけ）。検査の対象から外した（v2.4.0）
   }
   for (let i = 0; i < c.province.length; i++) {
     const p = c.province[i];

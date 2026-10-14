@@ -53,14 +53,14 @@ const menuBtn = (w) => q(`[data-open-win="${w}"]`) ?? { click: () => window.alte
 const pick = (a, d) => { const boxes = () => [...window.document.querySelectorAll("#tab-wars .member-picker")]; boxes()[0].querySelectorAll("input")[a].click(); boxes()[1].querySelectorAll("input")[d].click(); };
 
 const open = (w) => { menuBtn(w).click(); return win(w); };
-console.log("=== 一覧ウィンドウ（国家・文化・宗教・属州） ===");
-for (const k of ["state", "culture", "religion", "province"]) {
+console.log("=== 一覧ウィンドウ（文化・宗教）／国家は国家タブ ===");
+for (const k of ["culture", "religion"]) {
   const w = open(`list-${k}`);
   check(`${k}一覧が開く`, !!w && !w.hidden && !!w.querySelector(".ent-body"));
 }
-const stRows = win("list-state").querySelectorAll(".ent-row");
-check("国家一覧に行があり、強調（検索）・削除のボタンがある（統合は詳細の「操作」へ移した）", stRows.length > 0 && ![...stRows[0].querySelectorAll("button")].some((b) => b.textContent.includes("統合")) && !!stRows[0].querySelector(".ico-trash") && !!stRows[0].querySelector(".ico-search"));
-check("一覧の各行にランダム設定のボタンは無い（追加バーには「追加」だけがある）", !stRows[0].textContent.includes("🎲") && win("list-state").querySelector(".ent-addbar")?.textContent.includes("追加"));
+check("国家・属州の一覧窓は無い（国家タブへ移した）", !q('[data-open-win="list-state"]') && !q('[data-open-win="list-province"]') && !q('[data-win="list-state"]'));
+const nationWin = open("nation");
+check("国家タブの一覧に、国の行があり、削除ボタンは無い", nationWin.querySelectorAll(".nation-row.b-click").length > 0 && !nationWin.querySelector(".ico-trash") && ![...nationWin.querySelectorAll("button")].some((b) => /削除/.test(b.textContent)));
 
 console.log("=== 削除（確認ダイアログ→削除→Undo） ===");
 if (!window.HTMLDialogElement.prototype.showModal) { window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); }; window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); }; }
@@ -82,10 +82,9 @@ check("宗教の系譜図が描かれる（ノードと線）", g.querySelectorA
 const node = g.querySelectorAll(".gen-node")[1]; node.dispatchEvent(new window.Event("click", { bubbles: true }));
 check("ノードを選ぶと編集欄（親を複数選べるチェック・名前・削除）が出る", !!win("genealogy-religion").querySelector(".gen-edit .gen-parent input[type=checkbox]") || !!win("genealogy-religion").querySelector(".gen-edit button"));
 
-console.log("=== 通貨・為替 ===");
+console.log("=== 通貨・為替は無い（v2.4.0 で廃止） ===");
 const cw = open("economy");
-check("相場表に全国家の行がある", cw.querySelectorAll(".cur-board tr").length > 1 && cw.querySelector(".cur-code") && cw.querySelector(".cur-chg"));
-check("両替の計算機がある", !!cw.querySelector(".cur-conv"));
+check("経済の窓に、相場表・両替の計算機は無い", !cw.querySelector(".cur-board") && !cw.querySelector(".cur-conv"));
 
 console.log("=== 核作戦 ===");
 const nw = open("nuclear");
@@ -104,7 +103,7 @@ const ww = open("war");
 check("戦争ウィンドウに戦況バーがある", ww.querySelectorAll(".wo-bar-wrap").length === 5);
 const dw = open("diplomacy");
 check("外交一覧は同盟・敵対・中立だけで、Neutrals は出ない", !dw.textContent.includes("Neutrals") && dw.textContent.includes("敵対"));
-check("外交の最初の画面は関係一覧（国ごとの行）", dw.querySelectorAll(".dip-relations .dip-row").length >= 2);
+check("外交は3列（国のリスト・関係カード・条約一覧）で、外交の表は無い", dw.querySelectorAll(".dip-left .dip-row").length >= 2 && !!dw.querySelector(".dip-mid") && !!dw.querySelector(".dip-right") && !dw.querySelector(".diplomacy-matrix"));
 const tn = open("treaty-new");
 check("「条約を結ぶ」で、同盟の拘束力（強・中・弱）を選べる", tn.querySelectorAll("select").length >= 3 && tn.textContent.includes("拘束力") && tn.textContent.includes("強"));
 

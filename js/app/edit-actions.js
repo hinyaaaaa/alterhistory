@@ -1,9 +1,11 @@
 import { planSetWorldInfo } from "../core/edit/world-info.js";
-import { planChangeMonarch } from "../core/edit/lineage.js";
+import { planChangeLeader, leaderCandidates, ensureLeaders } from "../core/edit/leaders.js";
+import { planSetRegime, REGIME_BY_KEY } from "../core/edit/regimes.js";
+import { planSetTechDoctrine, planSetMilitaryDoctrine, getTechDoctrine } from "../core/edit/doctrines.js";
 // 編集アクション：編集ツールの操作を Store の commit に変換する。
 // UI から呼ばれる。ロジック自体は core/edit/* にあり、ここは配線と通知だけ。
 
-import { PAINT_KINDS, planPaint, planBiomePaint } from "../core/edit/paint.js";
+import { PAINT_KINDS, planPaint, planBiomePaint, planHeightPaint } from "../core/edit/paint.js";
 import { planAddMarker, planMoveMarker, planEditMarker, planRemoveMarker } from "../core/edit/markers.js";
 import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapital, whyCannotRemoveBurg } from "../core/edit/burgs.js";
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
@@ -19,7 +21,7 @@ import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit
 import { planSetDoctrine, getDoctrine, DOCTRINES, DEFAULT_DOCTRINE } from "../core/edit/military-doctrine.js";
 import {
   suggestName as planSuggestName, isProvisional, planSetProvisional, withProvisional,
-  getNameStyle, styleOfCulture, planSetNameStyle, NAME_STYLES, STYLE_KEYS,
+
 } from "../core/edit/naming.js";
 import { suggestLabel } from "../core/edit/naming.js";
 import { withEvent, planLogEvent } from "../core/edit/history-log.js";
@@ -81,14 +83,10 @@ export function createEditActions({ store, renderer }) {
 
   return {
     suggestName,
-    NAME_STYLES, STYLE_KEYS,
     isProvisional(kind, id) { return withMap((map) => isProvisional(map, kind, id)) ?? false; },
     /** 仮の名前を確定する（名前は変えず、「仮」の印だけ外す） */
     confirmName(kind, id) { withMap((map) => safeRun("名前の確定", () => commitOrThrow(planSetProvisional(map, kind, id, false)))); },
     /** 文化の名前の系統（明示されたもの。無ければ null）と、実際に使われる系統 */
-    getNameStyle(cultureId) { return withMap((map) => getNameStyle(map, cultureId)) ?? null; },
-    effectiveNameStyle(cultureId) { return withMap((map) => styleOfCulture(map, cultureId)) ?? "western"; },
-    setNameStyle(cultureId, style) { withMap((map) => safeRun("名前の系統の変更", () => commitOrThrow(planSetNameStyle(map, cultureId, style)))); },
 
     /** 塗りブラシの1ストローク分のセルをまとめて塗る（Undo 1回にする） */
     paintCells(kind, target, cells, opts = {}) {
@@ -102,6 +100,13 @@ export function createEditActions({ store, renderer }) {
           commitEv(map, command, ev);
         }
         return report;
+      }));
+    },
+    /** 標高の調整（target: 1=上げる 2=下げる 3=ならす）。水域は変わらない（Undo可能） */
+    paintHeight(target, cells) {
+      withMap((map) => safeRun("標高の変更", () => {
+        const { command } = planHeightPaint(map, { mode: target, cells });
+        if (command) commitOrThrow(command);
       }));
     },
     paintBiome(target, cells) {
@@ -265,7 +270,8 @@ export function createEditActions({ store, renderer }) {
 
     setWorldInfo(kind, id, patch) { return !!withMap((map) => { let ok = false; safeRun("情報の変更", () => { const c = planSetWorldInfo(map, kind, id, patch); if (c) { store.commit(c); rerender(); } ok = true; }); return ok; }); },
     /** 君主交代（国家の「操作」から）。成功なら true */
-    changeMonarch(stateId, opts) { return !!withMap((map) => { let ok = false; safeRun("君主交代", () => { store.commit(planChangeMonarch(map, stateId, opts)); rerender(); ok = true; }); return ok; }); },
+    leaderCandidates(stateId, opts) { return withMap((map) => leaderCandidates(map, stateId, opts)) ?? []; },
+    changeLeader(stateId, opts) { return !!withMap((map) => { let ok = false; safeRun("指導者の交代", () => { store.commit(planChangeLeader(map, stateId, opts)); rerender(); ok = true; }); return ok; }); },
     // ---- ゾーン（疫病・災害の一時表示）。年表の「＋ 出来事を記録」から、選択だけで作る。確定するまで何も残さない ----
     /** 種類・範囲・期間を選んで確定する。年表に1件とゾーンが同時にでき、Undo は1回。成功なら zid、失敗なら null */
     recordZoneEvent({ type, scope, months, date = null } = {}) {
@@ -287,11 +293,25 @@ export function createEditActions({ store, renderer }) {
     /** patch: { salesTax?, pollTax?, treasury? }（Undo可能） */
     setFinance(stateId, patch) { withMap((map) => safeRun("財政の変更", () => commitOrThrow(planSetFinance(map, stateId, patch)))); },
     getTechLevel(stateId) { return withMap((map) => getTechLevel(map, stateId)) ?? null; },
-    setTechLevel(stateId, value) {
-      withMap((map) => safeRun("技術水準の変更", () => {
+    getTechDoctrine(stateId) { return withMap((map) => getTechDoctrine(map.pack.states[stateId])) ?? null; },
+    /** patch: { agri?, ind?, transport?, comms?, medicine?, energy? }（各 1〜10。解禁条件なし。Undo可能） */
+    setTechDoctrine(stateId, patch) {
+      withMap((map) => safeRun("技術ドクトリンの変更", () => {
         const before = getTechLevel(map, stateId);
-        commitEv(map, planSetTechLevel(map, stateId, value), { type: "tech", title: `${nameOf(map.pack.states[stateId])}の技術水準が変わった`, detail: `Lv${before} → Lv${value}` });
+        commitEv(map, planSetTechDoctrine(map, stateId, patch), { type: "tech", title: `${nameOf(map.pack.states[stateId])}の技術ドクトリンが変わった`, detail: `技術水準 Lv${before} → Lv${getTechLevel(map, stateId)}` });
       }));
+    },
+    /** 指導者のいない国に初代を置く（年表には残さない）。置いたら true */
+    ensureLeaders() { return !!withMap((map) => { const n = ensureLeaders(map); if (n) rerender(); return n; }); },
+    setRegime(stateId, key) {
+      withMap((map) => safeRun("政体の変更", () => {
+        const from = map.pack.states[stateId]?.formName;
+        commitEv(map, planSetRegime(map, stateId, key), { type: "regime", title: `${nameOf(map.pack.states[stateId])}の政体が変わった`, detail: `${from ?? "?"} → ${REGIME_BY_KEY[key]?.label ?? key}` });
+      }));
+    },
+    /** { base?: 総合方針のキー, nodes?: 陸・海・空・固有の節のキー配列 }（解禁条件なし。Undo可能） */
+    setMilitaryDoctrine(stateId, spec) {
+      withMap((map) => safeRun("軍事ドクトリンの変更", () => commitEv(map, planSetMilitaryDoctrine(map, stateId, spec), { type: "doctrine", title: `${nameOf(map.pack.states[stateId])}が軍事ドクトリンを改めた`, detail: "" })));
     },
 
     DOCTRINES,

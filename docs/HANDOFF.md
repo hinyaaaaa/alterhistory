@@ -17,7 +17,18 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
-## 追加済み：v2.3.0「内戦と検査」（いちばん新しい）
+## 追加済み：v2.4.0「国家のハブ」（いちばん新しい）
+統合指示書に沿った大改修（詳細は `CHANGELOG.md` の v2.4.0）。入口は 国家 / 外交 / 戦争。
+- **国家タブ**: `ui/nation-window.js`（一覧・新規作成ステップ・詳細6サブタブ）、`ui/nation-pickers.js`（軍事ドクトリンの木・技術ドクトリンの木）、`ui/face-svg.js`（顔のSVG）。`panels.openEntity("state", id)` は国家タブの詳細を開く（旧サイドバーの国家詳細は内部に残るが画面からは開かない。掃除してよい）。反乱は `simActions.startRebellion(stateId, {goal, scale})`（`core/edit/rebellion.js` の `pickRebelProvinces`。連結した属州を規模で選び、`breakaway({civil:true})` で内戦を始める）。
+- **データ層**（すべて DOM 非依存）: `core/edit/leaders.js`（指導者・世代交代・自動継承 `rollSuccession`）、`face.js`、`regimes.js`、`doctrines.js`（`effectiveDoctrineKey` が総合方針＋選んだ節を合成して `DOCTRINE_BY_KEY` に登録する。戦闘・軍・戦争エンジンは `state.doctrine` ではなくこれを使う）、`migrate.js`（読み込み時の移行。`loader.js` から呼ぶ）、`parcels.js`（講和の区画の領域分割）、`core/sim/minor-events.js`（月ごとの出来事）、`core/names/person.js`（人名）。
+- **月ごとの更新**: `simActions.advanceMonthly(date)`（`time-actions.js` が毎月呼ぶ）。指導者の継承・軍隊の自動編成（`core/sim/military.js` の `planArmyUpkeep`。年次の徴兵は月ごとに移した）・自動の出来事を、1か月分を1回のトランザクションにまとめる。`worlds.planAnnualUpdate` から徴兵は外れた。
+- **戦争形態**: `war.types = {国ID: 形態}`、`war.type` は合成した形態（`"asymmetric+total"` のような文字列。`warTypeOf` が解釈する）。`planSetWarType` で進行中に変更。
+- **外交**: `ui/diplomacy-window.js` は3列。`planSetTreatyParties`（参加国の変更）、中立条約（`terms.mode === "neutral"`）が `war-flow.js` の参戦招集を止める。締結できる種類は `SIGNABLE_KINDS`（4つ）。
+- **検査**: `app/auto-check.js`（操作後の debounce と5年ごと）。エラー表示は右下（`#banner`、`--wars-h` で戦争状況の上に積む）。
+- **テストの注意**: スモークテストは `dist/app.js` を使う。**テストの前に必ず `npm run build`**。
+- **未実装・先送り**: 土地の造成（水域を陸にする編集。海岸線・河川の再計算が要る）。戦争形態の負荷は民意の低下だけで、国庫・産業へは未反映。講和条約の入力欄は、戦争タブの講和画面に残っている（外交タブには「講和を結ぶ」の入口だけを置いた。完全な集約は未了）。旧サイドバーの国家詳細・`ui/settings-windows.js` 内の旧「軍事」窓の残骸（`milBody` など）は未掃除。
+
+## 追加済み：v2.3.0「内戦と検査」
 `ui/civil-section.js`（内戦の決着・外国の支援。戦争の窓の下）、`sim-actions` の `resolveCivilWar` / `recordCivilSupport`（`signTreaty` は第3引数で `enforceBudget` / `allowOngoing` を渡せる）、`core/edit/records-check.js`（整合性検査の拡張）、条約の種類 `support`（締結の窓には出さない）。未着手: v2.4.0（国境の年代再生。着手前に方針を短く確認する）。
 
 ## 追加済み：v2.2.0「世界を詳しく」

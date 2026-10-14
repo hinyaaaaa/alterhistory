@@ -7,8 +7,8 @@ const rect = (sel) => page.evaluate((s) => { const e = document.querySelector(s)
 const hit = (sel) => page.evaluate((s) => { const e = document.querySelector(s); if (!e) return false; const r = e.getBoundingClientRect(); const x = r.left + r.width / 2, y = r.top + r.height / 2; const top = document.elementFromPoint(x, y); return !!top && (top === e || e.contains(top)); }, sel);
 
 console.log("=== ハブの操作（アイコンを実際にクリック） ===");
-await page.click('[data-open-win="list-state"] svg'); await page.waitForTimeout(200);
-check("収縮したハブのアイコンをクリックすると窓が開く", await page.evaluate(() => window.alterhistory.wins.isOpen("list-state")));
+await page.click('[data-open-win="nation"] svg'); await page.waitForTimeout(200);
+check("収縮したハブのアイコンをクリックすると窓が開く", await page.evaluate(() => window.alterhistory.wins.isOpen("nation")));
 await page.keyboard.press("Escape");
 await page.click('[data-open-win="war"]'); await page.waitForTimeout(200);
 check("項目の中央（アイコン上）をクリックしても窓が開く", await page.evaluate(() => window.alterhistory.wins.isOpen("war")));
@@ -26,7 +26,7 @@ check("窓を開くとハブは自動で収縮する", (await rect("#hub")).w < 
 check("主要な窓を開いても、時計とハブが隠れない", await hit("#btn-time-toggle") && await hit("#hub-toggle"));
 const win = await rect('[data-win="diplomacy"]');
 check("窓は時計の下（上から76px付近）に開く", win.t >= 70 && win.t <= 120, `${win.t}`);
-for (const w of ["war", "list-state", "economy", "timeline", "settings"]) { await page.evaluate((id) => window.alterhistory.wins.open(id), w); }
+for (const w of ["war", "nation", "economy", "timeline", "settings"]) { await page.evaluate((id) => window.alterhistory.wins.open(id), w); }
 await page.waitForTimeout(200);
 check("窓を重ねて開いても、時計とハブが隠れない", await hit("#btn-time-toggle") && await hit("#hub-toggle") && await hit("#world-date"));
 await shot(page, "shell-windows");
@@ -77,6 +77,21 @@ check("カードは、ニュース・戦争状況・時計・ハブと重なら�
 await shot(page, "shell-hover");
 await page.mouse.move(5, 5); await page.waitForTimeout(100);
 check("カーソルを離すとカードが消える", await page.evaluate(() => document.querySelector(".conn-card").hidden));
+
+// ---- コールアウト（ホバー連動のコネクターライン）が残り続けないこと（v2.4.0 のバグ修正の再現条件） ----
+const gone = () => page.evaluate(() => document.querySelector(".conn-card").hidden && document.querySelector("svg.conn").hidden);
+const hoverCity = async () => { await page.mouse.move(pt[0] + 4, pt[1] + 4); await page.mouse.move(pt[0], pt[1]); await page.waitForTimeout(450); return page.evaluate(() => !document.querySelector(".conn-card").hidden && !document.querySelector("svg.conn").hidden); };
+check("[再現] 出したあと、ウィンドウを開くと、線もカードも消える", (await hoverCity()) && (await page.evaluate(() => { window.alterhistory.wins.open("timeline"); return true; })) && (await page.waitForTimeout(150), await gone()));
+await page.evaluate(() => { const w = window.alterhistory.wins; for (const id of w.openIds()) w.close(id); }); await page.waitForTimeout(100);
+check("[再現] 出したまま、窓を開いて閉じても、線もカードも残らない", (await hoverCity()) && (await page.evaluate(() => { window.alterhistory.wins.open("economy"); return true; })) && (await page.waitForTimeout(100), await page.evaluate(() => { window.alterhistory.wins.close("economy"); return true; })) && (await page.waitForTimeout(150), await gone()));
+check("[再現] ホバーを外す（カーソルを地図の外に出す）と消える", (await hoverCity()) && (await page.mouse.move(5, 5), await page.waitForTimeout(120), await gone()));
+check("[再現] 出したまま、ズームすると消える（ホイール）", (await hoverCity()) && (await page.mouse.wheel(0, -240), await page.waitForTimeout(150), await gone()));
+check("[再現] 出したまま、ボタン・ショートカットなどで見え方が変わっても消える（移動・ズームの関数）", (await hoverCity()) && (await page.evaluate(() => { const v = window.alterhistory.viewport; v.pan(30, 0); window.alterhistory.renderer.requestRender(); return true; })) && (await page.waitForTimeout(150), await gone()));
+check("[再現] 出したまま、窓を切り替える（別の窓を開く）と消える", (await hoverCity()) && (await page.evaluate(() => { window.alterhistory.wins.open("nation"); window.alterhistory.wins.open("war"); return true; })) && (await page.waitForTimeout(150), await gone()));
+await page.evaluate(() => { const w = window.alterhistory.wins; for (const id of w.openIds()) w.close(id); }); await page.waitForTimeout(100);
+check("[再現] 出したまま、キーを押すと消える", (await hoverCity()) && (await page.keyboard.press("Shift"), await page.waitForTimeout(100), await gone()));
+check("[再現] 出したまま、地図が変わる（Undo）と消える", (await hoverCity()) && (await page.evaluate(() => { const { store, editActions } = window.alterhistory; const s = store.getState().map.pack.states.find((x) => x && x.i > 0 && !x.removed); editActions.setRegime(s.i, "tribal"); return true; })) && (await page.waitForTimeout(150), await gone()));
+await page.mouse.move(5, 5); await page.waitForTimeout(100);
 
 console.log("=== 時計 ===");
 await page.click("#btn-time-step"); await page.waitForTimeout(200);

@@ -19,7 +19,7 @@ for (const [label, width, height, touch] of [["Surface Go 4 相当(1280x853)", 1
       await page.waitForTimeout(120);
       const r = await page.locator(`.float-win[data-win="${id}"]`).boundingBox();
       if (!r || r.x < -1 || r.y < -1 || r.x + r.width > width + 1 || r.y + r.height > height + 1) bad.push(`${name}${r ? `(${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)})` : "(開かない)"}`);
-      if (id === "war" || id === "military") await shot(page, `61-${width}-${id}`);
+      if (id === "war" || id === "nation") await shot(page, `61-${width}-${id}`);
       await page.keyboard.press("Escape");
       await page.waitForTimeout(60);
     }

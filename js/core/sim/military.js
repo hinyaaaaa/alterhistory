@@ -9,6 +9,8 @@
 //
 // 純粋ロジック層：DOM に依存しない。編集はコマンド(commands.js の部品)として返す。
 
+import { effectiveDoctrineKey } from "../edit/doctrines.js";
+import { generatePersonName } from "../names/person.js";
 import { setList, setProps, makeCommand } from "../edit/commands.js";
 import { UNIT_KEYS, UNIT_BY_KEY, forceHeadcount, emptyForce, DOCTRINE_BY_KEY, DEFAULT_DOCTRINE, stateTypeMult } from "./units.js";
 import { ensureEconomy } from "./economy.js";
@@ -105,7 +107,7 @@ const BASE_SHARE = { infantry: 1, cavalry: 0.25, archers: 0.3, artillery: 0.14, 
  *   ・持っていない兵科は、条件（技術・産業・海岸）が揃っているときだけ、ごく少数から始まる
  *   ・条件を満たさなくなった兵科は年5%ずつ減る。核は年次では増減しない
  */
-export function planAnnualConscription(map, stateId) {
+export function planAnnualConscription(map, stateId, { rate = 1, rnd = null, fill = false } = {}) {
   const state = map.pack.states[stateId];
   if (!isLive(state)) return null;
   ensureEconomy(state);
@@ -115,7 +117,7 @@ export function planAnnualConscription(map, stateId) {
   const pop = (state.rural ?? 0) + (state.urban ?? 0); // 千人
   const tech = state.techLevel ?? 3;
   const industry = state.industry ?? 0;
-  const doctrine = DOCTRINE_BY_KEY[state.doctrine] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
+  const doctrine = DOCTRINE_BY_KEY[effectiveDoctrineKey(state)] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
   const tmult = stateTypeMult(state.type);
   const coastal = isCoastalState(map, stateId);
   const list = regimentsOf(state);
@@ -142,10 +144,13 @@ export function planAnnualConscription(map, stateId) {
     const target = sum > 0 ? (totalTarget * shares[k] / sum) / CREW[k] : 0;
     const have = cur[k];
     let d;
-    if (shares[k] === 0) d = -Math.ceil(have * 0.05);                 // 条件を失った兵科は縮小
-    else if (have === 0) d = target >= 1 ? Math.max(1, Math.round(target * 0.03)) : 0; // 新規はごく少数から
-    else d = Math.max(-0.04 * have, Math.min(0.08 * have, (target - have) * 0.12));
-    d = Math.round(d);
+    // rate: 1年分なら 1、月ごとの更新なら 1/12。端数は、乱数があれば確率で切り上げる（小さい軍でも止まらない）
+    const roundBy = (v) => (rnd ? Math.sign(v) * (Math.floor(Math.abs(v)) + (rnd.next() < Math.abs(v) - Math.floor(Math.abs(v)) ? 1 : 0)) : Math.round(v));
+    if (fill) d = shares[k] === 0 ? 0 : Math.max(0, Math.round(target - have)); // 新しい国の初期編成: 目標まで一度に満たす
+    else if (shares[k] === 0) d = -Math.ceil(have * 0.05 * rate);                 // 条件を失った兵科は縮小
+    else if (have === 0) d = target >= 1 && (rate >= 1 || (rnd && rnd.next() < rate)) ? Math.max(1, Math.round(target * 0.03)) : 0; // 新規はごく少数から
+    else d = Math.max(-0.04 * have * rate, Math.min(0.08 * have * rate, (target - have) * 0.12 * rate));
+    d = roundBy(d);
     if (d !== 0) { delta[k] = d; any = true; }
   }
   if (!any) return null;
@@ -172,7 +177,7 @@ export function planAnnualConscription(map, stateId) {
   }
   list.forEach((r, idx) => { if (UNIT_KEYS.some((k) => (u2[idx][k] ?? 0) !== (r.u?.[k] ?? 0))) parts.push(setProps(r, { u: u2[idx] })); });
   if (!parts.length) return null;
-  return makeCommand("年次の兵力変動", [], parts);
+  return makeCommand(rate < 1 ? "月ごとの兵力変動" : "年次の兵力変動", [], parts);
 }
 
 // ---- Azgaar の部隊をそのまま取り込む ----
@@ -203,4 +208,63 @@ export function importAzgaarMilitary(map) {
     }
   }
   return changed;
+}
+
+
+// ---- 軍隊の自動編成（v2.4.0） ----
+//   ・軍隊は、国家ができるときに自動で生成される（部隊を持たない国には、月ごとの更新で作る）。Azgaar の部隊があれば、そのまま取り込む（importAzgaarMilitary）
+//   ・編成は技術ドクトリンに比例して、毎月少しずつ更新される。昔は将軍が率いる軍で、技術が進むと 連隊 → 師団 → 軍団 → 軍 と近代的な編成に変わる
+//   ・年をまたいだ急な増減を避けるため、1か月に1つだけ、分けるか合わせる
+export const ECHELONS = Object.freeze([
+  { level: 1, maxTech: 2, label: "軍", general: true, size: 5000 },
+  { level: 2, maxTech: 4, label: "連隊", size: 900 },
+  { level: 3, maxTech: 6, label: "師団", size: 2600 },
+  { level: 4, maxTech: 8, label: "軍団", size: 6500 },
+  { level: 5, maxTech: 99, label: "軍", size: 15000 },
+]);
+export const echelonOf = (tech) => ECHELONS.find((e) => tech <= e.maxTech) ?? ECHELONS.at(-1);
+const ORD = ["", "第一", "第二", "第三", "第四", "第五", "第六", "第七", "第八", "第九", "第十", "第十一", "第十二"];
+const nameFor = (state, e, n, rnd) => (e.general ? `${state.name}の${generatePersonName(rnd, "m").family}将軍の軍` : `${state.name}${ORD[n] ?? `第${n}`}${e.label}`);
+const burgCellsOf = (map, stateId) => map.pack.burgs.filter((b) => b && b.i && !b.removed && b.state === stateId).sort((a, b) => (b.population ?? 0) - (a.population ?? 0)).map((b) => b.cell);
+
+/** 1か月の更新。部隊が無ければ生成し、あれば編成（編成の段・数）を技術に合わせて1手だけ整える。変化なしは null */
+export function planArmyUpkeep(map, stateId, rnd) {
+  const state = map.pack.states[stateId];
+  if (!isLive(state)) return null;
+  const tech = state.techLevel ?? 3, e = echelonOf(tech), list = regimentsOf(state);
+  const pop = (state.rural ?? 0) + (state.urban ?? 0);
+  const headTotal = list.reduce((n, r) => n + forceHeadcount(r.u), 0);
+  const want = Math.max(1, Math.min(12, Math.round(Math.max(headTotal, pop * 6 * 0.5) / e.size)));
+  const cap = map.pack.burgs[state.capital];
+  if (!list.length) { // 部隊が無い国に、軍隊を生成する
+    if (!cap || pop <= 0) return null;
+    const cells = burgCellsOf(map, stateId); if (!cells.includes(cap.cell)) cells.unshift(cap.cell);
+    const n = Math.min(want, cells.length), regs = [], { p } = map.geometry.pack;
+    for (let k = 0; k < n; k++) regs.push({ i: k, name: nameFor(state, e, k + 1, rnd), icon: e.general ? "🏇" : "🛡️", echelon: e.level, state: stateId, cell: cells[k], x: p[cells[k]][0], y: p[cells[k]][1], bx: p[cells[k]][0], by: p[cells[k]][1], u: emptyForce() });
+    const parts = [setList((m) => m.pack.states[stateId].military, (m, v) => { m.pack.states[stateId].military = v; }, regs)];
+    return makeCommand("軍隊の自動編成", ["places"], parts);
+  }
+  const parts = [];
+  // 編成の段が変わったら、部隊の名前を新しい呼び方に直す（技術が進むと、連隊 → 師団 → 軍団）
+  // Azgaar から取り込んだ部隊（echelon が未設定）は、名前をそのまま残し、いまの段だけを記録する。以後、技術で段が変わったときに呼び方が変わる
+  list.forEach((r, idx) => { if (r.echelon == null) parts.push(setProps(r, { echelon: e.level })); else if (r.echelon !== e.level) parts.push(setProps(r, { name: nameFor(state, e, idx + 1, rnd), echelon: e.level, icon: e.general ? "🏇" : "🛡️" })); });
+  if (!parts.length) { // 1か月に1手だけ: 部隊が多すぎれば最小の2つを合わせ、少なすぎれば最大の部隊を2つに分ける
+    const sorted = list.slice().sort((a, b) => forceHeadcount(a.u) - forceHeadcount(b.u));
+    if (list.length > want + 1 && sorted.length >= 2) {
+      const [a, b] = sorted, merged = emptyForce(); for (const k of UNIT_KEYS) merged[k] = (a.u?.[k] ?? 0) + (b.u?.[k] ?? 0);
+      const keep = list.filter((r) => r !== a);
+      return makeCommand("部隊の統合", ["places"], [setProps(b, { u: merged }), setList((m) => m.pack.states[stateId].military, (m, v) => { m.pack.states[stateId].military = v; }, keep)]);
+    }
+    if (list.length < want - 1) {
+      const big = sorted.at(-1), cells = burgCellsOf(map, stateId).filter((c) => !list.some((r) => r.cell === c));
+      if (forceHeadcount(big.u) >= 2 && cells.length) {
+        const half = emptyForce(), rest = emptyForce(); for (const k of UNIT_KEYS) { const v = big.u?.[k] ?? 0; half[k] = Math.floor(v / 2); rest[k] = v - half[k]; }
+        const { p } = map.geometry.pack, c = cells[0], id = nextRegimentId(state);
+        const nr = { i: id, name: nameFor(state, e, list.length + 1, rnd), icon: e.general ? "🏇" : "🛡️", echelon: e.level, state: stateId, cell: c, x: p[c][0], y: p[c][1], bx: p[c][0], by: p[c][1], u: half };
+        return makeCommand("部隊の分割", ["places"], [setProps(big, { u: rest }), setList((m) => m.pack.states[stateId].military, (m, v) => { m.pack.states[stateId].military = v; }, [...list, nr])]);
+      }
+    }
+    return null;
+  }
+  return makeCommand("編成の更新", [], parts);
 }

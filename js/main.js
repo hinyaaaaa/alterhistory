@@ -40,10 +40,12 @@ import { initSetupWindow } from "./ui/setup-window.js";
 import { initRebellionWindow } from "./ui/rebellion-window.js";
 import { alertDialog } from "./ui/dialogs.js";
 import { initWorkWindows } from "./ui/work-windows.js";
+import { initNationWindow } from "./ui/nation-window.js";
 import { createEconomyView } from "./ui/economy-view.js";
 import { initEditorPanel } from "./ui/panels/editor-panel.js";
 import { createSimActions } from "./app/sim-actions.js";
 import { createTimeActions } from "./app/time-actions.js";
+import { createAutoCheck } from "./app/auto-check.js";
 import { initTimeBar } from "./ui/time-bar.js";
 import { initMilitaryPanel } from "./ui/panels/military-panel.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
@@ -58,7 +60,7 @@ function start() {
 
   const store = createStore({
     map: null, fileName: "", warnings: [], error: null, notice: null, busy: null, hover: null,
-    view: { biomes: true, heights: false, states: true, cultures: false, religions: false, provinces: false, borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, burgLabels: "auto", legendKind: "state" },
+    view: { biomes: true, heights: false, states: true, cultures: false, religions: false, provinces: false, borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, legendKind: "state" },
     editTool: "select", brushRadius: 40,
     timeRunning: false, timeSpeed: 120000, hint: null,
     exportOpts: { title: true, legend: true, scaleBar: true },
@@ -78,7 +80,8 @@ function start() {
   const files = initFileInput({ actions });
   const editActions = createEditActions({ store, renderer });
   const simActions = createSimActions({ store, renderer });
-  const timeActions = createTimeActions({ store, renderer, simActions });
+  const autoCheck = createAutoCheck({ store }); // データ検査の窓は無い。操作後と5年ごとに、問題があるときだけ右下に出す
+  const timeActions = createTimeActions({ store, renderer, simActions, autoCheck });
   const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
   let highlightRef = null; // 講和の割譲区画を赤く強調するために、あとで入る
   const warOutcome = initWarOutcome({ store, simActions, getHighlight: () => highlightRef });
@@ -121,7 +124,8 @@ function start() {
   initCovertWindow({ store, simActions, wins });
   // 地図上の国・州などを選んだときも、ズームせず強調だけする
   const rawOpen = panels.openEntity;
-  panels.openEntity = (kind, id) => { if (["state", "culture", "religion", "province"].includes(kind)) highlight.show(kind, id); return rawOpen(kind, id); };
+  let nationRef = null; // 国家タブ（あとで入る）。国家を選んだときは、サイドバーではなく国家タブの詳細を開く
+  panels.openEntity = (kind, id) => { if (["culture", "religion", "province"].includes(kind)) highlight.show(kind, id); if (kind === "state" && nationRef) { nationRef.openState(id); return; } return rawOpen(kind, id); };
   for (const [id, head] of [["sidebar", "#editor-panel"], ["edit-panel", ".editor-header"]]) {
     const root = byId(id);
     // sidebar の中身(editor-panel)は描き直されるので、ドラッグはパネル全体の上端を掴む形にする
@@ -147,10 +151,12 @@ function start() {
   // 右のパネルは × で小さくでき、元の場所（右端）の小さなボタンで開き直せる
 
   const economyView = createEconomyView({ store, editActions, builderActions });
-  initWorkWindows({ store, wins, views: { economy: economyView }, extras: { economy: [{ title: "通貨・為替", body: warOutcome.currencyBody, render: () => warOutcome.renderCurrency() }] } });
+  initWorkWindows({ store, wins, views: { economy: economyView } });
+  nationRef = initNationWindow({ store, wins, editActions, simActions, setupActions, economyView, openSetup, getWarsPanel: () => warsPanel, openRebellion, getHighlight: () => highlightRef });
   // 属州タブの「この属州を塗り直す」ボタンから、地図編集パネルを開いてツール欄を同期する
   window.addEventListener("request-edit-panel-open", () => editPanel.open());
   window.addEventListener("request-edit-panel-sync", (e) => {
+    if (e.detail?.tool && editMode.tool !== e.detail.tool) { editMode.setTool(e.detail.tool); editPanel.open(); } // 国家タブの「領土を塗る」「都市を置く」など、外からツールを選ぶ
     editToolbar.fillTargets(e.detail?.tool ?? editMode.tool);
     editToolbar.sync();
     if (e.detail?.target != null) editToolbar.setTargetValue(e.detail.target);

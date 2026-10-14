@@ -53,14 +53,14 @@ const menuBtn = (w) => q(`[data-open-win="${w}"]`) ?? { click: () => window.alte
 const pick = (a, d) => { const boxes = () => [...window.document.querySelectorAll("#tab-wars .war-side")]; boxes()[0].querySelectorAll("input")[a].click(); boxes()[1].querySelectorAll("input")[d].click(); };
 
 console.log("=== 設定メニューとウィンドウ ===");
-check("ハブに戦争・外交・軍事の入口がある", !!q("#hub") && !!menuBtn("war") && !!menuBtn("diplomacy") && !!menuBtn("military"));
-check("開く前、ウィンドウは見えない", ["war", "diplomacy", "military"].every((w) => win(w).hidden));
+check("ハブに国家・戦争・外交の入口があり、軍事は無い", !!q("#hub") && !!menuBtn("war") && !!menuBtn("diplomacy") && !!menuBtn("nation") && !q('[data-open-win="military"]'));
+check("開く前、ウィンドウは見えない", ["war", "diplomacy", "nation"].every((w) => win(w).hidden));
 menuBtn("war").click();
 check("戦争ウィンドウが開く", !win("war").hidden && !!win("war").querySelector(".war-band"));
-menuBtn("military").click();
-check("複数のウィンドウを同時に開ける", !win("war").hidden && !win("military").hidden);
+menuBtn("nation").click();
+check("複数のウィンドウを同時に開ける", !win("war").hidden && !win("nation").hidden);
 win("war").querySelector(".panel-close").click();
-check("× で閉じる", win("war").hidden && !win("military").hidden);
+check("× で閉じる", win("war").hidden && !win("nation").hidden);
 
 console.log("=== 戦争：宣戦布告と戦争名 ===");
 menuBtn("war").click();
@@ -90,13 +90,9 @@ check("終戦日が自動で決まっている", !!simActions.listWars().find((w
 
 const st = store.getState().map.pack.states.filter((s) => s && s.i > 0 && !s.removed);
 for (const s of st.slice(0, 2)) { const cell = store.getState().map.pack.cells.state.findIndex((v) => v === s.i); simActions.createRegiment(s.i, cell, {}); simActions.createRegiment(s.i, cell, {}); }
-console.log("=== 外交・軍事ウィンドウ ===");
+console.log("=== 外交ウィンドウ ===");
 menuBtn("diplomacy").click();
-check("外交ウィンドウに関係一覧と「条約を結ぶ」がある", !!win("diplomacy").querySelector(".dip-relations") && win("diplomacy").textContent.includes("条約を結ぶ") && !!win("diplomacy").querySelector(".diplomacy-matrix"));
-menuBtn("military").click();
-check("軍事ウィンドウに国ごとの比較表がある（国家の行数 + 見出し）", win("military").querySelectorAll(".win-table tr").length === st.length + 1);
-check("軍事の表に部隊数が出る", [...win("military").querySelectorAll(".win-table tr")][1].textContent.includes("2"));
-check("軍事ウィンドウに「攻撃」の操作は無い", !win("military").textContent.includes("攻撃"));
+check("外交ウィンドウに国のリスト・関係カード・「条約を結ぶ」があり、外交の表は無い", !!win("diplomacy").querySelector(".dip-left") && !!win("diplomacy").querySelector(".dip-mid") && win("diplomacy").textContent.includes("条約を結ぶ") && !win("diplomacy").querySelector(".diplomacy-matrix"));
 
 console.log("=== 国家の詳細画面 ===");
 window.alterhistory.editorPanel.openEntity("state", 1);
@@ -106,7 +102,7 @@ check("属州は基本情報の下に折りたたみで続く", !!q("#editor-pan
 
 console.log("=== ウィンドウの大きさ変更 ===");
 {
-  const stage = q("#stage"), w = win("military");
+  const stage = q("#stage"), w = win("nation");
   stage.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1000, height: 700, right: 1000, bottom: 700 });
   w.getBoundingClientRect = () => ({ left: 100, top: 50, width: parseFloat(w.style.width) || 400, height: parseFloat(w.style.height) || 300, right: 0, bottom: 0 });
   check("四辺と四隅に8個のつまみがある", w.querySelectorAll(".rs-handle").length === 8);

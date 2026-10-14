@@ -3,7 +3,7 @@
 //   ・「兆し」から始まる出来事：まず曖昧な噂・予兆だけが記録され、数か月後に本当に起きるか、杞憂に終わる（含みを持たせる）
 // 効果は国家の士気・民意・兵力・人口・産業と、戦況の傾き(edgeShift)に反映される。乱数は注入する（再現できる）。
 // 純粋ロジック層：DOM に依存しない。
-import { mobilized } from "./war-engine.js";
+import { mobilized, asymOf, warTypeOf } from "./war-engine.js";
 import { officialName } from "../names.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
@@ -41,12 +41,21 @@ const EVENTS = [
     run: (c) => { const side = c.rnd.next() < 0.5 ? "attacker" : "defender"; const foe = side === "attacker" ? "defender" : "attacker"; const id = c.rnd.pick(c.fightingOf(foe)); const hero = c.rnd.pick(c.fightingOf(side)); if (id == null || hero == null) return null; c.troops(id, 0.97); c.moraleOf(id, -5); c.edge(side === "attacker" ? 0.02 : -0.02); return `${c.name(hero)}軍が奇襲に成功し、${c.name(id)}軍は後退した`; } },
   { id: "famine", w: 2, title: "物資の逼迫",
     run: (c) => { const id = c.pickFighting(); if (id == null) return null; c.supportOf(id, -3); c.moraleOf(id, -3); c.pop(id, 0.995); return `${c.name(id)}で前線への物資が滞り、不満が高まった`; } },
-  { id: "mediation", w: 1, title: "調停の申し出",
+  { id: "mediation", w: 1, title: "調停の申し出", minTech: 2,
     run: (c) => { const n = c.neutral(); if (n == null) return null; for (const id of c.fightingAll()) c.supportOf(id, 2); c.setMediator(n); return `${c.name(n)}が調停を申し出た。講和の機運が高まっている`; } },
-  { id: "protest", w: 2, title: "反戦運動",
+  { id: "protest", w: 2, title: "反戦運動", minTech: 4,
     run: (c) => { const id = c.pickFighting(); if (id == null) return null; c.supportOf(id, -7); return `${c.name(id)}の首都で反戦デモが起き、政府が動揺した`; } },
-  { id: "breakthrough", w: 1, title: "技術的突破",
+  { id: "breakthrough", w: 1, title: "技術的突破", minTech: 3,
     run: (c) => { const id = c.bestTech(); if (id == null) return null; c.moraleOf(id, 4); c.edge(c.sideOfState(id) === "attacker" ? 0.02 : -0.02); return `${c.name(id)}が新型兵器を実戦投入し、戦況が動いた`; } },
+  // 非対称戦（ゲリラ・占領戦）でだけ起きる出来事。強い側が削られる
+  { id: "ambushG", asym: true, w: 3, title: "ゲリラの待ち伏せ",
+    run: (c) => { const id = c.strongerId(); if (id == null) return null; c.troops(id, 0.97); c.moraleOf(id, -5); c.edge(c.sideOfState(id) === "attacker" ? -0.015 : 0.015); return `${c.name(id)}軍の補給部隊が、山地でゲリラに襲われた`; } },
+  { id: "resistance", asym: true, w: 3, title: "占領地の抵抗",
+    run: (c) => { const id = c.strongerId(); if (id == null) return null; c.supportOf(id, -4); c.pop(id, 0.998); return `${c.name(id)}の占領地で住民の抵抗が広がり、駐留が重荷になった`; } },
+  { id: "sabotage", asym: true, w: 2, title: "補給線への破壊工作", minTech: 3,
+    run: (c) => { const id = c.strongerId(); if (id == null) return null; c.moraleOf(id, -3); c.industry(id, 0.995); c.edge(c.sideOfState(id) === "attacker" ? -0.01 : 0.01); return `${c.name(id)}の鉄道と橋が、各地で破壊された`; } },
+  { id: "uprising", asym: true, w: 2, title: "民衆の蜂起",
+    run: (c) => { const side = c.weakerSide(); const id = c.rnd.pick(c.fightingOf(side)); if (id == null) return null; c.moraleOf(id, 6); const s = c.strongerId(); if (s != null) c.troops(s, 0.98); return `${c.name(id)}の民衆が各地で蜂起し、士気が高まった`; } },
   { id: "hero", w: 1, title: "奇跡の防戦",
     run: (c) => { const side = c.weakerSide(); const id = c.rnd.pick(c.fightingOf(side)); if (id == null) return null; c.moraleOf(id, 7); return `${c.name(id)}軍の無名の将校が奇跡的な防戦を指揮し、士気が上がった`; } },
 ];
@@ -79,6 +88,7 @@ const pickWeighted = (list, rnd) => { const tot = list.reduce((n, x) => n + x.w,
 
 /** 戦争の形態ごとの、月ごとの出来事の起きやすさ */
 const RATE = { limited: 0.06, conventional: 0.1, total: 0.13, asymmetric: 0.13 };
+const rateOf = (type) => { const ks = String(type ?? "conventional").split("+"); return ks.reduce((n, k) => n + (RATE[k] ?? 0.2), 0) / ks.length; };
 const MAX_EVENTS = 40;
 
 /**
@@ -109,6 +119,7 @@ export function rollWarMonth(map, war, date, rnd, fx) {
     setMediator: (id) => { if (id != null) mediator = id; },
   };
   const log = (kind, title, text, oid = null) => events.push({ date, kind, title, text, ...(oid ? { oid } : {}) });
+  const techTop = Math.max(...all.map((id) => map.pack.states[id]?.techLevel ?? 3)); // 技術ドクトリンの水準。時代に合わない出来事は出さない
   const nowIdx = date.year * 12 + date.month;
   // 同じ種類の兆しは、続けて起きない（直近8か月以内に出た種類は除く）。同じ噂が何度も繰り返されるのを防ぐ
   const recentOmen = new Set((war.events ?? []).filter((e) => e.oid && e.date && nowIdx - (e.date.year * 12 + e.date.month) <= 8).map((e) => e.oid));
@@ -124,9 +135,9 @@ export function rollWarMonth(map, war, date, rnd, fx) {
   // 2) 新しい出来事 / 予兆
   const total = (war.events ?? []).length;
   if (total < MAX_EVENTS) {
-    const rate = RATE[war.type] ?? 0.2;
+    const rate = rateOf(war.type) * (asymOf(war.type) ? 1.4 : 1); // 非対称戦は、特殊な出来事が多い
     if (rnd.next() < rate) {
-      for (let tries = 0; tries < 4; tries++) { const ev = pickWeighted(EVENTS, rnd); const text = ev.run(c); if (text) { log("event", ev.title, text); break; } }
+      for (let tries = 0; tries < 4; tries++) { const ev = pickWeighted(EVENTS.filter((e) => (!e.asym || asymOf(war.type)) && (e.minTech ?? 0) <= techTop && (e.maxTech ?? 99) >= techTop), rnd); const text = ev.run(c); if (text) { log("event", ev.title, text); break; } }
     } else if (omens.length < 2 && rnd.next() < 0.07) {
       const pool = OMENS.filter((x) => !recentOmen.has(x.id)); const def = pool.length ? pickWeighted(pool, rnd) : null;
       if (!def) return { events, omens, edgeShift, mediator };

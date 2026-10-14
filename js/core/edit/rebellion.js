@@ -90,3 +90,42 @@ export function planSplitArmy(map, fromId, toId) {
   parts.push(setList((m) => m.pack.states[toId].military, (m, v) => { m.pack.states[toId].military = v; }, [...toRegs, ...added]));
   return { command: makeCommand("反乱による軍の分割", ["places"], parts), moved: moving.length, taken };
 }
+
+export const REBEL_GOALS = Object.freeze([
+  { key: "secession", label: "分離独立", desc: "領土の一部が、独立した国になる。" },
+  { key: "overthrow", label: "政体転覆", desc: "政体の違う反乱側が、国の統治そのものを奪おうとする。反乱側が勝つと、元の国の政体が変わる。" },
+]);
+export const REBEL_SCALES = Object.freeze([
+  { key: "small", label: "小", share: 0.15 }, { key: "medium", label: "中", share: 0.3 }, { key: "large", label: "大", share: 0.5 },
+]);
+
+/**
+ * 反乱の規模に応じて、反乱する属州を選ぶ（互いに連結した領域。首都の属州は含めない）。
+ * 首都から遠い属州を起点に、隣り合う属州へ広げ、国の領土（セル数）の share 割に届いたら止める。
+ * @returns {number[]} 属州IDの配列。選べなければ空
+ */
+export function pickRebelProvinces(map, stateId, scaleKey, rnd) {
+  const sc = REBEL_SCALES.find((s) => s.key === scaleKey); if (!sc) throw new Error("反乱の規模を選んでください");
+  const cands = breakawayCandidates(map, stateId); if (!cands.length) return [];
+  const c = map.pack.cells, geom = map.geometry?.pack?.cells;
+  const size = new Map(), adj = new Map();
+  for (let i = 0; i < c.province.length; i++) {
+    const p = c.province[i]; if (!(p > 0) || c.state[i] !== stateId) continue;
+    size.set(p, (size.get(p) ?? 0) + 1);
+    if (!geom?.c) continue;
+    for (const j of geom.c[i]) { const q = c.province[j]; if (q > 0 && q !== p && c.state[j] === stateId) { if (!adj.has(p)) adj.set(p, new Set()); adj.get(p).add(q); } }
+  }
+  const allowed = new Set(cands.map((x) => x.provinceId));
+  const total = [...size.values()].reduce((a, b) => a + b, 0), target = Math.max(1, total * sc.share);
+  const startPool = cands.slice(0, Math.max(1, Math.ceil(cands.length / 2)));
+  const start = (rnd ? rnd.pick(startPool) : startPool[0]).provinceId;
+  const chosen = [start]; let got = size.get(start) ?? 0;
+  const frontier = () => [...new Set(chosen.flatMap((p) => [...(adj.get(p) ?? [])]))].filter((q) => allowed.has(q) && !chosen.includes(q));
+  while (got < target) {
+    const f = frontier(); if (!f.length) break;
+    const q = rnd ? rnd.pick(f) : f[0];
+    if (got + (size.get(q) ?? 0) > total * 0.7) break; // 元の国には、必ず領土を残す
+    chosen.push(q); got += size.get(q) ?? 0;
+  }
+  return chosen;
+}

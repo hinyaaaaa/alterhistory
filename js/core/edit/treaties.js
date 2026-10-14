@@ -9,17 +9,17 @@
 //       共同宣言 … 記録と年表のみ（補正は付けない）
 //   ・保存場所: ext.data.treaties = [{ id, kind, name, parties:[{state, role}], signedAt, expiresAt|null, status, endedAt, brokenBy,
 //                                    terms, originWar, text, ref }]
-//   ・保存形式の版: ext.data.saveFormat（旧形式 = 1、条約を導入した形式 = 2）。旧形式は読み込み時に変換する。
+//   ・保存形式の版: ext.data.saveFormat（旧形式 = 1、条約を導入した形式 = 2、指導者・政体・技術ドクトリンの形式 = 3）。旧形式は読み込み時に変換する。
 //
 // 純粋ロジック層：DOM に依存しない。
 
 import { makeCommand, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
 import { withEvent } from "./history-log.js";
-import { planCreateAlliance, planDissolveAlliance, listAlliances, leaderOf } from "./alliances.js";
+import { planCreateAlliance, planDissolveAlliance, planEditAlliance, listAlliances, leaderOf } from "./alliances.js";
 import { planSetVassal, planReleaseVassal, vassalInfo, VASSAL_KINDS, VASSAL_BY_KEY } from "./vassals.js";
 
-export const SAVE_FORMAT = 2;
+export const SAVE_FORMAT = 3;
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const nameOf = (s) => s?.fullName ?? s?.name ?? "?";
@@ -29,9 +29,9 @@ const addMonthsTo = (t, n) => { const k = monthKey(t) + n; return { year: Math.f
 
 /** 条約の種類。terms は、種類ごとの最小限の条項（既定値は自動） */
 export const TREATY_KINDS = Object.freeze([
-  { key: "alliance", label: "軍事同盟・安全保障条約", short: "同盟", color: "ally", min: 2, desc: "当事国が攻められると、拘束力に応じて他の当事国が参戦する。" },
-  { key: "nonaggression", label: "不可侵条約", short: "不可侵", color: "info", min: 2, desc: "当事国どうしの宣戦は違約になる。破ると民意と信用が下がる。" },
-  { key: "economic", label: "経済協力・自由貿易", short: "協力", color: "warn", min: 2, desc: "当事国どうしの貿易収入が増える（関税が低いほど大きい）。" },
+  { key: "alliance", label: "安全保障（参戦義務）", short: "安全保障", color: "ally", min: 2, desc: "当事国が攻められると、拘束力に応じて他の当事国が参戦する。" },
+  { key: "nonaggression", label: "不可侵・中立", short: "不可侵・中立", color: "info", min: 2, desc: "不可侵: 当事国どうしの宣戦は違約になり、民意と信用が下がる。中立: 当事国は、同盟の参戦招集に応じない。" },
+  { key: "economic", label: "経済協力（貿易量）", short: "経済協力", color: "warn", min: 2, desc: "当事国どうしの貿易収入が増える（関税が低いほど大きい）。" },
   { key: "vassal", label: "従属（保護国・属国・傀儡）", short: "従属", color: "info", min: 2, max: 2, desc: "宗主国と従属国。貢納が経済に反映され、宗主国の戦争に従う。" },
   { key: "border", label: "領土・国境の画定", short: "国境", color: "info", min: 2, desc: "国境を取り決めた記録。領土の移転は、地図編集の割譲と同じ仕組みで行う。" },
   { key: "declaration", label: "共同宣言", short: "宣言", color: "brass", min: 2, desc: "定型文を選んで出す。効果は記録と年表のみ。" },
@@ -40,7 +40,12 @@ export const TREATY_KINDS = Object.freeze([
 ]);
 export const TREATY_BY_KEY = Object.fromEntries(TREATY_KINDS.map((k) => [k.key, k]));
 /** 外交ウィンドウの「条約を結ぶ」から選べる種類（講和は戦争ウィンドウから） */
-export const SIGNABLE_KINDS = Object.freeze(TREATY_KINDS.filter((k) => k.key !== "peace" && k.key !== "support").map((k) => k.key));
+export const SIGNABLE_KINDS = Object.freeze(["alliance", "economic", "declaration", "nonaggression"]);
+/** 不可侵・中立の「型」 */
+export const NONAGG_MODES = Object.freeze([{ key: "nonaggression", label: "不可侵（互いに宣戦しない）" }, { key: "neutral", label: "中立（同盟の参戦招集に応じない）" }]);
+export const isNeutral = (t) => t.kind === "nonaggression" && t.terms?.mode === "neutral";
+/** いま有効な中立条約の当事国 */
+export const neutralStates = (map, now = nowOf(map)) => new Set(activeTreaties(map, now, "nonaggression").filter(isNeutral).flatMap(partyIds));
 
 /** 同盟の拘束力 → 既存の同盟の拘束（loose/standard/strict） */
 export const BIND_LEVELS = Object.freeze([
@@ -91,7 +96,7 @@ export function autoName(map, kind, parties, terms = {}) {
   const two = names.length === 2 ? `${names[0]}・${names[1]}` : `${names[0]}ほか${names.length - 1}国`;
   const base = {
     alliance: names.length > 2 ? `${names[0]}同盟` : `${two}同盟`,
-    nonaggression: `${two}不可侵条約`,
+    nonaggression: terms.mode === "neutral" ? `${two}中立条約` : `${two}不可侵条約`,
     economic: `${two}経済協力協定`,
     vassal: `${names[1] ?? names[0]}従属条約`,
     border: `${two}国境画定条約`,
@@ -117,7 +122,7 @@ export function treatyText(map, t) {
   if (t.kind === "alliance") {
     const lead = t.parties.find((p) => p.role === "盟主");
     bits.push(`${names}は軍事同盟を結んだ。${lead ? `盟主は${nameOf(map.pack.states[lead.state])}。` : ""}拘束力は「${BIND_BY_KEY[term.bind]?.label ?? "中"}」と定められた。${term.civilCalls ? "" : ""}`);
-  } else if (t.kind === "nonaggression") bits.push(`${names}は、互いに宣戦しないことを約した。`);
+  } else if (t.kind === "nonaggression") bits.push(term.mode === "neutral" ? `${names}は中立を約し、同盟による参戦の招集には応じないこととした。` : `${names}は、互いに宣戦しないことを約した。`);
   else if (t.kind === "economic") bits.push(`${names}は経済協力を結び、関税を「${TARIFF_BY_KEY[term.tariff]?.label ?? "中"}」とした。`);
   else if (t.kind === "vassal") { const o = t.parties.find((p) => p.role === "宗主国"), v = t.parties.find((p) => p.role !== "宗主国"); bits.push(`${nameOf(map.pack.states[v?.state])}は${nameOf(map.pack.states[o?.state])}の${VASSAL_BY_KEY[term.kind]?.label ?? "属国"}となった。`); }
   else if (t.kind === "border") bits.push(`${names}は、国境を取り決めた。${term.note ? term.note : ""}`);
@@ -169,6 +174,7 @@ export function planConcludeTreaty(map, o, { logEvent = true } = {}) {
     ref = { vassalState: vassal };
   } else if (kind === "economic") terms.tariff = TARIFF_BY_KEY[terms.tariff] ? terms.tariff : "mid";
   else if (kind === "declaration") terms.declaration = DECLARATION_BY_KEY[terms.declaration] ? terms.declaration : "friendship";
+  else if (kind === "nonaggression") terms.mode = terms.mode === "neutral" ? "neutral" : "nonaggression";
   const name = uniqueName(map, o.name?.trim() || autoName(map, kind, parties, terms));
   const id = nextId(map);
   const expiresAt = o.months ? addMonthsTo(date, o.months) : null;
@@ -202,6 +208,30 @@ export function planBreakTreaty(map, id, { by = null, date = null } = {}) {
   if (by != null && partyIds(t).includes(by) && ["alliance", "nonaggression", "economic", "vassal", "border"].includes(t.kind)) parts.push(...breachPenaltyParts(map, by, 5, 10));
   const cmd = makeCommand(`条約を破棄（${t.name}）`, ["politics"], parts);
   return withEvent(map, cmd, { type: "treaty-broken", title: `${t.name}が破棄された`, detail: by != null ? `${nameOf(map.pack.states[by])}が破棄` : null, date: now, states: partyIds(t) });
+}
+
+/**
+ * 条約の参加国を後から変える（外す・足す）。有効な条約だけ。従属・講和・支援は変えられない。
+ * 同盟なら、同盟の加盟国も合わせて直す（盟主が抜けたら、残った国の先頭が盟主）。変化が無ければ null
+ */
+export function planSetTreatyParties(map, id, stateIds) {
+  const list = listTreaties(map); const t = list.find((x) => x.id === id); if (!t) throw new Error("その条約は存在しません");
+  if (treatyStatus(t, nowOf(map)) !== "active") throw new Error("有効な条約だけ、参加国を変えられます");
+  if (["vassal", "peace", "support"].includes(t.kind)) throw new Error("この種類の条約は、参加国を変えられません");
+  const ids = [...new Set(stateIds)];
+  if (ids.length === partyIds(t).length && ids.every((x) => partyIds(t).includes(x))) return null;
+  const parties = ids.map((s) => t.parties.find((p) => p.state === s) ?? { state: s, role: "加盟" });
+  checkParties(map, t.kind, parties);
+  if (t.kind === "alliance") { const lead = parties.find((p) => p.role === "盟主")?.state ?? ids[0]; for (const p of parties) p.role = p.state === lead ? "盟主" : "加盟"; }
+  const next = { ...t, parties, text: t.text && t.text === treatyText(map, t) ? null : t.text };
+  const parts = [{ apply: (m) => writeTreaties(m, list.map((x) => (x.id === id ? next : x))), revert: (m) => writeTreaties(m, list) }];
+  if (t.kind === "alliance" && t.ref?.allianceId) {
+    const c = planEditAlliance(map, t.ref.allianceId, { members: ids, leader: parties.find((p) => p.role === "盟主")?.state });
+    if (c) parts.push(...c.parts);
+  }
+  const added = ids.filter((x) => !partyIds(t).includes(x)), removed = partyIds(t).filter((x) => !ids.includes(x));
+  const cmd = makeCommand(`条約の参加国を変更（${t.name}）`, [], parts);
+  return withEvent(map, cmd, { type: "treaty-parties", title: `${t.name}の参加国が変わった`, detail: [added.length ? `加わる: ${joinNames(map, added)}` : "", removed.length ? `外れる: ${joinNames(map, removed)}` : ""].filter(Boolean).join(" / "), date: nowOf(map), states: [...new Set([...ids, ...removed])] });
 }
 
 /** 期限・名前・本文・条項を改める（改定）。変化が無ければ null */

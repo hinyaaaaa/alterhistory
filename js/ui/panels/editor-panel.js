@@ -1,5 +1,5 @@
 import { STATE_TAGS, BURG_KINDS, PROVINCE_TITLES, RESOURCES } from "../../core/edit/world-info.js";
-import { TITLES, REASONS, STABILITY, monarchRecord, lineageOf, causeChain } from "../../core/edit/lineage.js";
+import { TITLES, REASONS, STABILITY, leaderRecord, lineageOf, causeChain } from "../../core/edit/lineage.js";
 import { buildTimeline } from "../../io/chronicle.js";
 // エディタパネル：選ばれた対象（セル・都市・マーカー・国家など）の情報と編集フォームを表示する。
 // 左サイドバーに差し込む1枚のパネル。DOMを直接組み立てる（フレームワーク不使用）。
@@ -256,7 +256,7 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
   }
   /** 現在の君主と歴代 */
   function monarchLine(map, e) {
-    const r = monarchRecord(map, e.i); const box = el("div", "editor-section monarch-line");
+    const r = leaderRecord(map, e.i); const box = el("div", "editor-section monarch-line");
     box.append(el("h4", "", "君主"));
     box.append(el("p", "hint", r.current ? `${r.current.title}${r.current.name}（${r.current.since.year}年${r.current.since.month}月〜）` : "君主の記録はまだありません（「操作」で君主交代を記録できます）"));
     if (r.history.length) box.append(el("p", "hint", "歴代: " + r.history.map((x) => `${x.title}${x.name}（${x.since.year}〜${x.until.year}年）`).join(" → ")));
@@ -269,9 +269,9 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     const name = el("input"); name.placeholder = "名前（空なら自動）";
     const go = el("button", "primary", "君主交代を記録する"); go.type = "button";
     const row = el("div", "diplomacy-row"); row.append(reason, title, stab, name, go); w.append(row);
-    go.addEventListener("click", () => { editActions.changeMonarch(e.i, { reason: reason.value, title: title.value, name: name.value, stability: stab.value }); });
+    go.addEventListener("click", () => { editActions.changeLeader(e.i, { reason: reason.value, title: title.value, name: name.value, stability: stab.value }); });
     // 継承が「大きな混乱」の間は、反乱・独立への入口を出す（自動では起こさない）
-    if (monarchRecord(map, e.i).current?.stability === "chaos" && openRebellion) { const b = el("button", "", "継承の混乱から、反乱・独立を起こす…"); b.type = "button"; b.addEventListener("click", () => openRebellion({ stateId: e.i })); w.append(b); }
+    if (leaderRecord(map, e.i).current?.stability === "chaos" && openRebellion) { const b = el("button", "", "継承の混乱から、反乱・独立を起こす…"); b.type = "button"; b.addEventListener("click", () => openRebellion({ stateId: e.i })); w.append(b); }
     return w;
   }
   /** 系譜（前身・後継・国名の変遷）と、この国の因果の流れ */
@@ -399,7 +399,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     form.append(table(stats));
     form.append(textField("名前", e.fullName ?? e.name, (v) => editActions.renameEntity(kind, e.i, v), () => editActions.suggestName(kind, { id: e.i })));
     form.append(...provisionalNote(kind, e.i));
-    if (kind === "culture") form.append(nameStyleSection(e.i));
     if (kind === "culture" || kind === "religion") form.append(profileSection(kind, e, map));
     form.append(noteField(map, kind, e.i));
     body.append(form);
@@ -516,28 +515,6 @@ export function initEditorPanel({ store, editActions, editMode, panels: initialP
     ok.addEventListener("click", () => editActions.confirmName(kind, id));
     box.append(ok);
     return [box];
-  }
-
-  /** 文化の「名前の系統」。この文化の都市・属州・国家の仮名の雰囲気を決める */
-  function nameStyleSection(cultureId) {
-    const wrap = el("div", "editor-section");
-    wrap.append(el("h4", "", "名前の系統（仮生成用）"));
-    const sel = document.createElement("select");
-    const explicit = editActions.getNameStyle(cultureId);
-    const auto = editActions.effectiveNameStyle(cultureId);
-    const o0 = document.createElement("option");
-    o0.value = ""; o0.textContent = `自動（${editActions.NAME_STYLES[auto].label}）`;
-    sel.append(o0);
-    for (const k of editActions.STYLE_KEYS) {
-      const o = document.createElement("option");
-      o.value = k; o.textContent = editActions.NAME_STYLES[k].label;
-      sel.append(o);
-    }
-    sel.value = explicit ?? "";
-    sel.addEventListener("change", () => editActions.setNameStyle(cultureId, sel.value || null));
-    wrap.append(sel);
-    wrap.append(el("p", "hint", "この文化の領域に作る都市・属州の仮の名前が、この系統の響きになります。"));
-    return wrap;
   }
 
   function table(rows) {

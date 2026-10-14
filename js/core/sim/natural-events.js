@@ -8,6 +8,7 @@
 // 純粋ロジック層：DOM に依存しない。
 
 import { pickBreakawayProvinces } from "../edit/rebellion.js";
+import { getTechDoctrine } from "../edit/doctrines.js";
 import { makeCommand, setProps, setIndexed } from "../edit/commands.js";
 import { ensureExt } from "../edit/ext.js";
 import { withEvent } from "../edit/history-log.js";
@@ -42,7 +43,7 @@ export function planSetNaturalSettings(map, patch) {
 }
 
 /** 国ごとの1年あたりの基本確率（頻度「ふつう」のとき）。頻度の倍率は factor で掛ける */
-export const BASE_RATE = Object.freeze({ plague: 0.012, rebellion: 0.025, independence: 0.012, schism: 0.008 });
+export const BASE_RATE = Object.freeze({ plague: 0.012, independence: 0.012, schism: 0.008 });
 /** 民意が低いときの反乱の上乗せの上限（これが無いと、民意が0に近い国で毎年のように反乱が起きる） */
 export const REBELLION_BOOST_MAX = 2.5;
 
@@ -96,10 +97,9 @@ export function rollNaturalEvents(map, rnd, settings = null) {
     const sup = supportOf(s);
     // 疫病：人口が多い国ほど、また都市が大きい国ほど、広がりやすい
     const urbanShare = popOf(s) ? (s.urban ?? 0) / popOf(s) : 0;
-    const pPlague = BASE_RATE.plague * f * (0.5 + 1.5 * (popOf(s) / totalPop) * states.length / Math.max(1, states.length)) * (0.7 + urbanShare);
+    const pPlague = BASE_RATE.plague * f * (0.5 + 1.5 * (popOf(s) / totalPop) * states.length / Math.max(1, states.length)) * (0.7 + urbanShare) * Math.max(0.15, 1 - 0.09 * (getTechDoctrine(s).medicine - 1)); // 医療が進むほど、疫病は起きにくい（技術ドクトリン）
     if (rnd.next() < pPlague) out.push({ kind: "plague", stateId: s.i, ruralLoss: r1(0.03 + rnd.next() * 0.07), urbanLoss: r1(0.05 + rnd.next() * 0.09) });
-    // 反乱：民意が低い国で起きる
-    if (sup < 45 && rnd.next() < BASE_RATE.rebellion * f * Math.min(REBELLION_BOOST_MAX, 1 + (45 - sup) / 15)) out.push({ kind: "rebellion", stateId: s.i, supportDrop: Math.round(6 + rnd.next() * 8) });
+    // 反乱は、州が勝手に起こすことはしない（v2.4.0）。国家タブの「反乱を起こす」ボタンだけ
     // 独立：民意が低く、属州が複数ある国で、遠い属州が独立する
     // 民意が低いほど、話し合いではなく武力で割れる（内戦になる）ことが多い。分かれるのは、首都から遠い属州をいくつか
     if (sup < 55 && rnd.next() < BASE_RATE.independence * f * (1 + (55 - sup) / 20)) {

@@ -426,7 +426,6 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
       attackers: w.attackers.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }, w.names?.[id]) })), defenders: w.defenders.map((id) => ({ id, name: stateAt(id, w.startedAt, { later: true }, w.names?.[id]) })),
       battleCount: (w.battles ?? []).length, attackerWins: wins.attacker, defenderWins: wins.defender,
       type: w.type ?? null, warScore: w.result?.warScore ?? null,
-      forecast: (w.forecast ?? []).map((b) => ({ date: fmtDate(b.date), name: b.name ?? null, place: b.place ?? null, text: b.text ?? null, attacker: stateAt(b.attackerState, b.date ?? w.startedAt, undefined, b.attackerName ?? w.names?.[b.attackerState]), defender: stateAt(b.defenderState, b.date ?? w.startedAt, undefined, b.defenderName ?? w.names?.[b.defenderState]), winnerSide: b.winner, attackerPower: b.aPower ?? null, defenderPower: b.dPower ?? null, note: "開戦時に作られた想定の戦闘ログ（実際の戦闘ではない）" })),
       battles: (w.battles ?? []).map((b) => ({
         date: fmtDate(b.date ?? b), name: b.name ?? null, place: b.place ?? null, text: b.text ?? null,
         attacker: stateAt(b.attackerState, b.date ?? w.startedAt, undefined, b.attackerName ?? w.names?.[b.attackerState]), defender: stateAt(b.defenderState, b.date ?? w.startedAt, undefined, b.defenderName ?? w.names?.[b.defenderState]),
@@ -527,12 +526,6 @@ function timelineOf(map, { namer, stateAt, eraName, eras }) {
       const power = Number.isFinite(b.aPower) && Number.isFinite(b.dPower) ? ` / 戦力 ${b.aPower} 対 ${b.dPower}` : "";
       push(d, "battle", `戦闘${b.name ? `「${b.name}」` : ""}（${w.name}）`,
         `${A}（攻）対 ${D}（防）→ ${win} の勝利${b.place ? ` / 場所 ${b.place}` : ""}${power}${b.text ? ` / ${b.text}` : ""}`,
-        [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)], { cell: P.burgs[b.burgId] && !P.burgs[b.burgId].removed ? P.burgs[b.burgId].cell : null });
-    }
-    for (const b of w.forecast ?? []) { // 開戦時に作った想定の戦闘ログ。実際の戦闘とは別の種類で載せる
-      const d = b.date ?? w.startedAt;
-      const A = at(b.attackerState, d, b.attackerName ?? w.names?.[b.attackerState]), D = at(b.defenderState, d, b.defenderName ?? w.names?.[b.defenderState]);
-      push(d, "battle-forecast", `想定の戦闘${b.name ? `「${b.name}」` : ""}（${w.name}）`, `${A}（攻）対 ${D}（防）→ ${b.winner === "attacker" ? A : D} の勝利と想定${b.place ? ` / 場所 ${b.place}` : ""}${b.text ? ` / ${b.text}` : ""}`,
         [ref(namer, "state", b.attackerState), ref(namer, "state", b.defenderState)], { cell: P.burgs[b.burgId] && !P.burgs[b.burgId].removed ? P.burgs[b.burgId].cell : null });
     }
     for (const ev of w.events ?? []) { // 戦争の細かい動き（ハプニング・撤退・増派・決着）

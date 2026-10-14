@@ -1,7 +1,7 @@
 import { formatWorldTime } from "../../core/sim/time.js";
 import { forcePower } from "../../core/sim/units.js";
 import { BALANCE } from "../../core/sim/balance.js";
-import { WAR_TYPES } from "../../core/sim/war-engine.js";
+import { WAR_TYPES, warTypeOf } from "../../core/sim/war-engine.js";
 import { guardRender, keepScroll } from "../safe-render.js";
 import { byId } from "../dom.js";
 import { alertDialog, confirmDialog } from "../dialogs.js";
@@ -14,7 +14,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
   let selected = null;
   let creating = false;
   let wTab = "ov"; // 戦争ウィンドウで開いているタブ（概要・部隊・経過・講和）
-  let draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set(), muster: {}, type: "conventional" };
+  let draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set(), muster: {}, type: "conventional", types: {} };
   const stateName = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
   const monthIdx = (d) => d.year * 12 + d.month;
   const fmtDate3 = (d) => d ? `${d.year}年${d.month}月` : "";
@@ -67,10 +67,23 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
       typeSel.append(o);
     }
     typeSel.addEventListener("change", () => {
-      draft.type = typeSel.value;
+      draft.type = typeSel.value; draft.types = {};
       render();
     });
-    left.append(el("h4", "", "① 戦争の形態"), typeSel, el("p", "hint", WAR_TYPES[draft.type].desc));
+    left.append(el("h4", "", "① 戦争の形態（国ごとに選べる）"), typeSel, el("p", "hint", WAR_TYPES[draft.type].desc));
+    // 国ごとの形態。双方が食い違ってもよい（例: A国は総力戦、B国は非対称戦）
+    const picked = [...draft.attackers, ...draft.defenders];
+    if (picked.length) {
+      const per = el("div", "war-types");
+      for (const id of picked) {
+        const row = el("label", "war-type-row"); row.append(el("span", "", `${stateName(map, id)}（${draft.attackers.has(id) ? "攻撃側" : "防御側"}）`));
+        const sel = document.createElement("select");
+        for (const T of Object.values(WAR_TYPES).filter((x) => !x.civilOnly)) sel.append(new Option(T.label.replace(/（.*/, ""), T.key, false, (draft.types[id] ?? draft.type) === T.key));
+        sel.addEventListener("change", () => { draft.types[id] = sel.value; render(); });
+        row.append(sel); per.append(row);
+      }
+      left.append(per);
+    }
     const sideBox = (label, key, other) => {
       const box = el("div", "war-side");
       box.append(el("strong", "", label));
@@ -124,12 +137,8 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
         left.append(row);
       }
     }
-    right.append(el("h4", "", "戦力の比較"));
-    const preview = draft.attackers.size && draft.defenders.size ? simActions.previewWar([...draft.attackers], [...draft.defenders], draft.muster, draft.type) : null;
-    if (preview) {
-      if (preview.joined?.length) right.append(el("p", "hint", `同盟・従属の拘束により参戦: ${preview.joined.map((j) => `${stateName(map, j.id)}（${j.alliance}）`).join("、")}`));
-      right.append(getOutcome()?.bars(preview) ?? el("p", "muted", ""));
-    } else right.append(el("p", "muted", "攻撃側と防御側の国を選ぶと、ここに戦力の比較が出ます。"));
+    const joined = draft.attackers.size && draft.defenders.size ? simActions.previewWar([...draft.attackers], [...draft.defenders], draft.muster, draft.type)?.joined : null;
+    if (joined?.length) right.append(el("p", "hint", `同盟・従属の拘束により参戦: ${joined.map((j) => `${stateName(map, j.id)}（${j.alliance}）`).join("、")}`));
     right.append(el("p", "hint", "「戦争開始」で戦闘が始まり、時間とともに損害・ハプニングが積み重なります。終わりは決まっていません。いつでも講和条約を結べます（結んだ月が終戦の月です）。"));
     go.disabled = !draft.attackers.size || !draft.defenders.size;
     // 不可侵条約への違約: 宣戦の前に警告を出す（実行すると、条約は破棄され、民意と信用が下がる）
@@ -137,11 +146,11 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     if (breaches.length) { const warn = el("p", "war-breach", `警告: 不可侵条約に違反します（${[...new Set(breaches.map((b) => b.treaty))].join("、")}）。開戦すると条約は破棄され、攻める国の民意と信用が下がります。`); right.append(warn); }
     go.addEventListener("click", async () => {
       if (breaches.length && !(await confirmDialog(`不可侵条約「${[...new Set(breaches.map((b) => b.treaty))].join("、")}」に違反する宣戦です。\n条約は破棄され、攻める国の民意と信用が下がります。開戦しますか？`, { danger: true, okLabel: "違約して開戦する" }))) return;
-      const out = simActions.declareWarInstant([...draft.attackers], [...draft.defenders], draft.muster, draft.type);
+      const out = simActions.declareWarInstant([...draft.attackers], [...draft.defenders], draft.muster, draft.type, Object.fromEntries([...draft.attackers, ...draft.defenders].map((id) => [id, draft.types[id] ?? draft.type])));
       if (!out) return;
       selected = out.id;
       creating = false;
-      draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set(), muster: {}, type: "conventional" };
+      draft = { name: "", attackers: /* @__PURE__ */ new Set(), defenders: /* @__PURE__ */ new Set(), muster: {}, type: "conventional", types: {} };
       render();
       if (out.collapsed?.length) alertDialog?.(`人口の大部分を失い、国家が崩壊しました：${out.collapsed.join("、")}`);
     });
@@ -156,10 +165,22 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     nameIn.value = w.name;
     nameIn.className = "war-name-input";
     nameIn.addEventListener("change", () => simActions.renameWar(w.id, nameIn.value));
-    const typeName = WAR_TYPES[w.type]?.label ?? "通常戦";
+    const typeName = warTypeOf(w.type).label;
     const now = map.worldTime ?? { year: w.startedAt.year, month: w.startedAt.month };
     const elapsed = Math.max(0, monthIdx(w.endedAt ?? now) - monthIdx(w.startedAt));
     ov.append(el("label", "field-label", `戦争の名前（${typeName}）`), nameIn);
+    if (!w.endedAt && w.type !== "civil") {
+      const tb = el("div", "war-types"); tb.append(el("h4", "", "戦争の形態（国ごと。上げると負荷が増し、民意が下がる）"));
+      for (const id of [...w.attackers, ...w.defenders]) {
+        if (!isLive(map.pack.states[id])) continue;
+        const row = el("label", "war-type-row"); row.append(el("span", "", `${stateName(map, id)}（${w.attackers.includes(id) ? "攻撃側" : "防御側"}）`));
+        const sel = document.createElement("select");
+        for (const T of Object.values(WAR_TYPES).filter((x) => !x.civilOnly)) sel.append(new Option(T.label.replace(/（.*/, ""), T.key, false, (w.types?.[id] ?? w.type) === T.key));
+        sel.addEventListener("change", () => { simActions.setWarType(w.id, id, sel.value); render(); });
+        row.append(sel); tb.append(row);
+      }
+      ov.append(tb);
+    }
     ov.append(el("p", "hint", w.endedAt ? `開戦 ${fmtDate3(w.startedAt)} ／ 終戦 ${fmtDate3(w.endedAt)}（${w.lastedMonths ?? elapsed}か月）${w.treatyName ? ` ／ 講和条約：${w.treatyName}` : ""}` : `開戦 ${fmtDate3(w.startedAt)} ／ 経過 ${elapsed}か月（目安は約${w.durationMonths ?? "?"}か月。終わりは決まっておらず、講和条約を結んだ月が終戦になります）`));
     if (!w.endedAt) {
       mu.append(el("h4", "", "参戦国の部隊（チェックを外すと戦線から引き上げます）"));
@@ -194,7 +215,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
         mu.append(row);
       }
     }
-    const events = [...(w.forecast ?? []).map((b) => ({ date: b.date, tag: "戦闘（想定）", text: `${b.name}　${b.text}` })), ...(w.battles ?? []).map((b) => ({ date: b.date ?? (b.year != null ? { year: b.year, month: b.month } : null), tag: "戦闘", text: `${b.name ?? "戦闘"}　${b.text ?? ""}` })), ...(w.events ?? []).map((e) => ({ date: e.date, tag: { event: "出来事", omen: "兆し", "omen-fulfilled": "的中", "omen-faded": "杞憂", withdraw: "撤退", reevaluate: "再判定" }[e.kind] ?? "出来事", text: e.text, kind: e.kind }))];
+    const events = [...(w.battles ?? []).map((b) => ({ date: b.date ?? (b.year != null ? { year: b.year, month: b.month } : null), tag: "戦闘", text: `${b.name ?? "戦闘"}　${b.text ?? ""}` })), ...(w.events ?? []).map((e) => ({ date: e.date, tag: { event: "出来事", omen: "兆し", "omen-fulfilled": "的中", "omen-faded": "杞憂", withdraw: "撤退", reevaluate: "再判定" }[e.kind] ?? "出来事", text: e.text, kind: e.kind }))];
     const reached = (d) => !d || w.endedAt || monthIdx(d) <= monthIdx(now);
     const shown = events.filter((e) => reached(e.date)).sort((x, y) => (x.date ? monthIdx(x.date) : 0) - (y.date ? monthIdx(y.date) : 0));
     lg.append(el("h4", "", "経過の記録"));
@@ -225,7 +246,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
 
     if (w.endedAt) mu.append(el("p", "muted", "この戦争は終結しています。部隊の招集は戦争中だけ変えられます。"));
     if (w.result) {
-      const cur = simActions.currentWarScore(w), r = w.result, T = WAR_TYPES[w.type] ?? WAR_TYPES.conventional;
+      const cur = simActions.currentWarScore(w), r = w.result, T = warTypeOf(w.type);
       const dur = Math.max(1, w.durationMonths ?? 12), done = w.monthsDone ?? Math.round((w.progress ?? 0) * dur), over = Math.max(0, done - dur);
       pc.append(el("h4", "", "戦争スコアの内訳"));
       const tb = el("table", "win-table");
@@ -262,5 +283,13 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
   store.subscribe((_s, change) => {
     if (["replace", "commit", "undo", "redo"].includes(change.type)) safeRender();
   });
-  return { render, select(id) { creating = false; selected = id; render(); } };
+  return {
+    render,
+    select(id) { creating = false; selected = id; render(); },
+    /** 宣戦布告（国家タブから）：攻める国と守る国を入れた「新しい戦争」の準備画面を開く */
+    prepare(attackerId, defenderId) {
+      draft = { name: "", attackers: new Set([attackerId]), defenders: new Set([defenderId]), muster: {}, type: "conventional", types: {} };
+      creating = true; selected = null; render();
+    },
+  };
 }

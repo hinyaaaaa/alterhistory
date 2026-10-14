@@ -18,18 +18,14 @@ export const HUB_SECTIONS = [
     { id: "btn-fit", icon: "fit", label: "全体表示", kind: "el", tip: "地図全体を表示 (F)" },
   ] },
   { title: "国家と社会", items: [
-    { win: "list-state", icon: "state", label: "国家" },
+    { win: "nation", icon: "state", label: "国家" },
     { win: "list-culture", icon: "culture", label: "文化" },
     { win: "list-religion", icon: "religion", label: "宗教" },
-    { win: "list-province", icon: "province", label: "属州" },
+    { win: "economy", icon: "economy", label: "経済・交易", tip: "世界全体の交易（各国の税・財政は、国家タブの「内政・税」）" },
   ] },
   { title: "外交と戦争", items: [
     { win: "diplomacy", icon: "diplomacy", label: "外交" },
     { win: "war", icon: "war", label: "戦争", badge: "wars" },
-    { win: "military", icon: "military", label: "軍事" },
-  ] },
-  { title: "経済", items: [
-    { win: "economy", icon: "economy", label: "経済" },
   ] },
   { title: "記録と設定", items: [
     { win: "timeline", icon: "timeline", label: "年表" },
@@ -68,12 +64,7 @@ export function initHub({ store, wins }) {
         b.setAttribute("aria-expanded", "false");
         b.addEventListener("click", () => { setOpen(true); hub.classList.toggle("layers-open"); b.setAttribute("aria-expanded", String(hub.classList.contains("layers-open"))); b.classList.toggle("on", hub.classList.contains("layers-open")); });
         const pane = document.createElement("div"); pane.className = "hub-layers";
-        pane.innerHTML = `<div id="layer-toggles" class="lp-toggles"></div>
-          <span class="lp-title">名前の表示</span>
-          <div class="seg seg-4" data-seg-for="sel-burg-labels">
-            <button type="button" data-value="auto" title="近づくほど、小さな都市や属州の名前が現れる">ズーム連動</button><button type="button" data-value="all" title="重ならない範囲で、すべての都市名を出す">全部</button><button type="button" data-value="capitals" title="首都だけ">首都のみ</button><button type="button" data-value="none" title="都市名を出さない">なし</button>
-          </div>
-          <select id="sel-burg-labels" hidden><option value="auto" selected>ズーム連動</option><option value="all">すべての都市</option><option value="capitals">首都のみ</option><option value="none">表示しない</option></select>`;
+        pane.innerHTML = `<div id="layer-toggles" class="lp-toggles"></div>`;
         box.append(pane);
       }
     }

@@ -24,9 +24,10 @@
   color: var(--brass-bright); letter-spacing: 0.08em; text-transform: uppercase;
 }
 
+/* エラー・警告・お知らせは、右下に出す（v2.4.0）。右下の戦争状況（#war-status）の上に積み、重ならない */
 #banner {
-  position: absolute; left: 14px; right: 14px; top: 14px; z-index: 6; display: flex; gap: 12px;
-  align-items: flex-start; padding: 12px 16px; border-radius: var(--radius);
+  position: fixed; right: 16px; bottom: calc(16px + var(--wars-h, 0px)); width: 308px; max-width: calc(100vw - 32px); z-index: 45; display: flex; gap: 10px;
+  align-items: flex-start; padding: 10px 12px; border-radius: var(--radius); font-size: 12px;
   background: var(--panel); border: 1px solid var(--danger);
   border-left: 4px solid var(--danger-bright);
   box-shadow: var(--shadow-panel);
@@ -796,3 +797,55 @@ button.has-ico { display: inline-flex; align-items: center; justify-content: cen
 .menu-list button .ico, .settings-pop button .ico { margin-right: 8px; vertical-align: -3px; opacity: .85; }
 .tool-icon { display: inline-flex; align-items: center; justify-content: center; }
 .suggest-mini { min-width: 34px; min-height: 34px; }
+
+/* ---- 国家タブ（v2.4.0） ---- */
+.nation-body { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px; min-width: 0; }
+.nation-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.nation-bar h3 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.04em; }
+.nation-merge { margin-left: auto; display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); }
+.nation-table { display: flex; flex-direction: column; border: 1px solid var(--line); }
+.nation-row { display: grid; grid-template-columns: 14px 1.4fr 1.2fr 1.6fr 0.9fr 0.5fr; gap: 8px; align-items: center; padding: 5px 8px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.nation-row:last-child { border-bottom: 0; }
+.nation-row.b-click:hover { background: var(--panel-2); cursor: pointer; }
+.nation-head { color: var(--muted); font-size: 10.5px; background: var(--panel-2); }
+.nation-row .nn { font-weight: 600; } .nation-row .num { text-align: right; font-variant-numeric: tabular-nums; }
+.nation-top { display: grid; grid-template-columns: minmax(220px, 280px) 1fr; gap: 12px; }
+.nation-leader { display: flex; flex-direction: column; gap: 6px; border: 1px solid var(--line); background: var(--panel-2); padding: 8px; }
+.nation-leader .np-face { display: flex; justify-content: center; }
+.nation-leader-t { display: flex; flex-direction: column; gap: 3px; }
+.nation-cands { display: flex; flex-direction: column; gap: 4px; }
+.nation-cands button { text-align: left; padding: 5px 8px; font-size: 11.5px; }
+.nation-info { display: flex; flex-direction: column; gap: 8px; }
+.nation-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.nation-regime { border: 1px solid var(--line); background: var(--panel-2); padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.nation-support { display: flex; flex-direction: column; gap: 3px; }
+.np-bar { display: grid; grid-template-columns: 70px 1fr 36px; gap: 6px; align-items: center; font-size: 11px; color: var(--text-dim); }
+.np-bar-w { height: 6px; background: var(--panel-3); } .np-bar-f { display: block; height: 100%; background: var(--brass-dim); }
+.np-bar-v { text-align: right; font-variant-numeric: tabular-nums; }
+.nation-tabs { margin-top: 2px; } .nation-tabs button { flex: 1; font-size: 11.5px; }
+.nation-tabs button.active { background: var(--panel-3); border-color: var(--brass); color: var(--brass-bright); }
+.nation-pane { display: flex; flex-direction: column; gap: 10px; }
+.nation-sec { border: 1px solid var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.nation-sec h4 { margin: 0 0 2px; font-size: 12.5px; font-weight: 600; color: var(--brass-bright); }
+.nation-army-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; padding: 2px 0; }
+.np-row { display: flex; align-items: center; gap: 8px; font-size: 12px; } .np-k { min-width: 56px; color: var(--muted); font-size: 11px; }
+.np-seg { display: inline-flex; gap: 4px; } .np-seg button.on, .np-node.on, .np-step.on { background: var(--panel-3); border-color: var(--brass); color: var(--brass-bright); }
+.np-sub { margin: 6px 0 2px; font-size: 11.5px; color: var(--text-dim); }
+.np-tree { display: grid; grid-template-columns: 80px repeat(3, 1fr); gap: 4px; align-items: stretch; }
+.np-head { text-align: center; font-weight: 600; color: var(--brass-bright); } .np-tier { font-size: 10.5px; color: var(--muted); align-self: center; }
+.np-cell { display: flex; flex-direction: column; gap: 3px; }
+.np-node { padding: 3px 4px; font-size: 11px; text-transform: none; text-align: center; }
+.np-uniq { display: flex; gap: 6px; flex-wrap: wrap; }
+.np-track { display: grid; grid-template-columns: 70px 1fr; gap: 6px; align-items: center; }
+.np-chain { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; }
+.np-step { padding: 4px 1px; font-size: 9.5px; text-transform: none; line-height: 1.2; min-height: 34px; }
+.np-step.cur { outline: 1px solid var(--brass-bright); }
+.nation-create { display: flex; flex-direction: column; gap: 10px; }
+.np-crumbs { display: flex; gap: 6px; font-size: 11.5px; } .np-crumb { padding: 3px 8px; border: 1px solid var(--line); color: var(--muted); }
+.np-crumb.on { border-color: var(--brass); color: var(--brass-bright); } .np-crumb.done { cursor: pointer; color: var(--text-dim); }
+.np-pane { display: flex; flex-direction: column; gap: 8px; min-height: 220px; } .np-nav { display: flex; justify-content: space-between; }
+.np-regimes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 6px; }
+.np-regime { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 6px 8px; text-transform: none; }
+.np-regime.on { border-color: var(--brass); background: var(--panel-3); }
+.np-face { display: flex; } .face-svg { border: 1px solid var(--line-strong); background: #111; }
+@media (max-width: 700px) { .nation-top { grid-template-columns: 1fr; } .nation-row { grid-template-columns: 14px 1.4fr 1fr 1fr; } .nation-row > :nth-child(n+5) { display: none; } .np-tree { grid-template-columns: 56px repeat(3, 1fr); } .np-chain { grid-template-columns: repeat(5, 1fr); } }

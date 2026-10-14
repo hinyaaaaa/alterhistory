@@ -7,7 +7,7 @@ import { BALANCE } from "./balance.js";
 import { setProps, makeCommand } from "../edit/commands.js";
 import { ensureEconomy, computeAnnualUpdate } from "./economy.js";
 import { ratesParts } from "./currency.js";
-import { planAnnualConscription, regimentsOf } from "./military.js";
+import { regimentsOf } from "./military.js";
 import { UNIT_BY_KEY } from "./units.js";
 import { computeTrade, annualRevenue, getFinance } from "./trade.js";
 
@@ -53,10 +53,9 @@ export function planAnnualUpdate(map, rnd = null) {
     if (rural !== state.rural || urban !== state.urban || industry !== state.industry || peak !== state.popPeak || (morale != null && morale !== state.morale) || (support != null && support !== state.support)) {
       parts.push(setProps(state, { rural, urban, industry, popPeak: peak, ...(morale != null ? { morale } : {}), ...(support != null ? { support } : {}) }));
     }
-    const conscription = planAnnualConscription(map, state.i);
-    if (conscription) parts.push(...conscription.parts);
+    // 徴兵・編成は、月ごとの更新（sim-actions の advanceMonthly）に移した（v2.4.0）
   }
   if (rnd) parts.push(...ratesParts(map, rnd)); // 為替レートも年ごとに動く
   if (!parts.length) return null;
-  return makeCommand("年次更新（人口・産業・徴兵・税収・為替）", ["politics", "places"], parts);
+  return makeCommand("年次更新（人口・産業・税収・為替）", ["politics", "places"], parts);
 }

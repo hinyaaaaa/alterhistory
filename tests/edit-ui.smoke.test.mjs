@@ -75,8 +75,11 @@ const pointer = (el, type, x, y, extra = {}) => el.dispatchEvent(new window.Mous
 const canvas = $("map-canvas");
 
 console.log("=== ツール切替 ===");
-q('[data-tool="paint:state"]').click();
-check("国家ツールが選ばれる（ボタンがactive）", q('[data-tool="paint:state"]').classList.contains("active"));
+// 地図編集のボタンは 選択・気候帯・標高・マーカー だけ。国・都市は、国家タブの「領土を塗る」「都市を置く」から（同じ合図で選ぶ）
+check("地図編集のツールは 選択・気候帯・標高・マーカー の4つだけ", [...window.document.querySelectorAll("#edit-panel [data-tool]")].map((b) => b.dataset.tool).join() === "select,paint:biome,paint:height,add:marker");
+const pickTool = (tool, target) => window.dispatchEvent(new window.CustomEvent("request-edit-panel-sync", { detail: { tool, target } }));
+pickTool("paint:state", store.getState().map.pack.states.find((x) => x && x.i > 0 && !x.removed).i);
+check("国家を塗るツールが選ばれる（国家タブからの合図）", store.getState().editTool === "paint:state");
 check("対象セレクトが表示される", $("tool-target-group").hidden === false);
 check("ブラシ半径が表示される", $("tool-radius-group").hidden === false);
 const targetSel = $("tool-target");
@@ -129,8 +132,8 @@ const { getNote } = await import("../js/core/edit/notes.js");
 check("文章が保存される", getNote(store.getState().map, "burg", burg.i) === "海沿いの交易都市。");
 
 console.log("=== 都市を置く ===");
-q('[data-tool="add:burg"]').click();
-check("配置ツールに切り替わる", q('[data-tool="add:burg"]').classList.contains("active"));
+pickTool("add:burg");
+check("都市を置くツールに切り替わる（国家タブからの合図）", store.getState().editTool === "add:burg");
 let landCell = -1; for (let i = 0; i < map.pack.cells.biome.length; i++) if (map.pack.cells.biome[i] !== 0 && !map.pack.cells.burg[i]) { landCell = i; break; }
 const [lx, ly] = viewport.toScreen(map.geometry.pack.p[landCell][0], map.geometry.pack.p[landCell][1]);
 const beforeBurgCount = store.getState().map.pack.burgs.filter((b) => b && b.i && !b.removed).length;
@@ -158,10 +161,12 @@ window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "v", bu
 check("[V] で選択ツールに戻る", q('[data-tool="select"]').classList.contains("active"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "1", bubbles: true }));
 check("選択ツール中の[1]はレイヤー切替（塗るツールにはならない）", store.getState().view.states === false && q('[data-tool="select"]').classList.contains("active"));
+window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "7", bubbles: true }));
+check("選択ツール中の[7]は標高ツールに切り替わる", q('[data-tool="paint:height"]').classList.contains("active"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "6", bubbles: true }));
-check("選択ツール中の[6]は都市配置ツールに切り替わる", q('[data-tool="add:burg"]').classList.contains("active"));
-window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "2", bubbles: true }));
-check("配置ツール中の[2]は文化を塗るツールに切り替わる", q('[data-tool="paint:culture"]').classList.contains("active"));
+check("標高ツール中の[6]は気候帯ツールに切り替わる", q('[data-tool="paint:biome"]').classList.contains("active"));
+window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "8", bubbles: true }));
+check("[8]はマーカーツールに切り替わる", q('[data-tool="add:marker"]').classList.contains("active"));
 window.document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "v", bubbles: true }));
 
 console.log("=== ショートカット一覧は廃止 ===");

@@ -136,9 +136,9 @@ console.log("=== 画面: 国をクリックすると条約の一覧と履歴 ===
 wins.open("diplomacy"); await sleep(50);
 const rowA = qa('[data-win="diplomacy"] .dip-row').find((r) => r.textContent.includes(M().pack.states[A].name));
 rowA.click(); await sleep(50);
-check("国の条約の一覧が開く（履歴も含む）", qa('[data-win="diplomacy"] .treaty-row').length >= 2 && !!q('[data-win="diplomacy"] .treaty-row.broken'));
+check("国の条約の一覧が開く（履歴も含む）", qa('[data-win="diplomacy"] .treaty-row').length >= 2 && !!q('[data-win="diplomacy"] .treaty-card.broken'));
 check("関係一覧の国に、条約のバッジ（同盟・協力・戦争中など）が出る", qa('[data-win="diplomacy"] .dip-badge').length >= 1);
-check("工作の欄がある（隠密工作は外交へ）", win("diplomacy").textContent.includes("工作"));
+check("外交に工作の欄は無い（工作は国家タブへ集約）", !win("diplomacy").textContent.includes("隠密工作"));
 check("内戦の参戦招集のトグルがある", !!win("diplomacy").querySelector("#civil-calls-allies"));
 
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");

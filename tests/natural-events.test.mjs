@@ -46,14 +46,14 @@ const before = JSON.stringify({ r: live().map((s) => [s.i, s.rural, s.urban, s.s
 const nStates0 = live().length, nRel0 = store.getState().map.pack.religions.filter((r) => r && !r.removed && r.i > 0).length;
 const happened = sim.applyNaturalEvents(date, sure());
 const kinds = new Set(happened.map((h) => h.kind));
-check("疫病・反乱が起き、人口と民意が変わる", () => {
-  assert.ok(kinds.has("plague") && kinds.has("rebellion"), [...kinds].join(","));
+check("疫病が起き、人口と民意が変わる（州が勝手に起こす反乱は無い）", () => {
+  assert.ok(kinds.has("plague") && !kinds.has("rebellion"), [...kinds].join(","));
   assert.notEqual(JSON.stringify({ r: live().map((s) => [s.i, s.rural, s.urban, s.support]) }), before);
 });
 const tl = () => buildTimeline(store.getState().map);
-check("疫病・反乱が年表に載る（日付・関係国つき）", () => {
-  const p = tl().find((e) => e.type === "plague" && e.year === 40), r = tl().find((e) => e.type === "rebellion" && e.year === 40);
-  assert.ok(p && r && p.stateIds.length === 1 && p.detail.includes("%") && r.detail.includes("民意"));
+check("疫病が年表に載る（日付・関係国つき）。自動の反乱は載らない", () => {
+  const p = tl().find((e) => e.type === "plague" && e.year === 40);
+  assert.ok(p && p.stateIds.length === 1 && p.detail.includes("%") && !tl().some((e) => e.type === "rebellion"));
 });
 check("独立が起きたなら、新しい国が増え、年表の主権の記録に載る", () => {
   if (!kinds.has("independence")) return; // この世界に独立できる属州が無ければ起きない
@@ -110,16 +110,11 @@ console.log("=== 起きる頻度の目安（民意が低くても、毎年のよ
   const sts = w.pack.states.filter((s) => s && s.i > 0 && !s.removed);
   for (const s of sts) s.support = 10;
   const N = 3000, rnd = createRandom(Date.now() >>> 0);
-  const perState = (freq) => { let n = 0; for (let i = 0; i < N; i++) n += rollNaturalEvents(w, rnd, { enabled: true, frequency: freq }).filter((e) => e.kind === "rebellion").length; return n / N / sts.length; };
-  const normal = perState("normal"), high = perState("high");
-  console.log(`  （民意10の国の反乱: ふつう ${(normal * 100).toFixed(1)}%/年, 多い ${(high * 100).toFixed(1)}%/年）`);
-  // 設計上の上限は 0.025 × 2.5 = 6.25%/年（多いは2倍の12.5%）。標本のぶれ（約0.5ポイント）を見込んで 7% / 14%
-  check("民意10でも、反乱は1国あたり ふつう で年7%以下（設計の上限は6.25%）", () => assert.ok(normal <= 0.07, `${normal}`));
-  check("民意10でも、反乱は1国あたり 多い でも年14%以下（設計の上限は12.5%）", () => assert.ok(high <= 0.14, `${high}`));
-  check("それでも、民意が低ければ反乱は起きる（ふつうで年2%以上）", () => assert.ok(normal >= 0.02, `${normal}`));
+  let reb = 0; for (let i = 0; i < 3000; i++) reb += rollNaturalEvents(w, rnd, { enabled: true, frequency: "high" }).filter((e) => e.kind === "rebellion").length;
+  check("民意が10でも、州が勝手に反乱を起こすことは無い（反乱は国家タブのボタンだけ）", () => assert.equal(reb, 0));
   for (const s of sts) s.support = 70;
   let calm = 0; for (let i = 0; i < 2000; i++) calm += rollNaturalEvents(w, rnd, { enabled: true, frequency: "high" }).filter((e) => e.kind === "rebellion" || e.kind === "independence").length;
-  check("民意が高い国では、反乱も独立も起きない", () => assert.equal(calm, 0));
+  check("民意が高い国では、独立も起きない", () => assert.equal(calm, 0));
 }
 
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");

@@ -22,7 +22,8 @@ async function rasterizeSvg(svg, w, h) {
   const c = createCanvas(w, h); c.getContext("2d").drawImage(img, 0, 0);
   return c;
 }
-const opts = viewToRenderOptions({ overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true, labels: true });
+// 名前の出し方はズーム連動のみ（v2.4.0）。書き出しの確認では、全部の名前を出して数える
+const opts = { ...viewToRenderOptions({ overlay: "state", base: "biome", coast: true, rivers: true, routes: true, burgs: true }), labels: { states: true, burgs: true } };
 
 console.log("=== 色・ファイル名 ===");
 check("rgba → 色 + 不透明度", JSON.stringify(parseColor("rgba(45,50,60,0.85)")) === '{"color":"#2d323c","alpha":0.85}');

@@ -69,7 +69,7 @@ export function serializeNativeJson(map, { savedAt = "" } = {}) {
     markers: map.markers, zones: map.zones, routes: map.routes, cellRoutes: map.cellRoutes, relief: map.relief, ice: map.ice,
     measurers: map.measurers, goods: map.goods, markets: map.markets, deals: map.deals,
     namesbase: map.namesbase, graphOverride: map.graphOverride ?? {},
-    data: { ...(map.ext?.data ?? {}), saveFormat: SAVE_FORMAT }, // 保存形式の版（旧形式 = 1、条約を導入した形式 = 2）
+    data: { ...(map.ext?.data ?? {}), saveFormat: SAVE_FORMAT }, // 保存形式の版（旧形式 = 1、条約を導入した形式 = 2、指導者・政体・技術ドクトリンの形式 = 3）
   };
   return JSON.stringify(doc);
 }

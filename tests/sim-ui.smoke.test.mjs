@@ -105,7 +105,7 @@ function openStateTab(stateId) {
 }
 const state1 = map.pack.states.find((s) => s && s.i && !s.removed);
 openStateTab(state1.i);
-check("国家タブが開く（選択ツールに切替済みであること）", !$("editor-panel").hidden);
+check("国家タブが開く（国の詳細に切り替わる）", !q('[data-win="nation"]').hidden && !!q(".nation-detail"));
 function clickSubtab(label) { const b = qa(".dialog-tabs .tab-btn").find((x) => x.textContent.includes(label)); b?.click(); return b; }
 // 国家の詳細画面のサブタブは「基本情報」と「属州」だけ（軍事・外交・戦争は専用ウィンドウへ移した）。
 // 部隊編成・同盟・宣戦布告・戦闘記録は war-window / new-windows / war-flow の各テストで検証する。

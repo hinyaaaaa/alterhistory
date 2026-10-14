@@ -59,8 +59,30 @@ export function initHoverConnector({ store, viewport }) {
   const card = document.createElement("div"); card.className = "conn-card"; card.hidden = true;
   app.append(svg, card);
 
-  let timer = 0, key = "", press = null;
-  const hide = () => { clearTimeout(timer); timer = 0; key = ""; svg.hidden = true; card.hidden = true; };
+  let timer = 0, key = "", press = null, touchTimer = 0, raf = 0, sig = "", mo = null;
+  // 線とカードは、対象から目が離れたら必ず消す（v2.4.0: 残り続けるバグの修正）。
+  //   消える条件: ホバーを外す / 窓を閉じる・開く・切り替える / ズーム・移動 / ウィンドウの操作 / キー入力 / 地図の変更 / 画面を離れる
+  //   表示中だけ、見張りを動かす（地図の見え方が変わったかを毎フレーム確かめ、窓の表示変化を監視する）
+  const viewSig = () => { const [a, b] = viewport.toScreen(0, 0), [c, d] = viewport.toScreen(100, 100); return `${a.toFixed(1)},${b.toFixed(1)},${c.toFixed(1)},${d.toFixed(1)}`; };
+  const ownNode = (n) => n === card || n === svg || card.contains(n) || svg.contains(n);
+  const onDocMove = (e) => { if (e.target !== canvas && !ownNode(e.target)) hide(); };
+  const stopWatch = () => {
+    cancelAnimationFrame(raf); raf = 0; mo?.disconnect(); mo = null;
+    document.removeEventListener("pointermove", onDocMove, true); document.removeEventListener("keydown", hide, true);
+    document.removeEventListener("wheel", hide, true); document.removeEventListener("pointerdown", onDocDown, true);
+    window.removeEventListener("blur", hide); document.removeEventListener("visibilitychange", hide);
+  };
+  const onDocDown = (e) => { if (!ownNode(e.target)) hide(); };
+  const startWatch = () => {
+    if (raf) return; sig = viewSig();
+    const tick = () => { if (card.hidden) { raf = 0; return; } const now = viewSig(); if (now !== sig) return hide(); raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick);
+    document.addEventListener("pointermove", onDocMove, true); document.addEventListener("keydown", hide, true);
+    document.addEventListener("wheel", hide, true); document.addEventListener("pointerdown", onDocDown, true);
+    window.addEventListener("blur", hide); document.addEventListener("visibilitychange", hide);
+    if (typeof MutationObserver !== "undefined") { mo = new MutationObserver((list) => { if (list.some((m) => !ownNode(m.target))) hide(); }); mo.observe(app, { attributes: true, attributeFilter: ["hidden", "class", "style", "open"], subtree: true }); }
+  };
+  const hide = () => { clearTimeout(timer); clearTimeout(touchTimer); timer = 0; touchTimer = 0; key = ""; press = null; svg.hidden = true; card.hidden = true; stopWatch(); };
 
   // 避ける領域: ハブ・時計・ニュース・戦争状況・開いている窓
   const obstacles = () => [...document.querySelectorAll("#hub, #clock, #news, #war-status:not([hidden]), .float-win:not([hidden]), #sidebar:not([hidden])")].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
@@ -105,6 +127,7 @@ export function initHoverConnector({ store, viewport }) {
       t.rows.forEach(([a, b], i) => { dts[i].textContent = a; dds[i].textContent = b; });
     }
     card.hidden = false; svg.hidden = false; place(sx, sy, t);
+    startWatch();
   }
 
   // マウス: 少し止まったら出す（ちらつかせない）。ドラッグ中・ボタンを押している間は出さない
@@ -116,7 +139,9 @@ export function initHoverConnector({ store, viewport }) {
     timer = setTimeout(() => show(ev, shift), 140);
   });
   canvas.addEventListener("pointerleave", hide);
+  canvas.addEventListener("pointercancel", hide);
   canvas.addEventListener("wheel", hide, { passive: true });
+  document.documentElement.addEventListener("pointerleave", hide);
   // タッチ: 長押しで出す（動かしたら取り消し）
   canvas.addEventListener("pointerdown", (e) => {
     hide();
@@ -126,8 +151,8 @@ export function initHoverConnector({ store, viewport }) {
   });
   const endPress = () => { press = null; clearTimeout(timer); };
   canvas.addEventListener("pointermove", (e) => { if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 8) endPress(); });
-  canvas.addEventListener("pointerup", (e) => { if (e.pointerType === "touch") { endPress(); setTimeout(hide, 2200); } });
+  canvas.addEventListener("pointerup", (e) => { if (e.pointerType === "touch") { endPress(); clearTimeout(touchTimer); touchTimer = setTimeout(hide, 2200); } });
   canvas.addEventListener("pointercancel", endPress);
-  store.subscribe((s, ch) => { if (!s.map || ch.type === "replace") hide(); });
+  store.subscribe((s, ch) => { if (!s.map || ch.type === "replace" || (!card.hidden && ["commit", "undo", "redo"].includes(ch.type))) hide(); });
   return { hide, show };
 }

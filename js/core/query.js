@@ -1,6 +1,7 @@
 // 問い合わせ：セルや実体（国家・文化…）について、表示用の情報を取り出す。
 // 純粋関数のみ。UI からも、将来の編集ツールからも使う。
 
+import { effectiveDoctrineKey } from "./edit/doctrines.js";
 import { forcePower, forceHeadcount } from "./sim/units.js";
 
 const nameOf = (list, id) => {
@@ -100,7 +101,7 @@ export function statePopulation(state) {
 /** 国家の総軍事力（全部隊の戦力を合算。ドクトリン補正込み） */
 export function stateMilitaryPower(state) {
   const list = Array.isArray(state.military) ? state.military : [];
-  const doctrine = state.doctrine ?? "balanced";
+  const doctrine = effectiveDoctrineKey(state);
   return list.reduce((sum, r) => sum + forcePower(r.u, doctrine), 0);
 }
 

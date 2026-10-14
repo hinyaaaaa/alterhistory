@@ -24,8 +24,8 @@ try {
 
   console.log("=== ウィンドウの大きさ変更（実ブラウザでドラッグ） ===");
   {
-    await page.evaluate(() => window.alterhistory.wins.open("list-state")); await page.waitForTimeout(150);
-    const w = page.locator('.float-win[data-win="list-state"]');
+    await page.evaluate(() => window.alterhistory.wins.open("nation")); await page.waitForTimeout(150);
+    const w = page.locator('.float-win[data-win="nation"]');
     const b0 = await w.boundingBox();
     const hb = await w.locator(".rs-se").boundingBox();
     await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
@@ -51,7 +51,7 @@ try {
   await page.locator("#tab-wars .war-side").nth(0).locator(".war-chip").nth(0).click();
   await page.locator("#tab-wars .war-side").nth(1).locator(".war-chip").nth(1).click();
   await shot(page, "20-war-declare");
-  check("戦力の比較が出る", (await page.locator("#tab-wars .wo-bar-wrap").count()) >= 4);
+  check("準備画面に戦力の比較・予測は出ない（形態と部隊の選択だけ）", (await page.locator("#tab-wars .wo-bar-wrap").count()) === 0);
   await page.locator("#tab-wars button", { hasText: "戦争開始" }).click();
   await page.waitForTimeout(300);
   const tabs = await page.locator("#tab-wars .war-tabs button").allTextContents();
@@ -61,7 +61,10 @@ try {
   await page.locator("#tab-wars .war-tabs button", { hasText: "概要" }).click();
   await page.locator("#tab-wars .war-tabs button", { hasText: "講和" }).click();
   const pcText = await page.locator("#tab-wars .war-tab-pc").textContent();
-  check("講和タブの優勢度が0%ではない（逆算が効いている）", !/優勢度\)?0%/.test(pcText.replace(/\s/g, "")) && !pcText.replace(/\s/g, "").includes("戦力差(優勢度)0%") && !pcText.replace(/\s/g, "").includes("戦力差（優勢度）0%"), pcText.slice(0, 80));
+  { // 勝敗がつかなかった（互角の引き分け）戦争は、最大スコアが0で、優勢度も0%になる。それ以外では、最大スコアから逆算した優勢度が0%にならない
+    const t = pcText.replace(/\s/g, ""), stalemate = /最大スコア0[^0-9]/.test(t), zeroDom = /戦力差[（(]優勢度[）)]0%/.test(t);
+    check("講和タブの優勢度が0%ではない（逆算が効いている。引き分けの戦争は除く）", stalemate || !zeroDom, pcText.slice(0, 80));
+  }
   await page.locator("#tab-wars .war-tabs button", { hasText: "概要" }).click();
   check("概要に降伏までの民意が出る", (await page.locator("#tab-wars .war-tab-ov").textContent()).includes("降伏まであと"));
   await page.locator("#tab-wars .war-tabs button", { hasText: "経過" }).click();

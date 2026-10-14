@@ -14,7 +14,7 @@
 import { makeCommand } from "./commands.js";
 import { ensureExt } from "./ext.js";
 import {
-  NAME_STYLES, STYLE_KEYS, DEFAULT_STYLE, isStyle,
+  NAME_STYLES, STYLE_KEYS, isStyle,
   generatePlaceName, generateStateName, generateReligionName, generateCultureName, generateProvinceName,
   generateDeityName, generateAllianceName, generateZoneName, generateEraName,
 } from "../names/katakana.js";
@@ -42,66 +42,7 @@ export function takenNames(map) {
   return s;
 }
 
-// ---------- 系統（文化ごとの名前の雰囲気） ----------
-
-const styleKey = (cultureId) => `culture:${cultureId}`;
-
-/** 文化に明示された系統。無ければ null */
-export function getNameStyle(map, cultureId) {
-  const v = map.ext?.data?.nameStyles?.[styleKey(cultureId)];
-  return isStyle(v) ? v : null;
-}
-
-/** 文化の系統。明示が無ければ文化IDから決まる既定（同じ文化は常に同じ系統） */
-export function styleOfCulture(map, cultureId) {
-  const explicit = getNameStyle(map, cultureId);
-  if (explicit) return explicit;
-  if (!cultureId || cultureId < 0) return DEFAULT_STYLE;
-  return STYLE_KEYS[(cultureId * 3 + 1) % STYLE_KEYS.length];
-}
-
-/** 文化の系統を変える。style が null/空なら既定に戻す。変更が無ければ null */
-export function planSetNameStyle(map, cultureId, style) {
-  const culture = map.pack.cultures?.[cultureId];
-  if (!isLive(culture)) throw new Error("その文化は存在しません");
-  const after = style ? String(style) : null;
-  if (after && !isStyle(after)) throw new Error(`未対応の名前の系統です: ${after}`);
-  const before = getNameStyle(map, cultureId);
-  if (before === after) return null;
-  const key = styleKey(cultureId);
-  const write = (m, v) => {
-    const ext = ensureExt(m);
-    ext.data.nameStyles ??= {};
-    if (v) ext.data.nameStyles[key] = v; else delete ext.data.nameStyles[key];
-    if (!Object.keys(ext.data.nameStyles).length) delete ext.data.nameStyles;
-  };
-  return makeCommand("名前の系統を変更", [], [{ apply: (m) => write(m, after), revert: (m) => write(m, before) }]);
-}
-
-/** 実体が属する文化のID（分からなければ 0） */
-function cultureIdFor(map, { kind, id, cell, cultureId, stateId }) {
-  if (cultureId != null) return cultureId;
-  const c = map.pack.cells;
-  if (cell != null && c?.culture?.[cell] != null) return c.culture[cell];
-  const stateCulture = (sid) => {
-    const s = map.pack.states[sid];
-    if (!isLive(s)) return 0;
-    if (s.culture != null) return s.culture;
-    const cap = map.pack.burgs[s.capital];
-    return isLive(cap) ? cap.culture ?? 0 : 0;
-  };
-  if (stateId != null) return stateCulture(stateId);
-  if (id != null) {
-    const e = map.pack[LIST[kind]]?.[id];
-    if (!isLive(e)) return 0;
-    if (kind === "culture") return id;
-    if (kind === "burg") return e.culture ?? 0;
-    if (kind === "state") return stateCulture(id);
-    if (kind === "province") return stateCulture(e.state);
-    if (kind === "religion") return e.culture ?? 0;
-  }
-  return 0;
-}
+// 名前の系統は、生成のたびにランダムに選ぶ（v2.4.0: 「〇〇風」の指定は廃止）
 
 // ---------- 候補の生成 ----------
 
@@ -120,10 +61,7 @@ export function suggestName(map, opts) {
   if (!rnd) throw new Error("乱数(rnd)が必要です");
 
   let style = opts.style;
-  if (!isStyle(style)) {
-    const cid = cultureIdFor(map, opts);
-    style = cid ? styleOfCulture(map, cid) : rnd.pick(STYLE_KEYS);
-  }
+  if (!isStyle(style)) style = rnd.pick(STYLE_KEYS);
   const taken = takenNames(map);
   if (opts.avoid) for (const n of opts.avoid) taken.add(n);
 
@@ -171,10 +109,7 @@ export function suggestLabel(map, opts) {
   if (!LABEL_KINDS.includes(kind)) throw new Error(`名前を生成できない種類です: ${kind}`);
   if (!rnd) throw new Error("乱数(rnd)が必要です");
   let style = opts.style;
-  if (!isStyle(style)) {
-    const cid = cultureIdFor(map, { kind: "state", ...opts });
-    style = cid ? styleOfCulture(map, cid) : rnd.pick(STYLE_KEYS);
-  }
+  if (!isStyle(style)) style = rnd.pick(STYLE_KEYS);
   const taken = takenLabels(map);
   for (const k of NAME_KINDS) for (const e of map.pack[LIST[k]] ?? []) if (isLive(e) && e.name) taken.add(e.name);
   const gen = () => {

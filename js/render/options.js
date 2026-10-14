@@ -13,8 +13,7 @@ export function viewToRenderOptions(view) {
     burgs: isLayerOn(view, "burgs"),
     tradeLines: view.tradeLines ?? null,
     zones: isLayerOn(view, "zones"),
-    labels: isLayerOn(view, "labels")
-      ? { states: true, burgs: view.burgLabels === "none" ? false : view.burgLabels === "capitals" ? "capitals" : view.burgLabels === "auto" ? "auto" : true }
-      : false,
+    // 名前はズーム連動だけ（v2.4.0）。国家のレイヤーがオンの間は、国名を自動で出す
+    labels: { states: isLayerOn(view, "states"), burgs: "auto" },
   };
 }

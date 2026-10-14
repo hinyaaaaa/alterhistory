@@ -51,13 +51,12 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
       const gap = (label, v) => v <= EXHAUST_SUPPORT ? `${label}：民意 ${fmt(v)}（降伏ライン ${EXHAUST_SUPPORT} 以下。次の月の進行で降伏します）` : `${label}：民意 ${fmt(v)}（降伏まであと ${fmt(v - EXHAUST_SUPPORT)}）`;
       box.append(el("p", "hint", `${gap("攻撃側", r.aStrength.support)} ／ ${gap("防衛側", r.dStrength.support)}。民意は戦争が長引くほど、また損害が大きいほど下がります。`));
     }
-    if (!showVerdict) box.append(el("p", "hint", "戦争は続いています。勝敗の見通しは、講和条約を結ぶ段階で明らかになります。"));
-    else {
+    if (showVerdict) {
       if (r.victory) box.append(el("p", "hint", `勝利条件：${r.victory.text}`));
       box.append(el("div", `wo-verdict ${r.winner}`, r.winner === "attacker" ? `攻撃側の勝利（${names(map, war.attackers)}）` : r.winner === "defender" ? `防衛側の勝利（${names(map, war.defenders)}）` : "決着つかず（膠着）"));
     }
     const nowD = map.worldTime ?? war.startedAt, monthsNow = Math.max(0, (nowD.year - war.startedAt.year) * 12 + (nowD.month - war.startedAt.month));
-    const dates = ongoing ? `開戦 ${fmtDate(war.startedAt)}　経過 ${monthsNow}か月（目安 約${war.durationMonths ?? "?"}か月）${showVerdict ? `　現在の戦争スコア ${simActions.currentWarScore(war)}（最大 ${r.warScore ?? 0}）` : ""}` : `開戦 ${fmtDate(war.startedAt)}　終戦 ${fmtDate(war.endedAt)}（${war.lastedMonths ?? monthsNow}か月）${r.warScore != null ? `　戦争スコア ${r.warScore}` : ""}`;
+    const dates = ongoing ? `開戦 ${fmtDate(war.startedAt)}　経過 ${monthsNow}か月（目安 約${war.durationMonths ?? "?"}か月）${showVerdict ? `　現在の戦争スコア ${simActions.currentWarScore(war)}` : ""}` : `開戦 ${fmtDate(war.startedAt)}　終戦 ${fmtDate(war.endedAt)}（${war.lastedMonths ?? monthsNow}か月）${r.warScore != null ? `　戦争スコア ${r.warScore}` : ""}`;
     box.append(el("p", "hint", dates));
     if (war.joinedAllies?.length) box.append(el("p", "hint", `同盟の拘束により参戦: ${war.joinedAllies.map((j) => `${sname(map, j.id)}（${j.alliance}・${j.side === "attacker" ? "攻撃側" : "防衛側"}）`).join("、")}`));
     return box;
@@ -252,7 +251,7 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
     }
     const currentTerms = () => ({
       kind: draft.kind,
-      cessions: draft.kind === "standard" ? (draft.cessions ?? []).filter((c) => c.on).map((c) => ({ cells: c.regionCells, fromStateId: c.fromStateId, toStateId: c.toStateId, name: c.name, burgs: c.burgNames })) : [],
+      cessions: draft.kind === "standard" ? (draft.cessions ?? []).filter((c) => c.on).map((c) => ({ cells: c.regionCells, fromStateId: c.fromStateId, toStateId: c.toStateId, name: c.name, burgs: c.burgNames, ...(c.puppet ? { puppetOf: c.toStateId } : {}) })) : [],
       reparations: draft.kind === "standard" ? Object.entries(draft.reparations ?? {}).filter(([, a]) => a > 0).map(([k, amount]) => {
         const [f, t] = k.split("-").map(Number);
         return { fromStateId: f, toStateId: t, amount };
@@ -344,7 +343,7 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
         draft.cessions = null;
         renderTreaty();
       });
-      detail.append(el("h4", "", "割譲する地域（自動案。変更できます）"), sizeSel, el("p", "hint", `消耗に比例した目安: 約${fmt(draft.sug?.cessionCells ?? 0)}セル。行にカーソルを当てると、地図でその区画が赤く光ります。首都は割譲できません。`));
+      detail.append(el("h4", "", "割譲する地域（自動案。変更できます）"), sizeSel, el("p", "hint", `消耗に比例した目安: 約${fmt(draft.sug?.cessionCells ?? 0)}セル。選んだ区画は、地図で赤く強調されます（カーソルを当てると濃くなります）。国境側の区画から選び、先の区画を選ぶと間の区画も選ばれます。首都は割譲できません。`));
       const cessBox = el("div", "wo-cess");
       if (!draft.cessions.length) cessBox.append(el("p", "muted", "割譲できる区画がありません"));
       for (const c of draft.cessions) {
@@ -354,8 +353,12 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
         cb.checked = c.on;
         cb.addEventListener("change", () => {
           c.on = cb.checked;
-          l.classList.toggle("on", c.on);
-          renderMeter();
+          // 国境側の区画を選ばずに、その先の区画だけを渡すと飛び地になる。間の区画も一緒に選び、外すときは先の区画も外す
+          const list = draft.cessions.filter((x) => x.fromStateId === c.fromStateId), idxOf = (x) => list.indexOf(x);
+          if (c.on) for (const k of c.needs ?? []) { const dep = list[k]; if (dep) { dep.on = true; dep.toStateId = c.toStateId; } }
+          else for (const x of list) if ((x.needs ?? []).includes(idxOf(c))) x.on = false;
+          renderTreaty();
+          syncHighlight();
         });
         l.addEventListener("mouseenter", () => {
           draft.hover = c.key;
@@ -384,6 +387,11 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
           });
           l.append(s2);
         } else l.append(el("span", "wo-arrow", `→ ${sname(map, c.toStateId)}`));
+        // 傀儡国家を新しく建設して、そこへ渡す（宗主国は、受け取る勝者）
+        const pl = el("label", "wo-puppet"), pcb = document.createElement("input"); pcb.type = "checkbox"; pcb.checked = !!c.puppet; pcb.disabled = !c.on;
+        pcb.addEventListener("change", () => { c.puppet = pcb.checked; renderMeter(); });
+        pl.append(pcb, document.createTextNode(" 傀儡国家として新設")); pl.title = "この区画を、新しく建てる傀儡国家に渡す（宗主国は受取国）。首都は割譲できません";
+        l.append(pl);
         cessBox.append(l);
       }
       detail.append(cessBox, el("h4", "", "賠償金（消耗から自動で設定。変更できます）"));
@@ -433,148 +441,10 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
     return grid;
   }
   const isLeader = (id) => simActions.listAlliances().some((a) => !a.dissolvedAt && a.members.includes(id) && simActions.allianceLeader(a) === id);
-  const currencyBody = el("div", "cur-body");
-  let baseId = null, convFrom = null, convTo = null, convAmt = 100;
-  function spark(hist, up) {
-    const W = 90, H = 26;
-    if (!hist || hist.length < 2) return el("span", "muted", "—");
-    const mn = Math.min(...hist), mx = Math.max(...hist), span = mx - mn || 1;
-    const pts = hist.map((v, i) => `${(i / (hist.length - 1) * W).toFixed(1)},${(H - 2 - (v - mn) / span * (H - 4)).toFixed(1)}`).join(" ");
-    const NS2 = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(NS2, "svg");
-    svg.setAttribute("width", W);
-    svg.setAttribute("height", H);
-    svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
-    const pl = document.createElementNS(NS2, "polyline");
-    pl.setAttribute("points", pts);
-    pl.setAttribute("fill", "none");
-    pl.setAttribute("stroke-width", "1.6");
-    pl.setAttribute("stroke", up ? "#4fb477" : "#d9594c");
-    svg.append(pl);
-    return svg;
-  }
-  function renderCurrency() {
-    currencyBody.replaceChildren();
-    const map = store.getState().map;
-    if (!map) {
-      currencyBody.append(el("p", "muted", "地図を開いてください"));
-      return;
-    }
-    const states = map.pack.states.filter(isLive);
-    if (!states.length) {
-      currencyBody.append(el("p", "muted", "国家がありません"));
-      return;
-    }
-    if (!states.some((s) => s.i === baseId)) baseId = states[0].i;
-    const base = simActions.getCurrency(baseId);
-    const top = el("div", "cur-top");
-    const baseSel = document.createElement("select");
-    for (const s of states) {
-      const o = document.createElement("option");
-      o.value = s.i;
-      o.textContent = `${simActions.getCurrency(s.i).name}（${sname(map, s.i)}）`;
-      o.selected = s.i === baseId;
-      baseSel.append(o);
-    }
-    baseSel.addEventListener("change", () => {
-      baseId = Number(baseSel.value);
-      renderCurrency();
-    });
-    top.append(el("span", "", "基準通貨"), baseSel);
-    currencyBody.append(top, el("p", "hint", "レートの値はシステムが経済力から決め、年ごとに変動します。ここで選べるのは、変動相場か固定相場かだけです。"));
-    const rows = states.map((s) => {
-      const c = simActions.getCurrency(s.i);
-      const vsBase = simActions.exchangeRate(s.i, baseId);
-      const histBase = (c.hist ?? [c.rate]).map((r) => r / Math.max(1e-9, base.rate));
-      const prev = histBase.length > 1 ? histBase[histBase.length - 2] : vsBase;
-      return { s, c, vsBase, change: prev ? (vsBase - prev) / prev : 0, hist: histBase };
-    }).sort((a, b) => b.vsBase - a.vsBase);
-    const t = el("table", "win-table cur-board");
-    const h = el("tr");
-    for (const x of ["コード", "通貨", "国", `1通貨 = ${base.name}`, "前年比", "推移", "相場制", "固定の基準国"]) h.append(el("th", "", x));
-    t.append(h);
-    for (const { s, c, vsBase, change, hist } of rows) {
-      const tr = el("tr");
-      const code = el("td", "cur-code", c.code ?? String(s.name).slice(0, 3).toUpperCase());
-      const nameIn = document.createElement("input");
-      nameIn.value = c.name;
-      nameIn.size = 10;
-      nameIn.addEventListener("change", () => simActions.setCurrency(s.i, { name: nameIn.value.trim() || c.name }));
-      const rate = el("td", "cur-rate", vsBase.toFixed(4));
-      const chg = el("td", `cur-chg ${change > 5e-5 ? "up" : change < -5e-5 ? "down" : ""}`, `${change > 5e-5 ? "▲" : change < -5e-5 ? "▼" : "－"} ${(Math.abs(change) * 100).toFixed(2)}%`);
-      const sp = el("td");
-      sp.append(spark(hist, change >= 0));
-      const reg = document.createElement("select");
-      for (const [v, l] of [["floating", "変動"], ["pegged", "固定"]]) {
-        const o = document.createElement("option");
-        o.value = v;
-        o.textContent = l;
-        o.selected = c.regime === v;
-        reg.append(o);
-      }
-      const peg = document.createElement("select");
-      for (const o2 of states.filter((x) => x.i !== s.i)) {
-        const o = document.createElement("option");
-        o.value = o2.i;
-        o.textContent = sname(map, o2.i);
-        o.selected = c.pegTo === o2.i;
-        peg.append(o);
-      }
-      peg.disabled = c.regime !== "pegged";
-      const apply = () => simActions.setCurrency(s.i, reg.value === "pegged" ? { regime: "pegged", pegTo: Number(peg.value) } : { regime: "floating" });
-      reg.addEventListener("change", () => {
-        apply();
-        renderCurrency();
-      });
-      peg.addEventListener("change", apply);
-      const cell = (n) => {
-        const td = el("td");
-        td.append(n);
-        return td;
-      };
-      tr.append(code, cell(nameIn), el("td", "", sname(map, s.i)), rate, chg, sp, cell(reg), cell(peg));
-      t.append(tr);
-    }
-    currencyBody.append(t);
-    if (!states.some((s) => s.i === convFrom)) convFrom = states[0].i;
-    if (!states.some((s) => s.i === convTo)) convTo = (states[1] ?? states[0]).i;
-    const conv = el("div", "cur-conv");
-    const amt = document.createElement("input");
-    amt.type = "number";
-    amt.value = String(convAmt);
-    amt.min = "0";
-    const sel2 = (cur, on) => {
-      const s = document.createElement("select");
-      for (const st of states) {
-        const o = document.createElement("option");
-        o.value = st.i;
-        o.textContent = simActions.getCurrency(st.i).name;
-        o.selected = st.i === cur;
-        s.append(o);
-      }
-      s.addEventListener("change", () => {
-        on(Number(s.value));
-        renderCurrency();
-      });
-      return s;
-    };
-    const out = el("strong", "", `${fmt((Number(amt.value) || 0) * simActions.exchangeRate(convFrom, convTo), 2)} ${simActions.getCurrency(convTo).name}`);
-    amt.addEventListener("input", () => {
-      convAmt = Number(amt.value) || 0;
-      out.textContent = `${fmt(convAmt * simActions.exchangeRate(convFrom, convTo), 2)} ${simActions.getCurrency(convTo).name}`;
-    });
-    conv.append(el("h4", "", "両替"), amt, sel2(convFrom, (x) => {
-      convFrom = x;
-    }), el("span", "", "＝"), out, el("span", "", "（"), sel2(convTo, (x) => {
-      convTo = x;
-    }), el("span", "", "に）"));
-    currencyBody.append(conv);
-  }
-  const safeTreaty = guardRender(treatyBody, () => renderTreaty()), safeCurrency = guardRender(currencyBody, () => renderCurrency());
+  const safeTreaty = guardRender(treatyBody, () => renderTreaty());
   store.subscribe((_s, ch) => {
     if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
-    if (currencyBody.offsetParent) safeCurrency();
     if (treatyBody.offsetParent) safeTreaty();
   });
-  return { situation, bars, treatyBody, renderTreaty, clearHighlight, currencyBody, renderCurrency };
+  return { situation, bars, treatyBody, renderTreaty, clearHighlight };
 }

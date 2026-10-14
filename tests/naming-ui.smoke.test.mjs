@@ -65,7 +65,7 @@ const map = store.getState().map;
 const liveBurgs = () => store.getState().map.pack.burgs.filter((b) => b && b.i && !b.removed);
 
 console.log("=== 空欄のまま都市を置く → 仮の名前 ===");
-q('[data-tool="add:burg"]').click();
+window.dispatchEvent(new window.CustomEvent("request-edit-panel-sync", { detail: { tool: "add:burg" } }));
 let cell = -1; for (let i = 0; i < map.pack.cells.biome.length; i++) if (map.pack.cells.biome[i] !== 0 && !map.pack.cells.burg[i] && map.pack.cells.state[i] > 0) { cell = i; break; }
 const [sx, sy] = viewport.toScreen(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1]);
 const n0 = liveBurgs().length;
@@ -105,14 +105,10 @@ const sIn = window.document.querySelector('[data-win="setup"] .name-row input');
 const handmade = liveBurgs().find((b) => b.name === "手書きの町");
 check("手書きの名前で作られ、仮の印が付かない", !!handmade && !store.getState().map.ext?.data?.provisionalNames?.[`burg:${handmade.i}`]);
 
-console.log("=== 文化の「名前の系統」選択 ===");
+console.log("=== 文化に「名前の系統」の選択は無い（〇〇風は廃止） ===");
 const cid = map.pack.cultures.find((c) => c && c.i > 0 && !c.removed).i;
 window.alterhistory.editorPanel.openEntity("culture", cid);
 await sleep(30);
-const sel = panel.querySelector("select");
-check("文化パネルに系統の選択がある", !!sel && [...sel.options].some((o) => o.value === "nordic"));
-if (sel) { sel.value = "nordic"; sel.dispatchEvent(new window.Event("change")); await sleep(30); }
-check("系統を選ぶと保存データに入る", store.getState().map.ext?.data?.nameStyles?.[`culture:${cid}`] === "nordic");
-
+check("文化パネルに系統の選択が無い", ![...panel.querySelectorAll("select")].some((sel) => [...sel.options].some((o) => o.value === "nordic")));
 console.log(failed === 0 ? "\n全テスト合格" : `\n${failed}件失敗`);
 process.exit(failed ? 1 : 0);

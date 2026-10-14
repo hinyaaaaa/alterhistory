@@ -12,7 +12,7 @@ let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
 
 console.log("=== レイヤーの既定 ===");
-check("13個のレイヤーがある（旅の線は廃止）", LAYERS.length === 13 && new Set(LAYERS.map((l) => l.key)).size === 13);
+check("12個のレイヤーがある（名前はズーム連動のみで、レイヤーではない）", LAYERS.length === 12 && new Set(LAYERS.map((l) => l.key)).size === 12 && !LAYERS.some((l) => l.key === "labels"));
 check("未設定の既定は 国家・地形・国境・海岸線…がオン、文化・宗教・属州・標高がオフ",
   isLayerOn({}, "states") && isLayerOn({}, "biomes") && isLayerOn({}, "borders") && !isLayerOn({}, "cultures") && !isLayerOn({}, "heights"));
 check("色分けは重ねられる（描く順は 文化→宗教→属州→国家）", JSON.stringify(activeFills({ cultures: true, religions: true, states: true })) === '["culture","religion","state"]');
@@ -30,7 +30,7 @@ check("色分けの保存と復元用データ", snap.states === true && snap.cu
 console.log("=== 描画オプション ===");
 const o = viewToRenderOptions({ cultures: true, states: false, borders: true });
 check("fills / terrain / borders が渡る", JSON.stringify(o.fills) === '["culture"]' && o.terrain === "biome" && o.borders === true && o.legendKind === "culture");
-check("名前のレイヤーを切ると、国名も都市名も出ない", viewToRenderOptions({ labels: false }).labels === false);
+check("国名は国家レイヤーに連動し、都市名はズーム連動（auto）", viewToRenderOptions({ states: true }).labels.states === true && viewToRenderOptions({ states: false }).labels.states === false && viewToRenderOptions({}).labels.burgs === "auto");
 
 console.log("=== 外周（赤い強調） ===");
 const { text } = buildSyntheticMapText({ seed: 11 });

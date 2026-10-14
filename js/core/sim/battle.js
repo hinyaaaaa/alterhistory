@@ -14,6 +14,7 @@
 //
 // 純粋ロジック層：DOM に依存しない。乱数は core/random.js の createRandom を注入する。
 
+import { effectiveDoctrineKey } from "../edit/doctrines.js";
 import { UNIT_KEYS, forceHeadcount, forceHardness, attackDamage, DOCTRINE_BY_KEY, DEFAULT_DOCTRINE } from "./units.js";
 import { setProps, makeCommand } from "../edit/commands.js";
 import { regimentsOf } from "./military.js";
@@ -68,7 +69,7 @@ export function simulateBattle(attacker, defender, rnd) {
 
 /** 国家のドクトリン（未設定なら既定値）とタイプ（未設定ならGeneric）をまとめて取り出す */
 function stateProfile(state) {
-  return { doctrine: state.doctrine ?? DEFAULT_DOCTRINE, stateType: state.type ?? "Generic" };
+  return { doctrine: effectiveDoctrineKey(state), stateType: state.type ?? "Generic" };
 }
 
 /**

@@ -79,10 +79,11 @@ const clickBtn = (root, text) => [...root.querySelectorAll("button")].find((b) =
 const openList = (kind) => { q(`[data-open-win="list-${kind}"]`)?.click(); };
 
 console.log("=== 一覧ウィンドウを開く ===");
-check("ハブに国家一覧の入口がある", !!q('[data-open-win="list-state"]'));
-openList("state");
-await waitFor(() => q(".ent-addbar"), 2000, "追加バー");
-check("追加バーには「追加」だけが出る（作成は共通の初期設定ウィンドウで行う）", !!clickBtn(window.document, "国家を追加") && !clickBtn(window.document, "おまかせ領土つき"));
+check("ハブに国家（国家タブ）の入口がある", !!q('[data-open-win="nation"]'));
+q('[data-open-win="nation"]').click();
+await waitFor(() => q(".nation-list"), 2000, "国家一覧");
+check("国家一覧に「新規作成」と「統合」があり、削除は無い", !!clickBtn(window.document, "＋ 新規作成") && !!clickBtn(window.document, "統合") && ![...q('[data-win="nation"]').querySelectorAll("button")].some((b) => /削除/.test(b.textContent)));
+q('[data-win="nation"] .panel-close, [data-win="nation"] [data-close]')?.click();
 check("「歴史をつくる」ボタンは無い", !$("btn-builder") && !$("builder-panel"));
 
 console.log("=== 初期設定ウィンドウ：キャンセルすると何も作られない ===");
@@ -90,19 +91,19 @@ const setupWin = () => q('[data-win="setup"]');
 const histLen = () => (store.getState().map.ext?.data?.historyLog ?? []).length;
 const selOf = (root, text) => [...root.querySelectorAll("select")].find((s) => [...s.options].some((o) => o.textContent.includes(text)));
 const before = states().length, log0 = histLen();
-clickBtn(window.document, "国家を追加").click();
+window.alterhistory.openSetup("state");
 check("初期設定ウィンドウが開く", await waitFor(() => setupWin() && !setupWin().hidden, 2000, "開く"));
 check("開いただけでは国は増えず、年表にも載らない", states().length === before && histLen() === log0);
 setupWin().querySelector(".name-row input").value = "キャンセル王国";
 clickBtn(setupWin(), "キャンセル").click();
 check("キャンセルで閉じ、国も年表の記録も増えない", setupWin().hidden && states().length === before && histLen() === log0);
-clickBtn(window.document, "国家を追加").click();
+window.alterhistory.openSetup("state");
 setupWin().querySelector(".name-row input").value = "ばつ王国";
 setupWin().querySelector(".panel-close").click();
 check("× で閉じても、何も作られない", setupWin().hidden && states().length === before && histLen() === log0);
 
 console.log("=== 国を建てる（初期設定で入力 → 確定。おまかせ領土・首都つき） ===");
-clickBtn(window.document, "国家を追加").click();
+window.alterhistory.openSetup("state");
 await waitFor(() => setupWin() && !setupWin().hidden, 2000, "開く");
 const terr = selOf(setupWin(), "おまかせ（中）"); terr.value = "m";
 check("項目がそろっている（名前・色・政体・領土）", !!setupWin().querySelector(".name-row input") && !!setupWin().querySelector('input[type="color"]') && !!selOf(setupWin(), "君主制") && !!selOf(setupWin(), "あとで地図に塗る"));
@@ -119,24 +120,22 @@ check("首都が置かれる", done.capital > 0 && !ea.isProvisional("burg", don
 check("年表には「建国」が1件だけ増える", histLen() === log0 + 1 && store.getState().map.ext.data.historyLog.at(-1).type === "created-state");
 
 console.log("=== 国家一覧が最新になる ===");
-check("国家一覧に新しい国が出る", q('[data-win="list-state"]').textContent.includes(made.fullName ?? made.name));
+q('[data-open-win="nation"]').click(); await sleep(50);
+check("国家一覧に新しい国が出る", q('[data-win="nation"]').textContent.includes(made.fullName ?? made.name));
 
-console.log("=== 技術水準を変えられる ===");
-ea.setTechLevel?.(made.i, 7);
-check("技術水準を変えられる", ea.getTechLevel(made.i) === 7);
+console.log("=== 技術ドクトリン（技術水準の後継） ===");
+ea.setTechDoctrine(made.i, { agri: 7, ind: 7, transport: 7, comms: 7, medicine: 7, energy: 7 });
+check("技術ドクトリンを選ぶと技術水準が導かれる", ea.getTechLevel(made.i) === 7 && ea.getTechDoctrine(made.i).ind === 7);
 
 console.log("=== 手で塗る方式（領土は「あとで地図に塗る」） ===");
 const n0 = states().length;
-clickBtn(window.document, "国家を追加").click();
+window.alterhistory.openSetup("state");
 await waitFor(() => setupWin() && !setupWin().hidden, 2000, "開く");
 check("領土の既定は「あとで地図に塗る」", selOf(setupWin(), "あとで地図に塗る").value === "later");
 clickBtn(setupWin(), "確定して作成").click();
 await waitFor(() => states().length === n0 + 1, 2000, "追加");
 check("国がもう1つ増える", states().length === n0 + 1);
 await waitFor(() => store.getState().editTool === "paint:state", 2000, "塗るツール");
-check("塗るツールに切り替わり、塗り先が新しい国", store.getState().editTool === "paint:state");
-ba.endPaint();
-check("ツールが選択に戻る", store.getState().editTool === "select");
 
 console.log("=== 取り消し（Undo） ===");
 store.undo();

@@ -79,7 +79,7 @@ for (const f of ["境界線の貴方.map", "新世界より.map"]) {
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   check("セル配列が一致", ["biome", "burg", "culture", "pop", "river", "state", "religion", "province"].every((k) => same(back.pack.cells[k], M().pack.cells[k])));
   check("国家・宗教・都市・属州・河川が一致", ["states", "cultures", "religions", "provinces", "burgs", "rivers"].every((k) => same(back.pack[k], M().pack[k])));
-  check("歴史ログ・世界の時刻・ゾーン・マーカーが一致", same(back.ext.data, { ...M().ext.data, saveFormat: 2 }) && // 保存すると、保存形式の版 2 が付く
+  check("歴史ログ・世界の時刻・ゾーン・マーカーが一致", same(back.ext.data, { ...M().ext.data, saveFormat: 3 }) && // 保存すると、保存形式の版 3 が付く
      same(back.worldTime, M().worldTime) && same(back.zones, M().zones) && same(back.markers, M().markers));
   check("格子（標高・降水・点）が一致", same(back.grid.h, M().grid.h) && same(back.grid.points, M().grid.points));
   check("Azgaar 形式より読みやすい（改行なしの1つの JSON・数字の羅列の行ではない）", json.startsWith("{") && !json.includes("\n"));

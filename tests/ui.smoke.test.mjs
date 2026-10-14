@@ -139,7 +139,7 @@ key("2", { ctrlKey: true });
 check("Ctrl+数字は無視される（ブラウザ操作と衝突しない）", store.getState().view.states === true);
 
 console.log("=== 入力欄でのショートカット抑止 ===");
-const selBox = $("sel-burg-labels");
+const selBox = window.document.querySelector("select, input");
 selBox.focus();
 selBox.dispatchEvent(new window.KeyboardEvent("keydown", { key: "4", bubbles: true }));
 check("セレクト上のキー入力では切り替わらない", store.getState().view.provinces !== true);

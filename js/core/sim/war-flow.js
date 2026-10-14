@@ -3,6 +3,7 @@
 import { regimentsOf } from "./military.js";
 import { forceHeadcount } from "./units.js";
 import { vassalInfo, vassalsOf, VASSAL_BY_KEY } from "../edit/vassals.js";
+import { neutralStates } from "../edit/treaties.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -26,6 +27,7 @@ const liveAlliances = (map) => (map.ext?.data?.alliances ?? []).filter((a) => !a
  */
 export function expandWithAllies(map, attackers, defenders) {
   const A = new Set(attackers), D = new Set(defenders), joined = [];
+  const neutral = neutralStates(map); // 中立条約の当事国は、同盟の参戦招集に応じない
   for (let round = 0; round < 4; round++) {
     let changed = false;
     for (const al of liveAlliances(map)) {
@@ -34,7 +36,7 @@ export function expandWithAllies(map, attackers, defenders) {
       const members = al.members.filter((m) => isLive(map.pack.states[m]));
       const inA = members.some((m) => A.has(m)), inD = members.some((m) => D.has(m));
       if (inA && inD) continue;
-      const join = (set, side) => { for (const m of members) if (!A.has(m) && !D.has(m)) { set.add(m); joined.push({ id: m, side, alliance: al.name }); changed = true; } };
+      const join = (set, side) => { for (const m of members) if (!A.has(m) && !D.has(m) && !neutral.has(m)) { set.add(m); joined.push({ id: m, side, alliance: al.name }); changed = true; } };
       if (inD) join(D, "defender");                     // 標準・強固: 攻められた側の同盟国は守る
       if (inA && bond === "strict") join(A, "attacker"); // 強固のみ: 攻める側の同盟国も加わる
     }

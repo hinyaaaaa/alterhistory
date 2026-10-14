@@ -103,16 +103,8 @@ const before = [viewport.x, viewport.y];
 rowForCell.click();
 check("押すと表示位置が動く", viewport.x !== before[0] || viewport.y !== before[1]);
 
-console.log("=== 手書きの出来事を足す ===");
-const n0 = total();
-const add = q(".tl-add:not(.tl-rec)"); add.open = true;
-const inputs = add.querySelectorAll("input");
-inputs[0].value = "画面から足した出来事"; inputs[1].value = "テスト"; 
-add.querySelector("button.primary").click();
-check("年表が1件増える", total() === n0 + 1);
-check("画面にも反映される", count().startsWith(`${n0 + 1} 件`), count());
-store.undo();
-check("Undo で出来事も消える", total() === n0);
+console.log("=== 出来事を書き足す・記録する欄は無い（v2.4.0 で廃止） ===");
+check("年表に、書き足す欄・記録の欄が無い", !q(".tl-add") && !q(".tl-rec"));
 
 console.log("=== マーカー・ノートも年表に載る ===");
 const t0 = total();
@@ -133,20 +125,9 @@ check("見える範囲の計算（先頭）", JSON.stringify(visibleRange(0, 400
 check("見える範囲の計算（末尾でも件数を超えない）", visibleRange(58 * 9990, 400, 10000)[1] === 10000);
 check("種類の判定", kindOfType("battle") === "war" && kindOfType("alliance-formed") === "diplomacy" && kindOfType("manual") === "note");
 
-console.log("=== 外交表の食い違いを直す入口（外交・同盟ウィンドウ） ===");
-{
-  const m = store.getState().map;
-  m.ext.data.alliances = [...(m.ext.data.alliances ?? []), { id: 901, name: "食い違い同盟", members: [ids[0], ids[1]], formedAt: { year: 1, month: 1 }, dissolvedAt: null }];
-  m.pack.states[ids[0]].diplomacy = []; m.pack.states[ids[1]].diplomacy = [];
-  check("食い違いが数えられる", ea.diplomacyMismatchCount() >= 1);
-  q('[data-open-win="diplomacy"]').click();
-  await waitFor(() => q(".dip-mismatch button"), 2000, "直すボタン");
-  check("食い違いがあるときだけ、「直す」が出る", !!q(".dip-mismatch button"));
-  q(".dip-mismatch button").click();
-  check("押すと食い違いが無くなり、表示も消える", ea.diplomacyMismatchCount() === 0 && !q(".dip-mismatch"));
-  store.undo();
-  check("Undo で元に戻る（食い違いが再び出る）", ea.diplomacyMismatchCount() >= 1);
-}
+console.log("=== 外交表は無い（外交ウィンドウに食い違いの「直す」は出ない） ===");
+q('[data-open-win="diplomacy"]').click(); await sleep(50);
+check("外交に「直す」の欄は無い", !q(".dip-mismatch"));
 
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");
 process.exit(failed ? 1 : 0);

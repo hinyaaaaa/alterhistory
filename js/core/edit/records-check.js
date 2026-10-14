@@ -6,15 +6,15 @@ const live = (map, id) => exists(map, id) && !map.pack.states[id].removed;
 
 export function checkRecords(map) {
   const out = [], data = map.ext?.data ?? {}, now = map.worldTime ?? null;
-  // 君主の在位期間の重なり・すき間
-  for (const [sid, rec] of Object.entries(data.monarchs ?? {})) {
-    if (!exists(map, +sid)) { out.push(`君主の記録が、存在しない国家#${sid}を指しています`); continue; }
+  // 指導者の在位期間の重なり・すき間
+  for (const [sid, rec] of Object.entries(data.leaders ?? {})) {
+    if (!exists(map, +sid)) { out.push(`指導者の記録が、存在しない国家#${sid}を指しています`); continue; }
     const seq = [...(rec.history ?? []), ...(rec.current ? [rec.current] : [])];
     for (let i = 0; i + 1 < seq.length; i++) {
       const a = seq[i], b = seq[i + 1]; if (!a.until || !b.since) continue;
       const u = key(a.until.year, a.until.month), s = key(b.since.year, b.since.month);
-      if (u > s) out.push(`${stateName(map, +sid)}の君主「${a.name}」と「${b.name}」の在位が重なっています`);
-      else if (u < s) out.push(`${stateName(map, +sid)}の君主「${a.name}」と「${b.name}」の在位にすき間があります`);
+      if (u > s) out.push(`${stateName(map, +sid)}の指導者「${a.name}」と「${b.name}」の在位が重なっています`);
+      else if (u < s) out.push(`${stateName(map, +sid)}の指導者「${a.name}」と「${b.name}」の在位にすき間があります`);
     }
   }
   // 存在しない国への参照（戦争・条約・歴史ログ・分離元）

@@ -54,23 +54,20 @@ check("講和条約にも、当時の国名が残る", () => {
 });
 
 
-console.log("=== 想定の戦闘ログと、実際の戦闘は別 ===");
-check("開戦時の戦闘ログは forecast に入り、実際の戦闘（battles）は空から始まる", () => {
+console.log("=== 実際の戦闘の記録（想定の戦闘ログは作らない） ===");
+check("開戦時に想定の戦闘ログは作られず、実際の戦闘（battles）は空から始まる", () => {
   const w = listWars(map).find((x) => x.id === instantId);
-  assert.ok(w.forecast.length > 0, "想定の戦闘ログがある"); assert.deepEqual(w.battles, [], "実際の戦闘はまだ無い");
+  assert.ok(!("forecast" in w), "forecast は持たない"); assert.deepEqual(w.battles, [], "実際の戦闘はまだ無い");
 });
-check("実際の戦闘を記録しても、想定の戦闘ログは増えず、battles だけに足される", () => {
-  const before = listWars(map).find((x) => x.id === instantId).forecast.length;
+check("実際の戦闘を記録すると、battles に足され、年表には実戦だけが載る", () => {
   store.commit(planRecordBattle(map, instantId, { attackerState: A.i, defenderState: C.i, result: { winner: "defender", aPower: 10, dPower: 20 }, date: { year: 7, month: 7 } }));
   const w = listWars(map).find((x) => x.id === instantId);
-  assert.equal(w.forecast.length, before); assert.equal(w.battles.length, 1);
-});
-check("年表では、想定の戦闘と実際の戦闘が別の種類で載る", () => {
+  assert.equal(w.battles.length, 1);
   const tl = buildTimeline(map);
-  assert.ok(tl.some((e) => e.type === "battle-forecast"), "想定");
+  assert.ok(!tl.some((e) => e.type === "battle-forecast"), "想定は載らない");
   assert.ok(tl.some((e) => e.type === "battle" && e.detail.includes("戦力 10 対 20")), "実戦");
-  const c = buildChronicle(map); const w = c.wars.find((x) => x.id === instantId);
-  assert.ok(w.forecast.length > 0 && w.battleCount === 1 && w.forecast[0].note.includes("想定"));
+  const c = buildChronicle(map); const cw = c.wars.find((x) => x.id === instantId);
+  assert.ok(cw.battleCount === 1 && !("forecast" in cw));
 });
 check("再判定の理由は、戦闘ではなく戦争の出来事として残る", () => {
   const p = planReevaluateWars(map, [A.i, C.i], "☢ テスト作戦：2発が使用された", { year: 8, month: 1 });

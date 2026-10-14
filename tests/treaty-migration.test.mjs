@@ -28,17 +28,17 @@ check("旧形式のファイルが開ける", !!old && old.pack.states.length ==
 check("同盟が条約（種類=同盟）に変換される（拘束力・盟主・解消済みも）", ts.filter((t) => t.kind === "alliance").length === 2 && ts.find((t) => t.name === "北方同盟").terms.bind === "strong" && ts.find((t) => t.name === "北方同盟").parties.find((p) => p.role === "盟主").state === B && ts.find((t) => t.name === "旧い同盟").status === "broken");
 check("従属関係が条約（種類=従属）に変換される", ts.some((t) => t.kind === "vassal" && t.terms.kind === "protectorate" && t.ref.vassalState === C && t.parties[0].role === "宗主国"));
 check("過去の講和が条約（種類=講和・由来の戦争つき）に変換される", ts.some((t) => t.kind === "peace" && t.name === "昔の講和条約" && t.originWar === 1));
-check("変換後の保存形式の版は 2", old.ext.data.saveFormat === SAVE_FORMAT && SAVE_FORMAT === 2);
+check("変換後の保存形式の版は 3（条約は版 2 で導入）", old.ext.data.saveFormat === SAVE_FORMAT && SAVE_FORMAT === 3);
 check("変換は冪等（もう一度かけても増えない）", (() => { const n = listTreaties(old).length; migrateLegacyToTreaties(old); return listTreaties(old).length === n; })());
 check("元の同盟・従属のデータは壊れない（既存の仕組みがそのまま動く）", old.ext.data.alliances.length === 2 && old.pack.states[C].vassal.overlord === A);
 const resaved = JSON.parse(serializeNativeJson(old));
-check("保存し直すと新形式（保存形式の版 2）になる", resaved.data.saveFormat === 2 && resaved.data.treaties.length === ts.length);
+check("保存し直すと新形式（保存形式の版 3）になる", resaved.data.saveFormat === 3 && resaved.data.treaties.length === ts.length);
 const again = parseNativeJson(JSON.stringify(resaved)).map;
 check("新形式を開き直しても、条約は増えも減りもしない", listTreaties(again).length === ts.length);
-check("版 1 のファイル（saveFormat なし）でも、版 2 の判定で壊れない", parseNativeJson(json).map.ext.data.saveFormat === 2);
+check("版 1 のファイル（saveFormat なし）でも、版 3 の判定で壊れない", parseNativeJson(json).map.ext.data.saveFormat === 3);
 
 console.log("=== 条約の種類と条項 ===");
-check("条約の種類は8つ（同盟・不可侵・協力・従属・国境・共同宣言・外国の支援・講和）。締結の窓から選べるのは6つ", TREATY_KINDS.length === 8 && SIGNABLE_KINDS.length === 6 && !SIGNABLE_KINDS.includes("peace") && !SIGNABLE_KINDS.includes("support"));
+check("条約の種類は8つ（同盟・不可侵・協力・従属・国境・共同宣言・外国の支援・講和）。締結の窓から選べるのは4つ（安全保障・経済協力・共同宣言・不可侵・中立）", TREATY_KINDS.length === 8 && SIGNABLE_KINDS.length === 4 && SIGNABLE_KINDS.join() === "alliance,economic,declaration,nonaggression" && !SIGNABLE_KINDS.includes("peace") && !SIGNABLE_KINDS.includes("support"));
 const map2 = await load(); const st2 = { map: map2 };
 const r1 = planConcludeTreaty(map2, { kind: "nonaggression", parties: [{ state: A }, { state: B }], months: 60, date: { year: 10, month: 1 } });
 check("確定するまで、何も残らない", listTreaties(map2).length === 0);

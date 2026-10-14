@@ -63,7 +63,7 @@ const townNames = map().pack.burgs.filter((b) => b && b.i && !b.removed && !b.ca
 const provNames = map().pack.provinces.filter((p) => p && p.i && p.name).map((p) => p.name);
 
 console.log("=== ズーム連動のラベル ===");
-check("既定は「ズーム連動」", store.getState().view.burgLabels === "auto");
+check("名前の出し方はズーム連動だけ（選ぶ欄は無い）", !q("#sel-burg-labels") && !q("[data-seg-for=\"sel-burg-labels\"]"));
 viewport.fit();
 let t = await render();
 check("全体表示：首都の名前は出る", capitalNames.every((n) => t.includes(n)));
@@ -84,20 +84,10 @@ for (const z of [1, 2.6, 4, 6.5]) {
 viewport.fitK = fitK0;
 check("倍率が上がるほど、現れる都市名が増える", counts.every((c, i) => i === 0 || c >= counts[i - 1]) && counts.at(-1) > counts[0], counts.join(" → "));
 viewport.fit();
-store.update((s) => { s.view.burgLabels = "all"; });
-t = await render();
-check("「全部」にすると全体表示でも都市名がたくさん出る", townNames.filter((n) => t.includes(n)).length > 3, String(townNames.filter((n) => t.includes(n)).length));
-store.update((s) => { s.view.burgLabels = "capitals"; });
-t = await render();
-check("「首都のみ」では小さな都市の名前は出ない", townNames.every((n) => !t.includes(n) || capitalNames.includes(n)));
-store.update((s) => { s.view.burgLabels = "none"; });
-t = await render();
-check("「都市名なし」では首都名も出ない（国名は出る）", capitalNames.every((n) => !t.includes(n)) && t.length > 0);
-store.update((s) => { s.view.burgLabels = "auto"; });
 
 console.log("=== レイヤーのポップアップ（Azgaar 方式） ===");
 const layer = (k) => q(`[data-layer="${k}"]`);
-check("レイヤーのボタンが13個ある", window.document.querySelectorAll("[data-layer]").length === 13);
+check("レイヤーのボタンが12個ある（名前はレイヤーではない）", window.document.querySelectorAll("[data-layer]").length === 12 && !q("[data-layer=\"labels\"]"));
 layer("cultures").click();
 check("文化をオンにしても国家は消えない（重ねられる）", store.getState().view.cultures === true && store.getState().view.states !== false);
 check("オンのボタンは選択状態になる", layer("cultures").classList.contains("active") && layer("states").classList.contains("active"));
@@ -107,10 +97,6 @@ check("レイヤープリセットのボタンは廃止されている", !q("[da
 layer("zones").click();
 check("ゾーンの表示を切り替えられる", store.getState().view.zones === false);
 layer("zones").click();
-const seg = (id, val) => q(`[data-seg-for="${id}"] [data-value="${val}"]`);
-seg("sel-burg-labels", "capitals").click();
-check("名前の表示は区切りボタンで切り替わる", store.getState().view.burgLabels === "capitals" && seg("sel-burg-labels", "capitals").classList.contains("active"));
-seg("sel-burg-labels", "auto").click();
 check("上部バーのドロップダウンメニューは廃止（ハブに集約）", window.document.querySelectorAll("details.menu").length === 0);
 check("地図編集パネルには色分け・下地のセレクトが残っていない", !$("edit-panel").querySelector("[data-layer], #layer-toggles"));
 

@@ -1,10 +1,11 @@
-// 隠密作戦ウィンドウ。
+// 隠密作戦（工作）の画面。国家タブの「工作」に埋め込む。単独の窓も残す。
 import { guardRender } from "./safe-render.js";
 import { el } from "./kit.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const pct = (v) => `${Math.round(v * 100)}%`;
-export function initCovertWindow({ store, simActions, wins }) {
+/** 工作の画面。getAttacker を渡すと、実行する国をその国に固定する（国家タブに埋め込む用）。標的は画面で選ぶ */
+export function createCovertView({ store, simActions, getAttacker = null }) {
   const body = el("div", "covert-body");
   let atk = null, tgt = null, kind = "command";
   const nm = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
@@ -20,6 +21,7 @@ export function initCovertWindow({ store, simActions, wins }) {
       body.append(el("p", "muted", "国家が2つ以上必要です"));
       return;
     }
+    if (getAttacker) atk = getAttacker();
     if (!states.some((s) => s.i === atk)) atk = states[0].i;
     if (!states.some((s) => s.i === tgt && s.i !== atk)) tgt = states.find((s) => s.i !== atk).i;
     body.append(el("p", "hint", "宣戦布告なしに、相手の国力を静かに削ります。成功率と威力は、双方の技術水準の差で決まります。発覚しても、攻撃元が特定されるとは限りません（約3割は別の国の仕業と誤認されます）。戦争中の相手に使えば、戦況にも響きます。"));
@@ -40,9 +42,10 @@ export function initCovertWindow({ store, simActions, wins }) {
       return s;
     };
     const form = el("div", "member-picker");
-    form.append(el("span", "", "実行する国"), mk(atk, null, (x) => {
+    if (!getAttacker) form.append(el("span", "", "実行する国"), mk(atk, null, (x) => {
       atk = x;
-    }), el("span", "", "標的の国"), mk(tgt, atk, (x) => {
+    }));
+    form.append(el("span", "", "標的の国"), mk(tgt, atk, (x) => {
       tgt = x;
     }));
     body.append(form);
@@ -87,6 +90,11 @@ export function initCovertWindow({ store, simActions, wins }) {
       body.append(row);
     }
   }
+  return { body, render };
+}
+
+export function initCovertWindow({ store, simActions, wins }) {
+  const { body, render } = createCovertView({ store, simActions });
   wins.register("covert", { title: "隠密作戦", width: 720, body, onOpen: render });
   const safe = guardRender(body, () => render());
   store.subscribe((_s, ch) => {

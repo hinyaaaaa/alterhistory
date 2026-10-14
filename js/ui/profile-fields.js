@@ -1,5 +1,5 @@
 // 「詳しく」の中身（政治・文化の深さ）。国・文化・宗教の種類/政体/起源と、都市の設備。
-// history-builder.js から呼ぶ。見るだけなら畳んだまま、触りたい人だけが開く。
+// editor-panel.js から呼ぶ。見るだけなら畳んだまま、触りたい人だけが開く。
 
 import { el, btn } from "./kit.js";
 import { CULTURE_TYPES, RELIGION_TYPES, STATE_FORMS, BURG_GROUPS, BURG_FEATURES } from "../core/edit/profile.js";

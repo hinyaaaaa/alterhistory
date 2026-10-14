@@ -11,7 +11,7 @@ export const TOOLS = Object.freeze({
   SELECT: "select",
   PAINT_STATE: "paint:state", PAINT_CULTURE: "paint:culture",
   PAINT_RELIGION: "paint:religion", PAINT_PROVINCE: "paint:province",
-  PAINT_BIOME: "paint:biome",
+  PAINT_BIOME: "paint:biome", PAINT_HEIGHT: "paint:height",
   PAINT_ZONE: "paint:zone",
   ADD_BURG: "add:burg", ADD_MARKER: "add:marker",
 });
@@ -43,6 +43,7 @@ export function initEditMode({ store, viewport, editActions, panels, openSetup }
       if (!cells.length) return;
       cells.forEach((c) => painted.add(c));
       if (tool === TOOLS.PAINT_BIOME) editActions.paintBiome(target, cells);
+      else if (tool === TOOLS.PAINT_HEIGHT) editActions.paintHeight(target, cells);
       else if (tool === TOOLS.PAINT_ZONE) editActions.paintZone(target, cells, zoneMode);
       else editActions.paintCells(PAINT_TOOL_KIND[tool], target, cells);
     },

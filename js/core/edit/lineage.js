@@ -45,32 +45,8 @@ export function causeChain(tl, entry) {
 /** その後（この出来事を原因とするもの） */
 export const consequences = (tl, entry) => tl.filter((e) => e.causeKey === eventKey(entry));
 
-// ---- B: 君主と継承 ----
-export const TITLES = Object.freeze(["王", "女王", "皇帝", "女帝", "大公", "首長", "大統領", "摂政"]);
-export const REASONS = Object.freeze([
-  { key: "death", label: "死去", verb: "死去し" }, { key: "abdication", label: "退位", verb: "退位し" }, { key: "deposition", label: "廃位", verb: "廃位され" },
-  { key: "usurpation", label: "簒奪", verb: "倒され" }, { key: "election", label: "選出", verb: "任期を終え" }, { key: "conquest", label: "征服", verb: "征服され" },
-]);
-export const STABILITY = Object.freeze([{ key: "stable", label: "安定" }, { key: "dispute", label: "争いあり" }, { key: "chaos", label: "大きな混乱" }]);
-export const monarchRecord = (map, id) => map.ext?.data?.monarchs?.[id] ?? { current: null, history: [] };
-const writeMonarchs = (m, all) => { ensureExt(m).data.monarchs = all; };
-
-/** 君主交代。name 省略で自動（「第N代○○」）。確定まで何も残さない・Undo 1回。 */
-export function planChangeMonarch(map, stateId, { reason, title = "王", name = "", stability = "stable", date = null } = {}) {
-  const st = map.pack.states[stateId]; if (!st || st.removed || !(st.i > 0)) throw new Error("存在しない国家です");
-  const r = REASONS.find((x) => x.key === reason); if (!r) throw new Error("交代の理由を選んでください");
-  if (!TITLES.includes(title)) throw new Error("称号を選んでください");
-  const stab = STABILITY.find((x) => x.key === stability); if (!stab) throw new Error("継承の安定度を選んでください");
-  const when = date ?? map.worldTime ?? { year: 1, month: 1 };
-  const before = map.ext?.data?.monarchs ?? {}; const rec = monarchRecord(map, stateId);
-  const n = rec.history.length + (rec.current ? 1 : 0) + 1;
-  const next = { name: name.trim() || `第${n}代${title}`, title, since: { ...when }, reason: r.key, stability: stab.key };
-  const hist = rec.current ? [...rec.history, { ...rec.current, until: { ...when } }] : rec.history;
-  const after = { ...before, [stateId]: { current: next, history: hist } };
-  const cmd = makeCommand(`君主交代（${nm(st)}）`, [], [{ apply: (m) => writeMonarchs(m, after), revert: (m) => { const x = ensureExt(m); if (Object.keys(before).length) x.data.monarchs = before; else delete x.data.monarchs; } }]);
-  const prev = rec.current ? `${rec.current.title}${rec.current.name}が${r.verb}、` : "";
-  return withEvent(map, cmd, { type: "succession", title: `${epithet(st)}${nm(st)}で${prev}${next.title}${next.name}が即位`, detail: `理由: ${r.label} / 継承: ${stab.label}`, date: when, states: [stateId] });
-}
+// ---- B: 指導者と継承は leaders.js に移した（旧: 君主） ----
+export { TITLES, REASONS, STABILITY, leaderRecord, planChangeLeader } from "./leaders.js";
 
 // ---- C: 国の連続性（前身・後継・国名の変遷）。保存はせず、既存の記録から導く ----
 export function lineageOf(map, id) {

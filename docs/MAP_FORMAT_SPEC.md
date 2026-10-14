@@ -200,3 +200,18 @@ ALTERHISTORY は、適用できなかった件数を読み込み時の警告と�
 
 ### 読み込み時の変換（版 1 → 2）
 `migrateLegacyToTreaties`（`core/edit/treaties.js`）が、`data.alliances`・国家の `vassal`・講和済みの戦争（`data.wars[].terms.treatyName`）を、条約に変換する。冪等（もう一度かけても増えない）。元の同盟・従属・戦争のデータは変えない。
+
+
+## v2.4.0 の追加項目（保存形式の版 3）
+
+`data`（拡張データ）に追加。どれも無くても開ける。読み込み時に `core/edit/migrate.js` が旧データを移行する。
+
+- `saveFormat`: 保存すると必ず 3 を書く（旧形式 = 1、条約 = 2、指導者・政体・技術ドクトリン = 3）。
+- `leaders`: 指導者。`{ [国ID]: { current: Leader|null, history: Leader[] } }`。`Leader = { id, name, gender: "m"|"f", birthYear, since:{year,month}, until?, title, reason, stability, gen }`。`reason` は `founding|death|abdication|deposition|usurpation|election|conquest`。顔は `id` と `gen` から決まるので、保存しない。
+- `leaderSeq`: 指導者の ID の連番。
+- 旧 `monarchs`（君主）は、読み込み時に `leaders` へ移して消える。性別は称号から、生年は即位年の28年前から推定する。
+- 旧 `wars[].forecast`（開戦時の想定の戦闘ログ）は、読み込み時に捨てる。`wars[].types`: 国ごとの戦争形態 `{国ID: "limited"|"conventional"|"total"|"asymmetric"}`。`wars[].type` は合成した形態で、`"asymmetric+total"` のように `+` でつなぐことがある。`wars[].events[].kind` に `type-change`（形態の変更）が加わる。
+- 国家（`pack.states[i]`）の追加項目: `regime`（政体のキー。`absolute|constitutional|empire|elective|theocracy|aristocratic|democracy|presidential|party|nationalist|junta|tribal|federation|anarchy`）、`techDoctrine`（`{agri, ind, transport, comms, medicine, energy}` 各 1〜10。`techLevel` はここから導いた値を同時に書く）、`doctrineNodes`（選んだ軍事ドクトリンの節のキー）、`rebelGoal`（反乱側の国のみ。`secession|overthrow`）。`form` と `formName` は、政体から同時に書く。
+- 部隊（`state.military[]`）の追加項目: `echelon`（編成の段 1〜5。未設定は Azgaar から取り込んだ部隊で、最初の月に現在の段が入る）。
+- 年表（`historyLog`）の `type` に追加: `succession`（指導者の交代）、`regime`、`doctrine`、`treaty-parties`、`natural-<種類>`（月ごとの自動の出来事）。
+- 削除: 国家の削除、データ検査、為替の画面、出来事の書き足し・記録（`note` / `manual` の追加操作）。保存データの読み書きには影響しない（既存の `note` / `manual` は読める）。

@@ -36,7 +36,6 @@ const m = store.getState().map;
 assert.equal(m.pack.states[1].military[1].u.infantry, 3000, "招集しなかった部隊は損耗しない");
 assert.ok(m.pack.states[1].military[0].u.infantry < 3000, "招集した部隊は損耗する");
 const w = listWars(m)[0];
-assert.ok(w.forecast.length >= 2 && w.forecast.every((b) => b.name && b.text && b.date), "想定の戦闘ログが自動生成される");
   assert.equal(w.battles.length, 0, "実際の戦闘は、まだ記録されていない");
 assert.ok(w.result.casualties[2].lost > 0 && w.result.casualties[1].before === 3000, "各国の消耗が記録される");
 // --- 士気が変動する ---

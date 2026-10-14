@@ -75,7 +75,7 @@ for (const [panel, close, open] of [["edit-panel", "edit-panel-close", "btn-edit
   $(close).click(); await sleep(20);
   check(`${panel}: × で閉じる`, $(panel).hidden);
 }
-check("設定メニューから一覧ウィンドウ（国家）が開く", (() => { q('[data-open-win="list-state"]').click(); return !!q(".float-win:not([hidden])"); })());
+check("ハブから国家タブが開く", (() => { q('[data-open-win="nation"]').click(); return !!q(".float-win:not([hidden])"); })());
 
 console.log("=== 速度ラベル ===");
 check("速度ラベルが年数で書かれている", [...$("sel-time-speed").options].every((o) => /^1年=/.test(o.textContent)));

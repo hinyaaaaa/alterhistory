@@ -1,26 +1,26 @@
 // 外交ウィンドウ。国どうしの取り決めは、すべて「条約」として扱う。
-//   ・最初の画面は関係一覧。国ごとに、結んでいる条約をバッジで出す（同盟・不可侵・協力・従属・戦争中）。
-//     国をクリックすると、その国の条約の一覧と履歴が開く。
+//   ・3列: 左に国のリスト（バッジ）／中央に選んだ国の関係カード（同盟と、戦争した国=敵対。同盟の拘束力は弱・中・強）／右に条約の一覧。
+//     条約の参加国は後から変えられる（チップの × で外し、＋ で足す）。外交の表は無い。宣戦布告は国家タブにある。
 //   ・「条約を結ぶ」: 種類 → 当事国（複数可）→ 条項（種類ごとの最小限の入力。既定値は自動）→ 締結。
 //     名称は自動で付け、上書きできる。確定するまで、何も作らず、年表にも残さない。
 //   ・締結後に、条約の中身（重ねて開く詳細ウィンドウ）で、期限・改定・破棄ができる。破棄は違約の扱いを伴う。
-//   ・隠密工作（サイバー攻撃など）は平時にも使えるので、ここから隠密作戦の窓を開く。
+//   ・条約の種類は 安全保障（参戦義務）/ 経済協力（貿易量）/ 共同宣言 / 不可侵・中立 の4つ。従属は国家タブ、講和は戦争の講和画面から。
 //   横タブは使わず、縦に並べた節と、重ねて開く窓で扱う。
 import { el, btn } from "./kit.js";
 import { confirmDialog } from "./dialogs.js";
 import {
   TREATY_KINDS, TREATY_BY_KEY, SIGNABLE_KINDS, BIND_LEVELS, TARIFFS, DECLARATIONS, PERIODS, STATUS_LABEL,
-  listTreaties, treatyStatus, treatyText, autoName, partyIds, badgesOf,
+  listTreaties, treatyStatus, treatyText, autoName, partyIds, badgesOf, activeTreaties, NONAGG_MODES,
 } from "../core/edit/treaties.js";
 import { VASSAL_KINDS } from "../core/edit/vassals.js";
-import { activeWars } from "../core/edit/wars.js";
+import { activeWars, listWars } from "../core/edit/wars.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const nm = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
 const fmt = (d) => (d ? `${d.year}年${d.month}月` : "—");
 const selectOf = (options, value) => { const s = document.createElement("select"); for (const [v, label] of options) s.append(new Option(label, String(v))); if (value != null) s.value = String(value); return s; };
 
-export function initDiplomacyWindow({ store, wins, simActions, editorPanel, editActions }) {
+export function initDiplomacyWindow({ store, wins, simActions, getWarsPanel }) {
   const body = el("div", "dip-body");
   let focus = null;           // 条約の一覧を見ている国
   let detailId = null;        // 詳細ウィンドウで開いている条約
@@ -70,7 +70,7 @@ export function initDiplomacyWindow({ store, wins, simActions, editorPanel, edit
 
   // ---- 条約を結ぶ（確定するまで何も作らない） ----
   const newHost = el("div", "treaty-new");
-  const draft = { kind: "alliance", picked: new Set(), leader: null, bind: "medium", tariff: "mid", vassalKind: "vassal", declaration: "friendship", months: 0, name: "" };
+  const draft = { kind: "alliance", picked: new Set(), leader: null, bind: "medium", tariff: "mid", vassalKind: "vassal", declaration: "friendship", mode: "nonaggression", months: 0, name: "" };
   function renderNew() {
     newHost.replaceChildren();
     const map = store.getState().map; if (!map) { newHost.append(el("p", "muted", "地図を開いてください")); return; }
@@ -116,6 +116,9 @@ export function initDiplomacyWindow({ store, wins, simActions, editorPanel, edit
     } else if (draft.kind === "declaration") {
       const d = selectOf(DECLARATIONS.map((x) => [x.key, x.label]), draft.declaration); d.addEventListener("change", () => { draft.declaration = d.value; });
       k3.append(rowOf("定型文", d));
+    } else if (draft.kind === "nonaggression") {
+      const m = selectOf(NONAGG_MODES.map((x) => [x.key, x.label]), draft.mode); m.addEventListener("change", () => { draft.mode = m.value; });
+      k3.append(rowOf("型", m));
     } else k3.append(el("p", "hint", "この種類に、入力する条項はありません。"));
     if (draft.kind !== "vassal") {
       const per = selectOf(PERIODS.map((p) => [p.months ?? 0, p.label]), draft.months); per.addEventListener("change", () => { draft.months = +per.value; });
@@ -136,7 +139,7 @@ export function initDiplomacyWindow({ store, wins, simActions, editorPanel, edit
       const id = simActions.concludeTreaty({
         kind: draft.kind, parties: partiesFromDraft(), name: draft.name,
         months: draft.kind === "vassal" ? null : draft.months || null,
-        terms: { bind: draft.bind, tariff: draft.tariff, kind: draft.vassalKind, declaration: draft.declaration },
+        terms: { bind: draft.bind, tariff: draft.tariff, kind: draft.vassalKind, declaration: draft.declaration, mode: draft.mode },
       });
       if (id != null) { draft.picked.clear(); draft.leader = null; draft.name = ""; wins.close("treaty-new"); render(); openDetail(id); }
     });
@@ -151,68 +154,97 @@ export function initDiplomacyWindow({ store, wins, simActions, editorPanel, edit
   const rowOf = (label, node) => { const r = el("div", "diplomacy-row"); r.append(el("span", "field-label", label), node); return r; };
   wins.register("treaty-new", { title: "条約を結ぶ", width: 560, body: newHost, onOpen: renderNew });
 
-  // ---- 関係一覧（最初の画面） ----
+  // ---- 3列: 左に国のリスト／中央に選んだ国の関係カード／右に条約の一覧（HoI4 風） ----
+  function chipOf(s) { const c = el("span", "chip"); c.style.background = s?.color ?? "#888"; return c; }
+  /** その国が戦ったことのある相手（敵対）。戦争中かどうかも返す */
+  function enemiesOf(map, id) {
+    const out = new Map();
+    for (const w of listWars(map)) {
+      const inA = w.attackers.includes(id), inD = w.defenders.includes(id); if (!inA && !inD) continue;
+      for (const o of inA ? w.defenders : w.attackers) { const cur = out.get(o) ?? { id: o, ongoing: false, wars: [] }; cur.wars.push(w.id); if (!w.endedAt) cur.ongoing = true; out.set(o, cur); }
+    }
+    return [...out.values()];
+  }
+  function partyChips(map, t, active) {
+    const row = el("div", "dip-chips");
+    const ids = partyIds(t), canEdit = active && !["vassal", "peace", "support"].includes(t.kind);
+    for (const id of ids) {
+      const c = el("span", "dip-pchip"); c.append(chipOf(map.pack.states[id]), document.createTextNode(nm(map, id)));
+      if (canEdit && ids.length > (TREATY_BY_KEY[t.kind].min ?? 2)) { const x = btn("dip-x", "×", `${nm(map, id)}を条約から外す`, () => { if (simActions.setTreatyParties(t.id, ids.filter((i) => i !== id))) render(); }); c.append(x); }
+      row.append(c);
+    }
+    if (canEdit) {
+      const free = map.pack.states.filter((s) => isLive(s) && !ids.includes(s.i));
+      if (free.length) {
+        const add = selectOf([["", "＋"], ...free.map((s) => [s.i, nm(map, s.i)])], ""); add.className = "dip-add"; add.title = "参加国を足す";
+        add.addEventListener("change", () => { if (add.value !== "" && simActions.setTreatyParties(t.id, [...ids, +add.value])) render(); });
+        row.append(add);
+      }
+    }
+    return row;
+  }
   function render() {
     body.replaceChildren();
     const map = store.getState().map;
     if (!map) { body.append(el("p", "muted", "地図を開いてください")); return; }
     const states = map.pack.states.filter(isLive);
-    if (focus == null || !states.some((s) => s.i === focus)) focus = null;
-    const top = el("div", "dip-top");
-    top.append(btn("primary", "＋ 条約を結ぶ", "種類 → 当事国 → 条項 → 締結", () => { wins.open("treaty-new"); renderNew(); }));
-    body.append(top);
-    const wars = activeWars(map);
-    const list = el("div", "dip-relations");
+    if (focus == null || !states.some((s) => s.i === focus)) focus = states[0]?.i ?? null;
+    const cols = el("div", "dip-cols");
+    // 左: 国のリスト
+    const left = el("div", "dip-left"), wars = activeWars(map);
     for (const s of states) {
       const row = el("button", `dip-row${s.i === focus ? " on" : ""}`); row.type = "button";
-      const chip = el("span", "chip"); chip.style.background = s.color ?? "#888";
       const badges = el("span", "dip-badges");
       for (const b of badgesOf(map, s.i, wars)) badges.append(el("span", `dip-badge b-${b === "戦争中" ? "war" : "t"}`, b));
-      row.append(chip, el("span", "dip-name", nm(map, s.i)), badges);
-      row.addEventListener("click", () => { focus = focus === s.i ? null : s.i; render(); });
-      list.append(row);
+      row.append(chipOf(s), el("span", "dip-name", nm(map, s.i)), badges);
+      row.addEventListener("click", () => { focus = s.i; render(); }); left.append(row);
     }
-    body.append(list);
+    // 中央: 関係カード（関係は「同盟」と「敵対（戦争した国）」だけ）
+    const mid = el("div", "dip-mid");
     if (focus != null) {
-      const sec = el("section", "dip-country");
-      sec.append(el("h4", "", `${nm(map, focus)} の条約`));
-      const ts = listTreaties(map).filter((t) => partyIds(t).includes(focus));
-      if (!ts.length) sec.append(el("p", "muted", "結んでいる条約はまだありません"));
-      for (const t of ts.slice().reverse()) {
-        const st = treatyStatus(t, map.worldTime);
-        const r = el("button", `treaty-row ${st}`); r.type = "button";
-        r.append(el("span", "treaty-kind", TREATY_BY_KEY[t.kind].short), el("span", "treaty-title", t.name), el("span", "treaty-meta", `${fmt(t.signedAt)} ・ ${STATUS_LABEL[st]}`));
-        r.addEventListener("click", () => openDetail(t.id));
-        sec.append(r);
+      const f = map.pack.states[focus], now = map.worldTime;
+      const head = el("div", "dip-card-head"); head.append(chipOf(f), el("strong", "", nm(map, focus))); mid.append(head);
+      const ally = el("section", "dip-card"); ally.append(el("h4", "", "同盟"));
+      const als = activeTreaties(map, now, "alliance").filter((t) => partyIds(t).includes(focus));
+      if (!als.length) ally.append(el("p", "muted", "同盟国はありません"));
+      for (const t of als) {
+        const r = el("div", "dip-ally"); r.append(el("div", "dip-ally-n", t.name), partyChips(map, { ...t, parties: t.parties.filter((p) => p.state !== focus) }, false));
+        const bind = selectOf(BIND_LEVELS.map((b) => [b.key, `拘束力 ${b.label}`]), t.terms?.bind ?? "medium"); bind.title = BIND_LEVELS.map((b) => `${b.label}: ${b.desc}`).join("\n");
+        bind.addEventListener("change", () => { simActions.amendTreaty(t.id, { terms: { bind: bind.value } }); render(); });
+        r.append(bind); ally.append(r);
       }
-      body.append(sec);
+      mid.append(ally);
+      const foe = el("section", "dip-card"); foe.append(el("h4", "", "敵対（戦争した国）"));
+      const es = enemiesOf(map, focus);
+      if (!es.length) foe.append(el("p", "muted", "戦争をした相手はいません"));
+      for (const e of es) { const r = el("div", "dip-foe"); r.append(chipOf(map.pack.states[e.id]), el("span", "", nm(map, e.id)), el("span", `dip-badge ${e.ongoing ? "b-war" : "b-t"}`, e.ongoing ? "戦争中" : "過去に戦争")); foe.append(r); }
+      mid.append(foe);
+      const peace = el("section", "dip-card"); peace.append(el("h4", "", "講和"));
+      const mine = wars.filter((w) => [...w.attackers, ...w.defenders].includes(focus));
+      if (!mine.length) peace.append(el("p", "muted", "戦争中ではありません"));
+      for (const w of mine) { const r = el("div", "dip-foe"); r.append(el("span", "", w.name), btn("", "講和を結ぶ", "戦争の講和の画面を開く", () => { getWarsPanel?.()?.select(w.id); wins.open("war"); })); peace.append(r); }
+      mid.append(peace);
     }
-    // 工作（隠密工作は平時にも使える）
-    const ops = el("section", "dip-ops"); ops.append(el("h4", "", "工作"), el("p", "hint", "隠密工作（サイバー攻撃など）を平時に実行します。発覚すると、関係する条約や民意に影響します。"));
-    ops.append(btn("", "@covert 隠密工作を行う", "隠密作戦の窓を開く", () => wins.open("covert")));
-    body.append(ops);
-    // 設定
+    // 右: 条約の一覧
+    const right = el("div", "dip-right");
+    const top = el("div", "dip-top");
+    top.append(el("h4", "", "条約"), btn("primary", "＋ 条約を結ぶ", "種類 → 当事国 → 条項 → 締結", () => { if (focus != null) { draft.picked = new Set([focus]); draft.leader = null; } wins.open("treaty-new"); renderNew(); }));
+    right.append(top);
+    const ts = focus == null ? [] : listTreaties(map).filter((t) => partyIds(t).includes(focus));
+    if (!ts.length) right.append(el("p", "muted", "結んでいる条約はまだありません"));
+    for (const t of ts.slice().reverse()) {
+      const st = treatyStatus(t, map.worldTime), active = st === "active";
+      const card = el("div", `treaty-card ${st}`);
+      const h = el("button", "treaty-row"); h.type = "button";
+      h.append(el("span", "treaty-kind", TREATY_BY_KEY[t.kind].short), el("span", "treaty-title", t.name), el("span", "treaty-meta", `${fmt(t.signedAt)} ・ ${STATUS_LABEL[st]}`));
+      h.addEventListener("click", () => openDetail(t.id));
+      card.append(h, partyChips(map, t, active)); right.append(card);
+    }
     const set = el("section", "dip-settings"); set.append(el("h4", "", "条約の設定"));
     const lab = el("label", "chip-check"); const cb = document.createElement("input"); cb.type = "checkbox"; cb.id = "civil-calls-allies"; cb.checked = simActions.treatySettings().civilCallsAllies;
     cb.addEventListener("change", () => simActions.setTreatySettings({ civilCallsAllies: cb.checked }));
-    lab.append(cb, document.createTextNode(" 内戦（反乱で始まる戦争）でも、同盟国を参戦に招集する（既定はしない）"));
-    set.append(lab);
-    body.append(set);
-    // 敵対・中立の直接設定（同盟は「条約を結ぶ」から。ここは敵対・中立だけ）
-    const gap = editActions.diplomacyMismatchCount?.() ?? 0;
-    const det = el("details", "dip-direct"); det.append(el("summary", "", "敵対・中立の設定"));
-    if (gap > 0) {
-      const warn = el("div", "dip-mismatch");
-      const fix = btn("", "同盟・従属・戦争に合わせて直す", "", () => { editActions.reconcileDiplomacy(); render(); });
-      warn.append(el("span", "hint", `外交表が、同盟・従属・戦争と食い違っている組が ${gap} 件あります。`), fix); det.append(warn);
-    }
-    const pick = el("div", "state-picker"); pick.append(el("span", "field-label", "関係を設定する国"));
-    const f2 = focus ?? states[0]?.i;
-    const sel = selectOf(states.map((s) => [s.i, nm(map, s.i)]), f2);
-    sel.addEventListener("change", () => { focus = +sel.value; render(); });
-    pick.append(sel); det.append(pick);
-    if (f2 != null) det.append(editorPanel.buildDiplomacy(map, f2));
-    body.append(det);
+    lab.append(cb, document.createTextNode(" 内戦でも、同盟国を参戦に招集する（既定はしない）")); set.append(lab); right.append(set);
+    cols.append(left, mid, right); body.append(cols);
   }
   store.subscribe((_s, ch) => { if (["replace", "commit", "undo", "redo"].includes(ch.type)) { if (wins.isOpen("diplomacy")) render(); if (wins.isOpen("treaty-detail")) renderDetail(); } });
   return { body, render };

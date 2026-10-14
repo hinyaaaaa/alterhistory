@@ -17,7 +17,7 @@ import { createRandom } from "../core/random.js";
 
 const DEFAULT_MS_PER_MONTH = (2 * 60 * 1000) / 12; // 既定: 1年=2分 → 1ヶ月=10秒
 
-export function createTimeActions({ store, renderer, simActions = null }) {
+export function createTimeActions({ store, renderer, simActions = null, autoCheck = null }) {
   const rates = createRandom(Date.now() ^ 0x5eed);
   let timer = null;
   let msPerMonth = DEFAULT_MS_PER_MONTH;
@@ -28,6 +28,7 @@ export function createTimeActions({ store, renderer, simActions = null }) {
     const { time, yearChanged } = advanceMonth(map.worldTime);
     store.update((s) => { s.map.worldTime = time; });
     simActions?.advanceWars?.(time); // 戦争中の損害を、月ごとに自動で展開する
+    simActions?.advanceMonthly?.(time); // 指導者の継承・軍隊の編成・自動の出来事（月ごと）
     if (yearChanged) {
       const cmd = planAnnualUpdate(map, rates);
       if (cmd) store.commit(cmd);
@@ -40,6 +41,7 @@ export function createTimeActions({ store, renderer, simActions = null }) {
         try { store.commit(c.command); } catch { break; }
       }
     }
+    if (yearChanged) autoCheck?.onYear?.(time.year); // 5年ごとの自動検査（問題があるときだけ右下に出る）
     renderer.requestRender();
   }
 

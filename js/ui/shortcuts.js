@@ -4,8 +4,9 @@ import { TOOLS } from "./edit-mode.js";
 
 const PAN_STEP = 80;
 // 選択ツール中の数字・文字キーは、レイヤーのオン/オフ（独立なので重ねられる）
-const LAYER_KEYS = { 1: "states", 2: "cultures", 3: "religions", 4: "provinces", 5: "heights", b: "biomes", c: "coast", r: "rivers", t: "routes", u: "burgs", l: "labels" };
-const TOOL_KEYS = { 1: TOOLS.PAINT_STATE, 2: TOOLS.PAINT_CULTURE, 3: TOOLS.PAINT_RELIGION, 4: TOOLS.PAINT_PROVINCE, 5: TOOLS.PAINT_BIOME, 6: TOOLS.ADD_BURG, 7: TOOLS.ADD_MARKER };
+const LAYER_KEYS = { 1: "states", 2: "cultures", 3: "religions", 4: "provinces", 5: "heights", b: "biomes", c: "coast", r: "rivers", t: "routes", u: "burgs" };
+// 地図編集でできることは、気候帯・標高・マーカーだけ（v2.4.0）。国・属州・都市は国家タブから、文化・宗教は一覧から
+const TOOL_KEYS = { 6: TOOLS.PAINT_BIOME, 7: TOOLS.PAINT_HEIGHT, 8: TOOLS.ADD_MARKER };
 
 export function initShortcuts({ store, actions, openFileDialog, editMode, editToolbar, timeActions, panels }) {
   document.addEventListener("keydown", (e) => {
@@ -41,9 +42,9 @@ export function initShortcuts({ store, actions, openFileDialog, editMode, editTo
 
     if (key === "v") { editMode?.setTool(TOOLS.SELECT); editToolbar?.sync(); return; }
     if (key === "[" || key === "]") { const cur = Number(byId("tool-radius").value); const next = cur + (key === "]" ? 10 : -10); editMode?.setRadius(next); byId("tool-radius").value = String(Math.max(10, Math.min(200, next))); return; }
-    // 選択ツール中の 1〜5 はレイヤーの切替、それ以外のツール中の 1〜7 は工具の切替
+    // 選択ツール中の 1〜5 はレイヤーの切替、6〜8 は工具の切替（気候帯・標高・マーカー）。それ以外のツール中も 6〜8 で切り替わる
     if (editMode && editMode.tool !== TOOLS.SELECT && key in TOOL_KEYS) { editMode.setTool(TOOL_KEYS[key]); editToolbar?.fillTargets(TOOL_KEYS[key]); editToolbar?.sync(); return; }
-    if (editMode && editMode.tool === TOOLS.SELECT && (key === "6" || key === "7")) { editMode.setTool(TOOL_KEYS[key]); editToolbar?.fillTargets(TOOL_KEYS[key]); editToolbar?.sync(); return; }
+    if (editMode && editMode.tool === TOOLS.SELECT && (key === "6" || key === "7" || key === "8")) { editMode.setTool(TOOL_KEYS[key]); editToolbar?.fillTargets(TOOL_KEYS[key]); editToolbar?.sync(); return; }
     if (key === "f" || key === "0") actions.fit();
     else if (key === "+" || key === "=") actions.zoomBy(1.25);
     else if (key === "-" || key === "_") actions.zoomBy(1 / 1.25);

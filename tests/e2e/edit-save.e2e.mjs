@@ -25,7 +25,9 @@ try {
   check("編集パネルが開く", await page.locator("#edit-panel").isVisible());
   const undoDisabled = async () => !(await page.evaluate(() => window.alterhistory.store.canUndo()));
   check("編集前は Undo できない", await undoDisabled());
-  await page.locator('#edit-panel [data-tool="paint:state"]').click();
+  // 国を塗るのは、国家タブの「領土を塗る」から（地図編集のボタンは 気候帯・標高・マーカー だけ）
+  check("地図編集のボタンは 選択・気候帯・標高・マーカー の4つ", (await page.locator("#edit-panel [data-tool]").evaluateAll((bs) => bs.map((b) => b.dataset.tool).join())) === "select,paint:biome,paint:height,add:marker");
+  await page.evaluate(() => { const s = window.alterhistory.store.getState().map.pack.states.find((x) => x && x.i > 0 && !x.removed); window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:state", target: s.i } })); });
   const b = await mapBox();
   const px = () => page.evaluate(() => { const c = document.getElementById("map-canvas"); return [...c.getContext("2d").getImageData(Math.round(0.33 * c.width), Math.round(0.5 * c.height), 1, 1).data].join(","); });
   const px0 = await px();
@@ -43,11 +45,22 @@ try {
   check("Redo でやり直せる（見た目も）", !(await undoDisabled()) && (await px()) === pxPainted);
   await page.keyboard.press("Control+z"); await page.waitForTimeout(250);
   check("Ctrl+Z でも見た目が戻る", (await px()) === px0);
+  // 標高の調整: ドラッグで標高が上がり、Undo で戻る（水域は変わらない）
+  await page.locator('#edit-panel [data-tool="paint:height"]').click();
+  const hSum = () => page.evaluate(() => { const h = window.alterhistory.store.getState().map.geometry.pack.h; let land = 0, water = 0; for (let i = 0; i < h.length; i++) { if (h[i] >= 20) land += h[i]; else water++; } return [land, water]; });
+  const [land0, water0] = await hSum();
+  await page.mouse.move(b.x + b.width * 0.3, b.y + b.height * 0.5);
+  await page.mouse.down(); await page.mouse.move(b.x + b.width * 0.45, b.y + b.height * 0.5, { steps: 8 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  const [land1, water1] = await hSum();
+  check("標高ツールで塗ると、陸の標高が上がる（水域は変わらない）", land1 > land0 && water1 === water0, `${land0}→${land1}`);
+  await page.keyboard.press("Control+z"); await page.waitForTimeout(250);
+  check("標高の調整も Undo で戻る", (await hSum())[0] === land0);
   await page.locator('#edit-panel [data-tool="select"]').click();
   await page.mouse.dblclick(b.x + b.width * 0.3, b.y + b.height * 0.45); // 単クリックは何もしない仕様。ダブルクリックで国家を開く
   await page.waitForTimeout(300);
   await shot(page, "32-select-state");
-  check("選択ツールで国をダブルクリックすると詳細ウィンドウが出る", await page.locator("#sidebar").isVisible());
+  check("選択ツールで国をダブルクリックすると、国家タブの詳細が出る", await page.locator('[data-win="nation"] .nation-detail').isVisible());
 
   console.log("=== 確認ダイアログ（実物の <dialog>）===");
   await page.keyboard.press("Escape");

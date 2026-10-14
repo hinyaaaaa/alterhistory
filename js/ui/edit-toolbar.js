@@ -6,6 +6,7 @@
 // ここ（地図編集モード）にあるのは、あくまで「どのセルをどの属州にするか」という塗り分け作業だけ。
 // 国家・文化・宗教は地図全体の独立した色分けなので、引き続きここから新規作成できる。
 import { TOOLS } from "./edit-mode.js";
+import { HEIGHT_MODES } from "../core/edit/paint.js";
 import { PAINT_KINDS } from "../core/edit/paint.js";
 import { byId } from "./dom.js";
 import { promptDialog } from "./dialogs.js";
@@ -28,7 +29,8 @@ export function initEditToolbar({ store, editMode, editActions, openSetup }) {
     [TOOLS.PAINT_CULTURE]: "ドラッグして文化を塗る（「＋ 新しい文化を作る」で新規作成もできる）",
     [TOOLS.PAINT_RELIGION]: "ドラッグして宗教を塗る（「＋ 新しい宗教を作る」で新規作成もできる）",
     [TOOLS.PAINT_PROVINCE]: "ドラッグして属州を塗る（新しい属州は、国家タブの「属州」から作れます。属州はその国家の土地にしか塗れません）",
-    [TOOLS.PAINT_BIOME]: "ドラッグして地形を塗る（水域は塗れません）",
+    [TOOLS.PAINT_BIOME]: "ドラッグして気候帯・地形を塗る（水域は塗れません）",
+    [TOOLS.PAINT_HEIGHT]: "ドラッグして標高を調整する（上げる・下げる・ならす。水域は変わりません）",
     [TOOLS.ADD_BURG]: "地図をクリックして都市を置く",
     [TOOLS.ADD_MARKER]: "地図をクリックしてマーカーを置く",
   };
@@ -41,9 +43,14 @@ export function initEditToolbar({ store, editMode, editActions, openSetup }) {
     targetSel.replaceChildren();
     const kind = tool.startsWith("paint:") ? tool.slice(6) : null;
     // 旅・ゾーン画面が使う「ゾーンを塗る」など、この欄が扱わない塗りツールのときは対象欄を隠す
-    if (!map || !kind || (kind !== "biome" && !PAINT_KINDS[kind])) { targetGroup.hidden = true; return; }
+    if (!map || !kind || (kind !== "biome" && kind !== "height" && !PAINT_KINDS[kind])) { targetGroup.hidden = true; return; }
     targetGroup.hidden = false;
 
+    if (kind === "height") {
+      for (const [k, v] of Object.entries(HEIGHT_MODES)) { const o = document.createElement("option"); o.value = k; o.textContent = v.label; targetSel.append(o); }
+      editMode.setTarget(Number(targetSel.value));
+      return;
+    }
     if (kind === "biome") {
       for (const b of map.biomesData) { if (!b || b.i === 0) continue; const o = document.createElement("option"); o.value = b.i; o.textContent = b.name; targetSel.append(o); }
       return;

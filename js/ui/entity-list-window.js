@@ -1,10 +1,11 @@
 // 国家・文化・宗教・属州の「一覧ウィンドウ」。設定メニューから開く。
 //   ・横タブは使わない（種類ごとに別のウィンドウ）
-//   ・行を押すと詳細の設定ウィンドウが開く。🔍 は地図上で強調（ズームしない）、🗑 は削除
+//   ・行を押すと詳細の設定ウィンドウが開く。🗑 は削除（虫眼鏡の強調は廃止）
 //   ・ランダム生成のような誤操作しやすいボタンは、この一覧には置かない
 import { alertDialog, confirmDialog } from "./dialogs.js";
 import { el } from "./kit.js";
-const LIST_KEY = { state: "states", culture: "cultures", religion: "religions", province: "provinces" };
+// 国家の一覧は国家タブ（nation-window.js）、属州は国家タブの「傀儡・属州」に移した（v2.4.0）。国家の削除機能は無い。ここは文化と宗教だけ
+const LIST_KEY = { culture: "cultures", religion: "religions" };
 const CELL_KEY = { state: "state", culture: "culture", religion: "religion", province: "province" };
 export const KIND_LABEL = { state: "国家", culture: "文化", religion: "宗教", province: "属州" };
 export const KIND_ICON = { state: "state", culture: "culture", religion: "religion", province: "province" };
@@ -58,9 +59,8 @@ export function initEntityLists({ store, wins, panels, editActions, highlight, b
       const main = el("button", "ent-main", e.fullName ?? e.name); main.type = "button"; main.title = "詳細を設定する";
       main.addEventListener("click", () => panels.openEntity(kind, e.i));
       const meta = el("span", "ent-meta", `${cells}セル`);
-      const look = el("button", "ent-btn", "@search"); look.type = "button"; look.title = "地図上で強調する（ズームしません）";
-      look.addEventListener("click", () => highlight?.show(kind, e.i));
-      row.append(chip, main, meta, look);
+      // 虫眼鏡で赤く光らせる動きは廃止（v2.4.0）。強調は、国家タブの詳細設定の欄にカーソルを当てたときだけ
+      row.append(chip, main, meta);
       const del = el("button", "ent-btn danger", "@trash"); del.type = "button"; del.title = "削除する（元に戻せます）";
       del.addEventListener("click", async () => {
         if (!(await confirmDialog(`${KIND_LABEL[kind]}「${e.fullName ?? e.name}」を削除します。属していた土地は無所属になります。\n（元に戻せます）`, { okLabel: "削除する", danger: true }))) return;

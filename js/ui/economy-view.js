@@ -116,5 +116,13 @@ export function createEconomyView({ store, editActions, builderActions }) {
     c.append(el("p", "b-hint", "産物は地図（バイオーム・人口・海岸）から計算した簡易モデルです。戦争中の国どうしは取引しません。"));
   }
 
-  return { render, leave() { selected = null; builderActions.showTradeLines(null); } };
+  /** 国家タブの「内政・税」に埋め込む、1国分の財政（税率・国庫・産物・貿易相手） */
+  function stateFinance(stateId) {
+    const map = store.getState().map, s = map?.pack.states[stateId];
+    if (!isLive(s)) return el("p", "b-hint", "国家が見つかりません。");
+    const eco = builderActions.economy(); const info = eco?.trade.states.get(stateId);
+    if (!eco || !info) return el("p", "b-hint", "経済を計算できません。");
+    return detail(map, eco, s, editActions.getFinance(stateId), info);
+  }
+  return { render, stateFinance, leave() { selected = null; builderActions.showTradeLines(null); } };
 }

@@ -9,6 +9,7 @@ import { isNativeBytes, parseNativeJson } from "./native-map.js";
 import { validateMap } from "../core/model.js";
 import { checkIntegrity, checkHistoryRefs } from "../core/edit/integrity.js";
 import { diplomacyMismatches } from "../core/edit/relations.js";
+import { migrateToV240 } from "../core/edit/migrate.js";
 
 export class LoadError extends Error {
   constructor(message, cause) { super(message); this.name = "LoadError"; this.cause = cause; }
@@ -55,6 +56,7 @@ export async function loadFromBytes(bytes, Delaunator) {
 
   // 旧 ALTERHISTORY 形式（Azgaar の .map に拡張行を足したもの）は、末尾の拡張行から独自データを取り出す
   if (!native) parsed.warnings.push(...attachExtension(parsed.map));
+  migrateToV240(parsed.map);
   parsed.warnings.push(...inspectLoaded(parsed.map));
   return parsed;
 }

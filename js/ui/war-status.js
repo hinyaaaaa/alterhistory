@@ -8,13 +8,16 @@ const total = (s) => s.land + s.sea + s.air;
 const names = (map, ids) => ids.map((id) => map.pack.states[id]?.name ?? "?").join("・");
 
 export function initWarStatus({ store, wins, panels }) {
+  // 右下の戦争状況の高さを CSS 変数に出す。エラー表示（右下）は、この上に積んで重ならないようにする（v2.4.0）
   const root = document.getElementById("war-status");
   if (!root) throw new Error("#war-status が見つかりません（index.html を確認してください）");
+  const syncOffset = () => document.documentElement.style.setProperty("--wars-h", `${root.hidden ? 0 : Math.ceil(root.getBoundingClientRect().height) + 10}px`);
+  if (typeof ResizeObserver !== "undefined") new ResizeObserver(syncOffset).observe(root);
   function render(state) {
     const map = state?.map;
     const wars = map ? activeWars(map) : [];
     root.hidden = wars.length === 0;
-    if (!wars.length) { root.replaceChildren(); return; }
+    if (!wars.length) { root.replaceChildren(); syncOffset(); return; }
     const head = document.createElement("div"); head.className = "wars-head";
     head.innerHTML = "<b>進行中の戦争</b>"; const n = document.createElement("span"); n.textContent = String(wars.length); head.append(n);
     const list = [head];
@@ -32,6 +35,7 @@ export function initWarStatus({ store, wins, panels }) {
       list.push(item);
     }
     root.replaceChildren(...list);
+    syncOffset();
   }
   store.subscribe(render); render(store.getState());
   return { render: () => render(store.getState()) };
