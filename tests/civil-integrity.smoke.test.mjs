@@ -56,8 +56,8 @@ const r = simActions.rebel({ provinceIds: [prov.i], name: "反乱国", civil: tr
 const warId = r.warId;
 check("反乱で内戦が始まる", warId != null && M().ext.data.wars.find((w) => w.id === warId).type === "civil");
 wins.open("war"); await sleep(60);
-const sec = q(".war-civil");
-check("戦争の窓に「内戦の決着」欄があり、内戦が出る", !!sec && sec.textContent.includes("鎮圧する") && sec.textContent.includes("独立を承認する"));
+const ww0 = q('[data-win="war"]');
+check("戦争の窓に「内戦の決着」欄・「作戦」欄は無く、内戦そのものは戦争タブに出る（v2.5.0）", !q(".war-civil") && !q(".war-ops") && !ww0.textContent.includes("進行中の内戦はありません") && ww0.textContent.includes("反乱国"));
 const other = M().pack.states.find((s) => s && s.i > 0 && !s.removed && s.i !== r.id && s.i !== parent).i;
 check("外国の支援を、国の選択だけで記録できる（条約の一種）", simActions.recordCivilSupport(warId, other, "rebel") != null && M().ext.data.treaties.some((t) => t.kind === "support" && t.originWar === warId && t.parties[1].state === r.id));
 const provCells = () => M().pack.cells.province.filter((p) => p === prov.i).length;

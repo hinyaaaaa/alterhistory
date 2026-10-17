@@ -855,3 +855,11 @@ button.has-ico { display: inline-flex; align-items: center; justify-content: cen
 /* ドクトリン: 上限に達した節（A7） */
 .np-node.capped { border-style: dashed; border-color: var(--warn, var(--brass)); }
 .np-capped-note { color: var(--warn, var(--brass-bright)); }
+
+/* 外交ウィンドウの3タブ（v2.5.0） */
+.dip-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dip-tabs { flex: 1 1 auto; }
+.dip-focus { max-width: 200px; }
+.dip-wide { width: 100%; }
+.dip-others { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line, #ccc4); }
+.nation-succ-why { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 6px 0; }

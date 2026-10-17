@@ -105,8 +105,8 @@ const ww = open("war");
 check("戦争ウィンドウに戦況バーがある", ww.querySelectorAll(".wo-bar-wrap").length === 5);
 window.alterhistory.panels.diplomacy.closePeace(); window.alterhistory.panels.diplomacy.render(); // 講和モードを閉じて、条約一覧へ戻す
 const dw = open("diplomacy");
-check("外交一覧は同盟・敵対・中立だけで、Neutrals は出ない", !dw.textContent.includes("Neutrals") && dw.textContent.includes("敵対"));
-check("外交は3列（国のリスト・関係カード・条約一覧）で、外交の表は無い", dw.querySelectorAll(".dip-left .dip-row").length >= 2 && !!dw.querySelector(".dip-mid") && !!dw.querySelector(".dip-right") && !dw.querySelector(".diplomacy-matrix"));
+check("外交は3タブ（存在する同盟・破棄された同盟・講和条約）で、Neutrals は出ない", !dw.textContent.includes("Neutrals") && dw.textContent.includes("存在する同盟") && dw.textContent.includes("破棄された同盟") && dw.textContent.includes("講和条約"));
+check("外交に国の絞り込み欄と条約の一覧があり、外交の表は無い", !!dw.querySelector(".dip-focus") && !!dw.querySelector(".dip-right") && !dw.querySelector(".diplomacy-matrix"));
 const tn = open("treaty-new");
 check("「条約を結ぶ」で、同盟の拘束力（強・中・弱）を選べる", tn.querySelectorAll("select").length >= 3 && tn.textContent.includes("拘束力") && tn.textContent.includes("強"));
 

@@ -251,11 +251,11 @@ export function createSimActions({ store, renderer }) {
     /** 戦争開始前の見積もり（招集した部隊でのバー用）。副作用なし */
     previewWar(attackers, defenders, muster, type) { return withMap((map) => planWarPreview(map, { attackers, defenders, muster, type })); },
     /** 「戦争開始」：招集した部隊で即判定し、戦闘の記録を自動生成する。結果 { id, name, result, joined, endsAt, battles, collapsed } */
-    declareWarInstant(attackers, defenders, muster = null, type = "conventional", types = null) {
+    declareWarInstant(attackers, defenders, muster = null, type = "conventional", types = null, name = "") {
       return withMap((map) => {
         let out;
         safeRun("戦争開始", () => {
-          const r = planDeclareAndResolveWar(map, { attackers, defenders, date: currentDate(), rnd, muster, type, types });
+          const r = planDeclareAndResolveWar(map, { attackers, defenders, date: currentDate(), rnd, muster, type, types, name });
           let collapsed = [];
           const cmd = joinCommands(r.command, planWarBreach(map, attackers, defenders, currentDate())); // 不可侵条約への違約（あれば）
           atomic(r.command.label ?? "戦争開始", () => {

@@ -17,7 +17,7 @@ import { BALANCE } from "../sim/balance.js";
 import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
 import { partitionParcels } from "./parcels.js";
-import { monthlyWarLoad, resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, warTypeKey, escalationPenalty, applyVictoryConditions, planSupportDeltas, supportOf, EXHAUST_SUPPORT, WAR_TYPES } from "../sim/war-engine.js";
+import { monthlyWarLoad, resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, rollCampaignBattle, previewWar, reevaluateWar, warTypeOf, warTypeKey, escalationPenalty, applyVictoryConditions, planSupportDeltas, supportOf, EXHAUST_SUPPORT, WAR_TYPES } from "../sim/war-engine.js";
 import { officialName } from "../names.js";
 import { newFx, rollWarMonth, fxParts, addMorale, addSupport, addTreasury, mulIndustry, mulPop, mulTroops } from "../sim/war-events.js";
 import { regimentsOf } from "../sim/military.js";
@@ -85,7 +85,27 @@ export function planDeclareWar(map, { name, attackers, defenders, date }) {
  * 結果（勝敗・制海/制空/陸軍/士気の比較）は war.result に保存され、講和ウィンドウが読む。
  * @returns {{command, id, result}}
  */
-export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd, muster = null, type = "conventional", types = null }) {
+/** 内戦への外国の介入。元の国の同盟・従属の国は、利害が合えば（確率で）元の国側に付く。元の国と交戦中の国は、反乱側に付くことがある */
+function civilIntervention(map, a0, d0, rnd) {
+  const ex = expandWithAllies(map, a0, d0);
+  const A = [...a0], D = [...d0], joined = [];
+  for (const j of ex.joined) {
+    if (rnd.next() >= 0.6) continue;
+    (j.side === "attacker" ? A : D).push(j.id);
+    joined.push({ ...j, alliance: `${j.alliance}（内政干渉）` });
+  }
+  const parent = new Set(d0);
+  for (const w of activeWars(map)) {
+    const foes = w.attackers.some((x) => parent.has(x)) ? w.defenders : w.defenders.some((x) => parent.has(x)) ? w.attackers : [];
+    for (const id of foes) {
+      if (A.includes(id) || D.includes(id) || !isLive(map.pack.states[id]) || rnd.next() >= 0.5) continue;
+      A.push(id); joined.push({ id, side: "attacker", alliance: "元の国の敵国として反乱側を支援（内政干渉）" });
+    }
+  }
+  return { attackers: A, defenders: D, joined };
+}
+
+export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd, muster = null, type = "conventional", types = null, name: explicitName = "" }) {
   const a0 = [...new Set(attackers)], d0 = [...new Set(defenders)];
   if (!a0.length || !d0.length) throw new Error("攻撃側・防御側とも1カ国以上必要です");
   for (const id of [...a0, ...d0]) if (!isLive(map.pack.states[id])) throw new Error(`国家#${id}は存在しません`);
@@ -94,8 +114,8 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
   const T = warTypeOf(types && type !== "civil" ? warTypeKey(types, a0, d0, type) : type);
   // 同盟の拘束力に従って、同盟国が自動で参戦する（参戦した国は全部隊で戦う）
   // 内戦は、既定では同盟の参戦招集の対象外（設定で変えられる）
-  const noCall = T.key === "civil" && !getTreatySettings(map).civilCallsAllies;
-  const { attackers: a, defenders: d, joined } = noCall ? { attackers: a0, defenders: d0, joined: [] } : expandWithAllies(map, a0, d0);
+  // v2.5.0: 内戦への外国の介入は、システムが利害で判断する（同盟国は一部だけ動き、元の国の敵国は反乱側に付くことがある）
+  const { attackers: a, defenders: d, joined } = T.key === "civil" ? civilIntervention(map, a0, d0, rnd) : expandWithAllies(map, a0, d0);
   // 参戦した国は、自分の側の先頭の国と同じ形態にする（自分で選んでいればそれを使う）
   const typesN = {};
   if (types && T.key !== "civil") for (const [ids, lead] of [[a, a0[0]], [d, d0[0]]]) for (const id of ids) typesN[id] = types[id] ?? types[lead] ?? type;
@@ -125,17 +145,21 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
   const names0 = snapshotNames(map, [...a, ...d]);
   for (const b of battles) Object.assign(b, { attackerName: names0[b.attackerState], defenderName: names0[b.defenderState], aPower: sidePower(result.aStrength), dPower: sidePower(result.dStrength), powerBasis: "war-start" });
   // 戦争の名前は、実際に戦いが行われた場所から付ける
-  const name = nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key });
+  const given = String(explicitName ?? "").trim();
+  if (given && warNameTaken(map, given)) throw new Error(`「${given}」という戦争名は既に使われています`);
+  const name = given || nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key });
   const war = {
     id: nextWarId(map), name, type: T.key, ...(Object.keys(typesN).length ? { types: typesN } : {}), attackers: a, defenders: d, names: names0, startedAt: date, endsAt, durationMonths: months, endedAt: null,
     progress: 0, monthsDone: 0, events: [], omens: [], edgeShift: 0, withdrawn: {}, // progress: 経過月数 ÷ 目安の月数（1を超えて長引くこともある）。終わりは決まっておらず、講和条約を結んだ月が終戦の月になる
-    joinedAllies: joined, battles: [], advantage: {}, muster: cleanMuster, // 戦闘は記録するだけ。開戦時に「想定の戦闘」は作らない（v2.4.0）
+    joinedAllies: joined, battles: [], advantage: {}, muster: cleanMuster, // 戦闘は、戦争の進行とともにシステムが自動で記録する（v2.5.0）。最初の戦いは、開戦と同時に起きる
     result: {
       winner: result.winner, decisiveness: result.decisiveness, warScore: result.warScore, type: T.key, compare: result.compare, aStrength: result.aStrength, dStrength: result.dStrength,
       noise: result.noise, doctrine: result.doctrine, casualties: result.casualties, moraleDelta: result.moraleDelta, popLossShare: result.popLossShare, losses: result.losses,
       supportDelta: supportDelta2, victory: vic.victory, capitalFall: vic.capitalFall,
     },
   };
+  const first = rollCampaignBattle(map, { ...war, monthsDone: 0 }, date, rnd);
+  if (first) war.battles = [first];
   const parts = [];
   parts.push(...diplomacyParts(map, crossPairs(a, d), "Enemy")); // 戦争をしたら敵対
   const before = listWars(map);
@@ -253,7 +277,7 @@ export function planAdvanceWars(map, date, rnd = null) {
     const done0 = w.monthsDone ?? Math.round((w.progress ?? 0) * dur);
     const el = monthsBetween(w.startedAt, date);
     if (el <= done0) return w;
-    let cur = { ...w, events: [...(w.events ?? [])], omens: [...(w.omens ?? [])], edgeShift: w.edgeShift ?? 0, burden: Object.fromEntries(Object.entries(w.burden ?? {}).map(([k, v]) => [k, { ...v }])) };
+    let cur = { ...w, battles: [...(w.battles ?? [])], events: [...(w.events ?? [])], omens: [...(w.omens ?? [])], edgeShift: w.edgeShift ?? 0, burden: Object.fromEntries(Object.entries(w.burden ?? {}).map(([k, v]) => [k, { ...v }])) };
     const last = Math.min(el, done0 + 24); // 長く放置した場合でも、一度に処理するのは2年分まで
     for (let k = done0 + 1; k <= last; k++) {
       addProgressFx(map, cur, fx, effExp((k - 1) / dur), effExp(k / dur));
@@ -262,6 +286,13 @@ export function planAdvanceWars(map, date, rnd = null) {
         const rr = rollWarMonth(map, cur, addMonths(w.startedAt, k), rnd, fx);
         if (rr.events.length) { cur.events.push(...rr.events); touched.push(w.id); }
         cur.omens = rr.omens; cur.edgeShift += rr.edgeShift; if (rr.mediator != null) cur.mediator = rr.mediator;
+        // 作戦行動：進軍して戦いが起きる（戦いの名前・場所は自動）。3か月戦いが無ければ、必ず1つ起きる
+        const lastB = cur.battles[cur.battles.length - 1], lastAt = lastB?.date ? monthsBetween(w.startedAt, lastB.date) : 0;
+        const chance = cur.type === "limited" ? 0.3 : cur.type === "asymmetric" ? 0.5 : 0.4;
+        if (k - lastAt >= 3 || rnd.next() < chance) {
+          const b = rollCampaignBattle(map, { ...cur, monthsDone: k }, addMonths(w.startedAt, k), rnd);
+          if (b) cur.battles.push(b);
+        }
       }
     }
     cur.monthsDone = last; cur.progress = last / dur;

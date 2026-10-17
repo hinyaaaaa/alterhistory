@@ -1,5 +1,5 @@
 // 年表ウィンドウ（ハブ →「年表」）。
-//   ・歴史の出来事を、全件、時系列で見る。種類・国・年で絞り込める。件数は削らない。
+//   ・歴史の出来事を、全件、新しい順で見る。種類・国・年で絞り込める。件数は削らない。
 //   ・項目を押すと、地図がその場所へ移る。
 //   ・件数が多くても重くならないよう、画面に見える行だけを描く（仮想スクロール）。行の数は減らさない。
 import { buildTimeline } from "../io/chronicle.js";
@@ -76,7 +76,7 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
     const map = store.getState().map; mapRef = map;
     if (!map) { all = []; shown = []; count.textContent = "地図を開いてください"; spacer.style.height = "0px"; rowsHost.replaceChildren(); return; }
     fillSelects(map);
-    all = buildTimeline(map);
+    all = buildTimeline(map).reverse(); // 新しい順（v2.5.0）。データは古い順のまま持ち、表示だけ逆にする
     apply();
   }
   function apply() {

@@ -10,7 +10,7 @@
 import { planAddEntity, planAddProvince, pickNewColor } from "../core/edit/entities.js";
 import { planSetEntityProfile, planSetOrigins } from "../core/edit/profile.js";
 import { planPaint } from "../core/edit/paint.js";
-import { pickAutoTerritory, pickCapitalCell, countFreeLand, TERRITORY_SIZES } from "../core/edit/territory.js";
+import { pickAutoTerritory, pickAutoProvince, pickCapitalCell, countFreeLand, TERRITORY_SIZES } from "../core/edit/territory.js";
 import { planAddBurg } from "../core/edit/burgs.js";
 import { suggestName as planSuggestName } from "../core/edit/naming.js";
 import { planLogEvent } from "../core/edit/history-log.js";
@@ -109,6 +109,16 @@ export function createSetupActions({ store, renderer }) {
           if (!pick.cells.length) warning = "no-free-land";
           else {
             const p = planPaint(mapOf(), { kind, target: id, cells: pick.cells });
+            if (p.command) { commit(p.command); claimed = p.report?.changed ?? pick.cells.length; }
+          }
+        }
+
+        // 属州の面積：既定は自動（持ち主の国の、まだ属州に入っていない土地から決める）。"later" ならあとで塗る
+        if (kind === "province" && spec.territory !== "later") {
+          const pick = pickAutoProvince(mapOf(), { stateId: Number(spec.stateId), rnd, size: spec.territory && spec.territory !== "auto" ? spec.territory : "auto" });
+          if (!pick.cells.length) warning = "no-free-land";
+          else {
+            const p = planPaint(mapOf(), { kind: "province", target: id, cells: pick.cells });
             if (p.command) { commit(p.command); claimed = p.report?.changed ?? pick.cells.length; }
           }
         }

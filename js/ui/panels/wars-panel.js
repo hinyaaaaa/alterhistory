@@ -58,23 +58,13 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getD
     const left = el("div", "war-prep-left"), right = el("div", "war-prep-right");
     const go = el("button", "danger war-go", "@war 戦争開始");
     go.type = "button";
-    const typeSel = document.createElement("select");
-    for (const T of Object.values(WAR_TYPES).filter((x) => !x.civilOnly)) {
-      const o = document.createElement("option");
-      o.value = T.key;
-      o.textContent = T.label;
-      o.selected = draft.type === T.key;
-      typeSel.append(o);
-    }
-    typeSel.addEventListener("change", () => {
-      draft.type = typeSel.value; draft.types = {};
-      render();
-    });
-    left.append(el("h4", "", "① 戦争の形態（国ごとに選べる）"), typeSel, el("p", "hint", WAR_TYPES[draft.type].desc));
+    const nameIn = document.createElement("input"); nameIn.className = "war-name-input"; nameIn.dataset.field = "war-name"; nameIn.placeholder = "例: 日露戦争（空欄なら自動で付けます）"; nameIn.value = draft.name ?? "";
+    nameIn.addEventListener("input", () => { draft.name = nameIn.value; });
+    left.append(el("h4", "", "① 戦争の名前"), nameIn, el("p", "hint", "戦争の大きな枠組みだけを決めます。個々の戦い（〇〇の戦い、〇〇沖海戦など）は、システムが進軍させて自動で名前を付け、記録します。"));
     // 国ごとの形態。双方が食い違ってもよい（例: A国は総力戦、B国は非対称戦）
     const picked = [...draft.attackers, ...draft.defenders];
     if (picked.length) {
-      const per = el("div", "war-types");
+      const per = el("div", "war-types"); per.append(el("h4", "", "参戦国ごとの戦争の形態"));
       for (const id of picked) {
         const row = el("label", "war-type-row"); row.append(el("span", "", `${stateName(map, id)}（${draft.attackers.has(id) ? "攻撃側" : "防御側"}）`));
         const sel = document.createElement("select");
@@ -139,14 +129,14 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getD
     }
     const joined = draft.attackers.size && draft.defenders.size ? simActions.previewWar([...draft.attackers], [...draft.defenders], draft.muster, draft.type)?.joined : null;
     if (joined?.length) right.append(el("p", "hint", `同盟・従属の拘束により参戦: ${joined.map((j) => `${stateName(map, j.id)}（${j.alliance}）`).join("、")}`));
-    right.append(el("p", "hint", "「戦争開始」で戦闘が始まり、時間とともに損害・ハプニングが積み重なります。終わりは決まっていません。いつでも講和条約を結べます（結んだ月が終戦の月です）。"));
+    right.append(el("p", "hint", "「戦争開始」で戦いが始まり、時間とともにシステムが自動で進軍・交戦させ、戦いの名前も付けて記録します。終わりは決まっていません。いつでも講和条約を結べます（結んだ月が終戦の月です）。"));
     go.disabled = !draft.attackers.size || !draft.defenders.size;
     // 不可侵条約への違約: 宣戦の前に警告を出す（実行すると、条約は破棄され、民意と信用が下がる）
     const breaches = draft.attackers.size && draft.defenders.size ? simActions.treatyWarnings([...draft.attackers], [...draft.defenders]) : [];
     if (breaches.length) { const warn = el("p", "war-breach", `警告: 不可侵条約に違反します（${[...new Set(breaches.map((b) => b.treaty))].join("、")}）。開戦すると条約は破棄され、攻める国の民意と信用が下がります。`); right.append(warn); }
     go.addEventListener("click", async () => {
       if (breaches.length && !(await confirmDialog(`不可侵条約「${[...new Set(breaches.map((b) => b.treaty))].join("、")}」に違反する宣戦です。\n条約は破棄され、攻める国の民意と信用が下がります。開戦しますか？`, { danger: true, okLabel: "違約して開戦する" }))) return;
-      const out = simActions.declareWarInstant([...draft.attackers], [...draft.defenders], draft.muster, draft.type, Object.fromEntries([...draft.attackers, ...draft.defenders].map((id) => [id, draft.types[id] ?? draft.type])));
+      const out = simActions.declareWarInstant([...draft.attackers], [...draft.defenders], draft.muster, draft.type, Object.fromEntries([...draft.attackers, ...draft.defenders].map((id) => [id, draft.types[id] ?? draft.type])), draft.name);
       if (!out) return;
       selected = out.id;
       creating = false;
@@ -219,7 +209,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getD
     const reached = (d) => !d || w.endedAt || monthIdx(d) <= monthIdx(now);
     const shown = events.filter((e) => reached(e.date)).sort((x, y) => (x.date ? monthIdx(x.date) : 0) - (y.date ? monthIdx(y.date) : 0));
     lg.append(el("h4", "", "経過の記録"));
-    if (!shown.length) lg.append(el("p", "muted", "まだ記録はありません。時間が進むと、戦闘や出来事が記録されます。"));
+    if (!shown.length) lg.append(el("p", "muted", "まだ記録はありません。時間が進むと、システムが進軍させ、戦いや出来事を自動で記録します。"));
     const log = el("ol", "battle-log");
     for (const e of shown) {
       const li = el("li", e.kind ? `ev-${e.kind}` : "");

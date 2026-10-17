@@ -6,21 +6,14 @@ import { BALANCE, BALANCE_META, BALANCE_DEFAULTS } from "../core/sim/balance.js"
 import { planSetBalance } from "../core/edit/balance-setting.js";
 import { el } from "./kit.js";
 import { initDiplomacyWindow } from "./diplomacy-window.js";
-import { createCivilSection } from "./civil-section.js";
 
 export function initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }) {
   const wins = initWindows();
   const noMap = () => el("p", "muted", "地図を開いてください");
-  // 戦争: 準備→開始→経過→講和。「作戦」欄に核作戦を置く（核の保有・技術は軍事の窓で持つ）。経過は年表へのリンクを主にする
+  // 戦争: 準備→開始→経過→講和（v2.5.0: 「作戦」欄・内戦の決着欄は廃止）
   const warBody = el("div", "war-win-body");
-  const warOps = el("section", "war-ops"); warOps.append(el("h4", "", "作戦"));
-  warOps.append(el("p", "hint", "核を保有する国だけが実行できます。戦争の士気・民意・戦況に影響します。保有数は、国家タブの「軍事」で設定します。"));
-  const nb = el("button", "", "@nuclear 核作戦を立案・実行する"); nb.type = "button"; nb.addEventListener("click", () => wins.open("nuclear"));
-  const tb = el("button", "", "@timeline 戦争の経過を年表で見る"); tb.type = "button"; tb.addEventListener("click", () => { wins.open("timeline"); window.dispatchEvent(new CustomEvent("timeline-filter", { detail: { kind: "war" } })); });
-  const opsRow = el("div", "diplomacy-row"); opsRow.append(nb, tb); warOps.append(opsRow);
-  const civil = createCivilSection({ store, simActions: panels.simActions });
-  warBody.append(byId("tab-wars"), warOps, civil.box);
-  wins.register("war", { title: "戦争", width: 820, body: warBody, onOpen: () => { panels.wars.render(); civil.render(); } });
+  warBody.append(byId("tab-wars"));
+  wins.register("war", { title: "戦争", width: 820, body: warBody, onOpen: () => { panels.wars.render(); } });
   // 外交: 同盟・不可侵・協力・従属・講和は、すべて「条約」。条約の窓は ui/diplomacy-window.js
   const dip = initDiplomacyWindow({ store, wins, simActions: panels.simActions, getWarsPanel: () => panels.wars, getWarOutcome: () => warOutcome });
   panels.diplomacy = dip; // 戦争タブの「講和条約を結ぶ」から、外交ウィンドウの講和モードを開く

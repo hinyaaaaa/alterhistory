@@ -17,7 +17,19 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
-## 追加済み：v2.4.1「磨き上げ」（いちばん新しい）
+## 追加済み：v2.5.0「戦争と外交の再設計」（いちばん新しい）
+詳細は `CHANGELOG.md` の v2.5.0。
+- **戦い**: 戦争の枠（名前・陣営・参戦国ごとの形態）だけをユーザーが決める。個々の戦いは `core/sim/war-engine.js` の `rollCampaignBattle` が作る（開戦時に1つ、`planAdvanceWars` の月ごとに確率で。3か月空くと必ず1つ）。名前は `battleNameFor`（標高→「N高地の戦い」、海沿い＋海軍→「沖海戦」、川→「渡河戦」、首都→「攻囲戦」、文化の型で重みが変わる）。`war.battles[]` に `auto: true` で保存。
+- **不具合の修正**: 戦争タブ／クロニクルに記録が出なかったのは、v2.4.0 が開戦時の戦闘ログを保存しなくなっていたため。
+- **内戦の介入**: `core/edit/wars.js` の `civilIntervention`。設定 `civilCallsAllies` は互換のため残るが、使われない（UI なし）。
+- **外交**: `ui/diplomacy-window.js` は3タブ（`dipTab`: alliances / dissolved / peace）。講和の入力（`openPeace`）は講和条約タブの中。
+- **削除**: 戦争窓の「作戦」欄・「内戦の決着」欄（`ui/civil-section.js` ごと）。核作戦の入口は国家タブの「軍事」へ。`simActions.resolveCivilWar` は残してある（UI なし。講和条約で終える）。
+- **属州の面積**: `core/edit/territory.js` の `pickAutoProvince`。初期設定の「面積」が既定「おまかせ（自動）」。
+- **世代交代**: 国家タブで交代の理由・継承の安定度を選ぶ（`REASONS` / `STABILITY`）。
+- **年表**: 年表窓とクロニクルの Markdown は新しい順。クロニクル JSON のデータ順は古い順のまま。
+- **先送り（実機で確認すること）**: 州の面積の自動設定が入ったので、内戦（反乱・独立）の動きを実機で確認する。
+
+## 追加済み：v2.4.1「磨き上げ」
 詳細は `CHANGELOG.md` の v2.4.1。v2.4.0 の先送り（講和の集約・戦争形態の国庫/産業への負荷・旧パネルの掃除）を片づけ、自動撮影で画面を確認する仕組みを入れた。
 - **講和**: 外交ウィンドウの「講和モード」（`diplomacy.openPeace(warId)` / `closePeace()`。窓の `onClose` でも閉じる）。入力欄の本体は `ui/war-outcome-window.js` の `treatyBody` のまま（二重に持たない）。`panels.diplomacy` に公開。
 - **負荷**: `core/edit/wars.js` の `addMonthlyLoad`（月ごと）。係数は `core/sim/war-engine.js` の `WAR_TYPES.*.treasuryLoad/industryLoad` と `monthlyWarLoad`。全体の調整は `BALANCE.warTreasuryLoad` / `warIndustryLoad`。国の年収は `computeTrade` から求め、交易を計算できない地図（最小の地図）では人頭税だけの概算にする。

@@ -399,7 +399,7 @@ function pickPlace(map, stateId, rnd) {
 // ---------------------------------------------------------------------------
 // 戦闘の記録（自動生成）。ドクトリンに基づく書きぶりと結果。
 // ---------------------------------------------------------------------------
-const DOCTRINE_STORY = {
+export const DOCTRINE_STORY = {
   mobile: { win: ["機甲部隊が前線を突破し、後方の拠点を押さえた", "航空支援のもと快速部隊が敵の側面を回り込んだ"], lose: ["突出した機動部隊が補足され、押し戻された"] },
   firepower: { win: ["集中砲撃で防御線を粉砕し、前進した", "砲兵の圧倒的な火力で敵陣地を制圧した"], lose: ["砲撃は決定打にならず、前進を阻まれた"] },
   battleplan: { win: ["構築した陣地で敵の攻勢を食い止め、反撃に転じた", "縦深防御で攻め手を消耗させた"], lose: ["固めた陣地を迂回され、後退を強いられた"] },
@@ -447,4 +447,98 @@ export function generateBattleLog(map, { attackers, defenders, result, startedAt
       text: `${officialName(map.pack.states[w[0]])}軍が${officialName(map.pack.states[l])}の首都${capitalFall.place}を攻略し、${officialName(map.pack.states[l])}は降伏を迫られた` });
   }
   return log;
+}
+
+
+// ---------------------------------------------------------------------------
+// 作戦行動（自動）：戦争の大枠だけをユーザーが決め、個々の戦いはシステムが進軍させて記録する。
+// 戦いの名前は、その土地の名前・地形・その土地の文化の型から付ける
+//   （例: 標高の高い土地 →「203高地の戦い」／海沿いで海軍が動く →「〇〇沖海戦」／川の渡し →「〇〇川渡河戦」）。
+// ---------------------------------------------------------------------------
+const heightMeters = (h) => (h > 18 ? Math.round(Math.pow(h - 18, 1.8)) : 0);
+const riverNameByCell = new WeakMap();
+function riverAt(map, cell) {
+  const rivers = map.pack.rivers;
+  if (!Array.isArray(rivers)) return null;
+  let m = riverNameByCell.get(rivers);
+  if (!m) {
+    m = new Map();
+    for (const r of rivers) if (r && Array.isArray(r.cells)) for (const c of r.cells) if (!m.has(c)) m.set(c, r.name || r.fullName || null);
+    riverNameByCell.set(rivers, m);
+  }
+  return m.get(cell) ?? null;
+}
+const pickW = (rnd, items) => {
+  const total = items.reduce((a, x) => a + x.w, 0); let r = rnd.next() * total;
+  for (const x of items) { r -= x.w; if (r <= 0) return x.name; }
+  return items[items.length - 1].name;
+};
+
+/** 戦いの名前の候補。場所の地形・文化の型・海軍の有無から決める */
+export function battleNameFor(map, burg, { rnd, navy = false, capital = false, used = [] }) {
+  const place = burg.name;
+  const culture = map.pack.cultures?.[burg.culture ?? map.pack.cells.culture?.[burg.cell]];
+  const type = culture?.type ?? "Generic";
+  const h = map.geometry?.pack?.h?.[burg.cell] ?? 0;
+  const river = riverAt(map, burg.cell);
+  const coastal = burgIsCoastal(map, burg);
+  const alt = heightMeters(h);
+  const cand = [];
+  const add = (name, w = 1) => cand.push({ name, w });
+  if (coastal && navy) { add(`${place}沖海戦`, type === "Naval" ? 5 : 3); add(`${place}湾の海戦`, 1); }
+  if (h >= 55) { add(`${alt}高地の戦い`, type === "Highland" ? 3 : 2); add(`${place}高地の戦い`, 1); if (type === "Highland") add(`${place}の峠の戦い`, 3); }
+  if (river) { add(`${river}の渡河戦`, type === "River" ? 4 : 2); add(`${place}渡河作戦`, 1); }
+  if (type === "Lake") add(`${place}湖畔の戦い`, 3);
+  if (type === "Nomadic") { add(`${place}草原の戦い`, 3); add(`${place}の追撃戦`, 2); }
+  if (type === "Hunting") add(`${place}の森の戦い`, 3);
+  if (capital) { add(`${place}攻囲戦`, 4); add(`${place}攻略戦`, 2); }
+  add(`${place}の戦い`, 3); add(`${place}会戦`, 2); add(`${place}攻防戦`, 1);
+  let name = pickW(rnd, cand);
+  if (used.includes(name)) { let k = 2; while (used.includes(`第${k}次${name}`)) k++; name = `第${k}次${name}`; }
+  return name;
+}
+
+/**
+ * 戦争の「いま」の戦況から、新しい戦い1つを自動で作る（記録用。損害は月ごとの進行で別に積まれる）。
+ * 前線は国境の都市から始まり、攻撃側が優勢なほど奥の都市へ進む。防衛側が優勢なら国境で食い止め、終盤は反攻する。
+ * @returns {object|null} { date, name, place, burgId, winner, attackerState, defenderState, winnerState, loserState, text, ... }
+ */
+export function rollCampaignBattle(map, war, date, rnd) {
+  const r = war.result; if (!r) return null;
+  const A = (war.attackers ?? []).filter((id) => isLive(map.pack.states[id]) && !war.withdrawn?.[id]);
+  const D = (war.defenders ?? []).filter((id) => isLive(map.pack.states[id]) && !war.withdrawn?.[id]);
+  if (!A.length || !D.length) return null;
+  const dur = Math.max(1, war.durationMonths ?? 12);
+  const prog = clamp((war.monthsDone ?? 0) / dur, 0, 1);
+  const dec = r.decisiveness ?? 0.5;
+  const winnerSide = r.winner === "defender" ? "defender" : "attacker";
+  const pWin = r.winner === "stalemate" ? 0.5 : clamp(0.55 + dec * 0.35, 0.55, 0.9);
+  const pAtt = clamp((winnerSide === "attacker" ? pWin : 1 - pWin) + (war.edgeShift ?? 0), 0.08, 0.92);
+  const side = rnd.next() < pAtt ? "attacker" : "defender";
+  const wId = rnd.pick(side === "attacker" ? A : D), lId = rnd.pick(side === "attacker" ? D : A);
+  const counter = side === "defender" && winnerSide === "defender" && prog > 0.6; // 反攻：攻撃側の領土が戦場になる
+  const defFront = frontBurgs(map, D, A), attFront = frontBurgs(map, A, D);
+  const pool = counter ? attFront : defFront;
+  const reach = side === "attacker" ? clamp(0.25 + dec * 0.75, 0.25, 1) * (0.2 + 0.8 * prog) : 0.3 * (0.2 + 0.8 * prog);
+  const maxIdx = Math.max(0, Math.floor((pool.length - 1) * reach));
+  const used = (war.battles ?? []).map((b) => b.name);
+  const usedBurg = new Set((war.battles ?? []).slice(-3).map((b) => b.burgId));
+  let burg = null;
+  for (let t = 0; t < 8 && !burg; t++) { const c = pool[Math.min(maxIdx, Math.floor(rnd.next() * (maxIdx + 1)))]; if (c && !usedBurg.has(c.i)) burg = c; }
+  if (!burg && pool.length) burg = pool[Math.min(maxIdx, Math.floor(rnd.next() * (maxIdx + 1)))];
+  const navy = (r.aStrength?.sea ?? 0) > 0 || (r.dStrength?.sea ?? 0) > 0;
+  const allIds = [...A, ...D];
+  const capital = !!burg && allIds.some((id) => map.pack.states[id]?.capital === burg.i);
+  const place = burg?.name ?? officialName(map.pack.states[counter ? A[0] : D[0]], "国境地帯");
+  const name = burg ? battleNameFor(map, burg, { rnd, navy, capital, used }) : `${place}の戦い`;
+  const story = (id) => DOCTRINE_STORY[doctrineOf(map.pack.states[id]).baseKey ?? doctrineOf(map.pack.states[id]).key] ?? DOCTRINE_STORY.balanced;
+  const sidePower = (S) => Math.round((S?.land ?? 0) + (S?.sea ?? 0) + (S?.air ?? 0));
+  const nameOfState = (id) => officialName(map.pack.states[id]);
+  return {
+    date, name, place, burgId: burg?.i ?? null, winner: side, auto: true,
+    attackerState: A[0], defenderState: D[0], winnerState: wId, loserState: lId,
+    attackerName: nameOfState(A[0]), defenderName: nameOfState(D[0]),
+    aPower: sidePower(r.aStrength), dPower: sidePower(r.dStrength), powerBasis: "war-start",
+    text: `${nameOfState(wId)}軍：${rnd.pick(story(wId).win)}（${nameOfState(lId)}軍：${rnd.pick(story(lId).lose)}）`,
+  };
 }

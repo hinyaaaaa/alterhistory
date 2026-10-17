@@ -94,7 +94,8 @@ for (const s of st.slice(0, 2)) { const cell = store.getState().map.pack.cells.s
 console.log("=== 外交ウィンドウ ===");
 window.alterhistory.panels.diplomacy.closePeace(); // 講和モードから、条約一覧へ戻す
 menuBtn("diplomacy").click(); window.alterhistory.panels.diplomacy.render();
-check("外交ウィンドウに国のリスト・関係カード・「条約を結ぶ」があり、外交の表は無い", !!win("diplomacy").querySelector(".dip-left") && !!win("diplomacy").querySelector(".dip-mid") && win("diplomacy").textContent.includes("条約を結ぶ") && !win("diplomacy").querySelector(".diplomacy-matrix"));
+window.alterhistory.panels.diplomacy.closePeace(); win("diplomacy").querySelector(".dip-tabs button")?.click(); await sleep(40);
+check("外交ウィンドウに3タブ・国の絞り込み・「条約を結ぶ」があり、外交の表は無い", win("diplomacy").querySelectorAll(".dip-tabs button").length === 3 && !!win("diplomacy").querySelector(".dip-focus") && win("diplomacy").textContent.includes("条約を結ぶ") && !win("diplomacy").querySelector(".diplomacy-matrix"));
 
 console.log("=== 国家の詳細は国家タブに一本化されている（v2.4.1） ===");
 window.alterhistory.panels.openEntity("state", 1);

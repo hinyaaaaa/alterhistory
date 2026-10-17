@@ -123,8 +123,13 @@ export function initSetupWindow({ wins, setupActions, store, onCreated }) {
       body.append(field("起源（どこから分かれたか）", fields.origin));
     }
 
-    // 領土（属州以外）
+    // 属州の面積：自動が既定（持ち主の国の、まだ属州に入っていない土地から決める）
     let terr = null, capitalCb = null;
+    if (kind === "province") {
+      terr = select([{ id: "auto", label: "おまかせ（自動）" }, ...Object.entries(setupActions.TERRITORY_SIZES).map(([k, v]) => ({ id: k, label: `おまかせ（${v.label}）` })), { id: "later", label: "あとで地図に塗る" }], "auto");
+      body.append(field("面積", terr, "持ち主の国の、まだ属州に入っていない土地から決めます"));
+    }
+    // 領土（属州以外）
     if (kind !== "province" && !place) {
       const free = setupActions.freeLand(kind);
       const opts2 = [{ id: "later", label: "あとで地図に塗る" }];

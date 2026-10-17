@@ -659,10 +659,10 @@ export function chronicleToMarkdown(ch) {
   L.push("- 「## 1. 年表」は、ユーザーが行った操作（建国・宗教の誕生・改名・領土の変動など）と、戦争・同盟・外交を、年月順に並べた記録です。歴史を掴むにはまずここを読んでください。", "- 2 章以降は「現在の姿」の詳細です。名前に（消滅）と付くものは、すでに滅びた実体です。", "");
 
   // ---- 年表（年 → 月の順に、すべてのアクションを記録）----
-  L.push("## 1. 年表", "");
+  L.push("## 1. 年表（新しい順）", "");
   if (!ch.timeline.length) L.push("（記録された出来事はありません）");
   let lastEra, lastYear;
-  const dated = ch.timeline.filter((t) => t.year != null), undated = ch.timeline.filter((t) => t.year == null);
+  const dated = ch.timeline.filter((t) => t.year != null).reverse(), undated = ch.timeline.filter((t) => t.year == null); // 年表は新しい順（v2.5.0）
   for (const t of dated) {
     if (t.era !== lastEra || lastEra === undefined) { L.push("", `### ${t.era ?? "（時代区分なし）"}`); lastEra = t.era; lastYear = undefined; }
     if (t.year !== lastYear) { L.push("", `#### ${t.year}年`, ""); lastYear = t.year; }

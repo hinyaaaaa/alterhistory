@@ -151,3 +151,54 @@ export function pickCapitalCell(map, stateId) {
   }
   return best;
 }
+
+/**
+ * 属州の面積（セル）を、持ち主の国の「まだ属州に入っていない陸」から自動で決める。
+ *   ・面積は、国の領土を（既存の属州の数 + 2）で割った広さを目安に、乱数で ±25% ばらつかせる（最低4セル）
+ *   ・国の中の、つながった未所属の土地ごとに広さを数え、目安に届く（無ければ最大の）ものから種を選ぶ
+ *   ・山は越えにくく、平地へ先に広がる。国の土地は奪わない・他の属州の土地も奪わない
+ * @returns {{cells:number[], seed:number, reason?:"no-free-land"}}
+ */
+export function pickAutoProvince(map, { stateId, rnd, size = "auto" }) {
+  const c = map.pack.cells, { biome } = c, st = c.state, pv = c.province;
+  const { cells: geom } = map.geometry.pack, n = st.length;
+  const free = (i) => biome[i] !== 0 && st[i] === stateId && !(pv[i] > 0);
+  let owned = 0, freeCount = 0;
+  for (let i = 0; i < n; i++) { if (st[i] === stateId && biome[i] !== 0) owned++; if (free(i)) freeCount++; }
+  if (!freeCount) return { cells: [], seed: -1, reason: "no-free-land" };
+  const provCount = map.pack.provinces.filter((p) => p && typeof p === "object" && !p.removed && p.i > 0 && p.state === stateId).length;
+  const ratio = TERRITORY_SIZES[size]?.ratio;
+  let want = ratio ? Math.round(owned * ratio * 2.5) : Math.round((owned / (provCount + 2)) * (0.75 + 0.5 * rnd.next()));
+  want = Math.max(4, Math.min(want, freeCount));
+  // つながった未所属の土地
+  const comp = new Int32Array(n).fill(-1), sizes = [];
+  for (let i = 0; i < n; i++) {
+    if (!free(i) || comp[i] >= 0) continue;
+    const id = sizes.length; let count = 0; const stack = [i]; comp[i] = id;
+    while (stack.length) { const k = stack.pop(); count++; for (const j of geom.c[k]) if (free(j) && comp[j] < 0) { comp[j] = id; stack.push(j); } }
+    sizes.push(count);
+  }
+  const threshold = Math.min(want, Math.max(...sizes));
+  const candidates = [];
+  for (let i = 0; i < n; i++) if (free(i) && sizes[comp[i]] >= threshold) candidates.push(i);
+  let seed = -1, bestScore = -1;
+  for (let t = 0; t < 8; t++) {
+    const cand = candidates[Math.floor(rnd.next() * candidates.length)];
+    const score = geom.c[cand].filter(free).length;
+    if (score > bestScore) { bestScore = score; seed = cand; }
+  }
+  const H = map.geometry.pack.h;
+  const stepCost = (j) => 1 + (H ? Math.max(0, H[j] - 45) / 25 : 0);
+  const inSet = new Uint8Array(n), cells = [seed], dist = new Map([[seed, 0]]), frontier = new Set();
+  inSet[seed] = 1;
+  const offer = (from) => { for (const j of geom.c[from]) { if (!free(j) || inSet[j]) continue; const d = dist.get(from) + stepCost(j); if (!dist.has(j) || d < dist.get(j)) dist.set(j, d); frontier.add(j); } };
+  offer(seed);
+  while (cells.length < want && frontier.size) {
+    let best = -1, bestKey = Infinity;
+    for (const j of frontier) { const key = (dist.get(j) ?? 1) * (0.85 + 0.3 * rnd.next()); if (key < bestKey) { bestKey = key; best = j; } }
+    frontier.delete(best);
+    if (inSet[best]) continue;
+    inSet[best] = 1; cells.push(best); offer(best);
+  }
+  return { cells, seed };
+}

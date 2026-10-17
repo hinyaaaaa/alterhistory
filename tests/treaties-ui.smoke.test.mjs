@@ -58,7 +58,7 @@ const histTypes = () => (M().ext?.data?.historyLog ?? []).map((h) => h.type);
 
 console.log("=== 外交ウィンドウ: 条約を結ぶ（確定するまで何も残さない） ===");
 wins.open("diplomacy"); await sleep(50);
-check("関係一覧に国ごとの行がある", qa('[data-win="diplomacy"] .dip-row').length === ids.length);
+check("国で絞り込む欄がある（すべての国＋国ごと）", (qa('[data-win="diplomacy"] .dip-focus option').length === ids.length + 1));
 clickBtn(win("diplomacy"), "条約を結ぶ").click(); await sleep(50);
 const tw = win("treaty-new");
 check("条約を結ぶ窓: 種類→当事国→条項→名称の4段階", !tw.hidden && tw.querySelectorAll(".treaty-step").length === 4);
@@ -95,15 +95,16 @@ const al = M().ext.data.treaties.find((t) => t.id === aid);
 check("同盟は条約として結ばれ、既存の同盟（拘束力・盟主）とつながる", al.kind === "alliance" && M().ext.data.alliances.some((a) => a.id === al.ref.allianceId && a.bond === "standard" && a.leader === B));
 const prev = simActions.previewWar([D], [B], null, "conventional");
 check("同盟国が攻められると、同盟国が防衛に招集される", prev.defenders.includes(C), JSON.stringify(prev.defenders));
-check("内戦の参戦招集は、既定では行わない設定", simActions.treatySettings().civilCallsAllies === false);
 const { planDeclareAndResolveWar } = await import("../js/core/edit/wars.js");
 const { createRandom } = await import("../js/core/random.js");
-const civil = planDeclareAndResolveWar(M(), { attackers: [D], defenders: [B], date: { year: 1, month: 1 }, rnd: createRandom(1), type: "civil" });
-check("内戦では、同盟国は招集されない（既定）", civil.joined.length === 0);
-simActions.setTreatySettings({ civilCallsAllies: true });
-const civil2 = planDeclareAndResolveWar(M(), { attackers: [D], defenders: [B], date: { year: 1, month: 1 }, rnd: createRandom(1), type: "civil" });
-check("トグルを入れると、内戦でも招集される", civil2.joined.some((j) => j.id === C));
-simActions.setTreatySettings({ civilCallsAllies: false });
+// v2.5.0: 内戦への介入は設定ではなく、システムが利害で判断する（同盟国は確率で動き、動いたものは「内政干渉」と記録される）
+let civilJoins = 0, civilRuns = 0, tagged = true;
+for (let seed = 1; seed <= 40; seed++) {
+  const civil = planDeclareAndResolveWar(M(), { attackers: [D], defenders: [B], date: { year: 1, month: 1 }, rnd: createRandom(seed), type: "civil" });
+  civilRuns++; civilJoins += civil.joined.length; if (civil.joined.some((j) => !String(j.alliance).includes("内政干渉"))) tagged = false;
+}
+check("内戦への介入は、システムが判断する（いつも招集されるわけでも、いつも無視されるわけでもない）", civilJoins > 0 && civilJoins < civilRuns * 2, `${civilJoins}/${civilRuns}`);
+check("内戦で動いた国は「内政干渉」として記録される", tagged);
 
 console.log("=== 破棄・改定 ===");
 check("条約を改定できる（名前）", simActions.amendTreaty(aid, { name: "テスト同盟条約" }) && M().ext.data.treaties.find((t) => t.id === aid).name === "テスト同盟条約");
@@ -132,42 +133,24 @@ const ok = simActions.signTreaty(w.id, { kind: "white", treatyName: "テスト�
 const peace = M().ext.data.treaties.find((t) => t.kind === "peace");
 check("講和の締結で、条約（種類=講和）が一覧に入る", ok && !!peace && peace.name === "テスト講和条約" && peace.originWar === w.id);
 
-console.log("=== 画面: 国をクリックすると条約の一覧と履歴 ===");
+console.log("=== 画面: 外交ウィンドウは3タブ（存在する同盟・破棄された同盟・講和条約） ===");
 wins.open("diplomacy"); await sleep(50);
-const rowA = qa('[data-win="diplomacy"] .dip-row').find((r) => r.textContent.includes(M().pack.states[A].name));
-rowA.click(); await sleep(50);
-check("国の条約の一覧が開く（履歴も含む）", qa('[data-win="diplomacy"] .treaty-row').length >= 2 && !!q('[data-win="diplomacy"] .treaty-card.broken'));
-check("関係一覧の国に、条約のバッジ（同盟・協力・戦争中など）が出る", qa('[data-win="diplomacy"] .dip-badge').length >= 1);
+const dwin0 = () => win("diplomacy");
+const tabBtns = () => [...dwin0().querySelectorAll(".dip-tabs button")];
+const tabBtn = (t) => tabBtns().find((b) => b.textContent.startsWith(t));
+check("タブが3つある（存在する同盟・破棄された同盟・講和条約）", tabBtns().length === 3 && ["存在する同盟", "破棄された同盟", "講和条約"].every((t) => !!tabBtn(t)), tabBtns().map((b) => b.textContent).join("|"));
+check("既定は「存在する同盟」で、破棄された同盟は並ばない", tabBtn("存在する同盟").classList.contains("on") && !dwin0().querySelector(".treaty-card.broken .treaty-kind")?.textContent.includes("同盟"));
+tabBtn("破棄された同盟").click(); await sleep(40);
+check("「破棄された同盟」に、破棄した同盟が並ぶ（破棄した国も出る）", !!dwin0().querySelector(".treaty-card.broken") && dwin0().textContent.includes("破棄"));
+tabBtn("講和条約").click(); await sleep(40);
+check("「講和条約」に、結ばれた講和条約が並ぶ", dwin0().textContent.includes("テスト講和条約"));
+check("講和条約のタブから、条約の中身を開ける", (() => { const r = dwin0().querySelector(".treaty-row"); return !!r; })());
 check("外交に工作の欄は無い（工作は国家タブへ集約）", !win("diplomacy").textContent.includes("隠密工作"));
-check("内戦の参戦招集のトグルがある", !!win("diplomacy").querySelector("#civil-calls-allies"));
-
-console.log("=== A6: 外交タブの小さな改善（条約の絞り込み・敵対から戦争へ・拘束力の説明） ===");
+check("内戦の参戦招集のトグルは無い（システムが判断する）", !win("diplomacy").querySelector("#civil-calls-allies"));
+tabBtn("存在する同盟").click(); await sleep(40);
 {
   const { BIND_LEVELS } = await import("../js/core/edit/treaties.js");
-  wins.open("diplomacy"); await sleep(50);
   const dwin = () => win("diplomacy");
-  const rows = () => qa('[data-win="diplomacy"] .dip-row');
-  const label = (t) => [...dwin().querySelectorAll(".dip-filter button")].find((b) => b.textContent.startsWith(t));
-  const n = (t) => Number(label(t)?.textContent.match(/\d+/)?.[0] ?? -1);
-  let picked = false;
-  for (let i = 0; i < rows().length && !picked; i++) { rows()[i].click(); await sleep(40); if (n("破棄") > 0 && n("有効") > 0) picked = true; }
-  check("条約一覧に、状態の絞り込み（すべて・有効・失効・破棄）がある", ["すべて", "有効", "失効", "破棄"].every((t) => !!label(t)));
-  check("（準備）有効と破棄の両方を持つ国を選べた", picked);
-  check("件数の合計が「すべて」と一致する", n("有効") + n("失効") + n("破棄") === n("すべて"), `${n("有効")}+${n("失効")}+${n("破棄")} vs ${n("すべて")}`);
-  const cards = () => qa('[data-win="diplomacy"] .dip-right .treaty-card');
-  const total = n("すべて"), nBroken = n("破棄"), nActive = n("有効");
-  label("破棄").click(); await sleep(40);
-  check("「破棄」で、破棄された条約だけが並ぶ", cards().length === nBroken && cards().every((c) => c.classList.contains("broken")), `${cards().length}/${nBroken}`);
-  check("押した絞り込みが選択状態になる", label("破棄").classList.contains("on") && !label("すべて").classList.contains("on"));
-  label("有効").click(); await sleep(40);
-  check("「有効」で、有効な条約だけが並ぶ", cards().length === nActive && cards().every((c) => c.classList.contains("active")), `${cards().length}/${nActive}`);
-  label("すべて").click(); await sleep(40);
-  check("「すべて」で、全部に戻る", cards().length === total);
-  // 敵対の各行から、その戦争へ飛べる
-  let jump = null;
-  for (let i = 0; i < rows().length && !jump; i++) { rows()[i].click(); await sleep(40); jump = dwin().querySelector(".dip-foe .dip-foe-wars button"); }
-  check("敵対の行に、その戦争へ飛ぶボタンがある", !!jump);
-  if (jump) { wins.close("war"); jump.click(); await sleep(60); check("押すと、戦争ウィンドウが開く", !win("war").hidden); }
   // 同盟の拘束力: 選ぶ欄のその場に説明が出て、選び直すと説明も変わる
   wins.open("treaty-new"); await sleep(40);
   const kindSel = win("treaty-new").querySelector("select"); kindSel.value = "alliance"; kindSel.dispatchEvent(new window.Event("change")); await sleep(40);

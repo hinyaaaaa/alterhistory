@@ -7,7 +7,7 @@ import { faceSvg } from "./face-svg.js";
 import { guardRender } from "./safe-render.js";
 import { militaryPicker, techPicker } from "./nation-pickers.js";
 import { createCovertView } from "./covert-window.js";
-import { leaderRecord, faceOf, leaderAge, leaderCandidates, titleFor } from "../core/edit/leaders.js";
+import { leaderRecord, faceOf, leaderAge, leaderCandidates, titleFor, REASONS, STABILITY } from "../core/edit/leaders.js";
 import { REGIMES, regimeOf, supportBars } from "../core/edit/regimes.js";
 import { getTechDoctrine, TECH_TRACKS } from "../core/edit/doctrines.js";
 import { effectiveDoctrineKey } from "../core/edit/doctrines.js";
@@ -34,7 +34,7 @@ const sname = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?
 
 export function initNationWindow({ store, wins, editActions, simActions, setupActions, economyView, openSetup, getWarsPanel, openRebellion, getHighlight = () => null }) {
   const body = el("div", "nation-body");
-  let hoverTimer = 0, view = "list", sel = null, tab = "overview", step = 0, draft = null, mergeFrom = null, mergeTo = null, mergeArmed = false, candidates = null, rebel = { goal: "secession", scale: "medium", armed: false }, warTarget = null, sortBy = "default", sortDesc = false;
+  let hoverTimer = 0, view = "list", sel = null, tab = "overview", step = 0, draft = null, mergeFrom = null, mergeTo = null, mergeArmed = false, candidates = null, succReason = "death", succStab = "stable", rebel = { goal: "secession", scale: "medium", armed: false }, warTarget = null, sortBy = "default", sortDesc = false;
   const covert = createCovertView({ store, simActions, getAttacker: () => sel });
   const clearHl = () => { clearInterval(hoverTimer); hoverTimer = 0; getHighlight?.()?.clear(); };
   wins.register("nation", { title: "国家", width: 940, body, onOpen: () => { editActions.ensureLeaders(); render(); }, onClose: clearHl });
@@ -159,8 +159,18 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     t.append(btn("", candidates ? "候補を閉じる" : "世代交代…", "指導者を、候補の中から選んで交代させる", () => { candidates = candidates ? null : leaderCandidates(map, s.i, { n: 3, seed: Math.floor(Math.random() * 1e9) }); render(); }));
     box.append(t);
     if (candidates) {
+      // 交代の理由を選ぶ（建国は除く）。理由は年表と指導者の履歴に残る
+      const why = el("div", "nation-succ-why");
+      const rs = document.createElement("select"); rs.dataset.field = "succ-reason";
+      for (const r of REASONS.filter((x) => x.key !== "founding")) rs.append(new Option(r.label, r.key));
+      rs.value = succReason; rs.addEventListener("change", () => { succReason = rs.value; });
+      const ss = document.createElement("select"); ss.dataset.field = "succ-stability";
+      for (const x of STABILITY) ss.append(new Option(`継承: ${x.label}`, x.key));
+      ss.value = succStab; ss.addEventListener("change", () => { succStab = ss.value; });
+      why.append(el("span", "field-label", "交代の理由"), rs, ss);
+      box.append(why);
       const c = el("div", "nation-cands");
-      for (const x of candidates) c.append(btn("b-card", `${x.title}　${x.name}（${x.age}歳・${x.gender === "f" ? "女" : "男"}）`, "この人物に交代する", () => { editActions.changeLeader(s.i, { reason: "abdication", name: x.name, gender: x.gender, title: x.title, age: x.age }); candidates = null; render(); }));
+      for (const x of candidates) c.append(btn("b-card", `${x.title}　${x.name}（${x.age}歳・${x.gender === "f" ? "女" : "男"}）`, "この人物に交代する", () => { editActions.changeLeader(s.i, { reason: succReason, stability: succStab, name: x.name, gender: x.gender, title: x.title, age: x.age }); candidates = null; render(); }));
       box.append(c);
     }
     return box;
@@ -244,7 +254,8 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     ninp.type = "number"; ninp.min = "0"; ninp.step = "1"; ninp.value = String(nuclearStock(s)); ninp.dataset.field = "nuclear-stock";
     ninp.addEventListener("change", () => { simActions.setNuclearStock(s.i, Math.max(0, Math.round(Number(ninp.value) || 0))); render(); });
     nrow.append(el("span", "np-k", "保有数"), ninp, el("span", "", UNIT_BY_KEY.nuclear?.unit ?? "発"));
-    nuke.append(nrow, el("p", "hint", "核作戦（戦争ウィンドウの「作戦」）で使います。通常の戦争では使われません。部隊の編成そのものは、ここでは表示のみです。"));
+    const nb = el("button", "", "@nuclear 核作戦を立案・実行する"); nb.type = "button"; nb.addEventListener("click", () => wins.open("nuclear"));
+    nuke.append(nrow, el("p", "hint", "核を保有する国だけが実行できます。通常の戦争では使われません。部隊の編成そのものは、ここでは表示のみです。"), nb);
     pane.append(army, nuke, doc);
   }
   function techPane(pane, map, s) {
