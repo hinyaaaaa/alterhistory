@@ -10,7 +10,7 @@ const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /** 効果の入れ物（国ごとの増減）。1つのコマンドにまとめて反映するので、同じ国への複数の効果が食い違わない */
-export function newFx() { return { morale: new Map(), support: new Map(), popSurv: new Map(), indSurv: new Map(), troops: new Map() }; }
+export function newFx() { return { morale: new Map(), support: new Map(), popSurv: new Map(), indSurv: new Map(), troops: new Map(), treasury: new Map() }; }
 const add = (m, k, d) => m.set(k, (m.get(k) ?? 0) + d);
 const mul = (m, k, f) => m.set(k, (m.get(k) ?? 1) * f);
 
@@ -18,6 +18,8 @@ export const addMorale = (fx, id, d) => add(fx.morale, id, d);
 export const addSupport = (fx, id, d) => add(fx.support, id, d);
 export const mulPop = (fx, id, f) => mul(fx.popSurv, id, f);
 export const mulIndustry = (fx, id, f) => mul(fx.indSurv, id, f);
+/** 国庫の増減（d は増減の額。マイナスで減る） */
+export const addTreasury = (fx, id, d) => add(fx.treasury, id, d);
 /** 戦争に出ている部隊の兵力を一律に減らす（生き残る割合 f） */
 export function mulTroops(fx, map, war, id, f) {
   const st = map.pack.states[id]; if (!isLive(st)) return;
@@ -162,7 +164,7 @@ export function fxParts(map, fx, setProps) {
     for (const k of Object.keys(u)) if (k !== "nuclear") u[k] = Math.max(0, Math.floor((u[k] ?? 0) * f));
     parts.push(setProps(reg, { u }));
   }
-  const ids = new Set([...fx.morale.keys(), ...fx.support.keys(), ...fx.popSurv.keys(), ...fx.indSurv.keys()]);
+  const ids = new Set([...fx.morale.keys(), ...fx.support.keys(), ...fx.popSurv.keys(), ...fx.indSurv.keys(), ...fx.treasury.keys()]);
   for (const id of ids) {
     const st = map.pack.states[id]; if (!isLive(st)) continue;
     const pop0 = (st.rural ?? 0) + (st.urban ?? 0), ps = fx.popSurv.get(id) ?? 1, is = fx.indSurv.get(id) ?? 1;
@@ -171,6 +173,7 @@ export function fxParts(map, fx, setProps) {
     if (fx.support.has(id)) patch.support = clamp((st.support ?? 70) + fx.support.get(id), 0, 100);
     if (ps !== 1) { patch.popPeak = Math.max(st.popPeak ?? 0, pop0); patch.rural = Math.round((st.rural ?? 0) * ps * 100) / 100; patch.urban = Math.round((st.urban ?? 0) * ps * 100) / 100; }
     if (is !== 1) patch.industry = Math.round((st.industry ?? 0) * is * 10) / 10;
+    if (fx.treasury.has(id) && typeof st.treasury === "number") patch.treasury = Math.round(Math.max(0, st.treasury + fx.treasury.get(id)) * 100) / 100;
     parts.push(setProps(st, patch));
   }
   return parts;

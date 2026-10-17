@@ -9,7 +9,7 @@ import { planSetDiplomacy } from "../../js/core/edit/diplomacy.js";
 import { planCreateAlliance, planDissolveAlliance } from "../../js/core/edit/alliances.js";
 import { planDeclareWar, planRecordBattle, planSignPeace, suggestCessions } from "../../js/core/edit/wars.js";
 import { planSetNote } from "../../js/core/edit/notes.js";
-import { planSetTechLevel } from "../../js/core/edit/economy.js";
+import { planSetTechDoctrine, TECH_TRACKS } from "../../js/core/edit/doctrines.js";
 import { planSetDoctrine } from "../../js/core/edit/military-doctrine.js";
 import { planCreateRegiment, planEditRegiment } from "../../js/core/sim/military.js";
 import { planDeclareIndependence, planMergeStates } from "../../js/core/edit/sovereignty.js";
@@ -30,7 +30,7 @@ export async function buildHistoricalWorld() {
   const step = (label, fn) => { try { fn(); log.push("OK   " + label); } catch (e) { log.push("FAIL " + label + " : " + e.message); } };
 
   step("時代", () => { c(planSetEra(map, { name: "建国期", fromYear: 1 })); c(planSetEra(map, { name: "戦乱の時代", fromYear: 30 })); c(planSetEra(map, { name: "近代", fromYear: 80 })); });
-  step("技術・ドクトリン", () => { for (const s of [1, 2, 3, 4]) c(planSetTechLevel(map, s, 3 + s)); c(planSetDoctrine(map, 1, "mobile")); c(planSetDoctrine(map, 2, "battleplan")); });
+  step("技術・ドクトリン", () => { for (const s of [1, 2, 3, 4]) c(planSetTechDoctrine(map, s, Object.fromEntries(TECH_TRACKS.map((t) => [t.key, 3 + s])))); c(planSetDoctrine(map, 1, "mobile")); c(planSetDoctrine(map, 2, "battleplan")); });
   step("ノート", () => { c(planSetNote(map, "state", 2, "<p>北の公国。<br>鉱山が豊富。</p>")); c(planSetNote(map, "religion", 1, "<p>太陽神アマルを祀る。</p>")); });
   step("外交", () => { c(planSetDiplomacy(map, 1, 2, "Ally", { year: 5, month: 3 })); c(planSetDiplomacy(map, 1, 3, "Rival", { year: 12, month: 7 })); c(planSetDiplomacy(map, 2, 4, "Enemy", { year: 31, month: 1 })); c(planSetDiplomacy(map, 5, 6, "Vassal", { year: 40, month: 6 })); });
   step("同盟", () => { const a = c(planCreateAlliance(map, "北方同盟", [1, 2, 5], { year: 6, month: 1 })); const b = c(planCreateAlliance(map, "東方協商", [3, 4, 6], { year: 20, month: 4 })); c(planDissolveAlliance(map, b.id, { year: 55, month: 9 })); });

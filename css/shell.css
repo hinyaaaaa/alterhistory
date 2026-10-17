@@ -113,9 +113,6 @@
 /* --- 窓の中の節（横タブは使わない。縦に並べ、必要なら窓から窓へのリンクにする） --- */
 .work-extra { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--line); }
 .work-extra h4 { margin: 0 0 8px; font-family: var(--font-serif); letter-spacing: .1em; color: var(--brass-bright); }
-.ops-section { border-top: 1px solid var(--line); padding-top: 10px; }
-.ops-section h4 { font-family: var(--font-serif); letter-spacing: .1em; }
-.ops-merge h5 { margin: 12px 0 6px; font-size: 12px; color: var(--text-dim); letter-spacing: .08em; }
 .settings-sec { padding: 12px 0; border-bottom: 1px solid var(--line); }
 .settings-sec:last-child { border-bottom: 0; }
 .settings-sec h4 { margin: 0 0 4px; font-family: var(--font-serif); letter-spacing: .1em; color: var(--brass-bright); }
@@ -130,3 +127,6 @@
 .tl-rec select { margin: 4px 6px 4px 0; min-height: 34px; }
 .tl-rec-provs { display: flex; flex-wrap: wrap; gap: 6px 12px; margin: 6px 0; font-size: 12px; }
 .tl-row.tl-zone .tl-title::after { content: "  ◎"; color: var(--warn); }
+
+/* 狭い画面では、新聞を時計の下に置く（時計と重ならない）。右下の戦争状況・通知は下に積む */
+@media (max-width: 720px) { .news { top: 68px; right: 8px; } }

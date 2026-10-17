@@ -215,3 +215,7 @@ ALTERHISTORY は、適用できなかった件数を読み込み時の警告と�
 - 部隊（`state.military[]`）の追加項目: `echelon`（編成の段 1〜5。未設定は Azgaar から取り込んだ部隊で、最初の月に現在の段が入る）。
 - 年表（`historyLog`）の `type` に追加: `succession`（指導者の交代）、`regime`、`doctrine`、`treaty-parties`、`natural-<種類>`（月ごとの自動の出来事）。
 - 削除: 国家の削除、データ検査、為替の画面、出来事の書き足し・記録（`note` / `manual` の追加操作）。保存データの読み書きには影響しない（既存の `note` / `manual` は読める）。
+
+
+## 追記: v2.4.1（保存形式は変わらない）
+- `data.wars[].burden`（任意）: 戦争中に「実際に起きた負荷」の合計。`{ "<国ID>": { "support": 民意の増減の合計, "treasury": 国庫の減った額の合計, "industry": 産業の落ちた量の合計, "months": 負荷を積んだ月数 } }`。月あたりの値は、合計 ÷ `months`。v2.4.0 以前の戦争には無く、月が進むと付く。無くても読める。`saveFormat` は 3 のまま（変えない）。

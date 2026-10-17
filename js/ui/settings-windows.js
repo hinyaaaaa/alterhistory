@@ -1,8 +1,6 @@
 import { APP_VERSION_LABEL } from "../version.js";
 import { byId } from "./dom.js";
 import { initWindows } from "./windows.js";
-import { UNIT_TYPES, forcePower, forceHeadcount } from "../core/sim/units.js";
-import { regimentsOf } from "../core/sim/military.js";
 import { FILL_KEY } from "../app/layers.js";
 import { BALANCE, BALANCE_META, BALANCE_DEFAULTS } from "../core/sim/balance.js";
 import { planSetBalance } from "../core/edit/balance-setting.js";
@@ -10,7 +8,6 @@ import { el } from "./kit.js";
 import { initDiplomacyWindow } from "./diplomacy-window.js";
 import { createCivilSection } from "./civil-section.js";
 
-const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
 export function initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }) {
   const wins = initWindows();
   const noMap = () => el("p", "muted", "地図を開いてください");
@@ -25,45 +22,9 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
   warBody.append(byId("tab-wars"), warOps, civil.box);
   wins.register("war", { title: "戦争", width: 820, body: warBody, onOpen: () => { panels.wars.render(); civil.render(); } });
   // 外交: 同盟・不可侵・協力・従属・講和は、すべて「条約」。条約の窓は ui/diplomacy-window.js
-  const dip = initDiplomacyWindow({ store, wins, simActions: panels.simActions, getWarsPanel: () => panels.wars });
-  wins.register("diplomacy", { title: "外交", width: 980, body: dip.body, onOpen: () => dip.render() });
-  const milBody = el("div", "mil-body");
-  const overview = el("div", "mil-overview");
-  milBody.append(overview, byId("tab-regiments"));
-  function renderMil() {
-    overview.replaceChildren();
-    const map = store.getState().map;
-    if (!map) {
-      overview.append(noMap());
-      return;
-    }
-    const states = map.pack.states.filter(isLive);
-    const t = el("table", "win-table");
-    const head = el("tr");
-    head.append(el("th", "", "国家"), el("th", "", "部隊"));
-    for (const u of UNIT_TYPES) head.append(el("th", "", `${u.icon} ${u.label}`));
-    head.append(el("th", "", "総兵員"), el("th", "", "総戦力"));
-    t.append(head);
-    for (const s of states) {
-      const regs = regimentsOf(s), doc = editActions.getDoctrine(s.i);
-      const tr = el("tr", `clickable${panels.military.selectedState === s.i ? " active" : ""}`);
-      tr.title = "押すと、この国の部隊を下で編成できます";
-      tr.append(el("td", "", s.fullName ?? s.name), el("td", "", String(regs.length)));
-      let head2 = 0, power = 0;
-      for (const u of UNIT_TYPES) tr.append(el("td", "", regs.reduce((n, r) => n + (r.u?.[u.key] ?? 0), 0).toLocaleString()));
-      for (const r of regs) {
-        head2 += forceHeadcount(r.u);
-        power += forcePower(r.u, doc);
-      }
-      tr.append(el("td", "", Math.round(head2).toLocaleString()), el("td", "", Math.round(power).toLocaleString()));
-      tr.addEventListener("click", () => {
-        panels.military.selectState(s.i);
-        renderMil();
-      });
-      t.append(tr);
-    }
-    overview.append(t);
-  }
+  const dip = initDiplomacyWindow({ store, wins, simActions: panels.simActions, getWarsPanel: () => panels.wars, getWarOutcome: () => warOutcome });
+  panels.diplomacy = dip; // 戦争タブの「講和条約を結ぶ」から、外交ウィンドウの講和モードを開く
+  wins.register("diplomacy", { title: "外交", width: 980, body: dip.body, onOpen: () => dip.render(), onClose: () => dip.closePeace() });
   // 軍事の窓は廃止（v2.4.0）。軍の編成は国家タブの「軍事」に、表示のみで載る。
   // ⚖ バランス調整: 経済・戦争の数値をコードを直さずに変える。値は「この地図」に保存される（地図ファイルに入る）ので、
   // どの端末で開いても同じ歴史になる。アプリの既定値と違う項目だけが地図に記録される。
@@ -96,7 +57,6 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
     balBody.append(t, reset);
   }
   wins.register("balance", { title: "バランス調整", width: 860, body: balBody, onOpen: renderBalance });
-  if (warOutcome) wins.register("treaty", { title: "講和条約", width: 920, body: warOutcome.treatyBody, onOpen: () => warOutcome.renderTreaty(), onClose: () => warOutcome.clearHighlight() });
   store.subscribe((_s, change) => {
     if (!["replace", "commit", "undo", "redo"].includes(change.type)) return;
   });

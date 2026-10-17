@@ -130,8 +130,6 @@ export function initEditMode({ store, viewport, editActions, panels, openSetup }
       cb(cell);
       return;
     }
-    // 部隊の配置・移動待ちがあれば、どのツールが選ばれていても最優先でそちらを処理する
-    if (panels.regimentPending?.() && panels.consumeRegimentPlacement?.(cell)) return;
     if (tool !== TOOLS.SELECT) return;
     const picked = pickAt(map, cell, wx, wy, 6 / viewport.k);
     if (!picked || picked.type === "cell") return; // 地形セルの単純クリックは無視

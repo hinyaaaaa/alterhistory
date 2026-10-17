@@ -39,13 +39,15 @@ function textField(label, value, onChange, suggest) {
 }
 
 /** 国・文化・宗教の詳細に足す欄 */
-export function appendEntityProfile(d, kind, e, { editActions, map, openEntity }) {
+export function appendEntityProfile(d, kind, e, { editActions, map, openEntity, stateFields }) {
   if (kind === "state") {
-    d.append(
-      selectField("政体", STATE_FORMS, e.form, (v) => editActions.setEntityProfile("state", e.i, { form: v }), "政体を変えると、国の基準の税率の目安も変わります（税率そのものは経済タブで調整）"),
-      textField("政体名（国名につく語）", e.formName, (v) => editActions.setEntityProfile("state", e.i, { formName: v })),
-      selectField("国の種類", CULTURE_TYPES, e.type, (v) => editActions.setEntityProfile("state", e.i, { type: v })),
-    );
+    // stateFields: 出す欄を絞る（国家タブは、政体を専用のリストで扱うので "type" だけを使う）。省略すると3つとも出す
+    const all = {
+      form: selectField("政体", STATE_FORMS, e.form, (v) => editActions.setEntityProfile("state", e.i, { form: v }), "政体を変えると、国の基準の税率の目安も変わります（税率そのものは経済タブで調整）"),
+      formName: textField("政体名（国名につく語）", e.formName, (v) => editActions.setEntityProfile("state", e.i, { formName: v })),
+      type: selectField("国の種類", CULTURE_TYPES, e.type, (v) => editActions.setEntityProfile("state", e.i, { type: v })),
+    };
+    d.append(...(stateFields ?? Object.keys(all)).map((k) => all[k]));
     return;
   }
   if (kind === "religion") d.append(textField("最高神", e.deity, (v) => editActions.setEntityProfile("religion", e.i, { deity: v }), () => editActions.suggestLabel("deity", { cultureId: e.culture })));

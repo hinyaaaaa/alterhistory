@@ -446,5 +446,7 @@ export function initWarOutcome({ store, simActions, getHighlight = () => null })
     if (!["replace", "commit", "undo", "redo"].includes(ch.type)) return;
     if (treatyBody.offsetParent) safeTreaty();
   });
-  return { situation, bars, treatyBody, renderTreaty, clearHighlight };
+  /** 外交ウィンドウの講和から、この戦争を選んだ状態で開くために使う */
+  function select(warId) { sel = warId; draft = null; }
+  return { situation, bars, treatyBody, renderTreaty, clearHighlight, select };
 }

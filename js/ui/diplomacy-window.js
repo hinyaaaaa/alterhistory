@@ -20,10 +20,14 @@ const nm = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.na
 const fmt = (d) => (d ? `${d.year}年${d.month}月` : "—");
 const selectOf = (options, value) => { const s = document.createElement("select"); for (const [v, label] of options) s.append(new Option(label, String(v))); if (value != null) s.value = String(value); return s; };
 
-export function initDiplomacyWindow({ store, wins, simActions, getWarsPanel }) {
+export function initDiplomacyWindow({ store, wins, simActions, getWarsPanel, getWarOutcome = () => null }) {
   const body = el("div", "dip-body");
   let focus = null;           // 条約の一覧を見ている国
   let detailId = null;        // 詳細ウィンドウで開いている条約
+  let statusFilter = "all";   // 条約一覧の絞り込み（all / active / expired / broken）
+  let peace = false;          // 右の列を、講和条約の入力（戦争の講和）にしている間は true
+  function openPeace(warId) { const o = getWarOutcome(); if (!o) return; if (warId != null) o.select(warId); peace = true; wins.open("diplomacy"); render(); }
+  function closePeace() { if (!peace) return; peace = false; getWarOutcome()?.clearHighlight(); }
 
   // ---- 条約の中身（重ねて開く詳細ウィンドウ） ----
   const detailHost = el("div", "treaty-detail");
@@ -105,8 +109,9 @@ export function initDiplomacyWindow({ store, wins, simActions, getWarsPanel }) {
       const lead = selectOf(picked.length ? picked.map((id) => [id, nm(map, id)]) : [["", "当事国を選ぶと決められます"]], draft.leader ?? picked[0] ?? "");
       lead.addEventListener("change", () => { draft.leader = +lead.value; syncPreview(); });
       const bind = selectOf(BIND_LEVELS.map((b) => [b.key, `${b.label} — ${b.desc}`]), draft.bind);
-      bind.addEventListener("change", () => { draft.bind = bind.value; });
-      k3.append(rowOf("盟主", lead), rowOf("拘束力", bind));
+      const bdesc = el("p", "hint dip-bind-desc", BIND_LEVELS.find((b) => b.key === draft.bind)?.desc ?? ""); bdesc.dataset.field = "bind-desc";
+      bind.addEventListener("change", () => { draft.bind = bind.value; bdesc.textContent = BIND_LEVELS.find((b) => b.key === bind.value)?.desc ?? ""; });
+      k3.append(rowOf("盟主", lead), rowOf("拘束力", bind), bdesc);
     } else if (draft.kind === "economic") {
       const t = selectOf(TARIFFS.map((x) => [x.key, `関税 ${x.label}`]), draft.tariff); t.addEventListener("change", () => { draft.tariff = t.value; });
       k3.append(rowOf("関税の水準", t));
@@ -211,27 +216,47 @@ export function initDiplomacyWindow({ store, wins, simActions, getWarsPanel }) {
         const r = el("div", "dip-ally"); r.append(el("div", "dip-ally-n", t.name), partyChips(map, { ...t, parties: t.parties.filter((p) => p.state !== focus) }, false));
         const bind = selectOf(BIND_LEVELS.map((b) => [b.key, `拘束力 ${b.label}`]), t.terms?.bind ?? "medium"); bind.title = BIND_LEVELS.map((b) => `${b.label}: ${b.desc}`).join("\n");
         bind.addEventListener("change", () => { simActions.amendTreaty(t.id, { terms: { bind: bind.value } }); render(); });
-        r.append(bind); ally.append(r);
+        const bdesc = el("p", "hint dip-bind-desc", BIND_LEVELS.find((b) => b.key === (t.terms?.bind ?? "medium"))?.desc ?? ""); bdesc.dataset.field = "bind-desc";
+        r.append(bind, bdesc); ally.append(r);
       }
       mid.append(ally);
       const foe = el("section", "dip-card"); foe.append(el("h4", "", "敵対（戦争した国）"));
       const es = enemiesOf(map, focus);
       if (!es.length) foe.append(el("p", "muted", "戦争をした相手はいません"));
-      for (const e of es) { const r = el("div", "dip-foe"); r.append(chipOf(map.pack.states[e.id]), el("span", "", nm(map, e.id)), el("span", `dip-badge ${e.ongoing ? "b-war" : "b-t"}`, e.ongoing ? "戦争中" : "過去に戦争")); foe.append(r); }
+      const warById = new Map(listWars(map).map((w) => [w.id, w]));
+      for (const e of es) {
+        const r = el("div", "dip-foe"); r.append(chipOf(map.pack.states[e.id]), el("span", "", nm(map, e.id)), el("span", `dip-badge ${e.ongoing ? "b-war" : "b-t"}`, e.ongoing ? "戦争中" : "過去に戦争"));
+        const jumps = el("div", "dip-foe-wars"); // その相手との戦争へ飛ぶ（戦争ウィンドウで、その戦争を開く）
+        for (const wid of e.wars) { const w = warById.get(wid); if (w) jumps.append(btn("", `${w.name}${w.endedAt ? "（終戦）" : ""}`, "戦争ウィンドウで、この戦争を開く", () => { getWarsPanel?.()?.select(w.id); wins.open("war"); })); }
+        r.append(jumps); foe.append(r);
+      }
       mid.append(foe);
       const peace = el("section", "dip-card"); peace.append(el("h4", "", "講和"));
       const mine = wars.filter((w) => [...w.attackers, ...w.defenders].includes(focus));
       if (!mine.length) peace.append(el("p", "muted", "戦争中ではありません"));
-      for (const w of mine) { const r = el("div", "dip-foe"); r.append(el("span", "", w.name), btn("", "講和を結ぶ", "戦争の講和の画面を開く", () => { getWarsPanel?.()?.select(w.id); wins.open("war"); })); peace.append(r); }
+      for (const w of mine) { const r = el("div", "dip-foe"); r.append(el("span", "", w.name), btn("", "講和を結ぶ", "右の列で、この戦争の講和条約を入力します", () => openPeace(w.id))); peace.append(r); }
       mid.append(peace);
     }
-    // 右: 条約の一覧
+    // 右: 条約の一覧（講和モードでは、講和条約の入力。区画の強調・依存の自動選択・傀儡の新設・予算メーターは ui/war-outcome-window.js のまま）
     const right = el("div", "dip-right");
+    if (peace && getWarOutcome()) {
+      const pt = el("div", "dip-top"); pt.append(el("h4", "", "講和条約"), btn("", "◀ 条約の一覧", "講和の入力を閉じて、条約の一覧に戻る", () => { closePeace(); render(); }));
+      right.append(pt, getWarOutcome().treatyBody);
+      cols.classList.add("peace"); cols.append(left, mid, right); body.append(cols);
+      getWarOutcome().renderTreaty();
+      return;
+    }
     const top = el("div", "dip-top");
     top.append(el("h4", "", "条約"), btn("primary", "＋ 条約を結ぶ", "種類 → 当事国 → 条項 → 締結", () => { if (focus != null) { draft.picked = new Set([focus]); draft.leader = null; } wins.open("treaty-new"); renderNew(); }));
     right.append(top);
-    const ts = focus == null ? [] : listTreaties(map).filter((t) => partyIds(t).includes(focus));
-    if (!ts.length) right.append(el("p", "muted", "結んでいる条約はまだありません"));
+    const all = focus == null ? [] : listTreaties(map).filter((t) => partyIds(t).includes(focus));
+    const count = (k) => all.filter((t) => k === "all" || treatyStatus(t, map.worldTime) === k).length;
+    const fbar = el("div", "np-seg dip-filter"); fbar.dataset.field = "treaty-filter";
+    for (const [k, label] of [["all", "すべて"], ["active", "有効"], ["expired", "失効"], ["broken", "破棄"]]) fbar.append(btn(statusFilter === k ? "on" : "", `${label} ${count(k)}`, k === "all" ? "すべての条約" : `状態が「${label}」の条約だけ`, () => { statusFilter = k; render(); }));
+    right.append(fbar);
+    const ts = all.filter((t) => statusFilter === "all" || treatyStatus(t, map.worldTime) === statusFilter);
+    if (!all.length) right.append(el("p", "muted", "結んでいる条約はまだありません"));
+    else if (!ts.length) right.append(el("p", "muted", "この状態の条約はありません"));
     for (const t of ts.slice().reverse()) {
       const st = treatyStatus(t, map.worldTime), active = st === "active";
       const card = el("div", `treaty-card ${st}`);
@@ -247,5 +272,5 @@ export function initDiplomacyWindow({ store, wins, simActions, getWarsPanel }) {
     cols.append(left, mid, right); body.append(cols);
   }
   store.subscribe((_s, ch) => { if (["replace", "commit", "undo", "redo"].includes(ch.type)) { if (wins.isOpen("diplomacy")) render(); if (wins.isOpen("treaty-detail")) renderDetail(); } });
-  return { body, render };
+  return { body, render, openPeace, closePeace };
 }

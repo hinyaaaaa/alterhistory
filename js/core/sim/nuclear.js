@@ -3,7 +3,8 @@
 //   立案: 使う国・標的の国・使う発数を決める（技術水準・保有数・交戦中であることを検査）
 //   実行: 保有する核を消費し、標的国の人口・産業・士気に大きな打撃。記録は ext.data.nuclearOps に残る。
 // 純粋ロジック層：DOM に依存しない。
-import { makeCommand, setProps } from "../edit/commands.js";
+import { makeCommand, setProps, setList } from "../edit/commands.js";
+import { emptyForce } from "./units.js";
 import { ensureExt } from "../edit/ext.js";
 import { regimentsOf } from "./military.js";
 import { officialName } from "../names.js";
@@ -34,6 +35,35 @@ const writeOps = (m, list) => { const ext = ensureExt(m); ext.data.nuclearOps = 
 const nextId = (map) => { const l = listNuclearOps(map); return l.length ? Math.max(...l.map((o) => o.id)) + 1 : 1; };
 
 export function nuclearStock(state) { return regimentsOf(state).reduce((n, r) => n + (r.u?.nuclear ?? 0), 0); }
+
+/**
+ * 国の核の保有数を、指定した数にする（国家タブの「軍事」から使う。v2.4.1）。
+ *   核は部隊の兵科（u.nuclear）として持つので、増やすときは最も核を持つ部隊へ足し、減らすときは多い部隊から引く。
+ *   部隊が1つも無い国は、首都のセルに「戦略軍」を1部隊つくって置く。Undo は1回で戻る。変わらないなら null。
+ */
+export function planSetNuclearStock(map, stateId, count) {
+  const state = map.pack.states[stateId];
+  if (!isLive(state)) throw new Error("国家が見つかりません");
+  if (!Number.isInteger(count) || count < 0) throw new Error("核の保有数は0以上の整数にしてください");
+  const regs = regimentsOf(state), cur = nuclearStock(state);
+  if (count === cur) return null;
+  const label = "核の保有数を設定";
+  const withNuke = (r, n) => setProps(r, { u: { ...r.u, nuclear: n } });
+  if (count < cur) {
+    let need = cur - count; const parts = [];
+    for (const r of regs.filter((x) => (x.u?.nuclear ?? 0) > 0).sort((a, b) => b.u.nuclear - a.u.nuclear)) {
+      const cut = Math.min(need, r.u.nuclear); parts.push(withNuke(r, r.u.nuclear - cut)); need -= cut; if (!need) break;
+    }
+    return makeCommand(label, ["places"], parts);
+  }
+  const add = count - cur, holder = [...regs].sort((a, b) => (b.u?.nuclear ?? 0) - (a.u?.nuclear ?? 0))[0];
+  if (holder) return makeCommand(label, ["places"], [withNuke(holder, (holder.u?.nuclear ?? 0) + add)]);
+  const cell = map.pack.burgs?.[state.capital]?.cell;
+  if (cell === undefined || map.pack.cells.state[cell] !== stateId) throw new Error("部隊も首都も無いため、核を置く場所がありません");
+  const { p } = map.geometry.pack;
+  const reg = { i: 0, name: `${state.name}戦略軍`, icon: "", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u: { ...emptyForce(), nuclear: add } };
+  return makeCommand(label, ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => { m.pack.states[stateId].military = v; }, [reg])]);
+}
 
 /** 作戦を立案する。核を保有していれば、相手が戦争中でなくても立案できる */
 export function planDraftNuclearOp(map, { attackerId, targetId, warheads = 1 }) {

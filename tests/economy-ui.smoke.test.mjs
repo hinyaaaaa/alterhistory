@@ -100,17 +100,20 @@ check("経済ウィンドウを閉じると貿易線が消える", S().view.trad
 
 console.log("=== 政治・文化の深さ（詳細ウィンドウ） ===");
 const ep = window.alterhistory.editorPanel;
-const labelsOf = () => [...window.document.querySelectorAll("#editor-panel .b-mini")].map((x) => x.textContent);
-const fieldOf = (label) => [...window.document.querySelectorAll("#editor-panel .b-field")].find((f) => f.querySelector(".b-mini")?.textContent === label);
+let scope = '[data-win="nation"]'; // 国は国家タブの「基本設定」、文化・宗教は従来の詳細パネル（v2.4.1）
+const labelsOf = () => [...window.document.querySelectorAll(`${scope} .b-mini`)].map((x) => x.textContent);
+const fieldOf = (label) => [...window.document.querySelectorAll(`${scope} .b-field`)].find((f) => f.querySelector(".b-mini")?.textContent === label);
 const shownState = M().pack.states.find((x) => x && x.i && !x.removed);
-ep.openEntity("state", shownState.i);
-check("国の詳細に、政体・政体名・国の種類が出る", ["政体", "政体名（国名につく語）", "国の種類"].every((t) => labelsOf().includes(t)), labelsOf().join("|"));
-const formSel = fieldOf("政体").querySelector("select");
-formSel.value = "Republic"; formSel.dispatchEvent(new window.Event("change"));
-check("政体を変えられる", shownState.form === "Republic");
-check("政体の変更が歴史ログに残る", (M().ext?.data?.historyLog ?? []).some((h) => h.type === "profile-state" && /政体/.test(h.title)));
+window.alterhistory.panels.openEntity("state", shownState.i);
+check("国家タブの基本設定に「国の種類」が出る（政体は専用のリストが担当するので、政体名の欄は無い）", labelsOf().includes("国の種類") && !labelsOf().includes("政体名（国名につく語）"), labelsOf().join("|"));
+const typeSel = fieldOf("国の種類").querySelector("select");
+const typeBefore = shownState.type, typeAfter = [...typeSel.options].map((o) => o.value).find((v) => v !== typeSel.value);
+typeSel.value = typeAfter; typeSel.dispatchEvent(new window.Event("change"));
+check("国の種類を変えられる", shownState.type === typeAfter && typeAfter !== typeBefore, `${typeBefore} → ${shownState.type}`);
+check("国の種類の変更が歴史ログに残る", (M().ext?.data?.historyLog ?? []).some((h) => h.type === "profile-state"));
 store.undo();
 check("Undo で歴史ログも戻る", !(M().ext?.data?.historyLog ?? []).some((h) => h.type === "profile-state"));
+scope = "#editor-panel";
 const rel = M().pack.religions.find((x) => x && x.i && !x.removed);
 ep.openEntity("religion", rel.i);
 check("宗教の詳細に「最高神」の欄がある", labelsOf().includes("最高神"));

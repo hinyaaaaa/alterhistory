@@ -29,7 +29,7 @@ import { planPaint } from "../core/edit/paint.js";
 import { planSetOrigins } from "../core/edit/profile.js";
 import { suggestName as planSuggestName, withProvisional } from "../core/edit/naming.js";
 import { strikeEffects } from "../core/sim/nuclear.js";
-import { planDraftNuclearOp, planCancelNuclearOp, planExecuteNuclearOp, listNuclearOps, nuclearStock } from "../core/sim/nuclear.js";
+import { planDraftNuclearOp, planSetNuclearStock, planCancelNuclearOp, planExecuteNuclearOp, listNuclearOps, nuclearStock } from "../core/sim/nuclear.js";
 
 export function createSimActions({ store, renderer }) {
   const rnd = createRandom(Date.now());
@@ -412,6 +412,7 @@ export function createSimActions({ store, renderer }) {
     // --- 核作戦（立案→実行。通常の戦争では使われない） ---
     nuclearOps() { return withMap((map) => listNuclearOps(map)) ?? []; },
     strikeEstimate(stateId, warheads) { return withMap((map) => strikeEffects(map.pack.states[stateId]?.techLevel ?? 3, warheads)); },
+    setNuclearStock(stateId, count) { withMap((map) => safeRun("核の保有数の設定", () => { const c = planSetNuclearStock(map, stateId, count); if (c) commitOrThrow(c); })); },
     nuclearStock(stateId) { return withMap((map) => nuclearStock(map.pack.states[stateId])) ?? 0; },
     draftNuclearOp(attackerId, targetId, warheads) { return withMap((map) => { let id; safeRun("核作戦の立案", () => { const r = planDraftNuclearOp(map, { attackerId, targetId, warheads }); commitOrThrow(r.command); id = r.id; }); return id; }); },
     cancelNuclearOp(id) { withMap((map) => safeRun("核作戦の取り消し", () => commitOrThrow(planCancelNuclearOp(map, id)))); },

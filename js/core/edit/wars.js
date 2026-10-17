@@ -17,12 +17,12 @@ import { BALANCE } from "../sim/balance.js";
 import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { ensureExt } from "./ext.js";
 import { partitionParcels } from "./parcels.js";
-import { resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, warTypeKey, escalationPenalty, applyVictoryConditions, planSupportDeltas, supportOf, EXHAUST_SUPPORT, WAR_TYPES } from "../sim/war-engine.js";
+import { monthlyWarLoad, resolveWar, nameWar, applyLossFraction, mobilized, generateBattleLog, previewWar, reevaluateWar, warTypeOf, warTypeKey, escalationPenalty, applyVictoryConditions, planSupportDeltas, supportOf, EXHAUST_SUPPORT, WAR_TYPES } from "../sim/war-engine.js";
 import { officialName } from "../names.js";
-import { newFx, rollWarMonth, fxParts, addMorale, addSupport, mulPop, mulTroops } from "../sim/war-events.js";
+import { newFx, rollWarMonth, fxParts, addMorale, addSupport, addTreasury, mulIndustry, mulPop, mulTroops } from "../sim/war-events.js";
 import { regimentsOf } from "../sim/military.js";
 import { convert, getCurrency } from "../sim/currency.js";
-import { getFinance } from "../sim/trade.js";
+import { getFinance, computeTrade, annualRevenue } from "../sim/trade.js";
 import { getTreatySettings } from "./treaties.js";
 import { expandWithAllies, estimateDurationMonths, addMonths, proposePeaceVenue, peaceImpact } from "../sim/war-flow.js";
 import { diplomacyParts, crossPairs } from "./diplomacy.js";
@@ -157,6 +157,32 @@ function addProgressFx(map, war, fx, q0, q1) {
     mulPop(fx, id, Math.pow(1 - (r.popLossShare?.[id] ?? 0), dq));
     addMorale(fx, id, (r.moraleDelta?.[id] ?? 0) * dq);
     addSupport(fx, id, (r.supportDelta?.[id] ?? 0) * dq);
+    burdenOf(war, id).support += (r.supportDelta?.[id] ?? 0) * dq; // 実際に起きた民意の増減（国ごとの負荷の表示用）
+  }
+}
+
+/** 戦争が国ごとに記録する「実際に起きた負荷」の合計（民意・国庫・産業）。月あたりは、合計 ÷ months */
+function burdenOf(war, id) { war.burden ??= {}; return (war.burden[id] ??= { support: 0, treasury: 0, industry: 0, months: 0 }); }
+
+/**
+ * 1か月ぶんの、戦争形態による国庫・産業への負荷を fx に積む。国ごとに、自分の形態の係数を受ける（食い違ってよい）。
+ * 国庫は 0 より下がらない。実際に減った額だけを、戦争の記録（burden）に残す。
+ */
+function addMonthlyLoad(map, war, fx, getRevenue) {
+  const r = war.result; if (!r) return;
+  const strongIsAttacker = (r.aStrength?.land ?? 0) >= (r.dStrength?.land ?? 0);
+  for (const [ids, side] of [[war.attackers ?? [], "attacker"], [war.defenders ?? [], "defender"]]) {
+    for (const id of ids) {
+      const st = map.pack.states[id]; if (!isLive(st) || war.withdrawn?.[id]) continue;
+      const T = warTypeOf(war.types?.[id] ?? war.type);
+      const L = monthlyWarLoad(st, T, { occupier: (side === "attacker") === strongIsAttacker, revenue: getRevenue(id) });
+      const b = burdenOf(war, id); b.months += 1;
+      const avail = Math.max(0, (typeof st.treasury === "number" ? st.treasury : 0) + (fx.treasury.get(id) ?? 0));
+      const lossT = Math.min(L.treasury, avail);
+      if (lossT > 0) { addTreasury(fx, id, -lossT); b.treasury += lossT; }
+      const ind = (st.industry ?? 0) * (fx.indSurv.get(id) ?? 1);
+      if (L.industryShare > 0 && ind > 0) { mulIndustry(fx, id, 1 - L.industryShare); b.industry += ind * L.industryShare; }
+    }
   }
 }
 
@@ -214,16 +240,24 @@ function exhaustionCollapse(map, war, fx, date) {
 export function planAdvanceWars(map, date, rnd = null) {
   const list = listWars(map);
   const fx = newFx(); const touched = [];
+  let trade = null; // 国の年収は、月が進む戦争があるときだけ（一度だけ）求める
+  const getRevenue = (id) => {
+    if (trade === null) { try { trade = computeTrade(map); } catch { trade = false; } } // 交易を計算できない地図（最小の地図など）では、人頭税だけの概算にする
+    const info = trade ? trade.states.get(id) : null;
+    if (info) return annualRevenue(info);
+    const st = map.pack.states[id]; return st ? getFinance(st).pollTax * ((st.rural ?? 0) + (st.urban ?? 0)) : 0;
+  };
   const after = list.map((w) => {
     if (w.endedAt || !w.result || w.progress == null) return w;
     const dur = Math.max(1, w.durationMonths ?? 12);
     const done0 = w.monthsDone ?? Math.round((w.progress ?? 0) * dur);
     const el = monthsBetween(w.startedAt, date);
     if (el <= done0) return w;
-    let cur = { ...w, events: [...(w.events ?? [])], omens: [...(w.omens ?? [])], edgeShift: w.edgeShift ?? 0 };
+    let cur = { ...w, events: [...(w.events ?? [])], omens: [...(w.omens ?? [])], edgeShift: w.edgeShift ?? 0, burden: Object.fromEntries(Object.entries(w.burden ?? {}).map(([k, v]) => [k, { ...v }])) };
     const last = Math.min(el, done0 + 24); // 長く放置した場合でも、一度に処理するのは2年分まで
     for (let k = done0 + 1; k <= last; k++) {
       addProgressFx(map, cur, fx, effExp((k - 1) / dur), effExp(k / dur));
+      addMonthlyLoad(map, cur, fx, getRevenue); // 形態の係数とドクトリンの負荷で、国庫・産業も減る
       if (rnd) {
         const rr = rollWarMonth(map, cur, addMonths(w.startedAt, k), rnd, fx);
         if (rr.events.length) { cur.events.push(...rr.events); touched.push(w.id); }
@@ -750,8 +784,12 @@ export function planSetWarType(map, warId, stateId, key, date = null) {
   const st = map.pack.states[stateId], pen = escalationPenalty(cur, key);
   const when = date ?? map.worldTime ?? null;
   const nameOf = st?.fullName ?? st?.name ?? "?";
-  const events = [...(war.events ?? []), { date: when, kind: "type-change", title: "戦争形態の変更", text: `${nameOf}が${WAR_TYPES[cur]?.label?.replace(/（.*/, "") ?? "通常戦"}から${WAR_TYPES[key].label.replace(/（.*/, "")}へ移った${pen ? "。負荷が増し、民意が下がった" : ""}` }];
+  const events = [...(war.events ?? []), { date: when, kind: "type-change", title: "戦争形態の変更", text: `${nameOf}が${WAR_TYPES[cur]?.label?.replace(/（.*/, "") ?? "通常戦"}から${WAR_TYPES[key].label.replace(/（.*/, "")}へ移った${pen ? "。負荷が増し、民意が下がり、国庫も減った" : ""}` }];
   const parts = [{ apply: (m) => writeWars(m, list.map((w) => (w.id === warId ? { ...w, type: nextType, types, events } : w))), revert: (m) => writeWars(m, list) }];
-  if (pen && isLive(st)) parts.push(setProps(st, { support: Math.max(0, Math.min(100, supportOf(st) - pen)) }));
+  if (pen && isLive(st)) {
+    const patch = { support: Math.max(0, Math.min(100, supportOf(st) - pen)) };
+    if (typeof st.treasury === "number") patch.treasury = Math.round(st.treasury * (1 - pen * 0.005) * 100) / 100; // 一時的な負荷は、国庫にも少し効く（1段上げるごとに約2%）
+    parts.push(setProps(st, patch));
+  }
   return makeCommand(`戦争形態の変更（${nameOf}）`, ["places"], parts);
 }

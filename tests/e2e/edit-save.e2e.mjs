@@ -2,15 +2,16 @@ import { launch, openApp, reporter, shot, root } from "./lib.mjs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { statSync, readFileSync } from "node:fs";
-const { browser, ctx, page: page0, problems } = await launch();
-let page = page0;
-// 読み込み直しは「前のタブを閉じて新しいタブで開く」。同じタブでの再読込はテスト環境で不安定だったため
+let { browser, ctx, page, problems } = await launch();
+// 読み込み直しは「ブラウザを起こし直して開く」。同じタブの再読込も2つ目のタブも、このテスト環境では不安定だったため
 async function freshPage(file) {
-  await page.close({ runBeforeUnload: false });
-  page = await ctx.newPage();
+  // ブラウザごと起こし直す（2つ目のタブは、このテスト環境では読み込みが固まるため）。保存したファイルはディスクにあるので影響しない
+  await browser.close().catch(() => {});
+  const fresh = await launch();
+  browser = fresh.browser; ctx = fresh.ctx; page = fresh.page;
   page.on("dialog", (d) => d.accept());
   page.on("pageerror", (e) => problems.push(`例外: ${e.message}`));
-  await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.bringToFront();
+  await page.goto(pathToFileURL(path.join(root, "index.html")).href, { waitUntil: "domcontentloaded" }); await page.bringToFront();
   await page.setInputFiles("#file-input", file);
   await page.waitForFunction(() => /セル/.test(document.getElementById("status-map")?.textContent ?? ""), null, { timeout: 30000, polling: 100 });
 }
@@ -99,7 +100,7 @@ try {
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#btn-save")]);
   const savePath = "/tmp/e2e-saved.ahmap"; await dl.saveAs(savePath);
   check("保存ファイルができる（空でない）", statSync(savePath).size > 10000, String(statSync(savePath).size));
-  await freshPage(savePath); // 前のタブを閉じて、新しいタブで保存ファイルを開く
+  await freshPage(savePath); // ブラウザを起こし直して、保存ファイルを開く
   check("開き直しても同じ年月", (await page.textContent("#world-date")) === dateBefore, `${dateBefore} → ${await page.textContent("#world-date")}`);
   await menu('[data-open-win="war"]');
   await shot(page, "42-after-reload");

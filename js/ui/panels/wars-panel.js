@@ -9,7 +9,7 @@ import { el } from "../kit.js";
 
 const fmt4 = (n) => Math.round(n).toLocaleString("ja-JP");
 const isLive = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-export function initWarsPanel({ store, simActions, getOutcome = () => null, getWins = () => null }) {
+export function initWarsPanel({ store, simActions, getOutcome = () => null, getDiplomacy = () => null }) {
   const root = byId("tab-wars");
   let selected = null;
   let creating = false;
@@ -170,7 +170,7 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     const elapsed = Math.max(0, monthIdx(w.endedAt ?? now) - monthIdx(w.startedAt));
     ov.append(el("label", "field-label", `戦争の名前（${typeName}）`), nameIn);
     if (!w.endedAt && w.type !== "civil") {
-      const tb = el("div", "war-types"); tb.append(el("h4", "", "戦争の形態（国ごと。上げると負荷が増し、民意が下がる）"));
+      const tb = el("div", "war-types"); tb.append(el("h4", "", "戦争の形態（国ごと。上げると負荷が増し、民意と国庫が下がる）"));
       for (const id of [...w.attackers, ...w.defenders]) {
         if (!isLive(map.pack.states[id])) continue;
         const row = el("label", "war-type-row"); row.append(el("span", "", `${stateName(map, id)}（${w.attackers.includes(id) ? "攻撃側" : "防御側"}）`));
@@ -227,6 +227,17 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
       log.append(li);
     }
     lg.append(log);
+    // 国ごとの負荷（実際に起きた減りだけを、月あたりで出す。形態とドクトリンの負荷が、国庫・産業・民意にどれだけ響いたか）
+    const burdened = [...w.attackers, ...w.defenders].filter((id) => (w.burden?.[id]?.months ?? 0) > 0);
+    if (burdened.length) {
+      const bt = el("div", "war-burden"); bt.dataset.field = "war-burden"; bt.append(el("h4", "", "国ごとの負荷（月あたり。実際に起きた減り）"));
+      const row = (cells, head = false) => { const r = el("div", `war-burden-row${head ? " head" : ""}`); for (const c of cells) r.append(el("span", "", c)); return r; };
+      bt.append(row(["国", "民意", "国庫", "産業"], true));
+      const f1 = (v) => (Math.abs(v) < 0.05 ? "±0" : `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(1)}`);
+      for (const id of burdened) { const b = w.burden[id], n = b.months; bt.append(row([stateName(map, id), f1(b.support / n), f1(-b.treasury / n), f1(-b.industry / n)])); }
+      bt.append(el("p", "hint", "戦争の形態と軍事ドクトリンの負荷で変わります（国庫は0より下がりません）。"));
+      ov.append(bt);
+    }
     ov.append(el("h4", "", "戦況"));
     const sit = getOutcome()?.situation(map, w);
     if (sit) ov.append(sit);
@@ -234,14 +245,14 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
     if (!w.endedAt) {
       const go = el("button", "primary war-go", "講和条約を結ぶ");
       go.type = "button";
-      go.addEventListener("click", () => getWins()?.open("treaty"));
+      go.addEventListener("click", () => getDiplomacy()?.openPeace(w.id));
       ov.append(go);
       const fin = el("button", "", "経過を目安の終わりまで進める");
       fin.type = "button";
       fin.title = "時間を待たずに、目安の期間ぶんの損害とできごとを反映します";
       fin.addEventListener("click", () => simActions.finishWar(w.id));
       ov.append(fin);
-    } else ov.append(el("p", "muted", "この戦争は終結しました。条約の中身は「講和条約」ウィンドウで確認できます。"));
+    } else ov.append(el("p", "muted", "この戦争は終結しました。条約の中身は、外交ウィンドウの講和条約で確認できます。"));
 
 
     if (w.endedAt) mu.append(el("p", "muted", "この戦争は終結しています。部隊の招集は戦争中だけ変えられます。"));
@@ -260,10 +271,10 @@ export function initWarsPanel({ store, simActions, getOutcome = () => null, getW
       row("現在のスコア", `${cur}${r.victory?.collapse ? "（民意の崩壊で降伏したため満額）" : ""}`);
       tb.append((() => { const tr = el("tr"); tr.append(el("th", "", "要求できるもの"), el("td", "", cur >= BALANCE.annexMinScore ? "全面降伏（併合）まで" : `割譲・賠償・従属化（併合は${BALANCE.annexMinScore}以上）`)); return tr; })());
       pc.append(tb);
-      pc.append(el("p", "hint", "スコアは目安の期間まで上がり、超過後も戦争が続けば毎月上がります。割譲の費用は講和条約の窓で確認できます。"));
+      pc.append(el("p", "hint", "スコアは目安の期間まで上がり、超過後も戦争が続けば毎月上がります。割譲の費用は、外交ウィンドウの講和条約で確認できます。"));
       const open = el("button", w.endedAt ? "" : "primary war-go", w.endedAt ? "条約の中身を見る" : "講和条約を結ぶ");
       open.type = "button";
-      open.addEventListener("click", () => getWins()?.open("treaty"));
+      open.addEventListener("click", () => getDiplomacy()?.openPeace(w.id));
       pc.append(open);
     }
     const TABS = [["ov", "概要", ov], ["mu", "部隊", mu], ["lg", "経過", lg], ["pc", "講和", pc]];

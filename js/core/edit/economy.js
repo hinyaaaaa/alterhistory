@@ -3,7 +3,6 @@
 //
 // 純粋ロジック層：DOM に依存しない。
 
-import { makeCommand, setProps } from "./commands.js";
 import { TECH_MIN, TECH_MAX, clampTech } from "../sim/economy.js";
 
 export { TECH_MIN, TECH_MAX };
@@ -15,14 +14,4 @@ export function getTechLevel(map, stateId) {
   const s = map.pack.states[stateId];
   if (!isLive(s)) return null;
   return typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
-}
-
-/** @returns {object|null} 変更が無ければ null */
-export function planSetTechLevel(map, stateId, value) {
-  const s = map.pack.states[stateId];
-  if (!isLive(s)) throw new Error("存在しない国家です");
-  const after = clampTech(value);
-  const before = typeof s.techLevel === "number" ? clampTech(s.techLevel) : 3;
-  if (before === after) return null;
-  return makeCommand(`技術水準の変更（${s.name}）`, [], [setProps(s, { techLevel: after })]);
 }

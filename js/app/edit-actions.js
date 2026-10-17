@@ -17,7 +17,7 @@ import { listEras, eraAt, planSetEra, planRemoveEra } from "../core/edit/eras.js
 import { planSetFinance, getFinance } from "../core/edit/finance.js";
 import { planSetEntityProfile, planSetOrigin, planSetOrigins, planSetBurgProfile, originTree, descendantsOf } from "../core/edit/profile.js";
 import { planAddTemporaryZone, resolveZoneScope } from "../core/edit/zones.js";
-import { planSetTechLevel, getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
+import { getTechLevel, TECH_MIN, TECH_MAX } from "../core/edit/economy.js";
 import { planSetDoctrine, getDoctrine, DOCTRINES, DEFAULT_DOCTRINE } from "../core/edit/military-doctrine.js";
 import {
   suggestName as planSuggestName, isProvisional, planSetProvisional, withProvisional,

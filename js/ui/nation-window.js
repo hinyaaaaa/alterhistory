@@ -7,14 +7,20 @@ import { faceSvg } from "./face-svg.js";
 import { guardRender } from "./safe-render.js";
 import { militaryPicker, techPicker } from "./nation-pickers.js";
 import { createCovertView } from "./covert-window.js";
-import { leaderRecord, faceOf, leaderAge, leaderCandidates, STABILITY, titleFor } from "../core/edit/leaders.js";
+import { leaderRecord, faceOf, leaderAge, leaderCandidates, titleFor } from "../core/edit/leaders.js";
 import { REGIMES, regimeOf, supportBars } from "../core/edit/regimes.js";
 import { getTechDoctrine, TECH_TRACKS } from "../core/edit/doctrines.js";
 import { effectiveDoctrineKey } from "../core/edit/doctrines.js";
 import { VASSAL_KINDS, vassalsOf, vassalInfo } from "../core/edit/vassals.js";
-import { REBEL_GOALS, REBEL_SCALES } from "../core/edit/rebellion.js";
+import { REBEL_GOALS, REBEL_SCALES, breakawayCandidates } from "../core/edit/rebellion.js";
+import { supportOf } from "../core/sim/war-engine.js";
+import { nationStability } from "../core/edit/stability.js";
 import { UNIT_BY_KEY, DOCTRINE_BY_KEY, forceHeadcount } from "../core/sim/units.js";
 import { statePopulation } from "../core/query.js";
+import { nuclearStock } from "../core/sim/nuclear.js";
+import { STATE_TAGS } from "../core/edit/world-info.js";
+import { htmlToEditable, editableToHtml } from "../core/edit/notes.js";
+import { appendEntityProfile } from "./profile-fields.js";
 import { generatePersonName } from "../core/names/person.js";
 import { faceSpec } from "../core/edit/face.js";
 import { suggestName } from "../core/edit/naming.js";
@@ -28,9 +34,10 @@ const sname = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?
 
 export function initNationWindow({ store, wins, editActions, simActions, setupActions, economyView, openSetup, getWarsPanel, openRebellion, getHighlight = () => null }) {
   const body = el("div", "nation-body");
-  let hoverTimer = 0, view = "list", sel = null, tab = "overview", step = 0, draft = null, mergeFrom = null, mergeTo = null, mergeArmed = false, candidates = null, rebel = { goal: "secession", scale: "medium", armed: false }, warTarget = null;
+  let hoverTimer = 0, view = "list", sel = null, tab = "overview", step = 0, draft = null, mergeFrom = null, mergeTo = null, mergeArmed = false, candidates = null, rebel = { goal: "secession", scale: "medium", armed: false }, warTarget = null, sortBy = "default", sortDesc = false;
   const covert = createCovertView({ store, simActions, getAttacker: () => sel });
-  wins.register("nation", { title: "国家", width: 940, body, onOpen: () => { editActions.ensureLeaders(); render(); } });
+  const clearHl = () => { clearInterval(hoverTimer); hoverTimer = 0; getHighlight?.()?.clear(); };
+  wins.register("nation", { title: "国家", width: 940, body, onOpen: () => { editActions.ensureLeaders(); render(); }, onClose: clearHl });
   const mapOf = () => store.getState().map;
   const fail = (e) => store.update((s) => { s.error = e?.message ?? String(e); });
 
@@ -49,6 +56,13 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
       editActions.mergeStates(mergeFrom, mergeTo); mergeFrom = mergeTo = null; mergeArmed = false; render();
     });
     mg.append(go); bar.append(mg);
+    const SORTS = [["default", "登録順"], ["name", "名前"], ["pop", "人口"], ["regime", "政体"]];
+    const sortRow = el("div", "np-row nation-sort"), ss = document.createElement("select"); ss.dataset.field = "nation-sort";
+    for (const [k, t] of SORTS) ss.append(new Option(t, k, false, k === sortBy));
+    ss.addEventListener("change", () => { sortBy = ss.value; render(); });
+    sortRow.append(el("span", "np-k", "並べ替え"), ss, btn("", sortDesc ? "▼ 降順" : "▲ 昇順", "並びの向きを切り替える", () => { sortDesc = !sortDesc; render(); }));
+    const keyOf = { name: (x) => sname(map, x.i), pop: (x) => statePopulation(x), regime: (x) => regimeOf(x).label, default: (x) => x.i }[sortBy];
+    states.sort((a, b) => { const ka = keyOf(a), kb = keyOf(b); const c = typeof ka === "number" ? ka - kb : String(ka).localeCompare(String(kb), "ja"); return (sortDesc ? -c : c) || a.i - b.i; });
     const table = el("div", "nation-table");
     const head = el("div", "nation-row nation-head"); for (const h of ["", "国家", "政体", "指導者", "人口", "属州"]) head.append(el("span", "", h)); table.append(head);
     for (const s of states) {
@@ -58,7 +72,7 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
       r.addEventListener("click", () => openState(s.i)); table.append(r);
     }
     if (!states.length) table.append(el("p", "muted", "国家がまだありません。「＋ 新規作成」から建国できます。"));
-    box.append(bar, table); return box;
+    box.append(bar, sortRow, table); return box;
   }
 
   // ---------- 新規作成（領土 → 指導者 → 政体 → ドクトリン → 技術ドクトリン） ----------
@@ -69,7 +83,7 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
   }
   function createView(map) {
     const box = el("div", "nation-create");
-    const bar = el("div", "nation-bar"); bar.append(btn("", "◀ 国家一覧", "", () => { view = "list"; render(); }), el("h3", "", "国家の新規作成"));
+    const bar = el("div", "nation-bar"); bar.append(btn("", "◀ 国家一覧", "", () => { clearHl(); view = "list"; render(); }), el("h3", "", "国家の新規作成"));
     const crumbs = el("div", "np-crumbs"); STEPS.forEach((t, i) => { const c = el("span", `np-crumb${i === step ? " on" : i < step ? " done" : ""}`, `${i + 1}. ${t}`); c.addEventListener("click", () => { if (i <= step) { step = i; render(); } }); crumbs.append(c); });
     const pane = el("div", "np-pane");
     const field = (label, node) => { const l = el("label", "np-row"); l.append(el("span", "np-k", label), node); return l; };
@@ -154,15 +168,17 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
   function infoBlock(map, s) {
     const box = el("div", "nation-info"), l = leaderRecord(map, s.i).current, f = editActions.getFinance(s.i) ?? { treasury: 0 };
     const stat = (k, v) => { const d = el("div", "b-stat"); d.append(el("div", "b-stat-v", v), el("div", "b-mini", k)); return d; };
-    const stats = el("div", "nation-stats");
-    stats.append(stat("人口", fmt(statePopulation(s))), stat("支持", s.support != null ? `${Math.round(s.support)}%` : "—"), stat("安定度", STABILITY.find((x) => x.key === l?.stability)?.label ?? "安定"), stat("国庫", fmt(f.treasury)));
+    const stab = nationStability(map, s), stats = el("div", "nation-stats");
+    stats.append(stat("人口", fmt(statePopulation(s))), stat("支持", `${Math.round(supportOf(s))}%`), stat("安定度", stab.label), stat("国庫", fmt(f.treasury)));
     const r = regimeOf(s), reg = el("div", "nation-regime");
     const sl = document.createElement("select"); for (const x of REGIMES) sl.append(new Option(x.label, x.key, false, x.key === r.key));
     sl.addEventListener("change", () => { editActions.setRegime(s.i, sl.value); render(); });
     reg.append(el("span", "np-k", "政体"), sl, el("p", "hint", r.desc));
     const bars = el("div", "nation-support");
     for (const b of supportBars(s)) { const row = el("div", "np-bar"); const fill = el("span", "np-bar-f"); fill.style.width = `${b.value}%`; row.append(el("span", "np-bar-k", b.label), (() => { const w = el("span", "np-bar-w"); w.append(fill); return w; })(), el("span", "np-bar-v", `${b.value}%`)); bars.append(row); }
-    reg.append(bars); box.append(stats, reg); return box;
+    reg.append(bars);
+    const why = el("p", "hint nation-stab-why", `安定度の内訳（${stab.score}点）: ${stab.factors.map((f) => `${f.label} ${f.delta}`).join(" ／ ")}`); why.dataset.field = "stability-why";
+    box.append(stats, why, reg); return box;
   }
 
   function overviewPane(pane, map, s) {
@@ -179,17 +195,38 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     const seg = (items, cur, on) => { const g = el("div", "np-seg"); for (const x of items) g.append(btn(cur === x.key ? "on" : "", x.label, x.desc ?? "", () => { on(x.key); rebel.armed = false; render(); })); return g; };
     const row = (k, n) => { const r = el("div", "np-row"); r.append(el("span", "np-k", k), n); return r; };
     reb.append(row("目的", seg(REBEL_GOALS, rebel.goal, (k) => { rebel.goal = k; })), el("p", "hint", REBEL_GOALS.find((g) => g.key === rebel.goal).desc), row("規模", seg(REBEL_SCALES, rebel.scale, (k) => { rebel.scale = k; })));
-    reb.append(btn(rebel.armed ? "danger" : "", rebel.armed ? "本当に反乱を起こす" : "反乱を起こす", "連なった領域が離反し、軍が割れて内戦になる", () => {
+    const nProv = map.pack.provinces.filter((p) => isLive(p) && p.state === s.i).length;
+    const rebWhy = nProv < 2 ? `属州が2つ以上ないと反乱は起こせません（いま${nProv}つ）` : !breakawayCandidates(map, s.i).length ? "首都の属州のほかに、離反できる属州がありません" : "";
+    const rebRow = el("div", "np-row nation-reb-row");
+    const rebBtn = btn(rebel.armed ? "danger" : "", rebel.armed ? "本当に反乱を起こす" : "反乱を起こす", "連なった領域が離反し、軍が割れて内戦になる", () => {
       if (!rebel.armed) { rebel.armed = true; return render(); }
       rebel.armed = false;
       try { simActions.startRebellion(s.i, { goal: rebel.goal, scale: rebel.scale }); wins.open("war"); } catch (e) { fail(e); }
       render();
-    }));
+    });
+    rebRow.append(rebBtn);
+    if (rebWhy) { rebBtn.disabled = true; const why = el("span", "hint nation-reb-why", rebWhy); why.dataset.field = "rebel-why"; rebRow.append(why); }
+    reb.append(rebRow);
     const land = el("section", "nation-sec"); land.append(el("h4", "", "領土と都市"), el("p", "hint", "地図に塗って領土を広げる・都市を置く（地図編集は、気候帯・標高・マーカーだけになりました）。"));
     const go = (tool, target) => () => window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool, target } }));
     const row2 = el("div", "np-seg"); row2.append(btn("", "領土を塗る", "地図をドラッグして、この国の領土を塗る", go("paint:state", s.i)), btn("", "都市を置く", "地図をクリックして、都市を置く", go("add:burg", s.i)));
     land.append(row2);
-    pane.append(war, reb, land);
+    // 基本設定（旧・国家詳細にあった、国名の変更・国の種類・特色・文章。v2.4.1 で国家タブへ移した。政体は上の専用リストが担当）
+    const basic = document.createElement("details"); basic.className = "nation-sec nation-basic"; basic.dataset.field = "basic";
+    basic.append(el("summary", "", "基本設定（国名・国の種類・特色・文章）"));
+    const nameLab = el("label", "b-field"), nameBox = el("span", "name-row"), nameIn = document.createElement("input");
+    nameIn.value = s.fullName ?? s.name; nameIn.dataset.field = "state-name";
+    nameIn.addEventListener("change", () => { editActions.renameEntity("state", s.i, nameIn.value); render(); });
+    const dice = btn("", "🎲", "仮の名前を生成（押すたびに変わります。Undo で戻せます）", () => { const v = editActions.suggestName("state", { id: s.i }); if (v) { nameIn.value = v; editActions.renameEntity("state", s.i, v); render(); } });
+    nameBox.append(nameIn, dice); nameLab.append(el("span", "b-mini", "国家名"), nameBox);
+    const prof = el("div", "b-details"); appendEntityProfile(prof, "state", s, { stateFields: ["type"], editActions, map, openEntity: (k, id) => window.alterhistory?.panels?.openEntity?.(k, id) });
+    const tags = el("div", "tl-rec-provs");
+    for (const o of STATE_TAGS) { const lab = el("label"), cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = (s.tags ?? []).includes(o.key); cb.addEventListener("change", () => { const cur = new Set(s.tags ?? []); if (cb.checked) cur.add(o.key); else cur.delete(o.key); editActions.setWorldInfo("state", s.i, { tags: [...cur] }); }); lab.append(cb, document.createTextNode(" " + o.label)); tags.append(lab); }
+    const { text: noteText, rich } = htmlToEditable(editActions.getNote("state", s.i));
+    const note = document.createElement("textarea"); note.className = "note-field"; note.rows = 4; note.value = noteText; note.dataset.field = "state-note";
+    note.addEventListener("change", () => editActions.setNote("state", s.i, editableToHtml(note.value, rich)));
+    basic.append(nameLab, prof, el("h4", "", "特色"), tags, el("h4", "", "文章"), ...(rich ? [el("p", "hint", "書式（HTML）を含む文章です。プレーンテキストとして編集すると書式は失われます。")] : []), note);
+    pane.append(war, reb, land, basic);
     const l = leaderRecord(map, s.i);
     if (l.history.length) { const h = el("section", "nation-sec"); h.append(el("h4", "", "歴代の指導者")); for (const x of l.history.slice().reverse().slice(0, 8)) h.append(el("div", "hint", `${x.since.year}–${x.until?.year ?? ""}　${x.title}${x.name}`)); pane.append(h); }
   }
@@ -201,19 +238,28 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     for (const [u, n] of by) army.append(el("div", "nation-army-row", `${UNIT_BY_KEY[u]?.label ?? u}　${fmt(n)}${UNIT_BY_KEY[u]?.unit ?? ""}`));
     const doc = el("section", "nation-sec"); doc.append(el("h4", "", `軍事ドクトリン（現在: ${DOCTRINE_BY_KEY[effectiveDoctrineKey(s)]?.label ?? "均衡"}）`));
     doc.append(militaryPicker({ get: () => mapOf().pack.states[s.i], onChange: (p) => { editActions.setMilitaryDoctrine(s.i, p); } }).box);
-    pane.append(army, doc);
+    // 核の保有数（旧「軍事」窓にあった設定をここへ移した。使うのは戦争ウィンドウの核作戦。通常の戦争では使われない）
+    const nuke = el("section", "nation-sec"); nuke.append(el("h4", "", "核の保有数"));
+    const nrow = el("div", "np-row"), ninp = document.createElement("input");
+    ninp.type = "number"; ninp.min = "0"; ninp.step = "1"; ninp.value = String(nuclearStock(s)); ninp.dataset.field = "nuclear-stock";
+    ninp.addEventListener("change", () => { simActions.setNuclearStock(s.i, Math.max(0, Math.round(Number(ninp.value) || 0))); render(); });
+    nrow.append(el("span", "np-k", "保有数"), ninp, el("span", "", UNIT_BY_KEY.nuclear?.unit ?? "発"));
+    nuke.append(nrow, el("p", "hint", "核作戦（戦争ウィンドウの「作戦」）で使います。通常の戦争では使われません。部隊の編成そのものは、ここでは表示のみです。"));
+    pane.append(army, nuke, doc);
   }
   function techPane(pane, map, s) {
     const sec = el("section", "nation-sec"); sec.append(el("h4", "", `技術ドクトリン（技術水準 Lv${editActions.getTechLevel(s.i)}）`), el("p", "hint", "どの段でも、条件なしで選べます。自動では進みません。"));
     sec.append(techPicker({ get: () => mapOf().pack.states[s.i], onChange: (p) => { editActions.setTechDoctrine(s.i, p); } }).box); pane.append(sec);
   }
   function vassalPane(pane, map, s) {
+    const kindSelect = (cur, on) => { const sel = document.createElement("select"); sel.dataset.field = "vassal-kind"; for (const x of VASSAL_KINDS) sel.append(new Option(x.label, x.key, false, x.key === cur)); sel.title = VASSAL_KINDS.find((x) => x.key === cur)?.desc ?? ""; sel.addEventListener("change", () => on(sel.value)); return sel; };
+    const kindRow = (label, cur, on) => { const r = el("div", "np-row"); r.append(el("span", "np-k", label), kindSelect(cur, on), el("span", "hint", VASSAL_KINDS.find((x) => x.key === cur)?.desc ?? "")); return r; };
     const vs = el("section", "nation-sec"); vs.append(el("h4", "", "傀儡・従属国"));
     const info = vassalInfo(map, s.i);
-    if (info) vs.append(el("p", "hint", `この国は ${sname(map, info.overlord)} の${VASSAL_KINDS.find((k) => k.key === info.kind)?.label ?? ""}です。`), btn("", "独立させる", "", () => { simActions.releaseVassal(s.i); render(); }));
+    if (info) vs.append(el("p", "hint", `この国は ${sname(map, info.overlord)} に従属しています。`), kindRow("種類", info.kind, (k) => { simActions.setVassal(s.i, info.overlord, k); render(); }), btn("", "独立させる", "", () => { simActions.releaseVassal(s.i); render(); }));
     const mine = vassalsOf(map, s.i);
     if (!mine.length) vs.append(el("p", "muted", "従える国はありません"));
-    for (const v of mine) { const r = el("div", "nation-army-row"); r.append(el("span", "", `${sname(map, v.stateId)}（${VASSAL_KINDS.find((k) => k.key === v.kind)?.label ?? v.kind}）`), btn("", "解放", "", () => { simActions.releaseVassal(v.stateId); render(); })); vs.append(r); }
+    for (const v of mine) { const r = el("div", "nation-army-row"); r.append(el("span", "", sname(map, v.stateId)), kindSelect(v.kind, (k) => { simActions.setVassal(v.stateId, s.i, k); render(); }), btn("", "解放", "", () => { simActions.releaseVassal(v.stateId); render(); })); vs.append(r); }
     const others = map.pack.states.filter((x) => isLive(x) && x.i !== s.i && !vassalInfo(map, x.i));
     if (others.length) {
       const add = el("div", "np-row"), t = document.createElement("select"), k = document.createElement("select");

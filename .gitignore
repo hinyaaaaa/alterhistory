@@ -1,2 +1,3 @@
 node_modules/
 tests/.samples/
+tests/e2e/shots/

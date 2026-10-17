@@ -53,6 +53,8 @@ const menuBtn = (w) => q(`[data-open-win="${w}"]`) ?? { click: () => window.alte
 const pick = (a, d) => { const boxes = () => [...window.document.querySelectorAll("#tab-wars .member-picker")]; boxes()[0].querySelectorAll("input")[a].click(); boxes()[1].querySelectorAll("input")[d].click(); };
 
 const open = (w) => { menuBtn(w).click(); return win(w); };
+// 講和条約は、外交ウィンドウの右の列（講和モード）に出る（v2.4.1 A1）。独立の「講和条約」ウィンドウは無い
+const peaceOpen = (warId) => { window.alterhistory.panels.diplomacy.openPeace(warId); return win("diplomacy"); };
 console.log("=== 一覧ウィンドウ（文化・宗教）／国家は国家タブ ===");
 for (const k of ["culture", "religion"]) {
   const w = open(`list-${k}`);
@@ -91,16 +93,17 @@ const nw = open("nuclear");
 check("核作戦ウィンドウが開く（核の保有国が無ければ案内）", !nw.hidden && nw.textContent.includes("核"));
 
 console.log("=== 講和条約・戦争・外交 ===");
-check("戦争がまだ無いときは案内が出る", open("treaty").textContent.includes("まだありません"));
+check("戦争がまだ無いときは案内が出る", peaceOpen().textContent.includes("まだありません"));
 const ids = store.getState().map.pack.states.filter((s) => s && s.i > 0 && !s.removed).map((s) => s.i);
 const out = simActions.declareWarInstant([ids[0]], [ids[1]], null, "conventional");
 check("宣戦布告で即判定され、名前と終戦日が付く", !!out && !!out.name && !!out.endsAt);
-check("戦争中でも、講和条約をいつでも結べる（締結ボタンがある）", [...open("treaty").querySelectorAll("button")].some((b) => b.textContent.includes("講和条約を締結")));
-const tw = open("treaty");
-check("講和条約ウィンドウに戦争・条約名・渡る量の表が出る", !!tw.querySelector(".war-prep") && (!!tw.querySelector(".wo-impact table") || tw.textContent.includes("各国の消耗")));
+check("戦争中でも、講和条約をいつでも結べる（締結ボタンがある）", [...peaceOpen().querySelectorAll("button")].some((b) => b.textContent.includes("講和条約を締結")));
+const tw = peaceOpen();
+check("外交の右の列（講和モード）に戦争・条約名・渡る量の表が出る", !!tw.querySelector(".war-prep") && (!!tw.querySelector(".wo-impact table") || tw.textContent.includes("各国の消耗")));
 const ww = open("war");
 [...ww.querySelectorAll(".war-band button")].find((b) => b.textContent.includes(out.name))?.click(); // 戦争を選ぶと詳細（戦況）が出る
 check("戦争ウィンドウに戦況バーがある", ww.querySelectorAll(".wo-bar-wrap").length === 5);
+window.alterhistory.panels.diplomacy.closePeace(); window.alterhistory.panels.diplomacy.render(); // 講和モードを閉じて、条約一覧へ戻す
 const dw = open("diplomacy");
 check("外交一覧は同盟・敵対・中立だけで、Neutrals は出ない", !dw.textContent.includes("Neutrals") && dw.textContent.includes("敵対"));
 check("外交は3列（国のリスト・関係カード・条約一覧）で、外交の表は無い", dw.querySelectorAll(".dip-left .dip-row").length >= 2 && !!dw.querySelector(".dip-mid") && !!dw.querySelector(".dip-right") && !dw.querySelector(".diplomacy-matrix"));
@@ -113,8 +116,7 @@ check("隠密作戦ウィンドウに、3種の作戦と成功率が出る", cv.
 const before = simActions.covertOps().length;
 [...cv.querySelectorAll("button")].find((b) => b.textContent.includes("作戦を実行"))?.click();
 check("作戦を実行すると記録が残る", simActions.covertOps().length === before + 1);
-open("treaty");
-const tdet = win("treaty");
+const tdet = peaceOpen();
 check("講和の自動案が入っている（種類・条約名・賠償金・その他の条件）", tdet.querySelector("select") && tdet.querySelector("textarea")?.value.length > 0 && /条約$/.test([...tdet.querySelectorAll("input:not([type])")].map((i) => i.value).find((v) => /条約$/.test(v)) ?? ""));
 check("割譲の行に、都市名の表示がある", [...tdet.querySelectorAll(".wo-cess-burgs")].length === 0 || tdet.querySelector(".wo-cess-burgs").textContent.length > 0);
 console.log("=== 廃止したもの ===");

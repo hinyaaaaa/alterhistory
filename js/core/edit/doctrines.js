@@ -73,7 +73,18 @@ export function normalizeNodes(state, keys) {
   return out.sort();
 }
 
-/** 総合方針＋選んだ節の効果を合成した「実効ドクトリン」のキーを返す。選んだ節が無ければ総合方針のキーのまま */
+/**
+ * 効果の上限（v2.4.1 A7。ユーザー回答で確定）。節を重ねても、極端な強さにならないようにする。
+ *   unit: 兵科の倍率は、総合方針の基本値の ±60% 以内（基本が1.0なら 0.4〜1.6）
+ *   war : 攻め・守りは、それぞれの合計（総合方針＋全部の節）が ±25% 以内
+ */
+export const DOCTRINE_CAPS = Object.freeze({ unit: 0.6, war: 0.25 });
+/** 節の効果の記号（fx のキー）が影響する先（兵科のキー、または attack / defense） */
+export const fxDimension = (k) => (k === "atk" ? "attack" : k === "def" ? "defense" : FX[k] ?? null);
+/** 実効ドクトリンのうち、上限に達している効果 [{ dim, raw, cap }]（raw: 上限が無ければこうなる増減率。cap: 上限の増減率） */
+export const doctrineCapped = (state) => DOCTRINE_BY_KEY[effectiveDoctrineKey(state)]?.capped ?? [];
+
+/** 総合方針＋選んだ節の効果を合成した「実効ドクトリン」のキーを返す。選んだ節が無ければ総合方針のキーのまま。合成には上限（DOCTRINE_CAPS）がかかる */
 export function effectiveDoctrineKey(state) {
   const baseKey = DOCTRINE_BY_KEY[state?.doctrine] ? state.doctrine : DEFAULT_DOCTRINE;
   const nodes = normalizeNodes(state, state?.doctrineNodes);
@@ -91,7 +102,19 @@ export function effectiveDoctrineKey(state) {
     if (fx.mor) { moraleLoss *= 1 + fx.mor; war.moraleHit = (war.moraleHit ?? 1) * (1 + fx.mor); }
     if (fx.con) conscriptBonus += fx.con;
   }
-  DOCTRINE_BY_KEY[key] = { ...base, key, baseKey, label: `${base.label}＋${nodes.length}`, mult, war, moraleLoss: Math.round(moraleLoss * 1000) / 1000, defenseBonus: Math.round(defenseBonus * 1000) / 1000, conscriptBonus: Math.round(conscriptBonus * 1000) / 1000 };
+  // 上限をかける（上限に達した効果は、capped に残して、画面に「上限に達している」と出す）
+  const capped = [], r3 = (v) => Math.round(v * 1000) / 1000;
+  for (const u of Object.keys(mult)) {
+    const b0 = base.mult[u] ?? 1, hi = r3(b0 * (1 + DOCTRINE_CAPS.unit)), lo = r3(b0 * (1 - DOCTRINE_CAPS.unit));
+    if (mult[u] > hi || mult[u] < lo) { capped.push({ dim: u, raw: r3(mult[u] / b0 - 1), cap: mult[u] > hi ? DOCTRINE_CAPS.unit : -DOCTRINE_CAPS.unit }); mult[u] = mult[u] > hi ? hi : lo; }
+  }
+  const capWar = (v) => Math.max(-DOCTRINE_CAPS.war, Math.min(DOCTRINE_CAPS.war, v));
+  if (war.attack !== undefined && Math.abs(war.attack) > DOCTRINE_CAPS.war) { capped.push({ dim: "attack", raw: r3(war.attack), cap: capWar(war.attack) }); war.attack = capWar(war.attack); }
+  if ((war.defense !== undefined && Math.abs(war.defense) > DOCTRINE_CAPS.war) || Math.abs(defenseBonus) > DOCTRINE_CAPS.war) {
+    capped.push({ dim: "defense", raw: r3(Math.max(Math.abs(war.defense ?? 0), Math.abs(defenseBonus)) * Math.sign(war.defense ?? defenseBonus)), cap: capWar(war.defense ?? defenseBonus) });
+    if (war.defense !== undefined) war.defense = capWar(war.defense); defenseBonus = capWar(defenseBonus);
+  }
+  DOCTRINE_BY_KEY[key] = { ...base, key, baseKey, capped, label: `${base.label}＋${nodes.length}`, mult, war, moraleLoss: Math.round(moraleLoss * 1000) / 1000, defenseBonus: Math.round(defenseBonus * 1000) / 1000, conscriptBonus: Math.round(conscriptBonus * 1000) / 1000 };
   return key;
 }
 

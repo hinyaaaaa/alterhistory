@@ -47,7 +47,6 @@ import { createSimActions } from "./app/sim-actions.js";
 import { createTimeActions } from "./app/time-actions.js";
 import { createAutoCheck } from "./app/auto-check.js";
 import { initTimeBar } from "./ui/time-bar.js";
-import { initMilitaryPanel } from "./ui/panels/military-panel.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
 import { initWarOutcome } from "./ui/war-outcome-window.js";
 
@@ -82,11 +81,10 @@ function start() {
   const simActions = createSimActions({ store, renderer });
   const autoCheck = createAutoCheck({ store }); // データ検査の窓は無い。操作後と5年ごとに、問題があるときだけ右下に出す
   const timeActions = createTimeActions({ store, renderer, simActions, autoCheck });
-  const militaryPanel = initMilitaryPanel({ store, simActions, editActions });
   let highlightRef = null; // 講和の割譲区画を赤く強調するために、あとで入る
   const warOutcome = initWarOutcome({ store, simActions, getHighlight: () => highlightRef });
   let winsRef = null;
-  const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome, getWins: () => winsRef });
+  const warsPanel = initWarsPanel({ store, simActions, getOutcome: () => warOutcome, getDiplomacy: () => panels.diplomacy });
   // editMode は editorPanel より後に作るが、editorPanel（国家タブの属州サブタブ）から
   // 「属州を塗るツールに切り替える」ために参照したいので、後で編集パネルに差し込む
   let editModeRef = null;
@@ -99,10 +97,7 @@ function start() {
     editMode: { setTool: (t) => editModeRef?.setTool(t) },
   });
   const panels = {
-    ...editorPanel, simActions, military: militaryPanel, wars: warsPanel,
-    // edit-mode.js が地図クリックを「部隊の配置/移動」として消費するために使う
-    regimentPending: () => militaryPanel.regimentPending(),
-    consumeRegimentPlacement: (cell) => militaryPanel.consumeRegimentPlacement(cell),
+    ...editorPanel, simActions, wars: warsPanel,
   };
   editorPanel.setPanels?.(panels); // editor-panel.js 内で使う panels（wars/alliances/military）を後から渡す
   const highlight = initHighlight({ store, viewport, renderer }); highlightRef = highlight; // 一覧・地図クリックで、ズームせずに境界線を光らせる

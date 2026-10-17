@@ -24,19 +24,20 @@ export const EXHAUST_SUPPORT = 10; // 民意がこの値以下になった側は
 /**
  * 戦争の形態。常に総力戦ではなく、規模と性格を選べる。
  *   lossScale: 兵力の損害の大きさ / popScale: 民間の被害 / duration: 戦争の長さ / scoreScale: 勝者が講和で要求できる大きさ（戦争スコア）
+ *   treasuryLoad / industryLoad: 毎月の国庫・産業への負荷の係数（限定戦 < 通常戦 < 総力戦。非対称戦は、強い側＝占領側に occupierLoad 倍の国庫の負担）。BALANCE の warTreasuryLoad / warIndustryLoad で全体を調整できる
  *   allMuster: true なら、部隊の選択に関係なく全部隊が出る（総力戦）
  */
 export const WAR_TYPES = Object.freeze({
-  limited: { key: "limited", label: "限定戦（国境紛争）", weary: 0.3, capitalFall: 0.2, lossScale: 0.3, popScale: 0.35, duration: 0.25, scoreScale: 0.4, allMuster: false,
+  limited: { key: "limited", label: "限定戦（国境紛争）", weary: 0.3, capitalFall: 0.2, lossScale: 0.3, popScale: 0.35, duration: 0.25, scoreScale: 0.4, treasuryLoad: 0.3, industryLoad: 0.3, allMuster: false,
     desc: "国境付近の小規模な衝突。損害も期間も小さく、要求できるものも小さい。" },
-  conventional: { key: "conventional", label: "通常戦", weary: 1, capitalFall: 1, lossScale: 0.75, popScale: 1, duration: 0.8, scoreScale: 0.8, allMuster: false,
+  conventional: { key: "conventional", label: "通常戦", weary: 1, capitalFall: 1, lossScale: 0.75, popScale: 1, duration: 0.8, scoreScale: 0.8, treasuryLoad: 1, industryLoad: 1, allMuster: false,
     desc: "招集した部隊どうしの正規戦。標準的な損害と期間。" },
-  total: { key: "total", label: "総力戦", weary: 0.8, capitalFall: 1.3, lossScale: 1.2, popScale: 1.6, duration: 1.3, scoreScale: 1, allMuster: true,
+  total: { key: "total", label: "総力戦", weary: 0.8, capitalFall: 1.3, lossScale: 1.2, popScale: 1.6, duration: 1.3, scoreScale: 1, treasuryLoad: 1.8, industryLoad: 2, allMuster: true,
     desc: "国のすべてを注ぎ込む。全部隊が参戦し、損害も民間の被害も大きい。全面降伏まで要求できる。" },
-  asymmetric: { key: "asymmetric", asym: true, label: "非対称戦（ゲリラ・占領戦）", weary: 1.4, capitalFall: 0, lossScale: 0.9, popScale: 1.3, duration: 2.2, scoreScale: 0.5, allMuster: false,
+  asymmetric: { key: "asymmetric", asym: true, label: "非対称戦（ゲリラ・占領戦）", weary: 1.4, capitalFall: 0, lossScale: 0.9, popScale: 1.3, duration: 2.2, scoreScale: 0.5, treasuryLoad: 1.2, industryLoad: 0.8, occupierLoad: 1.6, allMuster: false,
     desc: "弱い側が地形と民衆を盾にゲリラ戦を行う。強い側は制空・制海が効きにくく、士気が長期で削られる。決着がつきにくく、長引く。" },
   // 反乱で国が割れたときに自動で始まる戦争。手で宣戦する形態の一覧には出さない（civilOnly）
-  civil: { key: "civil", label: "内戦（反乱）", weary: 1.2, capitalFall: 1.2, lossScale: 0.9, popScale: 1.3, duration: 1, scoreScale: 0.9, allMuster: true, civilOnly: true,
+  civil: { key: "civil", label: "内戦（反乱）", weary: 1.2, capitalFall: 1.2, lossScale: 0.9, popScale: 1.3, duration: 1, scoreScale: 0.9, treasuryLoad: 1.2, industryLoad: 1.5, allMuster: true, civilOnly: true,
     desc: "国が割れて、互いの全部隊で戦う。決着は、鎮圧（併合）か独立の承認か、講和で決まる。" },
 });
 const BLEND = new Map();
@@ -46,7 +47,7 @@ function blendType(key) {
   const [a, b] = key.split("+").map((k) => WAR_TYPES[k]);
   if (!a || !b) return WAR_TYPES.conventional;
   const o = { key, label: `${a.label.replace(/（.*/, "")}／${b.label.replace(/（.*/, "")}`, desc: "双方が別の形態を選んだ戦い。", allMuster: !!(a.allMuster || b.allMuster), asym: !!(a.asym || b.asym) };
-  for (const f of ["weary", "capitalFall", "lossScale", "popScale", "duration", "scoreScale"]) o[f] = Math.round(((a[f] + b[f]) / 2) * 1000) / 1000;
+  for (const f of ["weary", "capitalFall", "lossScale", "popScale", "duration", "scoreScale", "treasuryLoad", "industryLoad"]) o[f] = Math.round(((a[f] + b[f]) / 2) * 1000) / 1000;
   BLEND.set(key, o); return o;
 }
 export const warTypeOf = (key) => WAR_TYPES[key] ?? (typeof key === "string" && key.includes("+") ? blendType(key) : WAR_TYPES.conventional);
@@ -60,6 +61,18 @@ export function warTypeKey(types, attackers, defenders, fallback = "conventional
   return A === D ? A : [A, D].sort().join("+");
 }
 /** 形態を上げたとき（限定戦 → 通常戦 → 総力戦）の、国への追加の負荷（民意の低下）。下げるときは負荷なし */
+/**
+ * 戦争中の「毎月の負荷」（国庫の減りと産業の低下）。形態の係数 × 軍事ドクトリンの moraleLoss で変わる。
+ *   revenue: 国の年収（人頭税＋輸出の売上税）。国庫は、その1/12を基準に減る。occupier: 非対称戦で、強い側（占領する側）か
+ * @returns {{treasury:number, industryShare:number}} treasury: 国庫から減る額 / industryShare: 産業が落ちる割合（0〜）
+ */
+export function monthlyWarLoad(state, T, { occupier = false, revenue = 0 } = {}) {
+  const dl = doctrineOf(state).moraleLoss ?? 1, occ = T.asym && occupier ? (T.occupierLoad ?? 1.5) : 1;
+  return {
+    treasury: Math.max(0, (revenue / 12) * BALANCE.warTreasuryLoad * (T.treasuryLoad ?? 1) * dl * occ),
+    industryShare: Math.min(0.2, 0.004 * BALANCE.warIndustryLoad * (T.industryLoad ?? 1) * dl * (T.asym && occupier ? 1.25 : 1)),
+  };
+}
 export const ESCALATION = Object.freeze({ limited: 0, conventional: 1, asymmetric: 1, total: 2 });
 export const escalationPenalty = (from, to) => Math.max(0, (ESCALATION[to] ?? 1) - (ESCALATION[from] ?? 1)) * 4;
 

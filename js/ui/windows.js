@@ -140,6 +140,7 @@ export function initWindows() {
     const w = wins.get(id);
     if (!w) return;
     if (w.root.hidden) {
+      w.opener = document.activeElement instanceof HTMLElement && document.activeElement !== document.body ? document.activeElement : null; // 閉じたときに、キーボード操作の位置を戻す
       w.root.hidden = false;
       if (!w.root.style.left) {
         const n = [...wins.values()].filter((x) => x !== w && !x.root.hidden).length % 5;
@@ -150,6 +151,7 @@ export function initWindows() {
     }
     w.def.onOpen?.();
     front(w);
+    if (w.opener) { w.root.tabIndex = -1; w.root.focus({ preventScroll: true }); } // キーボードで開いたときは、窓の中からTabで進めるように
     notify();
   }
   function closeWin(id) {
@@ -157,6 +159,8 @@ export function initWindows() {
     if (w) {
       w.root.hidden = true;
       w.def.onClose?.();
+      const back = w.opener; w.opener = null;
+      if (back?.isConnected && !back.disabled && w.root.contains(document.activeElement)) back.focus({ preventScroll: true });
       notify();
     }
   }
@@ -165,7 +169,9 @@ export function initWindows() {
     if (e.key !== "Escape") return;
     if (e.defaultPrevented || document.querySelector("dialog[open]")) return; // 確認ダイアログのEscは、そのダイアログだけを閉じる（背後の窓は閉じない）
     const top = [...wins.values()].filter((w) => !w.root.hidden).sort((a, b) => Number(b.root.style.zIndex) - Number(a.root.style.zIndex))[0];
-    if (top && !(document.activeElement instanceof HTMLInputElement) && !document.querySelector("details.menu[open]")) closeWin([...wins.entries()].find(([, w]) => w === top)[0]);
+    const ae = document.activeElement;
+    if (ae instanceof HTMLInputElement || ae instanceof HTMLTextAreaElement) { ae.blur(); return; } // 入力中のEscは、まず入力欄を抜ける（書きかけは確定される）。もう一度押すと窓が閉じる
+    if (top && !document.querySelector("details.menu[open]")) closeWin([...wins.entries()].find(([, w]) => w === top)[0]);
   });
   const openIds = () => [...wins.entries()].filter(([, x]) => !x.root.hidden).map(([id]) => id);
   return { register, open, close: closeWin, isOpen, openIds, subscribe: (fn) => { listeners.add(fn); return () => listeners.delete(fn); } };

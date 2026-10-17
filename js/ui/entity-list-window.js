@@ -6,7 +6,7 @@ import { alertDialog, confirmDialog } from "./dialogs.js";
 import { el } from "./kit.js";
 // 国家の一覧は国家タブ（nation-window.js）、属州は国家タブの「傀儡・属州」に移した（v2.4.0）。国家の削除機能は無い。ここは文化と宗教だけ
 const LIST_KEY = { culture: "cultures", religion: "religions" };
-const CELL_KEY = { state: "state", culture: "culture", religion: "religion", province: "province" };
+const CELL_KEY = { culture: "culture", religion: "religion" };
 export const KIND_LABEL = { state: "国家", culture: "文化", religion: "宗教", province: "属州" };
 export const KIND_ICON = { state: "state", culture: "culture", religion: "religion", province: "province" };
 
@@ -23,9 +23,9 @@ export function initEntityLists({ store, wins, panels, editActions, highlight, b
       const id = await openSetup(kind);
       if (id == null) return; // キャンセル：何も作られていない
       const map = store.getState().map;
-      const owned = kind === "province" ? 0 : map?.pack.cells[CELL_KEY[kind]].reduce((n, v) => n + (v === id ? 1 : 0), 0) ?? 0;
+      const owned = map?.pack.cells[CELL_KEY[kind]].reduce((n, v) => n + (v === id ? 1 : 0), 0) ?? 0;
       // 領土を「あとで塗る」にした場合は、そのまま地図をなぞって塗れるようにする
-      if (kind !== "province" && owned === 0 && builderActions) {
+      if (owned === 0 && builderActions) {
         builderActions.beginPaint(kind, id);
         window.dispatchEvent(new CustomEvent("request-edit-panel-open"));
         window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: `paint:${kind}`, target: id } }));
@@ -45,7 +45,7 @@ export function initEntityLists({ store, wins, panels, editActions, highlight, b
     for (let i = 0; i < arr.length; i++) if (map.pack.cells.biome[i] !== 0) counts.set(arr[i], (counts.get(arr[i]) ?? 0) + 1);
     const items = map.pack[LIST_KEY[kind]].filter((e) => e && e.i > 0 && !e.removed).map((e) => ({ e, cells: counts.get(e.i) ?? 0 })).sort((a, b) => b.cells - a.cells);
     body.append(addBar(kind));
-    body.append(el("p", "hint", `${KIND_LABEL[kind]}は ${items.length} 件。名前を押すと詳細（${kind === "state" ? "「操作」欄で統合・反乱・独立も" : "系譜も"}）を開けます。`));
+    body.append(el("p", "hint", `${KIND_LABEL[kind]}は ${items.length} 件。名前を押すと詳細（系譜も）を開けます。`));
     // 系譜図は独立の入口にせず、文化・宗教という単位の下に置く
     if (kind === "culture" || kind === "religion") {
       const g = el("button", "", "@tree 系譜図を開く"); g.type = "button"; g.addEventListener("click", () => wins.open(`genealogy-${kind}`));

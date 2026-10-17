@@ -209,11 +209,7 @@ button:disabled:hover { border-color: var(--line); color: var(--text-dim); }
   padding: 6px 9px; color: var(--text); width: 100%;
 }
 .note-field { resize: vertical; font: inherit; }
-.tech-level-row { display: flex; align-items: center; gap: 10px; }
-.tech-level-row input[type="range"] { flex: 1; }
-.tech-level-value { min-width: 1.5em; text-align: right; font-variant-numeric: tabular-nums; color: var(--brass-bright); font-weight: 700; }
 .diplomacy-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 5px; }
-.diplomacy-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 button.danger { border-color: var(--danger); color: var(--danger-bright); background: var(--panel-2); }
 button.danger:hover { background: rgba(179, 57, 44, 0.18); border-color: var(--danger-bright); }
 button.link { background: none; border: 0; box-shadow: none; color: var(--brass-bright); text-align: left; padding: 2px 0; font-weight: 500; }
@@ -239,18 +235,7 @@ button.link:hover { color: var(--brass-bright); text-decoration: underline; }
 
 /* --- 国家タブ内のサブタブ（基本情報／外交／軍事／属州） --- */
 .dialog-tabs { display: flex; flex-wrap: wrap; gap: 2px; padding: 0 4px; border-bottom: 1px solid var(--line); background: var(--panel); }
-.tab-btn {
-  background: transparent; border: 0; border-bottom: 3px solid transparent; border-radius: 0;
-  padding: 8px 10px; color: var(--muted); box-shadow: none; font-weight: 600;
-  text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em;
-}
-.tab-btn:hover { color: var(--text); border-color: var(--line-strong); }
-.tab-btn.active { color: var(--brass-bright); border-bottom-color: var(--brass); }
 .tab-panel { padding: 12px 14px; }
-
-/* --- 部隊管理 --- */
-.state-picker { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
-.regiment-list { display: flex; flex-direction: column; gap: 12px; }
 .regiment-card {
   border: 1px solid var(--line); border-left: 3px solid var(--brass-dim);
   border-radius: var(--radius); padding: 12px 14px; background: var(--panel-2);
@@ -258,33 +243,9 @@ button.link:hover { color: var(--brass-bright); text-decoration: underline; }
 }
 .regiment-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 9px; }
 .regiment-card-head .name { font-weight: 700; color: var(--brass-bright); }
-.regiment-units { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 7px 12px; margin-bottom: 9px; padding: 9px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); }
-.unit-field { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 11px; }
-.unit-field input { width: 68px; padding: 3px 6px; }
-.regiment-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.regiment-power { color: var(--muted); font-size: 11px; letter-spacing: 0.02em; }
-.attack-target { display: flex; align-items: center; gap: 8px; margin-top: 9px; padding-top: 9px; border-top: 1px dashed var(--line); }
 .regiment-card-head input[type="checkbox"] { margin-right: 3px; }
-.regiment-name-ro { font-weight: 700; color: var(--brass-bright); margin: 0 0 4px; }
-.attack-target-section { border-top: 2px solid var(--danger); margin-top: 14px; padding-top: 10px; }
-.regiment-card.target-card { border-left-color: var(--danger); }
 #tab-regiments .hint { color: var(--muted); font-size: 11px; margin: 0 0 14px; }
 #tab-regiments .muted { color: var(--muted); font-size: 11px; }
-.muster-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 14px;
-  padding: 11px 14px; border: 1px solid var(--brass-dim); border-radius: var(--radius);
-  background: var(--panel-3); position: sticky; bottom: 0;
-}
-
-/* --- 戦争・講和 --- */
-.war-card {
-  border: 1px solid var(--line); border-left: 3px solid var(--danger);
-  border-radius: var(--radius); padding: 12px 14px; margin-bottom: 12px; background: var(--panel-2);
-  box-shadow: var(--shadow-panel);
-}
-.war-card.ended { opacity: 0.65; border-left-color: var(--line-strong); }
-.war-title { font-weight: 700; margin-bottom: 5px; color: var(--brass-bright); letter-spacing: 0.01em; }
-.war-meta { color: var(--muted); font-size: 11px; margin-bottom: 7px; }
 .battle-log { max-height: 130px; overflow-y: auto; font-size: 11px; color: var(--muted); margin: 7px 0; padding: 7px 9px; background: var(--panel); border: 1px solid var(--line); }
 .cession-list { display: flex; flex-direction: column; gap: 4px; margin: 9px 0; max-height: 170px; overflow-y: auto; }
 .cession-item { display: flex; align-items: center; gap: 8px; }
@@ -296,23 +257,6 @@ button.link:hover { color: var(--brass-bright); text-decoration: underline; }
   box-shadow: var(--shadow-panel);
 }
 .alliance-card.dissolved { opacity: 0.6; border-left-color: var(--muted); }
-
-/* --- 外交マトリクス（全国家×全国家の一覧表） --- */
-.diplomacy-matrix-scroll { overflow-x: auto; margin-top: 6px; }
-table.diplomacy-matrix { border-collapse: collapse; font-size: 11px; white-space: nowrap; }
-table.diplomacy-matrix th, table.diplomacy-matrix td {
-  border: 1px solid var(--line); padding: 4px 8px; text-align: center;
-}
-table.diplomacy-matrix thead th { background: var(--panel-2); font-weight: 600; }
-table.diplomacy-matrix tbody th { background: var(--panel-2); text-align: left; font-weight: 600; }
-table.diplomacy-matrix th.focus { color: var(--brass-bright); }
-table.diplomacy-matrix td.self { background: repeating-var(--panel-3) 8px; }
-table.diplomacy-matrix td { cursor: pointer; }
-table.diplomacy-matrix td.focus-row-col { background: rgba(143, 184, 176, 0.08); }
-table.diplomacy-matrix td.rel-Ally { color: var(--ally); font-weight: 600; }
-table.diplomacy-matrix td.rel-Enemy { color: var(--danger-bright); font-weight: 600; }
-table.diplomacy-matrix td.rel-Vassal, table.diplomacy-matrix td.rel-Suzerain { color: var(--brass-bright); }
-table.diplomacy-matrix select.rel-picker { font-size: 11px; width: 100%; }
 
 /* --- 時間設定ダイアログ（年月の直接指定・時代区分の管理） --- */
 .time-settings-dialog { width: min(420px, 90vw); }
@@ -328,10 +272,6 @@ table.diplomacy-matrix select.rel-picker { font-size: 11px; width: 100%; }
 .member-picker { display: flex; flex-wrap: wrap; gap: 6px; margin: 9px 0; }
 .member-picker label { display: inline-flex; align-items: center; gap: 5px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 3px 10px; font-size: 11px; cursor: pointer; }
 .member-picker input { margin: 0; }
-
-
-/* --- 軍事ダイアログ タブのアイコン --- */
-.tab-icon { margin-right: 6px; opacity: 0.85; }
 
 /* ---- 名前の仮生成 ---- */
 .confirm-dialog .suggest-btn { margin: 0 0 8px; }
@@ -421,7 +361,7 @@ table.diplomacy-matrix select.rel-picker { font-size: 11px; width: 100%; }
 }
 .b-details { display: flex; flex-direction: column; gap: 8px; padding: 8px 10px 10px; border-top: 1px dashed var(--line); background: rgba(0, 0, 0, 0.16); }
 .b-field { display: flex; flex-direction: column; gap: 3px; }
-.b-field input, .b-field select { width: 100%; }
+.b-field input, .b-field select { width: 100%; box-sizing: border-box; min-width: 0; }
 
 /* 仮の名前トレイ（下に固定表示） */
 .b-tray {
@@ -431,9 +371,6 @@ table.diplomacy-matrix select.rel-picker { font-size: 11px; width: 100%; }
   border-top: 1px solid var(--brass-dim);
 }
 .b-tray-text { flex: 1; font-size: 11.5px; color: var(--text); }
-
-@media (max-width: 720px) {
-}
 
 /* 書き出しメニューの「画像に入れるもの」 */
 .menu-opts { display: flex; flex-direction: column; gap: 2px; padding: 8px 11px 6px; border-top: 1px solid var(--line); margin-top: 4px; }
@@ -583,8 +520,6 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .win-list .ended { opacity: 0.6; }
 .muster-state { margin: 8px 0; padding: 8px; border: 1px solid var(--line); border-radius: 4px; }
 .muster-state h5 { margin: 0 0 6px; font-size: 12.5px; color: var(--brass-bright); }
-.muster-row { display: flex; align-items: center; gap: 8px; padding: 2px 0; font-size: 12.5px; }
-.muster-row .muted { margin-left: auto; }
 .win-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .win-table th, .win-table td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
 .win-table th:first-child, .win-table td:first-child { text-align: left; }
@@ -623,8 +558,6 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .ent-main { flex: 1; text-align: left; background: none; border: 0; color: var(--text); padding: 4px 2px; cursor: pointer; }
 .ent-meta { color: var(--muted); font-size: 11px; min-width: 56px; text-align: right; }
 .ent-btn { padding: 2px 8px; }
-
-.dip-mismatch { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
 
 /* ---- 年表ウィンドウ ---- */
 .tl-body { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
@@ -665,18 +598,10 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 .regiment-card.mini .regiment-card-head { display: flex; gap: 4px; align-items: center; }
 .mini-name { flex: 1; min-width: 0; background: transparent; border: 0; font-weight: 600; }
 .mini-btn { padding: 1px 7px; font-size: 12px; }
-.regiment-card.mini .regiment-power { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
 .mini-more > summary { cursor: pointer; font-size: 12px; color: var(--muted); margin-top: 4px; }
-.regiment-card.mini .regiment-units { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin-top: 6px; }
-
-/* ---- 戦術ドクトリン ---- */
-.doctrine-list { display: flex; flex-direction: column; gap: 6px; }
 .doctrine-card { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
 .doctrine-card.on { border-color: var(--brass); background: var(--panel-2); }
 .doctrine-body p { margin: 2px 0 4px; }
-.doctrine-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.doctrine-chip { font-size: 11px; padding: 1px 7px; border-radius: 10px; border: 1px solid var(--line); color: var(--muted); }
-.doctrine-chip.up { color: #4fb477; border-color: #2f6b49; } .doctrine-chip.down { color: #d9594c; border-color: #7a3a33; }
 
 /* ---- 系譜図 ---- */
 .gen-scroll { overflow: auto; max-height: 420px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel-2); }
@@ -687,18 +612,13 @@ body { font-feature-settings: "palt"; text-rendering: optimizeLegibility; -webki
 /* ---- 横タブ廃止後 ---- */
 .b-kind-select { width: 100%; margin: 4px 0 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 8px; color: var(--text); }
 .b-random > summary, .state-prov-fold > summary { cursor: pointer; color: var(--muted); font-size: 12px; margin: 6px 0; }
-.state-prov-fold { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 4px; }
 
 .gen-parents { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 2px 10px; max-height: 150px; overflow: auto; }
 .gen-parent { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
-/* ---- 戦争の準備・戦闘の記録 ---- */
-.muster-box { display: flex; flex-direction: column; gap: 6px; margin: 6px 0 10px; }
 .muster-state { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
 .muster-reg { font-size: 12px; white-space: nowrap; }
 .battle-log { margin: 4px 0 10px; padding-left: 20px; font-size: 12px; color: var(--muted); }
 .battle-log li { margin-bottom: 3px; }
-.doctrine-merit { margin: 2px 0 4px; font-size: 12px; color: #4fb477; }
 
 .wo-cess { max-height: none; overflow: visible; } /* 割譲の一覧は窓のスクロールに任せる（入れ子のスクロールを作らない） */
 
@@ -848,4 +768,90 @@ button.has-ico { display: inline-flex; align-items: center; justify-content: cen
 .np-regime { display: flex; flex-direction: column; gap: 2px; text-align: left; padding: 6px 8px; text-transform: none; }
 .np-regime.on { border-color: var(--brass); background: var(--panel-3); }
 .np-face { display: flex; } .face-svg { border: 1px solid var(--line-strong); background: #111; }
-@media (max-width: 700px) { .nation-top { grid-template-columns: 1fr; } .nation-row { grid-template-columns: 14px 1.4fr 1fr 1fr; } .nation-row > :nth-child(n+5) { display: none; } .np-tree { grid-template-columns: 56px repeat(3, 1fr); } .np-chain { grid-template-columns: repeat(5, 1fr); } }
+@media (max-width: 700px) { .nation-top { grid-template-columns: 1fr; } .nation-row { grid-template-columns: 14px 1.4fr 1fr 0.9fr; } .nation-row > :nth-child(4), .nation-row > :nth-child(6) { display: none; } /* 狭い画面は、並べ替えに使う 国家・政体・人口 を見せる */ .np-tree { grid-template-columns: 56px repeat(3, 1fr); } .np-chain { grid-template-columns: repeat(5, 1fr); } }
+
+/* ---- 狭い画面（スマホ）で横にはみ出さない（v2.4.1 A4 の自動検査で見つかった崩れ） ---- */
+@media (max-width: 720px) {
+  .nation-merge { margin-left: 0; flex-wrap: wrap; min-width: 0; }
+  .nation-merge select { max-width: 100%; min-width: 0; }
+  .nation-tabs { flex-wrap: wrap; }
+  .nation-tabs button { flex: 1 1 30%; }
+  .nation-detail .np-row, .nation-pane .np-row { flex-wrap: wrap; min-width: 0; }
+  .nation-pane select, .nation-pane input { min-width: 0; max-width: 100%; }
+  .war-prep, .treaty-body .war-prep { grid-template-columns: minmax(0, 1fr); }
+  .war-prep-right { position: static; }
+  .wo-cess-row { grid-template-columns: auto minmax(0, 1fr); }
+  .wo-cess-row > select, .wo-cess-row > .wo-arrow { grid-column: 1 / -1; justify-self: stretch; }
+}
+.b-field input[type="range"] { margin: 0; } /* 既定の左右2pxの余白で、枠より2pxはみ出していた */
+
+/* ---- 外交ウィンドウ・条約の窓（v2.4.0 では、このスタイルが欠けていて3列が縦に積まれていた。v2.4.1 の A1 で足した） ---- */
+.dip-body { min-width: 0; }
+.dip-cols { display: grid; grid-template-columns: 168px minmax(0, 1fr) minmax(0, 1.15fr); gap: 12px; align-items: start; }
+.dip-cols.peace { grid-template-columns: 168px minmax(0, 1fr); } /* 講和モード: 関係カードをたたみ、右の列を広げる */
+.dip-cols.peace .dip-mid { display: none; }
+.dip-left { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.dip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; text-align: left; padding: 6px 8px; font-size: 12px; background: transparent; border: 1px solid var(--line); }
+.dip-row.on { background: var(--panel-3); border-color: var(--brass); color: var(--brass-bright); }
+.dip-name { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+.dip-badges { display: flex; flex-wrap: wrap; gap: 3px; flex-basis: 100%; }
+.dip-badge { font-size: 10.5px; padding: 0 5px; border: 1px solid var(--line-strong); color: var(--text-dim); border-radius: 3px; }
+.dip-badge.b-war { color: var(--danger-bright); border-color: var(--danger); }
+.chip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; border: 1px solid rgba(255, 255, 255, 0.28); }
+.dip-mid, .dip-right { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.dip-card { border: 1px solid var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.dip-card h4, .dip-top h4, .dip-settings h4 { margin: 0; font-size: 12.5px; font-weight: 600; color: var(--brass-bright); }
+.dip-card-head { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.dip-ally, .dip-foe { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: 12px; }
+.dip-ally-n { flex: 1 1 100%; font-weight: 600; }
+.dip-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.dip-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.dip-pchip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; padding: 2px 7px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+.dip-x { padding: 0 8px; min-height: 34px; min-width: 34px; line-height: 1.3; font-size: 14px; } /* 押せる要素は34px以上（タッチ）*/
+.dip-pchip { padding-block: 0; }
+.dip-add { font-size: 11px; padding: 2px 4px; max-width: 90px; }
+.dip-settings { border-top: 1px solid var(--line); padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.chip-check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.treaty-card { border: 1px solid var(--line); background: var(--panel-2); padding: 6px 8px; display: flex; flex-direction: column; gap: 5px; }
+.treaty-card.expired, .treaty-card.broken, .treaty-card.ended { opacity: 0.65; }
+.treaty-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 2px 0; }
+.treaty-kind { font-size: 10.5px; padding: 0 5px; border: 1px solid var(--info); color: var(--info); border-radius: 3px; }
+.treaty-title { font-weight: 600; font-size: 12.5px; }
+.treaty-meta { margin-left: auto; font-size: 11px; color: var(--muted); }
+.treaty-detail, .treaty-new { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.treaty-head { display: flex; align-items: center; gap: 8px; }
+.treaty-name { flex: 1 1 auto; min-width: 0; font-weight: 600; }
+.treaty-status { font-size: 11px; padding: 1px 6px; border: 1px solid var(--line-strong); color: var(--text-dim); border-radius: 3px; }
+.treaty-status.active { color: var(--ally); border-color: var(--ally); }
+.treaty-status.broken { color: var(--danger-bright); border-color: var(--danger); }
+.treaty-parties { margin: 0; padding-left: 18px; font-size: 12px; }
+.treaty-text { width: 100%; box-sizing: border-box; font-size: 12px; }
+.treaty-step { border: 1px solid var(--line); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.treaty-step h4 { margin: 0; font-size: 12.5px; color: var(--brass-bright); }
+.treaty-states, .treaty-terms { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.treaty-states .chip-check { flex: 0 1 auto; }
+.treaty-preview { font-style: italic; }
+@media (max-width: 720px) {
+  .dip-cols, .dip-cols.peace { grid-template-columns: minmax(0, 1fr); }
+  .dip-left { flex-direction: row; flex-wrap: wrap; }
+  .dip-row { flex: 1 1 45%; }
+}
+
+/* 戦争の概要: 国ごとの負荷（A2） */
+.war-burden { display: flex; flex-direction: column; gap: 2px; margin: 6px 0; }
+.war-burden h4 { margin: 0 0 4px; font-size: 12.5px; color: var(--brass-bright); }
+.war-burden-row { display: grid; grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr)); gap: 6px; font-size: 12px; padding: 2px 0; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
+.war-burden-row.head { color: var(--muted); font-size: 11px; }
+.war-burden-row span:not(:first-child) { text-align: right; }
+.nation-sort { margin: 6px 0; } .nation-reb-row { align-items: center; flex-wrap: wrap; } .nation-reb-why { margin: 0; color: var(--danger-bright); }
+
+/* 外交タブの小さな改善（A6）: 条約の絞り込み・敵対から戦争へ・拘束力の説明 */
+.dip-filter { display: flex; flex-wrap: wrap; gap: 4px; }
+.dip-filter button { flex: 1 1 auto; font-size: 11.5px; }
+.dip-foe-wars { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; }
+.dip-foe-wars button { font-size: 11.5px; padding: 3px 8px; }
+.dip-bind-desc { flex-basis: 100%; margin: 2px 0 0; font-size: 11.5px; }
+
+/* ドクトリン: 上限に達した節（A7） */
+.np-node.capped { border-style: dashed; border-color: var(--warn, var(--brass)); }
+.np-capped-note { color: var(--warn, var(--brass-bright)); }

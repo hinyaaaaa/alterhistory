@@ -71,10 +71,15 @@ try {
   for (let i = 0; i < 18; i++) { await page.click("#btn-time-step"); await page.waitForTimeout(40); }
   check("月を18回進めても、開いているタブ（経過）が保たれる", await page.locator("#tab-wars .war-tabs button.active").textContent() === "経過");
   await shot(page, "22-war-after-time");
-  console.log("=== 講和条約ウィンドウ ===");
-  await openWin("treaty");
+  console.log("=== 講和条約（外交ウィンドウの右の列） ===");
+  await page.locator("#tab-wars .war-tabs button", { hasText: "概要" }).click();
+  await page.locator("#tab-wars .war-go").first().click(); // 戦争タブの「講和条約を結ぶ」→ 外交ウィンドウの講和モード
+  await page.waitForTimeout(250);
   await shot(page, "23-treaty");
-  check("講和条約の入力が出る", (await page.locator('.float-win[data-win="treaty"]').textContent()).includes("講和"));
+  check("講和条約の入力が、外交ウィンドウの右の列に出る", (await page.locator('.float-win[data-win="diplomacy"] .dip-right .war-prep').count()) === 1);
+  check("独立の講和条約ウィンドウは無い", (await page.locator('.float-win[data-win="treaty"]').count()) === 0);
+  await page.locator('.float-win[data-win="diplomacy"] .dip-top button', { hasText: "条約の一覧" }).click();
+  check("「条約の一覧」で、右の列が条約の一覧に戻る", (await page.locator('.float-win[data-win="diplomacy"] .dip-right .war-prep').count()) === 0);
 } catch (e) { problems.push(`スクリプト例外: ${e.message}`); }
 const fail = done(problems);
 await browser.close();

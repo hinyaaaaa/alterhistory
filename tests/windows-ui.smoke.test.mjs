@@ -74,9 +74,10 @@ newBtn().click(); pick(0, 1); declare().click();
 const names = simActions.listWars().map((w) => w.name);
 check("同じ国どうしの2回目も、自動で付く戦争名が重ならない", new Set(names).size === 2 && names.every((n) => n.length > 0), names.join(" / "));
 check("宣戦布告の瞬間に結果が判定される", simActions.listWars().every((w) => w.result && ["attacker", "defender", "stalemate"].includes(w.result.winner)));
-menuBtn("treaty").click();
-check("講和条約ウィンドウに、講和待ちの戦争と条約の入力が出る", !!win("treaty").querySelector(".war-prep") && win("treaty").textContent.includes("各国の消耗"));
-check("講和条約名は講和地の地名から付く（◯◯条約）", [...win("treaty").querySelectorAll("input:not([type])")].some((i) => /条約$/.test(i.value)), [...win("treaty").querySelectorAll("input:not([type])")].map((i) => i.value).join(" / "));
+window.alterhistory.panels.diplomacy.openPeace(); // 講和条約は、外交ウィンドウの右の列（講和モード）に出る
+check("外交の右の列に、講和待ちの戦争と条約の入力が出る", !!win("diplomacy").querySelector(".dip-right .war-prep") && win("diplomacy").textContent.includes("各国の消耗"));
+check("独立の講和条約ウィンドウは無い", !win("treaty"));
+check("講和条約名は講和地の地名から付く（◯◯条約）", [...win("diplomacy").querySelectorAll("input:not([type])")].some((i) => /条約$/.test(i.value)), [...win("diplomacy").querySelectorAll("input:not([type])")].map((i) => i.value).join(" / "));
 
 console.log("=== 戦争ウィンドウ：戦況と講和の分離 ===");
 [...qa("#tab-wars .war-band button")].find((b) => b.textContent.includes(names[0])).click();
@@ -91,14 +92,15 @@ check("終戦日が自動で決まっている", !!simActions.listWars().find((w
 const st = store.getState().map.pack.states.filter((s) => s && s.i > 0 && !s.removed);
 for (const s of st.slice(0, 2)) { const cell = store.getState().map.pack.cells.state.findIndex((v) => v === s.i); simActions.createRegiment(s.i, cell, {}); simActions.createRegiment(s.i, cell, {}); }
 console.log("=== 外交ウィンドウ ===");
-menuBtn("diplomacy").click();
+window.alterhistory.panels.diplomacy.closePeace(); // 講和モードから、条約一覧へ戻す
+menuBtn("diplomacy").click(); window.alterhistory.panels.diplomacy.render();
 check("外交ウィンドウに国のリスト・関係カード・「条約を結ぶ」があり、外交の表は無い", !!win("diplomacy").querySelector(".dip-left") && !!win("diplomacy").querySelector(".dip-mid") && win("diplomacy").textContent.includes("条約を結ぶ") && !win("diplomacy").querySelector(".diplomacy-matrix"));
 
-console.log("=== 国家の詳細画面 ===");
-window.alterhistory.editorPanel.openEntity("state", 1);
+console.log("=== 国家の詳細は国家タブに一本化されている（v2.4.1） ===");
+window.alterhistory.panels.openEntity("state", 1);
 await sleep(50);
-check("横タブは廃止（国家の詳細にタブボタンは無い）", qa("#editor-panel .tab-btn").length === 0);
-check("属州は基本情報の下に折りたたみで続く", !!q("#editor-panel .state-prov-fold"));
+check("国家を開く操作は、国家タブを開く", !!win("nation") && !win("nation").hidden && win("nation").style.display !== "none");
+check("旧・国家詳細（サイドバー）は出ない", !q("#editor-panel .state-prov-fold") && qa("#editor-panel .tab-btn").length === 0);
 
 console.log("=== ウィンドウの大きさ変更 ===");
 {

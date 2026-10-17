@@ -141,6 +141,43 @@ check("関係一覧の国に、条約のバッジ（同盟・協力・戦争中�
 check("外交に工作の欄は無い（工作は国家タブへ集約）", !win("diplomacy").textContent.includes("隠密工作"));
 check("内戦の参戦招集のトグルがある", !!win("diplomacy").querySelector("#civil-calls-allies"));
 
+console.log("=== A6: 外交タブの小さな改善（条約の絞り込み・敵対から戦争へ・拘束力の説明） ===");
+{
+  const { BIND_LEVELS } = await import("../js/core/edit/treaties.js");
+  wins.open("diplomacy"); await sleep(50);
+  const dwin = () => win("diplomacy");
+  const rows = () => qa('[data-win="diplomacy"] .dip-row');
+  const label = (t) => [...dwin().querySelectorAll(".dip-filter button")].find((b) => b.textContent.startsWith(t));
+  const n = (t) => Number(label(t)?.textContent.match(/\d+/)?.[0] ?? -1);
+  let picked = false;
+  for (let i = 0; i < rows().length && !picked; i++) { rows()[i].click(); await sleep(40); if (n("破棄") > 0 && n("有効") > 0) picked = true; }
+  check("条約一覧に、状態の絞り込み（すべて・有効・失効・破棄）がある", ["すべて", "有効", "失効", "破棄"].every((t) => !!label(t)));
+  check("（準備）有効と破棄の両方を持つ国を選べた", picked);
+  check("件数の合計が「すべて」と一致する", n("有効") + n("失効") + n("破棄") === n("すべて"), `${n("有効")}+${n("失効")}+${n("破棄")} vs ${n("すべて")}`);
+  const cards = () => qa('[data-win="diplomacy"] .dip-right .treaty-card');
+  const total = n("すべて"), nBroken = n("破棄"), nActive = n("有効");
+  label("破棄").click(); await sleep(40);
+  check("「破棄」で、破棄された条約だけが並ぶ", cards().length === nBroken && cards().every((c) => c.classList.contains("broken")), `${cards().length}/${nBroken}`);
+  check("押した絞り込みが選択状態になる", label("破棄").classList.contains("on") && !label("すべて").classList.contains("on"));
+  label("有効").click(); await sleep(40);
+  check("「有効」で、有効な条約だけが並ぶ", cards().length === nActive && cards().every((c) => c.classList.contains("active")), `${cards().length}/${nActive}`);
+  label("すべて").click(); await sleep(40);
+  check("「すべて」で、全部に戻る", cards().length === total);
+  // 敵対の各行から、その戦争へ飛べる
+  let jump = null;
+  for (let i = 0; i < rows().length && !jump; i++) { rows()[i].click(); await sleep(40); jump = dwin().querySelector(".dip-foe .dip-foe-wars button"); }
+  check("敵対の行に、その戦争へ飛ぶボタンがある", !!jump);
+  if (jump) { wins.close("war"); jump.click(); await sleep(60); check("押すと、戦争ウィンドウが開く", !win("war").hidden); }
+  // 同盟の拘束力: 選ぶ欄のその場に説明が出て、選び直すと説明も変わる
+  wins.open("treaty-new"); await sleep(40);
+  const kindSel = win("treaty-new").querySelector("select"); kindSel.value = "alliance"; kindSel.dispatchEvent(new window.Event("change")); await sleep(40);
+  const bd = () => win("treaty-new").querySelector('[data-field="bind-desc"]');
+  const bsel = [...win("treaty-new").querySelectorAll("select")].find((x) => [...x.options].some((o) => o.value === "strong"));
+  check("同盟の条項に、拘束力の説明がその場に出る", !!bd() && bd().textContent === BIND_LEVELS.find((b) => b.key === bsel.value).desc, bd()?.textContent);
+  const other = BIND_LEVELS.find((b) => b.key !== bsel.value); bsel.value = other.key; bsel.dispatchEvent(new window.Event("change")); await sleep(30);
+  check("拘束力を選び直すと、説明も変わる", bd().textContent === other.desc, bd().textContent);
+}
+
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");
 dom.window.close();
 process.exit(failed ? 1 : 0);

@@ -75,7 +75,6 @@ alterhistory/
 │  │   safe-render.js       再描画してもフォーカスとスクロールを保つ補助
 │  │   tools/               brush.js（ブラシの共通処理）selection.js（クリック判定）
 │  │   panels/editor-panel.js     選んだ対象の編集フォーム（都市・マーカー・国家など）
-│  │   panels/military-panel.js   軍事ウィンドウ（部隊の編成・編集・移動。戦闘は戦争ウィンドウで記録する）
 │  │   panels/wars-panel.js       戦争タブ（宣戦布告・戦績・講和条約フォーム）
 │  │   panels/alliances-panel.js  同盟タブ（結成・メンバー編集・解消）
 │  └ vendor/delaunator.min.js   公式が同梱するのと同じビルド（ISC）

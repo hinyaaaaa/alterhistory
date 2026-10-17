@@ -64,6 +64,30 @@ check("左上に指導者の顔、国家情報（人口・支持・安定度・�
 check("サブタブは 概要/軍事/技術ドクトリン/傀儡・属州/内政・税/工作", ["概要", "軍事", "技術ドクトリン", "傀儡・属州", "内政・税", "工作"].every((t) => !!btnOf(win().querySelector(".nation-tabs"), t)) && !btnOf(win().querySelector(".nation-tabs"), "外交"));
 check("概要に宣戦布告と反乱がある", win().textContent.includes("宣戦布告") && win().textContent.includes("反乱を起こす"));
 
+console.log("=== 基本設定（旧・国家詳細から移した：国名・特色・文章・核の保有数） ===");
+{
+  const sA = () => M().pack.states[A];
+  const basic = () => win().querySelector('details[data-field="basic"]');
+  check("概要に「基本設定」がある（政体名の欄は無い）", !!basic() && !basic().textContent.includes("政体名（国名につく語）"));
+  const nm = basic().querySelector('input[data-field="state-name"]');
+  nm.value = "テスト改名国"; nm.dispatchEvent(new window.Event("change")); await sleep(60);
+  check("国名を変えられる", (sA().fullName ?? sA().name).includes("テスト改名国") || sA().name === "テスト改名国", `${sA().fullName}|${sA().name}`);
+  store.undo(); await sleep(60);
+  check("Undo で国名が戻る", !(sA().fullName ?? sA().name).includes("テスト改名国"));
+  const tagBox = basic().querySelector('.tl-rec-provs input[type="checkbox"]'); const tagsBefore = [...(sA().tags ?? [])];
+  tagBox.checked = !tagBox.checked; tagBox.dispatchEvent(new window.Event("change")); await sleep(60);
+  check("特色（タグ）を切り替えられる", JSON.stringify(sA().tags ?? []) !== JSON.stringify(tagsBefore));
+  const note = win().querySelector('textarea[data-field="state-note"]');
+  note.value = "テスト用の文章"; note.dispatchEvent(new window.Event("change")); await sleep(60);
+  check("文章を書ける", editActions.getNote("state", A).includes("テスト用の文章"));
+  btnOf(win(), "軍事")?.click(); await sleep(60);
+  const nuke = win().querySelector('input[data-field="nuclear-stock"]');
+  check("軍事に核の保有数の欄がある", !!nuke);
+  nuke.value = "6"; nuke.dispatchEvent(new window.Event("change")); await sleep(80);
+  check("核の保有数を設定でき、核作戦が読む値（simActions.nuclearStock）に反映される", simActions.nuclearStock(A) === 6, String(simActions.nuclearStock(A)));
+  btnOf(win(), "概要")?.click(); await sleep(60);
+}
+
 console.log("=== 政体 ===");
 const regSel = win().querySelector(".nation-regime select");
 check("政体は1つのリストから選ぶ（政体名の別項目は無い）", regSel.options.length >= 12 && !win().textContent.includes("政体名"));
@@ -120,4 +144,69 @@ if (withProv) {
   check("政体転覆の反乱側は、元の国と違う政体を持ち、目的が記録される", rebel.rebelGoal === "overthrow" && rebel.regime !== M().pack.states[withProv.i].regime);
   check("反乱側は連結した複数の属州を持ち、元の国にも領土が残る", rebel.cells > 0 && M().pack.states[withProv.i].cells > 0);
 } else check("（属州が2つ以上ある国が無いので、反乱の検査は省略）", true);
+console.log("=== A5: 支持・安定度・傀儡の種類・並べ替え・反乱の理由・Esc・強調の解除 ===");
+{
+  const open = (id) => { window.alterhistory.panels.openEntity("state", id); };
+  const stat = (k) => [...win().querySelectorAll(".b-stat")].find((d) => d.textContent.includes(k))?.firstChild.textContent;
+  const reshow = async () => { btnOf(win(), "傀儡・属州")?.click(); btnOf(win(), "概要")?.click(); await sleep(40); };
+  const C = live()[0].i; open(C); await sleep(60);
+  delete M().pack.states[C].support; await reshow();
+  check("支持が値なしでも、既定値（70%）が出る（「—」にならない）", stat("支持") === "70%", String(stat("支持")));
+  check("支持70・戦争なし・継承が安定なら「安定」", stat("安定度") === "安定", String(stat("安定度")));
+  check("安定度の内訳（点数と要因）が見える", /安定度の内訳（\d+点）.*民意 70/.test(win().querySelector('[data-field="stability-why"]')?.textContent ?? ""));
+  M().pack.states[C].support = 45; await reshow(); check("支持45なら「不安」", stat("安定度") === "不安", String(stat("安定度")));
+  M().pack.states[C].support = 20; await reshow(); check("支持20なら「危機」", stat("安定度") === "危機", String(stat("安定度")));
+  M().pack.states[C].support = 70;
+  // 傀儡の種類を、あとから変えられる
+  const B = live().find((x) => x.i !== C && !x.vassal)?.i;
+  simActions.setVassal(B, C, "puppet"); await sleep(40); btnOf(win(), "傀儡・属州").click(); await sleep(60);
+  const ks = win().querySelector('select[data-field="vassal-kind"]');
+  check("従える国の行に、種類を選ぶ欄がある", !!ks && ks.value === "puppet");
+  ks.value = "protectorate"; ks.dispatchEvent(new window.Event("change")); await sleep(60);
+  check("種類を変えると、宗主はそのまま種類だけが変わる", M().pack.states[B].vassal?.kind === "protectorate" && M().pack.states[B].vassal?.overlord === C);
+  store.undo(); await sleep(40); check("Undo で種類が戻る", M().pack.states[B].vassal?.kind === "puppet");
+  // 国家一覧の並べ替え
+  btnOf(win(), "◀ 国家一覧").click(); await sleep(60);
+  const names = () => [...win().querySelectorAll(".nation-row.b-click .nn")].map((x) => x.textContent);
+  const sortSel = win().querySelector('select[data-field="nation-sort"]');
+  check("並べ替えの欄がある（登録順・名前・人口・政体）", !!sortSel && [...sortSel.options].map((o) => o.textContent).join() === "登録順,名前,人口,政体");
+  sortSel.value = "name"; sortSel.dispatchEvent(new window.Event("change")); await sleep(40);
+  const asc = names(); check("名前順に並ぶ", JSON.stringify(asc) === JSON.stringify([...asc].sort((a, b) => a.localeCompare(b, "ja"))), asc.join("|"));
+  btnOf(win(), "▲ 昇順").click(); await sleep(40);
+  check("降順に切り替えられる", JSON.stringify(names()) === JSON.stringify([...asc].reverse()));
+  win().querySelector('select[data-field="nation-sort"]').value = "pop"; win().querySelector('select[data-field="nation-sort"]').dispatchEvent(new window.Event("change")); await sleep(40);
+  const pops = [...win().querySelectorAll(".nation-row.b-click")].map((r) => Number(r.querySelector(".num").textContent.replace(/,/g, ""))); // いまは降順
+  check("人口順（降順）に並ぶ", pops.length > 1 && pops.every((v, i) => i === 0 || pops[i - 1] >= v), pops.join(","));
+  // 反乱ボタン: 属州が2つ未満なら、押す前に理由を出す
+  for (const p of M().pack.provinces) if (p && p.i && p.state === C && !p.removed) p.removed = true; // 属州を0に
+  open(C); await sleep(60);
+  const why = win().querySelector('[data-field="rebel-why"]');
+  check("属州が2つ未満だと、ボタンの横に理由が出る", !!why && /属州が2つ以上ない/.test(why.textContent), why?.textContent);
+  check("そのとき「反乱を起こす」は押せない", btnOf(win(), "反乱を起こす").disabled === true);
+  // Esc: 入力中はまず入力欄を抜け、もう一度で窓が閉じる。閉じたら強調も消える
+  let cleared = 0; const hl = window.alterhistory.highlight; const origClear = hl.clear.bind(hl); hl.clear = () => { cleared++; origClear(); };
+  btnOf(win(), "概要")?.click(); await sleep(30);
+  const nameInput = win().querySelector('input[data-field="state-name"]'); win().querySelector('details[data-field="basic"]').open = true; nameInput.focus();
+  check("（準備）入力欄にフォーカスがある", dom.window.document.activeElement === nameInput);
+  dom.window.document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await sleep(30);
+  check("入力中のEscは、窓を閉じず入力欄を抜ける", !win().hidden && dom.window.document.activeElement !== nameInput);
+  dom.window.document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await sleep(30);
+  check("もう一度Escを押すと、国家タブが閉じる", win().hidden === true);
+  check("閉じると、地図の領土の強調が必ず解除される", cleared >= 1, String(cleared));
+}
+
+console.log("=== A7: ドクトリンの「上限に達している」表示 ===");
+{
+  const { TREE_NODES } = await import("../js/core/edit/doctrines.js");
+  const T = live().find((x) => !x.removed)?.i ?? A; window.alterhistory.panels.openEntity("state", T); await sleep(60);
+  btnOf(win(), "軍事")?.click(); await sleep(60);
+  check("節が少ないうちは「上限に達している」と出ない", !win().querySelector(".np-capped-note") && !win().querySelector(".np-node.capped"));
+  editActions.setMilitaryDoctrine(T, { nodes: TREE_NODES.map((n) => n.key) }); await sleep(60);
+  btnOf(win(), "技術ドクトリン")?.click(); btnOf(win(), "軍事")?.click(); await sleep(60);
+  const note = win().querySelector('[data-field="doctrine-capped"]');
+  check("選べる節を全部選ぶと、上限に達している効果が画面に出る", !!note && note.textContent.includes("上限に達している") && /守り|歩兵|砲兵|機甲|攻め/.test(note.textContent), note?.textContent);
+  check("上限に達した効果に関わる選択中の節が、点線（capped）で示される", win().querySelectorAll(".np-node.on.capped").length > 0);
+  editActions.setMilitaryDoctrine(T, { nodes: [] }); await sleep(40);
+}
+
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功"); dom.window.close(); process.exit(failed ? 1 : 0);
