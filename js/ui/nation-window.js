@@ -6,6 +6,7 @@ import { el, btn, swatch, isLive } from "./kit.js";
 import { faceSvg } from "./face-svg.js";
 import { guardRender } from "./safe-render.js";
 import { militaryPicker, techPicker } from "./nation-pickers.js";
+import { conditionPane, progressBlock } from "./condition-view.js";
 import { createCovertView } from "./covert-window.js";
 import { leaderRecord, faceOf, leaderAge, leaderCandidates, titleFor, REASONS, STABILITY, heirOf, familyOf, MAJORITY } from "../core/edit/leaders.js";
 import { REGIMES, regimeOf, supportBars } from "../core/edit/regimes.js";
@@ -27,7 +28,7 @@ import { suggestName } from "../core/edit/naming.js";
 import { createRandom } from "../core/random.js";
 
 const fmt = (n) => Math.round(n ?? 0).toLocaleString("ja-JP");
-const TABS = [["overview", "概要"], ["military", "軍事"], ["tech", "技術ドクトリン"], ["vassal", "傀儡・属州"], ["finance", "内政・税"], ["covert", "工作"]];
+const TABS = [["overview", "概要"], ["condition", "国勢"], ["military", "軍事"], ["tech", "技術ドクトリン"], ["vassal", "傀儡・属州"], ["finance", "内政・税"], ["covert", "工作"]];
 const STEPS = ["領土", "指導者", "政体", "ドクトリン", "技術ドクトリン"];
 const newRnd = () => createRandom(Math.floor(Math.random() * 2 ** 31));
 const sname = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
@@ -138,7 +139,7 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     const top = el("div", "nation-top"); top.append(leaderBlock(map, s), infoBlock(map, s)); box.append(top);
     const tabs = el("div", "b-tabs nation-tabs"); for (const [k, t] of TABS) tabs.append(btn(tab === k ? "active" : "", t, "", () => { tab = k; render(); })); box.append(tabs);
     const pane = el("div", "nation-pane");
-    ({ overview: overviewPane, military: militaryPane, tech: techPane, vassal: vassalPane, finance: financePane, covert: covertPane })[tab](pane, map, s);
+    ({ overview: overviewPane, condition: (p, m, st) => conditionPane(p, simActions.nationCondition(st.i)), military: militaryPane, tech: techPane, vassal: vassalPane, finance: financePane, covert: covertPane })[tab](pane, map, s);
     box.append(pane);
     // 詳細設定の欄にカーソルを当てている間だけ、その国の領土を地図で光らせる（虫眼鏡のボタンは廃止）
     const hl = () => getHighlight?.();
@@ -273,7 +274,7 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
       for (const p of pend) m.append(btn("", `${p.label}「${p.step}」を採用`, "", () => { simActions.adoptTechMomentum(s.i, p.field); render(); }));
       sec.append(m, el("p", "hint", "◆は、時代の流れで機運が出ている分野です。採用すると +1 段になります（押さなければ変わりません）。"));
     }
-    pane.append(sec);
+    pane.append(sec, progressBlock(simActions.nationCondition(s.i)));
   }
   function vassalPane(pane, map, s) {
     const kindSelect = (cur, on) => { const sel = document.createElement("select"); sel.dataset.field = "vassal-kind"; for (const x of VASSAL_KINDS) sel.append(new Option(x.label, x.key, false, x.key === cur)); sel.title = VASSAL_KINDS.find((x) => x.key === cur)?.desc ?? ""; sel.addEventListener("change", () => on(sel.value)); return sel; };

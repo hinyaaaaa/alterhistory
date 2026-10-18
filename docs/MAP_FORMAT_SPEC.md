@@ -217,6 +217,13 @@ ALTERHISTORY は、適用できなかった件数を読み込み時の警告と�
 - v2.6.0 で追加（`saveFormat` は 3 のまま。無い項目は空として読むので、v2.5.0 までの保存データはそのまま開ける）:
   - `techMomentum`: 採用していない技術の機運。`{ [国ID]: { [分野キー]: { target, via } } }`。`target` は採用すると到達する段、`via` は `neighbor`（隣国が先行）| `year`（世界の年）。
   - `pendingEvents`: 予約された後続の出来事（出来事の連鎖）。`[{ key, stateId, due:{year,month}, depth, from }]`。期日が来たら起こし、取り下げる。
+  - `pendingEvents` の項目に任意の `fromEvent`（きっかけとなった出来事の年表のキー。v2.7.0）。`techMomentum` の `via` に `progress`（技術の進捗が満ちた）が加わった（v2.7.0）。
+  - `shocks`（v2.7.0）: 出来事が残す余波。`[{ s: 国ID, k: "food"|"health"|"order"|"fiscal", a: 強さ（＋は悪化・−は好転）, y, m: 起きた年月, h: 半減期（月）, ev: 出来事の key, from?: 元の出来事の年表のキー }]`。いまの強さは `a × 0.5^(経過月 ÷ h)`。
+  - `ideas`（v2.7.0）: 国ごとの思潮。`{ [国ID]: { enlight, liberal, nation, equal, tradition, faith } }`（各 0〜1）。
+  - `languages`（v2.7.0）: 文化ごとの言語。`{ [文化ID]: { v, id, parent, order: "MH"|"HM", link, lex: { 見出し: 語 }, proper, male, female, clan, changes: [{ key, label, from }], edited: { 見出し: 1 }, phon } }`。語は音節の記号を `.` でつないだ文字列（例 `ka.raN`）。手で直した語は `~カナ`。無い文化は、地図のシード（`meta.seed`）と文化番号から同じものを作り直す。
+  - `migrationAcc`（v2.7.0）: まとまった移住を年表に載せるための積算。`{ "元の国>先の国": 千人 }`。
+  - 国（`pack.states[i]`）に任意の `techProgress`（v2.7.0）: `{ [分野キー]: 0〜1 }`。次の段までの進捗。段（`techDoctrine`）は自動では変わらない。
+  - 年表（`historyLog`）の `type` に追加（v2.7.0）: `ideas`（思潮が高まった）、`migration`（まとまった移住）、`language`（文化の言語が分かれた）。
   - `heirs`: 世襲の政体の後継者。`{ [国ID]: { name, gender, birthYear, family } }`。
   - `leaders` の `Leader` に任意項目を追加: `family`（姓＝王朝名）、`regentFor`（摂政のとき、幼い君主 `{ name, gender, birthYear, family, title }`）。`reason` に `majority`（成人して親政を始めた）を追加。
   - `historyLog` の項目に任意の `data`（小さな構造データ）。`tech-momentum`（`{ field, target }`）・`treaty-expiring`（`{ treatyId, until }`）で使う。

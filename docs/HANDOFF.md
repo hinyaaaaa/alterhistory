@@ -17,7 +17,18 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
-## 追加済み：v2.5.0「戦争と外交の再設計」（いちばん新しい）
+## 追加済み：v2.7.0「因果が巡る世界と、簡易言語」（いちばん新しい）
+詳細は `CHANGELOG.md` の v2.7.0。月ごとの更新（`advanceMonthly`）の順は、**人口 → 思潮 → 技術の進捗 → 言語 → 連鎖・出来事 → 機運**。出来事は、その月の人口・思潮が動いたあとの状態を読んで起きる。
+- **因果の土台**: `core/sim/pressure.js`。指標（`getIndicators`。月ごと・余波の数が変わるまで覚える）・余波（`ext.data.shocks`）・出来事の倍率（`eventFactors`）・余波だけで起きる後続（`drivenWeight`）・原因（`dominantCause`）。`minor-events.js` と `event-chains.js` が使う。`BALANCE.causalStrength = 0` で従来の挙動に戻る。
+- **人口**: `core/sim/population.js`（月次の超過死亡・都市化・移住）。年次の自然増加は `economy.js` の `computeAnnualUpdate(state, mods)`（`mods.growthMult`）のまま。`world.js` の `planAnnualUpdate` が `growthMods` を渡す。
+- **制約**: `core/sim/limits.js`（`industrialFactor`・`foodConscriptionFactor`。`military.js` が使う。`capacity.js` から分けたのは読み込みの循環を避けるため）と `capacity.js`（国家タブの表示）。
+- **技術の進捗**: `core/sim/tech-progress.js`。国の `techProgress = {分野: 0〜1}`。`techLevelFine`（`doctrines.js`）が内部の細かい水準。採用・手動変更で進捗は 0 に戻る。機運は `rollTechMomentum` が進捗で決める。
+- **思潮**: `core/sim/ideas.js`。`ext.data.ideas`。制度（税率・徴兵率・政体）は動かさない（テストで確認）。
+- **言語**: `core/names/language.js`（音節の記号・語根辞書・音変化・名前）、`core/edit/language.js`（地図との結び付け・保存・編集）。`katakana.js` の `cfg` は、言語から作った系統（オブジェクト）も受け付ける。`naming.js`・`person.js`・`leaders.js` が文化の言語を使う。言語は保存されていなければシードから作り直す（同じ地図なら同じ）。最初の月の更新で全文化を保存する（年表には残さない）。
+- **画面**: `ui/condition-view.js`（国勢・進捗）、`ui/language-section.js`（言語の欄。開閉を覚える）。
+- **仮置きの数値**（調整してよい）: 食料の需給は地図の生産÷需要を 1 付近として扱う（実マップで釣り合いがずれるなら、バランス調整の「食料が釣り合う需給比」＝`BALANCE.foodBase` で割る）／余波の強さと半減期（`EVENT_SHOCKS`）／思潮の目標式（`ideaTargets`）／進捗の基準（`BASE_MONTHS`=600、約50年）。
+
+## 追加済み：v2.5.0「戦争と外交の再設計」
 詳細は `CHANGELOG.md` の v2.5.0。
 - **戦い**: 戦争の枠（名前・陣営・参戦国ごとの形態）だけをユーザーが決める。個々の戦いは `core/sim/war-engine.js` の `rollCampaignBattle` が作る（開戦時に1つ、`planAdvanceWars` の月ごとに確率で。3か月空くと必ず1つ）。名前は `battleNameFor`（標高→「N高地の戦い」、海沿い＋海軍→「沖海戦」、川→「渡河戦」、首都→「攻囲戦」、文化の型で重みが変わる）。`war.battles[]` に `auto: true` で保存。
 - **不具合の修正**: 戦争タブ／クロニクルに記録が出なかったのは、v2.4.0 が開戦時の戦闘ログを保存しなくなっていたため。
@@ -507,5 +518,5 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ## 版の予定（2026-10-18 更新）
 - v2.6.0（史実の足取り）: B1〜B6 完了。v2.6.1（自由な反乱・史実風の戦争名）完了。
-- **v2.7: 土地の造成**（水域を陸にする。海上にも造成できる）。着手前に、`cells.t` / `cells.f` と海岸線が標高から導かれるか、読み込み時の固定値かを調べ、短くまとめて質問する（B7 の方針をそのまま引き継ぐ）。
-- **v2.8: 独自言語**（文化ごとの言語から、地名・人名・文化名・宗教名・戦争名などを決める）。第IV部の展望を実装指示書にする。
+- v2.7.0（因果が巡る世界と、簡易言語）: 完了。独自言語の簡易版を入れた。
+- **v2.8: 土地の造成**（水域を陸にする。海上にも造成できる）。着手前に、`cells.t` / `cells.f` と海岸線が標高から導かれるか、読み込み時の固定値かを調べ、短くまとめて質問する（B7 の方針をそのまま引き継ぐ）。

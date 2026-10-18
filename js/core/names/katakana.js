@@ -86,6 +86,8 @@ export function validate(name, { min = 2, max = 9 } = {}) {
 // ---------- 生成の本体 ----------
 
 function cfg(style) {
+  // 言語から作った系統（オブジェクト）も受け付ける（v2.7.0）。heads・mids・tails・midChance を持つ
+  if (style && typeof style === "object" && Array.isArray(style.heads) && Array.isArray(style.tails)) return style;
   return NAME_STYLES[isStyle(style) ? style : DEFAULT_STYLE];
 }
 

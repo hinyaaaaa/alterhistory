@@ -10,6 +10,8 @@
 //
 // 純粋ロジック層：DOM に依存しない。
 
+import { techLevelFine } from "../edit/doctrines.js";
+
 export const TECH_MIN = 1;
 export const TECH_MAX = 10;
 
@@ -53,11 +55,14 @@ export function ensureEconomy(state) {
  * 国家1つぶんの年次更新。state を直接変更しない（呼び出し側が差分を commit する設計に合わせるため）。
  * @returns {{rural:number, urban:number, industry:number}} 更新後の値
  */
-export function computeAnnualUpdate(state) {
+export function computeAnnualUpdate(state, mods = null) {
   const tech = clampTech(state.techLevel ?? 3);
+  // 内部の細かい技術水準（進捗を含む小数）。進捗が無い国は、整数の段と同じ値になる
+  const fine = techLevelFine(state);
   const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
   const cap = carryingCapacity(state);
-  const r = GROWTH_RATE_BY_TECH(tech);
+  // mods: 人口の独立システム（population.js）が出す、食料・疫病・戦争による増え方の倍率
+  const r = GROWTH_RATE_BY_TECH(fine) * (mods?.growthMult ?? 1);
 
   // ロジスティック成長: 上限に近づくほど増加率が下がる
   const growth = pop > 0 ? r * pop * (1 - pop / cap) : 0;
@@ -69,8 +74,14 @@ export function computeAnnualUpdate(state) {
   const newUrban = round2((state.urban ?? 0) + growth * ratio);
   const newRural = round2(newPop - newUrban);
 
-  const industry = round2((newPop / 1000) * INDUSTRY_PER_CAPITA_BY_TECH(tech));
+  const industry = round2((newPop / 1000) * INDUSTRY_PER_CAPITA_BY_TECH(fine));
   return { rural: newRural, urban: newUrban, industry };
+}
+
+/** 技術水準（小数も可）に見合う、いまの産業力の目安（千人あたりの係数 × 人口） */
+export function expectedIndustry(state, tech = null) {
+  const pop = Math.max(0, (state.rural ?? 0) + (state.urban ?? 0));
+  return (pop / 1000) * INDUSTRY_PER_CAPITA_BY_TECH(tech ?? techLevelFine(state));
 }
 
 export function clampTech(v) {

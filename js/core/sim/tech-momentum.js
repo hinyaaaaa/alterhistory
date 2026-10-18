@@ -6,7 +6,8 @@
 import { makeCommand } from "../edit/commands.js";
 import { ensureExt } from "../edit/ext.js";
 import { withEvent } from "../edit/history-log.js";
-import { TECH_TRACKS, TECH_MAX, getTechDoctrine, planSetTechDoctrine } from "../edit/doctrines.js";
+import { TECH_TRACKS, TECH_MAX, getTechDoctrine, getTechProgress, planSetTechDoctrine } from "../edit/doctrines.js";
+import { setProps } from "../edit/commands.js";
 import { BALANCE } from "./balance.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
@@ -36,10 +37,16 @@ export function pendingFields(map, stateId) {
 
 export const momentumText = (field, target, via) => {
   const step = trackOf(field).steps[target - 1];
-  return via === "neighbor" ? `隣国に「${step}」が広まり、${trackOf(field).label}の分野で取り入れる機運が高まっている` : `「${step}」の実用化が近いと言われている（${trackOf(field).label}）`;
+  if (via === "neighbor") return `隣国に「${step}」が広まり、${trackOf(field).label}の分野で取り入れる機運が高まっている`;
+  if (via === "progress") return `${trackOf(field).label}の研究と実用化が進み、「${step}」を採用できる段階に達した`;
+  return `「${step}」の実用化が近いと言われている（${trackOf(field).label}）`;
 };
 
-/** この月に機運が出る国・分野を決める（地図は変更しない）。1国につき月に1件まで */
+/**
+ * この月に機運が出る国・分野を決める（地図は変更しない）。1国につき月に1件まで。
+ *   v2.7.0: 機運の出やすさは、分野の進捗（tech-progress.js がためる）で決まる。進捗が満ちた分野は、ほぼ確実に出る。
+ *   隣国が先に進んでいる・世界の年が来ている、という従来の条件は残る（ただし進捗が低いうちは、ごくまれにしか出ない）。
+ */
 export function rollTechMomentum(map, rnd) {
   const year = map.worldTime?.year ?? 1, rate = BALANCE.momentumRate ?? 0.03, out = [];
   if (!(rate > 0)) return out;
@@ -47,12 +54,15 @@ export function rollTechMomentum(map, rnd) {
   const lvOf = (id) => lvs.get(id) ?? lvs.set(id, getTechDoctrine(map.pack.states[id])).get(id);
   for (const s of map.pack.states) {
     if (!isLive(s)) continue;
-    const mine = lvOf(s.i), pend = momentumTable(map)[s.i] ?? {}, cands = [];
+    const mine = lvOf(s.i), pend = momentumTable(map)[s.i] ?? {}, prog = getTechProgress(s), cands = [];
     for (const t of TECH_TRACKS) {
       const target = mine[t.key] + 1; if (target > TECH_MAX || pend[t.key]?.target === target) continue;
-      const ahead = [...(nb.get(s.i) ?? [])].some((n) => isLive(map.pack.states[n]) && lvOf(n)[t.key] >= target);
-      const via = ahead ? "neighbor" : year >= YEAR_GATE(target) ? "year" : null;
-      if (via) cands.push({ field: t.key, target, via, p: via === "neighbor" ? rate : rate * 0.5 });
+      const pr = prog[t.key], ahead = [...(nb.get(s.i) ?? [])].some((n) => isLive(map.pack.states[n]) && lvOf(n)[t.key] >= target);
+      let via = null, p = 0;
+      if (pr >= 1) { via = "progress"; p = 0.35; }
+      else if (ahead) { via = "neighbor"; p = rate * (0.1 + 3 * pr * pr); }
+      else if (pr >= 0.5 || (year >= YEAR_GATE(target) && pr >= 0.25)) { via = pr >= 0.5 ? "progress" : "year"; p = rate * (0.5 + 3 * pr * pr); }
+      if (via) cands.push({ field: t.key, target, via, p });
     }
     for (const c of cands) if (rnd.chance(c.p)) { out.push({ stateId: s.i, field: c.field, target: c.target, via: c.via }); break; }
   }
@@ -83,6 +93,7 @@ export function planAdoptMomentum(map, stateId, field, date) {
   const before = momentumTable(map), after = withEntry(before, stateId, field, null);
   const tech = planSetTechDoctrine(map, stateId, { [field]: p.target }); if (!tech) return null;
   const lvBefore = getTechDoctrine(s)[field];
-  const cmd = makeCommand(`技術の機運を採用（${nm(s)}）`, tech.layers, [...tech.parts, { apply: (m) => writeTable(m, after), revert: (m) => writeTable(m, before) }]);
+  const reset = setProps(s, { techProgress: { ...getTechProgress(s), [field]: 0 } }); // 採用したら、その分野の進捗は 0 から
+  const cmd = makeCommand(`技術の機運を採用（${nm(s)}）`, tech.layers, [...tech.parts, reset, { apply: (m) => writeTable(m, after), revert: (m) => writeTable(m, before) }]);
   return withEvent(map, cmd, { type: "tech", title: `${nm(s)}が${p.label}の「${p.step}」を採用した`, detail: `${p.label} ${lvBefore}段 → ${p.target}段（機運の採用）`, date, states: [stateId] });
 }

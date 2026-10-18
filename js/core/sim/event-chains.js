@@ -10,6 +10,8 @@ import { planChangeLeader } from "../edit/leaders.js";
 import { BALANCE } from "./balance.js";
 import { MINOR_EVENTS, planMinorEvent } from "./minor-events.js";
 import { listHistory } from "../edit/history-log.js";
+import { getIndicators, eventFactors } from "./pressure.js";
+import { ideasOf } from "./ideas.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const mk = (d) => (d?.year ?? 0) * 12 + ((d?.month ?? 1) - 1);
@@ -31,6 +33,16 @@ export const listPending = (map) => map?.ext?.data?.pendingEvents ?? [];
 const writePending = (m, list) => { const x = ensureExt(m); if (list.length) x.data.pendingEvents = list; else delete x.data.pendingEvents; };
 const pendingCmd = (map, next, label) => { const before = listPending(map); return makeCommand(label, [], [{ apply: (m) => writePending(m, next), revert: (m) => writePending(m, before) }]); };
 
+/** いま起きた出来事（同じ年月・同じ国）の年表のキー。後続の cause（きっかけ）にする */
+function causeKeyOf(map, key, stateId, date) {
+  const log = listHistory(map);
+  for (let i = log.length - 1; i >= 0 && i >= log.length - 40; i--) {
+    const h = log[i];
+    if ((h.type === `natural-${key}` || h.type === key) && (h.states ?? []).includes(stateId) && h.year === date.year && h.month === date.month) return `${h.type}|${h.year}-${h.month}|${h.title}`;
+  }
+  return null;
+}
+
 /**
  * 出来事 key が起きたあと、後続を予約するコマンド（予約が無ければ null）。depth: いまの出来事の段（最初=0）。
  * 後続の段は depth+1。BALANCE.chainDepth を超える後続は予約しない。
@@ -39,11 +51,15 @@ export function planScheduleChain(map, { key, stateId, swing = 0 }, date, rnd, d
   const defs = CHAINS[key]; if (!defs || !isLive(map.pack.states[stateId])) return null;
   if (depth + 1 > (BALANCE.chainDepth ?? 2)) return null;
   const rate = BALANCE.chainRate ?? 1; if (!(rate > 0)) return null;
-  const add = [];
+  const add = [], k = BALANCE.causalStrength ?? 1, fromEvent = causeKeyOf(map, key, stateId, date);
+  // v2.7.0: 先立つ出来事が残した状態の変化（余波）が、後続の起きやすさを変える。確率 = 表の値 × 状態による倍率
+  let ind = null; try { ind = getIndicators(map, date).get(stateId) ?? null; } catch { ind = null; }
+  const ideas = ind && k > 0 ? ideasOf(map, stateId, ind) : null;
   for (const d of defs) {
     if (d.when && !d.when({ key, stateId, swing })) continue;
-    if (!rnd.chance(Math.min(1, d.p * rate))) continue;
-    add.push({ key: d.key, stateId, due: dateOf(mk(date) + rnd.int(d.months[0], d.months[1])), depth: depth + 1, from: key });
+    const mod = k > 0 ? 1 + (eventFactors(d.key, ind, ideas).w - 1) * k : 1;
+    if (!rnd.chance(Math.min(1, d.p * rate * Math.max(0, mod)))) continue;
+    add.push({ key: d.key, stateId, due: dateOf(mk(date) + rnd.int(d.months[0], d.months[1])), depth: depth + 1, from: key, ...(fromEvent ? { fromEvent } : {}) });
   }
   return add.length ? pendingCmd(map, [...listPending(map), ...add], "出来事の連鎖（予約）") : null;
 }
@@ -59,7 +75,7 @@ export function planRunPending(map, p, date, rnd) {
   const out = [], rest = listPending(map).filter((x) => x !== p && !(x.key === p.key && x.stateId === p.stateId && mk(x.due) === mk(p.due) && x.from === p.from));
   const st = map.pack.states[p.stateId], ev = MINOR_EVENTS.find((e) => e.key === p.key);
   if (isLive(st) && ev) {
-    const c = planMinorEvent(map, { key: p.key, stateId: p.stateId }, date); if (c) out.push(c);
+    const c = planMinorEvent(map, { key: p.key, stateId: p.stateId, cause: p.fromEvent ?? null }, date); if (c) out.push(c);
   }
   out.push(pendingCmd(map, rest, "出来事の連鎖（取り下げ）"));
   return { commands: out, after: () => (isLive(st) && ev ? { key: p.key, stateId: p.stateId, depth: p.depth ?? 1, leaderChange: !!ev.leaderChange } : null) };

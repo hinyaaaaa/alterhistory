@@ -16,6 +16,16 @@ import { REGIMES, REGIME_BY_KEY, planSetRegime } from "../core/edit/regimes.js";
 import { rollSuccession, ensureLeaders, planChangeLeader, rollRegencyEnd } from "../core/edit/leaders.js";
 import { planArmyUpkeep, planAnnualConscription } from "../core/sim/military.js";
 import { rollMinorEvents, planMinorEvent } from "../core/sim/minor-events.js";
+import { planPopulationMonth, planMigrationEvent } from "../core/sim/population.js";
+import { planIdeasMonth, planIdeaNotable } from "../core/sim/ideas.js";
+import { planTechProgressMonth } from "../core/sim/tech-progress.js";
+import { planEnsureLanguages } from "../core/edit/language.js";
+import { getIndicators, activeShocks, SHOCK_KINDS } from "../core/sim/pressure.js";
+import { maxUrbanShare } from "../core/sim/population.js";
+import { constraintReport } from "../core/sim/capacity.js";
+import { trinityOf, progressRates } from "../core/sim/tech-progress.js";
+import { IDEAS, ideasOf } from "../core/sim/ideas.js";
+import { TECH_TRACKS as TRACKS, getTechDoctrine as techOf, getTechProgress as progOf } from "../core/edit/doctrines.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
 import { planNextCollapse } from "../core/sim/collapse.js";
 import { leaderOf } from "../core/edit/alliances.js";
@@ -378,6 +388,11 @@ export function createSimActions({ store, renderer }) {
             if (up) { const fresh = !(st.military ?? []).length; store.commit(up); if (fresh) { const f = planAnnualConscription(map, st.i, { fill: true }); if (f) store.commit(f); } stat.army++; }
             else { const c = planAnnualConscription(map, st.i, { rate: 1 / 12, rnd: rng }); if (c) store.commit(c); }
           }
+          // v2.7.0: 人口（飢え・疫病・都市化・移住）→ 思潮の攪拌 → 技術の進捗 → 新しい文化の言語。出来事より先に動かす（出来事は、この状態を読んで起きる）
+          { const cur = store.getState().map, pm = planPopulationMonth(cur, date); if (pm) { store.commit(pm.command); stat.population = 1; for (const mv of pm.moves) { const c = planMigrationEvent(store.getState().map, mv, date); if (c) { store.commit(c); stat.events++; stat.migration = (stat.migration ?? 0) + 1; } } } }
+          { const im = planIdeasMonth(store.getState().map, date, rng); if (im) { store.commit(im.command); for (const nt of im.notable) { const c = planIdeaNotable(store.getState().map, nt, date); if (c) { store.commit(c); stat.events++; stat.ideas = (stat.ideas ?? 0) + 1; } } } }
+          { const tp = planTechProgressMonth(store.getState().map, date); if (tp) { store.commit(tp); stat.progress = 1; } }
+          { const lg = planEnsureLanguages(store.getState().map, date); if (lg) { store.commit(lg.command); stat.languages = lg.created.length; } }
           // 出来事の連鎖: 期日が来た後続を起こし（さらに後続があれば予約し）、そのあと今月の新しい出来事と、その後続の予約
           const chain = (ev, depth) => { const cur = store.getState().map; const sc = planScheduleChain(cur, ev, date, rng, depth); if (sc) store.commit(sc); };
           for (const p of duePending(map, date)) {
@@ -388,7 +403,7 @@ export function createSimActions({ store, renderer }) {
             chain(done, done.depth);
           }
           for (const t of treatiesNeedingNotice(store.getState().map, date)) { const c = planTreatyExpiryNotice(store.getState().map, t, date); if (c) store.commit(c); }
-          for (const ev of rollMinorEvents(store.getState().map, rng)) { const c = planMinorEvent(store.getState().map, ev, date); if (c) { store.commit(c); stat.events++; chain(ev, 0); } }
+          for (const ev of rollMinorEvents(store.getState().map, rng, null, date)) { const c = planMinorEvent(store.getState().map, ev, date); if (c) { store.commit(c); stat.events++; chain(ev, 0); } }
           for (const ev of rollTechMomentum(store.getState().map, rng)) { const c = planTechMomentum(store.getState().map, ev, date); if (c) { store.commit(c); stat.momentum = (stat.momentum ?? 0) + 1; } }
         });
       } catch { /* 月ごとの更新が失敗しても、時間は進める */ }
@@ -398,6 +413,26 @@ export function createSimActions({ store, renderer }) {
     /** 予約されている後続の出来事・反乱の火種（国家タブの表示用。反乱は起こさない） */
     pendingEvents(stateId = null) { return withMap((map) => listPending(map).filter((p) => stateId == null || p.stateId === stateId)) ?? []; },
     rebellionSpark(stateId) { return withMap((map) => rebellionSpark(map, stateId)) ?? null; },
+    /**
+     * 国勢（v2.7.0）: 国の状態・制約・余波・思潮・技術の進捗。国家タブの「国勢」と「技術ドクトリン」が使う（地図は変更しない）
+     * @returns {object|null}
+     */
+    nationCondition(stateId) {
+      return withMap((map) => {
+        const s = map.pack.states[stateId]; if (!s || s.removed || !(s.i > 0)) return null;
+        const date = currentDate(), ind = getIndicators(map, date).get(stateId); if (!ind) return null;
+        const tri = trinityOf(map, stateId, date), pr = progressRates(map, stateId, date), lv = techOf(s), prog = progOf(s), rates = pr?.rates ?? {};
+        const titleOf = (k) => (k ? String(k).split("|").slice(2).join("|") : null);
+        return {
+          food: ind.food, urbanShare: ind.urbanShare, maxUrban: maxUrbanShare(ind.lv), industryRatio: ind.industryRatio, fiscalSlack: ind.fiscalSlack, support: ind.support, war: ind.war, stress: ind.stress,
+          constraints: constraintReport(map, stateId, date),
+          trinity: tri ? { I: tri.I, E: tri.E, T: tri.T, total: tri.trinity } : null,
+          shocks: activeShocks(map, stateId, date).map((sh) => ({ kind: SHOCK_KINDS[sh.k] ?? sh.k, now: sh.now, source: titleOf(sh.from) })),
+          ideas: IDEAS.map((i) => ({ key: i.key, label: i.label, desc: i.desc, v: ideasOf(map, stateId, ind)[i.key] })),
+          progress: TRACKS.map((t) => ({ key: t.key, label: t.label, level: lv[t.key], step: t.steps[Math.min(9, lv[t.key])] ?? null, progress: prog[t.key], monthsLeft: rates[t.key] > 0 && lv[t.key] < 10 ? Math.ceil((1 - prog[t.key]) / rates[t.key]) : null })),
+        };
+      }) ?? null;
+    },
     /** 技術の機運（採用できるもの）。[{ field, label, target, step, via }] */
     techMomentum(stateId) { return withMap((map) => pendingFields(map, stateId)) ?? []; },
     /** 機運を採用する（その国の該当分野が +1 段。Undo 可）。採用できたら true */

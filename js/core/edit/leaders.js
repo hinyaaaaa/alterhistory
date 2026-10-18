@@ -10,6 +10,7 @@ import { withEvent } from "./history-log.js";
 import { epithet } from "./world-info.js";
 import { REGIMES, regimeOf } from "./regimes.js";
 import { generatePersonName } from "../names/person.js";
+import { languageOfState } from "./language.js";
 import { faceSpec } from "./face.js";
 import { createRandom } from "../random.js";
 
@@ -47,13 +48,13 @@ const hereditaryOf = (st) => regimeOf(st).succession === "hereditary";
 export const familyOf = (l) => l?.family ?? (String(l?.name ?? "").includes("・") ? String(l.name).split("・").slice(1).join("・") : "");
 export const heirOf = (map, id) => map?.ext?.data?.heirs?.[id] ?? null;
 const writeHeirs = (m, h) => { const x = ensureExt(m); if (h && Object.keys(h).length) x.data.heirs = h; else delete x.data.heirs; };
-const personOf = (rnd, g, family) => { const p = generatePersonName(rnd, g); const f = family || p.family; return { given: p.given, family: f, full: `${p.given}・${f}` }; };
-const newFamily = (rnd, g, avoid) => { let f = generatePersonName(rnd, g).family; for (let i = 0; i < 20 && f === avoid; i++) f = generatePersonName(rnd, g).family; return f; };
+const personOf = (rnd, g, family, lang = null) => { const p = generatePersonName(rnd, g, null, lang); const f = family || p.family; return { given: p.given, family: f, full: `${p.given}・${f}` }; };
+const newFamily = (rnd, g, avoid, lang = null) => { let f = generatePersonName(rnd, g, null, lang).family; for (let i = 0; i < 20 && f === avoid; i++) f = generatePersonName(rnd, g, null, lang).family; return f; };
 /** 現在の君主の後継者（世襲・君主が成人・摂政でないときだけ）。年は date */
-function makeHeir(st, leader, when, rnd) {
+function makeHeir(st, leader, when, rnd, lang = null) {
   if (!hereditaryOf(st) || !leader || leader.regentFor) return null;
   const age = leaderAge(leader, when); if (age < 18) return null;
-  const g = rnd.chance(0.3) ? "f" : "m", a = rnd.int(0, Math.max(0, Math.min(30, age - 18))), p = personOf(rnd, g, familyOf(leader));
+  const g = rnd.chance(0.3) ? "f" : "m", a = rnd.int(0, Math.max(0, Math.min(30, age - 18))), p = personOf(rnd, g, familyOf(leader), lang);
   return { name: p.full, gender: g, birthYear: when.year - a, family: p.family };
 }
 /** 世襲の国に、後継者がいなければ置く（保存済みの記録として直接書く。年表には残さない）。置いた数を返す */
@@ -62,7 +63,7 @@ export function ensureHeirs(map, date = null) {
   for (const st of map.pack.states) {
     if (!isLive(st) || !hereditaryOf(st)) continue;
     const l = data.leaders?.[st.i]?.current; if (!l || l.regentFor || data.heirs?.[st.i]) continue;
-    const h = makeHeir(st, l, now, createRandom(st.i * 733 + now.year * 3 + 11)); if (!h) continue;
+    const h = makeHeir(st, l, now, createRandom(st.i * 733 + now.year * 3 + 11), languageOfState(map, st)); if (!h) continue;
     data.heirs = data.heirs ?? {}; data.heirs[st.i] = h; n++;
   }
   return n;
@@ -78,7 +79,7 @@ export function leaderCandidates(map, stateId, { n = 3, seed = null, date = null
   if (heir) out.push({ name: heir.name, gender: heir.gender, title: titleFor(st, heir.gender), age: leaderAge(heir, now), heir: true });
   while (out.length < n) {
     const gender = rnd.chance(hereditary ? 0.3 : 0.45) ? "f" : "m";
-    const p = hereditary && fam ? personOf(rnd, gender, fam) : generatePersonName(rnd, gender);
+    const lang = languageOfState(map, st), p = hereditary && fam ? personOf(rnd, gender, fam, lang) : generatePersonName(rnd, gender, null, lang);
     out.push({ name: p.full, gender, title: titleFor(st, gender), age: rnd.int(hereditary ? 22 : 38, hereditary ? 45 : 64) });
   }
   return out;
@@ -102,7 +103,7 @@ export function planChangeLeader(map, stateId, { reason, title, name = "", gende
   const when = date ?? map.worldTime ?? { year: 1, month: 1 };
   const before = map.ext?.data?.leaders ?? {}, rec = leaderRecord(map, stateId), seq0 = seqOf(map);
   const heirsBefore = map.ext?.data?.heirs ?? {};
-  const rr = rnd ?? createRandom(stateId * 31 + seq0 * 7 + when.year);
+  const rr = rnd ?? createRandom(stateId * 31 + seq0 * 7 + when.year), lang = languageOfState(map, st);
   const hereditary = hereditaryOf(st), heir = hereditary ? heirsBefore[stateId] ?? null : null;
   const prevFam = familyOf(rec.current), dynastyEnds = reason === "usurpation" || reason === "conquest", keepDyn = hereditary && !dynastyEnds && !!prevFam;
   const given = name.trim();
@@ -113,13 +114,13 @@ export function planChangeLeader(map, stateId, { reason, title, name = "", gende
   let g = gender ?? (title ? genderOfTitle(title) : "m"), t, nameFull, birthYear, family;
   if (title && gender && genderOfTitle(title) !== gender) throw new Error("称号と性別が合っていません");
   if (child && hereditary) { // 摂政
-    g = rr.chance(0.5) ? "f" : "m"; family = keepDyn ? prevFam : newFamily(rr, g, prevFam);
-    const p = personOf(rr, g, family); nameFull = p.full; t = g === "f" ? "女摂政" : "摂政"; birthYear = when.year - rr.int(28, 50);
+    g = rr.chance(0.5) ? "f" : "m"; family = keepDyn ? prevFam : newFamily(rr, g, prevFam, lang);
+    const p = personOf(rr, g, family, lang); nameFull = p.full; t = g === "f" ? "女摂政" : "摂政"; birthYear = when.year - rr.int(28, 50);
   } else if (useHeir) { g = heir.gender; family = heir.family; nameFull = heir.name; birthYear = heir.birthYear; t = title ?? titleFor(st, g); }
   else {
     t = title ?? titleFor(st, g);
     if (given) { nameFull = given; family = familyOf({ name: given }); }
-    else { family = keepDyn ? prevFam : hereditary && dynastyEnds ? newFamily(rr, g, prevFam) : null; const p = personOf(rr, g, family); nameFull = p.full; family = p.family; }
+    else { family = keepDyn ? prevFam : hereditary && dynastyEnds ? newFamily(rr, g, prevFam, lang) : null; const p = personOf(rr, g, family, lang); nameFull = p.full; family = p.family; }
     birthYear = when.year - (age ?? rr.int(24, 55));
   }
   const gen = rec.history.length + (rec.current ? 1 : 0) + 1;
@@ -128,7 +129,7 @@ export function planChangeLeader(map, stateId, { reason, title, name = "", gende
   const after = { ...before, [stateId]: { current: next, history: hist } };
   const heirsAfter = { ...heirsBefore };
   if (!hereditary || next.regentFor) delete heirsAfter[stateId];
-  else { const h = makeHeir(st, next, when, createRandom(seq0 * 101 + stateId * 17 + when.year)); if (h) heirsAfter[stateId] = h; else delete heirsAfter[stateId]; }
+  else { const h = makeHeir(st, next, when, createRandom(seq0 * 101 + stateId * 17 + when.year), lang); if (h) heirsAfter[stateId] = h; else delete heirsAfter[stateId]; }
   const cmd = makeCommand(`指導者の交代（${nm(st)}）`, [], [{
     apply: (m) => { write(m, after); setSeq(m, seq0 + 1); writeHeirs(m, heirsAfter); },
     revert: (m) => { const x = ensureExt(m); if (Object.keys(before).length) x.data.leaders = before; else delete x.data.leaders; if (seq0) x.data.leaderSeq = seq0; else delete x.data.leaderSeq; writeHeirs(m, heirsBefore); },
@@ -149,7 +150,7 @@ export function ensureLeaders(map, date = null) {
     if (!isLive(st) || data.leaders[st.i]?.current) continue;
     const rnd = createRandom(st.i * 1291 + 7), g = rnd.chance(0.2) ? "f" : "m";
     const rec = data.leaders[st.i] ?? { current: null, history: [] };
-    rec.current = { id: ++n, name: generatePersonName(rnd, g).full, gender: g, birthYear: now.year - rnd.int(30, 60), since: { year: Math.max(1, now.year - rnd.int(0, 12)), month: 1 }, title: titleFor(st, g), reason: "death", stability: "stable", gen: rec.history.length + 1 };
+    rec.current = { id: ++n, name: generatePersonName(rnd, g, null, languageOfState(map, st)).full, gender: g, birthYear: now.year - rnd.int(30, 60), since: { year: Math.max(1, now.year - rnd.int(0, 12)), month: 1 }, title: titleFor(st, g), reason: "death", stability: "stable", gen: rec.history.length + 1 };
     data.leaders[st.i] = rec; added++;
   }
   data.leaderSeq = n;

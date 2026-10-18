@@ -10,6 +10,9 @@ import { withEvent } from "../edit/history-log.js";
 import { getTechDoctrine } from "../edit/doctrines.js";
 import { regimeOf } from "../edit/regimes.js";
 import { FREQUENCIES, getNaturalSettings } from "./natural-events.js";
+import { getIndicators, eventFactors, restlessness, drivenWeight, dominantCause, shockPart } from "./pressure.js";
+import { ideasOf } from "./ideas.js";
+import { BALANCE } from "./balance.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -68,33 +71,61 @@ export function eventFits(ev, state, ctx = {}) {
   return true;
 }
 
-/** この月に起きる出来事を決める。地図は変更しない。@returns {{key:string, stateId:number}[]} */
-export function rollMinorEvents(map, rnd, settings = null) {
+/**
+ * この月に起きる出来事を決める。地図は変更しない。@returns {{key:string, stateId:number, cause?:string}[]}
+ *   v2.7.0: 国の状態（食料・疫病・治安・財政・戦争）と思潮が、起きやすさを変える。余波が強いと、連鎖の表を待たずに後続も起きる。
+ *   cause は、起きた原因（余波の元の出来事のキー）。BALANCE.causalStrength が 0 なら、状態に関係なく従来どおり決まる。
+ */
+export function rollMinorEvents(map, rnd, settings = null, date = null) {
   const cfg = settings ?? getNaturalSettings(map);
   if (!cfg.enabled) return [];
-  const f = FREQUENCIES[cfg.frequency]?.factor ?? 1;
+  const f = FREQUENCIES[cfg.frequency]?.factor ?? 1, k = BALANCE.causalStrength ?? 1;
+  const when = date ?? map.worldTime ?? { year: 1, month: 1 };
+  let inds = null; try { inds = getIndicators(map, when); } catch { inds = null; }
   const out = [];
   for (const s of map.pack.states.filter(isLive)) {
-    if (rnd.next() >= MINOR_RATE * f) continue;
+    const ind = inds?.get(s.i) ?? null;
+    if (rnd.next() >= MINOR_RATE * f * (1 + (restlessness(ind) - 1) * k)) continue;
     const ctx = { hasNeighbor: (s.neighbors ?? []).some((n) => isLive(map.pack.states[n])) };
-    const pool = MINOR_EVENTS.filter((e) => !e.follow && eventFits(e, s, ctx));
+    const ideas = ind && k > 0 ? ideasOf(map, s.i, ind) : null;
+    const pool = [], weights = [];
+    for (const e of MINOR_EVENTS) {
+      if (!eventFits(e, s, ctx)) continue;
+      let w;
+      if (e.follow) { w = k > 0 ? drivenWeight(e.key, ind) * k : 0; } // 後続は、状態が整ったときだけ単独でも起きる
+      else w = e.w * (1 + (eventFactors(e.key, ind, ideas).w - 1) * k);
+      if (w > 0) { pool.push(e); weights.push(w); }
+    }
     if (!pool.length) continue;
-    const ev = rnd.weighted(pool, pool.map((e) => e.w));
-    out.push({ key: ev.key, stateId: s.i, ...(ev.swing ? { swing: rnd.int(-6, 6) } : {}) });
+    const ev = rnd.weighted(pool, weights);
+    const cause = k > 0 ? dominantCause(map, ev.key, s.i, when) : null;
+    out.push({ key: ev.key, stateId: s.i, ...(ev.swing ? { swing: rnd.int(-6, 6) } : {}), ...(cause ? { cause } : {}) });
   }
   return out;
 }
 
-/** 出来事を反映する（Undo 1回）。民意・国庫・産業・士気だけを動かす */
-export function planMinorEvent(map, { key, stateId, swing = 0 }, date) {
+/**
+ * 出来事を反映する（Undo 1回）。民意・国庫・産業・士気だけを動かす。
+ *   v2.7.0: 悪い出来事の被害は、国の状態で変わる（食料が足りない国の飢饉は重い・医療が進んだ国の疫病は軽い）。
+ *   起きたあとには余波が残り、後続の出来事の確率と被害を変える。cause は、年表に残す「きっかけ」。
+ */
+export function planMinorEvent(map, { key, stateId, swing = 0, cause = null }, date) {
   const ev = MINOR_EVENTS.find((e) => e.key === key), s = map.pack.states[stateId];
   if (!ev || !isLive(s)) return null;
-  const n = s.fullName ?? s.name, fx = ev.fx ?? {}, patch = {};
-  const d = (fx.support ?? 0) + (ev.swing ? (swing || 0) : 0);
+  const n = s.fullName ?? s.name, fx = ev.fx ?? {}, patch = {}, k = BALANCE.causalStrength ?? 1;
+  let impact = 1;
+  if (k > 0) { try { const ind = getIndicators(map, date).get(stateId); impact = 1 + (eventFactors(key, ind, ind ? ideasOf(map, stateId, ind) : null).impact - 1) * k; } catch { impact = 1; } }
+  let d = (fx.support ?? 0) + (ev.swing ? (swing || 0) : 0);
+  if (d < 0) d *= impact; // 被害は重く（または軽く）。良い出来事は変えない
   if (d) patch.support = clamp(Math.round(sup(s) + d), 0, 100);
-  if (fx.morale) patch.morale = clamp((s.morale ?? 70) + fx.morale, 0, 100);
-  if (fx.treasuryF && typeof s.treasury === "number") patch.treasury = Math.round(s.treasury * fx.treasuryF * 100) / 100;
-  if (fx.industryF && typeof s.industry === "number") patch.industry = Math.round(s.industry * fx.industryF * 10) / 10;
-  const cmd = makeCommand(`出来事（${ev.title}）`, [], [setProps(s, patch)]);
-  return withEvent(map, cmd, { type: `natural-${ev.key}`, title: ev.text(n, s, swing), detail: ev.title, date, states: [stateId] });
+  if (fx.morale) patch.morale = clamp((s.morale ?? 70) + (fx.morale < 0 ? fx.morale * impact : fx.morale), 0, 100);
+  const tf = fx.treasuryF && fx.treasuryF < 1 ? 1 - (1 - fx.treasuryF) * impact : fx.treasuryF;
+  if (tf && typeof s.treasury === "number") patch.treasury = Math.round(s.treasury * tf * 100) / 100;
+  if (fx.industryF && typeof s.industry === "number") patch.industry = Math.round(s.industry * (fx.industryF < 1 ? 1 - (1 - fx.industryF) * impact : fx.industryF) * 10) / 10;
+  const title = ev.text(n, s, swing), type = `natural-${ev.key}`;
+  const own = `${type}|${date.year}-${date.month}|${title}`; // この出来事のキー（余波の「元」になる）
+  const parts = [setProps(s, patch)];
+  const sp = shockPart(map, key, stateId, date, own, 1); if (sp) parts.push(sp);
+  const cmd = makeCommand(`出来事（${ev.title}）`, [], parts);
+  return withEvent(map, cmd, { type, title, detail: ev.title, date, states: [stateId], ...(cause ? { cause } : {}) });
 }

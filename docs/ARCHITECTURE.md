@@ -201,3 +201,10 @@ alterhistory/
 - `core/edit/treaties.js`（条約。DOM に依存しない）。既存の `alliances.js`・`vassals.js`・`wars.js` と、`core/sim/trade.js`（経済協力の補正）につながる。
 - `core/edit/zones.js`（期間つきの一時ゾーン）／`render/layers/zones.js`。
 - 版: `js/version.js`、保存形式の版は `core/edit/treaties.js` の `SAVE_FORMAT`。
+
+## v2.7.0 で足した層（因果・人口・制約・技術・思想・言語）
+- **状態の層**: `core/sim/pressure.js`。指標（地図から毎月導く）と余波（`ext.data.shocks`）が、あらゆる出来事の確率と影響の入力になる。出来事 → 余波 → 次の出来事、という循環が、ほかの機能の土台。
+- **システム**: `population.js`（月次の人口）・`tech-progress.js`（進捗。三位一体）・`ideas.js`（思潮）・`limits.js` / `capacity.js`（経済の制約）。どれも「月ごとの更新」から呼ばれ、結果は1つのコマンドとして commit される（Undo 可）。
+- **読み込みの向き**: `limits.js`（`military.js` が使う）は `pressure.js` と `doctrines.js` だけを読む。`capacity.js`（表示用）は `world.js` を読む。循環を作らないこと（`military → capacity → world → military` になる）。
+- **言語**: `core/names/language.js`（純粋。音節の記号・辞書・音変化・名前）→ `core/edit/language.js`（地図と結ぶ）→ `naming.js` / `person.js` / `leaders.js`。`katakana.js` の生成器は、系統（キー）の代わりに言語から作ったオブジェクトも受け取る。
+- 何が「計算」で何が「演出」か: 指標・余波・人口・進捗・思潮は計算（バランス調整で係数を変えられる）。出来事の文面と、言語の音の好みは演出。

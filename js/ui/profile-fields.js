@@ -2,6 +2,7 @@
 // editor-panel.js から呼ぶ。見るだけなら畳んだまま、触りたい人だけが開く。
 
 import { el, btn } from "./kit.js";
+import { languageSection } from "./language-section.js";
 import { CULTURE_TYPES, RELIGION_TYPES, STATE_FORMS, BURG_GROUPS, BURG_FEATURES } from "../core/edit/profile.js";
 
 const LIST_KEY = { state: "states", culture: "cultures", religion: "religions" };
@@ -66,6 +67,7 @@ export function appendEntityProfile(d, kind, e, { editActions, map, openEntity, 
     if (kids.length > 8) row.append(el("span", "b-mini", `ほか${kids.length - 8}`));
     d.append(row);
   }
+  if (kind === "culture") d.append(languageSection(e.i, { editActions })); // 言語（v2.7.0）
 }
 
 /** 都市の詳細（設備のチェック・区分・人口） */

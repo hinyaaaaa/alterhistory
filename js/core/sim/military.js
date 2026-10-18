@@ -9,6 +9,7 @@
 //
 // 純粋ロジック層：DOM に依存しない。編集はコマンド(commands.js の部品)として返す。
 
+import { industrialFactor, foodConscriptionFactor } from "./limits.js";
 import { effectiveDoctrineKey } from "../edit/doctrines.js";
 import { generatePersonName } from "../names/person.js";
 import { setList, setProps, makeCommand } from "../edit/commands.js";
@@ -127,7 +128,7 @@ export function planAnnualConscription(map, stateId, { rate = 1, rnd = null, fil
   for (const r of list) for (const k of UNIT_KEYS) cur[k] += r.u?.[k] ?? 0;
 
   // 重い兵科は、産業力が足りないほど目標が小さくなる（産業 0 なら装備品はほぼ作れない）
-  const industrial = Math.min(1, industry / 300);
+  const industrial = industrialFactor(state);
   const shares = {};
   let sum = 0;
   for (const k of Object.keys(BASE_SHARE)) {
@@ -137,7 +138,7 @@ export function planAnnualConscription(map, stateId, { rate = 1, rnd = null, fil
     if (def.industryShare > 0) v *= 0.2 + 0.8 * industrial;
     shares[k] = v; sum += v;
   }
-  const totalTarget = pop * 6; // 人口(千人)×6 ＝ 人口の0.6%
+  const totalTarget = pop * 6 * foodConscriptionFactor(map, stateId); // 人口(千人)×6 ＝ 人口の0.6%（食料が足りない国は、兵を養えず減る）
   const delta = emptyForce();
   let any = false;
   for (const k of Object.keys(BASE_SHARE)) {

@@ -152,6 +152,19 @@ export function getTechDoctrine(state) {
 export function techLevelFrom(levels) {
   return clampT(TECH_TRACKS.reduce((n, t) => n + (levels[t.key] ?? TECH_MIN) * t.weight, 0));
 }
+/** 分野ごとの進捗（次の段まで 0〜1）。未設定は 0 */
+export function getTechProgress(state) {
+  return Object.fromEntries(TECH_TRACKS.map((t) => { const v = state?.techProgress?.[t.key]; return [t.key, typeof v === "number" && v > 0 ? Math.min(1, v) : 0]; }));
+}
+/**
+ * 内部の細かい技術水準（1〜10 の小数）。見える段（techLevel・技術ドクトリン）は整数のまま、
+ * その間を分野ごとの進捗で埋める。人口の増え方・産業力など、経済の連続的な計算に使う（戦闘・編成は整数の段を使う）。
+ */
+export function techLevelFine(state) {
+  const lv = getTechDoctrine(state), pr = getTechProgress(state);
+  const v = TECH_TRACKS.reduce((n, t) => n + (lv[t.key] + (lv[t.key] < TECH_MAX ? pr[t.key] : 0)) * t.weight, 0);
+  return Math.min(TECH_MAX, Math.max(TECH_MIN, v));
+}
 export function planSetTechDoctrine(map, stateId, patch) {
   const s = map.pack.states[stateId];
   if (!isLive(s)) throw new Error("存在しない国家です");
@@ -160,7 +173,11 @@ export function planSetTechDoctrine(map, stateId, patch) {
   const same = TECH_TRACKS.every((t) => next[t.key] === cur[t.key]) && s.techDoctrine;
   if (same) return null;
   const level = techLevelFrom(next);
-  return makeCommand(`技術ドクトリンの変更（${s.name}）`, [], [setProps(s, { techDoctrine: next, techLevel: level })]);
+  // 段を直接変えた分野は、進捗を 0 に戻す（その段の途中ではなくなるため）
+  const changed = TECH_TRACKS.filter((t) => next[t.key] !== cur[t.key]);
+  const props = { techDoctrine: next, techLevel: level };
+  if (changed.length && s.techProgress) props.techProgress = { ...getTechProgress(s), ...Object.fromEntries(changed.map((t) => [t.key, 0])) };
+  return makeCommand(`技術ドクトリンの変更（${s.name}）`, [], [setProps(s, props)]);
 }
 export const regimeUniqueNodes = (regimeKey) => UNIQUE_NODES.filter((n) => n.regime === regimeKey);
 export { REGIME_BY_KEY };

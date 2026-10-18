@@ -10,6 +10,8 @@ import { ratesParts } from "./currency.js";
 import { regimentsOf } from "./military.js";
 import { UNIT_BY_KEY } from "./units.js";
 import { computeTrade, annualRevenue, getFinance } from "./trade.js";
+import { growthMods } from "./population.js";
+import { getIndicators } from "./pressure.js";
 
 /** 兵科ごとの維持費の重み（歩兵=1 を基準。機甲・航空・海軍ほど高い）。仮置きの値 */
 const UPKEEP_WEIGHT = { infantry: 1, armor: 8, air: 15, navy: 25, special: 3, advanced: 6, nuclear: 100 };
@@ -35,6 +37,7 @@ export function planAnnualUpdate(map, rnd = null) {
   const parts = [];
   // 税収: 今年の人口・取引で計算し、軍の維持費を引いて国庫に足す（Azgaar 本家は毎回リセットするが、ここは年々ためる）
   const trade = computeTrade(map);
+  let inds = null; try { inds = getIndicators(map); } catch { inds = null; } // 食料・疫病・戦争で、人口の増え方が変わる
   for (const state of map.pack.states) {
     if (!isLive(state)) continue;
     ensureEconomy(state);
@@ -43,7 +46,7 @@ export function planAnnualUpdate(map, rnd = null) {
       const net = revenue * (1 - militaryBurden(state)); // 軍の維持費を引いた分が国庫に入る
       parts.push(setProps(state, { treasury: Math.round((getFinance(state).treasury + net) * 100) / 100 }));
     }
-    const { rural, urban, industry } = computeAnnualUpdate(state);
+    const { rural, urban, industry } = computeAnnualUpdate(state, growthMods(inds?.get(state.i)));
     const peak = Math.max(state.popPeak ?? 0, rural + urban); // 過去最大の人口（崩壊の判定に使う）
     // 士気は年ごとに平時の水準(70)へ近づく（戦争や核の打撃からの立ち直り）
     // 民意：戦争をしていない国は、年ごとに平時の水準(70)へ回復する（戦争中は戦争の進行が動かす）

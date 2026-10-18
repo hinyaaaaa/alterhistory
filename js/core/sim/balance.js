@@ -13,6 +13,12 @@ export const BALANCE_META = Object.freeze([
   { key: "momentumRate", label: "技術の機運の出やすさ", desc: "隣国が先に進んだ分野で、月ごとに機運が出る確率（世界の年だけが条件のときは半分）。0にすると機運は出ない。採用は自動ではない", def: 0.03, min: 0, max: 0.5, step: 0.005 },
   { key: "chainRate", label: "出来事の連鎖の起きやすさ", desc: "飢饉→物価の高騰、疫病→復興などの「後続の出来事」が起きる確率の倍率。0で連鎖しない", def: 1, min: 0, max: 3, step: 0.1 },
   { key: "chainDepth", label: "出来事の連鎖の長さ", desc: "後続の出来事が、さらに後続を呼べる段数の上限（1なら、最初の出来事の次の1段だけ）", def: 2, min: 1, max: 4, step: 1 },
+  { key: "causalStrength", label: "因果の強さ", desc: "食料・疫病・治安などの状態と余波が、出来事の起きやすさと影響を変える度合い。0で従来どおり（状態に関係なく決まる）、1が標準、2で強くなる", def: 1, min: 0, max: 3, step: 0.1 },
+  { key: "foodBase", label: "食料が釣り合う需給比", desc: "地図の生産量÷需要がこの値のとき、食料が釣り合っているとみなす（地図ごとの生産規模の違いを吸収する）", def: 1, min: 0.1, max: 10, step: 0.05 },
+  { key: "migrationRate", label: "移住の活発さ", desc: "国どうしの人の移動（難民・移民）の倍率。0で国をまたぐ移住なし", def: 1, min: 0, max: 5, step: 0.1 },
+  { key: "urbanizeRate", label: "都市化の速さ", desc: "農村から都市へ人が移る速さの倍率。0で都市化しない", def: 1, min: 0, max: 5, step: 0.1 },
+  { key: "techPace", label: "技術の進捗の速さ", desc: "産業力・経済力・技術力がそろった国で、1つの段を進めるのにかかる時間の逆数（1で約50年。2なら約25年）。段が上がる採用はボタンのまま", def: 1, min: 0, max: 5, step: 0.1 },
+  { key: "ideasMix", label: "思想の混ざりやすさ", desc: "隣国どうしで思潮が混ざり合う速さの倍率。0で混ざらない（国内の事情だけで動く）", def: 1, min: 0, max: 5, step: 0.1 },
   { key: "cessionCostScale", label: "割譲の費用", desc: "小さいほど、同じスコアで多く割譲させられる", def: 1, min: 0.1, max: 3, step: 0.05 },
 ]);
 export const BALANCE_DEFAULTS = Object.freeze(Object.fromEntries(BALANCE_META.map((m) => [m.key, m.def])));

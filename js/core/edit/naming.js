@@ -13,6 +13,8 @@
 
 import { makeCommand } from "./commands.js";
 import { ensureExt } from "./ext.js";
+import { getLanguage, cultureOfEntity, featuresAt, languageStyle } from "./language.js";
+import { placeName } from "../names/language.js";
 import {
   NAME_STYLES, STYLE_KEYS, isStyle,
   generatePlaceName, generateStateName, generateReligionName, generateCultureName, generateProvinceName,
@@ -61,13 +63,17 @@ export function suggestName(map, opts) {
   if (!rnd) throw new Error("乱数(rnd)が必要です");
 
   let style = opts.style;
-  if (!isStyle(style)) style = rnd.pick(STYLE_KEYS);
+  // 文化の言語があれば、その言語の響き・語根で名付ける（v2.7.0）。style を明示したときは従来どおり
+  const lang = isStyle(style) ? null : getLanguage(map, cultureFor(map, kind, opts));
+  const langBurg = lang && kind === "burg" ? opts.cell ?? map.pack.burgs?.[opts.id]?.cell ?? null : null;
+  if (lang) style = languageStyle(lang, `${map.pack.cultures[lang.id]?.name ?? ""}語`);
+  else if (!isStyle(style)) style = rnd.pick(STYLE_KEYS);
   const taken = takenNames(map);
   if (opts.avoid) for (const n of opts.avoid) taken.add(n);
 
   const gen = () => {
     switch (kind) {
-      case "burg": return { name: generatePlaceName(rnd, style), extra: {} };
+      case "burg": return { name: lang ? placeName(lang, rnd, featuresAt(map, langBurg), { size: opts.size }) : generatePlaceName(rnd, style), extra: {} };
       case "province": return { name: generateProvinceName(rnd, style), extra: {} };
       case "culture": return { name: generateCultureName(rnd, style), extra: {} };
       case "religion": { const r = generateReligionName(rnd, style); return { name: r.name, extra: { deity: r.deity, type: r.type, form: r.form } }; }
@@ -84,7 +90,16 @@ export function suggestName(map, opts) {
     while (taken.has(`${last.name}${n}`)) n++;
     last = { ...last, name: `${last.name}${n}` };
   }
-  return { ...last, style };
+  return { ...last, style: lang ? "language" : style };
+}
+
+/** 名付ける対象がどの文化に属するか（cultureId > id > cell > stateId の順）。辿れなければ 0 */
+function cultureFor(map, kind, opts) {
+  if (opts.cultureId > 0) return opts.cultureId;
+  if (opts.id != null) { const c = cultureOfEntity(map, kind, opts.id); if (c > 0) return c; }
+  if (opts.cell != null) { const c = map.pack.cells?.culture?.[opts.cell] ?? 0; if (c > 0) return c; }
+  if (opts.stateId != null) { const c = map.pack.states?.[opts.stateId]?.culture ?? 0; if (c > 0) return c; }
+  return 0;
 }
 
 /** 同盟・ゾーン・時代・最高神の名前に使われている名前（被らないようにするため） */
@@ -109,7 +124,9 @@ export function suggestLabel(map, opts) {
   if (!LABEL_KINDS.includes(kind)) throw new Error(`名前を生成できない種類です: ${kind}`);
   if (!rnd) throw new Error("乱数(rnd)が必要です");
   let style = opts.style;
-  if (!isStyle(style)) style = rnd.pick(STYLE_KEYS);
+  const lang = isStyle(style) ? null : getLanguage(map, cultureFor(map, kind, opts));
+  if (lang) style = languageStyle(lang, `${map.pack.cultures[lang.id]?.name ?? ""}語`);
+  else if (!isStyle(style)) style = rnd.pick(STYLE_KEYS);
   const taken = takenLabels(map);
   for (const k of NAME_KINDS) for (const e of map.pack[LIST[k]] ?? []) if (isLive(e) && e.name) taken.add(e.name);
   const gen = () => {

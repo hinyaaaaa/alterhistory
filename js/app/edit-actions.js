@@ -24,6 +24,8 @@ import {
 
 } from "../core/edit/naming.js";
 import { suggestLabel } from "../core/edit/naming.js";
+import { getLanguage, parentCultureOf, planSetLanguageWord, planRerollLanguageWord, planRegenerateLanguage } from "../core/edit/language.js";
+import { lexiconRows, placeName as langPlace, personName as langPerson, renderWord as langRender, renderToken as langToken } from "../core/names/language.js";
 import { withEvent, planLogEvent } from "../core/edit/history-log.js";
 import { createRandom } from "../core/random.js";
 import { cellIndexOf } from "../core/spatial.js";
@@ -284,6 +286,34 @@ export function createEditActions({ store, renderer }) {
         });
         return zid;
       }) ?? null;
+    },
+    // --- 簡易言語（v2.7.0）---
+    /** 文化の言語の表示用データ（音の体系・語順・系統・語根辞書・試しの名前）。言語が無い文化は null */
+    languageView(cultureId, salt = 0) {
+      return withMap((map) => {
+        const lang = getLanguage(map, cultureId); if (!lang) return null;
+        const pid = parentCultureOf(map, cultureId), parent = pid ? getLanguage(map, pid) : null, r = createRandom(cultureId * 7919 + 13 + salt * 101);
+        const feat = [["river"], ["coast"], ["mountain"], ["forest"], [], []];
+        return {
+          id: cultureId, name: map.pack.cultures[cultureId].name, parentId: pid, parentName: pid ? map.pack.cultures[pid].name : null,
+          order: lang.order, link: lang.link, phon: lang.phon, changes: (lang.changes ?? []).filter((c) => c.from === cultureId || c.from == null), allChanges: lang.changes ?? [],
+          rows: lexiconRows(lang, parent), cats: { geo: "地形", place: "居住地・施設", qual: "性質", nat: "自然・物", soc: "人・社会" },
+          samples: { places: feat.map((f) => langPlace(lang, r, f)), people: [langPerson(lang, r, "m").full, langPerson(lang, r, "f").full, langPerson(lang, r, "m").full] },
+          example: (() => { const r = langRender(lang.lex.river), t = langRender(lang.lex.town), l = lang.link ? langToken(lang.link === "no" ? "no" : lang.link) : ""; return { river: r, town: t, joined: lang.order === "HM" ? t + l + r : r + l + t }; })(),
+        };
+      }) ?? null;
+    },
+    /** 語根辞書の語を手で直す（カタカナ 1〜8 文字）。直せたら true（不正な語は画面にエラーを出す） */
+    setLanguageWord(cultureId, key, kana) {
+      return withMap((map) => { let ok = false; safeRun("語の変更", () => { const c = planSetLanguageWord(map, cultureId, key, kana); if (c) commitOrThrow(c); ok = true; }); return ok; }) ?? false;
+    },
+    /** 語を、その言語の音の体系で作り直す */
+    rerollLanguageWord(cultureId, key) {
+      return withMap((map) => { let ok = false; safeRun("語の作り直し", () => { commitOrThrow(planRerollLanguageWord(map, cultureId, key, rnd)); ok = true; }); return ok; }) ?? false;
+    },
+    /** 言語を丸ごと作り直す（親の文化があれば、親から音変化で作り直す） */
+    regenerateLanguage(cultureId) {
+      return withMap((map) => { let ok = false; safeRun("言語の作り直し", () => { commitOrThrow(planRegenerateLanguage(map, cultureId, rnd)); ok = true; }); return ok; }) ?? false;
     },
     /** 同盟・ゾーン・最高神・時代の名前をランダムに作る（既存の名前と被らない） */
     suggestLabel(kind, ctx = {}) { return withMap((map) => suggestLabel(map, { kind, rnd, ...ctx })) ?? ""; },

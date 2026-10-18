@@ -16,10 +16,10 @@ export const TIMELINE_KINDS = [
   { key: "war", label: "戦争・戦闘", test: (t) => /^(war-|battle|covert-op|nuclear-op)/.test(t) },
   { key: "diplomacy", label: "外交・同盟", test: (t) => /^(diplomacy|alliance-|treaty)/.test(t) },
   { key: "state", label: "国家の変動", test: (t) => /^(state-merged|independence|sovereignty|created-state|removed-state|rename-state|capital|tech|doctrine|origin-state|succession|regime)/.test(t) },
-  { key: "culture", label: "文化・宗教", test: (t) => /(culture|religion)/.test(t) },
+  { key: "culture", label: "文化・宗教", test: (t) => /(culture|religion)/.test(t) || /^(ideas|language)$/.test(t) },
   { key: "place", label: "都市・地図", test: (t) => /(burg|province|zone|marker)/.test(t) },
   { key: "era", label: "時代", test: (t) => t === "era" },
-  { key: "natural", label: "自然発生", test: (t) => /^(plague|rebellion|schism|natural-)/.test(t) },
+  { key: "natural", label: "自然発生", test: (t) => /^(plague|rebellion|schism|natural-|migration)/.test(t) },
   { key: "note", label: "記録・手書き", test: (t) => t === "note" || t === "manual" },
 ];
 export const kindOfType = (type) => TIMELINE_KINDS.find((k) => k.test(String(type)))?.key ?? "other";
