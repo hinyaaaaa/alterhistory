@@ -370,3 +370,29 @@ export function badgesOf(map, stateId, warsActive = [], now = nowOf(map)) {
   if (warsActive.some((w) => [...w.attackers, ...w.defenders].includes(stateId))) out.add("戦争中");
   return [...out];
 }
+
+// ---- v2.6.0 B6: 期限切れが近い条約の通知と更新 ----
+/** 期限の何か月前から通知するか */
+export const EXPIRY_WARN_MONTHS = 12;
+/** 期限が近い（EXPIRY_WARN_MONTHS 以内の）有効な条約。残り月数つき */
+export function expiringTreaties(map, now = nowOf(map)) {
+  return activeTreaties(map, now).filter((t) => t.expiresAt && t.kind !== "peace").map((t) => ({ treaty: t, left: monthKey(t.expiresAt) - monthKey(now) })).filter((x) => x.left <= EXPIRY_WARN_MONTHS);
+}
+const noticeKey = (t) => monthKey(t.expiresAt);
+/** 通知をまだ出していない（同じ期限では1回だけ）期限間近の条約 */
+export function treatiesNeedingNotice(map, now = nowOf(map)) {
+  const done = new Set((map.ext?.data?.historyLog ?? []).filter((h) => h.type === "treaty-expiring" && h.data?.treatyId != null).map((h) => `${h.data.treatyId}|${h.data.until}`));
+  return expiringTreaties(map, now).filter((x) => !done.has(`${x.treaty.id}|${noticeKey(x.treaty)}`)).map((x) => x.treaty);
+}
+/** 期限切れが近いことを、年表（新聞）に残す */
+export function planTreatyExpiryNotice(map, t, now = nowOf(map)) {
+  const left = Math.max(0, monthKey(t.expiresAt) - monthKey(now)), names = t.parties.map((p) => map.pack.states[p.state]?.fullName ?? map.pack.states[p.state]?.name ?? "?").join("・");
+  return withEvent(map, makeCommand(`条約の期限（${t.name}）`, [], []), { type: "treaty-expiring", title: `「${t.name}」（${names}）の期限が近い`, detail: `期限は${t.expiresAt.year}年${t.expiresAt.month}月まで（あと${left}か月）。更新しなければ失効する`, date: now, states: t.parties.map((p) => p.state), data: { treatyId: t.id, until: noticeKey(t) } });
+}
+/** 条約を更新する（期限を延ばす。既定は、元の期間と同じだけ。Undo 可）。有効でない・期限の無い条約は null */
+export function planRenewTreaty(map, id, months = null, date = null) {
+  const list = listTreaties(map), t = list.find((x) => x.id === id); if (!t || treatyStatus(t, nowOf(map)) !== "active" || !t.expiresAt) return null;
+  const span = months ?? Math.max(12, monthKey(t.expiresAt) - monthKey(t.signedAt)), next = { ...t, expiresAt: addMonthsTo(t.expiresAt, span) };
+  const cmd = makeCommand(`条約を更新（${t.name}）`, [], [{ apply: (m) => writeTreaties(m, list.map((x) => (x.id === id ? next : x))), revert: (m) => writeTreaties(m, list) }]);
+  return withEvent(map, cmd, { type: "treaty-renewed", title: `「${t.name}」が更新された`, detail: `期限を${next.expiresAt.year}年${next.expiresAt.month}月まで延ばした（+${span}か月）`, date: date ?? nowOf(map), states: t.parties.map((p) => p.state) });
+}

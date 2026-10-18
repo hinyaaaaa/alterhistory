@@ -376,19 +376,21 @@ export function nameWar(map, { attackers, defenders, rnd, existingNames = [], ba
     const burg = key?.burgId ? map.pack.burgs[key.burgId] : null;
     const place = key?.place ?? pickPlace(map, defenders[0], rnd) ?? officialName(map.pack.states[defenders[0]], "国境");
     const isCapital = burg && [...attackers, ...defenders].some((id) => map.pack.states[id]?.capital === burg.i);
+    // 史実風の戦争名: 場所の名前の戦争・紛争・事変、包囲戦、二国の名を並べた戦争（普仏戦争のように）。機械的な「の戦い」は戦争名にしない
+    const A = map.pack.states[attackers[0]]?.name, D = map.pack.states[defenders[0]]?.name, pair = A && D ? `${A}・${D}戦争` : null;
     const kinds = [];
-    if (asymOf(type)) kinds.push(`${place}紛争`, `${place}掃討戦`);
-    else if (type === "limited") kinds.push(`${place}国境紛争`, `${place}の戦い`);
+    const add = (n, w = 1) => { if (n) for (let i = 0; i < w; i++) kinds.push(n); };
+    if (asymOf(type)) { add(`${place}紛争`, 3); add(`${place}掃討戦`, 1); add(`${place}治安戦`, 1); }
+    else if (type === "limited") { add(`${place}国境紛争`, 3); add(`${place}事変`, 2); add(`${place}事件`, 1); }
     else {
-      kinds.push(`${place}戦争`, `${place}の戦い`);
-      if (isCapital) kinds.push(`${place}包囲戦`, `${place}攻略戦`);
-      if (burg && burgIsCoastal(map, burg)) kinds.push(`${place}上陸作戦`);
+      add(`${place}戦争`, 4); add(pair, 2); add(`${place}戦役`, 1);
+      if (isCapital) add(`${place}包囲戦`, 3);
+      if (burg && burgIsCoastal(map, burg)) add(`${place}上陸作戦`, 1);
     }
-    base = isCapital && type !== "asymmetric" && type !== "limited" ? rnd.pick([`${place}包囲戦`, `${place}戦争`]) : rnd.pick(kinds);
+    base = isCapital && type !== "asymmetric" && type !== "limited" ? rnd.pick([`${place}包囲戦`, `${place}戦争`, ...(pair ? [pair] : [])]) : rnd.pick(kinds);
   }
-  let name = base, k = 2;
-  while (existingNames.includes(name)) name = `${base}（${k++}）`;
-  return name;
+  let name = base;
+  return name; // 同じ名前の重複は、wars.js の seriesWarName が「第二次〇〇」の連番で区別する
 }
 
 function pickPlace(map, stateId, rnd) {
@@ -435,8 +437,9 @@ export function generateBattleLog(map, { attackers, defenders, result, startedAt
     const place = burg?.name ?? officialName(map.pack.states[counter ? attackers[0] : defenders[0]], "国境地帯");
     const dk = doctrineOf(map.pack.states[wId]).baseKey ?? doctrineOf(map.pack.states[wId]).key;
     const story = DOCTRINE_STORY[dk] ?? DOCTRINE_STORY.balanced;
-    let kind = rnd.pick([`${place}の戦い`, `${place}会戦`, `${place}攻防戦`]);
-    for (let k = 2; log.some((x) => x.name === kind); k++) kind = `第${k}次${place}の戦い`; // 同じ場所で再び戦うときは番号を付ける
+    const usedNames = log.map((x) => x.name);
+    let kind = burg ? battleNameFor(map, burg, { rnd, navy: false, capital: false, used: usedNames, year: startedAt?.year ?? null }) : rnd.pick([`${place}の戦い`, `${place}会戦`, `${place}攻防戦`]);
+    if (usedNames.includes(kind)) kind = `${place}の戦い（${i + 1}）`;
     const t = Math.min(durationMonths, Math.max(0, Math.round(((i + 1) / (n + 1)) * durationMonths)));
     log.push({ date: addMonths(startedAt, t), name: kind, place, burgId: burg?.i ?? null, winner: side, attackerState: attackers[0], defenderState: defenders[0], winnerState: wId, loserState: lId,
       text: `${officialName(map.pack.states[wId])}軍：${rnd.pick(story.win)}（${officialName(map.pack.states[lId])}軍：${rnd.pick((DOCTRINE_STORY[doctrineOf(map.pack.states[lId]).baseKey ?? doctrineOf(map.pack.states[lId]).key] ?? DOCTRINE_STORY.balanced).lose)}）` });
@@ -475,7 +478,7 @@ const pickW = (rnd, items) => {
 };
 
 /** 戦いの名前の候補。場所の地形・文化の型・海軍の有無から決める */
-export function battleNameFor(map, burg, { rnd, navy = false, capital = false, used = [] }) {
+export function battleNameFor(map, burg, { rnd, navy = false, capital = false, used = [], year = null }) {
   const place = burg.name;
   const culture = map.pack.cultures?.[burg.culture ?? map.pack.cells.culture?.[burg.cell]];
   const type = culture?.type ?? "Generic";
@@ -493,10 +496,26 @@ export function battleNameFor(map, burg, { rnd, navy = false, capital = false, u
   if (type === "Hunting") add(`${place}の森の戦い`, 3);
   if (capital) { add(`${place}攻囲戦`, 4); add(`${place}攻略戦`, 2); }
   add(`${place}の戦い`, 3); add(`${place}会戦`, 2); add(`${place}攻防戦`, 1);
-  let name = pickW(rnd, cand);
-  if (used.includes(name)) { let k = 2; while (used.includes(`第${k}次${name}`)) k++; name = `第${k}次${name}`; }
-  return name;
+  const fresh = cand.filter((x) => !used.includes(x.name));
+  if (fresh.length) return pickW(rnd, fresh);
+  return variantBattleName(map, burg, { rnd, used, year });
 }
+
+/**
+ * 同じ土地で再び戦うときの、戦いの名前（v2.6.1）。「第20次〇〇の戦い」のような機械的な連番は、史実でもありえないので使わない。
+ * 史実の呼び方に倣う: 別の言い方（会戦・攻防戦・近郊の戦い・奪回戦・追撃戦）→ その属州・地方の名前 → 第二次・第三次（3回目まで）→ 年を添える。
+ */
+export function variantBattleName(map, burg, { rnd, used = [], year = null }) {
+  const place = burg.name, prov = map.pack.provinces?.[burg.province ?? map.pack.cells.province?.[burg.cell]];
+  const region = prov && !prov.removed && prov.i > 0 ? (prov.name ?? null) : null;
+  const forms = [`${place}会戦`, `${place}攻防戦`, `${place}近郊の戦い`, `${place}奪回戦`, `${place}の追撃戦`, `${place}の反攻`, `${place}の戦い`,
+    ...(region ? [`${region}の戦い`, `${region}地方の戦い`, `${region}会戦`, `${region}攻防戦`] : [])];
+  const free = forms.filter((n) => !used.includes(n)); if (free.length) return rnd.pick(free);
+  for (const n of [2, 3]) { const f = forms.map((x) => `${ordOf(n)}${x}`).filter((x) => !used.includes(x)); if (f.length) return rnd.pick(f.slice(0, 3)); }
+  const y = year != null ? `（${year}年）` : "";
+  for (let k = 1; ; k++) { const name = `${place}の戦い${y}${k > 1 ? `・${k}` : ""}`; if (!used.includes(name)) return name; }
+}
+const ordOf = (n) => ["", "第一次", "第二次", "第三次"][n] ?? `第${n}次`;
 
 /**
  * 戦争の「いま」の戦況から、新しい戦い1つを自動で作る（記録用。損害は月ごとの進行で別に積まれる）。
@@ -522,15 +541,20 @@ export function rollCampaignBattle(map, war, date, rnd) {
   const reach = side === "attacker" ? clamp(0.25 + dec * 0.75, 0.25, 1) * (0.2 + 0.8 * prog) : 0.3 * (0.2 + 0.8 * prog);
   const maxIdx = Math.max(0, Math.floor((pool.length - 1) * reach));
   const used = (war.battles ?? []).map((b) => b.name);
-  const usedBurg = new Set((war.battles ?? []).slice(-3).map((b) => b.burgId));
+  const usedBurg = new Set((war.battles ?? []).slice(-3).map((b) => b.burgId)), everUsed = new Set((war.battles ?? []).map((b) => b.burgId));
   let burg = null;
+  // まだ戦場になっていない都市を優先する（同じ都市ばかりで戦わない）。前線の奥行きが足りなければ、少しずつ範囲を広げる
+  for (let widen = 0; widen < 3 && !burg; widen++) {
+    const hi = Math.min(pool.length - 1, maxIdx + widen * 2);
+    const fresh = pool.slice(0, hi + 1).filter((c) => c && !everUsed.has(c.i)); if (fresh.length) burg = fresh[Math.floor(rnd.next() * fresh.length)];
+  }
   for (let t = 0; t < 8 && !burg; t++) { const c = pool[Math.min(maxIdx, Math.floor(rnd.next() * (maxIdx + 1)))]; if (c && !usedBurg.has(c.i)) burg = c; }
   if (!burg && pool.length) burg = pool[Math.min(maxIdx, Math.floor(rnd.next() * (maxIdx + 1)))];
   const navy = (r.aStrength?.sea ?? 0) > 0 || (r.dStrength?.sea ?? 0) > 0;
   const allIds = [...A, ...D];
   const capital = !!burg && allIds.some((id) => map.pack.states[id]?.capital === burg.i);
   const place = burg?.name ?? officialName(map.pack.states[counter ? A[0] : D[0]], "国境地帯");
-  const name = burg ? battleNameFor(map, burg, { rnd, navy, capital, used }) : `${place}の戦い`;
+  const name = burg ? battleNameFor(map, burg, { rnd, navy, capital, used, year: date?.year ?? null }) : `${place}の戦い`;
   const story = (id) => DOCTRINE_STORY[doctrineOf(map.pack.states[id]).baseKey ?? doctrineOf(map.pack.states[id]).key] ?? DOCTRINE_STORY.balanced;
   const sidePower = (S) => Math.round((S?.land ?? 0) + (S?.sea ?? 0) + (S?.air ?? 0));
   const nameOfState = (id) => officialName(map.pack.states[id]);

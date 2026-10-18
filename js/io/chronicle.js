@@ -29,6 +29,11 @@ import { zoneLabel } from "../core/edit/zones.js";
 import { getNote, htmlToEditableText } from "./chronicle-text.js";
 import { UNIT_TYPES, DOCTRINE_BY_KEY, DEFAULT_DOCTRINE, forcePower, forceHeadcount } from "../core/sim/units.js";
 import { statePopulation } from "../core/query.js";
+import { leaderRecord, REASONS, STABILITY, heirOf, familyOf, leaderAge } from "../core/edit/leaders.js";
+import { TECH_TRACKS, getTechDoctrine, NODE_BY_KEY } from "../core/edit/doctrines.js";
+import { vassalInfo, vassalsOf, VASSAL_BY_KEY } from "../core/edit/vassals.js";
+import { WAR_TYPES } from "../core/sim/war-engine.js";
+import { MINOR_EVENTS } from "../core/sim/minor-events.js";
 
 export const CHRONICLE_FORMAT = "alterhistory-chronicle";
 export const CHRONICLE_VERSION = 1;
@@ -73,6 +78,42 @@ function peaceTermsOfFactory(namer) {
     cededProvinces: (t.provinceIds ?? []).map((id) => namer.province(id)), cededUnaffiliatedRegions: (t.regionCells ?? []).length,
     cededTo: t.toStateId != null ? namer.state(t.toStateId) : null, legacyReparations: typeof t.reparations === "number" ? t.reparations : 0,
   });
+}
+
+
+/** 国ごとの「史実の足取り」：歴代の指導者・政体の変遷・技術と軍事のドクトリン・従属・戦争形態（v2.6.0 B1）。すべて年月つきで、省略しない */
+function historyOfState(map, s, { stateAt, namer }) {
+  const rec = leaderRecord(map, s.i);
+  const lead = (l, current) => ({
+    name: l.name, title: l.title, gender: l.gender === "f" ? "女性" : "男性", birthYear: l.birthYear ?? null,
+    from: fmtDate(l.since), to: current ? null : fmtDate(l.until), current: !!current,
+    dynasty: familyOf(l) || null, regentFor: l.regentFor ? { name: l.regentFor.name, title: l.regentFor.title } : null,
+    reason: REASONS.find((r) => r.key === l.reason)?.label ?? null, stability: STABILITY.find((x) => x.key === l.stability)?.label ?? null,
+  });
+  const leaders = [...rec.history.map((l) => lead(l, false)), ...(rec.current ? [lead(rec.current, true)] : [])];
+  const mine = (type) => listHistory(map).filter((h) => h.type === type && (h.states ?? []).includes(s.i) && validDate(h))
+    .map((h) => ({ date: fmtDate(h), title: h.title, detail: h.detail ?? null }));
+  const tech = getTechDoctrine(s);
+  const nodes = (Array.isArray(s.doctrineNodes) ? s.doctrineNodes : []).map((k) => NODE_BY_KEY[k]?.label ?? k);
+  const vi = vassalInfo(map, s.i);
+  const warForms = listWars(map).filter((w) => w.attackers.includes(s.i) || w.defenders.includes(s.i)).map((w) => {
+    const k = w.types?.[s.i] ?? w.type ?? "conventional";
+    return { war: w.name, form: WAR_TYPES[k]?.label ?? String(k), side: w.attackers.includes(s.i) ? "攻撃側" : "防御側", started: fmtDate(w.startedAt), ended: fmtDate(w.endedAt), ongoing: !w.endedAt };
+  });
+  const hr = heirOf(map, s.i), nowD = map.worldTime ?? { year: 1, month: 1 };
+  return {
+    leaders,
+    heir: hr ? { name: hr.name, gender: hr.gender === "f" ? "女性" : "男性", age: leaderAge(hr, nowD), dynasty: hr.family ?? null } : null,
+    regimeHistory: { current: s.formName ?? null, changes: mine("regime") },
+    techDoctrine: { levels: TECH_TRACKS.map((t) => ({ field: t.label, tier: tech[t.key], step: t.steps[tech[t.key] - 1] ?? null })), changes: mine("tech") },
+    militaryDoctrineDetail: { chosenNodes: nodes, changes: mine("doctrine") },
+    vassalage: {
+      overlord: vi ? { ...ref(namer, "state", vi.overlord), kind: VASSAL_BY_KEY[vi.kind]?.label ?? vi.kind, since: fmtDate(vi.since) } : null,
+      vassals: vassalsOf(map, s.i).map((id) => ({ ...ref(namer, "state", id), kind: VASSAL_BY_KEY[vassalInfo(map, id)?.kind]?.label ?? null })),
+      changes: [...mine("vassal"), ...mine("vassal-released")],
+    },
+    warForms,
+  };
 }
 
 function newAcc() { return { n: 0, sx: 0, sy: 0, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity }; }
@@ -348,6 +389,7 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
       },
       provinces: (s.provinces ?? []).map((id) => P.provinces[id]).filter(live).map((p) => ({ id: p.i, name: p.fullName ?? p.name })),
       diplomacy,
+      ...historyOfState(map, s, { stateAt, namer }),
       alliances: listAlliances(map).filter((a) => a.members.includes(s.i)).map((a) => ({ id: a.id, name: a.name, active: !a.dissolvedAt, formed: fmtDate(a.formedAt), dissolved: fmtDate(a.dissolvedAt) })),
       note: noteOf("state", s.i),
     };
@@ -499,7 +541,7 @@ function timelineOf(map, { namer, stateAt, eraName, eras }) {
     if (cell == null) for (const id of stateIds) { cell = capitalCellOf(id); if (cell != null) break; }
     timeline.push({
       date: fmtDate(date), year: validDate(date) ? date.year : null, month: validDate(date) ? date.month : null, era: eraName(date), type, title, detail: detail ?? null, involvedStates: involved,
-      cell, stateIds, zoneId: extra.zoneId ?? null, cause: extra.cause ?? null, _k: dateKey(date),
+      cell, stateIds, zoneId: extra.zoneId ?? null, cause: extra.cause ?? null, data: extra.data ?? null, _k: dateKey(date),
     });
   };
   for (const e of eras) push({ year: e.fromYear, month: 1 }, "era", `時代「${e.name}」の始まり`, `${e.fromYear}年から。`);
@@ -508,7 +550,7 @@ function timelineOf(map, { namer, stateAt, eraName, eras }) {
     let cell = Number.isInteger(h.cell) ? h.cell : null;
     if (cell == null && h.ref?.kind === "burg" && P.burgs[h.ref.id] && !P.burgs[h.ref.id].removed) cell = P.burgs[h.ref.id].cell;
     const states = [...(h.states ?? []), ...(h.ref?.kind === "state" ? [h.ref.id] : [])];
-    push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}セル` : null].filter(Boolean).join(" / ") || null, [], { cell, states, zoneId: h.zoneId ?? null, cause: h.cause ?? null });
+    push(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}セル` : null].filter(Boolean).join(" / ") || null, [], { cell, states, zoneId: h.zoneId ?? null, cause: h.cause ?? null, data: h.data ?? null });
   }
   for (const a of listAlliances(map)) {
     push(a.formedAt, "alliance-formed", `同盟「${a.name}」結成`, `加盟国: ${a.members.map((id) => stateAt(id, a.formedAt, undefined, a.memberNames?.[id])).join("、")}`, stateNames(a.members));
@@ -684,6 +726,16 @@ export function chronicleToMarkdown(ch) {
     L.push(`- 人口: ${s.population.total}（千人） / 技術水準 ${s.economy.techLevel}${s.economy.techLevelIsDefault ? "（未設定の既定値）" : ""} / 産業力 ${s.economy.industry}`);
     L.push(`- 軍事: ドクトリン「${s.military.doctrine.label}」 / 部隊 ${s.military.regimentCount} / 総兵員 ${s.military.totalHeadcount} / 戦力 ${s.military.totalPower}`);
     for (const r of s.military.regiments) L.push(`  - ${r.name}（${r.position}・${r.locatedIn.name}領内）: ${Object.entries(r.units).map(([k, v]) => `${k}${v}`).join("、") || "兵力なし"}`);
+    L.push(`- 政体の変遷: ${s.regimeHistory.changes.length ? s.regimeHistory.changes.map((c) => `${c.date} ${c.detail ?? c.title}`).join(" / ") : "変更の記録なし"}（現在: ${s.regimeHistory.current ?? "不明"}）`);
+    L.push(`- 歴代の指導者:${s.leaders.length ? "" : " 記録なし"}`);
+    for (const l of s.leaders) L.push(`  - ${l.title}${l.name}（${l.gender}${l.birthYear != null ? `・${l.birthYear}年生` : ""}） ${l.from ?? "不明"}〜${l.current ? "現在" : l.to ?? "不明"}${l.dynasty ? ` / 王朝: ${l.dynasty}` : ""}${l.regentFor ? ` / 摂政（幼い${l.regentFor.title}${l.regentFor.name}に代わる）` : ""}${l.reason ? ` / 就任の理由: ${l.reason}` : ""}${l.stability ? ` / 継承: ${l.stability}` : ""}`);
+    if (s.heir) L.push(`- 次の指導者（後継者）: ${s.heir.name}（${s.heir.gender}・${s.heir.age}歳）`);
+    L.push(`- 技術ドクトリン: ${s.techDoctrine.levels.map((t) => `${t.field} ${t.tier}段（${t.step ?? "?"}）`).join("、")}${s.techDoctrine.changes.length ? ` / 変遷: ${s.techDoctrine.changes.map((c) => `${c.date} ${c.detail ?? c.title}`).join("、")}` : ""}`);
+    L.push(`- 軍事ドクトリン: 総合方針「${s.military.doctrine.label}」 / 選んだ節: ${s.militaryDoctrineDetail.chosenNodes.join("、") || "なし"}${s.militaryDoctrineDetail.changes.length ? ` / 変遷: ${s.militaryDoctrineDetail.changes.map((c) => c.date).join("、")}に改定` : ""}`);
+    if (s.vassalage.overlord) L.push(`- 従属: ${s.vassalage.overlord.name} の${s.vassalage.overlord.kind}（${s.vassalage.overlord.since ?? "時期不明"}から）`);
+    if (s.vassalage.vassals.length) L.push(`- 従える国: ${s.vassalage.vassals.map((v) => `${v.name}（${v.kind ?? "?"}）`).join("、")}`);
+    for (const c of s.vassalage.changes) L.push(`  - ${c.date} ${c.title}`);
+    if (s.warForms.length) L.push(`- 戦争形態: ${s.warForms.map((w) => `${w.war}（${w.side}・${w.form}・${w.started ?? "?"}〜${w.ongoing ? "継続中" : w.ended ?? "?"}）`).join("、")}`);
     if (s.provinces.length) L.push(`- 属州: ${s.provinces.map((p) => p.name).join("、")}`);
     if (s.diplomacy.length) L.push(`- 外交: ${s.diplomacy.map((d) => `${d.with.name}=${d.relation}`).join("、")}`);
     if (s.alliances.length) L.push(`- 同盟: ${s.alliances.map((a) => `${a.name}${a.active ? "" : "（解消済み）"}`).join("、")}`);
@@ -750,9 +802,13 @@ const TYPE_JP = {
   "created-state": "建国", "created-culture": "文化の誕生", "created-religion": "宗教の誕生", "created-province": "属州の設置",
   "created-burg": "都市の建設", "created-zone": "ゾーン発生", "edit-zone": "ゾーン変化", "removed-zone": "ゾーン収束",
   capital: "遷都", territory: "領土", tech: "技術", doctrine: "軍事", "rename-alliance": "同盟改称",
+  succession: "代替わり", "tech-momentum": "技術の機運", "chain-end": "余波", "heir-named": "後継者", regime: "政体", vassal: "従属", "vassal-released": "従属の解消", rebellion: "反乱", plague: "疫病", "zone-start": "ゾーン発生",
+  "treaty-signed": "条約締結", "treaty-expiring": "条約の期限", "treaty-renewed": "条約の更新", "treaty-broken": "条約破棄", "treaty-parties": "条約の参加国変更", "treaty-breach": "条約違反",
+  "covert-op": "隠密作戦", "nuclear-op": "核作戦", "war-event": "戦況",
+  ...Object.fromEntries(MINOR_EVENTS.map((e) => [`natural-${e.key}`, e.title])),
 };
 /** 出来事の種類の日本語。未知の種類も、接頭辞（rename- / removed- / profile- / origin-）から読める名前にする */
-function typeJp(t) {
+export function typeJp(t) {
   if (TYPE_JP[t]) return TYPE_JP[t];
   const head = String(t ?? "").split("-")[0];
   return { rename: "改名", removed: "消滅", profile: "設定変更", origin: "系統の変更" }[head] ?? String(t ?? "出来事");
@@ -776,4 +832,10 @@ export function readChronicleCells(ch) {
   const c = ch.cells;
   if (!c) return null;
   return { biome: unrle(c.biome), state: unrle(c.state), culture: unrle(c.culture), religion: unrle(c.religion), province: unrle(c.province), burg: unrle(c.burg), river: unrle(c.river), pop: unrle(c.pop) };
+}
+
+/** 国の外交の履歴（条約の締結・破棄・参加国の変更・更新・同盟・従属・戦争・講和）。年表から絞って、新しい順に返す（v2.6.0 B6） */
+export const DIPLOMACY_TYPE = /^(treaty|alliance|vassal|diplomacy|war-declared|war-ended|peace|rename-alliance)/;
+export function diplomacyHistory(map, stateId) {
+  return buildTimeline(map).filter((t) => t.stateIds?.includes(stateId) && DIPLOMACY_TYPE.test(String(t.type))).reverse();
 }

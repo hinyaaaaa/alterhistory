@@ -7,12 +7,12 @@ import { faceSvg } from "./face-svg.js";
 import { guardRender } from "./safe-render.js";
 import { militaryPicker, techPicker } from "./nation-pickers.js";
 import { createCovertView } from "./covert-window.js";
-import { leaderRecord, faceOf, leaderAge, leaderCandidates, titleFor, REASONS, STABILITY } from "../core/edit/leaders.js";
+import { leaderRecord, faceOf, leaderAge, leaderCandidates, titleFor, REASONS, STABILITY, heirOf, familyOf, MAJORITY } from "../core/edit/leaders.js";
 import { REGIMES, regimeOf, supportBars } from "../core/edit/regimes.js";
 import { getTechDoctrine, TECH_TRACKS } from "../core/edit/doctrines.js";
 import { effectiveDoctrineKey } from "../core/edit/doctrines.js";
 import { VASSAL_KINDS, vassalsOf, vassalInfo } from "../core/edit/vassals.js";
-import { REBEL_GOALS, REBEL_SCALES, breakawayCandidates } from "../core/edit/rebellion.js";
+import { REBEL_TYPES, REBEL_TYPE_BY_KEY, REBEL_SCALES, canRebel } from "../core/edit/rebellion.js";
 import { supportOf } from "../core/sim/war-engine.js";
 import { nationStability } from "../core/edit/stability.js";
 import { UNIT_BY_KEY, DOCTRINE_BY_KEY, forceHeadcount } from "../core/sim/units.js";
@@ -34,7 +34,7 @@ const sname = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?
 
 export function initNationWindow({ store, wins, editActions, simActions, setupActions, economyView, openSetup, getWarsPanel, openRebellion, getHighlight = () => null }) {
   const body = el("div", "nation-body");
-  let hoverTimer = 0, view = "list", sel = null, tab = "overview", step = 0, draft = null, mergeFrom = null, mergeTo = null, mergeArmed = false, candidates = null, succReason = "death", succStab = "stable", rebel = { goal: "secession", scale: "medium", armed: false }, warTarget = null, sortBy = "default", sortDesc = false;
+  let hoverTimer = 0, view = "list", sel = null, tab = "overview", step = 0, draft = null, mergeFrom = null, mergeTo = null, mergeArmed = false, candidates = null, succReason = "death", succStab = "stable", rebel = { type: "independence", scale: "medium", armed: false }, warTarget = null, sortBy = "default", sortDesc = false;
   const covert = createCovertView({ store, simActions, getAttacker: () => sel });
   const clearHl = () => { clearInterval(hoverTimer); hoverTimer = 0; getHighlight?.()?.clear(); };
   wins.register("nation", { title: "国家", width: 940, body, onOpen: () => { editActions.ensureLeaders(); render(); }, onClose: clearHl });
@@ -156,6 +156,10 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     const t = el("div", "nation-leader-t");
     if (!l) { t.append(el("p", "muted", "指導者がいません")); box.append(t); return box; }
     t.append(el("strong", "", `${l.title}　${l.name}`), el("div", "hint", `${leaderAge(l, now)}歳・${l.gender === "f" ? "女性" : "男性"}・第${l.gen}代・${l.since.year}年に就任`));
+    if (familyOf(l) && heirOf(map, s.i) !== undefined && regimeOf(s).succession === "hereditary") t.append(el("div", "hint", `王朝: ${familyOf(l)}家`));
+    if (l.regentFor) { const q = el("div", "hint nation-regent", `摂政: 幼い${l.regentFor.title}${l.regentFor.name}（${leaderAge(l.regentFor, now)}歳）に代わって政務をとる。${l.regentFor.birthYear + MAJORITY}年に親政へ`); q.dataset.field = "regent"; t.append(q); }
+    const hr = regimeOf(s).succession === "hereditary" ? heirOf(map, s.i) : null;
+    if (hr) { const q = el("div", "hint nation-heir", `次の指導者: ${titleFor(s, hr.gender)}　${hr.name}（${leaderAge(hr, now)}歳・${hr.gender === "f" ? "女" : "男"}）`); q.dataset.field = "heir"; t.append(q); }
     t.append(btn("", candidates ? "候補を閉じる" : "世代交代…", "指導者を、候補の中から選んで交代させる", () => { candidates = candidates ? null : leaderCandidates(map, s.i, { n: 3, seed: Math.floor(Math.random() * 1e9) }); render(); }));
     box.append(t);
     if (candidates) {
@@ -170,7 +174,7 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
       why.append(el("span", "field-label", "交代の理由"), rs, ss);
       box.append(why);
       const c = el("div", "nation-cands");
-      for (const x of candidates) c.append(btn("b-card", `${x.title}　${x.name}（${x.age}歳・${x.gender === "f" ? "女" : "男"}）`, "この人物に交代する", () => { editActions.changeLeader(s.i, { reason: succReason, stability: succStab, name: x.name, gender: x.gender, title: x.title, age: x.age }); candidates = null; render(); }));
+      for (const x of candidates) c.append(btn("b-card", `${x.heir ? "【後継者】" : ""}${x.title}　${x.name}（${x.age}歳・${x.gender === "f" ? "女" : "男"}）`, x.heir ? "後継者がそのまま即位する" : "この人物に交代する", () => { editActions.changeLeader(s.i, { reason: succReason, stability: succStab, name: x.name, gender: x.gender, title: x.title, age: x.age }); candidates = null; render(); }));
       box.append(c);
     }
     return box;
@@ -204,14 +208,16 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     const reb = el("section", "nation-sec"); reb.append(el("h4", "", "反乱"));
     const seg = (items, cur, on) => { const g = el("div", "np-seg"); for (const x of items) g.append(btn(cur === x.key ? "on" : "", x.label, x.desc ?? "", () => { on(x.key); rebel.armed = false; render(); })); return g; };
     const row = (k, n) => { const r = el("div", "np-row"); r.append(el("span", "np-k", k), n); return r; };
-    reb.append(row("目的", seg(REBEL_GOALS, rebel.goal, (k) => { rebel.goal = k; })), el("p", "hint", REBEL_GOALS.find((g) => g.key === rebel.goal).desc), row("規模", seg(REBEL_SCALES, rebel.scale, (k) => { rebel.scale = k; })));
-    const nProv = map.pack.provinces.filter((p) => isLive(p) && p.state === s.i).length;
-    const rebWhy = nProv < 2 ? `属州が2つ以上ないと反乱は起こせません（いま${nProv}つ）` : !breakawayCandidates(map, s.i).length ? "首都の属州のほかに、離反できる属州がありません" : "";
+    const rt = REBEL_TYPE_BY_KEY[rebel.type];
+    reb.append(row("種類", seg(REBEL_TYPES, rebel.type, (k) => { rebel.type = k; })), el("p", "hint nation-reb-type", `${rt.desc}（歴史上の例: ${rt.examples}）`), row("規模", seg(REBEL_SCALES, rebel.scale, (k) => { rebel.scale = k; })));
+    const spark = simActions.rebellionSpark(s.i);
+    if (spark) { const sp = el("p", "hint nation-spark", `反乱の火種: ${spark.level}（民意 ${Math.round(spark.support)}）${spark.causes.length ? `。最近の出来事: ${spark.causes.join(" / ")}` : ""}。州が勝手に反乱を起こすことはありません。起こすなら、下のボタンで。`); sp.dataset.field = "rebellion-spark"; reb.append(sp); }
+    const rebWhy = !canRebel(map, s.i) ? "反乱の拠点になる都市（首都のほか）のある領土がありません" : "";
     const rebRow = el("div", "np-row nation-reb-row");
-    const rebBtn = btn(rebel.armed ? "danger" : "", rebel.armed ? "本当に反乱を起こす" : "反乱を起こす", "連なった領域が離反し、軍が割れて内戦になる", () => {
+    const rebBtn = btn(rebel.armed ? "danger" : "", rebel.armed ? "本当に反乱を起こす" : "反乱を起こす", "種類と規模に応じた領域が離反し、軍が割れて内戦になる（州の単位には縛られない）", () => {
       if (!rebel.armed) { rebel.armed = true; return render(); }
       rebel.armed = false;
-      try { simActions.startRebellion(s.i, { goal: rebel.goal, scale: rebel.scale }); wins.open("war"); } catch (e) { fail(e); }
+      try { simActions.startRebellion(s.i, { type: rebel.type, scale: rebel.scale }); wins.open("war"); } catch (e) { fail(e); }
       render();
     });
     rebRow.append(rebBtn);
@@ -260,7 +266,14 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
   }
   function techPane(pane, map, s) {
     const sec = el("section", "nation-sec"); sec.append(el("h4", "", `技術ドクトリン（技術水準 Lv${editActions.getTechLevel(s.i)}）`), el("p", "hint", "どの段でも、条件なしで選べます。自動では進みません。"));
-    sec.append(techPicker({ get: () => mapOf().pack.states[s.i], onChange: (p) => { editActions.setTechDoctrine(s.i, p); } }).box); pane.append(sec);
+    const pend = simActions.techMomentum(s.i);
+    sec.append(techPicker({ get: () => mapOf().pack.states[s.i], onChange: (p) => { editActions.setTechDoctrine(s.i, p); }, marks: () => simActions.techMomentum(s.i) }).box);
+    if (pend.length) {
+      const m = el("div", "np-row"); m.append(el("span", "np-k", "機運のある分野"));
+      for (const p of pend) m.append(btn("", `${p.label}「${p.step}」を採用`, "", () => { simActions.adoptTechMomentum(s.i, p.field); render(); }));
+      sec.append(m, el("p", "hint", "◆は、時代の流れで機運が出ている分野です。採用すると +1 段になります（押さなければ変わりません）。"));
+    }
+    pane.append(sec);
   }
   function vassalPane(pane, map, s) {
     const kindSelect = (cur, on) => { const sel = document.createElement("select"); sel.dataset.field = "vassal-kind"; for (const x of VASSAL_KINDS) sel.append(new Option(x.label, x.key, false, x.key === cur)); sel.title = VASSAL_KINDS.find((x) => x.key === cur)?.desc ?? ""; sel.addEventListener("change", () => on(sel.value)); return sel; };

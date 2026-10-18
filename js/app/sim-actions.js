@@ -11,20 +11,24 @@ import { createRandom } from "../core/random.js";
 import { suggestLabel } from "../core/edit/naming.js";
 import { withEvent } from "../core/edit/history-log.js";
 import { makeCommand, setProps } from "../core/edit/commands.js";
-import { planSplitArmy, pickRebelProvinces, REBEL_GOALS } from "../core/edit/rebellion.js";
+import { planSplitArmy, pickRebelRegion, REBEL_TYPE_BY_KEY, REBEL_TYPE_OF_GOAL, rebelRegimeKey, rebelWarName } from "../core/edit/rebellion.js";
 import { REGIMES, REGIME_BY_KEY, planSetRegime } from "../core/edit/regimes.js";
-import { rollSuccession, ensureLeaders, planChangeLeader } from "../core/edit/leaders.js";
+import { rollSuccession, ensureLeaders, planChangeLeader, rollRegencyEnd } from "../core/edit/leaders.js";
 import { planArmyUpkeep, planAnnualConscription } from "../core/sim/military.js";
 import { rollMinorEvents, planMinorEvent } from "../core/sim/minor-events.js";
 import { planSetCurrency, getCurrency, exchangeRate } from "../core/sim/currency.js";
 import { planNextCollapse } from "../core/sim/collapse.js";
 import { leaderOf } from "../core/edit/alliances.js";
 import { planCovertOp, covertOdds, listCovertOps, COVERT_KINDS } from "../core/sim/covert.js";
-import { planSetVassal, planReleaseVassal, vassalInfo } from "../core/edit/vassals.js";
+import { planSetVassal, planReleaseVassal, vassalInfo, VASSAL_BY_KEY } from "../core/edit/vassals.js";
+import { treatiesNeedingNotice, planTreatyExpiryNotice, planRenewTreaty, expiringTreaties } from "../core/edit/treaties.js";
 import { planConcludeTreaty, planBreakTreaty, planAmendTreaty, planSetTreatyParties, planWarBreach, findWarViolations, joinCommands, listTreaties, planSetTreatySettings, getTreatySettings, planExpireWarSupport, BIND_LEVELS } from "../core/edit/treaties.js";
 import { planMergeStates, planDeclareIndependence } from "../core/edit/sovereignty.js";
 import { rollNaturalEvents, planPlague, planRebellion, getNaturalSettings, planSetNaturalSettings } from "../core/sim/natural-events.js";
-import { planAddEntity } from "../core/edit/entities.js";
+import { planScheduleChain, duePending, planRunPending, planTurnoverLeader, rebellionSpark, listPending } from "../core/sim/event-chains.js";
+import { seriesWarName } from "../core/edit/wars.js";
+import { rollTechMomentum, planTechMomentum, planAdoptMomentum, pendingFields } from "../core/sim/tech-momentum.js";
+import { planAddEntity, planAddProvince } from "../core/edit/entities.js";
 import { planPaint } from "../core/edit/paint.js";
 import { planSetOrigins } from "../core/edit/profile.js";
 import { suggestName as planSuggestName, withProvisional } from "../core/edit/naming.js";
@@ -100,12 +104,32 @@ export function createSimActions({ store, renderer }) {
   };
 
   /**
+   * 反乱の領域（セル）を、属州の単位に整える。領域に丸ごと入る属州はそのまま移り、属州の一部だけ（または属州の無い）セルは、
+   * 反乱側の新しい属州として切り出す（元の属州は残りの領土に残る）。@returns 反乱側に移る属州のID
+   */
+  function carveRebelProvinces(stateId, cells) {
+    const map = store.getState().map, c = map.pack.cells, inSet = new Set(cells), tally = new Map();
+    for (let i = 0; i < c.state.length; i++) { if (c.state[i] !== stateId || !(c.province[i] > 0)) continue; const e = tally.get(c.province[i]) ?? { all: 0, inside: 0 }; e.all++; if (inSet.has(i)) e.inside++; tally.set(c.province[i], e); }
+    const full = [...tally].filter(([, e]) => e.inside > 0 && e.inside === e.all).map(([id]) => id);
+    const fullSet = new Set(full);
+    const rest = cells.filter((i) => !fullSet.has(c.province[i]));
+    if (!rest.length) return full;
+    const nm = planSuggestName(map, { kind: "province", rnd, stateId }).name;
+    const add = planAddProvince(map, { state: stateId, name: nm, rnd }); store.commit(add.command);
+    const paint = planPaint(store.getState().map, { kind: "province", target: add.id, cells: rest, force: true }); store.commit(paint.command);
+    const m3 = store.getState().map, parts = [];
+    for (const i of rest) { const b = m3.pack.burgs[m3.pack.cells.burg[i]]; if (b && !b.removed && b.i > 0 && b.province !== add.id) parts.push(setProps(b, { province: add.id })); }
+    if (parts.length) store.commit(makeCommand("反乱側の属州の都市", ["politics"], parts));
+    return [...full, add.id];
+  }
+
+  /**
    * 反乱・独立：属州（複数可）を新しい国家として切り離す。「全部成功か全部取り消し」。
    *   civil: true なら HoI4 のように、軍が割れて、元の国との内戦（戦争）が始まる。false なら話し合いによる平和的な独立
    * 失敗したら例外を投げる（何も変わらない）。
    * @returns {{id:number, name:string, provinceNames:string[], warId:number|null, fromId:number}}
    */
-  function breakaway({ provinceIds, name, color, civil, provisional = false, date, rng = rnd }) {
+  function breakaway({ provinceIds, name, color, civil, provisional = false, date, rng = rnd, rebelType = null, armyBonus = 0 }) {
     const first = store.getState().map; if (!first) throw new Error("地図を開いてください");
     const fromId = first.pack.provinces[provinceIds?.[0]]?.state;
     if (!(fromId > 0)) throw new Error("属州が存在しません");
@@ -117,11 +141,14 @@ export function createSimActions({ store, renderer }) {
       if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) store.commit(makeCommand("国の色", ["politics"], [setProps(store.getState().map.pack.states[r.id], { color: color.toLowerCase() })]));
       let warId = null;
       if (civil) {
-        const split = planSplitArmy(store.getState().map, fromId, r.id); if (split.command) store.commit(split.command);
+        const split = planSplitArmy(store.getState().map, fromId, r.id, { bonus: armyBonus }); if (split.command) store.commit(split.command);
         const w = planDeclareAndResolveWar(store.getState().map, { attackers: [r.id], defenders: [fromId], date, rnd: rng, type: "civil" });
         store.commit(w.command); warId = w.id;
         const m2 = store.getState().map, fromName = m2.pack.states[fromId].fullName ?? m2.pack.states[fromId].name;
-        let wn = `${fromName}内戦`; if (warNameTaken(m2, wn, warId)) wn = `${date.year}年の${fromName}内戦`;
+        // 内戦の名前は、反乱の型に合わせた史実風（〇〇の乱・〇〇独立戦争・〇〇宗教戦争…）。同じ名前が続くときは「第二次〇〇」と連番にする
+        const rebelSt = m2.pack.states[r.id], capB = m2.pack.burgs[rebelSt.capital], relId = capB ? m2.pack.cells.religion[capB.cell] : 0;
+        const base = rebelType ? rebelWarName(rebelType, { fromName, rebelName: nm, placeName: capB?.name, religionName: relId > 0 ? m2.pack.religions[relId]?.name : null }) : `${fromName}内戦`;
+        const wn = seriesWarName(m2, base, [r.id], [fromId], date, warId);
         if (!warNameTaken(m2, wn, warId)) { const rn = planRenameWar(m2, warId, wn); if (rn) store.commit(rn); }
         putMarker("war", "⚔️", capitalCell(store.getState().map, r.id), `${date.year}年${date.month}月 ${wn}`);
         runCollapses();
@@ -132,7 +159,7 @@ export function createSimActions({ store, renderer }) {
     return out;
   }
 
-  return {
+  const api = {
     // --- 部隊 ---
     createRegiment(stateId, cell, opts) {
       return withMap((map) => safeRun("部隊の編成", () => { const r = planCreateRegiment(map, stateId, cell, opts); commitOrThrow(r.command); return r.id; }));
@@ -206,6 +233,9 @@ export function createSimActions({ store, renderer }) {
     concludeTreaty(opts) { return withMap((map) => { let id = null; safeRun("条約の締結", () => { const r = planConcludeTreaty(map, { ...opts, date: currentDate() }); commitOrThrow(r.command); id = r.id; rerender(); }); return id; }) ?? null; },
     breakTreaty(id, by = null) { return withMap((map) => { let ok = false; safeRun("条約の破棄", () => { commitOrThrow(planBreakTreaty(map, id, { by, date: currentDate() })); ok = true; rerender(); }); return ok; }) ?? false; },
     setTreatyParties(id, stateIds) { return withMap((map) => { let ok = false; safeRun("条約の参加国の変更", () => { const c = planSetTreatyParties(map, id, stateIds); if (c) commitOrThrow(c); ok = true; rerender(); }); return ok; }) ?? false; },
+    /** 期限が近い条約を更新する（期限を延ばす。Undo 可）。できたら true */
+    renewTreaty(id, months = null) { return withMap((map) => { let ok = false; safeRun("条約の更新", () => { const c = planRenewTreaty(map, id, months, currentDate()); if (c) { commitOrThrow(c); ok = true; } }); if (ok) rerender(); return ok; }) ?? false; },
+    expiringTreaties() { return withMap((map) => expiringTreaties(map, currentDate()).map((x) => ({ id: x.treaty.id, name: x.treaty.name, left: x.left }))) ?? []; },
     amendTreaty(id, patch) { return withMap((map) => { let ok = false; safeRun("条約の改定", () => { const c = planAmendTreaty(map, id, patch); if (c) commitOrThrow(c); ok = true; }); return ok; }) ?? false; },
     /** 宣戦が、有効な不可侵条約に反するか（画面の警告用。副作用なし） */
     treatyWarnings(attackers, defenders) { return withMap((map) => findWarViolations(map, attackers, defenders).map((v) => ({ treaty: v.treaty.name, aggressor: v.aggressor, target: v.target }))) ?? []; },
@@ -280,20 +310,28 @@ export function createSimActions({ store, renderer }) {
     /** 月が進むたびの、戦争の損害とハプニングの展開（時間経過）。崩壊した国名を返す */
     /** 反乱・独立（手動）。失敗したら例外。ウィンドウ側でメッセージを出す */
     rebel(opts) { return breakaway({ ...opts, date: currentDate() }); },
-    /** 「反乱を起こす」ボタン。目的（分離独立 / 政体転覆）と規模（小・中・大）から、連結した領域を自動で選び、軍を割って内戦を始める */
-    startRebellion(stateId, { goal = "secession", scale = "medium" } = {}) {
+    /**
+     * 反乱を起こす（v2.6.1: 州に縛られない、自由な反乱）。型（歴史上の5つ）と規模（小・中・大）を選ぶと、型に合った起点から連結した領域が決まり、
+     * 軍が割れて内戦になる。civil: false なら、戦争にならない平和的な分離。
+     * opts: { type, scale, civil=true, name?, color?, goal?（旧い指定。分離独立→民族独立、政体転覆→民衆蜂起）}
+     */
+    startRebellion(stateId, opts = {}) {
       const map = store.getState().map; if (!map) throw new Error("地図を開いてください");
-      if (!REBEL_GOALS.some((g) => g.key === goal)) throw new Error("反乱の目的を選んでください");
-      const provinceIds = pickRebelProvinces(map, stateId, scale, rnd);
-      if (!provinceIds.length) throw new Error("反乱を起こせる属州がありません（属州が2つ以上、必要です）");
-      const out = breakaway({ provinceIds, civil: true, date: currentDate() });
-      const m2 = store.getState().map, rebel = m2.pack.states[out.id];
-      const parent = m2.pack.states[stateId];
-      const others = REGIMES.filter((r) => r.key !== (parent.regime ?? ""));
-      const reg = goal === "overthrow" ? others[Math.floor(rnd.next() * others.length)] : REGIME_BY_KEY[parent.regime] ?? others[0];
-      store.commit(makeCommand("反乱側の目的・政体", ["politics"], [setProps(rebel, { rebelGoal: goal, regime: reg.key, form: reg.form, formName: reg.label })]));
+      const type = opts.type ?? REBEL_TYPE_OF_GOAL[opts.goal ?? "secession"], t = REBEL_TYPE_BY_KEY[type];
+      if (!t) throw new Error("反乱の種類を選んでください");
+      const scale = opts.scale ?? "medium", civil = opts.civil !== false, date = opts.date ?? currentDate();
+      const region = pickRebelRegion(map, stateId, type, scale, rnd);
+      if (!region) throw new Error("反乱を起こせません（首都のほかに、拠点になる都市のある領土が必要です）");
+      const out = atomic("反乱", () => {
+        const provinceIds = carveRebelProvinces(stateId, region.cells);
+        const o = breakaway({ provinceIds, name: opts.name, color: opts.color, civil, provisional: !!opts.provisional, date, rebelType: type, armyBonus: t.armyBonus });
+        const m2 = store.getState().map, rebel = m2.pack.states[o.id], parent = m2.pack.states[stateId];
+        const reg = REGIME_BY_KEY[rebelRegimeKey(type, parent.regime ?? "", rnd)] ?? REGIME_BY_KEY[parent.regime] ?? REGIMES[0];
+        store.commit(makeCommand("反乱側の目的・政体", ["politics"], [setProps(rebel, { rebelGoal: t.goal, rebelType: type, regime: reg.key, form: reg.form, formName: reg.label })]));
+        return { ...o, regime: reg.label };
+      });
       rerender();
-      return { ...out, goal, scale, regime: reg.label };
+      return { ...out, type, typeLabel: t.label, goal: t.goal, scale };
     },
     /** 自然発生イベントの設定（オン／オフ・頻度） */
     getNaturalEvents() { const m = store.getState().map; return m ? getNaturalSettings(m) : null; },
@@ -332,16 +370,39 @@ export function createSimActions({ store, renderer }) {
           const map = store.getState().map;
           ensureLeaders(map, date);
           for (const st of map.pack.states.filter((x) => x && x.i > 0 && !x.removed)) {
-            const hit = rollSuccession(map, st.i, date, rng);
+            const rg = rollRegencyEnd(map, st.i, date); // 幼い君主が成人したら、摂政が退いて親政に移る
+            if (rg) { store.commit(planChangeLeader(map, st.i, { reason: "majority", stability: "stable", name: rg.name, gender: rg.gender, title: rg.title, age: rg.age, date, rnd: rng })); stat.leaders++; }
+            const hit = rg ? null : rollSuccession(map, st.i, date, rng);
             if (hit) { store.commit(planChangeLeader(map, st.i, { reason: hit.reason, stability: hit.stability, date, rnd: rng })); stat.leaders++; }
             const up = planArmyUpkeep(map, st.i, rng);
             if (up) { const fresh = !(st.military ?? []).length; store.commit(up); if (fresh) { const f = planAnnualConscription(map, st.i, { fill: true }); if (f) store.commit(f); } stat.army++; }
             else { const c = planAnnualConscription(map, st.i, { rate: 1 / 12, rnd: rng }); if (c) store.commit(c); }
           }
-          for (const ev of rollMinorEvents(map, rng)) { const c = planMinorEvent(map, ev, date); if (c) { store.commit(c); stat.events++; } }
+          // 出来事の連鎖: 期日が来た後続を起こし（さらに後続があれば予約し）、そのあと今月の新しい出来事と、その後続の予約
+          const chain = (ev, depth) => { const cur = store.getState().map; const sc = planScheduleChain(cur, ev, date, rng, depth); if (sc) store.commit(sc); };
+          for (const p of duePending(map, date)) {
+            const cur = store.getState().map, run = planRunPending(cur, p, date, rng);
+            for (const c of run.commands) store.commit(c);
+            const done = run.after(); if (!done) continue; stat.events++; stat.chained = (stat.chained ?? 0) + 1;
+            if (done.leaderChange) { const lc = planTurnoverLeader(store.getState().map, done.stateId, date, rng); if (lc) { store.commit(lc); stat.leaders++; } }
+            chain(done, done.depth);
+          }
+          for (const t of treatiesNeedingNotice(store.getState().map, date)) { const c = planTreatyExpiryNotice(store.getState().map, t, date); if (c) store.commit(c); }
+          for (const ev of rollMinorEvents(store.getState().map, rng)) { const c = planMinorEvent(store.getState().map, ev, date); if (c) { store.commit(c); stat.events++; chain(ev, 0); } }
+          for (const ev of rollTechMomentum(store.getState().map, rng)) { const c = planTechMomentum(store.getState().map, ev, date); if (c) { store.commit(c); stat.momentum = (stat.momentum ?? 0) + 1; } }
         });
       } catch { /* 月ごとの更新が失敗しても、時間は進める */ }
       return stat;
+    },
+
+    /** 予約されている後続の出来事・反乱の火種（国家タブの表示用。反乱は起こさない） */
+    pendingEvents(stateId = null) { return withMap((map) => listPending(map).filter((p) => stateId == null || p.stateId === stateId)) ?? []; },
+    rebellionSpark(stateId) { return withMap((map) => rebellionSpark(map, stateId)) ?? null; },
+    /** 技術の機運（採用できるもの）。[{ field, label, target, step, via }] */
+    techMomentum(stateId) { return withMap((map) => pendingFields(map, stateId)) ?? []; },
+    /** 機運を採用する（その国の該当分野が +1 段。Undo 可）。採用できたら true */
+    adoptTechMomentum(stateId, field) {
+      return withMap((map) => { let ok = false; safeRun("技術の機運の採用", () => { const c = planAdoptMomentum(map, stateId, field, currentDate()); if (c) { commitOrThrow(c); ok = true; } }); if (ok) rerender(); return ok; }) ?? false;
     },
 
     applyNaturalEvents(date, rng = rnd) {
@@ -351,10 +412,10 @@ export function createSimActions({ store, renderer }) {
         try {
           const title = atomic(`自然発生イベント（${ev.kind}）`, () => {
             const map = store.getState().map;
-            if (ev.kind === "plague") { store.commit(planPlague(map, ev, date)); return "疫病"; }
+            if (ev.kind === "plague") { store.commit(planPlague(map, ev, date)); const sc = planScheduleChain(store.getState().map, { key: "plague", stateId: ev.stateId }, date, rng, 0); if (sc) store.commit(sc); return "疫病"; }
             if (ev.kind === "independence") {
-              breakaway({ provinceIds: ev.provinceIds ?? [ev.provinceId], civil: !!ev.civil, provisional: true, date, rng });
-              return ev.civil ? "反乱（内戦）" : "属州の独立";
+              api.startRebellion(ev.stateId, { type: ev.type, scale: ev.scale, civil: !!ev.civil, provisional: true, date });
+              return ev.civil ? "反乱（内戦）" : "分離独立";
             }
             if (ev.kind === "schism") {
               const parent = map.pack.religions[ev.religionId];
@@ -407,8 +468,18 @@ export function createSimActions({ store, renderer }) {
     allianceLeader(a) { return leaderOf(a); },
     // --- 従属関係（傀儡・保護国・属国） ---
     vassalInfo(stateId) { return withMap((map) => vassalInfo(map, stateId)) ?? null; },
-    setVassal(vassalId, overlordId, kind) { withMap((map) => safeRun("従属関係", () => commitOrThrow(planSetVassal(map, vassalId, overlordId, kind, currentDate())))); },
-    releaseVassal(vassalId) { withMap((map) => safeRun("独立", () => commitOrThrow(planReleaseVassal(map, vassalId)))); },
+    setVassal(vassalId, overlordId, kind) {
+      withMap((map) => safeRun("従属関係", () => {
+        const cmd = planSetVassal(map, vassalId, overlordId, kind, currentDate()), nmOf = (id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? "?";
+        commitOrThrow(withEvent(map, cmd, { type: "vassal", title: `${nmOf(vassalId)}が${nmOf(overlordId)}に従属した`, detail: `種類: ${VASSAL_BY_KEY[kind]?.label ?? kind}`, date: currentDate(), states: [vassalId, overlordId] }));
+      }));
+    },
+    releaseVassal(vassalId) {
+      withMap((map) => safeRun("独立", () => {
+        const cmd = planReleaseVassal(map, vassalId), v = vassalInfo(map, vassalId), nmOf = (id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? "?";
+        commitOrThrow(withEvent(map, cmd, { type: "vassal-released", title: `${nmOf(vassalId)}が従属を脱し、独立した`, detail: v ? `元の宗主国: ${nmOf(v.overlord)}` : "", date: currentDate(), states: [vassalId, ...(v ? [v.overlord] : [])] }));
+      }));
+    },
     // --- 核作戦（立案→実行。通常の戦争では使われない） ---
     nuclearOps() { return withMap((map) => listNuclearOps(map)) ?? []; },
     strikeEstimate(stateId, warheads) { return withMap((map) => strikeEffects(map.pack.states[stateId]?.techLevel ?? 3, warheads)); },
@@ -471,7 +542,7 @@ export function createSimActions({ store, renderer }) {
         ? { kind: "annex", treatyName: `${war.name}の終結（鎮圧）`, annex: [{ fromStateId: rebel, toStateId: parent }], notes: "反乱側の国を解体し、属州を取り戻した" }
         : { kind: "white", treatyName: `${war.name}の終結（独立承認）`, notes: "元の国は、反乱側の独立を承認した" };
       const ok = !!this.signTreaty(warId, terms, { enforceBudget: false, allowOngoing: true });
-      if (ok && outcome !== "suppress" && _w) { const m3 = store.getState().map, rb = m3.pack.states[_w.attackers[0]]; if (rb?.rebelGoal === "overthrow" && rb.regime) { const rc = planSetRegime(m3, _w.defenders[0], rb.regime); if (rc) store.commit(rc); } } // 政体転覆が成功した：元の国の政体が変わる
+      if (ok && outcome !== "suppress" && _w) { const m3 = store.getState().map, rb = m3.pack.states[_w.attackers[0]]; if (rb?.rebelGoal === "overthrow" && rb.regime) { const rc = planSetRegime(m3, _w.defenders[0], rb.regime); if (rc) { const ds = m3.pack.states[_w.defenders[0]]; store.commit(withEvent(m3, rc, { type: "regime", title: `${ds?.fullName ?? ds?.name ?? "?"}の政体が変わった`, detail: `${ds?.formName ?? "?"} → ${REGIME_BY_KEY[rb.regime]?.label ?? rb.regime}（政体転覆）`, date: currentDate(), states: [_w.defenders[0]] })); } } } // 政体転覆が成功した：元の国の政体が変わる
       if (ok) { const c = planExpireWarSupport(store.getState().map, warId, currentDate()); if (c) { store.commit(c); rerender(); } } // 戦争が終われば、外国の支援は失効する
       return ok;
     },
@@ -515,4 +586,5 @@ export function createSimActions({ store, renderer }) {
       }));
     },
   };
+  return api;
 }

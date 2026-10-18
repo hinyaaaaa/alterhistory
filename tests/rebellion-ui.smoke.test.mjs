@@ -3,7 +3,7 @@ import { JSDOM } from "jsdom";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { breakawayCandidates } from "../js/core/edit/rebellion.js";
+import { canRebel } from "../js/core/edit/rebellion.js";
 import { listWars } from "../js/core/edit/wars.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -43,49 +43,36 @@ check("地図が読み込める", await waitFor(() => store.getState().map, 1500
 const M = () => store.getState().map;
 const live = () => M().pack.states.filter((s) => s && s.i > 0 && !s.removed);
 
-// 分離できる国を用意する（無ければ、ある国の属州を半分に割って作る）
-let parent = live().find((s) => breakawayCandidates(M(), s.i).length >= 1);
-if (!parent) {
-  const m = M(), c = m.pack.cells;
-  for (const s of live()) {
-    const P = m.pack.provinces.find((p) => p && p.i > 0 && !p.removed && p.state === s.i); if (!P) continue;
-    const capProv = c.province[m.pack.burgs[s.capital]?.cell];
-    if (P.i === capProv) continue;
-    if (breakawayCandidates(m, s.i).length) { parent = s; break; }
-  }
-}
-check("分離できる国がある", !!parent);
+// 反乱を起こせる国（首都のほかに、拠点になる都市のある国）
+const parent = live().find((s) => canRebel(M(), s.i));
+check("反乱を起こせる国がある", !!parent);
 if (parent) {
-  const prov = M().pack.provinces[breakawayCandidates(M(), parent.i)[0].provinceId];
   const n0 = live().length, w0 = listWars(M()).length;
   const win = () => q('[data-win="rebellion"]');
 
-  console.log("=== ウィンドウを開く ===");
-  window.alterhistory.openRebellion({ stateId: parent.i, provinceId: prov.i });
+  console.log("=== ウィンドウを開く（州を選ぶ欄は無い。種類と規模を選ぶ） ===");
+  window.alterhistory.openRebellion({ stateId: parent.i });
   check("ウィンドウが開く", await waitFor(() => win() && !win().hidden, 2000, "開く"));
-  const boxes = () => [...win().querySelectorAll('input[type="checkbox"]')];
-  check("押した属州だけが選ばれている", boxes().some((b) => b.checked && Number(b.value) === prov.i) && boxes().filter((b) => b.checked).length === 1);
+  check("反乱の種類が5つあり、規模を選べる。属州のチェックは無い", win().querySelectorAll('[data-field="rebel-type"] option').length === 5 && win().querySelectorAll('[data-field="rebel-scale"] option').length === 3 && win().querySelectorAll('input[type="checkbox"]').length === 0);
   check("開いただけでは何も起きない", live().length === n0 && listWars(M()).length === w0);
 
-  console.log("=== 属州を選ばないと起こせない／キャンセルすると何も起きない ===");
-  boxes().forEach((b) => { b.checked = false; });
-  clickBtn(win(), "反乱を起こす").click();
-  check("属州が未選択ならメッセージが出て、何も起きない", win().textContent.includes("1つ以上") && live().length === n0);
+  console.log("=== キャンセルすると何も起きない ===");
   clickBtn(win(), "キャンセル").click();
   check("キャンセルで閉じ、何も起きない", win().hidden && live().length === n0 && listWars(M()).length === w0);
 
   console.log("=== 内戦で分離する ===");
-  window.alterhistory.openRebellion({ stateId: parent.i, provinceId: prov.i });
+  window.alterhistory.openRebellion({ stateId: parent.i });
   await waitFor(() => win() && !win().hidden, 2000, "再び開く");
+  const ts = win().querySelector('[data-field="rebel-type"]'); ts.value = "independence"; ts.dispatchEvent(new window.Event("change"));
   win().querySelector(".name-row input").value = "離反共和国";
   clickBtn(win(), "反乱を起こす").click();
   check("新しい国が増え、内戦が始まる", await waitFor(() => live().length === n0 + 1 && listWars(M()).length === w0 + 1, 3000, "反乱"));
   const born = live().at(-1);
-  check("名前・分離元・属州が入り、ウィンドウは閉じる", born.fullName === "離反共和国" && born.parentState === parent.i && M().pack.provinces[prov.i].state === born.i && win().hidden);
-  check("内戦（戦争）として記録される", listWars(M()).at(-1).type === "civil" && listWars(M()).at(-1).attackers.includes(born.i));
+  check("名前・分離元が入り、ウィンドウは閉じる", born.fullName === "離反共和国" && born.parentState === parent.i && born.rebelType === "independence" && win().hidden);
+  check("内戦（戦争）として記録され、名前は型に合う史実風（〇〇独立戦争）", listWars(M()).at(-1).type === "civil" && listWars(M()).at(-1).attackers.includes(born.i) && /独立戦争$/.test(listWars(M()).at(-1).name));
   check("結果が通知される", await waitFor(() => alerts.some((t) => t.includes("離反共和国") && t.includes("内戦")), 2000, "通知"));
   store.undo();
-  check("Undo 1回で全部戻る", live().length === n0 && listWars(M()).length === w0 && M().pack.provinces[prov.i].state === parent.i);
+  check("Undo 1回で全部戻る", live().length === n0 && listWars(M()).length === w0);
 }
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功");
 process.exit(failed ? 1 : 0);

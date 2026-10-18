@@ -10,6 +10,9 @@ export const BALANCE_META = Object.freeze([
   { key: "annexMinScore", label: "全面降伏に必要なスコア", desc: "併合を求めるのに必要な戦争スコア", def: 70, min: 10, max: 100, step: 1 },
   { key: "warTreasuryLoad", label: "戦争の国庫への負荷", desc: "戦争中、毎月、国の年収の1/12に この値×形態の係数×ドクトリンの負荷 をかけた額が国庫から減る（0で国庫に響かない）", def: 0.4, min: 0, max: 3, step: 0.05 },
   { key: "warIndustryLoad", label: "戦争の産業への負荷", desc: "戦争中、毎月、産業が 0.4%×この値×形態の係数×ドクトリンの負荷 だけ落ちる（0で産業に響かない）", def: 1, min: 0, max: 5, step: 0.1 },
+  { key: "momentumRate", label: "技術の機運の出やすさ", desc: "隣国が先に進んだ分野で、月ごとに機運が出る確率（世界の年だけが条件のときは半分）。0にすると機運は出ない。採用は自動ではない", def: 0.03, min: 0, max: 0.5, step: 0.005 },
+  { key: "chainRate", label: "出来事の連鎖の起きやすさ", desc: "飢饉→物価の高騰、疫病→復興などの「後続の出来事」が起きる確率の倍率。0で連鎖しない", def: 1, min: 0, max: 3, step: 0.1 },
+  { key: "chainDepth", label: "出来事の連鎖の長さ", desc: "後続の出来事が、さらに後続を呼べる段数の上限（1なら、最初の出来事の次の1段だけ）", def: 2, min: 1, max: 4, step: 1 },
   { key: "cessionCostScale", label: "割譲の費用", desc: "小さいほど、同じスコアで多く割譲させられる", def: 1, min: 0.1, max: 3, step: 0.05 },
 ]);
 export const BALANCE_DEFAULTS = Object.freeze(Object.fromEntries(BALANCE_META.map((m) => [m.key, m.def])));

@@ -75,6 +75,8 @@
 .news-card h5 { margin: 5px 0 3px; font-family: var(--font-serif); font-weight: 800; font-size: 16px; line-height: 1.4; letter-spacing: .04em; color: var(--text); padding-right: 18px; }
 .news-card p { margin: 0; font-size: 12px; line-height: 1.65; color: var(--text-dim); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .news-card p.cause { color: var(--muted); font-size: 11px; }
+.news-adopt { margin: 6px 0 2px; padding: 3px 12px; min-height: 0; pointer-events: auto; border: 1px solid var(--k, var(--ally)); background: transparent; color: var(--k, var(--ally)); font: inherit; cursor: pointer; }
+.news-adopt:disabled { opacity: .6; cursor: default; }
 .news-close { position: absolute; right: 4px; top: 8px; width: 28px; height: 28px; min-height: 0; padding: 0; border: 0; background: transparent; color: var(--muted); pointer-events: auto; }
 
 /* --- 右下: 進行中の戦争 --- */

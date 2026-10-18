@@ -65,22 +65,31 @@ export function initHoverConnector({ store, viewport }) {
   //   表示中だけ、見張りを動かす（地図の見え方が変わったかを毎フレーム確かめ、窓の表示変化を監視する）
   const viewSig = () => { const [a, b] = viewport.toScreen(0, 0), [c, d] = viewport.toScreen(100, 100); return `${a.toFixed(1)},${b.toFixed(1)},${c.toFixed(1)},${d.toFixed(1)}`; };
   const ownNode = (n) => n === card || n === svg || card.contains(n) || svg.contains(n);
+  // 実際のポインタ位置を常に覚え、表示中は「いま本当に地図の上か」を毎フレーム確かめる（イベントが来ない抜け道を塞ぐ）
+  let lastPt = null;
+  const trackPt = (e) => { lastPt = { x: e.clientX, y: e.clientY }; };
+  document.addEventListener("pointermove", trackPt, true);
+  const overCanvas = () => { if (!lastPt || typeof document.elementFromPoint !== "function") return true; const el = document.elementFromPoint(lastPt.x, lastPt.y); return !el || el === canvas || ownNode(el); };
+  const onDocOut = (e) => { if (!e.relatedTarget) hide(); }; // ウィンドウの外へ出た
   const onDocMove = (e) => { if (e.target !== canvas && !ownNode(e.target)) hide(); };
   const stopWatch = () => {
     cancelAnimationFrame(raf); raf = 0; mo?.disconnect(); mo = null;
     document.removeEventListener("pointermove", onDocMove, true); document.removeEventListener("keydown", hide, true);
     document.removeEventListener("wheel", hide, true); document.removeEventListener("pointerdown", onDocDown, true);
     window.removeEventListener("blur", hide); document.removeEventListener("visibilitychange", hide);
+    document.removeEventListener("pointerout", onDocOut, true); document.removeEventListener("mouseleave", hide, true); window.removeEventListener("pagehide", hide);
   };
   const onDocDown = (e) => { if (!ownNode(e.target)) hide(); };
   const startWatch = () => {
     if (raf) return; sig = viewSig();
-    const tick = () => { if (card.hidden) { raf = 0; return; } const now = viewSig(); if (now !== sig) return hide(); raf = requestAnimationFrame(tick); };
+    const tick = () => { if (card.hidden) { raf = 0; return; } const now = viewSig(); if (now !== sig || !overCanvas()) return hide(); raf = requestAnimationFrame(tick); };
     raf = requestAnimationFrame(tick);
     document.addEventListener("pointermove", onDocMove, true); document.addEventListener("keydown", hide, true);
     document.addEventListener("wheel", hide, true); document.addEventListener("pointerdown", onDocDown, true);
     window.addEventListener("blur", hide); document.addEventListener("visibilitychange", hide);
-    if (typeof MutationObserver !== "undefined") { mo = new MutationObserver((list) => { if (list.some((m) => !ownNode(m.target))) hide(); }); mo.observe(app, { attributes: true, attributeFilter: ["hidden", "class", "style", "open"], subtree: true }); }
+    document.addEventListener("pointerout", onDocOut, true); document.addEventListener("mouseleave", hide, true); window.addEventListener("pagehide", hide);
+    // 新聞が薄れる・時計が進む等の変化では消さない（窓の表示変化だけを見張る）
+    if (typeof MutationObserver !== "undefined") { mo = new MutationObserver((list) => { if (list.some((m) => !ownNode(m.target) && !m.target.closest?.("#news, #clock, #war-status"))) hide(); }); mo.observe(app, { attributes: true, attributeFilter: ["hidden", "class", "style", "open"], subtree: true }); }
   };
   const hide = () => { clearTimeout(timer); clearTimeout(touchTimer); timer = 0; touchTimer = 0; key = ""; press = null; svg.hidden = true; card.hidden = true; stopWatch(); };
 
@@ -136,7 +145,7 @@ export function initHoverConnector({ store, viewport }) {
     if (e.buttons) return hide();
     clearTimeout(timer);
     const shift = e.shiftKey, ev = { clientX: e.clientX, clientY: e.clientY };
-    timer = setTimeout(() => show(ev, shift), 140);
+    timer = setTimeout(() => { if (overCanvas()) show(ev, shift); }, 140);
   });
   canvas.addEventListener("pointerleave", hide);
   canvas.addEventListener("pointercancel", hide);

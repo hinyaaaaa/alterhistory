@@ -214,6 +214,15 @@ ALTERHISTORY は、適用できなかった件数を読み込み時の警告と�
 - 国家（`pack.states[i]`）の追加項目: `regime`（政体のキー。`absolute|constitutional|empire|elective|theocracy|aristocratic|democracy|presidential|party|nationalist|junta|tribal|federation|anarchy`）、`techDoctrine`（`{agri, ind, transport, comms, medicine, energy}` 各 1〜10。`techLevel` はここから導いた値を同時に書く）、`doctrineNodes`（選んだ軍事ドクトリンの節のキー）、`rebelGoal`（反乱側の国のみ。`secession|overthrow`）。`form` と `formName` は、政体から同時に書く。
 - 部隊（`state.military[]`）の追加項目: `echelon`（編成の段 1〜5。未設定は Azgaar から取り込んだ部隊で、最初の月に現在の段が入る）。
 - 年表（`historyLog`）の `type` に追加: `succession`（指導者の交代）、`regime`、`doctrine`、`treaty-parties`、`natural-<種類>`（月ごとの自動の出来事）。
+- v2.6.0 で追加（`saveFormat` は 3 のまま。無い項目は空として読むので、v2.5.0 までの保存データはそのまま開ける）:
+  - `techMomentum`: 採用していない技術の機運。`{ [国ID]: { [分野キー]: { target, via } } }`。`target` は採用すると到達する段、`via` は `neighbor`（隣国が先行）| `year`（世界の年）。
+  - `pendingEvents`: 予約された後続の出来事（出来事の連鎖）。`[{ key, stateId, due:{year,month}, depth, from }]`。期日が来たら起こし、取り下げる。
+  - `heirs`: 世襲の政体の後継者。`{ [国ID]: { name, gender, birthYear, family } }`。
+  - `leaders` の `Leader` に任意項目を追加: `family`（姓＝王朝名）、`regentFor`（摂政のとき、幼い君主 `{ name, gender, birthYear, family, title }`）。`reason` に `majority`（成人して親政を始めた）を追加。
+  - `historyLog` の項目に任意の `data`（小さな構造データ）。`tech-momentum`（`{ field, target }`）・`treaty-expiring`（`{ treatyId, until }`）で使う。
+  - 年表の `type` に追加: `tech-momentum`、`vassal`、`vassal-released`、`treaty-expiring`、`treaty-renewed`、`natural-<pricespike|refugees|riot|recovery|purge|turnover>`（連鎖の後続）。
+  - v2.6.1: 反乱で生まれた国の `rebelType`（`uprising`|`independence`|`religious`|`coup`|`noble`）。`rebelGoal`（`overthrow`|`secession`）は従来どおり。反乱側の領土に切り出した属州は、通常の属州として保存される。戦争名の連番は名前の文字列だけで持つ（追加の項目なし）。
+  - バランス調整の項目に追加: `momentumRate`、`chainRate`、`chainDepth`（`ext.data.balance` に既定値と違うものだけ保存）。
 - 削除: 国家の削除、データ検査、為替の画面、出来事の書き足し・記録（`note` / `manual` の追加操作）。保存データの読み書きには影響しない（既存の `note` / `manual` は読める）。
 
 

@@ -136,7 +136,7 @@ console.log("=== 自然発生：民意の低い国で、内戦になる反乱が
   for (const s of live(M)) s.support = 5;
   const sure = () => ({ ...createRandom(7), next: () => 0 });
   const evs = rollNaturalEvents(M(), sure(), { enabled: true, frequency: "high" }).filter((e) => e.kind === "independence");
-  check("独立の出来事は複数の属州と、内戦かどうかを持つ", () => { assert.ok(evs.length > 0); assert.ok(evs[0].provinceIds.length >= 1); assert.equal(evs[0].civil, true); assert.equal(evs[0].provinceId, evs[0].provinceIds[0]); });
+  check("独立の出来事は、反乱の型と規模と、内戦かどうかを持つ（州に縛られない）", () => { assert.ok(evs.length > 0); assert.ok(["uprising", "independence", "religious", "coup", "noble"].includes(evs[0].type)); assert.ok(["small", "medium", "large"].includes(evs[0].scale)); assert.equal(evs[0].civil, true); });
   const nStates = live(M).length, nWars = listWars(M()).length;
   const done = sim.applyNaturalEvents(date, sure());
   check("実際に起きると、新国家ができて内戦が始まる（反乱）", () => {

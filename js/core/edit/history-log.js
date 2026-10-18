@@ -58,6 +58,7 @@ export function withEvent(map, command, event) {
   if (event.count != null) entry.count = event.count;
   if (event.mergeKey) entry.mergeKey = event.mergeKey;
   if (event.ref) entry.ref = event.ref;
+  if (event.data) entry.data = event.data; // 出来事に付ける小さな構造データ（技術の機運の分野など）
   if (event.cause) entry.cause = event.cause; // きっかけとなった出来事のキー（lineage.js の eventKey）
   if (event.zoneId) entry.zoneId = event.zoneId; // この出来事に伴うゾーン（疫病・災害）の id。年表の項目から、ゾーンの輪郭を強調するために使う
   return makeCommand(command.label, command.layers, [...command.parts, eventPart(entry)]);

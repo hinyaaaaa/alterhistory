@@ -7,6 +7,7 @@
 //   ・条約の種類は 安全保障（参戦義務）/ 経済協力（貿易量）/ 共同宣言 / 不可侵・中立 の4つ。従属は国家タブ、講和は戦争の講和画面から。
 //   横タブは使わず、縦に並べた節と、重ねて開く窓で扱う。
 import { el, btn } from "./kit.js";
+import { diplomacyHistory, typeJp } from "../io/chronicle.js";
 import { confirmDialog } from "./dialogs.js";
 import {
   TREATY_KINDS, TREATY_BY_KEY, SIGNABLE_KINDS, BIND_LEVELS, TARIFFS, DECLARATIONS, PERIODS, STATUS_LABEL,
@@ -263,6 +264,14 @@ export function initDiplomacyWindow({ store, wins, simActions, getWarsPanel, get
       return;
     }
     if (dipTab === "peace") renderPeaceTab(map, right); else renderAlliances(map, right, dipTab === "dissolved");
+    // 選んだ国の外交の履歴（年表から絞る。条約の締結・破棄・参加国の変更・更新・戦争・講和）
+    if (focus != null) {
+      const hs = el("section", "dip-card dip-history"); hs.dataset.field = "dip-history"; hs.append(el("h4", "", `${nm(map, focus)}の外交の履歴`));
+      const rows = diplomacyHistory(map, focus);
+      if (!rows.length) hs.append(el("p", "muted", "外交の記録はまだありません"));
+      for (const t of rows) hs.append(el("div", "dip-hist-row", `${t.date}　[${typeJp(t.type)}] ${t.title}${t.detail ? ` — ${String(t.detail).split("\n")[0]}` : ""}`));
+      right.append(hs);
+    }
     body.append(right);
   }
   store.subscribe((_s, ch) => { if (["replace", "commit", "undo", "redo"].includes(ch.type)) { if (wins.isOpen("diplomacy")) render(); if (wins.isOpen("treaty-detail")) renderDetail(); } });

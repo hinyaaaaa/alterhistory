@@ -49,6 +49,13 @@ export const MINOR_EVENTS = Object.freeze([
   { key: "coup", title: "クーデター未遂", w: 3, reg: AUTH, text: (n) => `${n}で、軍の一部がクーデターを企てて鎮圧された`, fx: { support: -5, morale: -3 } },
   { key: "revival", title: "宗教の復興", w: 3, reg: (r) => r.key === "theocracy", text: (n) => `${n}で信仰の復興が起こり、民が教えに集まった`, fx: { support: 4 } },
   { key: "congress", title: "党大会", w: 3, reg: (r) => r.key === "party", text: (n) => `${n}で党大会が開かれ、新しい方針が示された`, fx: { support: 2 } },
+  // ---- 連鎖の後続（follow: 単独では起きない。先立つ出来事から event-chains.js が予約する） ----
+  { key: "pricespike", title: "物価の高騰", w: 0, follow: true, text: (n) => `${n}で穀物が不足し、物価が高騰した`, fx: { support: -3, treasuryF: 0.98 } },
+  { key: "refugees", title: "難民の流入", w: 0, follow: true, text: (n) => `${n}の各地に、飢えた人々が流れ込んだ`, fx: { support: -2, treasuryF: 0.985 } },
+  { key: "riot", title: "暴動", w: 0, follow: true, text: (n) => `${n}の都市で、物価高に怒る民衆が暴動を起こした`, fx: { support: -4, morale: -1 } },
+  { key: "recovery", title: "復興", w: 0, follow: true, text: (n) => `${n}で復興が進み、暮らしが立ち直ってきた`, fx: { support: 4, treasuryF: 1.01 } },
+  { key: "purge", title: "粛清", w: 0, follow: true, text: (n) => `${n}で、クーデターに関わった者への粛清が行われた`, fx: { support: -3, morale: 2 } },
+  { key: "turnover", title: "政権交代", w: 0, follow: true, leaderChange: true, text: (n) => `${n}で、選挙の敗北を受けて政権が交代した`, fx: { support: 2 } },
   { key: "council", title: "長老会議", w: 3, reg: (r) => r.key === "tribal", text: (n) => `${n}で長老たちの大きな会議が開かれ、争いが収まった`, fx: { support: 3 } },
 ]);
 
@@ -70,7 +77,7 @@ export function rollMinorEvents(map, rnd, settings = null) {
   for (const s of map.pack.states.filter(isLive)) {
     if (rnd.next() >= MINOR_RATE * f) continue;
     const ctx = { hasNeighbor: (s.neighbors ?? []).some((n) => isLive(map.pack.states[n])) };
-    const pool = MINOR_EVENTS.filter((e) => eventFits(e, s, ctx));
+    const pool = MINOR_EVENTS.filter((e) => !e.follow && eventFits(e, s, ctx));
     if (!pool.length) continue;
     const ev = rnd.weighted(pool, pool.map((e) => e.w));
     out.push({ key: ev.key, stateId: s.i, ...(ev.swing ? { swing: rnd.int(-6, 6) } : {}) });

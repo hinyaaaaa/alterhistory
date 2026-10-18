@@ -64,18 +64,21 @@ export function militaryPicker({ get, onChange }) {
 }
 
 /** 技術ドクトリン：6分野それぞれで到達段（1〜10）を選ぶ。自動で進むことは無い */
-export function techPicker({ get, onChange }) {
+export function techPicker({ get, onChange, marks = () => [] }) {
   const box = el("div", "np-tech");
   function draw() {
     box.replaceChildren();
     const lv = getTechDoctrine(get());
     for (const t of TECH_TRACKS) {
       const row = el("div", "np-track");
-      row.append(el("span", "np-k", t.label));
+      const mk = marks().find((m) => m.field === t.key);
+      row.append(el("span", "np-k", mk ? `${t.label} ◆` : t.label));
+      if (mk) row.title = `機運: ${mk.target}段「${mk.step}」を採用できる`;
       const chain = el("div", "np-chain");
       t.steps.forEach((label, i) => {
         const b = el("button", `np-step${i + 1 <= lv[t.key] ? " on" : ""}${i + 1 === lv[t.key] ? " cur" : ""}`, label);
         b.type = "button"; b.title = `${t.label} ${i + 1}段：${label}`;
+        if (mk && i + 1 === mk.target) { b.classList.add("momentum"); b.title += "（機運あり）"; }
         b.addEventListener("click", () => { onChange({ [t.key]: i + 1 }); draw(); });
         chain.append(b);
       });

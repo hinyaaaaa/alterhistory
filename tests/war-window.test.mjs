@@ -17,9 +17,9 @@ console.log("=== 戦争名は重複しない ===");
 const r1 = planDeclareWar(map, { attackers: [1], defenders: [2], date }); run(r1);
 check("既定の名前が付く", listWars(map)[0].name.endsWith("戦争") && !listWars(map)[0].name.includes("第"));
 const r2 = planDeclareWar(map, { attackers: [1], defenders: [2], date }); run(r2);
-check("同じ組み合わせの2回目は「（第2次）」が付いて重ならない", listWars(map)[1].name.endsWith("（第2次）"), listWars(map)[1].name);
+check("同じ国どうしの2回目は「第二次〇〇戦争」になり、重ならない（v2.6.1）", /^第二次/.test(listWars(map)[1].name) && listWars(map)[1].name.endsWith("戦争"), listWars(map)[1].name);
 const r3 = planDeclareWar(map, { attackers: [1], defenders: [2], date }); run(r3);
-check("3回目は「（第3次）」", listWars(map)[2].name.endsWith("（第3次）"));
+check("3回目は「第三次〇〇戦争」", /^第三次/.test(listWars(map)[2].name));
 let threw = false; try { planDeclareWar(map, { name: listWars(map)[0].name, attackers: [3], defenders: [4], date }); } catch { threw = true; }
 check("名前を自分で付けて重複させると拒否される", threw);
 check("warNameTaken は自分自身を除外できる", warNameTaken(map, listWars(map)[0].name) && !warNameTaken(map, listWars(map)[0].name, listWars(map)[0].id) && !warNameTaken(map, "存在しない戦争"));

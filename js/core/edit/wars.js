@@ -53,11 +53,41 @@ export function warNameTaken(map, name, exceptId = null) {
   const n = String(name ?? "").trim();
   return !!n && listWars(map).some((w) => w.id !== exceptId && w.name === n);
 }
-/** 既定の戦争名が重なるときは「（第2次）」「（第3次）」…を付けて一意にする */
-function uniqueDefaultName(map, base) {
-  if (!warNameTaken(map, base)) return base;
-  for (let k = 2; ; k++) { const n = `${base}（第${k}次）`; if (!warNameTaken(map, n)) return n; }
+// ---- 戦争名の連番（v2.6.1）: 史実のように、同じ国どうしが直近100年のうちにまた戦ったら「第二次〇〇戦争」。連番が付くのは2度目から ----
+const ORD_JP = ["", "第一次", "第二次", "第三次", "第四次", "第五次", "第六次", "第七次", "第八次", "第九次", "第十次"];
+const ordLabel = (n) => ORD_JP[n] ?? `第${n}次`;
+/** 連番を外した、戦争の「語幹」（第二次〇〇戦争 → 〇〇戦争） */
+export const warRootOf = (name) => String(name ?? "").replace(/^第[一二三四五六七八九十百\d]+次/, "").replace(/（\d+）$/, "").replace(/（第\d+次）$/, "");
+export const SERIES_YEARS = 100;
+const mkey = (d) => (d?.year ?? 0) * 12 + ((d?.month ?? 1) - 1);
+/** 2つの陣営が、過去に敵として戦った戦争のうち、直近 SERIES_YEARS 年以内で最も新しいもの */
+function recentWarBetween(map, a, d, date, exceptId = null) {
+  const now = date ?? map.worldTime ?? { year: 1, month: 1 };
+  const hit = listWars(map).filter((w) => {
+    if (w.id === exceptId) return false;
+    const sideOf = (id) => (w.attackers.includes(id) ? "a" : w.defenders.includes(id) ? "d" : null);
+    const opposed = a.some((x) => d.some((y) => { const p = sideOf(x), q = sideOf(y); return p && q && p !== q; }));
+    if (!opposed) return false;
+    const last = w.endedAt ?? now; return mkey(now) - mkey(last) <= SERIES_YEARS * 12;
+  });
+  return hit.sort((x, y) => mkey(y.startedAt) - mkey(x.startedAt))[0] ?? null;
 }
+/**
+ * 戦争名を、史実のように連番にする。
+ *   ・同じ国どうしが直近100年以内に戦っていたら、その戦争の語幹を引き継いで「第二次〇〇戦争」「第三次〇〇戦争」…
+ *   ・そうでなくても、同じ名前の戦争が既にあるなら、連番を付けて区別する（「（2）」のような機械的な印は付けない）
+ *   ・初めての名前なら、そのまま
+ */
+export function seriesWarName(map, base, a, d, date, exceptId = null) {
+  const prev = recentWarBetween(map, a, d, date, exceptId);
+  const root = prev ? warRootOf(prev.name) : warRootOf(base);
+  const n = listWars(map).filter((w) => w.id !== exceptId && warRootOf(w.name) === root).length;
+  if (n === 0) return prev ? base : root === base ? base : base;
+  let k = n + 1, name = `${ordLabel(k)}${root}`;
+  while (warNameTaken(map, name, exceptId)) name = `${ordLabel(++k)}${root}`;
+  return name;
+}
+const uniqueDefaultName = (map, base, a = [], d = [], date = null) => seriesWarName(map, base, a, d, date);
 
 /** その時点の国名を { 国ID: 名前 } で控える（のちに改名・消滅しても、当時の名前で歴史を書けるように） */
 export const snapshotNames = (map, ids) => Object.fromEntries([...new Set(ids)].map((id) => [id, officialName(map.pack.states[id], `国家#${id}`)]));
@@ -71,7 +101,7 @@ export function planDeclareWar(map, { name, attackers, defenders, date }) {
   const explicit = String(name ?? "").trim();
   if (explicit && warNameTaken(map, explicit)) throw new Error(`「${explicit}」という戦争名は既に使われています`);
   const war = {
-    id: nextWarId(map), name: explicit || uniqueDefaultName(map, `${aNames[0]}対${dNames[0]}戦争`),
+    id: nextWarId(map), name: explicit || uniqueDefaultName(map, `${aNames[0]}対${dNames[0]}戦争`, a, d, date),
     attackers: a, defenders: d, startedAt: date, endedAt: null, battles: [], advantage: {},
     names: snapshotNames(map, [...a, ...d]), // 開戦時の国名
     muster: {}, // 召集する部隊: { [国家ID]: [部隊ID, ...] }（チェックを付けた部隊がこの戦争の戦力）
@@ -147,7 +177,7 @@ export function planDeclareAndResolveWar(map, { attackers, defenders, date, rnd,
   // 戦争の名前は、実際に戦いが行われた場所から付ける
   const given = String(explicitName ?? "").trim();
   if (given && warNameTaken(map, given)) throw new Error(`「${given}」という戦争名は既に使われています`);
-  const name = given || nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key });
+  const name = given || seriesWarName(map, nameWar(map, { attackers: a, defenders: d, rnd, existingNames: listWars(map).map((w) => w.name), battles, type: T.key }), a, d, date);
   const war = {
     id: nextWarId(map), name, type: T.key, ...(Object.keys(typesN).length ? { types: typesN } : {}), attackers: a, defenders: d, names: names0, startedAt: date, endsAt, durationMonths: months, endedAt: null,
     progress: 0, monthsDone: 0, events: [], omens: [], edgeShift: 0, withdrawn: {}, // progress: 経過月数 ÷ 目安の月数（1を超えて長引くこともある）。終わりは決まっておらず、講和条約を結んだ月が終戦の月になる

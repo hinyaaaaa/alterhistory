@@ -91,6 +91,8 @@ check("[再現] 出したまま、窓を切り替える（別の窓を開く）�
 await page.evaluate(() => { const w = window.alterhistory.wins; for (const id of w.openIds()) w.close(id); }); await page.waitForTimeout(100);
 check("[再現] 出したまま、キーを押すと消える", (await hoverCity()) && (await page.keyboard.press("Shift"), await page.waitForTimeout(100), await gone()));
 check("[再現] 出したまま、地図が変わる（Undo）と消える", (await hoverCity()) && (await page.evaluate(() => { const { store, editActions } = window.alterhistory; const s = store.getState().map.pack.states.find((x) => x && x.i > 0 && !x.removed); editActions.setRegime(s.i, "tribal"); return true; })) && (await page.waitForTimeout(150), await gone()));
+check("[再現] 出したまま、カーソルがウィンドウの外へ出る（pointerout・相手なし）と消える", (await hoverCity()) && (await page.evaluate(() => { document.dispatchEvent(new PointerEvent("pointerout", { bubbles: true, relatedTarget: null })); return true; })) && (await page.waitForTimeout(60), await gone()));
+check("[再現] 出したまま、ポインタが地図の上でなくなる（上に別の要素が来る）と、次のフレームで消える", (await hoverCity()) && (await page.evaluate(() => { const d = document.createElement("div"); d.id = "tmp-cover"; d.style.cssText = "position:fixed;inset:0;z-index:99999;background:transparent"; document.body.append(d); return true; })) && (await page.waitForTimeout(200), await gone()) && (await page.evaluate(() => { document.getElementById("tmp-cover").remove(); return true; })));
 await page.mouse.move(5, 5); await page.waitForTimeout(100);
 
 console.log("=== 時計 ===");

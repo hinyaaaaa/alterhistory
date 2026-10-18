@@ -7,7 +7,7 @@
 //
 // 純粋ロジック層：DOM に依存しない。
 
-import { pickBreakawayProvinces } from "../edit/rebellion.js";
+import { REBEL_TYPES, pickRebelRegion } from "../edit/rebellion.js";
 import { getTechDoctrine } from "../edit/doctrines.js";
 import { makeCommand, setProps, setIndexed } from "../edit/commands.js";
 import { ensureExt } from "../edit/ext.js";
@@ -103,8 +103,11 @@ export function rollNaturalEvents(map, rnd, settings = null) {
     // 独立：民意が低く、属州が複数ある国で、遠い属州が独立する
     // 民意が低いほど、話し合いではなく武力で割れる（内戦になる）ことが多い。分かれるのは、首都から遠い属州をいくつか
     if (sup < 55 && rnd.next() < BASE_RATE.independence * f * (1 + (55 - sup) / 20)) {
-      const provs = pickBreakawayProvinces(map, s.i, rnd);
-      if (provs.length) out.push({ kind: "independence", stateId: s.i, provinceId: provs[0], provinceIds: provs, civil: rnd.next() < Math.min(0.9, 0.55 + (55 - sup) / 100) });
+      // 州に縛られない、自由な反乱（v2.6.1）。型と規模をランダムに選ぶ（国の政体に合う型が出やすい）
+      const reg = s.regime ?? "", hereditary = ["absolute", "constitutional", "empire", "elective"].includes(reg), auth = ["junta", "nationalist", "party", "anarchy"].includes(reg);
+      const weights = REBEL_TYPES.map((t) => ({ uprising: 3 + (sup < 30 ? 2 : 0), independence: 3, religious: 1, coup: 1 + (auth ? 3 : 0), noble: 1 + (hereditary ? 3 : 0) })[t.key]);
+      const type = rnd.weighted(REBEL_TYPES.map((t) => t.key), weights), scale = rnd.weighted(["small", "medium", "large"], [5, 3, 1]);
+      if (pickRebelRegion(map, s.i, type, scale, null)) out.push({ kind: "independence", stateId: s.i, type, scale, civil: rnd.next() < Math.min(0.9, 0.55 + (55 - sup) / 100) });
     }
   }
   for (const r of map.pack.religions) {

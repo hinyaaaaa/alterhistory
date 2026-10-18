@@ -1,6 +1,7 @@
 // 国家タブ（一覧・新規作成・詳細の6サブタブ・反乱ボタン）の統合テスト（jsdom）。
 // 実際の index.html とビルド済み dist/app.js（npm run build 後）を動かす。
 import { JSDOM } from "jsdom";
+import { canRebel } from "../js/core/edit/rebellion.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
@@ -130,10 +131,10 @@ check("選んだ政体（大統領制）が入る", N.regime === "presidential" 
 check("作成後は、その国の詳細が開く", !!win().querySelector(".nation-detail"));
 
 console.log("=== 反乱ボタン ===");
-const withProv = live().find((s) => M().pack.provinces.filter((p) => p && !p.removed && p.i > 0 && p.state === s.i).length >= 2);
+const withProv = live().find((s) => canRebel(M(), s.i));
 if (withProv) {
   window.alterhistory.panels.openEntity("state", withProv.i); await sleep(60);
-  btnOf(win(), "大").click(); await sleep(30); btnOf(win(), "政体転覆").click(); await sleep(30);
+  btnOf(win(), "大").click(); await sleep(30); btnOf(win(), "民衆蜂起・革命").click(); await sleep(30);
   const b = btnOf(win(), "反乱を起こす"); b.click(); await sleep(30);
   check("1回目の押下では起こらず、確認に変わる", !!btnOf(win(), "本当に反乱を起こす") && !M().ext?.data?.wars?.some((w) => w.type === "civil"));
   const wars0 = (M().ext?.data?.wars ?? []).length;
@@ -142,8 +143,9 @@ if (withProv) {
   check("反乱で内戦（戦争）が始まる", (M().ext?.data?.wars ?? []).length === wars0 + 1 && w.type === "civil" && w.defenders[0] === withProv.i);
   const rebel = M().pack.states[w.attackers[0]];
   check("政体転覆の反乱側は、元の国と違う政体を持ち、目的が記録される", rebel.rebelGoal === "overthrow" && rebel.regime !== M().pack.states[withProv.i].regime);
-  check("反乱側は連結した複数の属州を持ち、元の国にも領土が残る", rebel.cells > 0 && M().pack.states[withProv.i].cells > 0);
-} else check("（属州が2つ以上ある国が無いので、反乱の検査は省略）", true);
+  check("反乱側は領土を持ち、元の国にも領土が残る（州に縛られない）", rebel.cells > 0 && M().pack.states[withProv.i].cells > 0);
+  store.undo(); await sleep(60); // 以降の検査（安定度など）に、内戦を持ち越さない
+} else check("（反乱を起こせる国が無いので、反乱の検査は省略）", true);
 console.log("=== A5: 支持・安定度・傀儡の種類・並べ替え・反乱の理由・Esc・強調の解除 ===");
 {
   const open = (id) => { window.alterhistory.panels.openEntity("state", id); };
@@ -177,12 +179,10 @@ console.log("=== A5: 支持・安定度・傀儡の種類・並べ替え・反�
   win().querySelector('select[data-field="nation-sort"]').value = "pop"; win().querySelector('select[data-field="nation-sort"]').dispatchEvent(new window.Event("change")); await sleep(40);
   const pops = [...win().querySelectorAll(".nation-row.b-click")].map((r) => Number(r.querySelector(".num").textContent.replace(/,/g, ""))); // いまは降順
   check("人口順（降順）に並ぶ", pops.length > 1 && pops.every((v, i) => i === 0 || pops[i - 1] >= v), pops.join(","));
-  // 反乱ボタン: 属州が2つ未満なら、押す前に理由を出す
+  // 反乱ボタン: 州に縛られない。属州が0でも（拠点になる都市があれば）押せて、理由は出ない
   for (const p of M().pack.provinces) if (p && p.i && p.state === C && !p.removed) p.removed = true; // 属州を0に
   open(C); await sleep(60);
-  const why = win().querySelector('[data-field="rebel-why"]');
-  check("属州が2つ未満だと、ボタンの横に理由が出る", !!why && /属州が2つ以上ない/.test(why.textContent), why?.textContent);
-  check("そのとき「反乱を起こす」は押せない", btnOf(win(), "反乱を起こす").disabled === true);
+  check("属州が無くても、反乱は起こせる（理由が出ず、ボタンが押せる）", !win().querySelector('[data-field="rebel-why"]') && btnOf(win(), "反乱を起こす").disabled !== true);
   // Esc: 入力中はまず入力欄を抜け、もう一度で窓が閉じる。閉じたら強調も消える
   let cleared = 0; const hl = window.alterhistory.highlight; const origClear = hl.clear.bind(hl); hl.clear = () => { cleared++; origClear(); };
   btnOf(win(), "概要")?.click(); await sleep(30);
