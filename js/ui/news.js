@@ -17,6 +17,7 @@ const CATS = [
   { test: /^diplomacy|^covert|^sanction/, label: "外交", color: "var(--info)" },
   { test: /^econom|^currency|^trade|^famine/, label: "経済", color: "var(--warn)" },
   { test: /^natural|^plague|^disaster|^zone/, label: "自然", color: "var(--warn)" },
+  { test: /^ai$/, label: "国家の判断", color: "var(--accent)" },
   { test: /^ideas|^language/, label: "思想・言語", color: "var(--info)" },
   { test: /^migration/, label: "移住", color: "var(--info)" },
   { test: /^tech-momentum/, label: "技術の機運", color: "var(--ally)", major: true },

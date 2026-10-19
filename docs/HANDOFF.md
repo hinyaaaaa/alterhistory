@@ -17,7 +17,16 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
-## 追加済み：v2.7.0「因果が巡る世界と、簡易言語」（いちばん新しい）
+## 追加済み：v3.0.0「自ら動く国家」（いちばん新しい）
+詳細は `CHANGELOG.md` の v3.0.0。月ごとの更新の順は、人口 → 思潮 → 技術の進捗 → 言語 → **国家の自律行動** → 連鎖・出来事 → 機運。
+- **設定**: `core/sim/ai-settings.js`（`ext.data.ai = { enabled, tempo, verbs, players, targetPlayers }`。既定に戻ると保存から消える）。`isAutonomous(map, id)` = 有効で、プレイヤー国が1つ以上あり、その国がプレイヤー国ではない。
+- **判断**: `core/sim/ai.js`。`planAutonomy(map, date, rnd)` は地図を変えず、決定（誰が・何を・なぜ）の一覧を返す。`candidatesOf` が候補（宣戦・条約・技術）を作り、`pickDecision`（重み付き。何もしない重みもある）で選ぶ。講和は `peaceDecisions`。
+- **実行**: `app/sim-actions.js` の `runDecision`。理由の年表（`planAiNote`）→ 既存の操作（`declareWarInstant`・`signTreaty`・`planAdoptMomentum`・`planConcludeTreaty`・`planRenewTreaty`）を、1つの transaction で。失敗したら全部取り消し、画面にエラーを出さない。
+- **ペース**: `core/sim/ai-pace.js`（`paceOf`・`paceMultiplier`）。技術の進捗（`tech-progress.js`）と宣戦の意欲（`ai.js`）にかかる。
+- **仮置きの数値**（調整してよい）: `TEMPOS`（判断の間隔・宣戦の意欲・100年あたりの宣戦の目安 `warRate`）／`WAR_COOLDOWN_MONTHS`（180）／`PAIR_COOLDOWN_MONTHS`（360）／宣戦の条件（戦力比 0.57 以上、民意 45 以上、財政の余力 0.4 以上）／発展の度合いの式（`developmentScore`）／性格の式（`characterOf`）。
+- **今後の候補**: 隠密作戦・動員・属国化・体制の変更の自律／プレイヤー国への外交の提案（承認制）／国ごとの「手動固定」／自律国どうしの講和条件の交渉。
+
+## 追加済み：v2.7.0「因果が巡る世界と、簡易言語」
 詳細は `CHANGELOG.md` の v2.7.0。月ごとの更新（`advanceMonthly`）の順は、**人口 → 思潮 → 技術の進捗 → 言語 → 連鎖・出来事 → 機運**。出来事は、その月の人口・思潮が動いたあとの状態を読んで起きる。
 - **因果の土台**: `core/sim/pressure.js`。指標（`getIndicators`。月ごと・余波の数が変わるまで覚える）・余波（`ext.data.shocks`）・出来事の倍率（`eventFactors`）・余波だけで起きる後続（`drivenWeight`）・原因（`dominantCause`）。`minor-events.js` と `event-chains.js` が使う。`BALANCE.causalStrength = 0` で従来の挙動に戻る。
 - **人口**: `core/sim/population.js`（月次の超過死亡・都市化・移住）。年次の自然増加は `economy.js` の `computeAnnualUpdate(state, mods)`（`mods.growthMult`）のまま。`world.js` の `planAnnualUpdate` が `growthMods` を渡す。

@@ -6,7 +6,7 @@ import { el, btn, swatch, isLive } from "./kit.js";
 import { faceSvg } from "./face-svg.js";
 import { guardRender } from "./safe-render.js";
 import { militaryPicker, techPicker } from "./nation-pickers.js";
-import { conditionPane, progressBlock } from "./condition-view.js";
+import { conditionPane, progressBlock, autonomySection } from "./condition-view.js";
 import { createCovertView } from "./covert-window.js";
 import { leaderRecord, faceOf, leaderAge, leaderCandidates, titleFor, REASONS, STABILITY, heirOf, familyOf, MAJORITY } from "../core/edit/leaders.js";
 import { REGIMES, regimeOf, supportBars } from "../core/edit/regimes.js";
@@ -139,7 +139,7 @@ export function initNationWindow({ store, wins, editActions, simActions, setupAc
     const top = el("div", "nation-top"); top.append(leaderBlock(map, s), infoBlock(map, s)); box.append(top);
     const tabs = el("div", "b-tabs nation-tabs"); for (const [k, t] of TABS) tabs.append(btn(tab === k ? "active" : "", t, "", () => { tab = k; render(); })); box.append(tabs);
     const pane = el("div", "nation-pane");
-    ({ overview: overviewPane, condition: (p, m, st) => conditionPane(p, simActions.nationCondition(st.i)), military: militaryPane, tech: techPane, vassal: vassalPane, finance: financePane, covert: covertPane })[tab](pane, map, s);
+    ({ overview: overviewPane, condition: (p, m, st) => { conditionPane(p, simActions.nationCondition(st.i)); p.append(autonomySection(simActions.autonomyView(st.i), { onTogglePlayer: (on) => { simActions.setPlayerState(st.i, on); render(); } })); }, military: militaryPane, tech: techPane, vassal: vassalPane, finance: financePane, covert: covertPane })[tab](pane, map, s);
     box.append(pane);
     // 詳細設定の欄にカーソルを当てている間だけ、その国の領土を地図で光らせる（虫眼鏡のボタンは廃止）
     const hl = () => getHighlight?.();

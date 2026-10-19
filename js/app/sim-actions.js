@@ -20,6 +20,8 @@ import { planPopulationMonth, planMigrationEvent } from "../core/sim/population.
 import { planIdeasMonth, planIdeaNotable } from "../core/sim/ideas.js";
 import { planTechProgressMonth } from "../core/sim/tech-progress.js";
 import { planEnsureLanguages } from "../core/edit/language.js";
+import { planAutonomy, planAiNote, peaceTermsFor, aiView } from "../core/sim/ai.js";
+import { getAi, planSetAi, planSetPlayer } from "../core/sim/ai-settings.js";
 import { getIndicators, activeShocks, SHOCK_KINDS } from "../core/sim/pressure.js";
 import { maxUrbanShare } from "../core/sim/population.js";
 import { constraintReport } from "../core/sim/capacity.js";
@@ -168,6 +170,36 @@ export function createSimActions({ store, renderer }) {
     rerender();
     return out;
   }
+
+  /**
+   * 自律行動の決定を、ユーザーと同じ既存の操作で実行する（v3.0.0）。理由を年表に残してから実行し、失敗したら全部取り消す。
+   * 宣戦・講和は、戦争ウィンドウと同じ処理（マーカー・崩壊の判定を含む）を通る。
+   */
+  const runDecision = (d, date, rng) => {
+    const prevErr = store.getState().error; let ok = false;
+    try {
+      store.transaction("国家の判断", () => {
+        const m0 = store.getState().map;
+        if (d.kind !== "renew") store.commit(planAiNote(m0, d, date)); // 更新は「条約が更新された」の記録がすでにあるので、重ねて残さない
+        if (d.kind === "war") ok = !!api.declareWarInstant([d.stateId], [d.targetId]);
+        else if (d.kind === "peace") {
+          const w = listWars(m0).find((x) => x.id === d.warId); if (!w) throw new Error("戦争がありません");
+          const venue = planPeaceVenue(m0, w.id, rng);
+          ok = !!api.signTreaty(w.id, peaceTermsFor(m0, w, venue));
+          if (!ok) ok = !!api.signTreaty(w.id, { kind: "white", cessions: [], reparations: [], annex: [], treatyName: venue?.treatyName ?? "", notes: "", venue: venue ? { place: venue.place, stateId: venue.stateId } : null });
+        } else if (d.kind === "tech") { const c = planAdoptMomentum(m0, d.stateId, d.field, date); if (c) { store.commit(c); ok = true; } }
+        else if (d.kind === "renew") { const c = planRenewTreaty(m0, d.treatyId, 120, date); if (c) { store.commit(c); ok = true; } }
+        else if (["alliance", "nonaggression", "economic"].includes(d.kind)) {
+          const terms = d.kind === "alliance" ? { bind: "medium" } : d.kind === "nonaggression" ? { mode: "nonaggression" } : { tariff: "mid" };
+          const r = planConcludeTreaty(m0, { kind: d.kind, parties: [{ state: d.stateId, role: d.kind === "alliance" ? "盟主" : "加盟" }, { state: d.targetId }], terms, months: 120, date });
+          store.commit(r.command); ok = true;
+        }
+        if (!ok) throw new Error("実行できませんでした");
+      });
+    } catch { ok = false; }
+    if (!ok && store.getState().error !== prevErr) store.update((st) => { st.error = prevErr; }); // 自律の失敗で、画面にエラーを出さない
+    return ok;
+  };
 
   const api = {
     // --- 部隊 ---
@@ -393,6 +425,8 @@ export function createSimActions({ store, renderer }) {
           { const im = planIdeasMonth(store.getState().map, date, rng); if (im) { store.commit(im.command); for (const nt of im.notable) { const c = planIdeaNotable(store.getState().map, nt, date); if (c) { store.commit(c); stat.events++; stat.ideas = (stat.ideas ?? 0) + 1; } } } }
           { const tp = planTechProgressMonth(store.getState().map, date); if (tp) { store.commit(tp); stat.progress = 1; } }
           { const lg = planEnsureLanguages(store.getState().map, date); if (lg) { store.commit(lg.command); stat.languages = lg.created.length; } }
+          // v3.0.0: プレイヤー国以外の国が、判断して動く（宣戦・条約・講和・技術の採用）。理由つきで年表に残る
+          { for (const d of planAutonomy(store.getState().map, date, rng)) if (runDecision(d, date, rng)) { stat.ai = (stat.ai ?? 0) + 1; stat.events++; } }
           // 出来事の連鎖: 期日が来た後続を起こし（さらに後続があれば予約し）、そのあと今月の新しい出来事と、その後続の予約
           const chain = (ev, depth) => { const cur = store.getState().map; const sc = planScheduleChain(cur, ev, date, rng, depth); if (sc) store.commit(sc); };
           for (const p of duePending(map, date)) {
@@ -413,6 +447,14 @@ export function createSimActions({ store, renderer }) {
     /** 予約されている後続の出来事・反乱の火種（国家タブの表示用。反乱は起こさない） */
     pendingEvents(stateId = null) { return withMap((map) => listPending(map).filter((p) => stateId == null || p.stateId === stateId)) ?? []; },
     rebellionSpark(stateId) { return withMap((map) => rebellionSpark(map, stateId)) ?? null; },
+    // --- 国家の自律行動（v3.0.0）---
+    /** 設定: { enabled, tempo, verbs, players } */
+    getAutonomy() { const m = store.getState().map; return m ? getAi(m) : null; },
+    setAutonomy(patch) { return withMap((map) => { let ok = false; safeRun("自律行動の設定", () => { commitOrThrow(planSetAi(map, patch)); ok = true; }); return ok; }) ?? false; },
+    /** 国を「プレイヤー国」にする／やめる（それ以外の国が自律する） */
+    setPlayerState(stateId, on) { return withMap((map) => { let ok = false; safeRun("プレイヤー国の設定", () => { commitOrThrow(planSetPlayer(map, stateId, on)); ok = true; }); return ok; }) ?? false; },
+    /** 国家タブ用: 自律の状態・性格・ペース・直近の判断 */
+    autonomyView(stateId) { return withMap((map) => aiView(map, stateId, currentDate())) ?? null; },
     /**
      * 国勢（v2.7.0）: 国の状態・制約・余波・思潮・技術の進捗。国家タブの「国勢」と「技術ドクトリン」が使う（地図は変更しない）
      * @returns {object|null}

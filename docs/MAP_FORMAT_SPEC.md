@@ -222,6 +222,8 @@ ALTERHISTORY は、適用できなかった件数を読み込み時の警告と�
   - `ideas`（v2.7.0）: 国ごとの思潮。`{ [国ID]: { enlight, liberal, nation, equal, tradition, faith } }`（各 0〜1）。
   - `languages`（v2.7.0）: 文化ごとの言語。`{ [文化ID]: { v, id, parent, order: "MH"|"HM", link, lex: { 見出し: 語 }, proper, male, female, clan, changes: [{ key, label, from }], edited: { 見出し: 1 }, phon } }`。語は音節の記号を `.` でつないだ文字列（例 `ka.raN`）。手で直した語は `~カナ`。無い文化は、地図のシード（`meta.seed`）と文化番号から同じものを作り直す。
   - `migrationAcc`（v2.7.0）: まとまった移住を年表に載せるための積算。`{ "元の国>先の国": 千人 }`。
+  - `ai`（v3.0.0）: 国家の自律行動の設定。`{ enabled?, tempo?: "cautious"|"normal"|"active", verbs?: { tech, treaty, war, peace }, targetPlayers?, players?: [国ID] }`。`players`（プレイヤー国）が空なら、自律は動かない。既定の内容になったときは、この項目ごと消える。
+  - 年表（`historyLog`）の `type` に `ai`（国家の判断。`detail` は 宣戦・講和・技術の採用・同盟・不可侵条約・経済協力、`data: { ai: true, kind }`、`states[0]` が判断した国）を追加（v3.0.0）。
   - 国（`pack.states[i]`）に任意の `techProgress`（v2.7.0）: `{ [分野キー]: 0〜1 }`。次の段までの進捗。段（`techDoctrine`）は自動では変わらない。
   - 年表（`historyLog`）の `type` に追加（v2.7.0）: `ideas`（思潮が高まった）、`migration`（まとまった移住）、`language`（文化の言語が分かれた）。
   - `heirs`: 世襲の政体の後継者。`{ [国ID]: { name, gender, birthYear, family } }`。

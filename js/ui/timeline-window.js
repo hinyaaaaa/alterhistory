@@ -19,6 +19,7 @@ export const TIMELINE_KINDS = [
   { key: "culture", label: "文化・宗教", test: (t) => /(culture|religion)/.test(t) || /^(ideas|language)$/.test(t) },
   { key: "place", label: "都市・地図", test: (t) => /(burg|province|zone|marker)/.test(t) },
   { key: "era", label: "時代", test: (t) => t === "era" },
+  { key: "ai", label: "国家の判断", test: (t) => t === "ai" },
   { key: "natural", label: "自然発生", test: (t) => /^(plague|rebellion|schism|natural-|migration)/.test(t) },
   { key: "note", label: "記録・手書き", test: (t) => t === "note" || t === "manual" },
 ];

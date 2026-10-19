@@ -403,15 +403,15 @@
     const { cells, vertices, h } = map.geometry.pack;
     const biome = map.pack.cells.biome;
     const biomeColor = map.biomesData.map((b) => b?.color ?? "#999");
-    let cache2 = pathCache.get(map.geometry);
+    let cache3 = pathCache.get(map.geometry);
     const stamp = `${map.rev?.terrain ?? 0}`;
-    if (!cache2 || cache2.stamp !== stamp) {
-      cache2 = { stamp, byKey: /* @__PURE__ */ new Map() };
-      pathCache.set(map.geometry, cache2);
+    if (!cache3 || cache3.stamp !== stamp) {
+      cache3 = { stamp, byKey: /* @__PURE__ */ new Map() };
+      pathCache.set(map.geometry, cache3);
     }
     const hasPath2D = typeof Path2D !== "undefined";
     function paint(landColor, { water = true, alpha = 1, key: key2 = "" } = {}) {
-      let entries = cache2.byKey.get(key2);
+      let entries = cache3.byKey.get(key2);
       if (!entries) {
         const groups = /* @__PURE__ */ new Map();
         for (let i = 0; i < cells.v.length; i++) {
@@ -435,7 +435,7 @@
             entries.push({ color, path });
           } else entries.push({ color, list });
         }
-        cache2.byKey.set(key2, entries);
+        cache3.byKey.set(key2, entries);
       }
       ctx.globalAlpha = alpha;
       for (const e of entries) {
@@ -1237,11 +1237,11 @@
   var ramp = (z, z0, z1) => clamp((z - z0) / (z1 - z0), 0, 1);
   var zoomOf = (vp) => vp.fitK > 0 ? vp.k / vp.fitK : 1;
   function rankBurgs(map) {
-    const live4 = map.pack.burgs.filter((b) => b && b.i && !b.removed);
-    const towns = live4.filter((b) => !b.capital).sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
+    const live5 = map.pack.burgs.filter((b) => b && b.i && !b.removed);
+    const towns = live5.filter((b) => !b.capital).sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
     const p = /* @__PURE__ */ new Map();
     towns.forEach((b, i) => p.set(b, towns.length > 1 ? i / (towns.length - 1) : 0));
-    const capitals = live4.filter((b) => b.capital).sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
+    const capitals = live5.filter((b) => b.capital).sort((a, b) => (b.population ?? 0) - (a.population ?? 0));
     return { capitals, towns, percentile: (b) => b.capital ? -1 : p.get(b) ?? 1 };
   }
   var labelZoom = (pc) => pc < 0 ? 0 : 1.15 + 5.2 * Math.pow(pc, 0.85);
@@ -1409,7 +1409,7 @@
   var nowOf = (map) => map?.worldTime ?? { year: 1, month: 1 };
   function eventPart(entry) {
     let before = null;
-    const write2 = (m, list) => {
+    const write3 = (m, list) => {
       const ext = ensureExt(m);
       if (list.length) ext.data.historyLog = list;
       else delete ext.data.historyLog;
@@ -1424,10 +1424,10 @@
         } else {
           next = [...before, entry];
         }
-        write2(m, next);
+        write3(m, next);
       },
       revert(m) {
-        write2(m, before ?? []);
+        write3(m, before ?? []);
       }
     };
   }
@@ -2664,7 +2664,7 @@
     return getRelation(map, a, b);
   }
   function reconcileParts(map, ids2 = null, facts = null) {
-    const live4 = map.pack.states.filter(isLive4).map((s) => s.i);
+    const live5 = map.pack.states.filter(isLive4).map((s) => s.i);
     const rows = /* @__PURE__ */ new Map();
     const rowOf = (id) => {
       if (!rows.has(id)) rows.set(id, (map.pack.states[id].diplomacy ?? []).slice());
@@ -2672,8 +2672,8 @@
     };
     const pairs = [];
     if (ids2) {
-      for (const a of ids2) for (const b of live4) if (a !== b) pairs.push([a, b]);
-    } else for (let x = 0; x < live4.length; x++) for (let y = x + 1; y < live4.length; y++) pairs.push([live4[x], live4[y]]);
+      for (const a of ids2) for (const b of live5) if (a !== b) pairs.push([a, b]);
+    } else for (let x = 0; x < live5.length; x++) for (let y = x + 1; y < live5.length; y++) pairs.push([live5[x], live5[y]]);
     let changed = 0;
     for (const [a, b] of pairs) {
       const want = relationOf(map, a, b, facts);
@@ -2690,9 +2690,9 @@
     return [...rows].map(([id, row]) => setProps(map.pack.states[id], { diplomacy: row }));
   }
   function diplomacyMismatches(map) {
-    const live4 = map.pack.states.filter(isLive4).map((s) => s.i), out = [];
-    for (let x = 0; x < live4.length; x++) for (let y = x + 1; y < live4.length; y++) {
-      const a = live4[x], b = live4[y], truth = relationOf(map, a, b);
+    const live5 = map.pack.states.filter(isLive4).map((s) => s.i), out = [];
+    for (let x = 0; x < live5.length; x++) for (let y = x + 1; y < live5.length; y++) {
+      const a = live5[x], b = live5[y], truth = relationOf(map, a, b);
       if (truth && getRelation(map, a, b) !== truth) out.push({ a, b, table: getRelation(map, a, b), truth });
     }
     return out;
@@ -2793,8 +2793,8 @@
     }
     return set;
   }
-  function isBlockaded(map, a, b, cache2 = null) {
-    const set = cache2 ?? blockedPairs(map);
+  function isBlockaded(map, a, b, cache3 = null) {
+    const set = cache3 ?? blockedPairs(map);
     return set.has(a < b ? `${a}-${b}` : `${b}-${a}`);
   }
 
@@ -4062,11 +4062,11 @@
   }
   function ratesParts(map, rnd) {
     const parts = [];
-    const live4 = map.pack.states.filter(isLive8);
-    const fund = new Map(live4.map((s) => [s.i, fundamentalValue(s)]));
+    const live5 = map.pack.states.filter(isLive8);
+    const fund = new Map(live5.map((s) => [s.i, fundamentalValue(s)]));
     const mean = [...fund.values()].reduce((a, b) => a + b, 0) / Math.max(1, fund.size);
     const next = /* @__PURE__ */ new Map();
-    for (const s of live4) {
+    for (const s of live5) {
       const c = getCurrency(s);
       if (c.regime === "floating") {
         const target = fund.get(s.i) / mean;
@@ -4075,7 +4075,7 @@
         next.set(s.i, Math.max(0.01, Math.round((c.rate + pull + shock) * 1e4) / 1e4));
       }
     }
-    for (const s of live4) {
+    for (const s of live5) {
       const c = getCurrency(s);
       let rate = next.get(s.i);
       if (c.regime === "pegged") rate = next.get(c.pegTo) ?? getCurrency(map.pack.states[c.pegTo] ?? s).rate;
@@ -4540,8 +4540,8 @@
     const war = list.find((w) => w.id === warId);
     if (!war) throw new Error("\u305D\u306E\u6226\u4E89\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (war.endedAt) throw new Error("\u7D42\u7D50\u3057\u305F\u6226\u4E89\u306B\u306F\u8A18\u9332\u3067\u304D\u307E\u305B\u3093");
-    const nm7 = snapshotNames(map, [attackerState, defenderState]);
-    const entry = { year: date.year, month: date.month, attackerState, defenderState, attackerName: nm7[attackerState], defenderName: nm7[defenderState], winner: result.winner, aPower: result.aPower, dPower: result.dPower };
+    const nm8 = snapshotNames(map, [attackerState, defenderState]);
+    const entry = { year: date.year, month: date.month, attackerState, defenderState, attackerName: nm8[attackerState], defenderName: nm8[defenderState], winner: result.winner, aPower: result.aPower, dPower: result.dPower };
     const advGain = result.winner === "attacker" ? 1 : -1;
     const before = list;
     const after = list.map((w) => w.id !== warId ? w : {
@@ -5032,10 +5032,10 @@
     const adjacent = stateAdjacency(map);
     const diag = Math.hypot(map.meta.width || 1280, map.meta.height || 774);
     const ctx = { wars, adjacent, diag, blocked };
-    const live4 = map.pack.states.filter(isLive10);
+    const live5 = map.pack.states.filter(isLive10);
     const production = computeProduction(map);
     const info = /* @__PURE__ */ new Map();
-    for (const s of live4) {
+    for (const s of live5) {
       const demand = computeDemand(s);
       const prod = production.get(s.i);
       const net = Object.fromEntries(GOODS.map((g) => [g.id, round2(prod[g.id] - demand[g.id])]));
@@ -5043,8 +5043,8 @@
     }
     const deals = [];
     for (const g of GOODS) {
-      const remaining = new Map(live4.filter((s) => info.get(s.i).net[g.id] > 0.01).map((s) => [s.i, info.get(s.i).net[g.id]]));
-      const importers = live4.filter((s) => info.get(s.i).net[g.id] < -0.01).sort((a, b) => info.get(a.i).net[g.id] - info.get(b.i).net[g.id]);
+      const remaining = new Map(live5.filter((s) => info.get(s.i).net[g.id] > 0.01).map((s) => [s.i, info.get(s.i).net[g.id]]));
+      const importers = live5.filter((s) => info.get(s.i).net[g.id] < -0.01).sort((a, b) => info.get(a.i).net[g.id] - info.get(b.i).net[g.id]);
       for (const imp of importers) {
         let need = -info.get(imp.i).net[g.id];
         const cands = [...remaining.keys()].map((e) => ({ e, aff: tradeAffinity(map, imp.i, e, ctx), tax: getFinance(map.pack.states[e]).salesTax })).filter((c) => c.aff > 0.05).map((c) => ({ ...c, score: c.aff * (1 - 0.8 * c.tax) })).sort((a, b) => b.score - a.score);
@@ -5072,7 +5072,7 @@
       b.imports += d.units;
       b.importValue = round2(b.importValue + d.value);
     }
-    for (const s of live4) {
+    for (const s of live5) {
       const f = getFinance(s);
       info.get(s.i).pollTaxRevenue = round2(f.pollTax * ((s.rural ?? 0) + (s.urban ?? 0)));
     }
@@ -6221,13 +6221,13 @@
     const pairs = [];
     for (let i = 0; i < uniq.length; i++) for (let j = i + 1; j < uniq.length; j++) pairs.push([uniq[i], uniq[j]]);
     const before = listAlliances(map);
-    const write2 = (m, list) => {
+    const write3 = (m, list) => {
       const ext = ensureExt(m);
       ext.data.alliances = list;
       if (!list.length) delete ext.data.alliances;
     };
     return {
-      command: makeCommand(`\u540C\u76DF\u3092\u7D50\u6210\uFF08${alliance.name}\uFF09`, [], [{ apply: (m) => write2(m, [...before, alliance]), revert: (m) => write2(m, before) }, ...diplomacyParts(map, pairs, "Ally")]),
+      command: makeCommand(`\u540C\u76DF\u3092\u7D50\u6210\uFF08${alliance.name}\uFF09`, [], [{ apply: (m) => write3(m, [...before, alliance]), revert: (m) => write3(m, before) }, ...diplomacyParts(map, pairs, "Ally")]),
       id: alliance.id
     };
   }
@@ -6245,10 +6245,10 @@
     if (nextName === a.name && nextBond === bondKey(a) && nextLeader === leaderOf(a) && JSON.stringify(nextMembers) === JSON.stringify(a.members)) return null;
     const before = list;
     const after = list.map((x) => x.id === allianceId ? { ...x, name: nextName, members: nextMembers, bond: nextBond, leader: nextLeader } : x);
-    const write2 = (m, v) => {
+    const write3 = (m, v) => {
       ensureExt(m).data.alliances = v;
     };
-    return makeCommand("\u540C\u76DF\u3092\u7DE8\u96C6", [], [{ apply: (m) => write2(m, after), revert: (m) => write2(m, before) }]);
+    return makeCommand("\u540C\u76DF\u3092\u7DE8\u96C6", [], [{ apply: (m) => write3(m, after), revert: (m) => write3(m, before) }]);
   }
   function planDissolveAlliance(map, allianceId, date) {
     const list = listAlliances(map);
@@ -6257,10 +6257,10 @@
     if (a.dissolvedAt) throw new Error("\u65E2\u306B\u89E3\u6D88\u3055\u308C\u3066\u3044\u307E\u3059");
     const before = list;
     const after = list.map((x) => x.id === allianceId ? { ...x, dissolvedAt: date ?? null } : x);
-    const write2 = (m, v) => {
+    const write3 = (m, v) => {
       ensureExt(m).data.alliances = v;
     };
-    return makeCommand("\u540C\u76DF\u3092\u89E3\u6D88", [], [{ apply: (m) => write2(m, after), revert: (m) => write2(m, before) }]);
+    return makeCommand("\u540C\u76DF\u3092\u89E3\u6D88", [], [{ apply: (m) => write3(m, after), revert: (m) => write3(m, before) }]);
   }
   function alliancesOf(map, stateId) {
     return listAlliances(map).filter((a) => a.members.includes(stateId));
@@ -6746,8 +6746,8 @@
       cellsDesired: g.cellsDesired
     });
     for (const k of GRID_KEYS) map.grid[k] = unrleFlat(g[k] ?? []);
-    const pk = doc.pack ?? {};
-    for (const k of ["features", "states", "cultures", "religions", "provinces", "burgs", "rivers"]) map.pack[k] = pk[k] ?? [];
+    const pk2 = doc.pack ?? {};
+    for (const k of ["features", "states", "cultures", "religions", "provinces", "burgs", "rivers"]) map.pack[k] = pk2[k] ?? [];
     for (const k of CELL_KEYS) map.pack.cells[k] = unrleFlat(doc.cells?.[k] ?? []);
     for (const k of ["markers", "zones", "routes", "relief", "ice", "measurers", "goods", "markets", "deals", "namesbase"]) map[k] = doc[k] ?? [];
     map.cellRoutes = doc.cellRoutes ?? {};
@@ -7719,7 +7719,7 @@
   function provisionalPart(map, kind, id, flag) {
     const before = isProvisional(map, kind, id);
     const key2 = provKey(kind, id);
-    const write2 = (m, v) => {
+    const write3 = (m, v) => {
       var _a;
       const ext = ensureExt(m);
       (_a = ext.data).provisionalNames ?? (_a.provisionalNames = {});
@@ -7727,7 +7727,7 @@
       else delete ext.data.provisionalNames[key2];
       if (!Object.keys(ext.data.provisionalNames).length) delete ext.data.provisionalNames;
     };
-    return { apply: (m) => write2(m, flag), revert: (m) => write2(m, before) };
+    return { apply: (m) => write3(m, flag), revert: (m) => write3(m, before) };
   }
   function planSetProvisional(map, kind, id, flag) {
     if (!NAME_KINDS.includes(kind)) throw new Error(`\u672A\u5BFE\u5FDC\u306E\u7A2E\u985E\u3067\u3059: ${kind}`);
@@ -7998,21 +7998,21 @@
     } else {
       after = [...before, { id: nextEraId(map), name: trimmed, fromYear: year }];
     }
-    const write2 = (m, v) => {
+    const write3 = (m, v) => {
       ensureExt(m).data.eras = v;
     };
-    return makeCommand(existing ? `\u6642\u4EE3\u3092\u7DE8\u96C6\uFF08${trimmed}\uFF09` : `\u6642\u4EE3\u3092\u8FFD\u52A0\uFF08${trimmed}\uFF09`, [], [{ apply: (m) => write2(m, after), revert: (m) => write2(m, before) }]);
+    return makeCommand(existing ? `\u6642\u4EE3\u3092\u7DE8\u96C6\uFF08${trimmed}\uFF09` : `\u6642\u4EE3\u3092\u8FFD\u52A0\uFF08${trimmed}\uFF09`, [], [{ apply: (m) => write3(m, after), revert: (m) => write3(m, before) }]);
   }
   function planRemoveEra(map, id) {
     const before = listEras(map);
     if (!before.some((e) => e.id === id)) throw new Error("\u305D\u306E\u6642\u4EE3\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     const after = before.filter((e) => e.id !== id);
-    const write2 = (m, v) => {
+    const write3 = (m, v) => {
       const ext = ensureExt(m);
       ext.data.eras = v;
       if (!v.length) delete ext.data.eras;
     };
-    return makeCommand("\u6642\u4EE3\u3092\u524A\u9664", [], [{ apply: (m) => write2(m, after), revert: (m) => write2(m, before) }]);
+    return makeCommand("\u6642\u4EE3\u3092\u524A\u9664", [], [{ apply: (m) => write3(m, after), revert: (m) => write3(m, before) }]);
   }
 
   // js/render/layers/annotations.js
@@ -9440,11 +9440,11 @@
   }
   var ideaTechBonus = (ideas) => 0.3 * (ideas?.enlight ?? 0.2) - 0.15 * (ideas?.tradition ?? 0.5) + 0.075;
   function planIdeasMonth(map, date, rnd) {
-    const inds = getIndicators(map, date), nb = neighborsOfStates(map), live4 = map.pack.states.filter(isLive26);
-    if (!live4.length) return null;
-    const before = ideaTable(map), nBefore = ideaNotified(map), nAfter = {}, cur = new Map(live4.map((s) => [s.i, ideasOf(map, s.i, inds.get(s.i))]));
+    const inds = getIndicators(map, date), nb = neighborsOfStates(map), live5 = map.pack.states.filter(isLive26);
+    if (!live5.length) return null;
+    const before = ideaTable(map), nBefore = ideaNotified(map), nAfter = {}, cur = new Map(live5.map((s) => [s.i, ideasOf(map, s.i, inds.get(s.i))]));
     const mix2 = BALANCE.ideasMix ?? 1, next = {}, notable = [];
-    for (const s of live4) {
+    for (const s of live5) {
       const mine = cur.get(s.i), tgt = ideaTargets(s, inds.get(s.i)), out = {};
       const neigh = [...nb.get(s.i) ?? []].filter((n) => cur.has(n));
       const atWar2 = /* @__PURE__ */ new Set();
@@ -9738,7 +9738,7 @@
   }
   function makeNamer(map) {
     const P3 = map.pack;
-    const nm7 = (list, id, fallbackLabel) => {
+    const nm8 = (list, id, fallbackLabel) => {
       const e = list?.[id];
       if (!e || typeof e !== "object") return `${fallbackLabel}#${id}\uFF08\u5B58\u5728\u3057\u306A\u3044\uFF09`;
       const base = e.fullName ?? e.name ?? `${fallbackLabel}#${id}`;
@@ -9746,11 +9746,11 @@
       return e.removed ? `${clean}\uFF08\u6D88\u6EC5\uFF09` : clean;
     };
     return {
-      state: (id) => id === 0 ? "\u7121\u6240\u5C5E" : nm7(P3.states, id, "\u56FD\u5BB6"),
-      culture: (id) => id === 0 ? "\u306A\u3057" : nm7(P3.cultures, id, "\u6587\u5316"),
-      religion: (id) => id === 0 ? "\u306A\u3057" : nm7(P3.religions, id, "\u5B97\u6559"),
-      province: (id) => id === 0 ? "\u306A\u3057" : nm7(P3.provinces, id, "\u5C5E\u5DDE"),
-      burg: (id) => id === 0 ? "\u306A\u3057" : nm7(P3.burgs, id, "\u90FD\u5E02")
+      state: (id) => id === 0 ? "\u7121\u6240\u5C5E" : nm8(P3.states, id, "\u56FD\u5BB6"),
+      culture: (id) => id === 0 ? "\u306A\u3057" : nm8(P3.cultures, id, "\u6587\u5316"),
+      religion: (id) => id === 0 ? "\u306A\u3057" : nm8(P3.religions, id, "\u5B97\u6559"),
+      province: (id) => id === 0 ? "\u306A\u3057" : nm8(P3.provinces, id, "\u5C5E\u5DDE"),
+      burg: (id) => id === 0 ? "\u306A\u3057" : nm8(P3.burgs, id, "\u90FD\u5E02")
     };
   }
   var ref = (namer, kind, id) => ({ id, name: namer[kind](id) });
@@ -9801,7 +9801,7 @@
   }
   var TREATY_KIND = { standard: "\u901A\u5E38\u306E\u8B1B\u548C", white: "\u767D\u7D19\u548C\u5E73", annex: "\u5168\u9762\u964D\u4F0F", vassal: "\u5F93\u5C5E\u5316" };
   var VASSAL_KIND = { puppet: "\u5080\u5121", protectorate: "\u4FDD\u8B77\u56FD", vassal: "\u5C5E\u56FD" };
-  function describeTreaty(t, nm7, namer) {
+  function describeTreaty(t, nm8, namer) {
     if (!t) return "\u6761\u4EF6\u306E\u8A18\u9332\u306A\u3057";
     const out = [];
     const modern = t.cessions || t.annex || Array.isArray(t.reparations) || t.vassalize;
@@ -9809,13 +9809,13 @@
     out.push(`${t.treatyName ?? "\u8B1B\u548C\u6761\u7D04"}\uFF08${TREATY_KIND[t.kind ?? "standard"] ?? t.kind}${venue}\uFF09`);
     if (modern) {
       const cells = (c) => Array.isArray(c.cells) ? c.cells.length : c.cells ?? 0;
-      for (const c of t.cessions ?? []) out.push(`\u5272\u8B72 ${c.name || "\u533A\u753B"}\uFF08${cells(c)}\u30BB\u30EB\uFF09${nm7(c.fromStateId)}\u2192${nm7(c.toStateId)}`);
-      for (const r of Array.isArray(t.reparations) ? t.reparations : []) out.push(`\u8CE0\u511F ${nm7(r.fromStateId)}\u2192${nm7(r.toStateId)} ${r.amount}${r.currency ? ` ${r.currency}` : ""}${r.received != null ? `\uFF08\u53D7\u53D6 ${r.received}${r.receivedCurrency ? ` ${r.receivedCurrency}` : ""}\uFF09` : ""}`);
-      for (const x of t.annex ?? []) out.push(`\u4F75\u5408 ${nm7(x.fromStateId)}\u2192${nm7(x.toStateId)}`);
-      for (const x of t.vassalize ?? []) out.push(`\u5F93\u5C5E ${nm7(x.fromStateId)} \u306F ${nm7(x.toStateId)} \u306E${VASSAL_KIND[x.kind] ?? x.kind}`);
+      for (const c of t.cessions ?? []) out.push(`\u5272\u8B72 ${c.name || "\u533A\u753B"}\uFF08${cells(c)}\u30BB\u30EB\uFF09${nm8(c.fromStateId)}\u2192${nm8(c.toStateId)}`);
+      for (const r of Array.isArray(t.reparations) ? t.reparations : []) out.push(`\u8CE0\u511F ${nm8(r.fromStateId)}\u2192${nm8(r.toStateId)} ${r.amount}${r.currency ? ` ${r.currency}` : ""}${r.received != null ? `\uFF08\u53D7\u53D6 ${r.received}${r.receivedCurrency ? ` ${r.receivedCurrency}` : ""}\uFF09` : ""}`);
+      for (const x of t.annex ?? []) out.push(`\u4F75\u5408 ${nm8(x.fromStateId)}\u2192${nm8(x.toStateId)}`);
+      for (const x of t.vassalize ?? []) out.push(`\u5F93\u5C5E ${nm8(x.fromStateId)} \u306F ${nm8(x.toStateId)} \u306E${VASSAL_KIND[x.kind] ?? x.kind}`);
     } else {
       const prov = (t.provinceIds ?? []).map(namer.province);
-      if (prov.length || (t.regionCells ?? []).length) out.push(`\u5272\u8B72 ${[...prov, ...(t.regionCells ?? []).length ? [`\u672A\u7DE8\u5165\u5730\u57DF${t.regionCells.length}\u304B\u6240`] : []].join("\u30FB")}\u2192${nm7(t.toStateId)}`);
+      if (prov.length || (t.regionCells ?? []).length) out.push(`\u5272\u8B72 ${[...prov, ...(t.regionCells ?? []).length ? [`\u672A\u7DE8\u5165\u5730\u57DF${t.regionCells.length}\u304B\u6240`] : []].join("\u30FB")}\u2192${nm8(t.toStateId)}`);
       if (typeof t.reparations === "number" && t.reparations) out.push(`\u8CE0\u511F(\u7523\u696D\u529B) ${t.reparations}`);
     }
     if (t.notes) out.push(`\u6761\u4EF6: ${String(t.notes).replace(/\s*\n\s*/g, " ")}`);
@@ -10493,6 +10493,7 @@
     ideas: "\u601D\u6F6E",
     migration: "\u79FB\u4F4F",
     language: "\u8A00\u8A9E",
+    ai: "\u56FD\u5BB6\u306E\u5224\u65AD",
     ...Object.fromEntries(MINOR_EVENTS.map((e) => [`natural-${e.key}`, e.title]))
   };
   function typeJp(t) {
@@ -10852,8 +10853,8 @@
   }
 
   // js/version.js
-  var APP_VERSION = "2.7.0";
-  var APP_VERSION_NAME = "\u56E0\u679C\u304C\u5DE1\u308B\u4E16\u754C\u3068\u3001\u7C21\u6613\u8A00\u8A9E";
+  var APP_VERSION = "3.0.0";
+  var APP_VERSION_NAME = "\u81EA\u3089\u52D5\u304F\u56FD\u5BB6";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/icons.js
@@ -11901,15 +11902,15 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
     const NODE_W = 150, NODE_H = 28, GAP_X = 50, GAP_Y = 14;
     function layout(map, kind) {
       const list = map.pack[LIST_KEY2[kind]];
-      const live4 = list.filter(isLive30);
+      const live5 = list.filter(isLive30);
       const parentsOf2 = (e) => {
         const ps = [...new Set((Array.isArray(e.origins) ? e.origins : []).filter((o) => Number.isInteger(o) && (o === 0 || isLive30(list[o]))))];
         return ps.length ? ps : [0];
       };
       const children = /* @__PURE__ */ new Map([[0, []]]);
-      for (const e of live4) children.set(e.i, []);
+      for (const e of live5) children.set(e.i, []);
       const extra = [];
-      for (const e of live4) {
+      for (const e of live5) {
         const ps = parentsOf2(e);
         children.get(ps[0]).push(e.i);
         for (const p of ps.slice(1)) if (p !== 0) extra.push([p, e.i]);
@@ -12085,6 +12086,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
     { key: "culture", label: "\u6587\u5316\u30FB\u5B97\u6559", test: (t) => /(culture|religion)/.test(t) || /^(ideas|language)$/.test(t) },
     { key: "place", label: "\u90FD\u5E02\u30FB\u5730\u56F3", test: (t) => /(burg|province|zone|marker)/.test(t) },
     { key: "era", label: "\u6642\u4EE3", test: (t) => t === "era" },
+    { key: "ai", label: "\u56FD\u5BB6\u306E\u5224\u65AD", test: (t) => t === "ai" },
     { key: "natural", label: "\u81EA\u7136\u767A\u751F", test: (t) => /^(plague|rebellion|schism|natural-|migration)/.test(t) },
     { key: "note", label: "\u8A18\u9332\u30FB\u624B\u66F8\u304D", test: (t) => t === "note" || t === "manual" }
   ];
@@ -12135,12 +12137,12 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
     scroller.append(spacer);
     body.append(filters, count, scroller);
     let all = [], shown = [], mapRef = null;
-    const live4 = (map) => map.pack.states.filter((s) => s && s.i > 0);
+    const live5 = (map) => map.pack.states.filter((s) => s && s.i > 0);
     const nameOf5 = (s) => `${s.fullName ?? s.name}${s.removed ? "\uFF08\u6D88\u6EC5\uFF09" : ""}`;
     function fillSelects(map) {
       const prevS = stateSel.value, prevK = kindSel.value;
       kindSel.replaceChildren(new Option("\u3059\u3079\u3066\u306E\u7A2E\u985E", ""), ...TIMELINE_KINDS.map((k) => new Option(k.label, k.key)));
-      stateSel.replaceChildren(new Option("\u3059\u3079\u3066\u306E\u56FD", ""), ...live4(map).map((s) => new Option(nameOf5(s), String(s.i))));
+      stateSel.replaceChildren(new Option("\u3059\u3079\u3066\u306E\u56FD", ""), ...live5(map).map((s) => new Option(nameOf5(s), String(s.i))));
       kindSel.value = prevK;
       stateSel.value = prevS;
     }
@@ -12312,7 +12314,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
   function initNuclearWindow({ store, simActions, wins }) {
     const body = el("div", "nuc-body");
     let atk = null, tgt = null, heads = 1;
-    const nm7 = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
+    const nm8 = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     function render() {
       body.replaceChildren();
       const map = store.getState().map;
@@ -12333,7 +12335,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
           for (const x of list) {
             const o = document.createElement("option");
             o.value = x.i;
-            o.textContent = nm7(map, x.i);
+            o.textContent = nm8(map, x.i);
             o.selected = x.i === cur;
             s.append(o);
           }
@@ -12370,12 +12372,12 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       if (!ops.length) body.append(el("p", "muted", "\u7ACB\u6848\u3055\u308C\u305F\u4F5C\u6226\u306F\u3042\u308A\u307E\u305B\u3093"));
       for (const o of ops) {
         const row = el("div", "ent-row");
-        row.append(el("span", "ent-main", `${o.status === "executed" ? "\u5B9F\u884C\u6E08\u307F" : "\u7ACB\u6848\u4E2D"}\u3000${o.name}\u3000${nm7(map, o.attackerId)} \u2192 ${nm7(map, o.targetId)}\u3000${o.warheads}\u767A`));
+        row.append(el("span", "ent-main", `${o.status === "executed" ? "\u5B9F\u884C\u6E08\u307F" : "\u7ACB\u6848\u4E2D"}\u3000${o.name}\u3000${nm8(map, o.attackerId)} \u2192 ${nm8(map, o.targetId)}\u3000${o.warheads}\u767A`));
         if (o.status === "planned") {
           const run = el("button", "danger", "\u5B9F\u884C\u3059\u308B");
           run.type = "button";
           run.addEventListener("click", async () => {
-            if (await confirmDialog(`\u300C${o.name}\u300D\u3092\u5B9F\u884C\u3057\u307E\u3059\u3002${nm7(map, o.targetId)}\u306F\u58CA\u6EC5\u7684\u306A\u88AB\u5BB3\u3092\u53D7\u3051\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`, { okLabel: "\u5B9F\u884C\u3059\u308B", danger: true })) simActions.executeNuclearOp(o.id);
+            if (await confirmDialog(`\u300C${o.name}\u300D\u3092\u5B9F\u884C\u3057\u307E\u3059\u3002${nm8(map, o.targetId)}\u306F\u58CA\u6EC5\u7684\u306A\u88AB\u5BB3\u3092\u53D7\u3051\u307E\u3059\u3002\u3088\u308D\u3057\u3044\u3067\u3059\u304B\uFF1F\uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`, { okLabel: "\u5B9F\u884C\u3059\u308B", danger: true })) simActions.executeNuclearOp(o.id);
           });
           const cancel = el("button", "ent-btn", "\u53D6\u308A\u6D88\u3057");
           cancel.type = "button";
@@ -12398,7 +12400,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
   function createCovertView({ store, simActions, getAttacker = null }) {
     const body = el("div", "covert-body");
     let atk = null, tgt = null, kind = "command";
-    const nm7 = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
+    const nm8 = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     function render() {
       body.replaceChildren();
       const map = store.getState().map;
@@ -12421,7 +12423,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
           if (x.i === ban) continue;
           const o = document.createElement("option");
           o.value = x.i;
-          o.textContent = nm7(map, x.i);
+          o.textContent = nm8(map, x.i);
           o.selected = x.i === cur;
           s.append(o);
         }
@@ -13270,6 +13272,7 @@ ${shown}${more}`;
     { test: /^diplomacy|^covert|^sanction/, label: "\u5916\u4EA4", color: "var(--info)" },
     { test: /^econom|^currency|^trade|^famine/, label: "\u7D4C\u6E08", color: "var(--warn)" },
     { test: /^natural|^plague|^disaster|^zone/, label: "\u81EA\u7136", color: "var(--warn)" },
+    { test: /^ai$/, label: "\u56FD\u5BB6\u306E\u5224\u65AD", color: "var(--accent)" },
     { test: /^ideas|^language/, label: "\u601D\u60F3\u30FB\u8A00\u8A9E", color: "var(--info)" },
     { test: /^migration/, label: "\u79FB\u4F4F", color: "var(--info)" },
     { test: /^tech-momentum/, label: "\u6280\u8853\u306E\u6A5F\u904B", color: "var(--ally)", major: true },
@@ -13968,7 +13971,7 @@ ${shown}${more}`;
     if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093");
     const e = map.pack[listKey]?.[id];
     if (!isLive35(e) || !e.i) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    const label2 = LABEL_OF[kind], nm7 = e.fullName ?? e.name;
+    const label2 = LABEL_OF[kind], nm8 = e.fullName ?? e.name;
     const c = map.pack.cells;
     const parts = [];
     const clearCells = (field2, ids2) => {
@@ -13979,7 +13982,7 @@ ${shown}${more}`;
     const zero = { cells: 0, area: 0, rural: 0, urban: 0 };
     if (kind === "state") {
       const wars = map.ext?.data?.wars ?? [];
-      if (!force && wars.some((w) => !w.endedAt && (w.attackers.includes(id) || w.defenders.includes(id)))) throw new Error(`\u300C${nm7}\u300D\u306F\u6226\u4E89\u4E2D\u306E\u305F\u3081\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B\u8B1B\u548C\u3057\u3066\u304F\u3060\u3055\u3044`);
+      if (!force && wars.some((w) => !w.endedAt && (w.attackers.includes(id) || w.defenders.includes(id)))) throw new Error(`\u300C${nm8}\u300D\u306F\u6226\u4E89\u4E2D\u306E\u305F\u3081\u524A\u9664\u3067\u304D\u307E\u305B\u3093\u3002\u5148\u306B\u8B1B\u548C\u3057\u3066\u304F\u3060\u3055\u3044`);
       const provIds = new Set(map.pack.provinces.filter((p) => isLive35(p) && p.i && p.state === id).map((p) => p.i));
       clearCells("state", /* @__PURE__ */ new Set([id]));
       if (provIds.size) clearCells("province", provIds);
@@ -13998,7 +14001,7 @@ ${shown}${more}`;
       for (const b of map.pack.burgs) if (isLive35(b) && b.i && b.province === id) parts.push(setProps(b, { province: 0 }));
       parts.push(setProps(e, { removed: true, ...zero }));
     }
-    return makeCommand(`${label2}\u300C${nm7}\u300D\u3092\u524A\u9664`, ["politics", "places"], parts);
+    return makeCommand(`${label2}\u300C${nm8}\u300D\u3092\u524A\u9664`, ["politics", "places"], parts);
   }
 
   // js/core/edit/finance.js
@@ -15895,6 +15898,40 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     sec.append(el("p", "hint", "\u9032\u6357\u306F\u6BCE\u6708\u305F\u307E\u308A\u307E\u3059\u3002\u6BB5\u304C\u4E0A\u304C\u308B\u306E\u306F\u3001\u6A5F\u904B\u304C\u51FA\u3066\u300C\u63A1\u7528\u3059\u308B\u300D\u3092\u62BC\u3057\u305F\u3068\u304D\u3060\u3051\u3067\u3059\u3002"));
     return sec;
   }
+  function autonomySection(v, { onTogglePlayer } = {}) {
+    const sec = el("section", "nation-sec");
+    sec.dataset.field = "cond-ai";
+    sec.append(el("h4", "", "\u81EA\u5F8B\u884C\u52D5"));
+    if (!v) return sec;
+    const row = el("div", "cond-ai-player");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = v.player;
+    cb.id = "ai-player-toggle";
+    cb.addEventListener("change", () => onTogglePlayer?.(cb.checked));
+    const lb = el("label", "", " \u2605 \u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\uFF08\u81EA\u5206\u3067\u52D5\u304B\u3059\u56FD\uFF09");
+    lb.htmlFor = "ai-player-toggle";
+    row.append(cb, lb);
+    sec.append(row);
+    if (!v.hasPlayers) {
+      sec.append(el("p", "hint", "\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u30921\u3064\u3082\u6C7A\u3081\u3066\u3044\u306A\u3044\u306E\u3067\u3001\u81EA\u5F8B\u884C\u52D5\u306F\u52D5\u3044\u3066\u3044\u307E\u305B\u3093\u3002\u81EA\u5206\u3067\u52D5\u304B\u3059\u56FD\u306B \u2605 \u3092\u4ED8\u3051\u308B\u3068\u3001\u307B\u304B\u306E\u56FD\u304C\u81EA\u5F8B\u3057\u3066\u52D5\u304D\u307E\u3059\u3002"));
+      return sec;
+    }
+    if (!v.enabled) {
+      sec.append(el("p", "hint", "\u81EA\u5F8B\u884C\u52D5\u306F\u3001\u8A2D\u5B9A\u3067\u30AA\u30D5\u306B\u306A\u3063\u3066\u3044\u307E\u3059\u3002"));
+      return sec;
+    }
+    if (v.player) sec.append(el("p", "hint", "\u3053\u306E\u56FD\u306F\u81EA\u5206\u3067\u52D5\u304B\u3057\u307E\u3059\u3002\u5BA3\u6226\u30FB\u6761\u7D04\u30FB\u8B1B\u548C\u30FB\u6280\u8853\u306E\u63A1\u7528\u306F\u3001\u3059\u3079\u3066\u64CD\u4F5C\u3057\u305F\u3068\u304D\u3060\u3051\u884C\u308F\u308C\u307E\u3059\u3002"));
+    else {
+      sec.append(el("p", "hint", `\u3053\u306E\u56FD\u306F\u81EA\u5F8B\u3057\u3066\u52D5\u304D\u307E\u3059\uFF08\u5224\u65AD\u306E\u901F\u3055: ${v.tempo}\uFF09\u3002\u7D04${v.nextThinkMonths}\u304B\u6708\u5F8C\u306B\u6B21\u306E\u5224\u65AD\u3092\u3057\u307E\u3059\u3002`));
+      if (v.character) for (const [k, label2] of [["expansion", "\u62E1\u5F35"], ["security", "\u5B89\u5168"], ["prosperity", "\u7E41\u6804"], ["prestige", "\u5A01\u4FE1"]]) sec.append(bar(label2, v.character[k], pct2(v.character[k]), { hint: "\u56FD\u306E\u6027\u683C\uFF08\u76EE\u6A19\u306E\u91CD\u307F\uFF09\u3002\u653F\u4F53\u30FB\u601D\u6F6E\u30FB\u98DF\u6599\u30FB\u6226\u4E89\u304B\u3089\u6C7A\u307E\u308B" }));
+      if (v.pace) sec.append(bar("\u767A\u5C55\u306E\u30DA\u30FC\u30B9", Math.min(1, v.pace.index / 2), `\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u306E ${v.pace.index.toFixed(2)} \u500D\uFF08\u901F\u3055 \xD7${v.pace.mult.toFixed(2)}\uFF09`, { level: v.pace.index > 1.6 || v.pace.index < 0.6 ? "warn" : "ok", hint: "\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u3088\u308A\u9032\u307F\u3059\u304E\u305F\u56FD\u306F\u920D\u308A\u3001\u9045\u308C\u305F\u56FD\u306F\u901F\u307E\u308A\u307E\u3059\uFF08\u6280\u8853\u306E\u9032\u6357\u3068\u5BA3\u6226\u306E\u610F\u6B32\uFF09" }));
+    }
+    sec.append(el("h5", "", "\u76F4\u8FD1\u306E\u5224\u65AD"));
+    if (!v.recent.length) sec.append(el("p", "hint", "\u307E\u3060\u3042\u308A\u307E\u305B\u3093"));
+    for (const r of v.recent) sec.append(el("div", "cond-shock", `${r.year}\u5E74${r.month}\u6708  ${r.text}`));
+    return sec;
+  }
 
   // js/core/edit/stability.js
   var STABILITY_LEVELS = Object.freeze([
@@ -16449,7 +16486,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       }));
       box.append(tabs);
       const pane = el("div", "nation-pane");
-      ({ overview: overviewPane, condition: (p, m, st) => conditionPane(p, simActions.nationCondition(st.i)), military: militaryPane, tech: techPane, vassal: vassalPane, finance: financePane, covert: covertPane })[tab](pane, map, s);
+      ({ overview: overviewPane, condition: (p, m, st) => {
+        conditionPane(p, simActions.nationCondition(st.i));
+        p.append(autonomySection(simActions.autonomyView(st.i), { onTogglePlayer: (on2) => {
+          simActions.setPlayerState(st.i, on2);
+          render();
+        } }));
+      }, military: militaryPane, tech: techPane, vassal: vassalPane, finance: financePane, covert: covertPane })[tab](pane, map, s);
       box.append(pane);
       const hl = () => getHighlight?.();
       const on = () => {
@@ -16872,13 +16915,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     return set;
   };
   function planPopulationMonth(map, date) {
-    const inds = getIndicators(map, date), live4 = map.pack.states.filter(isLive44);
-    if (!live4.length) return null;
+    const inds = getIndicators(map, date), live5 = map.pack.states.filter(isLive44);
+    if (!live5.length) return null;
     const nb = neighborsOfStates(map), wars = warPairs(map);
-    const delta = new Map(live4.map((s) => [s.i, { r: 0, u: 0 }]));
+    const delta = new Map(live5.map((s) => [s.i, { r: 0, u: 0 }]));
     const migr = BALANCE.migrationRate ?? 1, urbz = BALANCE.urbanizeRate ?? 1, strength = BALANCE.causalStrength ?? 1;
     const accBefore = migrationAcc(map), acc = { ...accBefore }, moves = [];
-    for (const s of live4) {
+    for (const s of live5) {
       const ind = inds.get(s.i), d = delta.get(s.i), rural = s.rural ?? 0, urban = s.urban ?? 0, pop = rural + urban;
       if (!(pop > 0) || !ind) continue;
       let m = Math.max(0, 0.9 - ind.food) * 25e-4 + Math.max(0, ind.stress.health) * 12e-4;
@@ -16916,7 +16959,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       }
     }
     const parts = [];
-    for (const s of live4) {
+    for (const s of live5) {
       const d = delta.get(s.i);
       if (Math.abs(d.r) + Math.abs(d.u) < 0.01) continue;
       parts.push(setProps(s, { rural: Math.max(0, r22((s.rural ?? 0) + d.r)), urban: Math.max(0, r22((s.urban ?? 0) + d.u)) }));
@@ -17548,34 +17591,126 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     return { command, result };
   }
 
-  // js/core/sim/tech-progress.js
+  // js/core/sim/ai-settings.js
   var isLive47 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var TEMPOS = Object.freeze({
+    cautious: Object.freeze({ key: "cautious", label: "\u614E\u91CD", think: 12, war: 0.6, warRate: 1.5 }),
+    normal: Object.freeze({ key: "normal", label: "\u3075\u3064\u3046", think: 6, war: 1, warRate: 3 }),
+    active: Object.freeze({ key: "active", label: "\u7A4D\u6975", think: 3, war: 1.5, warRate: 6 })
+  });
+  var AI_VERBS = Object.freeze([
+    { key: "tech", label: "\u6280\u8853\u306E\u63A1\u7528" },
+    { key: "treaty", label: "\u6761\u7D04\uFF08\u7DE0\u7D50\u30FB\u66F4\u65B0\uFF09" },
+    { key: "war", label: "\u5BA3\u6226" },
+    { key: "peace", label: "\u8B1B\u548C" }
+  ]);
+  var DEFAULT_VERBS = Object.freeze({ tech: true, treaty: true, war: true, peace: true });
+  function getAi(map) {
+    const s = map?.ext?.data?.ai ?? {};
+    return {
+      enabled: s.enabled !== false,
+      tempo: TEMPOS[s.tempo] ? s.tempo : "normal",
+      targetPlayers: s.targetPlayers !== false,
+      verbs: { ...DEFAULT_VERBS, ...s.verbs ?? {} },
+      players: [...new Set(s.players ?? [])].filter((id) => isLive47(map?.pack?.states?.[id]))
+    };
+  }
+  var isDefault = (v) => v.enabled && v.tempo === "normal" && v.targetPlayers && !v.players.length && Object.values(v.verbs).every(Boolean);
+  var write2 = (m, v) => {
+    const x = ensureExt(m);
+    if (!v || isDefault(v)) delete x.data.ai;
+    else x.data.ai = v;
+  };
+  function planSetAi(map, patch) {
+    const raw = map.ext?.data?.ai, cur = getAi(map);
+    const next = { ...cur, ...patch, verbs: { ...cur.verbs, ...patch.verbs ?? {} } };
+    if (!TEMPOS[next.tempo]) throw new Error("\u5224\u65AD\u306E\u901F\u3055\u306F \u614E\u91CD\u30FB\u3075\u3064\u3046\u30FB\u7A4D\u6975 \u304B\u3089\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    next.players = [...new Set(next.players)].filter((id) => isLive47(map.pack.states[id]));
+    const cmd = makeCommand("\u56FD\u5BB6\u306E\u81EA\u5F8B\u884C\u52D5\u306E\u8A2D\u5B9A", [], [{ apply: (m) => write2(m, next), revert: (m) => {
+      const x = ensureExt(m);
+      if (raw === void 0) delete x.data.ai;
+      else x.data.ai = raw;
+    } }]);
+    return cmd;
+  }
+  function planSetPlayer(map, stateId, on) {
+    if (!isLive47(map.pack.states[stateId])) throw new Error("\u305D\u306E\u56FD\u306F\u3042\u308A\u307E\u305B\u3093");
+    const cur = getAi(map).players, next = on ? [...cur, stateId] : cur.filter((id) => id !== stateId);
+    return planSetAi(map, { players: next });
+  }
+  function isAutonomous(map, id, ai = getAi(map)) {
+    return ai.enabled && ai.players.length > 0 && isLive47(map.pack.states[id]) && !ai.players.includes(id);
+  }
+
+  // js/core/sim/ai-pace.js
+  var isLive48 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var clamp15 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var median = (a) => {
+    if (!a.length) return 1;
+    const b = [...a].sort((x, y) => x - y), m = b.length >> 1;
+    return b.length % 2 ? b[m] : (b[m - 1] + b[m]) / 2;
+  };
+  var PACE_MIN = 0.6;
+  var PACE_MAX = 1.6;
+  function developmentScore(s, ind, popMedian) {
+    const pop = (s.rural ?? 0) + (s.urban ?? 0);
+    return 0.45 * (techLevelFine(s) / 10) + 0.3 * Math.min(1, (ind?.industryRatio ?? 1) / 1.5) + 0.25 * (clamp15(pop / Math.max(1, popMedian), 0, 3) / 3);
+  }
+  var cache2 = /* @__PURE__ */ new WeakMap();
+  function paceOf(map, date = map.worldTime ?? { year: 1, month: 1 }) {
+    const sig = `${date.year * 12 + date.month}:${map.pack.states.length}:${getAi(map).players.join(",")}`;
+    const hit = cache2.get(map);
+    if (hit && hit.sig === sig) return hit.out;
+    const inds = getIndicators(map, date), live5 = map.pack.states.filter(isLive48), popMedian = median(live5.map((s) => (s.rural ?? 0) + (s.urban ?? 0)));
+    const scores = new Map(live5.map((s) => [s.i, developmentScore(s, inds.get(s.i), popMedian)]));
+    const players = getAi(map).players.filter((id) => scores.has(id));
+    const all = median([...scores.values()]);
+    const ref2 = Math.max(0.05, 0.5 * all, median((players.length ? players : [...scores.keys()]).map((id) => scores.get(id))));
+    const out = /* @__PURE__ */ new Map();
+    for (const [id, score] of scores) {
+      const index = score / ref2;
+      out.set(id, { score, ref: ref2, index, mult: clamp15(Math.pow(1 / Math.max(0.05, index), 0.5), PACE_MIN, PACE_MAX) });
+    }
+    cache2.set(map, { sig, out });
+    return out;
+  }
+  function paceMultiplier(map, stateId, date) {
+    if (!isAutonomous(map, stateId)) return 1;
+    try {
+      return paceOf(map, date).get(stateId)?.mult ?? 1;
+    } catch {
+      return 1;
+    }
+  }
+
+  // js/core/sim/tech-progress.js
+  var isLive49 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var clamp16 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var BASE_MONTHS = 600;
   function trinityOf(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }, inds = null) {
     const s = map.pack.states[stateId];
-    if (!isLive47(s)) return null;
+    if (!isLive49(s)) return null;
     const ind = (inds ?? getIndicators(map, date)).get(stateId);
     if (!ind) return null;
     const ideas = ideasOf(map, stateId, ind);
-    const I = clamp15(ind.industryRatio, 0.3, 1.5);
-    const E = clamp15(ind.fiscalSlack - 0.6 * militaryBurden(s), 0.15, 1.2) * Math.sqrt(clamp15(ind.food, 0.3, 1));
-    const T2 = clamp15(0.55 + 0.5 * ind.urbanShare + 0.025 * ind.lv.comms + ideaTechBonus(ideas), 0.3, 1.6);
+    const I = clamp16(ind.industryRatio, 0.3, 1.5);
+    const E = clamp16(ind.fiscalSlack - 0.6 * militaryBurden(s), 0.15, 1.2) * Math.sqrt(clamp16(ind.food, 0.3, 1));
+    const T2 = clamp16(0.55 + 0.5 * ind.urbanShare + 0.025 * ind.lv.comms + ideaTechBonus(ideas), 0.3, 1.6);
     return { I, E, T: T2, trinity: Math.cbrt(I * E * T2), ind, ideas };
   }
   function progressRates(map, stateId, date, ctx = {}) {
     const tri = trinityOf(map, stateId, date, ctx.inds ?? null);
     if (!tri) return null;
     const { ind } = tri, lv = ind.lv, nb = ctx.nb ?? neighborsOfStates(map);
-    const neigh = [...nb.get(stateId) ?? []].filter((n) => isLive47(map.pack.states[n]));
-    const pace = (BALANCE.techPace ?? 1) / BASE_MONTHS, out = {};
+    const neigh = [...nb.get(stateId) ?? []].filter((n) => isLive49(map.pack.states[n]));
+    const pace = (BALANCE.techPace ?? 1) / BASE_MONTHS * paceMultiplier(map, stateId, date), out = {};
     for (const t of TECH_TRACKS) {
       if (lv[t.key] >= TECH_MAX) {
         out[t.key] = 0;
         continue;
       }
       const ahead = neigh.length ? neigh.filter((n) => getTechDoctrine(map.pack.states[n])[t.key] > lv[t.key]).length / neigh.length : 0;
-      const tf = { agri: 1 + 0.3 * Math.max(0, 1 - ind.food), medicine: 1 + 0.4 * clamp15(ind.stress.health, 0, 1), ind: Math.sqrt(tri.I), energy: Math.sqrt(tri.I), transport: Math.sqrt(tri.E), comms: 0.8 + 0.4 * ind.urbanShare }[t.key] ?? 1;
+      const tf = { agri: 1 + 0.3 * Math.max(0, 1 - ind.food), medicine: 1 + 0.4 * clamp16(ind.stress.health, 0, 1), ind: Math.sqrt(tri.I), energy: Math.sqrt(tri.I), transport: Math.sqrt(tri.E), comms: 0.8 + 0.4 * ind.urbanShare }[t.key] ?? 1;
       out[t.key] = pace * tri.trinity * tf * (1 + 0.6 * ahead) * (1 - 0.5 * ind.war) / (1 + 0.1 * (lv[t.key] - 1));
     }
     return { rates: out, ...tri };
@@ -17590,13 +17725,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     }
     const nb = neighborsOfStates(map), parts = [];
     for (const s of map.pack.states) {
-      if (!isLive47(s)) continue;
+      if (!isLive49(s)) continue;
       const r = progressRates(map, s.i, date, { inds, nb });
       if (!r) continue;
       const cur = getTechProgress(s), next = { ...cur };
       let changed = false;
       for (const t of TECH_TRACKS) {
-        const v = Math.round(clamp15(cur[t.key] + r.rates[t.key], 0, 1) * 1e4) / 1e4;
+        const v = Math.round(clamp16(cur[t.key] + r.rates[t.key], 0, 1) * 1e4) / 1e4;
         if (v !== cur[t.key]) {
           next[t.key] = v;
           changed = true;
@@ -17607,8 +17742,223 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     return parts.length ? makeCommand("\u6280\u8853\u306E\u9032\u6357\uFF08\u6708\uFF09", [], parts) : null;
   }
 
+  // js/core/sim/ai.js
+  var isLive50 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var clamp17 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var mkOf2 = (d) => d.year * 12 + (d.month - 1);
+  var nm7 = (s) => s?.fullName ?? s?.name ?? "?";
+  var pk = (a, b) => a < b ? `${a}-${b}` : `${b}-${a}`;
+  var WAR_COOLDOWN_MONTHS = 180;
+  var PAIR_COOLDOWN_MONTHS = 360;
+  var KIND_LABEL4 = Object.freeze({ war: "\u5BA3\u6226", peace: "\u8B1B\u548C", tech: "\u6280\u8853\u306E\u63A1\u7528", renew: "\u6761\u7D04\u306E\u66F4\u65B0", nonaggression: "\u4E0D\u53EF\u4FB5\u6761\u7D04", alliance: "\u540C\u76DF", economic: "\u7D4C\u6E08\u5354\u529B" });
+  function makeContext(map, date) {
+    const ai = getAi(map), nb = neighborsOfStates(map), inds = getIndicators(map, date), pace = paceOf(map, date), mk3 = mkOf2(date);
+    const allied = /* @__PURE__ */ new Set(), nonagg = /* @__PURE__ */ new Set(), atWar2 = /* @__PURE__ */ new Set(), grudge = /* @__PURE__ */ new Set();
+    for (const t of activeTreaties(map, date, "alliance")) {
+      const ids2 = partyIds(t);
+      for (const a of ids2) for (const b of ids2) if (a < b) allied.add(pk(a, b));
+    }
+    for (const t of activeTreaties(map, date, "nonaggression")) {
+      const ids2 = partyIds(t);
+      for (const a of ids2) for (const b of ids2) if (a < b) nonagg.add(pk(a, b));
+    }
+    for (const w of listWars(map)) {
+      const recent = w.endedAt && mk3 - mkOf2(w.endedAt) <= 480;
+      for (const a of w.attackers ?? []) for (const d of w.defenders ?? []) {
+        if (!w.endedAt) atWar2.add(pk(a, d));
+        else if (recent) grudge.add(pk(a, d));
+      }
+    }
+    const cache3 = /* @__PURE__ */ new Map();
+    const share = (a, b) => {
+      const k = `${a}>${b}`;
+      if (!cache3.has(k)) {
+        let v = 0.5;
+        try {
+          v = previewWar(map, [a], [b]).compare?.land ?? 0.5;
+        } catch {
+          v = 0.5;
+        }
+        cache3.set(k, v);
+      }
+      return cache3.get(k);
+    };
+    return { map, date, ai, tempo: TEMPOS[ai.tempo], nb, inds, pace, mk: mk3, allied, nonagg, atWar: atWar2, grudge, share };
+  }
+  function characterOf(map, s, ind, ideas, threat = 0) {
+    const reg = regimeOf(s).key, warlike = ["empire", "junta", "nationalist", "tribal"].includes(reg) ? 0.2 : 0, peaceful = ["democracy", "constitutional", "federation", "presidential"].includes(reg) ? 0.15 : 0;
+    return {
+      expansion: clamp17(0.2 + 0.35 * ideas.nation + warlike - peaceful - 0.15 * ideas.liberal + 0.3 * Math.max(0, 1 - ind.food), 0, 1),
+      security: clamp17(0.3 + 0.4 * threat + 0.3 * ind.war, 0, 1),
+      prosperity: clamp17(0.3 + 0.3 * ideas.enlight + peaceful, 0, 1),
+      prestige: clamp17(0.2 + 0.3 * ideas.nation + (["absolute", "empire"].includes(reg) ? 0.2 : 0), 0, 1)
+    };
+  }
+  var CHARACTER_LABELS = Object.freeze({ expansion: "\u62E1\u5F35", security: "\u5B89\u5168", prosperity: "\u7E41\u6804", prestige: "\u5A01\u4FE1" });
+  function shockCause(map, stateId, date, kinds) {
+    const sh = activeShocks(map, stateId, date).find((x) => x.from && kinds.includes(x.k) && x.now > 0.15);
+    return sh?.from ?? null;
+  }
+  var live4 = (map, id) => isLive50(map.pack.states[id]);
+  var hasWarNow = (map, id) => listWars(map).some((w) => !w.endedAt && ((w.attackers ?? []).includes(id) || (w.defenders ?? []).includes(id)));
+  var lastWarStart = (map, id) => listWars(map).filter((w) => (w.attackers ?? [])[0] === id).reduce((m, w) => Math.max(m, mkOf2(w.startedAt)), -1e9);
+  var lastWarBetween = (map, a, b) => listWars(map).filter((w) => (w.attackers ?? []).includes(a) && (w.defenders ?? []).includes(b) || (w.attackers ?? []).includes(b) && (w.defenders ?? []).includes(a)).reduce((m, w) => Math.max(m, mkOf2(w.startedAt)), -1e9);
+  var treatyCount = (map, date, id, kinds) => activeTreaties(map, date).filter((t) => kinds.includes(t.kind) && partyIds(t).includes(id)).length;
+  var vassalPair = (map, a, b) => vassalInfo(map, a)?.overlord === b || vassalInfo(map, b)?.overlord === a;
+  function candidatesOf(ctx, s, budget) {
+    const { map, date, ai, inds, tempo } = ctx, ind = inds.get(s.i), out = { major: [], tech: null, character: null };
+    if (!ind) return out;
+    const ideas = ideasOf(map, s.i, ind), neigh = [...ctx.nb.get(s.i) ?? []].filter((n) => live4(map, n));
+    let threat = 0;
+    for (const n of neigh) if (!ctx.allied.has(pk(s.i, n))) threat = Math.max(threat, clamp17((1 - ctx.share(s.i, n) - 0.5) * 2, 0, 1));
+    const ch = characterOf(map, s, ind, ideas, threat);
+    out.character = ch;
+    const auto = (id) => isAutonomous(map, id, ai);
+    const pace = ctx.pace.get(s.i);
+    if (ai.verbs.tech) {
+      const p = pendingFields(map, s.i)[0];
+      if (p) {
+        const u = clamp17(0.6 * (0.5 + ch.prosperity) * clamp17(ind.fiscalSlack, 0.2, 1), 0, 1);
+        out.tech = { kind: "tech", stateId: s.i, field: p.field, u, reason: `${nm7(s)}\u306F\u3001${p.label}\u306E\u7814\u7A76\u304C\u5B9F\u308A\u3001\u300C${p.step}\u300D\u306E\u63A1\u7528\u306B\u8E0F\u307F\u5207\u3063\u305F` };
+      }
+    }
+    if (ai.verbs.treaty) {
+      for (const { treaty: t } of expiringTreaties(map, date)) {
+        const ids2 = partyIds(t);
+        if (ids2[0] !== s.i || !ids2.every(auto) || ctx.atWar.has(pk(ids2[0], ids2[1] ?? ids2[0]))) continue;
+        out.major.push({ kind: "renew", stateId: s.i, treatyId: t.id, u: 1.2, reason: `${nm7(s)}\u306F\u3001\u300C${t.name}\u300D\u306E\u671F\u9650\u304C\u8FD1\u3065\u304D\u3001\u95A2\u4FC2\u304C\u826F\u597D\u306A\u305F\u3081\u3001\u6761\u7D04\u3092\u66F4\u65B0\u3057\u305F` });
+      }
+      const pacts = treatyCount(map, date, s.i, ["alliance", "nonaggression"]);
+      for (const n of neigh) {
+        if (!auto(n) || ctx.atWar.has(pk(s.i, n)) || ctx.grudge.has(pk(s.i, n)) || vassalPair(map, s.i, n)) continue;
+        const sn = map.pack.states[n], theirs = 1 - ctx.share(s.i, n), bound = ctx.allied.has(pk(s.i, n)) || ctx.nonagg.has(pk(s.i, n));
+        if (!bound && pacts < 2 && theirs > 0.55) out.major.push({ kind: "nonaggression", stateId: s.i, targetId: n, u: ch.security * (theirs - 0.5) * 4, reason: `${nm7(s)}\u306F\u3001\u5F37\u5927\u306A\u96A3\u56FD${nm7(sn)}\u3078\u306E\u5099\u3048\u3068\u3057\u3066\u3001\u4E0D\u53EF\u4FB5\u6761\u7D04\u3092\u7D50\u3093\u3060` });
+        if (!bound && treatyCount(map, date, s.i, ["alliance"]) < 1 && treatyCount(map, date, n, ["alliance"]) < 1 && Math.abs(ctx.share(s.i, n) - 0.5) < 0.25) {
+          const common = [.../* @__PURE__ */ new Set([...neigh, ...ctx.nb.get(n) ?? []])].find((m) => m !== s.i && m !== n && live4(map, m) && !ctx.allied.has(pk(s.i, m)) && !ctx.allied.has(pk(n, m)) && 1 - ctx.share(s.i, m) > 0.55);
+          if (common != null) out.major.push({ kind: "alliance", stateId: s.i, targetId: n, u: ch.security * 0.8, reason: `${nm7(s)}\u306F\u3001\u5171\u901A\u306E\u8105\u5A01\u3067\u3042\u308B${nm7(map.pack.states[common])}\u306B\u5099\u3048\u3001${nm7(sn)}\u3068\u540C\u76DF\u3092\u7D50\u3093\u3060` });
+        }
+        if (!ctx.atWar.has(pk(s.i, n)) && !activeTreaties(map, date, "economic").some((t) => partyIds(t).includes(s.i) && partyIds(t).includes(n)) && !ctx.grudge.has(pk(s.i, n)))
+          out.major.push({ kind: "economic", stateId: s.i, targetId: n, u: 0.5 * ch.prosperity, reason: `${nm7(s)}\u306F\u3001\u901A\u5546\u3092\u5E83\u3052\u308B\u305F\u3081\u3001${nm7(sn)}\u3068\u7D4C\u6E08\u5354\u529B\u3092\u7D50\u3093\u3060` });
+      }
+    }
+    const support = typeof s.support === "number" ? s.support : 70, cool = WAR_COOLDOWN_MONTHS / tempo.war;
+    if (ai.verbs.war && budget.warsLeft > 0 && budget.ongoing < budget.maxOngoing && !hasWarNow(map, s.i) && support >= 45 && ind.fiscalSlack >= 0.4 && ctx.mk - lastWarStart(map, s.i) >= cool) {
+      const paceFactor = pace ? pace.index > 1.3 ? 0.5 : pace.index < 0.7 ? 1.3 : 1 : 1;
+      let best = null;
+      for (const n of neigh) {
+        const k = pk(s.i, n);
+        if (ctx.allied.has(k) || ctx.nonagg.has(k) || ctx.atWar.has(k) || vassalPair(map, s.i, n)) continue;
+        const mine = ctx.share(s.i, n);
+        if (mine < 0.57) continue;
+        if (!auto(n) && !ai.targetPlayers) continue;
+        if (ctx.mk - lastWarBetween(map, s.i, n) < PAIR_COOLDOWN_MONTHS) continue;
+        const need = Math.max(0, 1 - ind.food), grudge = ctx.grudge.has(k) ? 1 : 0, targetIsPlayer = !auto(n);
+        const u = (ch.expansion * (mine - 0.5) * 4 + 0.15 * grudge + 0.25 * need + 0.2 * ideas.nation) * tempo.war * paceFactor * (targetIsPlayer ? 0.6 : 1);
+        if (u > 0 && (!best || u > best.u)) best = { n, u, mine, need, grudge };
+      }
+      if (best) {
+        const t = map.pack.states[best.n], why = [];
+        if (best.need > 0.2) why.push("\u98DF\u6599\u306E\u4E0D\u8DB3\u304B\u3089\u65B0\u3057\u3044\u571F\u5730\u3092\u6C42\u3081");
+        if (ideas.nation > 0.5) why.push("\u6C11\u65CF\u4E3B\u7FA9\u306E\u9AD8\u307E\u308A\u3092\u80CC\u666F\u306B");
+        if (best.grudge) why.push("\u304B\u3064\u3066\u306E\u6575\u3078\u306E\u907A\u6068\u304B\u3089");
+        why.push(`${nm7(t)}\u306B\u5BFE\u3057\u3066\u6226\u529B\u3067\u512A\u4F4D\u306B\u7ACB\u3063\u305F\u3068\u898B\u3066`);
+        out.major.push({ kind: "war", stateId: s.i, targetId: best.n, u: best.u, reason: `${nm7(s)}\u306F\u3001${why.join("\u3001")}\u3001${nm7(t)}\u306B\u5BA3\u6226\u3057\u305F`, cause: best.need > 0.2 ? shockCause(map, s.i, date, ["food"]) : null });
+      }
+    }
+    return out;
+  }
+  function pickDecision(cands, rnd, idle = 0.8) {
+    const list = cands.filter((c) => c.u > 0);
+    if (!list.length) return null;
+    const total2 = list.reduce((n, c) => n + c.u, 0);
+    let x = rnd.next() * (total2 + idle);
+    if (x >= total2) return null;
+    for (const c of list) {
+      x -= c.u;
+      if (x < 0) return c;
+    }
+    return list.at(-1);
+  }
+  function peaceDecisions(ctx, rnd) {
+    const { map, ai } = ctx, out = [];
+    if (!ai.verbs.peace) return out;
+    for (const w of listWars(map)) {
+      if (!warOngoing(w)) continue;
+      const all = [...w.attackers ?? [], ...w.defenders ?? []];
+      if (!all.every((id) => isAutonomous(map, id, ai))) continue;
+      const progress = w.progress ?? 0, { winners, losers, stalemate } = peaceSides(w);
+      const lowest = Math.min(...losers.map((id) => map.pack.states[id]?.support ?? 70));
+      const p = progress >= 2 ? 1 : progress >= 1 ? 0.4 : progress >= 0.6 && lowest < 30 ? 0.2 : 0;
+      if (!(p > 0) || !rnd.chance(p)) continue;
+      const lead = map.pack.states[winners[0]];
+      out.push({ kind: "peace", stateId: winners[0], warId: w.id, reason: stalemate ? `${w.name}\u306F\u81A0\u7740\u3057\u3001\u53CC\u65B9\u304C\u6D88\u8017\u3057\u305F\u305F\u3081\u3001\u767D\u7D19\u548C\u5E73\u304C\u7D50\u3070\u308C\u305F` : `${w.name}\u306F\u6226\u5C40\u304C\u6C7A\u3057\u3001${nm7(lead)}\u304C\u512A\u4F4D\u306A\u6761\u4EF6\u3067\u8B1B\u548C\u3057\u305F`, u: 1 });
+    }
+    return out;
+  }
+  function planAutonomy(map, date, rnd) {
+    const ai = getAi(map);
+    if (!ai.enabled || !ai.players.length) return [];
+    const ctx = makeContext(map, date), tempo = ctx.tempo, out = [...peaceDecisions(ctx, rnd)];
+    const liveStates = map.pack.states.filter(isLive50);
+    const nAuto = liveStates.filter((s) => isAutonomous(map, s.i, ai)).length, gap = 12 / Math.max(0.01, nAuto * tempo.warRate / 100);
+    const lastAiWar = listWars(map).filter((w) => isAutonomous(map, (w.attackers ?? [])[0], ai)).reduce((m, w) => Math.max(m, mkOf2(w.startedAt)), -1e9);
+    const budget = {
+      warsLeft: ctx.mk - lastAiWar >= gap ? 1 : 0,
+      ongoing: listWars(map).filter((w) => !w.endedAt && [...w.attackers ?? [], ...w.defenders ?? []].every((id) => isAutonomous(map, id, ai))).length,
+      // プレイヤー国が加わる戦争は、ユーザーの講和を待つので、上限に数えない
+      maxOngoing: Math.max(1, Math.ceil(liveStates.length / 4))
+    };
+    for (const s of liveStates) {
+      if (!isAutonomous(map, s.i, ai) || (ctx.mk + s.i) % tempo.think !== 0) continue;
+      const c = candidatesOf(ctx, s, budget);
+      const pick = pickDecision(c.major, rnd);
+      if (pick) {
+        out.push(pick);
+        if (pick.kind === "war") {
+          budget.warsLeft--;
+          budget.ongoing++;
+        }
+      }
+      if (c.tech && rnd.chance(c.tech.u)) out.push(c.tech);
+    }
+    return out;
+  }
+  function planAiNote(map, d, date) {
+    const cmd = makeCommand("\u56FD\u5BB6\u306E\u5224\u65AD", [], []);
+    return withEvent(map, cmd, { type: "ai", title: d.reason, detail: KIND_LABEL4[d.kind] ?? d.kind, date, states: [d.stateId, ...d.targetId != null ? [d.targetId] : []], data: { ai: true, kind: d.kind }, ...d.cause ? { cause: d.cause } : {} });
+  }
+  function peaceTermsFor(map, war, venue = null) {
+    let t = null;
+    try {
+      t = suggestTerms(map, war, { size: "m" });
+    } catch {
+      t = null;
+    }
+    const base = t ? { kind: t.kind, cessions: (t.cessions ?? []).filter((c) => c.on).map((c) => ({ cells: c.regionCells, fromStateId: c.fromStateId, toStateId: c.toStateId, name: c.name, burgs: c.burgNames })), reparations: t.reparations ?? [], annex: [] } : { kind: "white", cessions: [], reparations: [], annex: [] };
+    return { ...base, treatyName: venue?.treatyName ?? "", notes: "", venue: venue ? { place: venue.place, stateId: venue.stateId } : null };
+  }
+  function aiView(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }) {
+    const ai = getAi(map), s = map.pack.states[stateId];
+    if (!isLive50(s)) return null;
+    const view = { enabled: ai.enabled, hasPlayers: ai.players.length > 0, player: ai.players.includes(stateId), autonomous: isAutonomous(map, stateId, ai), tempo: TEMPOS[ai.tempo].label, recent: [] };
+    const log = map.ext?.data?.historyLog ?? [];
+    view.recent = log.filter((h) => h.type === "ai" && (h.states ?? []).includes(stateId)).slice(-6).reverse().map((h) => ({ year: h.year, month: h.month, text: h.title, kind: h.detail }));
+    if (!view.autonomous) return view;
+    const ctx = makeContext(map, date), ind = ctx.inds.get(stateId);
+    if (!ind) return view;
+    const ideas = ideasOf(map, stateId, ind), neigh = [...ctx.nb.get(stateId) ?? []].filter((n) => live4(map, n));
+    let threat = 0;
+    for (const n of neigh) if (!ctx.allied.has(pk(stateId, n))) threat = Math.max(threat, clamp17((1 - ctx.share(stateId, n) - 0.5) * 2, 0, 1));
+    view.character = characterOf(map, s, ind, ideas, threat);
+    const p = ctx.pace.get(stateId);
+    view.pace = p ? { index: p.index, mult: p.mult } : null;
+    const t = ctx.tempo.think, wait = (t - (ctx.mk + stateId) % t) % t;
+    view.nextThinkMonths = wait === 0 ? t : wait;
+    return view;
+  }
+
   // js/core/sim/capacity.js
-  var clamp16 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp18 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   function constraintReport(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }) {
     const s = map.pack.states[stateId];
     if (!s) return [];
@@ -17619,7 +17969,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     out.push({ key: "food", label: "\u98DF\u6599", level: lvl2(ind.food, 0.95, 0.75), value: ind.food, text: ind.food >= 0.95 ? `\u98DF\u6599\u306F\u8DB3\u308A\u3066\u3044\u308B\uFF08\u9700\u7D66 ${ind.food.toFixed(2)}\uFF09` : `\u98DF\u6599\u304C\u4E0D\u8DB3\uFF08\u9700\u7D66 ${ind.food.toFixed(2)}\uFF09\u2192 \u4EBA\u53E3\u306E\u5897\u52A0\u304C\u920D\u308A\u3001\u98E2\u9949\u304C\u8D77\u304D\u3084\u3059\u304F\u3001\u5FB4\u5175\u3082\u6E1B\u308B` });
     const f = industrialFactor(s);
     out.push({ key: "industry", label: "\u7523\u696D\u529B", level: lvl2(f, 0.8, 0.4), value: f, text: f >= 0.95 ? "\u91CD\u88C5\u5099\uFF08\u6A5F\u7532\u30FB\u822A\u7A7A\u30FB\u6D77\u8ECD\uFF09\u3092\u5341\u5206\u306B\u4F5C\u308C\u308B\u7523\u696D\u304C\u3042\u308B" : `\u7523\u696D\u529B\u304C\u8DB3\u308A\u306A\u3044 \u2192 \u91CD\u88C5\u5099\u306E\u5897\u5F37\u76EE\u6A19\u306F ${pct4(0.2 + 0.8 * f)} \u306B\u6291\u3048\u3089\u308C\u308B` });
-    const burden = militaryBurden(s), slack = clamp16(ind.fiscalSlack - 0.6 * burden, 0.15, 1.2);
+    const burden = militaryBurden(s), slack = clamp18(ind.fiscalSlack - 0.6 * burden, 0.15, 1.2);
     out.push({ key: "fiscal", label: "\u8CA1\u653F\u306E\u4F59\u529B", level: lvl2(slack, 0.7, 0.4), value: slack, text: slack >= 0.7 ? `\u8CA1\u653F\u306B\u4F59\u529B\u304C\u3042\u308B\uFF08\u8ECD\u4E8B\u8CBB ${pct4(burden)}\uFF09` : `\u8ECD\u4E8B\u8CBB\u30FB\u4F59\u6CE2\u30FB\u6226\u4E89\u3067\u8CA1\u653F\u304C\u82E6\u3057\u3044\uFF08\u8ECD\u4E8B\u8CBB ${pct4(burden)}\uFF09\u2192 \u6280\u8853\u306E\u9032\u307F\u304C\u9045\u308C\u308B` });
     const tri = trinityOf(map, stateId, date);
     if (tri) out.push({ key: "trinity", label: "\u4E09\u4F4D\u4E00\u4F53", level: lvl2(tri.trinity, 0.8, 0.5), value: tri.trinity, text: `\u7523\u696D\u529B ${tri.I.toFixed(2)} \xD7 \u7D4C\u6E08\u529B ${tri.E.toFixed(2)} \xD7 \u6280\u8853\u529B ${tri.T.toFixed(2)}\uFF08\u3069\u308C\u304B1\u3064\u304C\u6B20\u3051\u308B\u3068\u6280\u8853\u306E\u9032\u307F\u304C\u920D\u308B\uFF09` });
@@ -17627,17 +17977,17 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   }
 
   // js/core/sim/collapse.js
-  var isLive48 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive51 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var COLLAPSE_RATIO = 0.25;
   var popOf2 = (s) => (s.rural ?? 0) + (s.urban ?? 0);
   function findCollapse(map) {
     for (const s of map.pack.states) {
-      if (!isLive48(s)) continue;
+      if (!isLive51(s)) continue;
       const peak = s.popPeak ?? 0;
       if (peak > 0 && popOf2(s) < peak * COLLAPSE_RATIO) {
         const wars = (map.ext?.data?.wars ?? []).filter((w) => !w.endedAt && (w.attackers.includes(s.i) || w.defenders.includes(s.i)));
         const enemies = /* @__PURE__ */ new Set();
-        for (const w of wars) for (const e of w.attackers.includes(s.i) ? w.defenders : w.attackers) if (isLive48(map.pack.states[e])) enemies.add(e);
+        for (const w of wars) for (const e of w.attackers.includes(s.i) ? w.defenders : w.attackers) if (isLive51(map.pack.states[e])) enemies.add(e);
         const strength = (id) => regimentsOf(map.pack.states[id]).reduce((n, r) => n + forceHeadcount({ ...r.u, nuclear: 0 }), 0);
         const annexer = [...enemies].sort((a, b) => strength(b) - strength(a))[0] ?? null;
         return { stateId: s.i, annexer };
@@ -17654,8 +18004,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   }
 
   // js/core/sim/covert.js
-  var isLive49 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp17 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var isLive52 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var clamp19 = (v, a, b) => Math.min(b, Math.max(a, v));
   var COVERT_KINDS = Object.freeze([
     { key: "command", label: "\u6307\u63EE\u901A\u4FE1\u7DB2\u3078\u306E\u4FB5\u5165", icon: "\u{1F4E1}", desc: "\u8ECD\u306E\u6307\u63EE\u30FB\u901A\u4FE1\u3092\u4E71\u3059\u3002\u6A19\u7684\u56FD\u306E\u58EB\u6C17\u3068\u5175\u529B\u304C\u4E0B\u304C\u308B\u3002\u6226\u4E89\u4E2D\u306E\u76F8\u624B\u306B\u7279\u306B\u52B9\u304F\u3002" },
     { key: "economy", label: "\u91D1\u878D\u30FB\u7523\u696D\u30B7\u30B9\u30C6\u30E0\u3078\u306E\u653B\u6483", icon: "\u{1F4B9}", desc: "\u5DE5\u5834\u306E\u5236\u5FA1\u3084\u6C7A\u6E08\u7DB2\u3092\u6B62\u3081\u308B\u3002\u6A19\u7684\u56FD\u306E\u7523\u696D\u3068\u56FD\u5EAB\u304C\u6E1B\u308B\u3002" },
@@ -17674,24 +18024,24 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   };
   function covertOdds(map, attackerId, targetId, kind) {
     const A = map.pack.states[attackerId], T2 = map.pack.states[targetId];
-    const ta = clamp17(A?.techLevel ?? 3, 1, 10), tt = clamp17(T2?.techLevel ?? 3, 1, 10);
-    const success = clamp17(0.55 + 0.07 * (ta - tt), 0.25, 0.92);
-    const detect = clamp17(0.2 + 0.05 * tt - 0.02 * ta, 0.08, 0.7);
-    const power = clamp17(0.5 + 0.1 * ta - 0.03 * tt, 0.3, 1.4);
+    const ta = clamp19(A?.techLevel ?? 3, 1, 10), tt = clamp19(T2?.techLevel ?? 3, 1, 10);
+    const success = clamp19(0.55 + 0.07 * (ta - tt), 0.25, 0.92);
+    const detect = clamp19(0.2 + 0.05 * tt - 0.02 * ta, 0.08, 0.7);
+    const power = clamp19(0.5 + 0.1 * ta - 0.03 * tt, 0.3, 1.4);
     return { success, detect, power, kind };
   }
   function planCovertOp(map, { attackerId, targetId, kind, date, rnd }) {
     const A = map.pack.states[attackerId], T2 = map.pack.states[targetId];
-    if (!isLive49(A) || !isLive49(T2)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
+    if (!isLive52(A) || !isLive52(T2)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
     if (attackerId === targetId) throw new Error("\u81EA\u56FD\u3092\u6A19\u7684\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
     const def = COVERT_BY_KEY[kind];
     if (!def) throw new Error("\u4F5C\u6226\u306E\u7A2E\u985E\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093");
     const odds = covertOdds(map, attackerId, targetId, kind);
     const ok2 = rnd.next() < odds.success;
-    const detected = rnd.next() < clamp17(odds.detect + (ok2 ? 0 : 0.3), 0, 0.95);
+    const detected = rnd.next() < clamp19(odds.detect + (ok2 ? 0 : 0.3), 0, 0.95);
     let blamed = null;
     if (detected) {
-      const others = map.pack.states.filter((s) => isLive49(s) && s.i !== attackerId && s.i !== targetId);
+      const others = map.pack.states.filter((s) => isLive52(s) && s.i !== attackerId && s.i !== targetId);
       blamed = rnd.next() < 0.7 || !others.length ? attackerId : rnd.pick(others).i;
     }
     const effects = {};
@@ -17700,7 +18050,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     if (ok2) {
       const p = odds.power, r = () => 0.7 + rnd.next() * 0.6;
       if (kind === "command") {
-        const morale = Math.round(-(4 + 8 * p) * r()), troops = clamp17(0.015 + 0.02 * p, 0, 0.05) * r();
+        const morale = Math.round(-(4 + 8 * p) * r()), troops = clamp19(0.015 + 0.02 * p, 0, 0.05) * r();
         effects.moraleDelta = morale;
         effects.troopLossShare = Math.round(troops * 1e3) / 1e3;
         for (const reg of regimentsOf(T2)) {
@@ -17708,22 +18058,22 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
           for (const k of Object.keys(u)) if (k !== "nuclear") u[k] = Math.max(0, Math.floor((u[k] ?? 0) * (1 - troops)));
           parts.push(setProps(reg, { u }));
         }
-        patchT.morale = clamp17((T2.morale ?? 70) + morale, 0, 100);
+        patchT.morale = clamp19((T2.morale ?? 70) + morale, 0, 100);
       } else if (kind === "economy") {
-        const ind = clamp17(0.02 + 0.04 * p, 0, 0.12) * r(), tre = clamp17(0.01 + 0.03 * p, 0, 0.1) * r(), t0 = Math.max(0, getFinance(T2).treasury);
+        const ind = clamp19(0.02 + 0.04 * p, 0, 0.12) * r(), tre = clamp19(0.01 + 0.03 * p, 0, 0.1) * r(), t0 = Math.max(0, getFinance(T2).treasury);
         effects.industryLossShare = Math.round(ind * 1e3) / 1e3;
         effects.treasuryLoss = Math.round(t0 * tre * 100) / 100;
         patchT.industry = Math.round((T2.industry ?? 0) * (1 - ind) * 10) / 10;
         patchT.treasury = Math.round((t0 - effects.treasuryLoss) * 100) / 100;
       } else {
         effects.supportDelta = Math.round(-(5 + 9 * p) * r());
-        patchT.support = clamp17((T2.support ?? 70) + effects.supportDelta, 0, 100);
+        patchT.support = clamp19((T2.support ?? 70) + effects.supportDelta, 0, 100);
       }
     }
-    if (detected && blamed === attackerId) patchT.support = clamp17((patchT.support ?? T2.support ?? 70) + 2, 0, 100);
+    if (detected && blamed === attackerId) patchT.support = clamp19((patchT.support ?? T2.support ?? 70) + 2, 0, 100);
     if (Object.keys(patchT).length) parts.push(setProps(T2, patchT));
-    const nm7 = (id) => officialName(map.pack.states[id]);
-    const text2 = ok2 ? `${nm7(attackerId)}\u306F${nm7(targetId)}\u306B\u5BFE\u3057\u300C${def.label}\u300D\u3092\u884C\u3044\u3001\u6210\u529F\u3057\u305F${detected ? `\uFF08\u767A\u899A\uFF1A${blamed === attackerId ? `${nm7(attackerId)}\u306E\u95A2\u4E0E\u304C\u7279\u5B9A\u3055\u308C\u305F` : `${nm7(blamed)}\u306E\u4ED5\u696D\u3068\u8AA4\u8A8D\u3055\u308C\u305F`}\uFF09` : "\uFF08\u767A\u899A\u305B\u305A\uFF09"}` : `${nm7(attackerId)}\u306E\u300C${def.label}\u300D\u306F\u5931\u6557\u306B\u7D42\u308F\u3063\u305F${detected ? `\u3002${blamed === attackerId ? `${nm7(attackerId)}\u306E\u95A2\u4E0E\u304C\u9732\u898B\u3057\u305F` : `${nm7(blamed)}\u306E\u4ED5\u696D\u3068\u7591\u308F\u308C\u305F`}` : "\uFF08\u767A\u899A\u305B\u305A\uFF09"}`;
+    const nm8 = (id) => officialName(map.pack.states[id]);
+    const text2 = ok2 ? `${nm8(attackerId)}\u306F${nm8(targetId)}\u306B\u5BFE\u3057\u300C${def.label}\u300D\u3092\u884C\u3044\u3001\u6210\u529F\u3057\u305F${detected ? `\uFF08\u767A\u899A\uFF1A${blamed === attackerId ? `${nm8(attackerId)}\u306E\u95A2\u4E0E\u304C\u7279\u5B9A\u3055\u308C\u305F` : `${nm8(blamed)}\u306E\u4ED5\u696D\u3068\u8AA4\u8A8D\u3055\u308C\u305F`}\uFF09` : "\uFF08\u767A\u899A\u305B\u305A\uFF09"}` : `${nm8(attackerId)}\u306E\u300C${def.label}\u300D\u306F\u5931\u6557\u306B\u7D42\u308F\u3063\u305F${detected ? `\u3002${blamed === attackerId ? `${nm8(attackerId)}\u306E\u95A2\u4E0E\u304C\u9732\u898B\u3057\u305F` : `${nm8(blamed)}\u306E\u4ED5\u696D\u3068\u7591\u308F\u308C\u305F`}` : "\uFF08\u767A\u899A\u305B\u305A\uFF09"}`;
     const op = { id: nextId3(map), date: date ?? null, attackerId, targetId, kind, success: ok2, detected, blamed, effects, text: text2 };
     const before = listCovertOps(map);
     parts.push({ apply: (m) => writeOps2(m, [...before, op]), revert: (m) => writeOps2(m, before) });
@@ -17731,7 +18081,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   }
 
   // js/core/sim/event-chains.js
-  var isLive50 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
+  var isLive53 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var mk2 = (d) => (d?.year ?? 0) * 12 + ((d?.month ?? 1) - 1);
   var dateOf = (n) => ({ year: Math.floor(n / 12), month: n % 12 + 1 });
   var CHAINS = Object.freeze({
@@ -17764,7 +18114,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   }
   function planScheduleChain(map, { key: key2, stateId, swing = 0 }, date, rnd, depth = 0) {
     const defs = CHAINS[key2];
-    if (!defs || !isLive50(map.pack.states[stateId])) return null;
+    if (!defs || !isLive53(map.pack.states[stateId])) return null;
     if (depth + 1 > (BALANCE.chainDepth ?? 2)) return null;
     const rate = BALANCE.chainRate ?? 1;
     if (!(rate > 0)) return null;
@@ -17788,16 +18138,16 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   function planRunPending(map, p, date, rnd) {
     const out = [], rest = listPending(map).filter((x) => x !== p && !(x.key === p.key && x.stateId === p.stateId && mk2(x.due) === mk2(p.due) && x.from === p.from));
     const st = map.pack.states[p.stateId], ev = MINOR_EVENTS.find((e) => e.key === p.key);
-    if (isLive50(st) && ev) {
+    if (isLive53(st) && ev) {
       const c = planMinorEvent(map, { key: p.key, stateId: p.stateId, cause: p.fromEvent ?? null }, date);
       if (c) out.push(c);
     }
     out.push(pendingCmd(map, rest, "\u51FA\u6765\u4E8B\u306E\u9023\u9396\uFF08\u53D6\u308A\u4E0B\u3052\uFF09"));
-    return { commands: out, after: () => isLive50(st) && ev ? { key: p.key, stateId: p.stateId, depth: p.depth ?? 1, leaderChange: !!ev.leaderChange } : null };
+    return { commands: out, after: () => isLive53(st) && ev ? { key: p.key, stateId: p.stateId, depth: p.depth ?? 1, leaderChange: !!ev.leaderChange } : null };
   }
   function planTurnoverLeader(map, stateId, date, rnd) {
     const st = map.pack.states[stateId];
-    if (!isLive50(st)) return null;
+    if (!isLive53(st)) return null;
     try {
       return planChangeLeader(map, stateId, { reason: "election", stability: "stable", date, rnd });
     } catch {
@@ -17806,7 +18156,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   }
   function rebellionSpark(map, stateId, date = null) {
     const s = map.pack.states[stateId];
-    if (!isLive50(s)) return null;
+    if (!isLive53(s)) return null;
     const support = typeof s.support === "number" ? s.support : 70;
     if (support >= 30) return null;
     const now = date ?? map.worldTime ?? { year: 1, month: 1 };
@@ -17852,8 +18202,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       if (!groups.size) return terms;
       const made = /* @__PURE__ */ new Map();
       for (const [overlord, list] of groups) {
-        const nm7 = (terms.puppetNames ?? {})[overlord] || suggestName(map, { kind: "state", rnd }).name;
-        const add2 = planAddEntity(map, { kind: "state", name: nm7, rnd });
+        const nm8 = (terms.puppetNames ?? {})[overlord] || suggestName(map, { kind: "state", rnd }).name;
+        const add2 = planAddEntity(map, { kind: "state", name: nm8, rnd });
         store.commit(add2.command);
         const m2 = store.getState().map, ns = m2.pack.states[add2.id];
         const reg = REGIME_BY_KEY[m2.pack.states[overlord]?.regime] ?? REGIMES[0];
@@ -17923,8 +18273,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       const fullSet = new Set(full);
       const rest = cells.filter((i) => !fullSet.has(c.province[i]));
       if (!rest.length) return full;
-      const nm7 = suggestName(map, { kind: "province", rnd, stateId }).name;
-      const add2 = planAddProvince(map, { state: stateId, name: nm7, rnd });
+      const nm8 = suggestName(map, { kind: "province", rnd, stateId }).name;
+      const add2 = planAddProvince(map, { state: stateId, name: nm8, rnd });
       store.commit(add2.command);
       const paint = planPaint(store.getState().map, { kind: "province", target: add2.id, cells: rest, force: true });
       store.commit(paint.command);
@@ -17941,10 +18291,10 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       if (!first) throw new Error("\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044");
       const fromId = first.pack.provinces[provinceIds?.[0]]?.state;
       if (!(fromId > 0)) throw new Error("\u5C5E\u5DDE\u304C\u5B58\u5728\u3057\u307E\u305B\u3093");
-      const nm7 = (name ?? "").trim() || suggestName(first, { kind: "state", rnd: rng, stateId: fromId }).name;
+      const nm8 = (name ?? "").trim() || suggestName(first, { kind: "state", rnd: rng, stateId: fromId }).name;
       const out = atomic(civil ? "\u53CD\u4E71\uFF08\u5185\u6226\uFF09" : "\u5C5E\u5DDE\u306E\u72EC\u7ACB", () => {
         const map = store.getState().map;
-        const r = planDeclareIndependence(map, { provinceIds, name: nm7, rnd: rng, date, cause: civil ? "rebellion" : "peaceful" });
+        const r = planDeclareIndependence(map, { provinceIds, name: nm8, rnd: rng, date, cause: civil ? "rebellion" : "peaceful" });
         store.commit(provisional ? withProvisional(map, r.command, "state", r.id, true) : r.command);
         if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) store.commit(makeCommand("\u56FD\u306E\u8272", ["politics"], [setProps(store.getState().map.pack.states[r.id], { color: color.toLowerCase() })]));
         let warId = null;
@@ -17956,7 +18306,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
           warId = w.id;
           const m2 = store.getState().map, fromName = m2.pack.states[fromId].fullName ?? m2.pack.states[fromId].name;
           const rebelSt = m2.pack.states[r.id], capB = m2.pack.burgs[rebelSt.capital], relId = capB ? m2.pack.cells.religion[capB.cell] : 0;
-          const base = rebelType ? rebelWarName(rebelType, { fromName, rebelName: nm7, placeName: capB?.name, religionName: relId > 0 ? m2.pack.religions[relId]?.name : null }) : `${fromName}\u5185\u6226`;
+          const base = rebelType ? rebelWarName(rebelType, { fromName, rebelName: nm8, placeName: capB?.name, religionName: relId > 0 ? m2.pack.religions[relId]?.name : null }) : `${fromName}\u5185\u6226`;
           const wn = seriesWarName(m2, base, [r.id], [fromId], date, warId);
           if (!warNameTaken(m2, wn, warId)) {
             const rn2 = planRenameWar(m2, warId, wn);
@@ -17965,11 +18315,53 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
           putMarker("war", "\u2694\uFE0F", capitalCell2(store.getState().map, r.id), `${date.year}\u5E74${date.month}\u6708 ${wn}`);
           runCollapses();
         }
-        return { id: r.id, name: nm7, provinceNames: r.provinceNames, warId, fromId };
+        return { id: r.id, name: nm8, provinceNames: r.provinceNames, warId, fromId };
       });
       rerender();
       return out;
     }
+    const runDecision = (d, date, rng) => {
+      const prevErr = store.getState().error;
+      let ok2 = false;
+      try {
+        store.transaction("\u56FD\u5BB6\u306E\u5224\u65AD", () => {
+          const m0 = store.getState().map;
+          if (d.kind !== "renew") store.commit(planAiNote(m0, d, date));
+          if (d.kind === "war") ok2 = !!api.declareWarInstant([d.stateId], [d.targetId]);
+          else if (d.kind === "peace") {
+            const w = listWars(m0).find((x) => x.id === d.warId);
+            if (!w) throw new Error("\u6226\u4E89\u304C\u3042\u308A\u307E\u305B\u3093");
+            const venue = planPeaceVenue(m0, w.id, rng);
+            ok2 = !!api.signTreaty(w.id, peaceTermsFor(m0, w, venue));
+            if (!ok2) ok2 = !!api.signTreaty(w.id, { kind: "white", cessions: [], reparations: [], annex: [], treatyName: venue?.treatyName ?? "", notes: "", venue: venue ? { place: venue.place, stateId: venue.stateId } : null });
+          } else if (d.kind === "tech") {
+            const c = planAdoptMomentum(m0, d.stateId, d.field, date);
+            if (c) {
+              store.commit(c);
+              ok2 = true;
+            }
+          } else if (d.kind === "renew") {
+            const c = planRenewTreaty(m0, d.treatyId, 120, date);
+            if (c) {
+              store.commit(c);
+              ok2 = true;
+            }
+          } else if (["alliance", "nonaggression", "economic"].includes(d.kind)) {
+            const terms = d.kind === "alliance" ? { bind: "medium" } : d.kind === "nonaggression" ? { mode: "nonaggression" } : { tariff: "mid" };
+            const r = planConcludeTreaty(m0, { kind: d.kind, parties: [{ state: d.stateId, role: d.kind === "alliance" ? "\u76DF\u4E3B" : "\u52A0\u76DF" }, { state: d.targetId }], terms, months: 120, date });
+            store.commit(r.command);
+            ok2 = true;
+          }
+          if (!ok2) throw new Error("\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F");
+        });
+      } catch {
+        ok2 = false;
+      }
+      if (!ok2 && store.getState().error !== prevErr) store.update((st) => {
+        st.error = prevErr;
+      });
+      return ok2;
+    };
     const api = {
       // --- 部隊 ---
       createRegiment(stateId, cell, opts) {
@@ -18394,6 +18786,12 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
                 stat.languages = lg.created.length;
               }
             }
+            {
+              for (const d of planAutonomy(store.getState().map, date, rng)) if (runDecision(d, date, rng)) {
+                stat.ai = (stat.ai ?? 0) + 1;
+                stat.events++;
+              }
+            }
             const chain = (ev, depth) => {
               const cur = store.getState().map;
               const sc = planScheduleChain(cur, ev, date, rng, depth);
@@ -18445,6 +18843,37 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       },
       rebellionSpark(stateId) {
         return withMap((map) => rebellionSpark(map, stateId)) ?? null;
+      },
+      // --- 国家の自律行動（v3.0.0）---
+      /** 設定: { enabled, tempo, verbs, players } */
+      getAutonomy() {
+        const m = store.getState().map;
+        return m ? getAi(m) : null;
+      },
+      setAutonomy(patch) {
+        return withMap((map) => {
+          let ok2 = false;
+          safeRun("\u81EA\u5F8B\u884C\u52D5\u306E\u8A2D\u5B9A", () => {
+            commitOrThrow(planSetAi(map, patch));
+            ok2 = true;
+          });
+          return ok2;
+        }) ?? false;
+      },
+      /** 国を「プレイヤー国」にする／やめる（それ以外の国が自律する） */
+      setPlayerState(stateId, on) {
+        return withMap((map) => {
+          let ok2 = false;
+          safeRun("\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u306E\u8A2D\u5B9A", () => {
+            commitOrThrow(planSetPlayer(map, stateId, on));
+            ok2 = true;
+          });
+          return ok2;
+        }) ?? false;
+      },
+      /** 国家タブ用: 自律の状態・性格・ペース・直近の判断 */
+      autonomyView(stateId) {
+        return withMap((map) => aiView(map, stateId, currentDate())) ?? null;
       },
       /**
        * 国勢（v2.7.0）: 国の状態・制約・余波・思潮・技術の進捗。国家タブの「国勢」と「技術ドクトリン」が使う（地図は変更しない）
@@ -18514,9 +18943,9 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
               }
               if (ev.kind === "schism") {
                 const parent = map.pack.religions[ev.religionId];
-                const nm7 = suggestName(map, { kind: "religion", rnd: rng, id: ev.religionId });
-                const add2 = planAddEntity(map, { kind: "religion", name: nm7.name, rnd: rng, extra: nm7.extra });
-                const entry = { type: "schism", title: `\u5B97\u6559\u300C${parent.fullName ?? parent.name}\u300D\u304B\u3089\u300C${nm7.name}\u300D\u304C\u5206\u304B\u308C\u305F`, detail: `${ev.cells.length}\u30BB\u30EB\u306E\u4FE1\u5F92\u304C\u65B0\u3057\u3044\u5B97\u6D3E\u306B\u79FB\u3063\u305F`, date, states: [ev.stateId], cell: ev.cells[0], ref: { kind: "religion", id: add2.id } };
+                const nm8 = suggestName(map, { kind: "religion", rnd: rng, id: ev.religionId });
+                const add2 = planAddEntity(map, { kind: "religion", name: nm8.name, rnd: rng, extra: nm8.extra });
+                const entry = { type: "schism", title: `\u5B97\u6559\u300C${parent.fullName ?? parent.name}\u300D\u304B\u3089\u300C${nm8.name}\u300D\u304C\u5206\u304B\u308C\u305F`, detail: `${ev.cells.length}\u30BB\u30EB\u306E\u4FE1\u5F92\u304C\u65B0\u3057\u3044\u5B97\u6D3E\u306B\u79FB\u3063\u305F`, date, states: [ev.stateId], cell: ev.cells[0], ref: { kind: "religion", id: add2.id } };
                 store.commit(withProvisional(map, withEvent(map, add2.command, entry), "religion", add2.id, true));
                 const paint = planPaint(store.getState().map, { kind: "religion", target: add2.id, cells: ev.cells });
                 if (!paint.command) throw new Error("\u5206\u6D3E\u306E\u9818\u571F\u3092\u5857\u308C\u307E\u305B\u3093\u3067\u3057\u305F");
@@ -19100,6 +19529,70 @@ ${shown}${more}`;
     natRow.append(natOn, natLabel, natFreq);
     if (simActions) dialog.append(natRow);
     syncNat();
+    if (simActions?.getAutonomy) {
+      dialog.append(el("h3", "dialog-subhead", "\u56FD\u5BB6\u306E\u81EA\u5F8B\u884C\u52D5"));
+      dialog.append(el("p", "hint", "\u300C\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u300D\uFF08\u56FD\u5BB6\u30BF\u30D6\u306E\u56FD\u52E2\u3067 \u2605 \u3092\u4ED8\u3051\u305F\u56FD\uFF09\u4EE5\u5916\u306E\u56FD\u304C\u3001\u30EB\u30FC\u30EB\u3067\u5224\u65AD\u3057\u3066\u3001\u5BA3\u6226\u30FB\u6761\u7D04\u30FB\u8B1B\u548C\u30FB\u6280\u8853\u306E\u63A1\u7528\u3092\u884C\u3044\u307E\u3059\u3002\u7406\u7531\u306F\u5E74\u8868\u306B\u6B8B\u308A\u3001Undo \u3067\u623B\u305B\u307E\u3059\u3002\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u304C1\u3064\u3082\u7121\u3044\u3068\u304D\u306F\u52D5\u304D\u307E\u305B\u3093\u3002"));
+      const aiRow = el("div", "time-settings-row");
+      const aiOn = document.createElement("input");
+      aiOn.type = "checkbox";
+      aiOn.id = "ai-on";
+      const aiLabel = el("label", "", " \u81EA\u5F8B\u884C\u52D5\u3092\u6709\u52B9\u306B\u3059\u308B");
+      aiLabel.htmlFor = "ai-on";
+      const aiTempo = document.createElement("select");
+      aiTempo.id = "ai-tempo";
+      aiTempo.setAttribute("aria-label", "\u5224\u65AD\u306E\u901F\u3055");
+      for (const [k, v] of [["cautious", "\u614E\u91CD"], ["normal", "\u3075\u3064\u3046"], ["active", "\u7A4D\u6975"]]) aiTempo.append(new Option(v, k));
+      aiRow.append(aiOn, aiLabel, aiTempo);
+      dialog.append(aiRow);
+      const verbRow = el("div", "time-settings-row ai-verbs");
+      const verbBoxes = {};
+      for (const [k, label2] of [["tech", "\u6280\u8853\u306E\u63A1\u7528"], ["treaty", "\u6761\u7D04"], ["war", "\u5BA3\u6226"], ["peace", "\u8B1B\u548C"]]) {
+        const c = document.createElement("input");
+        c.type = "checkbox";
+        c.id = `ai-verb-${k}`;
+        verbBoxes[k] = c;
+        const l = el("label", "", ` ${label2}`);
+        l.htmlFor = c.id;
+        verbRow.append(c, l);
+        c.addEventListener("change", () => {
+          simActions.setAutonomy({ verbs: { [k]: c.checked } });
+          syncAi();
+        });
+      }
+      const tp = document.createElement("input");
+      tp.type = "checkbox";
+      tp.id = "ai-target-players";
+      const tpl = el("label", "", " \u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u306B\u3082\u5BA3\u6226\u3059\u308B");
+      tpl.htmlFor = tp.id;
+      verbRow.append(tp, tpl);
+      tp.addEventListener("change", () => {
+        simActions.setAutonomy({ targetPlayers: tp.checked });
+        syncAi();
+      });
+      dialog.append(verbRow);
+      const syncAi = () => {
+        const s = simActions.getAutonomy();
+        if (!s) return;
+        aiOn.checked = s.enabled;
+        aiTempo.value = s.tempo;
+        aiTempo.disabled = !s.enabled;
+        for (const k of Object.keys(verbBoxes)) {
+          verbBoxes[k].checked = !!s.verbs[k];
+          verbBoxes[k].disabled = !s.enabled;
+        }
+        tp.checked = s.targetPlayers;
+        tp.disabled = !s.enabled;
+      };
+      aiOn.addEventListener("change", () => {
+        simActions.setAutonomy({ enabled: aiOn.checked });
+        syncAi();
+      });
+      aiTempo.addEventListener("change", () => {
+        simActions.setAutonomy({ tempo: aiTempo.value });
+        syncAi();
+      });
+      syncAi();
+    }
     const actions = el("div", "confirm-dialog-actions");
     const closeBtn = el("button", "primary", "\u9589\u3058\u308B");
     closeBtn.type = "button";
@@ -19161,7 +19654,7 @@ ${shown}${more}`;
 
   // js/ui/panels/wars-panel.js
   var fmt42 = (n) => Math.round(n).toLocaleString("ja-JP");
-  var isLive51 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
+  var isLive54 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
   function initWarsPanel({ store, simActions, getOutcome = () => null, getDiplomacy = () => null }) {
     const root = byId("tab-wars");
     let selected = null;
@@ -19181,7 +19674,7 @@ ${shown}${more}`;
         root.append(el("p", "muted", "\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044"));
         return;
       }
-      const states = map.pack.states.filter(isLive51);
+      const states = map.pack.states.filter(isLive54);
       const wars = simActions.listWars().slice().reverse();
       if (selected != null && !wars.some((w) => w.id === selected)) selected = null;
       if (!creating && selected == null && wars.length) selected = (wars.find((w) => !w.endedAt) ?? wars[0]).id;
@@ -19331,7 +19824,7 @@ ${shown}${more}`;
         const tb = el("div", "war-types");
         tb.append(el("h4", "", "\u6226\u4E89\u306E\u5F62\u614B\uFF08\u56FD\u3054\u3068\u3002\u4E0A\u3052\u308B\u3068\u8CA0\u8377\u304C\u5897\u3057\u3001\u6C11\u610F\u3068\u56FD\u5EAB\u304C\u4E0B\u304C\u308B\uFF09"));
         for (const id of [...w.attackers, ...w.defenders]) {
-          if (!isLive51(map.pack.states[id])) continue;
+          if (!isLive54(map.pack.states[id])) continue;
           const row = el("label", "war-type-row");
           row.append(el("span", "", `${stateName2(map, id)}\uFF08${w.attackers.includes(id) ? "\u653B\u6483\u5074" : "\u9632\u5FA1\u5074"}\uFF09`));
           const sel = document.createElement("select");
@@ -19350,7 +19843,7 @@ ${shown}${more}`;
         mu.append(el("h4", "", "\u53C2\u6226\u56FD\u306E\u90E8\u968A\uFF08\u30C1\u30A7\u30C3\u30AF\u3092\u5916\u3059\u3068\u6226\u7DDA\u304B\u3089\u5F15\u304D\u4E0A\u3052\u307E\u3059\uFF09"));
         for (const id of [...w.attackers, ...w.defenders]) {
           const st = map.pack.states[id];
-          if (!isLive51(st)) continue;
+          if (!isLive54(st)) continue;
           const regs = Array.isArray(st.military) ? st.military : [];
           const onFront = new Set(w.muster?.[id] ?? regs.map((r) => r.i));
           const row = el("div", "muster-state");

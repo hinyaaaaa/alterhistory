@@ -804,7 +804,7 @@ const TYPE_JP = {
   capital: "遷都", territory: "領土", tech: "技術", doctrine: "軍事", "rename-alliance": "同盟改称",
   succession: "代替わり", "tech-momentum": "技術の機運", "chain-end": "余波", "heir-named": "後継者", regime: "政体", vassal: "従属", "vassal-released": "従属の解消", rebellion: "反乱", plague: "疫病", "zone-start": "ゾーン発生",
   "treaty-signed": "条約締結", "treaty-expiring": "条約の期限", "treaty-renewed": "条約の更新", "treaty-broken": "条約破棄", "treaty-parties": "条約の参加国変更", "treaty-breach": "条約違反",
-  "covert-op": "隠密作戦", "nuclear-op": "核作戦", "war-event": "戦況", ideas: "思潮", migration: "移住", language: "言語",
+  "covert-op": "隠密作戦", "nuclear-op": "核作戦", "war-event": "戦況", ideas: "思潮", migration: "移住", language: "言語", ai: "国家の判断",
   ...Object.fromEntries(MINOR_EVENTS.map((e) => [`natural-${e.key}`, e.title])),
 };
 /** 出来事の種類の日本語。未知の種類も、接頭辞（rename- / removed- / profile- / origin-）から読める名前にする */

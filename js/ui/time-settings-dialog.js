@@ -109,6 +109,33 @@ export function openTimeSettingsDialog({ store, timeActions, editActions, simAct
   if (simActions) dialog.append(natRow);
   syncNat();
 
+  // --- 国家の自律行動（v3.0.0） ---
+  if (simActions?.getAutonomy) {
+    dialog.append(el("h3", "dialog-subhead", "国家の自律行動"));
+    dialog.append(el("p", "hint", "「プレイヤー国」（国家タブの国勢で ★ を付けた国）以外の国が、ルールで判断して、宣戦・条約・講和・技術の採用を行います。理由は年表に残り、Undo で戻せます。プレイヤー国が1つも無いときは動きません。"));
+    const aiRow = el("div", "time-settings-row");
+    const aiOn = document.createElement("input"); aiOn.type = "checkbox"; aiOn.id = "ai-on";
+    const aiLabel = el("label", "", " 自律行動を有効にする"); aiLabel.htmlFor = "ai-on";
+    const aiTempo = document.createElement("select"); aiTempo.id = "ai-tempo"; aiTempo.setAttribute("aria-label", "判断の速さ");
+    for (const [k, v] of [["cautious", "慎重"], ["normal", "ふつう"], ["active", "積極"]]) aiTempo.append(new Option(v, k));
+    aiRow.append(aiOn, aiLabel, aiTempo); dialog.append(aiRow);
+    const verbRow = el("div", "time-settings-row ai-verbs");
+    const verbBoxes = {};
+    for (const [k, label] of [["tech", "技術の採用"], ["treaty", "条約"], ["war", "宣戦"], ["peace", "講和"]]) {
+      const c = document.createElement("input"); c.type = "checkbox"; c.id = `ai-verb-${k}`; verbBoxes[k] = c;
+      const l = el("label", "", ` ${label}`); l.htmlFor = c.id; verbRow.append(c, l);
+      c.addEventListener("change", () => { simActions.setAutonomy({ verbs: { [k]: c.checked } }); syncAi(); });
+    }
+    const tp = document.createElement("input"); tp.type = "checkbox"; tp.id = "ai-target-players";
+    const tpl = el("label", "", " プレイヤー国にも宣戦する"); tpl.htmlFor = tp.id; verbRow.append(tp, tpl);
+    tp.addEventListener("change", () => { simActions.setAutonomy({ targetPlayers: tp.checked }); syncAi(); });
+    dialog.append(verbRow);
+    const syncAi = () => { const s = simActions.getAutonomy(); if (!s) return; aiOn.checked = s.enabled; aiTempo.value = s.tempo; aiTempo.disabled = !s.enabled; for (const k of Object.keys(verbBoxes)) { verbBoxes[k].checked = !!s.verbs[k]; verbBoxes[k].disabled = !s.enabled; } tp.checked = s.targetPlayers; tp.disabled = !s.enabled; };
+    aiOn.addEventListener("change", () => { simActions.setAutonomy({ enabled: aiOn.checked }); syncAi(); });
+    aiTempo.addEventListener("change", () => { simActions.setAutonomy({ tempo: aiTempo.value }); syncAi(); });
+    syncAi();
+  }
+
   const actions = el("div", "confirm-dialog-actions");
   const closeBtn = el("button", "primary", "閉じる");
   closeBtn.type = "button";

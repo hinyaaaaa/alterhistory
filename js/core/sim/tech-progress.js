@@ -14,6 +14,7 @@ import { ideasOf, ideaTechBonus } from "./ideas.js";
 import { neighborsOfStates } from "./tech-momentum.js";
 import { militaryBurden } from "./world.js";
 import { BALANCE } from "./balance.js";
+import { paceMultiplier } from "./ai-pace.js";
 
 const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
@@ -36,7 +37,8 @@ export function progressRates(map, stateId, date, ctx = {}) {
   const tri = trinityOf(map, stateId, date, ctx.inds ?? null); if (!tri) return null;
   const { ind } = tri, lv = ind.lv, nb = ctx.nb ?? neighborsOfStates(map);
   const neigh = [...(nb.get(stateId) ?? [])].filter((n) => isLive(map.pack.states[n]));
-  const pace = (BALANCE.techPace ?? 1) / BASE_MONTHS, out = {};
+  // v3.0.0: 自律する国は、プレイヤー国とのペースの差に応じて速さを補正する（進みすぎは鈍り、遅れは速まる）
+  const pace = ((BALANCE.techPace ?? 1) / BASE_MONTHS) * paceMultiplier(map, stateId, date), out = {};
   for (const t of TECH_TRACKS) {
     if (lv[t.key] >= TECH_MAX) { out[t.key] = 0; continue; }
     const ahead = neigh.length ? neigh.filter((n) => getTechDoctrine(map.pack.states[n])[t.key] > lv[t.key]).length / neigh.length : 0;

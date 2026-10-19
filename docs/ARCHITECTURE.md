@@ -208,3 +208,10 @@ alterhistory/
 - **読み込みの向き**: `limits.js`（`military.js` が使う）は `pressure.js` と `doctrines.js` だけを読む。`capacity.js`（表示用）は `world.js` を読む。循環を作らないこと（`military → capacity → world → military` になる）。
 - **言語**: `core/names/language.js`（純粋。音節の記号・辞書・音変化・名前）→ `core/edit/language.js`（地図と結ぶ）→ `naming.js` / `person.js` / `leaders.js`。`katakana.js` の生成器は、系統（キー）の代わりに言語から作ったオブジェクトも受け取る。
 - 何が「計算」で何が「演出」か: 指標・余波・人口・進捗・思潮は計算（バランス調整で係数を変えられる）。出来事の文面と、言語の音の好みは演出。
+
+## v3.0.0 で足した層（国家の自律行動）
+- **判断は純粋、実行は app 層**: `core/sim/ai.js` は地図を変えず、決定の一覧を返す。実行は `app/sim-actions.js` の `runDecision` が、ユーザーと同じ既存の操作で行う（だから年表・検証・Undo は同じ）。AI 専用の「近道」は作らない。
+- **ペースの調整は、速さの倍率だけ**: `ai-pace.js` は、数値を直接動かさず、技術の進捗の速さと宣戦の意欲にかかる倍率だけを返す。
+- **読み込みの向き**: `ai.js` → `edit/wars.js`・`edit/treaties.js`・`sim/war-engine.js`・`sim/ideas.js`・`sim/pressure.js`。`tech-progress.js` → `ai-pace.js`（`ai.js` は読まない）。
+- **時計に依存しない**: 判断の間隔はゲーム内の月で数える（`(月の通し番号 + 国ID) % 間隔`）。倍速にしても、1年あたりの行動数は変わらない。
+
