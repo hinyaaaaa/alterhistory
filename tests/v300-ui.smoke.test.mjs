@@ -1,4 +1,4 @@
-// v3.0.0 の画面: 国家タブ「国勢」の自律行動（プレイヤー国の設定）・設定ダイアログ（jsdom）。ビルド済み dist/app.js を動かす。
+// v3.0.0 の画面: 国家タブ「国勢」のアルゴリズム国家の行動（プレイヤー国の設定）・設定ダイアログ（jsdom）。ビルド済み dist/app.js を動かす。
 import { JSDOM } from "jsdom";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -35,7 +35,7 @@ const M = () => store.getState().map, win = () => q('[data-win="nation"]');
 const live = () => M().pack.states.filter((s) => s && s.i > 0 && !s.removed);
 const btnOf = (r, t) => [...r.querySelectorAll("button")].find((b) => b.textContent.includes(t));
 
-console.log("=== 国勢タブの「自律行動」 ===");
+console.log("=== 国勢タブの「アルゴリズム国家の行動」 ===");
 { const L = live(); L.forEach((s, k) => { s.neighbors = [L[(k + 1) % L.length].i, L[(k + L.length - 1) % L.length].i]; }); } // 合成マップには国の隣接が無いので、輪にして与える
 q('[data-open-win="nation"]').click(); await sleep(60);
 const rows = () => win().querySelectorAll(".nation-row.b-click");
@@ -44,8 +44,8 @@ const S0 = live()[0].i, S1 = live()[1].i;
 btnOf(win().querySelector(".nation-tabs"), "国勢").click(); await sleep(60);
 const sec = () => win().querySelector('[data-field="cond-ai"]');
 const openState = async (i) => { const back = btnOf(win(), "国家一覧"); if (back) { back.click(); await sleep(30); } rows()[i].click(); await sleep(40); btnOf(win().querySelector(".nation-tabs"), "国勢").click(); await sleep(40); };
-check("「自律行動」の欄がある", !!sec());
-check("プレイヤー国が無いときは、自律が動かないことを説明する", sec().textContent.includes("自律行動は動いていません"));
+check("「アルゴリズム国家の行動」の欄がある", !!sec());
+check("プレイヤー国が無いときは、自律が動かないことを説明する", sec().textContent.includes("アルゴリズム国家の行動は動いていません"));
 const cb = () => win().querySelector("#ai-player-toggle");
 cb().checked = true; cb().dispatchEvent(new window.Event("change")); await sleep(80);
 check("★ を付けると、その国がプレイヤー国になる（保存される）", simActions.getAutonomy().players.includes(S0) && M().ext.data.ai?.players?.includes(S0));
@@ -59,9 +59,9 @@ let shown = false;
 for (let i = 0; i < live().length && !shown; i++) { await openState(i); shown = /\d+年\d+月/.test(sec()?.textContent ?? ""); }
 check("判断した国の「直近の判断」に、年月と理由の文が出る", shown);
 
-console.log("=== 設定（国家の自律行動） ===");
+console.log("=== 設定（アルゴリズム国家の行動） ===");
 $("world-date").click(); await sleep(60);
-check("設定ダイアログに、自律行動の欄がある（有効・速さ・行動の種類・プレイヤー国への宣戦）", !!q("#ai-on") && !!q("#ai-tempo") && ["tech", "treaty", "war", "peace"].every((k) => !!q(`#ai-verb-${k}`)) && !!q("#ai-target-players"));
+check("設定ダイアログに、アルゴリズム国家の行動の欄がある（有効・速さ・行動の種類・プレイヤー国への宣戦）", !!q("#ai-on") && !!q("#ai-tempo") && ["tech", "treaty", "war", "peace"].every((k) => !!q(`#ai-verb-${k}`)) && !!q("#ai-target-players"));
 check("初期値は、有効・ふつう・すべて有効", q("#ai-on").checked && q("#ai-tempo").value === "normal" && q("#ai-verb-war").checked && q("#ai-target-players").checked);
 q("#ai-tempo").value = "active"; q("#ai-tempo").dispatchEvent(new window.Event("change")); await sleep(40);
 check("判断の速さを変えられる（保存される）", simActions.getAutonomy().tempo === "active");

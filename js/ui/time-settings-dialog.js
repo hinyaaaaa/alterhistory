@@ -109,13 +109,13 @@ export function openTimeSettingsDialog({ store, timeActions, editActions, simAct
   if (simActions) dialog.append(natRow);
   syncNat();
 
-  // --- 国家の自律行動（v3.0.0） ---
+  // --- アルゴリズム国家の行動（v3.0.0） ---
   if (simActions?.getAutonomy) {
-    dialog.append(el("h3", "dialog-subhead", "国家の自律行動"));
+    dialog.append(el("h3", "dialog-subhead", "アルゴリズム国家の行動"));
     dialog.append(el("p", "hint", "「プレイヤー国」（国家タブの国勢で ★ を付けた国）以外の国が、ルールで判断して、宣戦・条約・講和・技術の採用を行います。理由は年表に残り、Undo で戻せます。プレイヤー国が1つも無いときは動きません。"));
     const aiRow = el("div", "time-settings-row");
     const aiOn = document.createElement("input"); aiOn.type = "checkbox"; aiOn.id = "ai-on";
-    const aiLabel = el("label", "", " 自律行動を有効にする"); aiLabel.htmlFor = "ai-on";
+    const aiLabel = el("label", "", " アルゴリズム国家の行動を有効にする"); aiLabel.htmlFor = "ai-on";
     const aiTempo = document.createElement("select"); aiTempo.id = "ai-tempo"; aiTempo.setAttribute("aria-label", "判断の速さ");
     for (const [k, v] of [["cautious", "慎重"], ["normal", "ふつう"], ["active", "積極"]]) aiTempo.append(new Option(v, k));
     aiRow.append(aiOn, aiLabel, aiTempo); dialog.append(aiRow);

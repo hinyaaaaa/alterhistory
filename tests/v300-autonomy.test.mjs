@@ -137,11 +137,11 @@ console.log("=== 発展のペース ===");
     const lo = paceOf(w.M(), { year: date.year + 6, month: 1 }).get(A).mult; w.store.undo();
     assert.ok(hi < 1 && lo > 1, `進みすぎ ${hi.toFixed(2)} / 遅れ ${lo.toFixed(2)}`);
   });
-  check("補正は自律する国だけ。プレイヤー国・プレイヤー国なしでは 1", () => {
+  check("補正はアルゴリズム国家だけ。プレイヤー国・プレイヤー国なしでは 1", () => {
     assert.equal(paceMultiplier(w.M(), P, date), 1);
     w.store.commit(planSetPlayer(w.M(), P, false)); assert.equal(paceMultiplier(w.M(), A, { year: date.year + 9, month: 1 }), 1); w.store.undo();
   });
-  check("技術の進捗の速さに反映される（自律する国だけ）", () => {
+  check("技術の進捗の速さに反映される（アルゴリズム国家だけ）", () => {
     const sA = w.M().pack.states[A], later = { year: date.year + 12, month: 1 };
     w.store.commit(setProps(sA, { techDoctrine: Object.fromEntries(Object.keys(sA.techDoctrine).map((k) => [k, 9])), techLevel: 9 }));
     const withPace = progressRates(w.M(), A, later).rates.agri; w.store.commit(planSetPlayer(w.M(), A, true));
@@ -153,11 +153,11 @@ console.log("=== 発展のペース ===");
 console.log("=== 実行（既存の操作と同じ。理由つきで年表に残る） ===");
 {
   const w = await world(), [P, A] = w.ids; w.store.commit(planSetPlayer(w.M(), P, true));
-  check("技術の採用: 自律する国は、実った機運を採用する。プレイヤー国は採用しない", () => {
+  check("技術の採用: アルゴリズム国家は、実った機運を採用する。プレイヤー国は採用しない", () => {
     const lv = (id) => JSON.stringify(getTechDoctrine(w.M().pack.states[id]));
     for (const id of [P, A]) w.M().ext.data.techMomentum = { ...(w.M().ext.data.techMomentum ?? {}), [id]: { agri: { target: getTechDoctrine(w.M().pack.states[id]).agri + 1, via: "year" } } };
     const a0 = lv(A), p0 = lv(P); run(w, 12, createRandom(9), { advanceWars: false });
-    assert.notEqual(lv(A), a0, "自律国は採用した"); assert.equal(lv(P), p0, "プレイヤー国は変わらない");
+    assert.notEqual(lv(A), a0, "アルゴリズム国家は採用した"); assert.equal(lv(P), p0, "プレイヤー国は変わらない");
   });
   check("年表に、理由つきの「国家の判断」が残る（プレイヤー国は主体にならない）", () => {
     const notes = listHistory(w.M()).filter((h) => h.type === "ai"); assert.ok(notes.length >= 1);
@@ -184,7 +184,7 @@ console.log("=== 長期の振る舞い ===");
     const kinds = new Set(notes.map((n) => n.detail)); assert.ok(kinds.has("宣戦") && kinds.has("技術の採用") && (kinds.has("不可侵条約") || kinds.has("経済協力")), [...kinds].join());
     assert.ok(wars.length >= 2 && wars.length <= 20, `戦争 ${wars.length}`);
   });
-  check("自律国どうしの戦争は、講和条約で終わる（終わらない戦争はプレイヤー国が加わるものだけ）", () => {
+  check("アルゴリズム国家どうしの戦争は、講和条約で終わる（終わらない戦争はプレイヤー国が加わるものだけ）", () => {
     const open = wars.filter((x) => !x.endedAt), ended = wars.filter((x) => x.endedAt);
     assert.ok(ended.length >= 1); assert.ok(open.every((x) => [...x.attackers, ...x.defenders].includes(P)), "未講和の戦争は、プレイヤー国が加わるものだけ");
     assert.ok(listHistory(w.M()).some((h) => /treaty|peace/.test(h.type) && /講和|和約|条約/.test(h.title)));
@@ -192,7 +192,7 @@ console.log("=== 長期の振る舞い ===");
   check("プレイヤー国の技術・条約は、自律では動かない", () => {
     assert.ok(!(w.M().ext.data.treaties ?? []).some((t) => t.parties.some((p) => p.state === P) && t.kind !== "peace"), "プレイヤー国が結ぶ条約は無い");
   });
-  check("国家タブ用の表示データ（自律国は性格・ペース・次の判断。プレイヤー国は自律しない）", () => {
+  check("国家タブ用の表示データ（アルゴリズム国家は性格・ペース・次の判断。プレイヤー国は自律しない）", () => {
     const v = aiView(w.M(), w.ids[2]); assert.ok(v.autonomous && v.character && v.pace && v.nextThinkMonths >= 1 && v.recent.length >= 0);
     const p = aiView(w.M(), P); assert.ok(p.player && !p.autonomous);
   });

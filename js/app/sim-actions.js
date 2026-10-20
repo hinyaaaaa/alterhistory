@@ -172,7 +172,7 @@ export function createSimActions({ store, renderer }) {
   }
 
   /**
-   * 自律行動の決定を、ユーザーと同じ既存の操作で実行する（v3.0.0）。理由を年表に残してから実行し、失敗したら全部取り消す。
+   * アルゴリズム国家の行動の決定を、ユーザーと同じ既存の操作で実行する（v3.0.0）。理由を年表に残してから実行し、失敗したら全部取り消す。
    * 宣戦・講和は、戦争ウィンドウと同じ処理（マーカー・崩壊の判定を含む）を通る。
    */
   const runDecision = (d, date, rng) => {
@@ -447,10 +447,10 @@ export function createSimActions({ store, renderer }) {
     /** 予約されている後続の出来事・反乱の火種（国家タブの表示用。反乱は起こさない） */
     pendingEvents(stateId = null) { return withMap((map) => listPending(map).filter((p) => stateId == null || p.stateId === stateId)) ?? []; },
     rebellionSpark(stateId) { return withMap((map) => rebellionSpark(map, stateId)) ?? null; },
-    // --- 国家の自律行動（v3.0.0）---
+    // --- アルゴリズム国家の行動（v3.0.0）---
     /** 設定: { enabled, tempo, verbs, players } */
     getAutonomy() { const m = store.getState().map; return m ? getAi(m) : null; },
-    setAutonomy(patch) { return withMap((map) => { let ok = false; safeRun("自律行動の設定", () => { commitOrThrow(planSetAi(map, patch)); ok = true; }); return ok; }) ?? false; },
+    setAutonomy(patch) { return withMap((map) => { let ok = false; safeRun("アルゴリズム国家の行動の設定", () => { commitOrThrow(planSetAi(map, patch)); ok = true; }); return ok; }) ?? false; },
     /** 国を「プレイヤー国」にする／やめる（それ以外の国が自律する） */
     setPlayerState(stateId, on) { return withMap((map) => { let ok = false; safeRun("プレイヤー国の設定", () => { commitOrThrow(planSetPlayer(map, stateId, on)); ok = true; }); return ok; }) ?? false; },
     /** 国家タブ用: 自律の状態・性格・ペース・直近の判断 */

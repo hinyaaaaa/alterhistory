@@ -89,7 +89,7 @@ export function candidatesOf(ctx, s, budget) {
   }
 
   if (ai.verbs.treaty) {
-    // 条約の更新: 当事国がすべて自律国で、自分が筆頭のときだけ（二重に更新しない）
+    // 条約の更新: 当事国がすべてアルゴリズム国家で、自分が筆頭のときだけ（二重に更新しない）
     for (const { treaty: t } of expiringTreaties(map, date)) {
       const ids = partyIds(t); if (ids[0] !== s.i || !ids.every(auto) || ctx.atWar.has(pk(ids[0], ids[1] ?? ids[0]))) continue;
       out.major.push({ kind: "renew", stateId: s.i, treatyId: t.id, u: 1.2, reason: `${nm(s)}は、「${t.name}」の期限が近づき、関係が良好なため、条約を更新した` });
@@ -147,7 +147,7 @@ export function pickDecision(cands, rnd, idle = 0.8) {
   return list.at(-1);
 }
 
-/** 講和の判断: 参戦国がすべて自律国の戦争が、目安の期間をすぎたら、講和条約を結ぶ */
+/** 講和の判断: 参戦国がすべてアルゴリズム国家の戦争が、目安の期間をすぎたら、講和条約を結ぶ */
 function peaceDecisions(ctx, rnd) {
   const { map, ai } = ctx, out = [];
   if (!ai.verbs.peace) return out;
@@ -166,7 +166,7 @@ function peaceDecisions(ctx, rnd) {
 }
 
 /**
- * 今月の自律行動の決定を求める。地図は変えない。
+ * 今月のアルゴリズム国家の行動の決定を求める。地図は変えない。
  * @returns {{kind:string, stateId:number, targetId?:number, treatyId?:number, warId?:number, field?:string, reason:string, cause?:string|null}[]}
  */
 export function planAutonomy(map, date, rnd) {
@@ -174,7 +174,7 @@ export function planAutonomy(map, date, rnd) {
   if (!ai.enabled || !ai.players.length) return [];
   const ctx = makeContext(map, date), tempo = ctx.tempo, out = [...peaceDecisions(ctx, rnd)];
   const liveStates = map.pack.states.filter(isLive);
-  // 世界全体で、新しい戦争を始める間隔の下限（自律する国が多いほど短い）。1回の判断で、戦争は多くて1つ
+  // 世界全体で、新しい戦争を始める間隔の下限（アルゴリズム国家が多いほど短い）。1回の判断で、戦争は多くて1つ
   const nAuto = liveStates.filter((s) => isAutonomous(map, s.i, ai)).length, gap = 12 / Math.max(0.01, (nAuto * tempo.warRate) / 100);
   const lastAiWar = listWars(map).filter((w) => isAutonomous(map, (w.attackers ?? [])[0], ai)).reduce((m, w) => Math.max(m, mkOf(w.startedAt)), -1e9);
   const budget = { warsLeft: ctx.mk - lastAiWar >= gap ? 1 : 0, ongoing: listWars(map).filter((w) => !w.endedAt && [...(w.attackers ?? []), ...(w.defenders ?? [])].every((id) => isAutonomous(map, id, ai))).length, // プレイヤー国が加わる戦争は、ユーザーの講和を待つので、上限に数えない
@@ -195,14 +195,14 @@ export function planAiNote(map, d, date) {
   return withEvent(map, cmd, { type: "ai", title: d.reason, detail: KIND_LABEL[d.kind] ?? d.kind, date, states: [d.stateId, ...(d.targetId != null ? [d.targetId] : [])], data: { ai: true, kind: d.kind }, ...(d.cause ? { cause: d.cause } : {}) });
 }
 
-/** 講和の条件（自律国どうしの戦争）。UI の「条約を結ぶ」と同じ形。提案が作れなければ白紙和平 */
+/** 講和の条件（アルゴリズム国家どうしの戦争）。UI の「条約を結ぶ」と同じ形。提案が作れなければ白紙和平 */
 export function peaceTermsFor(map, war, venue = null) {
   let t = null; try { t = suggestTerms(map, war, { size: "m" }); } catch { t = null; }
   const base = t ? { kind: t.kind, cessions: (t.cessions ?? []).filter((c) => c.on).map((c) => ({ cells: c.regionCells, fromStateId: c.fromStateId, toStateId: c.toStateId, name: c.name, burgs: c.burgNames })), reparations: t.reparations ?? [], annex: [] } : { kind: "white", cessions: [], reparations: [], annex: [] };
   return { ...base, treatyName: venue?.treatyName ?? "", notes: "", venue: venue ? { place: venue.place, stateId: venue.stateId } : null };
 }
 
-/** 国家タブの「自律行動」用。地図は変えない */
+/** 国家タブの「アルゴリズム国家の行動」用。地図は変えない */
 export function aiView(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }) {
   const ai = getAi(map), s = map.pack.states[stateId]; if (!isLive(s)) return null;
   const view = { enabled: ai.enabled, hasPlayers: ai.players.length > 0, player: ai.players.includes(stateId), autonomous: isAutonomous(map, stateId, ai), tempo: TEMPOS[ai.tempo].label, recent: [] };

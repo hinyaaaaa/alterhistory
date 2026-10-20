@@ -1,9 +1,9 @@
-// 国家の自律行動の設定（v3.0.0）。保存先: ext.data.ai = { enabled, tempo, verbs, players }
+// アルゴリズム国家の行動の設定（v3.0.0）。保存先: ext.data.ai = { enabled, tempo, verbs, players }
 //   ・players: 「プレイヤー国」。ユーザーが自分で動かす国。ここに入っていない国が、自律して動く。
-//     プレイヤー国を1つも決めていない地図では、自律行動は動かない（従来どおり、すべて手動）。
+//     プレイヤー国を1つも決めていない地図では、アルゴリズム国家の行動は動かない（従来どおり、すべて手動）。
 //   ・tempo: 判断の速さ（慎重・ふつう・積極）。1か国あたりの判断の間隔・年間の新しい戦争の数・宣戦の意欲に効く。
 //   ・verbs: どの行動を自律させるか（技術の採用・条約・宣戦・講和）。
-//   ・targetPlayers: プレイヤー国にも宣戦するか（既定は する。重みは自律国どうしより低い）。
+//   ・targetPlayers: プレイヤー国にも宣戦するか（既定は する。重みはアルゴリズム国家どうしより低い）。
 // 純粋ロジック層：DOM に依存しない。
 import { makeCommand } from "../edit/commands.js";
 import { ensureExt } from "../edit/ext.js";
@@ -12,7 +12,7 @@ const isLive = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
 
 /**
  * 判断の速さ。think = 1か国が判断する間隔（月）。war = 宣戦の意欲の倍率。
- * warRate = 自律する国1つあたり、100年に何回、新しい戦争を始めるかの目安（世界全体の宣戦の最短の間隔は、国の数で決まる）。
+ * warRate = アルゴリズム国家1つあたり、100年に何回、新しい戦争を始めるかの目安（世界全体の宣戦の最短の間隔は、国の数で決まる）。
  * 人が動かすのと同じくらいの頻度（国あたり、数十年に1回の戦争）になるよう決めてある。
  */
 export const TEMPOS = Object.freeze({
@@ -42,7 +42,7 @@ export function planSetAi(map, patch) {
   const next = { ...cur, ...patch, verbs: { ...cur.verbs, ...(patch.verbs ?? {}) } };
   if (!TEMPOS[next.tempo]) throw new Error("判断の速さは 慎重・ふつう・積極 から選んでください");
   next.players = [...new Set(next.players)].filter((id) => isLive(map.pack.states[id]));
-  const cmd = makeCommand("国家の自律行動の設定", [], [{ apply: (m) => write(m, next), revert: (m) => { const x = ensureExt(m); if (raw === undefined) delete x.data.ai; else x.data.ai = raw; } }]);
+  const cmd = makeCommand("アルゴリズム国家の行動の設定", [], [{ apply: (m) => write(m, next), revert: (m) => { const x = ensureExt(m); if (raw === undefined) delete x.data.ai; else x.data.ai = raw; } }]);
   return cmd;
 }
 

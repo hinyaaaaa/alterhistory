@@ -1,4 +1,4 @@
-// 発展のペースの調整（v3.0.0）。自律する国の進みが、プレイヤー国と比べて極端に遅い・早いことを防ぐ。
+// 発展のペースの調整（v3.0.0）。アルゴリズム国家の進みが、プレイヤー国と比べて極端に遅い・早いことを防ぐ。
 //   発展の度合い = 技術水準（細かい値）・産業力・人口の大きさの合成。基準 = プレイヤー国の中央値（いなければ全国の中央値）。
 //   指標 index = 自分 ÷ 基準。1 に近いほど、プレイヤー国と同じくらいのペース。
 //   補正 mult = index の平方根の逆数（0.6〜1.6）。進みすぎた国は鈍り（mult < 1）、遅れた国は速まる（mult > 1）。
@@ -36,7 +36,7 @@ export function paceOf(map, date = map.worldTime ?? { year: 1, month: 1 }) {
   return out;
 }
 
-/** 技術の進捗にかける倍率。自律する国だけ補正する（プレイヤー国・自律が無効のときは 1） */
+/** 技術の進捗にかける倍率。アルゴリズム国家だけ補正する（プレイヤー国・自律が無効のときは 1） */
 export function paceMultiplier(map, stateId, date) {
   if (!isAutonomous(map, stateId)) return 1;
   try { return paceOf(map, date).get(stateId)?.mult ?? 1; } catch { return 1; }

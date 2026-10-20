@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ALTERHISTORY v4 地理生成プレビュー</title>
+<style>
+  body { font: 14px/1.5 "Noto Sans JP", system-ui, sans-serif; margin: 0; background: #14181b; color: #d8e2e0; }
+  header { padding: 10px 14px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; background: #1b2226; }
+  input, select, button { font: inherit; padding: 4px 8px; background: #232c31; color: inherit; border: 1px solid #3a4850; border-radius: 4px; }
+  button { cursor: pointer; } button:hover { background: #2d3a40; }
+  main { padding: 10px 14px; } canvas { width: 100%; max-width: 1600px; height: auto; background: #0a1a33; display: block; }
+  pre { background: #1b2226; padding: 8px 10px; white-space: pre-wrap; border-radius: 4px; } #hover { min-height: 1.5em; color: #9ec9c0; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; } @media (max-width: 800px) { .cols { grid-template-columns: 1fr; } }
+</style></head><body>
+<header>
+  <b>v4 地理生成プレビュー（開発用）</b>
+  <label>シード <input id="seed" size="18" value="standard-world-1"></label><button id="rand">ランダム</button>
+  <label>セル数 <input id="cells" type="number" value="250000" step="1000" style="width:8em"></label>
+  <label>表示 <select id="layer"><option value="biome">バイオーム・河川</option><option value="elevation">標高</option><option value="temp">気温</option><option value="precip">降水</option><option value="fertility">肥沃度</option></select></label>
+  <button id="gen">生成</button><span id="status">待機中</span>
+</header>
+<main>
+  <canvas id="map" width="1600" height="800"></canvas>
+  <div id="hover">地図の上にカーソルを置くと、セルの情報が出ます</div>
+  <p>全体の描き直し: <span id="redraw">—</span></p>
+  <div class="cols"><pre id="timings">段階ごとの時間がここに出ます</pre><pre id="stats">統計がここに出ます</pre></div>
+  <p style="color:#8a9a98">このページはアプリ本体とまだつながっていない確認用です。生成時間と描き直し時間を、実機（Surface Go 4 など）で測るために使います。</p>
+</main>
+<script src="../dist/worldgen-preview.js"></script>
+</body></html>

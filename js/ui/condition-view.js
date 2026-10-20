@@ -51,18 +51,18 @@ export function progressBlock(c) {
   return sec;
 }
 
-/** 国家タブ「国勢」の「自律行動」（v3.0.0）。プレイヤー国かどうか・性格・ペース・直近の判断 */
+/** 国家タブ「国勢」の「アルゴリズム国家の行動」（v3.0.0）。プレイヤー国かどうか・性格・ペース・直近の判断 */
 export function autonomySection(v, { onTogglePlayer } = {}) {
   const sec = el("section", "nation-sec"); sec.dataset.field = "cond-ai";
-  sec.append(el("h4", "", "自律行動"));
+  sec.append(el("h4", "", "アルゴリズム国家の行動"));
   if (!v) return sec;
   const row = el("div", "cond-ai-player");
   const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = v.player; cb.id = "ai-player-toggle";
   cb.addEventListener("change", () => onTogglePlayer?.(cb.checked));
   const lb = el("label", "", " ★ プレイヤー国（自分で動かす国）"); lb.htmlFor = "ai-player-toggle";
   row.append(cb, lb); sec.append(row);
-  if (!v.hasPlayers) { sec.append(el("p", "hint", "プレイヤー国を1つも決めていないので、自律行動は動いていません。自分で動かす国に ★ を付けると、ほかの国が自律して動きます。")); return sec; }
-  if (!v.enabled) { sec.append(el("p", "hint", "自律行動は、設定でオフになっています。")); return sec; }
+  if (!v.hasPlayers) { sec.append(el("p", "hint", "プレイヤー国を1つも決めていないので、アルゴリズム国家の行動は動いていません。自分で動かす国に ★ を付けると、ほかの国が自律して動きます。")); return sec; }
+  if (!v.enabled) { sec.append(el("p", "hint", "アルゴリズム国家の行動は、設定でオフになっています。")); return sec; }
   if (v.player) sec.append(el("p", "hint", "この国は自分で動かします。宣戦・条約・講和・技術の採用は、すべて操作したときだけ行われます。"));
   else {
     sec.append(el("p", "hint", `この国は自律して動きます（判断の速さ: ${v.tempo}）。約${v.nextThinkMonths}か月後に次の判断をします。`));
