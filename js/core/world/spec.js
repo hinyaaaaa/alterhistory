@@ -56,7 +56,8 @@ export function normalizeWorldSpec(input = {}) {
 }
 
 /** 画面から生成するときの、見た目に分かりやすい種文字列（時刻に依存するので、決定性の対象外。生成後は保存して再現する） */
-export function makeWorldSeed(now = Date.now()) {
+export function makeWorldSeed(now) { // now: 呼び出し側が時刻を渡す（core は時刻に依存しない）
+  if (!Number.isFinite(now)) throw new Error("makeWorldSeed には時刻（ミリ秒）を渡してください");
   const s = Math.floor(now).toString(36), r = Math.floor((now * 9301 + 49297) % 233280).toString(36);
   return `W-${s}-${r}`.toUpperCase();
 }

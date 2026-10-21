@@ -49,6 +49,11 @@ import { createAutoCheck } from "./app/auto-check.js";
 import { initTimeBar } from "./ui/time-bar.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
 import { initWarOutcome } from "./ui/war-outcome-window.js";
+import { createWorldService } from "./app/world-service.js";
+import { createWorldActions } from "./app/world-actions.js";
+import { initWorldWorkspace } from "./ui/world-workspace.js";
+import worldWorkerSource from "./generated/worldgen-worker.txt";
+import { APP_VERSION } from "./version.js";
 
 function start() {
   const Delaunator = globalThis.Delaunator;
@@ -76,7 +81,18 @@ function start() {
     download: downloadBlob, createCanvas: createBrowserCanvas,
   });
 
-  const files = initFileInput({ actions });
+  // 球面世界（v4.0.0）。.ahmap v2 は球面世界の画面で、それ以外（Azgaar の .map・旧 .ahmap）は旧エディタで開く
+  const createWorldWorker = () => {
+    if (typeof Worker === "undefined") return null;
+    const url = URL.createObjectURL(new Blob([worldWorkerSource], { type: "text/javascript" }));
+    const w = new Worker(url); const t = w.terminate.bind(w); w.terminate = () => { t(); URL.revokeObjectURL(url); }; return w;
+  };
+  const worldService = createWorldService({ createWorker: createWorldWorker });
+  const worldActions = createWorldActions({ service: worldService, download: downloadBlob, appVersion: APP_VERSION });
+  let worldWorkspace = null;
+  const routedActions = { ...actions, openFile: async (file) => { if (worldWorkspace && await worldWorkspace.routeFile(file)) return; if (worldWorkspace?.active) await worldWorkspace.setActive(false); return actions.openFile(file); } };
+  const files = initFileInput({ actions: routedActions });
+
   const editActions = createEditActions({ store, renderer });
   const simActions = createSimActions({ store, renderer });
   const autoCheck = createAutoCheck({ store }); // データ検査の窓は無い。操作後と5年ごとに、問題があるときだけ右下に出す
@@ -104,6 +120,8 @@ function start() {
   const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   winsRef = wins;
   initHub({ store, wins }); // 左ハブ。ファイル・地図・各窓の入口（ボタンの id を持つので、ツールバー等の配線より先に作る）
+  worldWorkspace = initWorldWorkspace({ worldActions, openFileDialog: files.open, legacyHasMap: () => !!store.getState().map }); // 球面世界の画面（ハブの「保存」を引き受けるため、ツールバーの配線より先に作る）
+  byId("btn-world").addEventListener("click", () => worldWorkspace.setActive(!worldWorkspace.active));
   const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
   const setupActions = createSetupActions({ store, renderer });
   const setupWindow = initSetupWindow({
@@ -168,7 +186,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { worldActions, worldService, worldWorkspace, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

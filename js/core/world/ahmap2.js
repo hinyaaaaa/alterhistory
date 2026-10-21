@@ -15,10 +15,10 @@ export const AHMAP2_SCHEMA_VERSION = 1;
 const LE = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
 
 const TYPES = { f32: Float32Array, u8: Uint8Array, u16: Uint16Array, i32: Int32Array, u32: Uint32Array };
-const typeName = (a) => (a instanceof Float32Array ? "f32" : a instanceof Uint8Array ? "u8" : a instanceof Uint16Array ? "u16" : a instanceof Int32Array ? "i32" : a instanceof Uint32Array ? "u32" : null);
+const typeName = (a) => ({ Float32Array: "f32", Uint8Array: "u8", Uint16Array: "u16", Int32Array: "i32", Uint32Array: "u32" })[a?.constructor?.name] ?? null;
 
 // 必須チャンクと、セル配列の一覧（chunkName → world.cell のキー）
-const CELL_ARRAYS = ["elevation", "landWater", "plate", "temp", "precip", "biome", "soil", "fertility", "resource", "riverTo", "riverFlow", "river", "basin", "coastDist", "capacity", "areaKm2", "lat", "lon", "volcanic", "filled", "continent", "mountain"];
+const CELL_ARRAYS = ["elevation", "landWater", "plate", "temp", "precip", "biome", "soil", "fertility", "resource", "riverTo", "riverFlow", "river", "basin", "coastDist", "capacity", "areaKm2", "lat", "lon", "volcanic", "filled", "continent", "mountain", "moisture"];
 const GEOM = { "geom.centerXYZ": "centerXYZ", "geom.verticesXYZ": "vertexXYZ", "geom.neighborOffsets": "neighborOffsets", "geom.neighborIds": "neighborIds", "geom.cellVertexIds": "cellVertexIds" };
 export const REQUIRED_CHUNKS = ["world.spec", ...Object.keys(GEOM), ...CELL_ARRAYS.map((k) => `cell.${k}`), "entities.populations", "world.stats"];
 
@@ -32,6 +32,7 @@ async function pipe(bytes, stream) { const out = await new Response(new Blob([by
 const gzip = (b) => pipe(b, new CompressionStream("gzip"));
 const gunzip = (b) => pipe(b, new DecompressionStream("gzip"));
 const enc = new TextEncoder(), dec = new TextDecoder("utf-8", { fatal: true });
+const isBytes = (v) => ArrayBuffer.isView(v) && v.BYTES_PER_ELEMENT === 1; // 別の実行環境（iframe・jsdom）で作られた Uint8Array も受け付ける
 const rawOf = (arr) => new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
 
 /**
@@ -60,7 +61,7 @@ export async function encodeAhmap2(world, options = {}) {
   }
   await json("entities.populations", world.entities.populations);
   await json("world.stats", { stats: world.stats, timings: world.timings });
-  for (const [name, data] of Object.entries(options.extensions ?? {})) { if (!(data instanceof Uint8Array)) throw new Error(`拡張チャンク ${name} は Uint8Array`); await add(name, "ext", data); }
+  for (const [name, data] of Object.entries(options.extensions ?? {})) { if (!isBytes(data)) throw new Error(`拡張チャンク ${name} は Uint8Array`); await add(name, "ext", data); }
   let offset = 0;
   for (const c of chunks) { c.offset = offset; offset += c.storedBytes; }
   const manifest = {
@@ -80,7 +81,7 @@ export class Ahmap2Error extends Error { constructor(msg, problems = []) { super
 
 /** manifest だけを読む（全部を展開せずに、版・セル数・ハッシュを確かめる） */
 export function readAhmap2Manifest(bytes) {
-  if (!(bytes instanceof Uint8Array) || bytes.length < 16) throw new Ahmap2Error("ファイルが小さすぎる（.ahmap v2 ではない）");
+  if (!isBytes(bytes) || bytes.length < 16) throw new Ahmap2Error("ファイルが小さすぎる（.ahmap v2 ではない）");
   const magic = dec.decode(bytes.subarray(0, 8)); if (magic !== AHMAP2_MAGIC) throw new Ahmap2Error("マジックが一致しない（.ahmap v2 ではない）");
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), cv = dv.getUint32(8, true), ml = dv.getUint32(12, true);
   if (cv > AHMAP2_CONTAINER_VERSION) throw new Ahmap2Error(`新しいコンテナ版 ${cv} のファイル。このアプリは ${AHMAP2_CONTAINER_VERSION} まで（元ファイルは上書きしない）`);

@@ -16,6 +16,7 @@ export const HUB_SECTIONS = [
     { id: "btn-edit-mode", icon: "edit", label: "地図編集", kind: "el", tip: "地図編集 — 塗る・都市・目印" },
     { id: "hub-layers", icon: "layers", label: "レイヤー", kind: "layers", tip: "地図に何を重ねるか" },
     { id: "btn-fit", icon: "fit", label: "全体表示", kind: "el", tip: "地図全体を表示 (F)" },
+    { id: "btn-world", icon: "terrain", label: "球面世界", kind: "el", tip: "v4 の球面世界 — 生成・初期集団・地形編集（旧エディタとは別の画面）" },
   ] },
   { title: "国家と社会", items: [
     { win: "nation", icon: "state", label: "国家" },

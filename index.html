@@ -12,6 +12,7 @@
   <link rel="stylesheet" href="css/layout.css">
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/world.css">
 </head>
 <body>
 <div id="app">
@@ -67,6 +68,8 @@
         <button id="tab-edit-panel" class="panel-tab" title="地図編集を開く" aria-label="地図編集を開く" hidden><svg class="ico ico-edit" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
       </div>
       <div id="drop-hint" hidden>ここにドロップして開く</div>
+      <!-- 球面世界の作業画面（v4.0.0）。js/ui/world-workspace.js が中身を作る。旧エディタの地図とは独立 -->
+      <section id="world-stage" hidden aria-label="球面世界"></section>
 
     </section>
 

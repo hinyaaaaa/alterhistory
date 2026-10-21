@@ -253,7 +253,8 @@
     if (isObj(input) && input.schemaVersion !== void 0 && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} \u306F\u672A\u5BFE\u5FDC`);
     return { spec, errors };
   }
-  function makeWorldSeed(now = Date.now()) {
+  function makeWorldSeed(now) {
+    if (!Number.isFinite(now)) throw new Error("makeWorldSeed \u306B\u306F\u6642\u523B\uFF08\u30DF\u30EA\u79D2\uFF09\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044");
     const s = Math.floor(now).toString(36), r = Math.floor((now * 9301 + 49297) % 233280).toString(36);
     return `W-${s}-${r}`.toUpperCase();
   }
@@ -571,96 +572,27 @@
         }
       }
     });
-    const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V);
+    const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);
+    const cx = { mesh, lat, lon, elevation, isSea, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };
     stage("G4_climate", "\u6C17\u5019", () => {
-      const lapse = spec.climateModel.lapseRateCPerKm, Lkm = spec.climateModel.windMoistureLengthKm;
-      for (let c = 0; c < V; c++) {
-        const a = Math.abs(lat[c]) / (Math.PI / 2), h = Math.max(0, elevation[c]) / 1e3;
-        temp[c] = 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;
-      }
-      const up = new Int32Array(V).fill(-1);
-      for (let c = 0; c < V; c++) {
-        const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;
-        const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);
-        const wx = -east * ex, wy = -east * ey;
-        let best = -2, bj = -1;
-        for (let k = off[c]; k < off[c + 1]; k++) {
-          const j = nb[k];
-          let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2];
-          const dl = Math.hypot(dx, dy, dz) || 1;
-          const s = (dx * wx + dy * wy) / dl;
-          if (s > best) {
-            best = s;
-            bj = j;
-          }
-        }
-        up[c] = bj;
-      }
-      const pn = nSeed("precip"), decay = Math.exp(-spacingKm / Lkm), m = new Float32Array(V).fill(0.5), lift = new Float32Array(V);
-      for (let c = 0; c < V; c++) if (isSea[c]) m[c] = 1;
+      for (let c = 0; c < V; c++) temp[c] = tempAt(lat[c], elevation[c], cx.lapse);
+      cx.up = new Int32Array(V);
+      for (let c = 0; c < V; c++) cx.up[c] = upwindOf(mesh, lat, lon, c);
+      for (let c = 0; c < V; c++) moisture[c] = isSea[c] ? 1 : 0.5;
       const passes = Math.min(200, Math.ceil(4e3 / spacingKm) + 4);
       for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) {
-        if (isSea[c]) continue;
-        const u = up[c], l = Math.max(0, elevation[c] - Math.max(0, elevation[u])) / 1e3;
-        lift[c] = l;
-        m[c] = clamp(m[u] * decay - 0.3 * l, 0.42, 1);
+        if (!isSea[c]) moisture[c] = moistureStep(cx, c);
       }
-      for (let c = 0; c < V; c++) {
-        const la = Math.abs(lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
-        let p = zonal * (0.35 + 0.85 * m[c]) * (0.7 + 0.6 * fbm3(pn, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift[c] * m[c] * (isSea[c] ? 0 : 1);
-        if (!isSea[c] && elevation[c] > 3500) p *= 0.6;
-        precip[c] = clamp(p, 0, 6e3);
-      }
+      for (let c = 0; c < V; c++) precip[c] = precipAt(cx, c);
     });
     stage("G4_biome", "\u30D0\u30A4\u30AA\u30FC\u30E0", () => {
       for (let c = 0; c < V; c++) biome[c] = isSea[c] ? BIOMES.OCEAN : biomeOf(temp[c], precip[c], elevation[c]);
     });
     const parent = new Int32Array(V).fill(-1), filled = new Float32Array(V), flow = new Float32Array(V), basin = new Int32Array(V).fill(-1), landWater = new Uint8Array(V);
     let lakeCount = 0;
+    const hyd = { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome };
     stage("G5_rivers", "\u6C34\u7CFB", () => {
-      const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);
-      let on = 0;
-      const EPS = 0.05;
-      for (let c = 0; c < V; c++) filled[c] = elevation[c];
-      for (let c = 0; c < V; c++) {
-        if (!isSea[c]) continue;
-        done[c] = 1;
-        for (let k = off[c]; k < off[c + 1]; k++) if (!isSea[nb[k]]) {
-          heap.push(filled[c], c);
-          break;
-        }
-      }
-      while (heap.n > 0) {
-        const c = heap.pop();
-        order[on++] = c;
-        for (let k = off[c]; k < off[c + 1]; k++) {
-          const j = nb[k];
-          if (done[j]) continue;
-          done[j] = 1;
-          parent[j] = c;
-          filled[j] = Math.max(elevation[j], filled[c] + EPS);
-          heap.push(filled[j], j);
-        }
-      }
-      for (let c = 0; c < V; c++) flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 95e-7;
-      for (let i = on - 1; i >= 0; i--) {
-        const c = order[i], p = parent[c];
-        if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c];
-      }
-      for (let i = 0; i < on; i++) {
-        const c = order[i];
-        if (isSea[c]) continue;
-        const p = parent[c];
-        basin[c] = isSea[p] ? c : basin[p];
-      }
-      for (let c = 0; c < V; c++) {
-        if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;
-        else if (filled[c] - elevation[c] >= 40) {
-          landWater[c] = LAND_WATER.LAKE;
-          lakeCount++;
-        } else landWater[c] = LAND_WATER.LAND;
-      }
-      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAKE) biome[c] = BIOMES.LAKE;
+      lakeCount = computeHydrology(hyd, null).lakeCount;
     });
     let riverThreshold = 0;
     const river = new Uint8Array(V);
@@ -672,96 +604,17 @@
       for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && flow[c] >= riverThreshold && flow[c] > 0) river[c] = 1;
     });
     const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);
+    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };
     stage("G6_soil", "\u571F\u58CC\u30FB\u80A5\u6C83\u5EA6\u30FB\u8CC7\u6E90", () => {
-      const rs = ["iron", "copper", "tin", "gold", "coal", "gems"].map(nSeed), sSalt = nSeed("salt");
-      for (let c = 0; c < V; c++) {
-        const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];
-        let relief = 0, kn = 0;
-        for (let k = off[c]; k < off[c + 1]; k++) {
-          relief += Math.abs(elevation[nb[k]] - e);
-          kn++;
-        }
-        relief /= Math.max(1, kn);
-        const nearRiver = river[c] === 1;
-        let res = 0;
-        if (sea) {
-          if (e > -300 && coastDistSea(c) <= 6) res |= RES.FISH;
-        } else {
-          const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);
-          if (land) {
-            if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;
-            if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;
-            if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;
-            if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;
-            if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;
-            if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;
-            if (e > 200 && relief > 120) res |= RES.STONE;
-            if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;
-            if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;
-            if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;
-            if (nearRiver) res |= RES.FISH;
-          } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;
-        }
-        resource[c] = res;
-        let sl = SOILS.NONE;
-        if (!sea) {
-          if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;
-          else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;
-          else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;
-          else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;
-          else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;
-          else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;
-          else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;
-          else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;
-          else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;
-          else sl = SOILS.LOAM;
-        }
-        soil[c] = sl;
-        if (!sea && landWater[c] === LAND_WATER.LAND) {
-          const t = temp[c], p = precip[c];
-          const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);
-          const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);
-          const sf = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 }[sl];
-          const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3e3, 0, 1);
-          fertility[c] = clamp(tf * pf * sf * slope * alt, 0, 1);
-          const density = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0));
-          capacity[c] = density * areaKm2[c];
-        }
-      }
-      function coastDistSea(c) {
-        let fr = [c], seen = /* @__PURE__ */ new Set([c]);
-        for (let d = 0; d <= 6; d++) {
-          const nx = [];
-          for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) {
-            const j = nb[k];
-            if (!isSea[j]) return d + 1;
-            if (!seen.has(j)) {
-              seen.add(j);
-              nx.push(j);
-            }
-          }
-          fr = nx;
-          if (!fr.length) break;
-        }
-        return 99;
-      }
+      for (let c = 0; c < V; c++) landUseAt(lu, c);
     });
-    const populations = stage("G7_groups", "\u521D\u671F\u4EBA\u53E3\u96C6\u56E3", () => {
-      const rg = makeRng(seed, "groups"), cand = [];
-      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });
-      cand.sort((a, b) => b.s - a.s || a.c - b.c);
-      const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R) * 1;
-      for (const { c } of cand) {
-        if (out.length >= spec.initialGroups) break;
-        if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });
-      }
-      return out;
-    });
+    const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };
+    const populations = stage("G7_groups", "\u521D\u671F\u4EBA\u53E3\u96C6\u56E3", () => placeInitialGroups(gctx, spec, 0));
     const stats = stage("G8_stats", "\u7D71\u8A08", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
     const world2 = {
       spec: { ...spec, generatorVersion: GENERATOR_VERSION },
       mesh,
-      cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain },
+      cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },
       entities: { populations },
       stats,
       timings
@@ -769,6 +622,199 @@
     timings.total = Math.round(performance.now() - tAll);
     world2.hash = worldHash(world2);
     return world2;
+  }
+  function tempAt(latRad, elevation, lapse) {
+    const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1e3;
+    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;
+  }
+  function upwindOf(mesh, lat, lon, c) {
+    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;
+    const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);
+    const wx = -east * ex, wy = -east * ey;
+    let best = -2, bj = -1;
+    for (let k = off[c]; k < off[c + 1]; k++) {
+      const j = nb[k], dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2], dl = Math.hypot(dx, dy, dz) || 1, s = (dx * wx + dy * wy) / dl;
+      if (s > best) {
+        best = s;
+        bj = j;
+      }
+    }
+    return bj;
+  }
+  var upOf = (cx, c) => cx.up ? cx.up[c] : upwindOf(cx.mesh, cx.lat, cx.lon, c);
+  function liftRaw(cx, c) {
+    const u = upOf(cx, c);
+    return Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3;
+  }
+  function moistureStep(cx, c) {
+    const u = upOf(cx, c);
+    return clamp(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);
+  }
+  function precipAt(cx, c) {
+    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
+    const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];
+    let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);
+    if (!sea && cx.elevation[c] > 3500) p *= 0.6;
+    return clamp(p, 0, 6e3);
+  }
+  function computeHydrology(h, members = null) {
+    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;
+    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;
+    const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);
+    let on = 0;
+    for (let c = 0; c < V; c++) {
+      if (members && !members[c]) continue;
+      filled[c] = elevation[c];
+      parent[c] = -1;
+      basin[c] = -1;
+    }
+    for (let c = 0; c < V; c++) {
+      if (isSea[c]) {
+        done[c] = 1;
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (!isSea[j] && (!members || members[j])) {
+            heap.push(filled[c], c);
+            break;
+          }
+        }
+      } else if (members && !members[c]) done[c] = 1;
+    }
+    while (heap.n > 0) {
+      const c = heap.pop();
+      order[on++] = c;
+      for (let k = off[c]; k < off[c + 1]; k++) {
+        const j = nb[k];
+        if (done[j]) continue;
+        done[j] = 1;
+        parent[j] = c;
+        filled[j] = Math.max(elevation[j], filled[c] + EPS);
+        heap.push(filled[j], j);
+      }
+    }
+    for (let c = 0; c < V; c++) {
+      if (members && !members[c]) continue;
+      flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 95e-7;
+    }
+    for (let i = on - 1; i >= 0; i--) {
+      const c = order[i], p = parent[c];
+      if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c];
+    }
+    for (let i = 0; i < on; i++) {
+      const c = order[i];
+      if (isSea[c]) continue;
+      const p = parent[c];
+      basin[c] = isSea[p] ? c : basin[p];
+    }
+    let lakeCount = 0, unreached = 0;
+    for (let c = 0; c < V; c++) {
+      if (members && !members[c]) continue;
+      if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;
+      else {
+        if (parent[c] < 0) unreached++;
+        if (filled[c] - elevation[c] >= 40) {
+          landWater[c] = LAND_WATER.LAKE;
+          lakeCount++;
+          biome[c] = BIOMES.LAKE;
+        } else landWater[c] = LAND_WATER.LAND;
+      }
+    }
+    return { lakeCount, unreached };
+  }
+  function landUseNoise(seed) {
+    const ns = (name) => hashString(`${seed}::noise::${name}`);
+    return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };
+  }
+  var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };
+  function seaToLand(mesh, isSea, c) {
+    const off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    let fr = [c];
+    const seen = /* @__PURE__ */ new Set([c]);
+    for (let d = 0; d <= 6; d++) {
+      const nx = [];
+      for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) {
+        const j = nb[k];
+        if (!isSea[j]) return d + 1;
+        if (!seen.has(j)) {
+          seen.add(j);
+          nx.push(j);
+        }
+      }
+      fr = nx;
+      if (!fr.length) break;
+    }
+    return 99;
+  }
+  function landUseAt(g, c) {
+    const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;
+    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];
+    let relief = 0, kn = 0;
+    for (let k = off[c]; k < off[c + 1]; k++) {
+      relief += Math.abs(elevation[nb[k]] - e);
+      kn++;
+    }
+    relief /= Math.max(1, kn);
+    const nearRiver = river[c] === 1;
+    let res = 0;
+    if (sea) {
+      if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH;
+    } else {
+      const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);
+      if (land) {
+        if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;
+        if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;
+        if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;
+        if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;
+        if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;
+        if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;
+        if (e > 200 && relief > 120) res |= RES.STONE;
+        if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;
+        if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;
+        if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;
+        if (nearRiver) res |= RES.FISH;
+      } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;
+    }
+    resource[c] = res;
+    let sl = SOILS.NONE;
+    if (!sea) {
+      if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;
+      else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;
+      else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;
+      else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;
+      else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;
+      else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;
+      else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;
+      else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;
+      else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;
+      else sl = SOILS.LOAM;
+    }
+    soil[c] = sl;
+    if (land) {
+      const t = temp[c], p = precip[c];
+      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);
+      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);
+      const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3e3, 0, 1);
+      fertility[c] = clamp(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);
+      capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];
+    } else {
+      fertility[c] = 0;
+      capacity[c] = 0;
+    }
+  }
+  function placeInitialGroups(g, spec, variant = 0) {
+    const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;
+    const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];
+    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });
+    cand.sort((a, b) => b.s - a.s || a.c - b.c);
+    const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R);
+    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
+    for (const { c } of cand) {
+      if (out.length >= spec.initialGroups) break;
+      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });
+    }
+    return out;
   }
   function biomeOf(T, P, e) {
     if (e > 4500 || e > 3500 && T < 0) return BIOMES.ALPINE;
@@ -1014,7 +1060,7 @@
     $("redraw").textContent = `${(performance.now() - t0).toFixed(0)} ms\uFF08${W}\xD7${H} \u3092\u5168\u90E8\u63CF\u304D\u76F4\u3057\u305F\u6642\u9593\u3002\u672C\u7269\u306E\u30EC\u30F3\u30C0\u30E9\u30FC\u3067\u306F\u306A\u3044\uFF09`;
   }
   function run() {
-    const seed = $("seed").value.trim() || makeWorldSeed(), cells = Number($("cells").value) || 25e4;
+    const seed = $("seed").value.trim() || makeWorldSeed(Date.now()), cells = Number($("cells").value) || 25e4;
     $("seed").value = seed;
     $("status").textContent = "\u751F\u6210\u4E2D\u2026\uFF08\u3053\u306E\u9593\u3001\u753B\u9762\u306F\u6B62\u307E\u308A\u307E\u3059\uFF09";
     setTimeout(() => {
@@ -1036,7 +1082,7 @@
   $("gen").addEventListener("click", run);
   $("layer").addEventListener("change", draw);
   $("rand").addEventListener("click", () => {
-    $("seed").value = makeWorldSeed();
+    $("seed").value = makeWorldSeed(Date.now());
   });
   $("map").addEventListener("mousemove", (ev) => {
     if (!world || !pixelCell) return;

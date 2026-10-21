@@ -1342,12 +1342,12 @@
     if (rank) for (const b of rank.capitals) placeBurg(b);
     if (states) {
       const list = map.pack.states.filter((s) => s && s.i && !s.removed && s.pole).sort((a, b) => (b.area ?? 0) - (a.area ?? 0));
-      const fade = burgs === "auto" ? 1 - 0.8 * ramp(z, 4.5, 8) : 1;
+      const fade2 = burgs === "auto" ? 1 - 0.8 * ramp(z, 4.5, 8) : 1;
       for (const s of list) {
         if (!inView(s.pole[0], s.pole[1])) continue;
         const size = clamp(12 + Math.sqrt(s.area ?? 0) * 0.012 * Math.min(k, 3), 14, 24);
-        const draw = fade > 0.5 ? tryPlace : (...a) => placedSoft(...a);
-        draw(s.name ?? "", s.pole[0], s.pole[1], size, { color: "#2a1d12", halo: 3.6, weight: 800, spacing: size * 0.18, alpha: fade, shifts: [0, -22, 22, -40, 40] });
+        const draw = fade2 > 0.5 ? tryPlace : (...a) => placedSoft(...a);
+        draw(s.name ?? "", s.pole[0], s.pole[1], size, { color: "#2a1d12", halo: 3.6, weight: 800, spacing: size * 0.18, alpha: fade2, shifts: [0, -22, 22, -40, 40] });
       }
     }
     function placedSoft(text2, wx, wy, sizePx, style) {
@@ -3557,16 +3557,16 @@
     if (!A.length || !D.length) return null;
     const dur = Math.max(1, war.durationMonths ?? 12);
     const prog = clamp2((war.monthsDone ?? 0) / dur, 0, 1);
-    const dec = r.decisiveness ?? 0.5;
+    const dec3 = r.decisiveness ?? 0.5;
     const winnerSide = r.winner === "defender" ? "defender" : "attacker";
-    const pWin = r.winner === "stalemate" ? 0.5 : clamp2(0.55 + dec * 0.35, 0.55, 0.9);
+    const pWin = r.winner === "stalemate" ? 0.5 : clamp2(0.55 + dec3 * 0.35, 0.55, 0.9);
     const pAtt = clamp2((winnerSide === "attacker" ? pWin : 1 - pWin) + (war.edgeShift ?? 0), 0.08, 0.92);
     const side = rnd.next() < pAtt ? "attacker" : "defender";
     const wId = rnd.pick(side === "attacker" ? A : D), lId = rnd.pick(side === "attacker" ? D : A);
     const counter = side === "defender" && winnerSide === "defender" && prog > 0.6;
     const defFront = frontBurgs(map, D, A), attFront = frontBurgs(map, A, D);
     const pool = counter ? attFront : defFront;
-    const reach = side === "attacker" ? clamp2(0.25 + dec * 0.75, 0.25, 1) * (0.2 + 0.8 * prog) : 0.3 * (0.2 + 0.8 * prog);
+    const reach = side === "attacker" ? clamp2(0.25 + dec3 * 0.75, 0.25, 1) * (0.2 + 0.8 * prog) : 0.3 * (0.2 + 0.8 * prog);
     const maxIdx = Math.max(0, Math.floor((pool.length - 1) * reach));
     const used = (war.battles ?? []).map((b) => b.name);
     const usedBurg = new Set((war.battles ?? []).slice(-3).map((b) => b.burgId)), everUsed = new Set((war.battles ?? []).map((b) => b.burgId));
@@ -6577,7 +6577,7 @@
   function migrateLegacyToTreaties(map) {
     const ext = ensureExt(map);
     const data = ext.data;
-    const fmt6 = Number.isInteger(data.saveFormat) ? data.saveFormat : 1;
+    const fmt7 = Number.isInteger(data.saveFormat) ? data.saveFormat : 1;
     const list = [...data.treaties ?? []];
     let id = list.length ? Math.max(...list.map((t) => t.id)) + 1 : 1;
     let added = 0;
@@ -6606,7 +6606,7 @@
     }
     if (added) data.treaties = list;
     data.saveFormat = SAVE_FORMAT;
-    return { from: fmt6, added };
+    return { from: fmt7, added };
   }
   var EXPIRY_WARN_MONTHS = 12;
   function expiringTreaties(map, now = nowOf2(map)) {
@@ -10853,8 +10853,8 @@
   }
 
   // js/version.js
-  var APP_VERSION = "3.0.0";
-  var APP_VERSION_NAME = "\u81EA\u3089\u52D5\u304F\u56FD\u5BB6";
+  var APP_VERSION = "4.0.0";
+  var APP_VERSION_NAME = "\u7403\u9762\u4E16\u754C";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/icons.js
@@ -12502,9 +12502,9 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
     if (elapsed >= total2) return 0;
     if (elapsed < 0) elapsed = 0;
     const rise = Math.min(1, elapsed / 120);
-    const fade = Math.min(1, (total2 - elapsed) / FADE_MS);
+    const fade2 = Math.min(1, (total2 - elapsed) / FADE_MS);
     const pulse = 0.8 + 0.2 * Math.cos(elapsed / PULSE_MS * Math.PI * 2);
-    return rise * fade * pulse;
+    return rise * fade2 * pulse;
   }
   function initHighlight({ store, viewport, renderer }) {
     const canvas = byId("highlight-canvas");
@@ -13149,7 +13149,8 @@ ${shown}${more}`;
     { title: "\u5730\u56F3", items: [
       { id: "btn-edit-mode", icon: "edit", label: "\u5730\u56F3\u7DE8\u96C6", kind: "el", tip: "\u5730\u56F3\u7DE8\u96C6 \u2014 \u5857\u308B\u30FB\u90FD\u5E02\u30FB\u76EE\u5370" },
       { id: "hub-layers", icon: "layers", label: "\u30EC\u30A4\u30E4\u30FC", kind: "layers", tip: "\u5730\u56F3\u306B\u4F55\u3092\u91CD\u306D\u308B\u304B" },
-      { id: "btn-fit", icon: "fit", label: "\u5168\u4F53\u8868\u793A", kind: "el", tip: "\u5730\u56F3\u5168\u4F53\u3092\u8868\u793A (F)" }
+      { id: "btn-fit", icon: "fit", label: "\u5168\u4F53\u8868\u793A", kind: "el", tip: "\u5730\u56F3\u5168\u4F53\u3092\u8868\u793A (F)" },
+      { id: "btn-world", icon: "terrain", label: "\u7403\u9762\u4E16\u754C", kind: "el", tip: "v4 \u306E\u7403\u9762\u4E16\u754C \u2014 \u751F\u6210\u30FB\u521D\u671F\u96C6\u56E3\u30FB\u5730\u5F62\u7DE8\u96C6\uFF08\u65E7\u30A8\u30C7\u30A3\u30BF\u3068\u306F\u5225\u306E\u753B\u9762\uFF09" }
     ] },
     { title: "\u56FD\u5BB6\u3068\u793E\u4F1A", items: [
       { win: "nation", icon: "state", label: "\u56FD\u5BB6" },
@@ -19816,10 +19817,10 @@ ${shown}${more}`;
       nameIn.value = w.name;
       nameIn.className = "war-name-input";
       nameIn.addEventListener("change", () => simActions.renameWar(w.id, nameIn.value));
-      const typeName = warTypeOf(w.type).label;
+      const typeName2 = warTypeOf(w.type).label;
       const now = map.worldTime ?? { year: w.startedAt.year, month: w.startedAt.month };
       const elapsed = Math.max(0, monthIdx(w.endedAt ?? now) - monthIdx(w.startedAt));
-      ov.append(el("label", "field-label", `\u6226\u4E89\u306E\u540D\u524D\uFF08${typeName}\uFF09`), nameIn);
+      ov.append(el("label", "field-label", `\u6226\u4E89\u306E\u540D\u524D\uFF08${typeName2}\uFF09`), nameIn);
       if (!w.endedAt && w.type !== "civil") {
         const tb = el("div", "war-types");
         tb.append(el("h4", "", "\u6226\u4E89\u306E\u5F62\u614B\uFF08\u56FD\u3054\u3068\u3002\u4E0A\u3052\u308B\u3068\u8CA0\u8377\u304C\u5897\u3057\u3001\u6C11\u610F\u3068\u56FD\u5EAB\u304C\u4E0B\u304C\u308B\uFF09"));
@@ -19931,7 +19932,7 @@ ${shown}${more}`;
         };
         const domRaw = r.dominance ?? (r.warScore ? (r.warScore / (100 * T2.scoreScale) - BALANCE.scoreBase) / (1 - BALANCE.scoreBase) : 0);
         row("\u6226\u529B\u5DEE\uFF08\u512A\u52E2\u5EA6\uFF09", `${Math.round(Math.min(1, Math.max(0, domRaw)) * 100)}%`);
-        row("\u6226\u4E89\u306E\u5F62\u614B", `${typeName}\uFF08\u4FC2\u6570 ${T2.scoreScale}\uFF09`);
+        row("\u6226\u4E89\u306E\u5F62\u614B", `${typeName2}\uFF08\u4FC2\u6570 ${T2.scoreScale}\uFF09`);
         row("\u6700\u5927\u30B9\u30B3\u30A2", `${r.warScore ?? 0}\u3000\uFF1D 100 \xD7\uFF080.15 \uFF0B 0.85 \xD7 \u512A\u52E2\u5EA6\uFF09\xD7 \u4FC2\u6570`);
         row("\u7D4C\u904E", `${done} / \u76EE\u5B89 ${dur}\u304B\u6708${over ? `\uFF08\u8D85\u904E ${over}\u304B\u6708\u3076\u3093\u306E\u5360\u9818\u9032\u884C\u3092\u542B\u3080\uFF09` : ""}`);
         row("\u73FE\u5728\u306E\u30B9\u30B3\u30A2", `${cur}${r.victory?.collapse ? "\uFF08\u6C11\u610F\u306E\u5D29\u58CA\u3067\u964D\u4F0F\u3057\u305F\u305F\u3081\u6E80\u984D\uFF09" : ""}`);
@@ -20446,6 +20447,3169 @@ ${shown}${more}`;
     return { situation, bars, treatyBody, renderTreaty, clearHighlight, select: select2 };
   }
 
+  // js/core/world/sphere-mesh.js
+  var MESH_VERSION = "sphere-ico-1";
+  var cellCountForFrequency = (n) => 10 * n * n + 2;
+  var frequencyForCells = (target) => Math.max(1, Math.round(Math.sqrt((target - 2) / 10)));
+  var PHI = (1 + Math.sqrt(5)) / 2;
+  function baseIcosahedron() {
+    const raw = [[-1, PHI, 0], [1, PHI, 0], [-1, -PHI, 0], [1, -PHI, 0], [0, -1, PHI], [0, 1, PHI], [0, -1, -PHI], [0, 1, -PHI], [PHI, 0, -1], [PHI, 0, 1], [-PHI, 0, -1], [-PHI, 0, 1]];
+    const faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+    const a = norm(raw[0]);
+    let u = cross([0, 0, 1], a), s = Math.hypot(...u);
+    const verts = raw.map(norm);
+    if (s > 1e-12) {
+      u = u.map((v) => v / s);
+      const ang = Math.acos(Math.min(1, Math.max(-1, a[2]))), c = Math.cos(ang), sn = Math.sin(ang);
+      for (let i = 0; i < verts.length; i++) {
+        const v = verts[i], k = cross(u, v), d = dot(u, v);
+        verts[i] = [v[0] * c + k[0] * sn * -1 + u[0] * d * (1 - c), v[1] * c + k[1] * sn * -1 + u[1] * d * (1 - c), v[2] * c + k[2] * sn * -1 + u[2] * d * (1 - c)];
+      }
+    }
+    const fixed = faces.map(([p, q, r]) => {
+      const A = verts[p], B = verts[q], C = verts[r];
+      return dot(cross(sub(B, A), sub(C, A)), A) >= 0 ? [p, q, r] : [p, r, q];
+    });
+    return { verts, faces: fixed };
+  }
+  function norm(v) {
+    const l = Math.hypot(v[0], v[1], v[2]);
+    return [v[0] / l, v[1] / l, v[2] / l];
+  }
+  function cross(a, b) {
+    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  }
+  function dot(a, b) {
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  }
+  function sub(a, b) {
+    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  }
+  function buildSphereMesh(n) {
+    if (!Number.isInteger(n) || n < 1) throw new Error("\u5468\u6CE2\u6570 n \u306F 1 \u4EE5\u4E0A\u306E\u6574\u6570");
+    const { verts: bv, faces } = baseIcosahedron();
+    const V = cellCountForFrequency(n), T2 = 20 * n * n;
+    const centerXYZ = new Float32Array(3 * V);
+    for (let i = 0; i < 12; i++) {
+      centerXYZ[3 * i] = bv[i][0];
+      centerXYZ[3 * i + 1] = bv[i][1];
+      centerXYZ[3 * i + 2] = bv[i][2];
+    }
+    const edgeBase = /* @__PURE__ */ new Map();
+    let nextEdge = 12;
+    const interiorPerFace = (n - 1) * (n - 2) / 2, faceBase0 = 12 + 30 * (n - 1);
+    const rowStart = new Int32Array(n + 1);
+    for (let i = 1, acc = 0; i <= n - 2; i++) {
+      rowStart[i] = acc;
+      acc += n - 1 - i;
+    }
+    const tmp = [0, 0, 0];
+    const place = (id, a, b, c, wa, wb, wc) => {
+      tmp[0] = a[0] * wa + b[0] * wb + c[0] * wc;
+      tmp[1] = a[1] * wa + b[1] * wb + c[1] * wc;
+      tmp[2] = a[2] * wa + b[2] * wb + c[2] * wc;
+      const l = Math.hypot(tmp[0], tmp[1], tmp[2]);
+      centerXYZ[3 * id] = tmp[0] / l;
+      centerXYZ[3 * id + 1] = tmp[1] / l;
+      centerXYZ[3 * id + 2] = tmp[2] / l;
+    };
+    const tri = new Uint32Array(3 * T2);
+    let tp = 0;
+    const gid = new Int32Array((n + 1) * (n + 1));
+    for (let f = 0; f < 20; f++) {
+      const [fa, fb, fc] = faces[f], A = bv[fa], B = bv[fb], C = bv[fc], ids2 = [fa, fb, fc];
+      for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) {
+        const k = n - i - j, w = [k, i, j];
+        let id;
+        const zeros = (k === 0 ? 1 : 0) + (i === 0 ? 1 : 0) + (j === 0 ? 1 : 0);
+        if (zeros === 2) id = ids2[k === n ? 0 : i === n ? 1 : 2];
+        else if (zeros === 1) {
+          const slots = [0, 1, 2].filter((s) => w[s] > 0), u = ids2[slots[0]], v = ids2[slots[1]];
+          const lo = Math.min(u, v), hi = Math.max(u, v), key2 = lo * 12 + hi;
+          let base = edgeBase.get(key2);
+          if (base === void 0) {
+            base = nextEdge;
+            nextEdge += n - 1;
+            edgeBase.set(key2, base);
+          }
+          const wLo = u === lo ? w[slots[0]] : w[slots[1]];
+          id = base + (wLo - 1);
+          if (!(centerXYZ[3 * id] || centerXYZ[3 * id + 1] || centerXYZ[3 * id + 2])) place(id, A, B, C, k, i, j);
+        } else {
+          id = faceBase0 + f * interiorPerFace + rowStart[i] + (j - 1);
+          place(id, A, B, C, k, i, j);
+        }
+        gid[i * (n + 1) + j] = id;
+      }
+      for (let i = 0; i < n; i++) for (let j = 0; i + j < n; j++) {
+        const p = gid[i * (n + 1) + j], q = gid[(i + 1) * (n + 1) + j], r = gid[i * (n + 1) + j + 1];
+        tri[tp++] = p;
+        tri[tp++] = q;
+        tri[tp++] = r;
+        if (i + j < n - 1) {
+          const s = gid[(i + 1) * (n + 1) + j + 1];
+          tri[tp++] = q;
+          tri[tp++] = s;
+          tri[tp++] = r;
+        }
+      }
+    }
+    if (tp !== 3 * T2) throw new Error(`\u4E09\u89D2\u5F62\u306E\u6570\u304C\u5408\u308F\u306A\u3044: ${tp / 3} != ${T2}`);
+    {
+      const a = tri[0] * 3, b = tri[1] * 3, c = tri[2] * 3, P3 = [centerXYZ[a], centerXYZ[a + 1], centerXYZ[a + 2]];
+      const Q = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];
+      if (dot(cross(sub(Q, P3), sub(R, P3)), P3) < 0) for (let t = 0; t < T2; t++) {
+        const x = tri[3 * t + 1];
+        tri[3 * t + 1] = tri[3 * t + 2];
+        tri[3 * t + 2] = x;
+      }
+    }
+    const deg = new Uint32Array(V + 1);
+    for (let t = 0; t < 3 * T2; t++) deg[tri[t] + 1]++;
+    const offs = new Uint32Array(V + 1);
+    for (let i = 0; i < V; i++) offs[i + 1] = offs[i] + deg[i + 1];
+    const fill = new Uint32Array(V), sV = new Uint32Array(3 * T2), sW = new Uint32Array(3 * T2), sT = new Uint32Array(3 * T2);
+    for (let t = 0; t < T2; t++) for (let r = 0; r < 3; r++) {
+      const u = tri[3 * t + r], v = tri[3 * t + (r + 1) % 3], w = tri[3 * t + (r + 2) % 3], s = offs[u] + fill[u]++;
+      sV[s] = v;
+      sW[s] = w;
+      sT[s] = t;
+    }
+    const neighborIds = new Uint32Array(3 * T2), cellVertexIds = new Uint32Array(3 * T2);
+    for (let u = 0; u < V; u++) {
+      const s0 = offs[u], e0 = offs[u + 1], d = e0 - s0;
+      let cur = s0;
+      for (let k = 0; k < d; k++) {
+        neighborIds[s0 + k] = sV[cur];
+        cellVertexIds[s0 + k] = sT[cur];
+        const want = sW[cur];
+        let nx = -1;
+        for (let s = s0; s < e0; s++) if (sV[s] === want) {
+          nx = s;
+          break;
+        }
+        if (nx < 0) throw new Error(`\u9802\u70B9 ${u} \u306E\u5468\u308A\u304C\u9589\u3058\u3066\u3044\u306A\u3044`);
+        cur = nx;
+      }
+    }
+    const vertexXYZ = new Float32Array(3 * T2);
+    for (let t = 0; t < T2; t++) {
+      const a = tri[3 * t] * 3, b = tri[3 * t + 1] * 3, c = tri[3 * t + 2] * 3;
+      const x = centerXYZ[a] + centerXYZ[b] + centerXYZ[c], y = centerXYZ[a + 1] + centerXYZ[b + 1] + centerXYZ[c + 1], z = centerXYZ[a + 2] + centerXYZ[b + 2] + centerXYZ[c + 2], l = Math.hypot(x, y, z);
+      vertexXYZ[3 * t] = x / l;
+      vertexXYZ[3 * t + 1] = y / l;
+      vertexXYZ[3 * t + 2] = z / l;
+    }
+    return { meshVersion: MESH_VERSION, n, cellCount: V, triangleCount: T2, centerXYZ, neighborOffsets: offs, neighborIds, vertexXYZ, cellVertexOffsets: offs, cellVertexIds };
+  }
+  function latLonToXYZ(lat, lon) {
+    const c = Math.cos(lat);
+    return [c * Math.cos(lon), c * Math.sin(lon), Math.sin(lat)];
+  }
+  function unprojectViewToSphere(u, v) {
+    return latLonToXYZ(Math.PI / 2 - v * Math.PI, u * 2 * Math.PI - Math.PI);
+  }
+  function greatCircleRad(ax, ay, az, bx, by, bz) {
+    const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;
+    return Math.atan2(Math.hypot(cx, cy, cz), ax * bx + ay * by + az * bz);
+  }
+  function cellViewPolygon(mesh, c) {
+    const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1], d = e - s;
+    const cx = mesh.centerXYZ[3 * c], cy = mesh.centerXYZ[3 * c + 1], cz = mesh.centerXYZ[3 * c + 2];
+    const lon0 = Math.atan2(cy, cx), lon = new Float64Array(d), lat = new Float64Array(d);
+    let prev = 0, sum = 0;
+    for (let k = 0; k < d; k++) {
+      const t = mesh.cellVertexIds[s + k], x = mesh.vertexXYZ[3 * t], y = mesh.vertexXYZ[3 * t + 1], z = mesh.vertexXYZ[3 * t + 2];
+      let dl = Math.atan2(y, x) - lon0;
+      while (dl > Math.PI) dl -= 2 * Math.PI;
+      while (dl < -Math.PI) dl += 2 * Math.PI;
+      if (k > 0) {
+        let st = dl - prev;
+        while (st > Math.PI) st -= 2 * Math.PI;
+        while (st < -Math.PI) st += 2 * Math.PI;
+        sum += st;
+        dl = prev + st;
+      }
+      lon[k] = lon0 + dl;
+      lat[k] = Math.asin(Math.max(-1, Math.min(1, z)));
+      prev = dl;
+    }
+    let closing = 0;
+    {
+      let st = Math.atan2(mesh.vertexXYZ[3 * mesh.cellVertexIds[s] + 1], mesh.vertexXYZ[3 * mesh.cellVertexIds[s]]) - lon0 - prev;
+      while (st > Math.PI) st -= 2 * Math.PI;
+      while (st < -Math.PI) st += 2 * Math.PI;
+      closing = st;
+    }
+    const turn = sum + closing, wrapsPole = Math.abs(turn) > Math.PI;
+    return { lon, lat, wrapsPole, poleSign: wrapsPole ? Math.sign(cz) || 1 : 0, turn };
+  }
+  function sphericalTriangleArea(ax, ay, az, bx, by, bz, cx, cy, cz) {
+    const triple = ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);
+    const den = 1 + (ax * bx + ay * by + az * bz) + (bx * cx + by * cy + bz * cz) + (cx * ax + cy * ay + cz * az);
+    return 2 * Math.atan2(Math.abs(triple), den);
+  }
+  function cellArea(mesh, c) {
+    const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1], cx = mesh.centerXYZ[3 * c], cy = mesh.centerXYZ[3 * c + 1], cz = mesh.centerXYZ[3 * c + 2];
+    let a = 0;
+    for (let k = s; k < e; k++) {
+      const p = mesh.cellVertexIds[k], q = mesh.cellVertexIds[k + 1 < e ? k + 1 : s];
+      a += sphericalTriangleArea(cx, cy, cz, mesh.vertexXYZ[3 * p], mesh.vertexXYZ[3 * p + 1], mesh.vertexXYZ[3 * p + 2], mesh.vertexXYZ[3 * q], mesh.vertexXYZ[3 * q + 1], mesh.vertexXYZ[3 * q + 2]);
+    }
+    return a;
+  }
+  function validateSphereMesh(mesh) {
+    const errs = [], { cellCount: V, neighborOffsets: off, neighborIds: nb } = mesh;
+    let pent = 0;
+    for (let u = 0; u < V; u++) {
+      const d = off[u + 1] - off[u];
+      if (d === 5) pent++;
+      else if (d !== 6) errs.push(`\u30BB\u30EB ${u} \u306E\u96A3\u63A5\u6570\u304C ${d}`);
+      for (let k = off[u]; k < off[u + 1]; k++) {
+        const v = nb[k];
+        if (v === u) errs.push(`\u30BB\u30EB ${u} \u304C\u81EA\u5206\u3068\u96A3\u63A5`);
+        let back = false;
+        for (let m = off[v]; m < off[v + 1]; m++) if (nb[m] === u) {
+          back = true;
+          break;
+        }
+        if (!back) {
+          errs.push(`\u96A3\u63A5\u304C\u975E\u5BFE\u79F0: ${u}\u2192${v}`);
+          if (errs.length > 20) return errs;
+        }
+      }
+      if (errs.length > 20) return errs;
+    }
+    if (pent !== 12) errs.push(`\u4E94\u89D2\u5F62\u306E\u30BB\u30EB\u304C ${pent} \u500B\uFF0812 \u500B\u306E\u306F\u305A\uFF09`);
+    return errs;
+  }
+  function meshHash(mesh) {
+    let h = 2166136261;
+    const mix2 = (v) => {
+      h ^= v & 255;
+      h = Math.imul(h, 16777619);
+      h ^= v >>> 8 & 255;
+      h = Math.imul(h, 16777619);
+      h ^= v >>> 16 & 255;
+      h = Math.imul(h, 16777619);
+      h ^= v >>> 24 & 255;
+      h = Math.imul(h, 16777619);
+    };
+    for (let i = 0; i < mesh.centerXYZ.length; i++) mix2(Math.round(mesh.centerXYZ[i] * 1e6) | 0);
+    for (let i = 0; i < mesh.neighborIds.length; i++) mix2(mesh.neighborIds[i]);
+    return (h >>> 0).toString(16).padStart(8, "0");
+  }
+
+  // js/core/world/spec.js
+  var GENERATOR_VERSION = "4.0.0-alpha.1";
+  var WORLD_SPEC_SCHEMA = 1;
+  var ISLAND_MODES = Object.freeze({ few: 12, normal: 40, many: 90 });
+  var DEFAULT_WORLD_SPEC = Object.freeze({
+    schemaVersion: WORLD_SPEC_SCHEMA,
+    generatorVersion: GENERATOR_VERSION,
+    worldSeed: "",
+    planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
+    resolution: Object.freeze({ targetCells: 25e4 }),
+    landFraction: 0.5,
+    continentCountTarget: 6,
+    islandMode: "many",
+    plateCount: 14,
+    initialGroups: 12,
+    climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })
+  });
+  var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+  function normalizeWorldSpec(input2 = {}) {
+    const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input2) ? input2 : {};
+    const num2 = (v, def, lo, hi, name, int = false) => {
+      if (v === void 0) return def;
+      if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {
+        errors.push(`${name} \u306F ${lo}\u301C${hi}${int ? " \u306E\u6574\u6570" : ""}\uFF08\u53D7\u3051\u53D6\u3063\u305F\u5024: ${String(v)}\uFF09`);
+        return def;
+      }
+      return v;
+    };
+    const spec = {
+      schemaVersion: WORLD_SPEC_SCHEMA,
+      generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,
+      worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),
+      planet: {
+        radiusKm: num2(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),
+        displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection
+      },
+      resolution: { targetCells: num2(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },
+      landFraction: num2(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
+      continentCountTarget: num2(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
+      islandMode: i.islandMode ?? d.islandMode,
+      plateCount: num2(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
+      initialGroups: num2(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
+      climateModel: {
+        fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,
+        lapseRateCPerKm: num2(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),
+        windMoistureLengthKm: num2(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")
+      }
+    };
+    if (!spec.worldSeed) errors.push("worldSeed \u304C\u7A7A\uFF08\u30B7\u30FC\u30C9\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u751F\u6210\u3059\u308B\u5834\u5408\u306F makeWorldSeed \u3092\u4F7F\u3046\uFF09");
+    if (!(spec.islandMode in ISLAND_MODES)) {
+      errors.push(`islandMode \u306F ${Object.keys(ISLAND_MODES).join("/")} \u306E\u3044\u305A\u308C\u304B`);
+      spec.islandMode = d.islandMode;
+    }
+    if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \u306F\u73FE\u5728 equirectangular \u306E\u307F");
+    if (isObj(input2) && input2.schemaVersion !== void 0 && input2.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input2.schemaVersion} \u306F\u672A\u5BFE\u5FDC`);
+    return { spec, errors };
+  }
+  function makeWorldSeed(now) {
+    if (!Number.isFinite(now)) throw new Error("makeWorldSeed \u306B\u306F\u6642\u523B\uFF08\u30DF\u30EA\u79D2\uFF09\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044");
+    const s = Math.floor(now).toString(36), r = Math.floor((now * 9301 + 49297) % 233280).toString(36);
+    return `W-${s}-${r}`.toUpperCase();
+  }
+
+  // js/core/world/noise.js
+  function hashString(str) {
+    let h = 1779033703 ^ str.length;
+    for (let i = 0; i < str.length; i++) {
+      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+      h = h << 13 | h >>> 19;
+    }
+    h = Math.imul(h ^ h >>> 16, 2246822507);
+    h = Math.imul(h ^ h >>> 13, 3266489909);
+    return (h ^ h >>> 16) >>> 0;
+  }
+  function makeRng(seedStr, stage = "") {
+    let a = hashString(`${seedStr}::${stage}`);
+    const next = () => {
+      a = a + 1831565813 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+    next.range = (lo, hi) => lo + (hi - lo) * next();
+    next.int = (lo, hi) => Math.floor(next.range(lo, hi + 1));
+    next.unitVec = () => {
+      const z = next.range(-1, 1), t = next.range(0, 2 * Math.PI), r = Math.sqrt(1 - z * z);
+      return [r * Math.cos(t), r * Math.sin(t), z];
+    };
+    return next;
+  }
+  function hash3(seed, x, y, z) {
+    let h = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
+    h = Math.imul(h ^ h >>> 15, 2246822507);
+    h = Math.imul(h ^ h >>> 13, 3266489909);
+    return ((h ^ h >>> 16) >>> 0) / 4294967296;
+  }
+  var fade = (t) => t * t * (3 - 2 * t);
+  function valueNoise3(seed, x, y, z) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx = fade(x - xi), fy = fade(y - yi), fz = fade(z - zi);
+    const c000 = hash3(seed, xi, yi, zi), c100 = hash3(seed, xi + 1, yi, zi), c010 = hash3(seed, xi, yi + 1, zi), c110 = hash3(seed, xi + 1, yi + 1, zi);
+    const c001 = hash3(seed, xi, yi, zi + 1), c101 = hash3(seed, xi + 1, yi, zi + 1), c011 = hash3(seed, xi, yi + 1, zi + 1), c111 = hash3(seed, xi + 1, yi + 1, zi + 1);
+    const x00 = c000 + (c100 - c000) * fx, x10 = c010 + (c110 - c010) * fx, x01 = c001 + (c101 - c001) * fx, x11 = c011 + (c111 - c011) * fx;
+    const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;
+    return y0 + (y1 - y0) * fz;
+  }
+  function fbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {
+    let sum = 0, amp = 1, norm2 = 0, f = freq;
+    for (let o = 0; o < octaves; o++) {
+      sum += amp * valueNoise3(seed + o * 101, x * f, y * f, z * f);
+      norm2 += amp;
+      amp *= gain;
+      f *= 2.03;
+    }
+    return sum / norm2;
+  }
+
+  // js/core/world/worldgen.js
+  var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
+  var BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });
+  var BIOME_NAMES = Object.freeze(["\u6D77", "\u6C37\u96EA", "\u30C4\u30F3\u30C9\u30E9", "\u30BF\u30A4\u30AC", "\u6E29\u5E2F\u6797", "\u8349\u539F", "\u71B1\u5E2F\u7802\u6F20", "\u5BD2\u51B7\u7802\u6F20", "\u30B5\u30D0\u30F3\u30CA", "\u71B1\u5E2F\u5B63\u7BC0\u6797", "\u71B1\u5E2F\u96E8\u6797", "\u9AD8\u5C71", "\u6E7F\u5730", "\u6E56"]);
+  var SOILS = Object.freeze({ NONE: 0, ROCK: 1, SAND: 2, LOAM: 3, CLAY: 4, VOLCANIC: 5, PERMAFROST: 6, ALLUVIAL: 7, PODZOL: 8, BLACK_EARTH: 9 });
+  var RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 });
+  var RES_NAMES = Object.freeze({ 1: "\u9244", 2: "\u9285", 4: "\u932B", 8: "\u91D1", 16: "\u77F3\u70AD", 32: "\u5869", 64: "\u6728\u6750", 128: "\u6F01\u5834", 256: "\u77F3\u6750", 512: "\u7C98\u571F", 1024: "\u5B9D\u77F3" });
+  var clamp20 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var smooth = (t) => {
+    t = clamp20(t, 0, 1);
+    return t * t * (3 - 2 * t);
+  };
+  var D2R = Math.PI / 180;
+  var MinHeap = class {
+    constructor(cap) {
+      this.k = new Float64Array(cap);
+      this.v = new Int32Array(cap);
+      this.n = 0;
+    }
+    push(key2, val) {
+      let i = this.n++;
+      const k = this.k, v = this.v;
+      while (i > 0) {
+        const p = i - 1 >> 1;
+        if (k[p] <= key2) break;
+        k[i] = k[p];
+        v[i] = v[p];
+        i = p;
+      }
+      k[i] = key2;
+      v[i] = val;
+    }
+    pop() {
+      const k = this.k, v = this.v, top = v[0], key2 = k[--this.n], val = v[this.n];
+      let i = 0;
+      const n = this.n;
+      while (true) {
+        let c = 2 * i + 1;
+        if (c >= n) break;
+        if (c + 1 < n && k[c + 1] < k[c]) c++;
+        if (k[c] >= key2) break;
+        k[i] = k[c];
+        v[i] = v[c];
+        i = c;
+      }
+      k[i] = key2;
+      v[i] = val;
+      return top;
+    }
+  };
+  var Cancelled = class extends Error {
+  };
+  var makeStager = (onProgress, signal, timings) => (name, label2, fn) => {
+    if (signal?.aborted) throw new Cancelled("\u30AD\u30E3\u30F3\u30BB\u30EB\u3055\u308C\u307E\u3057\u305F");
+    onProgress?.({ stage: name, label: label2, fraction: 0 });
+    const t = performance.now(), r = fn();
+    timings[name] = Math.round(performance.now() - t);
+    onProgress?.({ stage: name, label: label2, fraction: 1, ms: timings[name] });
+    return r;
+  };
+  function generateWorld(specInput, options = {}) {
+    const { spec, errors } = normalizeWorldSpec(specInput);
+    if (errors.length) throw new Error("WorldSpec \u304C\u4E0D\u6B63: " + errors.join(" / "));
+    const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();
+    const n = frequencyForCells(spec.resolution.targetCells);
+    const mesh = stage("G1_mesh", "\u7403\u9762\u30E1\u30C3\u30B7\u30E5", () => buildSphereMesh(n));
+    const V = mesh.cellCount, X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = spec.planet.radiusKm;
+    const lat = new Float32Array(V), lon = new Float32Array(V), areaKm2 = new Float32Array(V);
+    stage("G1_derive", "\u7DEF\u5EA6\u7D4C\u5EA6\u30FB\u9762\u7A4D", () => {
+      for (let c = 0; c < V; c++) {
+        lat[c] = Math.asin(clamp20(X[3 * c + 2], -1, 1));
+        lon[c] = Math.atan2(X[3 * c + 1], X[3 * c]);
+        areaKm2[c] = cellArea(mesh, c) * R * R;
+      }
+    });
+    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), spacingRad = spacingKm / R;
+    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
+    const nSeed = (name) => hashString(`${seed}::noise::${name}`);
+    const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);
+    const volcanic = new Float32Array(V);
+    stage("G2_plates", "\u30D7\u30EC\u30FC\u30C8\u30FB\u5927\u9678\u306E\u6982\u5F62", () => {
+      const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];
+      const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);
+      for (let c = 0; c < V; c++) {
+        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
+        const w = (i) => (fbm3(warpSeed[i], x, y, z, 3, 1.5) - 0.5) * 0.32 + (fbm3(warpSeed[i] + 7, x, y, z, 3, 5.5) - 0.5) * 0.3;
+        const ax = w(0), ay = w(1), az = w(2);
+        const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);
+        wx[c] = px / l;
+        wy[c] = py / l;
+        wz[c] = pz / l;
+      }
+      const rp = makeRng(seed, "plates"), P3 = spec.plateCount, seeds = [], omega = [];
+      for (let p = 0; p < P3; p++) {
+        seeds.push(rp.unitVec());
+        const w = rp.unitVec(), sp = rp.range(0.4, 1.6);
+        omega.push([w[0] * sp, w[1] * sp, w[2] * sp]);
+      }
+      for (let c = 0; c < V; c++) {
+        let best = -2, bp = 0;
+        for (let p = 0; p < P3; p++) {
+          const d = wx[c] * seeds[p][0] + wy[c] * seeds[p][1] + wz[c] * seeds[p][2];
+          if (d > best) {
+            best = d;
+            bp = p;
+          }
+        }
+        plate[c] = bp;
+      }
+      const vel = (p, c) => {
+        const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
+        return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x];
+      };
+      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V);
+      for (let c = 0; c < V; c++) {
+        let best = 0, bestAbs = 0;
+        const vc = vel(plate[c], c);
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (plate[j] === plate[c]) continue;
+          const vj = vel(plate[j], c);
+          let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2];
+          const dl = Math.hypot(dx, dy, dz) || 1;
+          dx /= dl;
+          dy /= dl;
+          dz /= dl;
+          const conv = (vc[0] - vj[0]) * dx + (vc[1] - vj[1]) * dy + (vc[2] - vj[2]) * dz;
+          if (Math.abs(conv) > bestAbs) {
+            bestAbs = Math.abs(conv);
+            best = conv;
+          }
+        }
+        if (bestAbs > 0) {
+          isSrc[c] = 1;
+          srcStrength[c] = best;
+        }
+      }
+      const widthCells = Math.max(2, 5 * D2R / spacingRad), maxD = Math.ceil(widthCells * 3);
+      const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V);
+      let qh = 0, qt = 0;
+      for (let c = 0; c < V; c++) if (isSrc[c]) {
+        dist[c] = 0;
+        from[c] = c;
+        q[qt++] = c;
+      }
+      while (qh < qt) {
+        const c = q[qh++];
+        if (dist[c] >= maxD) continue;
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (dist[j] < 0) {
+            dist[j] = dist[c] + 1;
+            from[j] = from[c];
+            q[qt++] = j;
+          }
+        }
+      }
+      const nm8 = nSeed("ridge");
+      for (let c = 0; c < V; c++) {
+        if (dist[c] < 0) continue;
+        const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));
+        const mod = 0.55 + 0.9 * fbm3(nm8, X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3, 3, 1.4);
+        if (s > 0) {
+          mountain[c] = clamp20(s / 1.2, 0, 1.3) * f * mod;
+          volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;
+        } else rift[c] = clamp20(-s / 1.2, 0, 1) * f;
+      }
+      const rc = makeRng(seed, "continents"), K = spec.continentCountTarget;
+      const thetaLand = Math.acos(clamp20(1 - 2 * spec.landFraction / K, -1, 1));
+      let bestSet = null, bestSep = -1;
+      for (let trial = 0; trial < 3e3; trial++) {
+        const pts = [];
+        for (let i = 0; i < K; i++) pts.push(rc.unitVec());
+        let sep = 9;
+        for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp20(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));
+        if (sep > bestSep) {
+          bestSep = sep;
+          bestSet = pts;
+        }
+      }
+      const cs = bestSet.map((v) => ({ v, r: thetaLand * rc.range(0.8, 0.95) }));
+      const isl = [];
+      const NI = ISLAND_MODES[spec.islandMode];
+      for (let i = 0; i < NI; i++) isl.push({ v: rc.unitVec(), r: rc.range(1.2, 5.5) * D2R, w: rc.range(0.45, 0.95) });
+      const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];
+      for (let c = 0; c < V; c++) {
+        let f = 0;
+        for (const o of cs) {
+          const d = Math.acos(clamp20(dotp(c, o.v), -1, 1)), t = clamp20((1 - d / (o.r * 1.1)) * 2.2, 0, 1);
+          f = Math.max(f, t * t * (3 - 2 * t));
+        }
+        for (const o of isl) {
+          const d = Math.acos(clamp20(dotp(c, o.v), -1, 1));
+          if (d < o.r * 1.5) {
+            const t = clamp20(1 - d / (o.r * 1.5), 0, 1);
+            f = Math.max(f, o.w * t * t * (3 - 2 * t));
+          }
+        }
+        continent[c] = f;
+      }
+      const rh = makeRng(seed, "hotspots");
+      for (let h = 0; h < 6; h++) {
+        const start2 = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;
+        const dot2 = start2[0] * dirv[0] + start2[1] * dirv[1] + start2[2] * dirv[2];
+        let t = [dirv[0] - dot2 * start2[0], dirv[1] - dot2 * start2[1], dirv[2] - dot2 * start2[2]];
+        const tl = Math.hypot(...t) || 1;
+        t = t.map((x) => x / tl);
+        for (let i = 0; i < count; i++) {
+          const a = i * step, p = [start2[0] * Math.cos(a) + t[0] * Math.sin(a), start2[1] * Math.cos(a) + t[1] * Math.sin(a), start2[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));
+          for (let c = 0; c < V; c++) {
+            const d = Math.acos(clamp20(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));
+            if (d < rad * 2) {
+              const g = Math.exp(-((d / rad) ** 2));
+              continent[c] = Math.max(continent[c], amp * g * 0.9);
+              volcanic[c] = Math.max(volcanic[c], g);
+            }
+          }
+        }
+      }
+    });
+    const elevation = new Float32Array(V);
+    let seaLevelRaw = 0;
+    stage("G3_elevation", "\u6A19\u9AD8\u30FB\u6D77\u5CB8\u30FB\u5CF6", () => {
+      const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);
+      for (let c = 0; c < V; c++) {
+        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];
+        const land = smooth((cf - 0.25) / 0.45);
+        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) + mountain[c] * (0.03 + 0.97 * land) * 1.5 - rift[c] * 0.22;
+      }
+      const sorted = Float32Array.from(raw).sort();
+      seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];
+      const hi = sorted[Math.min(V - 1, Math.floor(V * 0.998))], lo = sorted[0];
+      for (let c = 0; c < V; c++) {
+        const e = raw[c] - seaLevelRaw;
+        elevation[c] = e >= 0 ? Math.pow(Math.min(1.35, e / Math.max(1e-6, hi - seaLevelRaw)), 1.2) * 6500 : e / Math.max(1e-6, seaLevelRaw - lo) * 5500;
+      }
+    });
+    const isSea = new Uint8Array(V);
+    for (let c = 0; c < V; c++) isSea[c] = elevation[c] <= 0 ? 1 : 0;
+    const coastDist = new Uint16Array(V);
+    stage("G3_coast", "\u6D77\u5CB8\u304B\u3089\u306E\u8DDD\u96E2", () => {
+      const q = new Int32Array(V);
+      let qh = 0, qt = 0;
+      const seen = new Uint8Array(V);
+      for (let c = 0; c < V; c++) if (isSea[c]) {
+        seen[c] = 1;
+        q[qt++] = c;
+      }
+      while (qh < qt) {
+        const c = q[qh++];
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (!seen[j]) {
+            seen[j] = 1;
+            coastDist[j] = Math.min(65535, coastDist[c] + 1);
+            q[qt++] = j;
+          }
+        }
+      }
+    });
+    const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);
+    const cx = { mesh, lat, lon, elevation, isSea, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };
+    stage("G4_climate", "\u6C17\u5019", () => {
+      for (let c = 0; c < V; c++) temp[c] = tempAt(lat[c], elevation[c], cx.lapse);
+      cx.up = new Int32Array(V);
+      for (let c = 0; c < V; c++) cx.up[c] = upwindOf(mesh, lat, lon, c);
+      for (let c = 0; c < V; c++) moisture[c] = isSea[c] ? 1 : 0.5;
+      const passes = Math.min(200, Math.ceil(4e3 / spacingKm) + 4);
+      for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) {
+        if (!isSea[c]) moisture[c] = moistureStep(cx, c);
+      }
+      for (let c = 0; c < V; c++) precip[c] = precipAt(cx, c);
+    });
+    stage("G4_biome", "\u30D0\u30A4\u30AA\u30FC\u30E0", () => {
+      for (let c = 0; c < V; c++) biome[c] = isSea[c] ? BIOMES.OCEAN : biomeOf(temp[c], precip[c], elevation[c]);
+    });
+    const parent = new Int32Array(V).fill(-1), filled = new Float32Array(V), flow = new Float32Array(V), basin = new Int32Array(V).fill(-1), landWater = new Uint8Array(V);
+    let lakeCount = 0;
+    const hyd = { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome };
+    stage("G5_rivers", "\u6C34\u7CFB", () => {
+      lakeCount = computeHydrology(hyd, null).lakeCount;
+    });
+    let riverThreshold = 0;
+    const river = new Uint8Array(V);
+    stage("G5_riverset", "\u6CB3\u5DDD\u306E\u9078\u5B9A", () => {
+      const f = [];
+      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND) f.push(flow[c]);
+      f.sort((a, b) => a - b);
+      riverThreshold = f.length ? f[Math.floor(f.length * 0.93)] : 0;
+      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && flow[c] >= riverThreshold && flow[c] > 0) river[c] = 1;
+    });
+    const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);
+    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };
+    stage("G6_soil", "\u571F\u58CC\u30FB\u80A5\u6C83\u5EA6\u30FB\u8CC7\u6E90", () => {
+      for (let c = 0; c < V; c++) landUseAt(lu, c);
+    });
+    const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };
+    const populations = stage("G7_groups", "\u521D\u671F\u4EBA\u53E3\u96C6\u56E3", () => placeInitialGroups(gctx, spec, 0));
+    const stats = stage("G8_stats", "\u7D71\u8A08", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
+    const world = {
+      spec: { ...spec, generatorVersion: GENERATOR_VERSION },
+      mesh,
+      cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },
+      entities: { populations },
+      stats,
+      timings
+    };
+    timings.total = Math.round(performance.now() - tAll);
+    world.hash = worldHash(world);
+    return world;
+  }
+  function tempAt(latRad, elevation, lapse) {
+    const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1e3;
+    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;
+  }
+  function upwindOf(mesh, lat, lon, c) {
+    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;
+    const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);
+    const wx = -east * ex, wy = -east * ey;
+    let best = -2, bj = -1;
+    for (let k = off[c]; k < off[c + 1]; k++) {
+      const j = nb[k], dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2], dl = Math.hypot(dx, dy, dz) || 1, s = (dx * wx + dy * wy) / dl;
+      if (s > best) {
+        best = s;
+        bj = j;
+      }
+    }
+    return bj;
+  }
+  var upOf = (cx, c) => cx.up ? cx.up[c] : upwindOf(cx.mesh, cx.lat, cx.lon, c);
+  function liftRaw(cx, c) {
+    const u = upOf(cx, c);
+    return Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3;
+  }
+  function moistureStep(cx, c) {
+    const u = upOf(cx, c);
+    return clamp20(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);
+  }
+  function precipAt(cx, c) {
+    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
+    const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];
+    let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);
+    if (!sea && cx.elevation[c] > 3500) p *= 0.6;
+    return clamp20(p, 0, 6e3);
+  }
+  function biomeAt(T2, P3, e, sea) {
+    return sea ? BIOMES.OCEAN : biomeOf(T2, P3, e);
+  }
+  function computeHydrology(h, members = null) {
+    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;
+    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;
+    const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);
+    let on = 0;
+    for (let c = 0; c < V; c++) {
+      if (members && !members[c]) continue;
+      filled[c] = elevation[c];
+      parent[c] = -1;
+      basin[c] = -1;
+    }
+    for (let c = 0; c < V; c++) {
+      if (isSea[c]) {
+        done[c] = 1;
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (!isSea[j] && (!members || members[j])) {
+            heap.push(filled[c], c);
+            break;
+          }
+        }
+      } else if (members && !members[c]) done[c] = 1;
+    }
+    while (heap.n > 0) {
+      const c = heap.pop();
+      order[on++] = c;
+      for (let k = off[c]; k < off[c + 1]; k++) {
+        const j = nb[k];
+        if (done[j]) continue;
+        done[j] = 1;
+        parent[j] = c;
+        filled[j] = Math.max(elevation[j], filled[c] + EPS);
+        heap.push(filled[j], j);
+      }
+    }
+    for (let c = 0; c < V; c++) {
+      if (members && !members[c]) continue;
+      flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 95e-7;
+    }
+    for (let i = on - 1; i >= 0; i--) {
+      const c = order[i], p = parent[c];
+      if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c];
+    }
+    for (let i = 0; i < on; i++) {
+      const c = order[i];
+      if (isSea[c]) continue;
+      const p = parent[c];
+      basin[c] = isSea[p] ? c : basin[p];
+    }
+    let lakeCount = 0, unreached = 0;
+    for (let c = 0; c < V; c++) {
+      if (members && !members[c]) continue;
+      if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;
+      else {
+        if (parent[c] < 0) unreached++;
+        if (filled[c] - elevation[c] >= 40) {
+          landWater[c] = LAND_WATER.LAKE;
+          lakeCount++;
+          biome[c] = BIOMES.LAKE;
+        } else landWater[c] = LAND_WATER.LAND;
+      }
+    }
+    return { lakeCount, unreached };
+  }
+  function landUseNoise(seed) {
+    const ns = (name) => hashString(`${seed}::noise::${name}`);
+    return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };
+  }
+  var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };
+  function seaToLand(mesh, isSea, c) {
+    const off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    let fr = [c];
+    const seen = /* @__PURE__ */ new Set([c]);
+    for (let d = 0; d <= 6; d++) {
+      const nx = [];
+      for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) {
+        const j = nb[k];
+        if (!isSea[j]) return d + 1;
+        if (!seen.has(j)) {
+          seen.add(j);
+          nx.push(j);
+        }
+      }
+      fr = nx;
+      if (!fr.length) break;
+    }
+    return 99;
+  }
+  function landUseAt(g, c) {
+    const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;
+    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];
+    let relief = 0, kn = 0;
+    for (let k = off[c]; k < off[c + 1]; k++) {
+      relief += Math.abs(elevation[nb[k]] - e);
+      kn++;
+    }
+    relief /= Math.max(1, kn);
+    const nearRiver = river[c] === 1;
+    let res = 0;
+    if (sea) {
+      if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH;
+    } else {
+      const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);
+      if (land) {
+        if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;
+        if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;
+        if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;
+        if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;
+        if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;
+        if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;
+        if (e > 200 && relief > 120) res |= RES.STONE;
+        if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;
+        if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;
+        if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;
+        if (nearRiver) res |= RES.FISH;
+      } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;
+    }
+    resource[c] = res;
+    let sl = SOILS.NONE;
+    if (!sea) {
+      if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;
+      else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;
+      else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;
+      else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;
+      else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;
+      else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;
+      else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;
+      else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;
+      else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;
+      else sl = SOILS.LOAM;
+    }
+    soil[c] = sl;
+    if (land) {
+      const t = temp[c], p = precip[c];
+      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp20(1 - (t - 26) / 12, 0.2, 1);
+      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp20(1 - (p - 2200) / 3500, 0.5, 1);
+      const slope = 1 - clamp20(relief / 700, 0, 0.9), alt = 1 - clamp20(Math.max(0, e - 1500) / 3e3, 0, 1);
+      fertility[c] = clamp20(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);
+      capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];
+    } else {
+      fertility[c] = 0;
+      capacity[c] = 0;
+    }
+  }
+  function placeInitialGroups(g, spec, variant = 0) {
+    const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;
+    const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];
+    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });
+    cand.sort((a, b) => b.s - a.s || a.c - b.c);
+    const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R);
+    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
+    for (const { c } of cand) {
+      if (out.length >= spec.initialGroups) break;
+      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });
+    }
+    return out;
+  }
+  function biomeOf(T2, P3, e) {
+    if (e > 4500 || e > 3500 && T2 < 0) return BIOMES.ALPINE;
+    if (T2 < -8) return BIOMES.ICE;
+    if (T2 < 0) return BIOMES.TUNDRA;
+    if (T2 < 5) return P3 > 300 ? BIOMES.TAIGA : BIOMES.COLD_DESERT;
+    if (T2 < 18) return P3 < 200 ? BIOMES.COLD_DESERT : P3 < 600 ? BIOMES.GRASSLAND : P3 > 2600 ? BIOMES.WETLAND : BIOMES.TEMPERATE_FOREST;
+    if (P3 < 250) return BIOMES.HOT_DESERT;
+    if (P3 < 900) return BIOMES.SAVANNA;
+    if (P3 < 1800) return BIOMES.TROPICAL_SEASONAL;
+    return BIOMES.RAINFOREST;
+  }
+  function landmasses(V, off, nb, isSea) {
+    const comp = new Int32Array(V).fill(-1), sizes = [];
+    const q = new Int32Array(V);
+    for (let s = 0; s < V; s++) {
+      if (isSea[s] || comp[s] >= 0) continue;
+      let qh = 0, qt = 0;
+      q[qt++] = s;
+      comp[s] = sizes.length;
+      let cnt = 0;
+      while (qh < qt) {
+        const c = q[qh++];
+        cnt++;
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (!isSea[j] && comp[j] < 0) {
+            comp[j] = comp[s];
+            q[qt++] = j;
+          }
+        }
+      }
+      sizes.push(cnt);
+    }
+    return { comp, sizes };
+  }
+  function recomputeStats(world) {
+    const { mesh, cell } = world, V = mesh.cellCount, isSea = new Uint8Array(V);
+    let lakes = 0;
+    for (let c = 0; c < V; c++) {
+      isSea[c] = cell.elevation[c] <= 0 ? 1 : 0;
+      if (cell.landWater[c] === LAND_WATER.LAKE) lakes++;
+    }
+    return computeStats({ V, off: mesh.neighborOffsets, nb: mesh.neighborIds, isSea, landWater: cell.landWater, elevation: cell.elevation, temp: cell.temp, biome: cell.biome, lat: cell.lat, riverThreshold: world.stats.riverFlowThreshold, river: cell.river, lakeCount: lakes, parent: cell.riverTo, populations: world.entities.populations });
+  }
+  function computeStats(a) {
+    const { V, off, nb, isSea, landWater, elevation, temp, biome, lat, riverThreshold, river, lakeCount, parent, populations } = a;
+    let mouthCount = 0;
+    for (let c = 0; c < V; c++) if (river[c] && parent[c] >= 0 && isSea[parent[c]]) mouthCount++;
+    let sea = 0, lake = 0, mount = 0, rivers = 0, cold = 0;
+    for (let c = 0; c < V; c++) {
+      if (isSea[c]) sea++;
+      else {
+        if (landWater[c] === LAND_WATER.LAKE) lake++;
+        if (elevation[c] > 2500) mount++;
+        if (river[c]) rivers++;
+      }
+    }
+    const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea), total2 = sizes.reduce((s, x) => s + x, 0);
+    const continents = sizes.filter((s) => s >= total2 * 0.03), islands = sizes.filter((s) => s < total2 * 0.03);
+    const biomeCounts = new Array(14).fill(0);
+    for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;
+    let tl = 0, nl = 0, th = 0, nh = 0;
+    for (let c = 0; c < V; c++) {
+      if (isSea[c]) continue;
+      const la = Math.abs(lat[c]) / D2R;
+      if (la < 20) {
+        tl += temp[c];
+        nl++;
+      } else if (la > 60) {
+        th += temp[c];
+        nh++;
+      }
+    }
+    return {
+      cells: V,
+      landFraction: landCells / V,
+      lakeFraction: lake / V,
+      mountainFraction: mount / Math.max(1, landCells),
+      riverCells: rivers,
+      riverFlowThreshold: riverThreshold,
+      riverMouths: mouthCount,
+      lakeCells: lakeCount,
+      continentCount: continents.length,
+      continentShares: continents.map((s) => +(s / total2).toFixed(3)).sort((x, y) => y - x),
+      islandCount: islands.length,
+      largestIslandCells: islands.length ? Math.max(...islands) : 0,
+      meanTempLow: nl ? tl / nl : null,
+      meanTempHigh: nh ? th / nh : null,
+      biomeCounts,
+      initialGroups: populations.length
+    };
+  }
+  function validateWorld(world) {
+    const errs = [], { cell, mesh } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    for (const k of ["elevation", "temp", "precip", "riverFlow", "fertility", "capacity"]) for (let c = 0; c < V; c++) if (!Number.isFinite(cell[k][c])) {
+      errs.push(`${k}[${c}] \u304C\u6709\u9650\u3067\u306A\u3044`);
+      break;
+    }
+    const state = new Uint8Array(V);
+    const stack = [];
+    for (let s = 0; s < V; s++) {
+      if (state[s]) continue;
+      let c = s;
+      stack.length = 0;
+      while (true) {
+        if (cell.landWater[c] === LAND_WATER.OCEAN) {
+          state[c] = 2;
+          break;
+        }
+        if (state[c] === 2) break;
+        if (state[c] === 1) {
+          errs.push(`\u6D41\u8DEF\u306B\u5FAA\u74B0: ${c}`);
+          break;
+        }
+        state[c] = 1;
+        stack.push(c);
+        const p = cell.riverTo[c];
+        if (p < 0) {
+          errs.push(`\u884C\u304D\u6B62\u307E\u308A\u306E\u6D41\u8DEF: ${c}`);
+          break;
+        }
+        let adj = false;
+        for (let k = off[c]; k < off[c + 1]; k++) if (nb[k] === p) {
+          adj = true;
+          break;
+        }
+        if (!adj) {
+          errs.push(`\u6D41\u8DEF\u304C\u96A3\u63A5\u3057\u3066\u3044\u306A\u3044: ${c}\u2192${p}`);
+          break;
+        }
+        c = p;
+      }
+      const ok2 = state[c] === 2;
+      for (const u of stack) state[u] = ok2 ? 2 : state[u];
+      if (errs.length > 20) break;
+    }
+    for (let c = 0; c < V; c++) {
+      if (cell.elevation[c] <= 0 !== (cell.landWater[c] === LAND_WATER.OCEAN)) {
+        errs.push(`\u6D77\u9678\u3068\u6A19\u9AD8\u304C\u4E0D\u4E00\u81F4: ${c}`);
+        break;
+      }
+    }
+    for (const p of world.entities.populations) {
+      if (cell.landWater[p.cell] !== LAND_WATER.LAND) errs.push(`\u521D\u671F\u96C6\u56E3 ${p.id} \u304C\u9678\u306B\u3044\u306A\u3044`);
+    }
+    return errs;
+  }
+  function worldHash(world) {
+    let h = 2166136261;
+    const { cell } = world;
+    const mix2 = (v) => {
+      h ^= v & 255;
+      h = Math.imul(h, 16777619);
+      h ^= v >>> 8 & 255;
+      h = Math.imul(h, 16777619);
+      h ^= v >>> 16 & 255;
+      h = Math.imul(h, 16777619);
+      h ^= v >>> 24 & 255;
+      h = Math.imul(h, 16777619);
+    };
+    for (let i = 0; i < cell.elevation.length; i++) mix2(Math.round(cell.elevation[i]) | 0);
+    for (let i = 0; i < cell.landWater.length; i++) mix2(cell.landWater[i] | cell.biome[i] << 8 | cell.soil[i] << 16);
+    for (let i = 0; i < cell.riverTo.length; i++) mix2(cell.riverTo[i] | 0);
+    for (let i = 0; i < cell.resource.length; i++) mix2(cell.resource[i]);
+    mix2(meshHash(world.mesh).length);
+    return (h >>> 0).toString(16).padStart(8, "0");
+  }
+  function generateWorldChecked(specInput, options = {}, maxAttempts = 6) {
+    const rejected = [];
+    const base = normalizeWorldSpec(specInput).spec;
+    for (let a = 0; a < maxAttempts; a++) {
+      const seedUsed = a === 0 ? base.worldSeed : `${base.worldSeed}#r${a}`;
+      const world = generateWorld({ ...base, worldSeed: seedUsed }, options), reasons = statsProblems(world.stats, base);
+      reasons.push(...validateWorld(world).slice(0, 5));
+      if (!reasons.length) return { world, rejected, attempts: a + 1, seedUsed };
+      rejected.push({ seed: seedUsed, reasons });
+    }
+    throw new Error(`\u8A31\u5BB9\u5E2F\u306B\u5165\u308B\u4E16\u754C\u3092\u4F5C\u308C\u306A\u304B\u3063\u305F\uFF08${maxAttempts} \u56DE\uFF09: ` + JSON.stringify(rejected));
+  }
+  function statsProblems(st, spec) {
+    const r = [];
+    if (Math.abs(st.landFraction - spec.landFraction) > 0.04) r.push(`\u9678\u5730\u7387 ${st.landFraction.toFixed(3)} \u304C\u76EE\u6A19 ${spec.landFraction} \u304B\u3089\u5916\u308C\u3066\u3044\u308B`);
+    const K = spec.continentCountTarget;
+    if (st.continentCount < Math.max(1, K - 2) || st.continentCount > K + 3) r.push(`\u5927\u9678\u7D1A\u306E\u9678\u584A\u304C ${st.continentCount} \u500B\uFF08\u76EE\u6A19 ${K}\uFF09`);
+    if (spec.islandMode === "many" && st.islandCount < 20) r.push(`\u5CF6\u304C\u5C11\u306A\u3044\uFF08${st.islandCount}\uFF09`);
+    if (st.continentShares[0] > 0.45) r.push(`\u6700\u5927\u306E\u9678\u584A\u304C\u9678\u306E ${(st.continentShares[0] * 100).toFixed(0)}%\uFF08\u504F\u308A\u3059\u304E\uFF09`);
+    if (st.meanTempLow != null && st.meanTempHigh != null && st.meanTempLow <= st.meanTempHigh + 10) r.push("\u4F4E\u7DEF\u5EA6\u304C\u9AD8\u7DEF\u5EA6\u3088\u308A\u5341\u5206\u306B\u6696\u304B\u304F\u306A\u3044");
+    return r;
+  }
+
+  // js/app/world-service.js
+  function createWorldService({ createWorker = null } = {}) {
+    let worker = null, abort = null, current = null, lastMode = "none";
+    const stopWorker = () => {
+      if (worker) {
+        worker.terminate();
+        worker = null;
+      }
+    };
+    function generateInline(spec, onProgress, signal) {
+      return new Promise((resolve, reject) => {
+        setTimeout(() => {
+          try {
+            const r = generateWorldChecked(spec, { onProgress, signal }, 4);
+            r.world.generation = { seedUsed: r.seedUsed, attempts: r.attempts, rejected: r.rejected };
+            resolve(r.world);
+          } catch (e) {
+            reject(e);
+          }
+        }, 20);
+      });
+    }
+    return {
+      /** 生成する。戻り値: Promise<world>。中断されたら reject（name: "Cancelled"）。onProgress({stage,label,fraction,ms}) */
+      generate(spec, { onProgress } = {}) {
+        this.cancel();
+        const token = {};
+        current = token;
+        const cancelled = () => Object.assign(new Error("\u751F\u6210\u3092\u4E2D\u65AD\u3057\u307E\u3057\u305F"), { name: "Cancelled" });
+        let w = null;
+        try {
+          w = createWorker ? createWorker() : null;
+        } catch {
+          w = null;
+        }
+        if (!w) {
+          lastMode = "inline";
+          abort = typeof AbortController !== "undefined" ? new AbortController() : null;
+          return generateInline(spec, onProgress, abort?.signal).catch((e) => {
+            throw current !== token ? cancelled() : /キャンセル/.test(e.message) ? cancelled() : e;
+          }).then((world) => {
+            if (current !== token) throw cancelled();
+            return world;
+          });
+        }
+        worker = w;
+        lastMode = "worker";
+        return new Promise((resolve, reject) => {
+          let gotMessage = false;
+          w.onmessage = (ev) => {
+            gotMessage = true;
+            const m = ev.data;
+            if (m.type === "progress") onProgress?.(m);
+            else if (m.type === "done") {
+              if (worker === w) worker = null;
+              w.terminate();
+              resolve(m.world);
+            } else if (m.type === "error") {
+              if (worker === w) worker = null;
+              w.terminate();
+              reject(new Error(m.message));
+            }
+          };
+          w.onerror = (ev) => {
+            if (worker === w) worker = null;
+            w.terminate();
+            if (gotMessage) {
+              reject(new Error(ev.message || "Worker \u3067\u30A8\u30E9\u30FC\u304C\u8D77\u304D\u307E\u3057\u305F"));
+              return;
+            }
+            lastMode = "inline";
+            onProgress?.({ stage: "fallback", label: "Worker \u3092\u4F7F\u3048\u306A\u3044\u305F\u3081\u3001\u3053\u306E\u753B\u9762\u3067\u751F\u6210\u3057\u307E\u3059\uFF08\u9014\u4E2D\u306F\u753B\u9762\u304C\u6B62\u307E\u308A\u307E\u3059\uFF09", fraction: 0 });
+            generateInline(spec, onProgress, null).then(resolve, reject);
+          };
+          w.postMessage({ type: "generate", spec, maxAttempts: 4 });
+          token.reject = reject;
+          token.cancelled = cancelled;
+        });
+      },
+      cancel() {
+        if (current?.reject) current.reject(current.cancelled());
+        current = null;
+        stopWorker();
+        abort?.abort();
+        abort = null;
+      },
+      get busy() {
+        return !!current;
+      },
+      /** 直近の生成に使った方法: "worker" / "inline" */
+      get lastMode() {
+        return lastMode;
+      }
+    };
+  }
+
+  // js/core/world/ahmap2.js
+  var AHMAP2_MAGIC = "AHMAP2\0\0";
+  var AHMAP2_CONTAINER_VERSION = 1;
+  var AHMAP2_SCHEMA_VERSION = 1;
+  var LE = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+  var TYPES = { f32: Float32Array, u8: Uint8Array, u16: Uint16Array, i32: Int32Array, u32: Uint32Array };
+  var typeName = (a) => ({ Float32Array: "f32", Uint8Array: "u8", Uint16Array: "u16", Int32Array: "i32", Uint32Array: "u32" })[a?.constructor?.name] ?? null;
+  var CELL_ARRAYS2 = ["elevation", "landWater", "plate", "temp", "precip", "biome", "soil", "fertility", "resource", "riverTo", "riverFlow", "river", "basin", "coastDist", "capacity", "areaKm2", "lat", "lon", "volcanic", "filled", "continent", "mountain", "moisture"];
+  var GEOM = { "geom.centerXYZ": "centerXYZ", "geom.verticesXYZ": "vertexXYZ", "geom.neighborOffsets": "neighborOffsets", "geom.neighborIds": "neighborIds", "geom.cellVertexIds": "cellVertexIds" };
+  var REQUIRED_CHUNKS = ["world.spec", ...Object.keys(GEOM), ...CELL_ARRAYS2.map((k) => `cell.${k}`), "entities.populations", "world.stats"];
+  var crcTable = null;
+  function crc32(bytes) {
+    if (!crcTable) {
+      crcTable = new Uint32Array(256);
+      for (let n = 0; n < 256; n++) {
+        let c2 = n;
+        for (let k = 0; k < 8; k++) c2 = c2 & 1 ? 3988292384 ^ c2 >>> 1 : c2 >>> 1;
+        crcTable[n] = c2 >>> 0;
+      }
+    }
+    let c = 4294967295;
+    for (let i = 0; i < bytes.length; i++) c = crcTable[(c ^ bytes[i]) & 255] ^ c >>> 8;
+    return (c ^ 4294967295) >>> 0;
+  }
+  async function pipe(bytes, stream) {
+    const out = await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer();
+    return new Uint8Array(out);
+  }
+  var gzip2 = (b) => pipe(b, new CompressionStream("gzip"));
+  var gunzip2 = (b) => pipe(b, new DecompressionStream("gzip"));
+  var enc = new TextEncoder();
+  var dec = new TextDecoder("utf-8", { fatal: true });
+  var isBytes = (v) => ArrayBuffer.isView(v) && v.BYTES_PER_ELEMENT === 1;
+  var rawOf = (arr) => new Uint8Array(arr.buffer, arr.byteOffset, arr.byteLength);
+  async function encodeAhmap2(world, options = {}) {
+    if (!LE) throw new Error("\u30EA\u30C8\u30EB\u30A8\u30F3\u30C7\u30A3\u30A2\u30F3\u4EE5\u5916\u306E\u74B0\u5883\u306F\u672A\u5BFE\u5FDC");
+    const chunks = [], cache3 = /* @__PURE__ */ new Map(), reuse = options.reuse instanceof Map ? options.reuse : /* @__PURE__ */ new Map();
+    const add2 = async (name, kind, raw, meta = {}) => {
+      const crc = crc32(raw), prev = reuse.get(name);
+      let stored, codec = "raw";
+      if (prev && prev.crc === crc && prev.rawBytes === raw.length) {
+        stored = prev.stored;
+        codec = prev.codec;
+      } else if (raw.length > 256) {
+        stored = await gzip2(raw);
+        codec = "gzip";
+      } else stored = raw;
+      cache3.set(name, { crc, rawBytes: raw.length, stored, codec });
+      chunks.push({ name, kind, codec, rawBytes: raw.length, storedBytes: stored.length, crc32: crc, ...meta, _stored: stored });
+    };
+    const json = (name, value) => add2(name, "json", enc.encode(JSON.stringify(value)));
+    const typed = (name, arr) => add2(name, typeName(arr), rawOf(arr), { count: arr.length });
+    const m = world.mesh;
+    await json("world.spec", world.spec);
+    for (const [name, key2] of Object.entries(GEOM)) await typed(name, m[key2]);
+    for (const k of CELL_ARRAYS2) {
+      if (!(world.cell[k] && typeName(world.cell[k]))) throw new Error(`cell.${k} \u304C\u578B\u4ED8\u304D\u914D\u5217\u3067\u306A\u3044`);
+      await typed(`cell.${k}`, world.cell[k]);
+    }
+    await json("entities.populations", world.entities.populations);
+    await json("world.stats", { stats: world.stats, timings: world.timings });
+    for (const [name, data] of Object.entries(options.extensions ?? {})) {
+      if (!isBytes(data)) throw new Error(`\u62E1\u5F35\u30C1\u30E3\u30F3\u30AF ${name} \u306F Uint8Array`);
+      await add2(name, "ext", data);
+    }
+    let offset = 0;
+    for (const c of chunks) {
+      c.offset = offset;
+      offset += c.storedBytes;
+    }
+    const manifest = {
+      format: "AHMAP2",
+      containerVersion: AHMAP2_CONTAINER_VERSION,
+      schemaVersion: AHMAP2_SCHEMA_VERSION,
+      worldSpecSchema: WORLD_SPEC_SCHEMA,
+      appVersion: options.appVersion ?? "",
+      generatorVersion: world.spec.generatorVersion,
+      meshVersion: m.meshVersion ?? MESH_VERSION,
+      savedAt: options.savedAt ?? "",
+      cellCount: m.cellCount,
+      triangleCount: m.triangleCount,
+      meshFrequency: m.n,
+      worldHash: world.hash,
+      required: REQUIRED_CHUNKS,
+      chunks: chunks.map(({ _stored, ...c }) => c),
+      ...options.extraManifest ? { extra: options.extraManifest } : {}
+    };
+    const mb = enc.encode(JSON.stringify(manifest)), head = 8 + 4 + 4 + mb.length, out = new Uint8Array(head + offset);
+    out.set(enc.encode(AHMAP2_MAGIC), 0);
+    const dv = new DataView(out.buffer);
+    dv.setUint32(8, AHMAP2_CONTAINER_VERSION, true);
+    dv.setUint32(12, mb.length, true);
+    out.set(mb, 16);
+    for (const c of chunks) out.set(c._stored, head + c.offset);
+    return { bytes: out, manifest, chunkCache: cache3 };
+  }
+  var Ahmap2Error = class extends Error {
+    constructor(msg, problems = []) {
+      super(msg);
+      this.name = "Ahmap2Error";
+      this.problems = problems;
+    }
+  };
+  function readAhmap2Manifest(bytes) {
+    if (!isBytes(bytes) || bytes.length < 16) throw new Ahmap2Error("\u30D5\u30A1\u30A4\u30EB\u304C\u5C0F\u3055\u3059\u304E\u308B\uFF08.ahmap v2 \u3067\u306F\u306A\u3044\uFF09");
+    const magic = dec.decode(bytes.subarray(0, 8));
+    if (magic !== AHMAP2_MAGIC) throw new Ahmap2Error("\u30DE\u30B8\u30C3\u30AF\u304C\u4E00\u81F4\u3057\u306A\u3044\uFF08.ahmap v2 \u3067\u306F\u306A\u3044\uFF09");
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength), cv = dv.getUint32(8, true), ml = dv.getUint32(12, true);
+    if (cv > AHMAP2_CONTAINER_VERSION) throw new Ahmap2Error(`\u65B0\u3057\u3044\u30B3\u30F3\u30C6\u30CA\u7248 ${cv} \u306E\u30D5\u30A1\u30A4\u30EB\u3002\u3053\u306E\u30A2\u30D7\u30EA\u306F ${AHMAP2_CONTAINER_VERSION} \u307E\u3067\uFF08\u5143\u30D5\u30A1\u30A4\u30EB\u306F\u4E0A\u66F8\u304D\u3057\u306A\u3044\uFF09`);
+    if (16 + ml > bytes.length) throw new Ahmap2Error("manifest \u304C\u30D5\u30A1\u30A4\u30EB\u306E\u9577\u3055\u3092\u8D85\u3048\u3066\u3044\u308B\uFF08\u9014\u4E2D\u3067\u5207\u308C\u305F\u7834\u640D\u30D5\u30A1\u30A4\u30EB\uFF09");
+    let manifest;
+    try {
+      manifest = JSON.parse(dec.decode(bytes.subarray(16, 16 + ml)));
+    } catch (e) {
+      throw new Ahmap2Error("manifest \u3092\u8AAD\u3081\u306A\u3044: " + e.message);
+    }
+    if (manifest.format !== "AHMAP2") throw new Ahmap2Error("manifest \u306E format \u304C AHMAP2 \u3067\u306F\u306A\u3044");
+    return { manifest, payloadStart: 16 + ml };
+  }
+  async function decodeAhmap2(bytes) {
+    const { manifest, payloadStart } = readAhmap2Manifest(bytes), problems = [], byName = /* @__PURE__ */ new Map();
+    if (manifest.schemaVersion > AHMAP2_SCHEMA_VERSION) throw new Ahmap2Error(`\u65B0\u3057\u3044\u30B9\u30AD\u30FC\u30DE\u7248 ${manifest.schemaVersion}\uFF08\u3053\u306E\u30A2\u30D7\u30EA\u306F ${AHMAP2_SCHEMA_VERSION} \u307E\u3067\uFF09`);
+    for (const c of manifest.chunks ?? []) byName.set(c.name, c);
+    for (const r of manifest.required ?? REQUIRED_CHUNKS) if (!byName.has(r)) problems.push(`\u5FC5\u9808\u30C1\u30E3\u30F3\u30AF ${r} \u304C\u7121\u3044`);
+    for (const r of REQUIRED_CHUNKS) if (!byName.has(r) && !problems.some((p) => p.includes(r))) problems.push(`\u5FC5\u9808\u30C1\u30E3\u30F3\u30AF ${r} \u304C\u7121\u3044`);
+    if (problems.length) throw new Ahmap2Error("\u5FC5\u9808\u30C1\u30E3\u30F3\u30AF\u304C\u6B20\u3051\u3066\u3044\u308B", problems);
+    const data = /* @__PURE__ */ new Map(), cache3 = /* @__PURE__ */ new Map(), extensions = /* @__PURE__ */ new Map();
+    for (const c of manifest.chunks) {
+      const s = payloadStart + c.offset, e = s + c.storedBytes;
+      if (c.offset < 0 || e > bytes.length) {
+        problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u304C\u30D5\u30A1\u30A4\u30EB\u306E\u7BC4\u56F2\u5916\uFF08\u9014\u4E2D\u3067\u5207\u308C\u305F\u7834\u640D\u30D5\u30A1\u30A4\u30EB\uFF09`);
+        continue;
+      }
+      const stored = bytes.subarray(s, e);
+      let raw;
+      try {
+        raw = c.codec === "gzip" ? await gunzip2(stored) : stored;
+      } catch (err) {
+        problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u306E\u5C55\u958B\u306B\u5931\u6557: ${err.message}`);
+        continue;
+      }
+      if (raw.length !== c.rawBytes) {
+        problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u306E\u9577\u3055\u304C\u4E00\u81F4\u3057\u306A\u3044\uFF08${raw.length} \u2260 ${c.rawBytes}\uFF09`);
+        continue;
+      }
+      if (crc32(raw) !== c.crc32) {
+        problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u306E\u30C1\u30A7\u30C3\u30AF\u30B5\u30E0\u304C\u4E00\u81F4\u3057\u306A\u3044\uFF08\u7834\u640D\uFF09`);
+        continue;
+      }
+      cache3.set(c.name, { crc: c.crc32, rawBytes: c.rawBytes, stored: stored.slice(), codec: c.codec });
+      if (c.kind === "ext" || !REQUIRED_CHUNKS.includes(c.name)) {
+        extensions.set(c.name, raw.slice());
+        continue;
+      }
+      if (c.kind === "json") {
+        try {
+          data.set(c.name, JSON.parse(dec.decode(raw)));
+        } catch (err) {
+          problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u306E JSON \u304C\u4E0D\u6B63: ${err.message}`);
+        }
+      } else {
+        const T3 = TYPES[c.kind];
+        if (!T3) {
+          problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u306E\u578B ${c.kind} \u304C\u672A\u77E5`);
+          continue;
+        }
+        if (raw.length % T3.BYTES_PER_ELEMENT) {
+          problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u306E\u9577\u3055\u304C\u8981\u7D20\u306E\u5927\u304D\u3055\u3067\u5272\u308A\u5207\u308C\u306A\u3044`);
+          continue;
+        }
+        const arr = new T3(raw.slice().buffer);
+        if (c.count !== void 0 && arr.length !== c.count) {
+          problems.push(`\u30C1\u30E3\u30F3\u30AF ${c.name} \u306E\u8981\u7D20\u6570\u304C\u4E00\u81F4\u3057\u306A\u3044`);
+          continue;
+        }
+        data.set(c.name, arr);
+      }
+    }
+    if (problems.length) throw new Ahmap2Error("\u30C1\u30E3\u30F3\u30AF\u306E\u691C\u8A3C\u306B\u5931\u6557", problems);
+    const V = manifest.cellCount, T2 = manifest.triangleCount, n = manifest.meshFrequency;
+    if (!Number.isInteger(V) || V !== 10 * n * n + 2 || T2 !== 20 * n * n) throw new Ahmap2Error("manifest \u306E\u30BB\u30EB\u6570\u30FB\u4E09\u89D2\u5F62\u6570\u304C\u5468\u6CE2\u6570\u3068\u4E00\u81F4\u3057\u306A\u3044");
+    const g = (name) => data.get(name);
+    const mesh = { meshVersion: manifest.meshVersion, n, cellCount: V, triangleCount: T2, centerXYZ: g("geom.centerXYZ"), vertexXYZ: g("geom.verticesXYZ"), neighborOffsets: g("geom.neighborOffsets"), neighborIds: g("geom.neighborIds"), cellVertexOffsets: g("geom.neighborOffsets"), cellVertexIds: g("geom.cellVertexIds") };
+    const sizes = [["geom.centerXYZ", mesh.centerXYZ, 3 * V], ["geom.verticesXYZ", mesh.vertexXYZ, 3 * T2], ["geom.neighborOffsets", mesh.neighborOffsets, V + 1], ["geom.neighborIds", mesh.neighborIds, 3 * T2], ["geom.cellVertexIds", mesh.cellVertexIds, 3 * T2]];
+    for (const [name, arr, want] of sizes) if (arr.length !== want) problems.push(`${name} \u306E\u8981\u7D20\u6570\u304C ${arr.length}\uFF08${want} \u306E\u306F\u305A\uFF09`);
+    const cell = {};
+    for (const k of CELL_ARRAYS2) {
+      cell[k] = g(`cell.${k}`);
+      if (cell[k].length !== V) problems.push(`cell.${k} \u306E\u8981\u7D20\u6570\u304C ${cell[k].length}\uFF08${V} \u306E\u306F\u305A\uFF09`);
+    }
+    if (problems.length) throw new Ahmap2Error("\u914D\u5217\u306E\u5927\u304D\u3055\u304C\u4E0D\u6574\u5408", problems);
+    const off = mesh.neighborOffsets;
+    if (off[0] !== 0 || off[V] !== 3 * T2) problems.push("\u96A3\u63A5\u30AA\u30D5\u30BB\u30C3\u30C8\u306E\u7AEF\u304C\u4E0D\u6B63");
+    for (let c = 0; c < V && problems.length < 10; c++) {
+      if (off[c + 1] < off[c]) {
+        problems.push(`\u96A3\u63A5\u30AA\u30D5\u30BB\u30C3\u30C8\u304C\u6E1B\u5C11: ${c}`);
+        break;
+      }
+    }
+    for (let i = 0; i < mesh.neighborIds.length; i++) if (mesh.neighborIds[i] >= V) {
+      problems.push(`\u96A3\u63A5 ID \u304C\u7BC4\u56F2\u5916: ${i}`);
+      break;
+    }
+    for (let i = 0; i < mesh.cellVertexIds.length; i++) if (mesh.cellVertexIds[i] >= T2) {
+      problems.push(`\u30BB\u30EB\u9802\u70B9 ID \u304C\u7BC4\u56F2\u5916: ${i}`);
+      break;
+    }
+    const nb = BIOME_NAMES.length;
+    for (let c = 0; c < V; c++) {
+      if (cell.landWater[c] > 2) {
+        problems.push(`landWater \u304C\u4E0D\u6B63: \u30BB\u30EB ${c}`);
+        break;
+      }
+      if (cell.biome[c] >= nb) {
+        problems.push(`biome \u304C\u4E0D\u6B63: \u30BB\u30EB ${c}`);
+        break;
+      }
+      if (cell.riverTo[c] < -1 || cell.riverTo[c] >= V) {
+        problems.push(`riverTo \u304C\u7BC4\u56F2\u5916: \u30BB\u30EB ${c}`);
+        break;
+      }
+      if (cell.basin[c] < -1 || cell.basin[c] >= V) {
+        problems.push(`basin \u304C\u7BC4\u56F2\u5916: \u30BB\u30EB ${c}`);
+        break;
+      }
+    }
+    if (problems.length) throw new Ahmap2Error("\u53C2\u7167\u30FB\u5024\u57DF\u306E\u691C\u8A3C\u306B\u5931\u6557", problems);
+    const { spec, errors } = normalizeWorldSpec(g("world.spec"));
+    if (errors.length) throw new Ahmap2Error("WorldSpec \u304C\u4E0D\u6B63", errors);
+    const world = { spec: { ...spec, generatorVersion: g("world.spec").generatorVersion ?? spec.generatorVersion }, mesh, cell, entities: { populations: g("entities.populations") }, stats: g("world.stats").stats, timings: g("world.stats").timings };
+    world.hash = worldHash(world);
+    if (world.hash !== manifest.worldHash) throw new Ahmap2Error("\u4E16\u754C\u306E\u30CF\u30C3\u30B7\u30E5\u304C manifest \u3068\u4E00\u81F4\u3057\u306A\u3044\uFF08\u5185\u5BB9\u304C\u66F8\u304D\u63DB\u308F\u3063\u3066\u3044\u308B\uFF09", [`\u4FDD\u5B58: ${manifest.worldHash} / \u518D\u8A08\u7B97: ${world.hash}`]);
+    const topo = validateSphereMesh(mesh);
+    if (topo.length) throw new Ahmap2Error("\u7403\u9762\u30C8\u30DD\u30ED\u30B8\u30FC\u306E\u691C\u8A3C\u306B\u5931\u6557", topo);
+    const geo = validateWorld(world);
+    if (geo.length) throw new Ahmap2Error("\u5730\u7406\u306E\u6574\u5408\u6027\u306E\u691C\u8A3C\u306B\u5931\u6557", geo);
+    return { world, manifest, extensions, chunkCache: cache3 };
+  }
+
+  // js/core/world/spatial-index.js
+  function buildSpatialIndex(mesh) {
+    const V = mesh.cellCount, X = mesh.centerXYZ, rows = Math.max(8, Math.min(2048, Math.round(Math.sqrt(V / 2)))), cols = rows * 2;
+    const binOf = (lat, lon) => {
+      const r = Math.min(rows - 1, Math.max(0, Math.floor((Math.PI / 2 - lat) / Math.PI * rows))), c = Math.min(cols - 1, Math.max(0, Math.floor((lon + Math.PI) / (2 * Math.PI) * cols)));
+      return r * cols + c;
+    };
+    const count = new Uint32Array(rows * cols + 1), bin = new Uint32Array(V);
+    for (let c = 0; c < V; c++) {
+      const b = binOf(Math.asin(Math.max(-1, Math.min(1, X[3 * c + 2]))), Math.atan2(X[3 * c + 1], X[3 * c]));
+      bin[c] = b;
+      count[b + 1]++;
+    }
+    for (let i = 0; i < rows * cols; i++) count[i + 1] += count[i];
+    const fill = new Uint32Array(rows * cols), ids2 = new Uint32Array(V);
+    for (let c = 0; c < V; c++) {
+      const b = bin[c];
+      ids2[count[b] + fill[b]++] = c;
+    }
+    return { mesh, rows, cols, binStart: count, binCells: ids2, binOf };
+  }
+  function nearestCell2(index, x, y, z) {
+    const { mesh, rows, cols, binStart, binCells } = index, X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    const lat = Math.asin(Math.max(-1, Math.min(1, z))), lon = Math.atan2(y, x);
+    const r0 = Math.min(rows - 1, Math.max(0, Math.floor((Math.PI / 2 - lat) / Math.PI * rows))), c0 = Math.min(cols - 1, Math.max(0, Math.floor((lon + Math.PI) / (2 * Math.PI) * cols)));
+    let best = -1, bd = -2;
+    for (let ring = 0; ring <= Math.max(rows, 4) && (best < 0 || ring <= 1); ring++) {
+      for (let dr = -ring; dr <= ring; dr++) {
+        const r = r0 + dr;
+        if (r < 0 || r >= rows) continue;
+        for (let dc = -ring; dc <= ring; dc++) {
+          if (Math.max(Math.abs(dr), Math.abs(dc)) !== ring) continue;
+          const cc = ((c0 + dc) % cols + cols) % cols, b = r * cols + cc;
+          for (let i = binStart[b]; i < binStart[b + 1]; i++) {
+            const c = binCells[i], d = X[3 * c] * x + X[3 * c + 1] * y + X[3 * c + 2] * z;
+            if (d > bd) {
+              bd = d;
+              best = c;
+            }
+          }
+        }
+      }
+    }
+    for (; ; ) {
+      let bj = -1;
+      for (let k = off[best]; k < off[best + 1]; k++) {
+        const j = nb[k], d = X[3 * j] * x + X[3 * j + 1] * y + X[3 * j + 2] * z;
+        if (d > bd) {
+          bd = d;
+          bj = j;
+        }
+      }
+      if (bj < 0) break;
+      best = bj;
+    }
+    return best;
+  }
+  function cellsInRadius(mesh, center, radiusRad) {
+    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, seen = /* @__PURE__ */ new Set([center]), cells = [center], dist = [0];
+    for (let q = 0; q < cells.length; q++) {
+      const c = cells[q];
+      for (let k = off[c]; k < off[c + 1]; k++) {
+        const j = nb[k];
+        if (seen.has(j)) continue;
+        seen.add(j);
+        const d = greatCircleRad(X[3 * center], X[3 * center + 1], X[3 * center + 2], X[3 * j], X[3 * j + 1], X[3 * j + 2]);
+        if (d <= radiusRad) {
+          cells.push(j);
+          dist.push(d);
+        }
+      }
+    }
+    return { cells: Int32Array.from(cells), dist: Float32Array.from(dist) };
+  }
+  function dilateCells(mesh, cells, rings) {
+    const off = mesh.neighborOffsets, nb = mesh.neighborIds, seen = new Set(cells);
+    let frontier = Array.from(cells);
+    for (let r = 0; r < rings; r++) {
+      const next = [];
+      for (const c of frontier) for (let k = off[c]; k < off[c + 1]; k++) {
+        const j = nb[k];
+        if (!seen.has(j)) {
+          seen.add(j);
+          next.push(j);
+        }
+      }
+      frontier = next;
+    }
+    return Int32Array.from(seen).sort();
+  }
+
+  // js/core/world/edit.js
+  var TRACKED = ["elevation", "landWater", "temp", "precip", "biome", "soil", "fertility", "resource", "riverTo", "riverFlow", "river", "basin", "coastDist", "capacity", "moisture", "filled"];
+  var BRUSH_MODES = Object.freeze({ raise: "\u9686\u8D77", lower: "\u6C88\u964D", smooth: "\u306A\u3060\u3089\u304B\u306B\u3059\u308B", flatten: "\u5E73\u3089\u306B\u3059\u308B" });
+  var MAX_ELEV = 9e3;
+  var MIN_ELEV = -11e3;
+  var MAX_HISTORY = 60;
+  function createWorldEditor(world) {
+    const { mesh, cell } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = world.spec.planet.radiusKm;
+    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), seed = world.spec.worldSeed;
+    const noise = landUseNoise(seed), undoStack = [], redoStack = [];
+    const isSea = new Uint8Array(V);
+    for (let c = 0; c < V; c++) isSea[c] = cell.elevation[c] <= 0 ? 1 : 0;
+    const cx = { mesh, lat: cell.lat, lon: cell.lon, elevation: cell.elevation, isSea, moisture: cell.moisture, precipNoise: null, lapse: world.spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / world.spec.climateModel.windMoistureLengthKm) };
+    cx.precipNoise = hashSeed(seed, "precip");
+    const hyd = { mesh, elevation: cell.elevation, isSea, precip: cell.precip, areaKm2: cell.areaKm2, parent: cell.riverTo, filled: cell.filled, flow: cell.riverFlow, basin: cell.basin, landWater: cell.landWater, biome: cell.biome };
+    const lu = { mesh, isSea, landWater: cell.landWater, biome: cell.biome, elevation: cell.elevation, river: cell.river, volcanic: cell.volcanic, mountain: cell.mountain, coastDist: cell.coastDist, temp: cell.temp, precip: cell.precip, areaKm2: cell.areaKm2, resource: cell.resource, soil: cell.soil, fertility: cell.fertility, capacity: cell.capacity, ...noise };
+    const snapshot = (idx) => {
+      const s = {};
+      for (const k of TRACKED) {
+        const a = cell[k], o = new a.constructor(idx.length);
+        for (let i = 0; i < idx.length; i++) o[i] = a[idx[i]];
+        s[k] = o;
+      }
+      return s;
+    };
+    const restore = (idx, s) => {
+      for (const k of TRACKED) {
+        const a = cell[k], o = s[k];
+        for (let i = 0; i < idx.length; i++) a[idx[i]] = o[i];
+      }
+      for (const c of idx) isSea[c] = cell.elevation[c] <= 0 ? 1 : 0;
+    };
+    const finish = () => {
+      world.stats = recomputeStats(world);
+      world.hash = worldHash(world);
+      world.editVersion = (world.editVersion ?? 0) + 1;
+    };
+    function applyBrush({ center, radiusKm, deltaM = 300, mode = "raise", target = 0 }) {
+      if (!(mode in BRUSH_MODES)) return { ok: false, reason: `\u30D6\u30E9\u30B7\u306E\u7A2E\u985E ${mode} \u306F\u672A\u5BFE\u5FDC` };
+      if (!(center >= 0 && center < V)) return { ok: false, reason: "\u30BB\u30EB\u306E\u6307\u5B9A\u304C\u7BC4\u56F2\u5916" };
+      if (!(radiusKm >= spacingKm * 0.5 && radiusKm <= 3e3)) return { ok: false, reason: `\u534A\u5F84\u306F ${Math.ceil(spacingKm * 0.5)}\u301C3000 km` };
+      const rr = radiusKm / R, reg = cellsInRadius(mesh, center, rr), rc = reg.cells;
+      const newElev = new Float32Array(rc.length);
+      let any = false;
+      for (let i = 0; i < rc.length; i++) {
+        const c = rc[i], t = reg.dist[i] / rr, w = (1 - t * t) * (1 - t * t), e = cell.elevation[c];
+        let v = e;
+        if (mode === "raise") v = e + deltaM * w;
+        else if (mode === "lower") v = e - deltaM * w;
+        else if (mode === "flatten") v = e + (target - e) * w * Math.min(1, Math.abs(deltaM) / 500);
+        else {
+          let s = 0, n = 0;
+          for (let k = off[c]; k < off[c + 1]; k++) {
+            s += cell.elevation[nb[k]];
+            n++;
+          }
+          v = e + (s / n - e) * w * Math.min(1, Math.abs(deltaM) / 500);
+        }
+        v = Math.max(MIN_ELEV, Math.min(MAX_ELEV, v));
+        if (Math.abs(v - e) > 1e-3) any = true;
+        newElev[i] = v;
+      }
+      if (!any) return { ok: true, changed: 0, dirty: new Int32Array(0), unchanged: true };
+      const pops = world.entities.populations;
+      for (const p of pops) {
+        const i = rc.indexOf(p.cell);
+        if (i >= 0 && newElev[i] <= 0) return { ok: false, reason: `\u3053\u306E\u7DE8\u96C6\u306F\u3001\u521D\u671F\u96C6\u56E3 #${p.id} \u306E\u5C45\u4F4F\u5730\u3092\u6D77\u306B\u3057\u307E\u3059\u3002\u5148\u306B\u96C6\u56E3\u3092\u79FB\u3059\u304B\u3001\u7BC4\u56F2\u3092\u5909\u3048\u3066\u304F\u3060\u3055\u3044` };
+      }
+      const changedIdx = [];
+      for (let i = 0; i < rc.length; i++) if (Math.abs(newElev[i] - cell.elevation[rc[i]]) > 1e-3) changedIdx.push(rc[i]);
+      const changed = Int32Array.from(changedIdx).sort();
+      const climateRings = Math.min(40, Math.ceil(700 / spacingKm) + 2);
+      const D = dilateCells(mesh, changed, climateRings), ring1 = dilateCells(mesh, changed, 1);
+      const basinIds = /* @__PURE__ */ new Set();
+      for (const c of ring1) if (cell.basin[c] >= 0) basinIds.add(cell.basin[c]);
+      const members = new Uint8Array(V);
+      for (const c of ring1) members[c] = 1;
+      for (let c = 0; c < V; c++) if (cell.basin[c] >= 0 && basinIds.has(cell.basin[c])) members[c] = 1;
+      const memberList = [];
+      for (let c = 0; c < V; c++) if (members[c]) memberList.push(c);
+      const newIsSea = isSea.slice();
+      let seaChanged = false;
+      for (let i = 0; i < rc.length; i++) {
+        const s = newElev[i] <= 0 ? 1 : 0;
+        if (s !== newIsSea[rc[i]]) {
+          newIsSea[rc[i]] = s;
+          seaChanged = true;
+        }
+      }
+      let newCoast = null;
+      const set = new Set(D);
+      for (const c of memberList) set.add(c);
+      if (seaChanged) {
+        newCoast = new Uint16Array(V);
+        const q = new Int32Array(V);
+        let qh = 0, qt = 0;
+        const seen = new Uint8Array(V);
+        for (let c = 0; c < V; c++) if (newIsSea[c]) {
+          seen[c] = 1;
+          q[qt++] = c;
+        }
+        while (qh < qt) {
+          const c = q[qh++];
+          for (let k = off[c]; k < off[c + 1]; k++) {
+            const j = nb[k];
+            if (!seen[j]) {
+              seen[j] = 1;
+              newCoast[j] = Math.min(65535, newCoast[c] + 1);
+              q[qt++] = j;
+            }
+          }
+        }
+        for (let c = 0; c < V; c++) if (newCoast[c] !== cell.coastDist[c]) set.add(c);
+      }
+      for (const c of dilateCells(mesh, Array.from(set), 1)) set.add(c);
+      const S = Int32Array.from(set).sort(), before = snapshot(S), oldSea = isSea.slice();
+      for (let i = 0; i < rc.length; i++) cell.elevation[rc[i]] = newElev[i];
+      isSea.set(newIsSea);
+      if (newCoast) cell.coastDist.set(newCoast);
+      for (const c of changed) cell.temp[c] = tempAt(cell.lat[c], cell.elevation[c], cx.lapse);
+      for (const c of D) if (isSea[c]) cell.moisture[c] = 1;
+      for (let it = 0; it < climateRings + 2; it++) for (const c of D) {
+        if (!isSea[c]) cell.moisture[c] = moistureStep(cx, c);
+      }
+      for (const c of D) cell.precip[c] = precipAt(cx, c);
+      for (const c of S) cell.biome[c] = biomeAt(cell.temp[c], cell.precip[c], cell.elevation[c], isSea[c]);
+      const hr = computeHydrology(hyd, members), thr = world.stats.riverFlowThreshold;
+      const rollback = (reason) => {
+        restore(S, before);
+        isSea.set(oldSea);
+        return { ok: false, reason };
+      };
+      if (hr.unreached > 0) return rollback("\u6C34\u7CFB\u306E\u518D\u8A08\u7B97\u306B\u5931\u6557\u3057\u307E\u3057\u305F\uFF08\u6D41\u57DF\u304C\u6D77\u3078\u3064\u306A\u304C\u308A\u307E\u305B\u3093\uFF09\u3002\u7BC4\u56F2\u3092\u5909\u3048\u3066\u304F\u3060\u3055\u3044");
+      for (const c of memberList) cell.river[c] = cell.landWater[c] === LAND_WATER.LAND && cell.riverFlow[c] >= thr && cell.riverFlow[c] > 0 ? 1 : 0;
+      for (const c of S) landUseAt(lu, c);
+      for (const p of pops) if (cell.landWater[p.cell] !== LAND_WATER.LAND) return rollback(`\u3053\u306E\u7DE8\u96C6\u306F\u3001\u521D\u671F\u96C6\u56E3 #${p.id} \u306E\u5C45\u4F4F\u5730\u3092\u6E56\u30FB\u6D77\u306B\u3057\u307E\u3059\u3002\u7BC4\u56F2\u3092\u5909\u3048\u3066\u304F\u3060\u3055\u3044`);
+      const after = snapshot(S), dIdx = [];
+      for (let i = 0; i < S.length; i++) {
+        for (const k of TRACKED) if (before[k][i] !== after[k][i]) {
+          dIdx.push(i);
+          break;
+        }
+      }
+      const diff = { cells: Int32Array.from(dIdx.map((i) => S[i])), old: {}, now: {} };
+      for (const k of TRACKED) {
+        const o = new before[k].constructor(dIdx.length), n = new before[k].constructor(dIdx.length);
+        dIdx.forEach((i, j) => {
+          o[j] = before[k][i];
+          n[j] = after[k][i];
+        });
+        diff.old[k] = o;
+        diff.now[k] = n;
+      }
+      finish();
+      undoStack.push(diff);
+      if (undoStack.length > MAX_HISTORY) undoStack.shift();
+      redoStack.length = 0;
+      return { ok: true, changed: changed.length, dirty: diff.cells, region: rc, affectedClimate: D.length, affectedBasinCells: memberList.length };
+    }
+    const applyDiff = (d, which) => {
+      const src = which === "old" ? d.old : d.now;
+      for (const k of TRACKED) {
+        const a = cell[k], o = src[k];
+        for (let i = 0; i < d.cells.length; i++) a[d.cells[i]] = o[i];
+      }
+      for (const c of d.cells) isSea[c] = cell.elevation[c] <= 0 ? 1 : 0;
+      finish();
+      return { ok: true, dirty: d.cells };
+    };
+    return {
+      applyBrush,
+      spacingKm,
+      undo() {
+        const d = undoStack.pop();
+        if (!d) return { ok: false, reason: "\u5143\u306B\u623B\u3059\u64CD\u4F5C\u304C\u3042\u308A\u307E\u305B\u3093" };
+        redoStack.push(d);
+        return applyDiff(d, "old");
+      },
+      redo() {
+        const d = redoStack.pop();
+        if (!d) return { ok: false, reason: "\u3084\u308A\u76F4\u3059\u64CD\u4F5C\u304C\u3042\u308A\u307E\u305B\u3093" };
+        undoStack.push(d);
+        return applyDiff(d, "now");
+      },
+      get canUndo() {
+        return undoStack.length > 0;
+      },
+      get canRedo() {
+        return redoStack.length > 0;
+      },
+      get undoCount() {
+        return undoStack.length;
+      },
+      clearHistory() {
+        undoStack.length = 0;
+        redoStack.length = 0;
+      }
+    };
+  }
+  function hashSeed(seed, name) {
+    return hashString(`${seed}::noise::${name}`);
+  }
+
+  // js/render/world-colors.js
+  var WORLD_LAYERS = Object.freeze([
+    { key: "biome", label: "\u30D0\u30A4\u30AA\u30FC\u30E0" },
+    { key: "elevation", label: "\u6A19\u9AD8" },
+    { key: "temp", label: "\u6C17\u6E29" },
+    { key: "precip", label: "\u964D\u6C34" },
+    { key: "fertility", label: "\u80A5\u6C83\u5EA6" },
+    { key: "soil", label: "\u571F\u58CC" },
+    { key: "resource", label: "\u8CC7\u6E90" },
+    { key: "plate", label: "\u30D7\u30EC\u30FC\u30C8" },
+    { key: "basin", label: "\u6D41\u57DF" }
+  ]);
+  var BIOME_RGB = [[20, 50, 110], [235, 240, 245], [160, 175, 150], [60, 105, 80], [60, 140, 70], [150, 180, 80], [225, 195, 120], [190, 180, 160], [190, 175, 80], [90, 150, 50], [20, 100, 40], [130, 120, 120], [80, 130, 120], [70, 130, 200]];
+  var SOIL_RGB = [[40, 60, 90], [120, 115, 110], [226, 204, 140], [150, 110, 70], [140, 100, 90], [90, 60, 60], [200, 220, 230], [110, 150, 80], [100, 90, 70], [50, 45, 40]];
+  var SOIL_NAMES = ["\u306A\u3057", "\u5CA9", "\u7802", "\u30ED\u30FC\u30E0", "\u7C98\u571F", "\u706B\u5C71\u7070\u571F", "\u6C38\u4E45\u51CD\u571F", "\u6C96\u7A4D\u571F", "\u30DD\u30C9\u30BE\u30EB", "\u9ED2\u571F"];
+  var hsv = (h, s, v) => {
+    const i = Math.floor(h * 6) % 6, f = h * 6 - Math.floor(h * 6), p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
+    const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i];
+    return [r * 255, g * 255, b * 255];
+  };
+  var hash2 = (n) => {
+    let h = Math.imul(n ^ 2654435769, 2246822507);
+    h ^= h >>> 13;
+    h = Math.imul(h, 3266489909);
+    return ((h ^ h >>> 16) >>> 0) / 4294967296;
+  };
+  function writeCellColor(world, layer, c, opt, out) {
+    const cell = world.cell, e = cell.elevation[c], sea = cell.landWater[c] === LAND_WATER.OCEAN;
+    let col;
+    switch (layer) {
+      case "elevation":
+        col = sea ? [20, 40 + 40 * Math.max(0, 1 + e / 5500), 110 + 60 * Math.max(0, 1 + e / 5500)] : [60 + 160 * Math.min(1, e / 7e3), 120 + 90 * Math.min(1, e / 7e3), 60 + 140 * Math.min(1, e / 7e3)];
+        break;
+      case "temp": {
+        const t = Math.max(0, Math.min(1, (cell.temp[c] + 25) / 60));
+        col = [255 * t, 80 + 60 * (1 - Math.abs(t - 0.5) * 2), 255 * (1 - t)];
+        break;
+      }
+      case "precip": {
+        const t = Math.min(1, cell.precip[c] / 3e3);
+        col = [230 - 200 * t, 230 - 120 * t, 200 + 50 * t];
+        break;
+      }
+      case "fertility": {
+        const t = cell.fertility[c];
+        col = cell.landWater[c] !== LAND_WATER.LAND ? sea ? [20, 50, 110] : [70, 130, 200] : [230 - 200 * t, 220 - 40 * t, 120 - 80 * t];
+        break;
+      }
+      case "soil":
+        col = sea ? [20, 50, 110] : SOIL_RGB[cell.soil[c]] ?? [128, 128, 128];
+        break;
+      case "resource": {
+        const bit = opt?.resource | 0, r = cell.resource[c];
+        if (sea) col = bit && r & bit ? [250, 210, 60] : [20, 50, 110];
+        else if (bit) col = r & bit ? [250, 210, 60] : [70 + 30 * Math.min(1, e / 3e3), 80 + 30 * Math.min(1, e / 3e3), 80];
+        else {
+          let n = 0;
+          for (let b = 1; b <= 1024; b <<= 1) if (r & b && b !== RES.TIMBER && b !== RES.FISH && b !== RES.STONE) n++;
+          col = [60 + 45 * n, 70 + 35 * n, 70];
+        }
+        break;
+      }
+      case "plate":
+        col = hsv(cell.plate[c] * 0.61803 % 1, 0.45, sea ? 0.55 : 0.9);
+        break;
+      case "basin": {
+        const b = cell.basin[c];
+        col = sea ? [20, 50, 110] : hsv(hash2(b + 7), 0.5, 0.85);
+        break;
+      }
+      default: {
+        const b = cell.biome[c];
+        col = BIOME_RGB[b].slice();
+        if (b === BIOMES.OCEAN) {
+          const d = 0.55 + 0.45 * Math.max(0, 1 + e / 5500);
+          col = col.map((v) => v * d);
+        } else if (b !== BIOMES.LAKE) {
+          const s = 0.75 + 0.25 * Math.min(1, e / 4e3);
+          col = col.map((v) => v * s);
+        }
+      }
+    }
+    out[0] = col[0];
+    out[1] = col[1];
+    out[2] = col[2];
+  }
+  function colorizeCells(world, layer, opt = {}, colors = null, dirty = null) {
+    const V = world.mesh.cellCount, out = colors ?? new Uint8ClampedArray(V * 4), tmp = [0, 0, 0];
+    const put = (c) => {
+      writeCellColor(world, layer, c, opt, tmp);
+      out[4 * c] = tmp[0];
+      out[4 * c + 1] = tmp[1];
+      out[4 * c + 2] = tmp[2];
+      out[4 * c + 3] = 255;
+    };
+    if (dirty) for (const c of dirty) put(c);
+    else for (let c = 0; c < V; c++) put(c);
+    return out;
+  }
+  function layerLegend(layer, opt = {}) {
+    const rgb = (a) => `rgb(${a[0] | 0},${a[1] | 0},${a[2] | 0})`;
+    switch (layer) {
+      case "biome":
+        return BIOME_NAMES.map((n, i) => ({ color: rgb(BIOME_RGB[i]), label: n }));
+      case "soil":
+        return SOIL_NAMES.slice(1).map((n, i) => ({ color: rgb(SOIL_RGB[i + 1]), label: n }));
+      case "elevation":
+        return [{ color: "rgb(20,60,140)", label: "\u6DF1\u6D77\uFF08\u22125500 m\uFF09" }, { color: "rgb(60,120,60)", label: "\u4F4E\u5730" }, { color: "rgb(150,170,110)", label: "\u9AD8\u5730" }, { color: "rgb(220,210,200)", label: "\u9AD8\u5C71\uFF087000 m\uFF09" }];
+      case "temp":
+        return [{ color: "rgb(0,80,255)", label: "\u221225\u2103" }, { color: "rgb(130,100,130)", label: "5\u2103" }, { color: "rgb(255,80,0)", label: "35\u2103" }];
+      case "precip":
+        return [{ color: "rgb(230,230,200)", label: "\u4E7E\u71E5\uFF080 mm\uFF09" }, { color: "rgb(30,110,250)", label: "\u591A\u96E8\uFF083000 mm \u4EE5\u4E0A\uFF09" }];
+      case "fertility":
+        return [{ color: "rgb(230,220,120)", label: "\u4F4E\u3044\uFF080\uFF09" }, { color: "rgb(30,180,40)", label: "\u9AD8\u3044\uFF081\uFF09" }];
+      case "resource":
+        return opt.resource ? [{ color: "rgb(250,210,60)", label: `${RES_NAMES[opt.resource]}\u304C\u3042\u308B` }] : [{ color: "rgb(105,105,70)", label: "\u9271\u7269\u306E\u7A2E\u985E\u304C\u591A\u3044\u307B\u3069\u660E\u308B\u3044" }];
+      case "plate":
+        return [{ color: "rgb(150,200,160)", label: "\u30D7\u30EC\u30FC\u30C8\u3054\u3068\u306B\u5225\u306E\u8272" }];
+      case "basin":
+        return [{ color: "rgb(150,200,160)", label: "\u6D41\u57DF\u3054\u3068\u306B\u5225\u306E\u8272\uFF08\u6D77\u3078\u6CE8\u3050\u5DDD\u3054\u3068\uFF09" }];
+      default:
+        return [];
+    }
+  }
+
+  // js/app/world-actions.js
+  var WORLD_EXT = ".ahmap";
+  var START_CHUNK = "entities.start";
+  var enc2 = new TextEncoder();
+  var dec2 = new TextDecoder();
+  function createWorldStore(initial) {
+    let state = initial;
+    const subs = /* @__PURE__ */ new Set();
+    return { getState: () => state, update(fn) {
+      const next = { ...state };
+      fn(next);
+      state = next;
+      for (const s of subs) s(state);
+    }, subscribe(fn) {
+      subs.add(fn);
+      return () => subs.delete(fn);
+    } };
+  }
+  function isAhmap2Bytes(bytes) {
+    return bytes.length >= 8 && new TextDecoder().decode(bytes.subarray(0, 8)) === AHMAP2_MAGIC;
+  }
+  function createWorldActions({ service, download, appVersion = "" }) {
+    const store = createWorldStore({
+      world: null,
+      fileName: "",
+      mode: "view",
+      layer: "biome",
+      layerOpt: {},
+      busy: null,
+      error: null,
+      notice: null,
+      hover: -1,
+      selectedCell: -1,
+      startGroupId: null,
+      brush: { mode: "raise", radiusKm: 600, deltaM: 400, target: 0 },
+      dirty: false,
+      undoCount: 0,
+      canUndo: false,
+      canRedo: false,
+      groupVariant: 0,
+      placing: false
+    });
+    let editor = null, extensions = {}, chunkCache = null, noticeTimer = 0, gen = 0;
+    const listeners = /* @__PURE__ */ new Set();
+    const emit = (e) => {
+      for (const l of listeners) l(e);
+    };
+    const notice = (text2) => {
+      store.update((s) => {
+        s.notice = text2;
+      });
+      clearTimeout(noticeTimer);
+      noticeTimer = setTimeout(() => store.update((s) => {
+        s.notice = null;
+      }), 6e3);
+    };
+    const fail = (msg) => store.update((s) => {
+      s.busy = null;
+      s.error = msg;
+    });
+    const syncHistory = () => store.update((s) => {
+      s.undoCount = editor?.undoCount ?? 0;
+      s.canUndo = !!editor?.canUndo;
+      s.canRedo = !!editor?.canRedo;
+    });
+    function adopt(world, fileName, { start: start2 = null, variant = 0, dirty = false } = {}) {
+      editor = createWorldEditor(world);
+      store.update((s) => {
+        s.world = world;
+        s.fileName = fileName;
+        s.error = null;
+        s.busy = null;
+        s.hover = -1;
+        s.selectedCell = -1;
+        s.startGroupId = start2;
+        s.dirty = dirty;
+        s.groupVariant = variant;
+        s.placing = false;
+        s.mode = start2 ? "view" : "groups";
+      });
+      syncHistory();
+      emit({ type: "world" });
+    }
+    const api = {
+      store,
+      on(fn) {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      /** 新しい世界を作る。specInput: WorldSpec（worldSeed 必須） */
+      async newWorld(specInput) {
+        const { spec, errors } = normalizeWorldSpec(specInput);
+        if (errors.length) {
+          fail("\u8A2D\u5B9A\u304C\u4E0D\u6B63\u3067\u3059: " + errors.join(" / "));
+          return { ok: false, errors };
+        }
+        const my = ++gen;
+        store.update((s) => {
+          s.busy = { label: "\u4E16\u754C\u3092\u751F\u6210\u4E2D\u2026", fraction: 0, stage: "" };
+          s.error = null;
+        });
+        try {
+          const world = await service.generate(spec, { onProgress: (p) => {
+            if (my === gen) store.update((s) => {
+              s.busy = { label: `\u4E16\u754C\u3092\u751F\u6210\u4E2D: ${p.label ?? p.stage}`, fraction: p.fraction === 1 ? 0.99 : 0.5, stage: p.stage };
+            });
+          } });
+          if (my !== gen) return { ok: false, cancelled: true };
+          extensions = {};
+          chunkCache = null;
+          world.entities.start = null;
+          adopt(world, `${world.spec.worldSeed}${WORLD_EXT}`, { dirty: true });
+          const g = world.generation;
+          if (g?.rejected?.length) notice(`\u7D71\u8A08\u306E\u8A31\u5BB9\u5E2F\u306B\u5165\u308B\u307E\u3067 ${g.attempts} \u56DE\u4F5C\u308A\u76F4\u3057\u307E\u3057\u305F\uFF08\u7834\u68C4\u3057\u305F\u30B7\u30FC\u30C9: ${g.rejected.map((r) => r.seed).join("\u3001")}\uFF09\u3002\u4F7F\u3063\u305F\u30B7\u30FC\u30C9: ${g.seedUsed}`);
+          return { ok: true, world };
+        } catch (e) {
+          if (e.name === "Cancelled") {
+            store.update((s) => {
+              s.busy = null;
+            });
+            return { ok: false, cancelled: true };
+          }
+          fail(`\u4E16\u754C\u306E\u751F\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${e.message}`);
+          return { ok: false, error: e.message };
+        }
+      },
+      cancelGeneration() {
+        gen++;
+        service.cancel();
+        store.update((s) => {
+          s.busy = null;
+        });
+      },
+      /** .ahmap v2 を開く */
+      async openBytes(bytes, fileName) {
+        store.update((s) => {
+          s.busy = { label: `${fileName} \u3092\u8AAD\u307F\u8FBC\u307F\u4E2D\u2026`, fraction: 0.3 };
+          s.error = null;
+        });
+        await new Promise((r) => setTimeout(r, 0));
+        try {
+          const { world, extensions: ext, chunkCache: cache3, manifest } = await decodeAhmap2(bytes);
+          extensions = Object.fromEntries(ext);
+          chunkCache = cache3;
+          let start2 = null;
+          if (ext.has(START_CHUNK)) {
+            try {
+              start2 = JSON.parse(dec2.decode(ext.get(START_CHUNK)));
+            } catch {
+              notice("\u4FDD\u5B58\u3055\u308C\u305F\u958B\u59CB\u96C6\u56E3\u306E\u60C5\u5831\u3092\u8AAD\u3081\u306A\u304B\u3063\u305F\u305F\u3081\u3001\u9078\u3073\u76F4\u3057\u3066\u304F\u3060\u3055\u3044");
+            }
+          }
+          world.entities.start = start2;
+          world.generation = null;
+          adopt(world, fileName, { start: start2?.groupId ?? null });
+          notice(`${fileName} \u3092\u958B\u304D\u307E\u3057\u305F\uFF08${manifest.cellCount.toLocaleString()} \u30BB\u30EB\uFF09`);
+          return { ok: true, world };
+        } catch (e) {
+          if (e instanceof Ahmap2Error) {
+            fail(`${fileName} \u3092\u958B\u3051\u307E\u305B\u3093\u3067\u3057\u305F: ${e.message}${e.problems.length ? "\uFF08" + e.problems.slice(0, 3).join("\uFF0F") + (e.problems.length > 3 ? ` \u307B\u304B${e.problems.length - 3}\u4EF6` : "") + "\uFF09" : ""}\u3002\u5143\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u5909\u66F4\u3057\u3066\u3044\u307E\u305B\u3093`);
+            return { ok: false, error: e.message, problems: e.problems };
+          }
+          fail(`${fileName} \u3092\u958B\u3051\u307E\u305B\u3093\u3067\u3057\u305F: ${e.message}`);
+          return { ok: false, error: e.message };
+        }
+      },
+      async openFile(file) {
+        return api.openBytes(new Uint8Array(await file.arrayBuffer()), file.name);
+      },
+      /** 保存（.ahmap v2 をダウンロード）。開始集団の選択も一緒に保存する */
+      async save() {
+        const { world, fileName } = store.getState();
+        if (!world) return { ok: false, reason: "\u4E16\u754C\u304C\u3042\u308A\u307E\u305B\u3093" };
+        store.update((s) => {
+          s.busy = { label: "\u4FDD\u5B58\u4E2D\u2026", fraction: 0.5 };
+          s.error = null;
+        });
+        try {
+          const ext = { ...extensions };
+          if (world.entities.start) ext[START_CHUNK] = enc2.encode(JSON.stringify(world.entities.start));
+          else delete ext[START_CHUNK];
+          const r = await encodeAhmap2(world, { appVersion, extensions: ext, reuse: chunkCache ?? void 0 });
+          chunkCache = r.chunkCache;
+          extensions = ext;
+          const name = fileName.endsWith(WORLD_EXT) ? fileName : `${fileName}${WORLD_EXT}`;
+          download(new Blob([r.bytes], { type: "application/octet-stream" }), name);
+          store.update((s) => {
+            s.busy = null;
+            s.dirty = false;
+          });
+          notice(`${name} \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F\uFF08${(r.bytes.length / 1048576).toFixed(1)} MB\uFF09`);
+          return { ok: true, bytes: r.bytes };
+        } catch (e) {
+          fail(`\u4FDD\u5B58\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${e.message}`);
+          return { ok: false, error: e.message };
+        }
+      },
+      setLayer(layer, opt = {}) {
+        store.update((s) => {
+          s.layer = layer;
+          s.layerOpt = opt;
+        });
+        emit({ type: "layer" });
+      },
+      setMode(mode) {
+        store.update((s) => {
+          s.mode = mode;
+          s.placing = false;
+        });
+        emit({ type: "mode" });
+      },
+      setBrush(patch) {
+        store.update((s) => {
+          s.brush = { ...s.brush, ...patch };
+        });
+        emit({ type: "brush" });
+      },
+      hover(cell) {
+        store.update((s) => {
+          s.hover = cell;
+        });
+      },
+      select(cell) {
+        store.update((s) => {
+          s.selectedCell = cell;
+        });
+        emit({ type: "select" });
+      },
+      // ---- 初期集団 ----
+      selectGroup(id) {
+        const { world } = store.getState();
+        if (!world?.entities.populations.some((p) => p.id === id)) return false;
+        store.update((s) => {
+          s.startGroupId = id;
+        });
+        emit({ type: "groups" });
+        return true;
+      },
+      /** 別の候補を提案する（再生成せず、置き直す。開始集団の選択は解除） */
+      proposeGroups() {
+        const { world, groupVariant } = store.getState();
+        if (!world) return;
+        const g = { mesh: world.mesh, landWater: world.cell.landWater, fertility: world.cell.fertility, temp: world.cell.temp, river: world.cell.river, coastDist: world.cell.coastDist, lat: world.cell.lat, lon: world.cell.lon };
+        world.entities.populations = placeInitialGroups(g, world.spec, groupVariant + 1);
+        world.entities.start = null;
+        world.hash = world.hash;
+        store.update((s) => {
+          s.groupVariant = groupVariant + 1;
+          s.startGroupId = null;
+          s.dirty = true;
+        });
+        emit({ type: "groups" });
+      },
+      /** 手動で集団を置く（居住できるセルだけ） */
+      placeGroup(cell) {
+        const { world } = store.getState();
+        if (!world) return { ok: false, reason: "\u4E16\u754C\u304C\u3042\u308A\u307E\u305B\u3093" };
+        const c = world.cell;
+        if (c.landWater[cell] !== LAND_WATER.LAND) return { ok: false, reason: c.landWater[cell] === LAND_WATER.LAKE ? "\u6E56\u306B\u306F\u7F6E\u3051\u307E\u305B\u3093" : "\u6D77\u306B\u306F\u7F6E\u3051\u307E\u305B\u3093" };
+        if (c.temp[cell] < -5 || c.temp[cell] > 34) return { ok: false, reason: `\u6C17\u6E29 ${c.temp[cell].toFixed(1)}\u2103 \u306F\u3001\u4EBA\u304C\u5B9A\u4F4F\u3059\u308B\u306B\u306F\u53B3\u3057\u3059\u304E\u307E\u3059\uFF08\u22125\u301C34\u2103\uFF09` };
+        if (c.fertility[cell] < 0.1) return { ok: false, reason: `\u80A5\u6C83\u5EA6 ${c.fertility[cell].toFixed(2)} \u306F\u4F4E\u3059\u304E\u307E\u3059\uFF080.10 \u4EE5\u4E0A\uFF09` };
+        const id = Math.max(0, ...world.entities.populations.map((p) => p.id)) + 1;
+        world.entities.populations.push({ id, cell, lat: c.lat[cell] * 180 / Math.PI, lon: c.lon[cell] * 180 / Math.PI, size: 300, subsistence: "forage", species: "human", manual: true });
+        store.update((s) => {
+          s.startGroupId = id;
+          s.placing = false;
+          s.dirty = true;
+        });
+        emit({ type: "groups" });
+        return { ok: true, id };
+      },
+      setPlacing(on) {
+        store.update((s) => {
+          s.placing = on;
+        });
+      },
+      removeGroup(id) {
+        const { world, startGroupId } = store.getState();
+        if (!world) return;
+        world.entities.populations = world.entities.populations.filter((p) => p.id !== id);
+        if (startGroupId === id) {
+          world.entities.start = null;
+          store.update((s) => {
+            s.startGroupId = null;
+          });
+        }
+        store.update((s) => {
+          s.dirty = true;
+        });
+        emit({ type: "groups" });
+      },
+      /** この集団で始める（v5 のシミュレーションの起点として保存する） */
+      confirmStart() {
+        const { world, startGroupId } = store.getState();
+        if (!world || startGroupId == null) return { ok: false, reason: "\u96C6\u56E3\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044" };
+        const p = world.entities.populations.find((x) => x.id === startGroupId);
+        if (!p) return { ok: false, reason: "\u9078\u3093\u3060\u96C6\u56E3\u304C\u898B\u3064\u304B\u308A\u307E\u305B\u3093" };
+        world.entities.start = { groupId: p.id, cell: p.cell, lat: p.lat, lon: p.lon, population: p.size, subsistence: p.subsistence, species: p.species };
+        store.update((s) => {
+          s.dirty = true;
+          s.mode = "view";
+        });
+        emit({ type: "groups" });
+        notice(`\u96C6\u56E3 #${p.id} \u3092\u958B\u59CB\u96C6\u56E3\u306B\u6C7A\u3081\u307E\u3057\u305F\u3002\u4FDD\u5B58\u3059\u308B\u3068\u3001\u7D9A\u304D\u304B\u3089\u59CB\u3081\u3089\u308C\u307E\u3059`);
+        return { ok: true };
+      },
+      // ---- 地形編集 ----
+      editAt(cell) {
+        const { world, brush } = store.getState();
+        if (!world || !editor) return { ok: false, reason: "\u4E16\u754C\u304C\u3042\u308A\u307E\u305B\u3093" };
+        const r = editor.applyBrush({ center: cell, radiusKm: brush.radiusKm, deltaM: brush.deltaM, mode: brush.mode, target: brush.target });
+        if (!r.ok) {
+          notice(r.reason);
+          return r;
+        }
+        if (r.unchanged) return r;
+        if (world.entities.start && world.cell.landWater[world.entities.start.cell] !== LAND_WATER.LAND) {
+          editor.undo();
+          notice("\u958B\u59CB\u96C6\u56E3\u306E\u5C45\u4F4F\u5730\u304C\u5931\u308F\u308C\u308B\u305F\u3081\u3001\u53D6\u308A\u6D88\u3057\u307E\u3057\u305F");
+          return { ok: false, reason: "\u958B\u59CB\u96C6\u56E3\u3092\u5B88\u308B\u305F\u3081\u53D6\u308A\u6D88\u3057" };
+        }
+        store.update((s) => {
+          s.dirty = true;
+        });
+        syncHistory();
+        emit({ type: "edit", dirty: r.dirty });
+        return r;
+      },
+      undo() {
+        if (!editor) return { ok: false };
+        const r = editor.undo();
+        if (r.ok) {
+          store.update((s) => {
+            s.dirty = true;
+          });
+          syncHistory();
+          emit({ type: "edit", dirty: r.dirty });
+        }
+        return r;
+      },
+      redo() {
+        if (!editor) return { ok: false };
+        const r = editor.redo();
+        if (r.ok) {
+          store.update((s) => {
+            s.dirty = true;
+          });
+          syncHistory();
+          emit({ type: "edit", dirty: r.dirty });
+        }
+        return r;
+      },
+      check() {
+        const { world } = store.getState();
+        return world ? validateWorld(world) : [];
+      },
+      /** セルの説明（パネル・ステータス用） */
+      describeCell(c) {
+        const { world } = store.getState();
+        if (!world || c < 0) return null;
+        const k = world.cell, res = Object.entries(RES_NAMES).filter(([b]) => k.resource[c] & Number(b)).map(([, n]) => n);
+        const group = world.entities.populations.find((p) => p.cell === c);
+        return {
+          cell: c,
+          lat: k.lat[c] * 180 / Math.PI,
+          lon: k.lon[c] * 180 / Math.PI,
+          elevation: k.elevation[c],
+          kind: ["\u6D77", "\u9678", "\u6E56"][k.landWater[c]],
+          biome: BIOME_NAMES[k.biome[c]],
+          temp: k.temp[c],
+          precip: k.precip[c],
+          fertility: k.fertility[c],
+          soil: SOIL_NAMES[k.soil[c]],
+          resources: res,
+          river: k.river[c] === 1,
+          riverFlow: k.riverFlow[c],
+          coastDist: k.coastDist[c],
+          areaKm2: k.areaKm2[c],
+          capacity: k.capacity[c],
+          group: group ? group.id : null
+        };
+      },
+      get editor() {
+        return editor;
+      }
+    };
+    return api;
+  }
+
+  // js/render/pixel-map.js
+  async function buildPixelMap(mesh, W, H, { rowsPerSlice = 24, yieldFn = () => new Promise((r) => setTimeout(r, 0)), onProgress = null, signal = null } = {}) {
+    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, map = new Int32Array(W * H);
+    let cur = 0, rowStartCell = 0;
+    for (let py = 0; py < H; py++) {
+      if (py % rowsPerSlice === 0) {
+        if (signal?.aborted) throw new Error("\u30AD\u30E3\u30F3\u30BB\u30EB\u3055\u308C\u307E\u3057\u305F");
+        onProgress?.(py / H);
+        await yieldFn();
+      }
+      cur = rowStartCell;
+      for (let px = 0; px < W; px++) {
+        const [x, y, z] = unprojectViewToSphere((px + 0.5) / W, (py + 0.5) / H);
+        let best = X[3 * cur] * x + X[3 * cur + 1] * y + X[3 * cur + 2] * z;
+        for (; ; ) {
+          let bj = -1;
+          for (let k = off[cur]; k < off[cur + 1]; k++) {
+            const j = nb[k], d = X[3 * j] * x + X[3 * j + 1] * y + X[3 * j + 2] * z;
+            if (d > best) {
+              best = d;
+              bj = j;
+            }
+          }
+          if (bj < 0) break;
+          cur = bj;
+        }
+        map[py * W + px] = cur;
+        if (px === 0) rowStartCell = cur;
+      }
+    }
+    onProgress?.(1);
+    return map;
+  }
+  function textureSizeFor(cellCount2) {
+    const w = Math.max(1024, Math.min(4096, 2 ** Math.ceil(Math.log2(Math.sqrt(cellCount2) * 2.6))));
+    return { W: w, H: w / 2 };
+  }
+
+  // js/render/sphere-view.js
+  var TAU = 2 * Math.PI;
+  var HALF_PI = Math.PI / 2;
+  var wrapPi = (a) => {
+    while (a > Math.PI) a -= TAU;
+    while (a < -Math.PI) a += TAU;
+    return a;
+  };
+  function createSphereView({ canvas, createCanvas = (w, h) => {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    return c;
+  }, schedule = (fn) => requestAnimationFrame(fn), onRender = null }) {
+    const ctx = canvas.getContext("2d");
+    let world = null, index = null, colors = null, layer = "biome", layerOpt = {}, pixelMap = null, tex = null, texCtx = null, TW = 0, TH = 0, prepared = false;
+    const view = { lon0: 0, lat0: 0, scale: 1 };
+    const overlay = { hoverCell: -1, selectedCell: -1, groups: [], brush: null, rivers: true, graticule: false, groupsVisible: true };
+    const stats = { mode: "none", lastRenderMs: 0, visibleCells: 0, pixelMapMs: 0, colorMs: 0, texSize: "" };
+    let raf = 0, abort = null;
+    const W = () => canvas.width, H = () => canvas.height;
+    const fitScale = () => Math.min(W() / TAU, H() / Math.PI);
+    const spacingRad = () => world ? Math.sqrt(4 * Math.PI / world.mesh.cellCount) : 0.01;
+    const maxScale = () => Math.max(fitScale() * 4, 90 / spacingRad());
+    const sx = (lon) => W() / 2 + wrapPi(lon - view.lon0) * view.scale;
+    const sy = (lat) => H() / 2 - (lat - view.lat0) * view.scale;
+    function clampView() {
+      view.scale = Math.max(fitScale(), Math.min(maxScale(), view.scale));
+      view.lon0 = wrapPi(view.lon0);
+      const halfLat = H() / 2 / view.scale, lim = Math.max(0, HALF_PI - halfLat);
+      view.lat0 = Math.max(-lim, Math.min(lim, view.lat0));
+      if (HALF_PI * 2 * view.scale <= H()) view.lat0 = 0;
+    }
+    const request = () => {
+      if (raf) return;
+      raf = schedule(() => {
+        raf = 0;
+        render();
+      });
+    };
+    function textureFromColors() {
+      if (!pixelMap || !colors) return;
+      const img = texCtx.createImageData(TW, TH), d = img.data, n = TW * TH;
+      for (let i = 0; i < n; i++) {
+        const c = pixelMap[i] * 4;
+        d[4 * i] = colors[c];
+        d[4 * i + 1] = colors[c + 1];
+        d[4 * i + 2] = colors[c + 2];
+        d[4 * i + 3] = 255;
+      }
+      texCtx.putImageData(img, 0, 0);
+    }
+    async function setWorld(w, { onProgress } = {}) {
+      abort?.abort();
+      abort = typeof AbortController !== "undefined" ? new AbortController() : null;
+      world = w;
+      prepared = false;
+      pixelMap = null;
+      index = null;
+      colors = null;
+      overlay.hoverCell = -1;
+      overlay.selectedCell = -1;
+      overlay.groups = [];
+      if (!w) {
+        stats.mode = "none";
+        request();
+        return;
+      }
+      let t = performance.now();
+      index = buildSpatialIndex(w.mesh);
+      stats.indexMs = Math.round(performance.now() - t);
+      t = performance.now();
+      colors = colorizeCells(w, layer, layerOpt);
+      stats.colorMs = Math.round(performance.now() - t);
+      const { W: tw, H: th } = textureSizeFor(w.mesh.cellCount);
+      TW = tw;
+      TH = th;
+      tex = createCanvas(TW, TH);
+      texCtx = tex.getContext("2d");
+      stats.texSize = `${TW}\xD7${TH}`;
+      view.lon0 = 0;
+      view.lat0 = 0;
+      view.scale = fitScale();
+      clampView();
+      t = performance.now();
+      const myAbort = abort;
+      pixelMap = await buildPixelMap(w.mesh, TW, TH, { onProgress, signal: myAbort?.signal });
+      if (world !== w) return;
+      stats.pixelMapMs = Math.round(performance.now() - t);
+      textureFromColors();
+      prepared = true;
+      request();
+    }
+    function setLayer(l, opt = {}) {
+      layer = l;
+      layerOpt = opt;
+      if (!world) return;
+      const t = performance.now();
+      colors = colorizeCells(world, layer, layerOpt, colors);
+      textureFromColors();
+      stats.colorMs = Math.round(performance.now() - t);
+      request();
+    }
+    function refresh(dirty) {
+      if (!world) return;
+      colorizeCells(world, layer, layerOpt, colors, dirty);
+      textureFromColors();
+      request();
+    }
+    function latLonAt(px, py) {
+      return { lat: Math.max(-HALF_PI, Math.min(HALF_PI, view.lat0 - (py - H() / 2) / view.scale)), lon: wrapPi(view.lon0 + (px - W() / 2) / view.scale) };
+    }
+    function cellAt(px, py) {
+      if (!world || !index) return -1;
+      const { lat, lon } = latLonAt(px, py);
+      if (Math.abs(view.lat0 - (py - H() / 2) / view.scale) > HALF_PI) return -1;
+      const [x, y, z] = latLonToXYZ(lat, lon);
+      return nearestCell2(index, x, y, z);
+    }
+    function screenOfCell(c) {
+      const lat = world.cell.lat[c], lon = world.cell.lon[c];
+      return { x: sx(lon), y: sy(lat) };
+    }
+    function zoomAt(px, py, factor) {
+      const before = latLonAt(px, py);
+      view.scale *= factor;
+      clampView();
+      const after = latLonAt(px, py);
+      view.lon0 = wrapPi(view.lon0 + (before.lon - after.lon));
+      view.lat0 += before.lat - after.lat;
+      clampView();
+      request();
+    }
+    function panBy(dx, dy) {
+      view.lon0 -= dx / view.scale;
+      view.lat0 += dy / view.scale;
+      clampView();
+      request();
+    }
+    function fit() {
+      view.lon0 = 0;
+      view.lat0 = 0;
+      view.scale = fitScale();
+      clampView();
+      request();
+    }
+    function centerOn(lat, lon, scale) {
+      view.lat0 = lat;
+      view.lon0 = lon;
+      if (scale) view.scale = scale;
+      clampView();
+      request();
+    }
+    function resize() {
+      clampView();
+      request();
+    }
+    const vectorWanted = () => {
+      if (!world || view.scale * spacingRad() < 6) return false;
+      const areaRad2 = W() / view.scale * (H() / view.scale);
+      return areaRad2 / (4 * Math.PI / world.mesh.cellCount) <= 45e3;
+    };
+    function drawRaster() {
+      ctx.imageSmoothingEnabled = view.scale < fitScale() * 6;
+      const w = TAU * view.scale, h = Math.PI * view.scale, y0 = H() / 2 - (HALF_PI - view.lat0) * view.scale;
+      for (let k = -1; k <= 1; k++) {
+        const x0 = W() / 2 + (-Math.PI - view.lon0 + k * TAU) * view.scale;
+        if (x0 > W() || x0 + w < 0) continue;
+        ctx.drawImage(tex, x0, y0, w, h);
+      }
+    }
+    function visibleCells() {
+      const cell = world.cell, V = world.mesh.cellCount, sp = spacingRad() * 2, latSpan = H() / 2 / view.scale + sp, lonSpan = W() / 2 / view.scale, out = [];
+      for (let c = 0; c < V; c++) {
+        if (Math.abs(cell.lat[c] - view.lat0) > latSpan) continue;
+        const cl = Math.max(0.05, Math.cos(cell.lat[c])), lim = lonSpan + sp / cl;
+        if (lim < Math.PI && Math.abs(wrapPi(cell.lon[c] - view.lon0)) > lim) continue;
+        out.push(c);
+      }
+      return out;
+    }
+    function polyPath(c, k) {
+      const p = cellViewPolygon(world.mesh, c), n = p.lon.length, off = k * TAU;
+      ctx.moveTo(W() / 2 + (p.lon[0] - view.lon0 + off) * view.scale, sy(p.lat[0]));
+      for (let i = 1; i < n; i++) ctx.lineTo(W() / 2 + (p.lon[i] - view.lon0 + off) * view.scale, sy(p.lat[i]));
+      if (p.wrapsPole) {
+        const pl = p.poleSign > 0 ? HALF_PI : -HALF_PI;
+        ctx.lineTo(W() / 2 + (p.lon[n - 1] - view.lon0 + off) * view.scale, sy(pl));
+        ctx.lineTo(W() / 2 + (p.lon[0] - view.lon0 + off) * view.scale, sy(pl));
+      }
+      ctx.closePath();
+    }
+    function drawVector() {
+      const list = visibleCells();
+      stats.visibleCells = list.length;
+      for (const c of list) {
+        const r = colors[4 * c], g = colors[4 * c + 1], b = colors[4 * c + 2], p = cellViewPolygon(world.mesh, c);
+        let lo = 1e9, hi = -1e9;
+        for (let i = 0; i < p.lon.length; i++) {
+          lo = Math.min(lo, p.lon[i]);
+          hi = Math.max(hi, p.lon[i]);
+        }
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.strokeStyle = ctx.fillStyle;
+        for (let k = -1; k <= 1; k++) {
+          const xl = W() / 2 + (lo - view.lon0 + k * TAU) * view.scale, xh = W() / 2 + (hi - view.lon0 + k * TAU) * view.scale;
+          if (xh < 0 || xl > W()) continue;
+          ctx.beginPath();
+          polyPath(c, k);
+          ctx.fill();
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+      }
+    }
+    function drawRivers2() {
+      const cell = world.cell, V = world.mesh.cellCount, lat = cell.lat, lon = cell.lon, sp = spacingRad() * 2, latSpan = H() / 2 / view.scale + sp, lonSpan = W() / 2 / view.scale + sp * 3;
+      ctx.beginPath();
+      let n = 0;
+      for (let c = 0; c < V; c++) {
+        if (!cell.river[c]) continue;
+        const p = cell.riverTo[c];
+        if (p < 0) continue;
+        if (Math.abs(lat[c] - view.lat0) > latSpan) continue;
+        const dl = wrapPi(lon[c] - view.lon0);
+        if (lonSpan < Math.PI && Math.abs(dl) > lonSpan) continue;
+        const dl2 = wrapPi(lon[p] - lon[c]);
+        const x1 = W() / 2 + dl * view.scale, y1 = sy(lat[c]), x2 = x1 + dl2 * view.scale, y2 = sy(lat[p]);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        n++;
+      }
+      const flow = Math.min(2.4, Math.max(0.8, view.scale * spacingRad() * 0.18));
+      ctx.strokeStyle = "rgba(40,100,230,0.95)";
+      ctx.lineWidth = flow;
+      ctx.lineCap = "round";
+      ctx.stroke();
+      stats.riverSegments = n;
+    }
+    function drawGraticule() {
+      ctx.strokeStyle = "rgba(255,255,255,0.18)";
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let la = -60; la <= 60; la += 30) {
+        const y = sy(la * Math.PI / 180);
+        ctx.moveTo(0, y);
+        ctx.lineTo(W(), y);
+      }
+      for (let lo = -180; lo < 180; lo += 30) for (let k = -1; k <= 1; k++) {
+        const x = W() / 2 + (lo * Math.PI / 180 - view.lon0 + k * TAU) * view.scale;
+        if (x < 0 || x > W()) continue;
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, H());
+      }
+      ctx.stroke();
+    }
+    function drawCellOutline(c, color, width) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      for (let k = -1; k <= 1; k++) {
+        const p = screenOfCell(c), x = p.x + k * TAU * view.scale;
+        if (x < -50 || x > W() + 50) continue;
+        ctx.beginPath();
+        polyPath(c, k);
+        ctx.stroke();
+      }
+    }
+    function drawBrush(b) {
+      const R = world.spec.planet.radiusKm, rr = b.radiusKm / R, lat = world.cell.lat[b.center], lon = world.cell.lon[b.center];
+      ctx.beginPath();
+      for (let i = 0; i <= 64; i++) {
+        const a = i / 64 * TAU, la = Math.asin(Math.sin(lat) * Math.cos(rr) + Math.cos(lat) * Math.sin(rr) * Math.cos(a)), lo = lon + Math.atan2(Math.sin(a) * Math.sin(rr) * Math.cos(lat), Math.cos(rr) - Math.sin(lat) * Math.sin(la));
+        const x = sx(lo), y = sy(la);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = b.color ?? "rgba(255,255,255,0.95)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    function drawGroups() {
+      ctx.font = "bold 12px sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (const g of overlay.groups) {
+        const p = screenOfCell(g.cell);
+        for (let k = -1; k <= 1; k++) {
+          const x = p.x + k * TAU * view.scale, y = p.y;
+          if (x < -20 || x > W() + 20 || y < -20 || y > H() + 20) continue;
+          ctx.beginPath();
+          ctx.arc(x, y, g.selected ? 12 : 9, 0, TAU);
+          ctx.fillStyle = g.selected ? "#ffd24a" : "rgba(20,30,40,0.85)";
+          ctx.fill();
+          ctx.lineWidth = g.selected ? 3 : 2;
+          ctx.strokeStyle = g.selected ? "#ffffff" : "#ffd24a";
+          ctx.stroke();
+          ctx.fillStyle = g.selected ? "#1b1b1b" : "#ffd24a";
+          ctx.fillText(String(g.id), x, y + 0.5);
+        }
+      }
+    }
+    function render() {
+      const t0 = performance.now();
+      ctx.fillStyle = "#0a1a33";
+      ctx.fillRect(0, 0, W(), H());
+      if (!world) {
+        stats.mode = "none";
+        return;
+      }
+      if (vectorWanted()) {
+        stats.mode = "vector";
+        drawVector();
+      } else if (prepared) {
+        stats.mode = "raster";
+        drawRaster();
+        stats.visibleCells = 0;
+      } else {
+        stats.mode = "preparing";
+      }
+      if (overlay.graticule) drawGraticule();
+      if (overlay.rivers && prepared && world.cell.river) drawRivers2();
+      if (overlay.selectedCell >= 0) drawCellOutline(overlay.selectedCell, "#ffffff", 2);
+      if (overlay.hoverCell >= 0) drawCellOutline(overlay.hoverCell, "rgba(255,255,255,0.8)", 1.5);
+      if (overlay.brush) drawBrush(overlay.brush);
+      if (overlay.groupsVisible && overlay.groups.length) drawGroups();
+      stats.lastRenderMs = Math.round((performance.now() - t0) * 10) / 10;
+      onRender?.(stats);
+    }
+    return {
+      setWorld,
+      setLayer,
+      refresh,
+      resize,
+      fit,
+      zoomAt,
+      panBy,
+      centerOn,
+      cellAt,
+      latLonAt,
+      screenOfCell,
+      render,
+      request,
+      setOverlay(patch) {
+        Object.assign(overlay, patch);
+        request();
+      },
+      get view() {
+        return { ...view };
+      },
+      get stats() {
+        return { ...stats };
+      },
+      get world() {
+        return world;
+      },
+      get ready() {
+        return prepared;
+      },
+      get layer() {
+        return layer;
+      },
+      renderNow() {
+        raf = 0;
+        render();
+      },
+      dispose() {
+        abort?.abort();
+        world = null;
+      }
+    };
+  }
+
+  // js/ui/world-workspace.js
+  var PRESETS = [[5e4, "50,000\uFF08\u8EFD\u3044\uFF09"], [1e5, "100,000"], [25e4, "250,000\uFF08\u6A19\u6E96\uFF09"], [5e5, "500,000"], [1e6, "1,000,000\uFF08\u91CD\u3044\uFF09"]];
+  var MODE_LABELS = { view: "\u95B2\u89A7", groups: "\u521D\u671F\u96C6\u56E3", edit: "\u5730\u5F62\u7DE8\u96C6" };
+  var fmt6 = (v, d = 0) => Number.isFinite(v) ? v.toLocaleString("ja-JP", { maximumFractionDigits: d, minimumFractionDigits: d }) : "\u2014";
+  function initWorldWorkspace({ worldActions, openFileDialog, legacyHasMap = () => false }) {
+    const stage = byId("world-stage"), app = byId("app");
+    stage.className = "world-stage";
+    stage.hidden = true;
+    const canvas = el("canvas", "world-canvas");
+    canvas.id = "world-canvas";
+    canvas.tabIndex = 0;
+    canvas.setAttribute("aria-label", "\u7403\u9762\u4E16\u754C\u306E\u5730\u56F3");
+    const top = el("div", "world-top"), panel2 = el("aside", "world-panel"), legend = el("div", "world-legend"), status = el("div", "world-status"), busy = el("div", "world-busy"), empty = el("div", "world-empty");
+    stage.append(canvas, top, panel2, legend, status, empty, busy);
+    const S = () => worldActions.store.getState();
+    const view = createSphereView({ canvas, onRender: () => renderStatus() });
+    let active = false, pointer = null, spaceDown = false;
+    const bNew = btn("primary", "\u65B0\u3057\u3044\u4E16\u754C", "\u4E16\u754C\u306E\u8A2D\u5B9A\u3092\u6C7A\u3081\u3066\u751F\u6210\u3059\u308B", () => openNewDialog());
+    const bOpen = btn("", "\u958B\u304F", "\u4FDD\u5B58\u3057\u305F\u4E16\u754C\uFF08.ahmap\uFF09\u3092\u958B\u304F", () => openFileDialog());
+    const bSave = btn("", "\u4FDD\u5B58", "\u4E16\u754C\u3092 .ahmap\uFF08v2\uFF09\u3068\u3057\u3066\u4FDD\u5B58\u3059\u308B (Ctrl+S)", () => worldActions.save());
+    const modeBox = el("div", "world-modes");
+    const modeBtns = {};
+    for (const [k, label2] of Object.entries(MODE_LABELS)) {
+      const b = btn("", label2, "", () => worldActions.setMode(k));
+      b.dataset.mode = k;
+      modeBtns[k] = b;
+      modeBox.append(b);
+    }
+    const layerSel = el("select", "world-layer");
+    layerSel.setAttribute("aria-label", "\u8868\u793A\u3059\u308B\u60C5\u5831");
+    for (const l of WORLD_LAYERS) {
+      const o = document.createElement("option");
+      o.value = l.key;
+      o.textContent = l.label;
+      layerSel.append(o);
+    }
+    const resSel = el("select", "world-res");
+    resSel.setAttribute("aria-label", "\u8CC7\u6E90\u306E\u7A2E\u985E");
+    {
+      const o = document.createElement("option");
+      o.value = "0";
+      o.textContent = "\u3059\u3079\u3066";
+      resSel.append(o);
+      for (const [bit, n] of Object.entries(RES_NAMES)) {
+        const o2 = document.createElement("option");
+        o2.value = bit;
+        o2.textContent = n;
+        resSel.append(o2);
+      }
+    }
+    const chkRiver = checkbox("\u6CB3\u5DDD", true, (v) => view.setOverlay({ rivers: v })), chkGrid = checkbox("\u7D4C\u7DEF\u7DDA", false, (v) => view.setOverlay({ graticule: v }));
+    const bFit = btn("", "\u5168\u4F53", "\u4E16\u754C\u5168\u4F53\u3092\u8868\u793A (F)", () => view.fit()), bClose = btn("", "\u65E7\u30A8\u30C7\u30A3\u30BF\u3078", "\u7403\u9762\u4E16\u754C\u306E\u753B\u9762\u3092\u9589\u3058\u3066\u3001\u65E7\u30A8\u30C7\u30A3\u30BF\u306B\u623B\u308B", () => setActive(false));
+    top.append(bNew, bOpen, bSave, el("span", "world-sep"), modeBox, el("span", "world-sep"), layerSel, resSel, chkRiver.label, chkGrid.label, el("span", "world-sep"), bFit, bClose);
+    layerSel.addEventListener("change", () => worldActions.setLayer(layerSel.value, { resource: Number(resSel.value) }));
+    resSel.addEventListener("change", () => worldActions.setLayer(layerSel.value, { resource: Number(resSel.value) }));
+    function checkbox(text2, on, fn) {
+      const label2 = el("label", "world-chk"), i = document.createElement("input");
+      i.type = "checkbox";
+      i.checked = on;
+      i.addEventListener("change", () => fn(i.checked));
+      label2.append(i, document.createTextNode(" " + text2));
+      return { label: label2, input: i };
+    }
+    async function confirmDiscard() {
+      const s = S();
+      if (!s.world || !s.dirty) return true;
+      return confirmDialog("\u4FDD\u5B58\u3057\u3066\u3044\u306A\u3044\u5909\u66F4\u304C\u3042\u308A\u307E\u3059\u3002\u7834\u68C4\u3057\u3066\u7D9A\u3051\u307E\u3059\u304B\uFF1F", { okLabel: "\u7834\u68C4\u3057\u3066\u7D9A\u3051\u308B", danger: true });
+    }
+    async function openNewDialog() {
+      if (!await confirmDiscard()) return;
+      const dlg = document.createElement("dialog");
+      dlg.className = "confirm-dialog world-new";
+      dlg.append(el("h2", null, "\u65B0\u3057\u3044\u4E16\u754C"));
+      const form = el("div", "world-form");
+      dlg.append(form);
+      const row = (label2, ctl, hint) => {
+        const r = el("label", "world-row");
+        r.append(el("span", "world-row-l", label2), ctl);
+        if (hint) r.append(el("span", "world-row-h", hint));
+        form.append(r);
+        return ctl;
+      };
+      const seed = document.createElement("input");
+      seed.type = "text";
+      seed.value = makeWorldSeed(Date.now());
+      seed.setAttribute("aria-label", "\u30B7\u30FC\u30C9");
+      const seedBox = el("span", "world-seedbox");
+      seedBox.append(seed, btn("", "\u30E9\u30F3\u30C0\u30E0", "\u65B0\u3057\u3044\u30B7\u30FC\u30C9\u306B\u3059\u308B", () => {
+        seed.value = makeWorldSeed(Date.now());
+      }));
+      row("\u30B7\u30FC\u30C9", seedBox, "\u540C\u3058\u30B7\u30FC\u30C9\u3068\u8A2D\u5B9A\u306A\u3089\u3001\u540C\u3058\u5730\u5F62\u306B\u306A\u308A\u307E\u3059");
+      const preset = document.createElement("select");
+      for (const [v, t] of PRESETS) {
+        const o = document.createElement("option");
+        o.value = String(v);
+        o.textContent = t;
+        if (v === DEFAULT_WORLD_SPEC.resolution.targetCells) o.selected = true;
+        preset.append(o);
+      }
+      row("\u30BB\u30EB\u6570", preset, "\u5927\u304D\u3044\u307B\u3069\u7D30\u304B\u3044\u4E16\u754C\u306B\u306A\u308A\u307E\u3059\uFF08\u7AEF\u672B\u306B\u3088\u308A\u751F\u6210\u306B\u6570\u79D2\u301C\u6570\u5341\u79D2\uFF09");
+      const land = document.createElement("input");
+      land.type = "range";
+      land.min = "20";
+      land.max = "80";
+      land.value = "50";
+      const landV = el("span", "world-row-v", "50%");
+      land.addEventListener("input", () => {
+        landV.textContent = `${land.value}%`;
+      });
+      const landBox = el("span", "world-seedbox");
+      landBox.append(land, landV);
+      row("\u9678\u5730\u306E\u5272\u5408", landBox);
+      const cont = document.createElement("input");
+      cont.type = "number";
+      cont.min = "1";
+      cont.max = "12";
+      cont.value = "6";
+      row("\u5927\u9678\u306E\u6570\uFF08\u76EE\u5B89\uFF09", cont);
+      const isl = document.createElement("select");
+      for (const [k, t] of [["few", "\u5C11\u306A\u3044"], ["normal", "\u3075\u3064\u3046"], ["many", "\u591A\u3044"]]) {
+        const o = document.createElement("option");
+        o.value = k;
+        o.textContent = `${t}\uFF08\u7D04${ISLAND_MODES[k]}\uFF09`;
+        if (k === "many") o.selected = true;
+        isl.append(o);
+      }
+      row("\u5CF6\u306E\u591A\u3055", isl);
+      const groups = document.createElement("input");
+      groups.type = "number";
+      groups.min = "1";
+      groups.max = "64";
+      groups.value = "12";
+      row("\u521D\u671F\u96C6\u56E3\u306E\u5019\u88DC\u6570", groups);
+      const err = el("p", "hint");
+      dlg.append(err);
+      const actions = el("div", "confirm-dialog-actions"), cancel = btn("", "\u30AD\u30E3\u30F3\u30BB\u30EB", "", () => {
+        dlg.close();
+        dlg.remove();
+      }), ok2 = btn("primary", "\u751F\u6210\u3059\u308B", "", () => {
+        const spec = { worldSeed: seed.value.trim(), resolution: { targetCells: Number(preset.value) }, landFraction: Number(land.value) / 100, continentCountTarget: Number(cont.value), islandMode: isl.value, initialGroups: Number(groups.value) };
+        dlg.close();
+        dlg.remove();
+        worldActions.newWorld(spec);
+      });
+      actions.append(cancel, ok2);
+      dlg.append(actions);
+      dlg.addEventListener("cancel", () => dlg.remove());
+      document.body.append(dlg);
+      dlg.showModal();
+      seed.focus();
+    }
+    const sec = (title) => {
+      const s = el("section", "world-sec");
+      s.append(el("h4", null, title));
+      return s;
+    };
+    const kv = (rows) => {
+      const d = el("dl", "world-kv");
+      for (const [k, v] of rows) {
+        d.append(el("dt", null, k), el("dd", null, String(v)));
+      }
+      return d;
+    };
+    function renderPanel() {
+      const s = S(), w = s.world;
+      panel2.replaceChildren();
+      if (!w) {
+        panel2.hidden = true;
+        return;
+      }
+      panel2.hidden = false;
+      if (s.mode === "view") {
+        const a = sec("\u4E16\u754C"), st = w.stats;
+        a.append(kv([["\u30B7\u30FC\u30C9", w.spec.worldSeed], ["\u30BB\u30EB\u6570", fmt6(w.mesh.cellCount)], ["\u9678\u5730\u7387", `${fmt6(st.landFraction * 100, 1)}%`], ["\u5927\u9678\uFF0F\u5CF6", `${st.continentCount}\uFF0F${st.islandCount}`], ["\u6CB3\u5DDD\u30BB\u30EB\uFF0F\u6E56", `${fmt6(st.riverCells)}\uFF0F${fmt6(st.lakeCells)}`], ["\u751F\u6210\u5668", w.spec.generatorVersion]]));
+        if (w.entities.start) a.append(el("p", "hint", `\u958B\u59CB\u96C6\u56E3: #${w.entities.start.groupId}\uFF08\u4EBA\u53E3 ${w.entities.start.population}\uFF09`));
+        else a.append(el("p", "hint warn", "\u958B\u59CB\u96C6\u56E3\u304C\u307E\u3060\u6C7A\u307E\u3063\u3066\u3044\u307E\u305B\u3093\u3002\u300C\u521D\u671F\u96C6\u56E3\u300D\u3067\u9078\u3093\u3067\u304F\u3060\u3055\u3044"));
+        panel2.append(a);
+        const c = sec("\u30BB\u30EB");
+        const d = worldActions.describeCell(s.selectedCell >= 0 ? s.selectedCell : s.hover);
+        if (d) c.append(kv([["\u7A2E\u5225", d.kind], ["\u7DEF\u5EA6\uFF0F\u7D4C\u5EA6", `${fmt6(d.lat, 2)}\xB0 \uFF0F ${fmt6(d.lon, 2)}\xB0`], ["\u6A19\u9AD8", `${fmt6(d.elevation)} m`], ["\u30D0\u30A4\u30AA\u30FC\u30E0", d.biome], ["\u6C17\u6E29", `${fmt6(d.temp, 1)} \u2103`], ["\u964D\u6C34", `${fmt6(d.precip)} mm/\u5E74`], ["\u80A5\u6C83\u5EA6", fmt6(d.fertility, 2)], ["\u571F\u58CC", d.soil], ["\u8CC7\u6E90", d.resources.join("\u30FB") || "\u306A\u3057"], ["\u5DDD", d.river ? `\u3042\u308A\uFF08${fmt6(d.riverFlow)} m\xB3/s\uFF09` : "\u306A\u3057"], ["\u6D77\u5CB8\u307E\u3067", `${d.coastDist} \u30BB\u30EB`], ["\u9762\u7A4D", `${fmt6(d.areaKm2)} km\xB2`]]));
+        else c.append(el("p", "hint", "\u5730\u56F3\u306E\u4E0A\u306B\u30AB\u30FC\u30BD\u30EB\u3092\u7F6E\u304F\u304B\u3001\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u9078\u3076\u3068\u3001\u8A73\u3057\u3044\u60C5\u5831\u304C\u51FA\u307E\u3059"));
+        panel2.append(c);
+      } else if (s.mode === "groups") {
+        const a = sec("\u521D\u671F\u96C6\u56E3\u3092\u9078\u3076");
+        a.append(el("p", "hint", "\u3053\u3053\u304B\u3089\u6B74\u53F2\u304C\u59CB\u307E\u308A\u307E\u3059\u3002\u5019\u88DC\u306F\u3001\u80A5\u6C83\u3067\u3001\u6D77\u30FB\u5DDD\u306B\u8FD1\u304F\u3001\u4E92\u3044\u306B\u96E2\u308C\u305F\u5834\u6240\u306B\u7F6E\u304B\u308C\u3066\u3044\u307E\u3059\u3002\u5730\u56F3\u306E\u4E38\u5370\u304B\u4E0B\u306E\u4E00\u89A7\u3067\u9078\u3073\u307E\u3059\u3002"));
+        const list = el("div", "world-groups");
+        for (const p of w.entities.populations) {
+          const d = worldActions.describeCell(p.cell), row = el("button", "world-group" + (p.id === s.startGroupId ? " on" : ""), "");
+          row.type = "button";
+          row.dataset.group = String(p.id);
+          row.append(el("b", null, `#${p.id}`), el("span", null, `${fmt6(d.lat, 1)}\xB0, ${fmt6(d.lon, 1)}\xB0`), el("span", null, `\u4EBA\u53E3 ${p.size}`), el("span", null, `\u80A5\u6C83 ${fmt6(d.fertility, 2)}`), el("span", null, `${d.biome}\u30FB${fmt6(d.temp, 0)}\u2103`), el("span", null, [d.river ? "\u5DDD" : "", d.coastDist <= 2 ? "\u6D77\u8FBA" : "", ...d.resources.slice(0, 3)].filter(Boolean).join("\u30FB") || "\u2014"));
+          row.addEventListener("click", () => {
+            worldActions.selectGroup(p.id);
+            const x = w.cell;
+            view.centerOn(x.lat[p.cell], x.lon[p.cell], Math.max(view.view.scale, 600));
+          });
+          list.append(row);
+        }
+        a.append(list);
+        const acts = el("div", "world-acts");
+        acts.append(btn("", "\u5225\u306E\u5019\u88DC\u3092\u63D0\u6848", "\u540C\u3058\u4E16\u754C\u306E\u307E\u307E\u3001\u5019\u88DC\u3092\u7F6E\u304D\u76F4\u3059", () => worldActions.proposeGroups()), btn(s.placing ? "primary" : "", s.placing ? "\u5730\u56F3\u3092\u30AF\u30EA\u30C3\u30AF\u2026" : "\u624B\u52D5\u3067\u7F6E\u304F", "\u5730\u56F3\u306E\u597D\u304D\u306A\u5834\u6240\u306B\u96C6\u56E3\u3092\u7F6E\u304F\uFF08\u5C45\u4F4F\u3067\u304D\u308B\u5834\u6240\u3060\u3051\uFF09", () => worldActions.setPlacing(!s.placing)));
+        const ok2 = btn("primary", "\u3053\u306E\u96C6\u56E3\u3067\u59CB\u3081\u308B", "\u9078\u3093\u3060\u96C6\u56E3\u3092\u3001\u6B74\u53F2\u306E\u8D77\u70B9\u3068\u3057\u3066\u6C7A\u3081\u308B", () => {
+          const r = worldActions.confirmStart();
+          if (!r.ok) alertDialog(r.reason);
+        });
+        ok2.disabled = s.startGroupId == null;
+        acts.append(ok2);
+        if (s.startGroupId != null) acts.append(btn("", "\u5019\u88DC\u304B\u3089\u5916\u3059", "\u9078\u3093\u3060\u96C6\u56E3\u3092\u4E00\u89A7\u304B\u3089\u53D6\u308A\u9664\u304F", () => worldActions.removeGroup(s.startGroupId)));
+        a.append(acts);
+        if (w.entities.start) a.append(el("p", "hint", `\u6C7A\u5B9A\u6E08\u307F: \u96C6\u56E3 #${w.entities.start.groupId}`));
+        panel2.append(a);
+      } else {
+        const a = sec("\u5730\u5F62\u3092\u7DE8\u96C6\u3059\u308B"), b = s.brush;
+        a.append(el("p", "hint", "\u30AF\u30EA\u30C3\u30AF\u307E\u305F\u306F\u30C9\u30E9\u30C3\u30B0\u3067\u6A19\u9AD8\u3092\u5909\u3048\u307E\u3059\u3002\u5F71\u97FF\u3092\u53D7\u3051\u308B\u7BC4\u56F2\uFF08\u6C17\u5019\u30FB\u6C34\u7CFB\u30FB\u571F\u58CC\u30FB\u8CC7\u6E90\uFF09\u3060\u3051\u3092\u518D\u8A08\u7B97\u3057\u307E\u3059\u3002\u964D\u6C34\u306E\u98A8\u4E0B\u3078\u306E\u6CE2\u53CA\u306F\u7D04700km\u307E\u3067\u306E\u8FD1\u4F3C\u3067\u3059\u3002"));
+        const mode = document.createElement("select");
+        for (const [k, t] of Object.entries(BRUSH_MODES)) {
+          const o = document.createElement("option");
+          o.value = k;
+          o.textContent = t;
+          if (k === b.mode) o.selected = true;
+          mode.append(o);
+        }
+        mode.addEventListener("change", () => worldActions.setBrush({ mode: mode.value }));
+        const rng = (label2, min, max, step, val, key2, unit) => {
+          const w1 = el("label", "world-row"), v = el("span", "world-row-v", `${val}${unit}`), i = document.createElement("input");
+          i.type = "range";
+          i.min = min;
+          i.max = max;
+          i.step = step;
+          i.value = val;
+          i.addEventListener("input", () => {
+            v.textContent = `${i.value}${unit}`;
+          });
+          i.addEventListener("change", () => worldActions.setBrush({ [key2]: Number(i.value) }));
+          const box = el("span", "world-seedbox");
+          box.append(i, v);
+          w1.append(el("span", "world-row-l", label2), box);
+          return w1;
+        };
+        const m1 = el("label", "world-row");
+        m1.append(el("span", "world-row-l", "\u7A2E\u985E"), mode);
+        a.append(m1, rng("\u534A\u5F84", 100, 2e3, 50, b.radiusKm, "radiusKm", " km"), rng("\u5F37\u3055", 50, 1500, 50, b.deltaM, "deltaM", " m"));
+        if (b.mode === "flatten") a.append(rng("\u76EE\u6A19\u306E\u6A19\u9AD8", -500, 3e3, 50, b.target, "target", " m"));
+        a.append(kv([["\u7DE8\u96C6\u306E\u5C65\u6B74", `${s.undoCount} \u4EF6\uFF08Ctrl+Z \u3067\u623B\u3059\u30FBCtrl+Y \u3067\u3084\u308A\u76F4\u3059\uFF09`]]));
+        panel2.append(a);
+      }
+    }
+    function renderLegend() {
+      const s = S();
+      legend.replaceChildren();
+      if (!s.world) {
+        legend.hidden = true;
+        return;
+      }
+      legend.hidden = false;
+      for (const it of layerLegend(s.layer, s.layerOpt)) {
+        const r = el("div", "world-legend-row"), sw = el("i");
+        sw.style.background = it.color;
+        r.append(sw, el("span", null, it.label));
+        legend.append(r);
+      }
+    }
+    function renderStatus() {
+      const s = S();
+      status.textContent = "";
+      if (!s.world) return;
+      const d = worldActions.describeCell(s.hover);
+      const vs = view.stats;
+      status.textContent = `${d ? `${fmt6(d.lat, 2)}\xB0, ${fmt6(d.lon, 2)}\xB0 \uFF5C ${d.kind} ${fmt6(d.elevation)} m \uFF5C ${d.biome} \uFF5C ${fmt6(d.temp, 1)}\u2103 \uFF5C ${fmt6(d.precip)} mm` : "\u2014"}\u3000\u3000${s.fileName}${s.dirty ? " *" : ""} \uFF5C ${fmt6(s.world.mesh.cellCount)} \u30BB\u30EB \uFF5C \u63CF\u753B ${vs.mode} ${vs.lastRenderMs} ms`;
+    }
+    function renderEmpty() {
+      const s = S();
+      empty.replaceChildren();
+      empty.hidden = !!s.world || !!s.busy;
+      if (s.world) return;
+      empty.append(el("h1", null, "\u7403\u9762\u4E16\u754C"), el("p", null, "\u5730\u7406\uFF08\u5927\u9678\u30FB\u6C17\u5019\u30FB\u5DDD\u30FB\u8CC7\u6E90\uFF09\u3092\u65B0\u3057\u304F\u751F\u6210\u3057\u3001\u521D\u671F\u96C6\u56E3\u3092\u9078\u3093\u3067\u3001\u6B74\u53F2\u3092\u59CB\u3081\u308B\u6E96\u5099\u3092\u3057\u307E\u3059\u3002"), (() => {
+        const d = el("div", "world-acts");
+        d.append(btn("primary large", "\u65B0\u3057\u3044\u4E16\u754C\u3092\u751F\u6210", "", () => openNewDialog()), btn("large", "\u4FDD\u5B58\u3057\u305F\u4E16\u754C\u3092\u958B\u304F", "", () => openFileDialog()));
+        return d;
+      })(), el("p", "hint", "\u65E7\u5F62\u5F0F\uFF08.map / \u65E7 .ahmap\uFF09\u306F\u65E7\u30A8\u30C7\u30A3\u30BF\u3067\u958B\u304D\u307E\u3059\u3002\u7403\u9762\u4E16\u754C\u3078\u306F\u5909\u63DB\u3055\u308C\u307E\u305B\u3093\u3002"));
+    }
+    function renderBusy() {
+      const s = S();
+      busy.replaceChildren();
+      busy.hidden = !s.busy;
+      if (!s.busy) return;
+      const bar2 = el("div", "world-bar"), fill = el("i");
+      fill.style.width = `${Math.round((s.busy.fraction ?? 0) * 100)}%`;
+      bar2.append(fill);
+      busy.append(el("div", "world-busy-t", s.busy.label), bar2);
+      if (/生成/.test(s.busy.label)) busy.append(btn("", "\u4E2D\u65AD", "\u751F\u6210\u3092\u4E2D\u65AD\u3059\u308B", () => worldActions.cancelGeneration()));
+    }
+    function renderChrome() {
+      const s = S();
+      for (const [k, b] of Object.entries(modeBtns)) {
+        b.classList.toggle("on", s.mode === k);
+        b.disabled = !s.world;
+        b.setAttribute("aria-pressed", String(s.mode === k));
+      }
+      bSave.disabled = !s.world || !!s.busy;
+      bFit.disabled = !s.world;
+      layerSel.disabled = !s.world;
+      resSel.hidden = s.layer !== "resource";
+      layerSel.value = s.layer;
+      byId("btn-save").disabled = !s.world || !!s.busy;
+      canvas.style.cursor = !s.world ? "default" : s.mode === "edit" ? "crosshair" : s.placing ? "copy" : "grab";
+      if (s.error) {
+        banner.textContent = s.error;
+        banner.hidden = false;
+      } else if (s.notice) {
+        banner.textContent = s.notice;
+        banner.hidden = false;
+      } else banner.hidden = true;
+      banner.classList.toggle("err", !!s.error);
+    }
+    const banner = el("div", "world-banner");
+    banner.hidden = true;
+    banner.addEventListener("click", () => worldActions.store.update((s) => {
+      s.error = null;
+      s.notice = null;
+    }));
+    stage.append(banner);
+    function overlayFromState() {
+      const s = S();
+      const groups = s.world && (s.mode === "groups" || s.world.entities.start) ? s.world.entities.populations.filter((p) => s.mode === "groups" || p.id === s.world.entities.start?.groupId).map((p) => ({ id: p.id, cell: p.cell, selected: p.id === s.startGroupId })) : [];
+      view.setOverlay({ groups, selectedCell: s.selectedCell, hoverCell: s.mode === "edit" ? -1 : s.hover });
+    }
+    let lastWorld = null, lastLayerKey = "";
+    worldActions.store.subscribe((s) => {
+      if (!active) return;
+      if (s.world !== lastWorld) {
+        lastWorld = s.world;
+        view.setWorld(s.world, { onProgress: (f) => worldActions.store.update((x) => {
+          if (!x.busy || x.busy.label.startsWith("\u5730\u56F3\u3092\u6E96\u5099")) x.busy = f >= 1 ? null : { label: `\u5730\u56F3\u3092\u6E96\u5099\u4E2D\u2026 ${Math.round(f * 100)}%`, fraction: f };
+        }) }).then(() => {
+          overlayFromState();
+          renderAll();
+        });
+        lastLayerKey = "";
+      }
+      const key2 = `${s.layer}:${s.layerOpt.resource | 0}`;
+      if (key2 !== lastLayerKey) {
+        lastLayerKey = key2;
+        view.setLayer(s.layer, s.layerOpt);
+      }
+      renderAll();
+    });
+    worldActions.on((e) => {
+      if (e.type === "edit") view.refresh(e.dirty);
+      if (e.type === "groups" || e.type === "select" || e.type === "mode") overlayFromState();
+    });
+    function renderAll() {
+      renderChrome();
+      renderPanel();
+      renderLegend();
+      renderStatus();
+      renderEmpty();
+      renderBusy();
+    }
+    const rectPos = (e) => {
+      const r = canvas.getBoundingClientRect();
+      return { x: (e.clientX - r.left) * (canvas.width / (r.width || canvas.width)), y: (e.clientY - r.top) * (canvas.height / (r.height || canvas.height)) };
+    };
+    let hoverPending = false, lastHover = null;
+    canvas.addEventListener("pointerdown", (e) => {
+      if (!S().world || e.button > 2) return;
+      canvas.setPointerCapture?.(e.pointerId);
+      const p = rectPos(e), s = S();
+      const editing = s.mode === "edit" && e.button === 0 && !spaceDown;
+      pointer = { id: e.pointerId, x: p.x, y: p.y, sx: p.x, sy: p.y, moved: false, editing, lastEdit: editing ? p : null };
+      if (editing) {
+        const c = view.cellAt(p.x, p.y);
+        if (c >= 0) worldActions.editAt(c);
+      }
+    });
+    canvas.addEventListener("pointermove", (e) => {
+      const s = S();
+      if (!s.world) return;
+      const p = rectPos(e);
+      lastHover = p;
+      if (pointer && pointer.id === e.pointerId) {
+        if (pointer.editing) {
+          const R = s.world.spec.planet.radiusKm, c = view.cellAt(p.x, p.y);
+          if (c >= 0 && pointer.lastEdit) {
+            const lc = view.cellAt(pointer.lastEdit.x, pointer.lastEdit.y);
+            if (lc >= 0) {
+              const X = s.world.mesh.centerXYZ, d = Math.acos(Math.max(-1, Math.min(1, X[3 * c] * X[3 * lc] + X[3 * c + 1] * X[3 * lc + 1] + X[3 * c + 2] * X[3 * lc + 2]))) * R;
+              if (d >= s.brush.radiusKm * 0.6) {
+                worldActions.editAt(c);
+                pointer.lastEdit = p;
+              }
+            }
+          }
+        } else {
+          const dx = p.x - pointer.x, dy = p.y - pointer.y;
+          if (Math.hypot(p.x - pointer.sx, p.y - pointer.sy) > 3) pointer.moved = true;
+          view.panBy(dx, dy);
+          pointer.x = p.x;
+          pointer.y = p.y;
+        }
+      }
+      if (!hoverPending) {
+        hoverPending = true;
+        requestAnimationFrame(() => {
+          hoverPending = false;
+          if (!lastHover) return;
+          const c = view.cellAt(lastHover.x, lastHover.y);
+          worldActions.hover(c);
+          if (S().mode === "edit" && c >= 0) view.setOverlay({ brush: { center: c, radiusKm: S().brush.radiusKm }, hoverCell: -1 });
+          else {
+            view.setOverlay({ brush: null, hoverCell: c });
+          }
+        });
+      }
+    });
+    canvas.addEventListener("pointerup", (e) => {
+      const s = S();
+      if (!pointer || pointer.id !== e.pointerId) return;
+      const p = rectPos(e), wasClick = !pointer.moved && !pointer.editing;
+      pointer = null;
+      if (wasClick && s.world) {
+        const c = view.cellAt(p.x, p.y);
+        if (c < 0) return;
+        if (s.mode === "groups" && s.placing) {
+          const r = worldActions.placeGroup(c);
+          if (!r.ok) alertDialog(r.reason);
+        } else if (s.mode === "groups") {
+          const g = s.world.entities.populations.find((q) => {
+            const sp = view.screenOfCell(q.cell);
+            return Math.hypot(sp.x - p.x, sp.y - p.y) < 16;
+          });
+          if (g) worldActions.selectGroup(g.id);
+          else worldActions.select(c);
+        } else worldActions.select(c);
+      }
+    });
+    canvas.addEventListener("pointercancel", () => {
+      pointer = null;
+    });
+    canvas.addEventListener("pointerleave", () => {
+      lastHover = null;
+      worldActions.hover(-1);
+      view.setOverlay({ brush: null, hoverCell: -1 });
+    });
+    canvas.addEventListener("wheel", (e) => {
+      if (!S().world) return;
+      e.preventDefault();
+      const p = rectPos(e);
+      view.zoomAt(p.x, p.y, Math.exp(-e.deltaY * 15e-4));
+    }, { passive: false });
+    canvas.addEventListener("dblclick", () => view.fit());
+    document.addEventListener("keydown", (e) => {
+      if (!active) return;
+      const t = e.target;
+      const typing = t instanceof HTMLElement && (t.closest("input, textarea, select") || t.isContentEditable);
+      if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const k = e.key.toLowerCase();
+        if (k === "s") {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          worldActions.save();
+        } else if (k === "z" && !typing) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          if (e.shiftKey) worldActions.redo();
+          else worldActions.undo();
+        } else if (k === "y" && !typing) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+          worldActions.redo();
+        }
+        return;
+      }
+      if (typing) return;
+      if (e.key === " ") {
+        spaceDown = true;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      } else if (e.key.toLowerCase() === "f") {
+        view.fit();
+        e.stopImmediatePropagation();
+      }
+    }, true);
+    document.addEventListener("keyup", (e) => {
+      if (e.key === " ") spaceDown = false;
+    });
+    byId("btn-save").addEventListener("click", (e) => {
+      if (!active) return;
+      e.stopImmediatePropagation();
+      worldActions.save();
+    }, true);
+    new ResizeObserver(() => resize()).observe(stage);
+    function resize() {
+      const r = stage.getBoundingClientRect();
+      const w = Math.max(320, Math.round(r.width || 1e3)), h = Math.max(240, Math.round(r.height || 700));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      view.resize();
+    }
+    async function setActive(on) {
+      if (on === active) return;
+      if (!on && !await confirmDiscard()) return;
+      active = on;
+      stage.hidden = !on;
+      app.classList.toggle("world-mode", on);
+      byId("btn-world")?.classList.toggle("on", on);
+      if (!on) byId("btn-save").disabled = !legacyHasMap();
+      if (on) {
+        resize();
+        lastWorld = null;
+        lastLayerKey = "";
+        worldActions.store.update(() => {
+        });
+        view.request();
+      }
+    }
+    return {
+      setActive,
+      get active() {
+        return active;
+      },
+      view,
+      isActive: () => active,
+      /** ファイル振り分け: .ahmap v2 なら球面世界で開く。それ以外は false */
+      async routeFile(file) {
+        const head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+        if (!isAhmap2Bytes(head)) return false;
+        await setActive(true);
+        await worldActions.openFile(file);
+        return true;
+      },
+      openNewDialog
+    };
+  }
+
+  // js/generated/worldgen-worker.txt
+  var worldgen_worker_default = '(() => {\n  // js/core/world/sphere-mesh.js\n  var MESH_VERSION = "sphere-ico-1";\n  var cellCountForFrequency = (n) => 10 * n * n + 2;\n  var frequencyForCells = (target) => Math.max(1, Math.round(Math.sqrt((target - 2) / 10)));\n  var PHI = (1 + Math.sqrt(5)) / 2;\n  function baseIcosahedron() {\n    const raw = [[-1, PHI, 0], [1, PHI, 0], [-1, -PHI, 0], [1, -PHI, 0], [0, -1, PHI], [0, 1, PHI], [0, -1, -PHI], [0, 1, -PHI], [PHI, 0, -1], [PHI, 0, 1], [-PHI, 0, -1], [-PHI, 0, 1]];\n    const faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];\n    const a = norm(raw[0]);\n    let u = cross([0, 0, 1], a), s = Math.hypot(...u);\n    const verts = raw.map(norm);\n    if (s > 1e-12) {\n      u = u.map((v) => v / s);\n      const ang = Math.acos(Math.min(1, Math.max(-1, a[2]))), c = Math.cos(ang), sn = Math.sin(ang);\n      for (let i = 0; i < verts.length; i++) {\n        const v = verts[i], k = cross(u, v), d = dot(u, v);\n        verts[i] = [v[0] * c + k[0] * sn * -1 + u[0] * d * (1 - c), v[1] * c + k[1] * sn * -1 + u[1] * d * (1 - c), v[2] * c + k[2] * sn * -1 + u[2] * d * (1 - c)];\n      }\n    }\n    const fixed = faces.map(([p, q, r]) => {\n      const A = verts[p], B = verts[q], C = verts[r];\n      return dot(cross(sub(B, A), sub(C, A)), A) >= 0 ? [p, q, r] : [p, r, q];\n    });\n    return { verts, faces: fixed };\n  }\n  function norm(v) {\n    const l = Math.hypot(v[0], v[1], v[2]);\n    return [v[0] / l, v[1] / l, v[2] / l];\n  }\n  function cross(a, b) {\n    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];\n  }\n  function dot(a, b) {\n    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\n  }\n  function sub(a, b) {\n    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];\n  }\n  function buildSphereMesh(n) {\n    if (!Number.isInteger(n) || n < 1) throw new Error("\\u5468\\u6CE2\\u6570 n \\u306F 1 \\u4EE5\\u4E0A\\u306E\\u6574\\u6570");\n    const { verts: bv, faces } = baseIcosahedron();\n    const V = cellCountForFrequency(n), T = 20 * n * n;\n    const centerXYZ = new Float32Array(3 * V);\n    for (let i = 0; i < 12; i++) {\n      centerXYZ[3 * i] = bv[i][0];\n      centerXYZ[3 * i + 1] = bv[i][1];\n      centerXYZ[3 * i + 2] = bv[i][2];\n    }\n    const edgeBase = /* @__PURE__ */ new Map();\n    let nextEdge = 12;\n    const interiorPerFace = (n - 1) * (n - 2) / 2, faceBase0 = 12 + 30 * (n - 1);\n    const rowStart = new Int32Array(n + 1);\n    for (let i = 1, acc = 0; i <= n - 2; i++) {\n      rowStart[i] = acc;\n      acc += n - 1 - i;\n    }\n    const tmp = [0, 0, 0];\n    const place = (id, a, b, c, wa, wb, wc) => {\n      tmp[0] = a[0] * wa + b[0] * wb + c[0] * wc;\n      tmp[1] = a[1] * wa + b[1] * wb + c[1] * wc;\n      tmp[2] = a[2] * wa + b[2] * wb + c[2] * wc;\n      const l = Math.hypot(tmp[0], tmp[1], tmp[2]);\n      centerXYZ[3 * id] = tmp[0] / l;\n      centerXYZ[3 * id + 1] = tmp[1] / l;\n      centerXYZ[3 * id + 2] = tmp[2] / l;\n    };\n    const tri = new Uint32Array(3 * T);\n    let tp = 0;\n    const gid = new Int32Array((n + 1) * (n + 1));\n    for (let f = 0; f < 20; f++) {\n      const [fa, fb, fc] = faces[f], A = bv[fa], B = bv[fb], C = bv[fc], ids = [fa, fb, fc];\n      for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) {\n        const k = n - i - j, w = [k, i, j];\n        let id;\n        const zeros = (k === 0 ? 1 : 0) + (i === 0 ? 1 : 0) + (j === 0 ? 1 : 0);\n        if (zeros === 2) id = ids[k === n ? 0 : i === n ? 1 : 2];\n        else if (zeros === 1) {\n          const slots = [0, 1, 2].filter((s) => w[s] > 0), u = ids[slots[0]], v = ids[slots[1]];\n          const lo = Math.min(u, v), hi = Math.max(u, v), key = lo * 12 + hi;\n          let base = edgeBase.get(key);\n          if (base === void 0) {\n            base = nextEdge;\n            nextEdge += n - 1;\n            edgeBase.set(key, base);\n          }\n          const wLo = u === lo ? w[slots[0]] : w[slots[1]];\n          id = base + (wLo - 1);\n          if (!(centerXYZ[3 * id] || centerXYZ[3 * id + 1] || centerXYZ[3 * id + 2])) place(id, A, B, C, k, i, j);\n        } else {\n          id = faceBase0 + f * interiorPerFace + rowStart[i] + (j - 1);\n          place(id, A, B, C, k, i, j);\n        }\n        gid[i * (n + 1) + j] = id;\n      }\n      for (let i = 0; i < n; i++) for (let j = 0; i + j < n; j++) {\n        const p = gid[i * (n + 1) + j], q = gid[(i + 1) * (n + 1) + j], r = gid[i * (n + 1) + j + 1];\n        tri[tp++] = p;\n        tri[tp++] = q;\n        tri[tp++] = r;\n        if (i + j < n - 1) {\n          const s = gid[(i + 1) * (n + 1) + j + 1];\n          tri[tp++] = q;\n          tri[tp++] = s;\n          tri[tp++] = r;\n        }\n      }\n    }\n    if (tp !== 3 * T) throw new Error(`\\u4E09\\u89D2\\u5F62\\u306E\\u6570\\u304C\\u5408\\u308F\\u306A\\u3044: ${tp / 3} != ${T}`);\n    {\n      const a = tri[0] * 3, b = tri[1] * 3, c = tri[2] * 3, P = [centerXYZ[a], centerXYZ[a + 1], centerXYZ[a + 2]];\n      const Q = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];\n      if (dot(cross(sub(Q, P), sub(R, P)), P) < 0) for (let t = 0; t < T; t++) {\n        const x = tri[3 * t + 1];\n        tri[3 * t + 1] = tri[3 * t + 2];\n        tri[3 * t + 2] = x;\n      }\n    }\n    const deg = new Uint32Array(V + 1);\n    for (let t = 0; t < 3 * T; t++) deg[tri[t] + 1]++;\n    const offs = new Uint32Array(V + 1);\n    for (let i = 0; i < V; i++) offs[i + 1] = offs[i] + deg[i + 1];\n    const fill = new Uint32Array(V), sV = new Uint32Array(3 * T), sW = new Uint32Array(3 * T), sT = new Uint32Array(3 * T);\n    for (let t = 0; t < T; t++) for (let r = 0; r < 3; r++) {\n      const u = tri[3 * t + r], v = tri[3 * t + (r + 1) % 3], w = tri[3 * t + (r + 2) % 3], s = offs[u] + fill[u]++;\n      sV[s] = v;\n      sW[s] = w;\n      sT[s] = t;\n    }\n    const neighborIds = new Uint32Array(3 * T), cellVertexIds = new Uint32Array(3 * T);\n    for (let u = 0; u < V; u++) {\n      const s0 = offs[u], e0 = offs[u + 1], d = e0 - s0;\n      let cur = s0;\n      for (let k = 0; k < d; k++) {\n        neighborIds[s0 + k] = sV[cur];\n        cellVertexIds[s0 + k] = sT[cur];\n        const want = sW[cur];\n        let nx = -1;\n        for (let s = s0; s < e0; s++) if (sV[s] === want) {\n          nx = s;\n          break;\n        }\n        if (nx < 0) throw new Error(`\\u9802\\u70B9 ${u} \\u306E\\u5468\\u308A\\u304C\\u9589\\u3058\\u3066\\u3044\\u306A\\u3044`);\n        cur = nx;\n      }\n    }\n    const vertexXYZ = new Float32Array(3 * T);\n    for (let t = 0; t < T; t++) {\n      const a = tri[3 * t] * 3, b = tri[3 * t + 1] * 3, c = tri[3 * t + 2] * 3;\n      const x = centerXYZ[a] + centerXYZ[b] + centerXYZ[c], y = centerXYZ[a + 1] + centerXYZ[b + 1] + centerXYZ[c + 1], z = centerXYZ[a + 2] + centerXYZ[b + 2] + centerXYZ[c + 2], l = Math.hypot(x, y, z);\n      vertexXYZ[3 * t] = x / l;\n      vertexXYZ[3 * t + 1] = y / l;\n      vertexXYZ[3 * t + 2] = z / l;\n    }\n    return { meshVersion: MESH_VERSION, n, cellCount: V, triangleCount: T, centerXYZ, neighborOffsets: offs, neighborIds, vertexXYZ, cellVertexOffsets: offs, cellVertexIds };\n  }\n  function greatCircleRad(ax, ay, az, bx, by, bz) {\n    const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;\n    return Math.atan2(Math.hypot(cx, cy, cz), ax * bx + ay * by + az * bz);\n  }\n  function sphericalTriangleArea(ax, ay, az, bx, by, bz, cx, cy, cz) {\n    const triple = ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);\n    const den = 1 + (ax * bx + ay * by + az * bz) + (bx * cx + by * cy + bz * cz) + (cx * ax + cy * ay + cz * az);\n    return 2 * Math.atan2(Math.abs(triple), den);\n  }\n  function cellArea(mesh, c) {\n    const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1], cx = mesh.centerXYZ[3 * c], cy = mesh.centerXYZ[3 * c + 1], cz = mesh.centerXYZ[3 * c + 2];\n    let a = 0;\n    for (let k = s; k < e; k++) {\n      const p = mesh.cellVertexIds[k], q = mesh.cellVertexIds[k + 1 < e ? k + 1 : s];\n      a += sphericalTriangleArea(cx, cy, cz, mesh.vertexXYZ[3 * p], mesh.vertexXYZ[3 * p + 1], mesh.vertexXYZ[3 * p + 2], mesh.vertexXYZ[3 * q], mesh.vertexXYZ[3 * q + 1], mesh.vertexXYZ[3 * q + 2]);\n    }\n    return a;\n  }\n  function meshHash(mesh) {\n    let h = 2166136261;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < mesh.centerXYZ.length; i++) mix(Math.round(mesh.centerXYZ[i] * 1e6) | 0);\n    for (let i = 0; i < mesh.neighborIds.length; i++) mix(mesh.neighborIds[i]);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n\n  // js/core/world/spec.js\n  var GENERATOR_VERSION = "4.0.0-alpha.1";\n  var WORLD_SPEC_SCHEMA = 1;\n  var ISLAND_MODES = Object.freeze({ few: 12, normal: 40, many: 90 });\n  var DEFAULT_WORLD_SPEC = Object.freeze({\n    schemaVersion: WORLD_SPEC_SCHEMA,\n    generatorVersion: GENERATOR_VERSION,\n    worldSeed: "",\n    planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),\n    resolution: Object.freeze({ targetCells: 25e4 }),\n    landFraction: 0.5,\n    continentCountTarget: 6,\n    islandMode: "many",\n    plateCount: 14,\n    initialGroups: 12,\n    climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })\n  });\n  var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);\n  function normalizeWorldSpec(input = {}) {\n    const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input) ? input : {};\n    const num = (v, def, lo, hi, name, int = false) => {\n      if (v === void 0) return def;\n      if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {\n        errors.push(`${name} \\u306F ${lo}\\u301C${hi}${int ? " \\u306E\\u6574\\u6570" : ""}\\uFF08\\u53D7\\u3051\\u53D6\\u3063\\u305F\\u5024: ${String(v)}\\uFF09`);\n        return def;\n      }\n      return v;\n    };\n    const spec = {\n      schemaVersion: WORLD_SPEC_SCHEMA,\n      generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,\n      worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),\n      planet: {\n        radiusKm: num(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),\n        displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection\n      },\n      resolution: { targetCells: num(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },\n      landFraction: num(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),\n      continentCountTarget: num(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),\n      islandMode: i.islandMode ?? d.islandMode,\n      plateCount: num(i.plateCount, d.plateCount, 4, 40, "plateCount", true),\n      initialGroups: num(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),\n      climateModel: {\n        fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,\n        lapseRateCPerKm: num(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),\n        windMoistureLengthKm: num(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")\n      }\n    };\n    if (!spec.worldSeed) errors.push("worldSeed \\u304C\\u7A7A\\uFF08\\u30B7\\u30FC\\u30C9\\u3092\\u6307\\u5B9A\\u3057\\u3066\\u304F\\u3060\\u3055\\u3044\\u3002\\u751F\\u6210\\u3059\\u308B\\u5834\\u5408\\u306F makeWorldSeed \\u3092\\u4F7F\\u3046\\uFF09");\n    if (!(spec.islandMode in ISLAND_MODES)) {\n      errors.push(`islandMode \\u306F ${Object.keys(ISLAND_MODES).join("/")} \\u306E\\u3044\\u305A\\u308C\\u304B`);\n      spec.islandMode = d.islandMode;\n    }\n    if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \\u306F\\u73FE\\u5728 equirectangular \\u306E\\u307F");\n    if (isObj(input) && input.schemaVersion !== void 0 && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} \\u306F\\u672A\\u5BFE\\u5FDC`);\n    return { spec, errors };\n  }\n\n  // js/core/world/noise.js\n  function hashString(str) {\n    let h = 1779033703 ^ str.length;\n    for (let i = 0; i < str.length; i++) {\n      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);\n      h = h << 13 | h >>> 19;\n    }\n    h = Math.imul(h ^ h >>> 16, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return (h ^ h >>> 16) >>> 0;\n  }\n  function makeRng(seedStr, stage = "") {\n    let a = hashString(`${seedStr}::${stage}`);\n    const next = () => {\n      a = a + 1831565813 | 0;\n      let t = Math.imul(a ^ a >>> 15, 1 | a);\n      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;\n      return ((t ^ t >>> 14) >>> 0) / 4294967296;\n    };\n    next.range = (lo, hi) => lo + (hi - lo) * next();\n    next.int = (lo, hi) => Math.floor(next.range(lo, hi + 1));\n    next.unitVec = () => {\n      const z = next.range(-1, 1), t = next.range(0, 2 * Math.PI), r = Math.sqrt(1 - z * z);\n      return [r * Math.cos(t), r * Math.sin(t), z];\n    };\n    return next;\n  }\n  function hash3(seed, x, y, z) {\n    let h = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);\n    h = Math.imul(h ^ h >>> 15, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return ((h ^ h >>> 16) >>> 0) / 4294967296;\n  }\n  var fade = (t) => t * t * (3 - 2 * t);\n  function valueNoise3(seed, x, y, z) {\n    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx = fade(x - xi), fy = fade(y - yi), fz = fade(z - zi);\n    const c000 = hash3(seed, xi, yi, zi), c100 = hash3(seed, xi + 1, yi, zi), c010 = hash3(seed, xi, yi + 1, zi), c110 = hash3(seed, xi + 1, yi + 1, zi);\n    const c001 = hash3(seed, xi, yi, zi + 1), c101 = hash3(seed, xi + 1, yi, zi + 1), c011 = hash3(seed, xi, yi + 1, zi + 1), c111 = hash3(seed, xi + 1, yi + 1, zi + 1);\n    const x00 = c000 + (c100 - c000) * fx, x10 = c010 + (c110 - c010) * fx, x01 = c001 + (c101 - c001) * fx, x11 = c011 + (c111 - c011) * fx;\n    const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;\n    return y0 + (y1 - y0) * fz;\n  }\n  function fbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {\n    let sum = 0, amp = 1, norm2 = 0, f = freq;\n    for (let o = 0; o < octaves; o++) {\n      sum += amp * valueNoise3(seed + o * 101, x * f, y * f, z * f);\n      norm2 += amp;\n      amp *= gain;\n      f *= 2.03;\n    }\n    return sum / norm2;\n  }\n\n  // js/core/world/worldgen.js\n  var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });\n  var BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });\n  var BIOME_NAMES = Object.freeze(["\\u6D77", "\\u6C37\\u96EA", "\\u30C4\\u30F3\\u30C9\\u30E9", "\\u30BF\\u30A4\\u30AC", "\\u6E29\\u5E2F\\u6797", "\\u8349\\u539F", "\\u71B1\\u5E2F\\u7802\\u6F20", "\\u5BD2\\u51B7\\u7802\\u6F20", "\\u30B5\\u30D0\\u30F3\\u30CA", "\\u71B1\\u5E2F\\u5B63\\u7BC0\\u6797", "\\u71B1\\u5E2F\\u96E8\\u6797", "\\u9AD8\\u5C71", "\\u6E7F\\u5730", "\\u6E56"]);\n  var SOILS = Object.freeze({ NONE: 0, ROCK: 1, SAND: 2, LOAM: 3, CLAY: 4, VOLCANIC: 5, PERMAFROST: 6, ALLUVIAL: 7, PODZOL: 8, BLACK_EARTH: 9 });\n  var RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 });\n  var RES_NAMES = Object.freeze({ 1: "\\u9244", 2: "\\u9285", 4: "\\u932B", 8: "\\u91D1", 16: "\\u77F3\\u70AD", 32: "\\u5869", 64: "\\u6728\\u6750", 128: "\\u6F01\\u5834", 256: "\\u77F3\\u6750", 512: "\\u7C98\\u571F", 1024: "\\u5B9D\\u77F3" });\n  var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;\n  var smooth = (t) => {\n    t = clamp(t, 0, 1);\n    return t * t * (3 - 2 * t);\n  };\n  var D2R = Math.PI / 180;\n  var MinHeap = class {\n    constructor(cap) {\n      this.k = new Float64Array(cap);\n      this.v = new Int32Array(cap);\n      this.n = 0;\n    }\n    push(key, val) {\n      let i = this.n++;\n      const k = this.k, v = this.v;\n      while (i > 0) {\n        const p = i - 1 >> 1;\n        if (k[p] <= key) break;\n        k[i] = k[p];\n        v[i] = v[p];\n        i = p;\n      }\n      k[i] = key;\n      v[i] = val;\n    }\n    pop() {\n      const k = this.k, v = this.v, top = v[0], key = k[--this.n], val = v[this.n];\n      let i = 0;\n      const n = this.n;\n      while (true) {\n        let c = 2 * i + 1;\n        if (c >= n) break;\n        if (c + 1 < n && k[c + 1] < k[c]) c++;\n        if (k[c] >= key) break;\n        k[i] = k[c];\n        v[i] = v[c];\n        i = c;\n      }\n      k[i] = key;\n      v[i] = val;\n      return top;\n    }\n  };\n  var Cancelled = class extends Error {\n  };\n  var makeStager = (onProgress, signal, timings) => (name, label, fn) => {\n    if (signal?.aborted) throw new Cancelled("\\u30AD\\u30E3\\u30F3\\u30BB\\u30EB\\u3055\\u308C\\u307E\\u3057\\u305F");\n    onProgress?.({ stage: name, label, fraction: 0 });\n    const t = performance.now(), r = fn();\n    timings[name] = Math.round(performance.now() - t);\n    onProgress?.({ stage: name, label, fraction: 1, ms: timings[name] });\n    return r;\n  };\n  function generateWorld(specInput, options = {}) {\n    const { spec, errors } = normalizeWorldSpec(specInput);\n    if (errors.length) throw new Error("WorldSpec \\u304C\\u4E0D\\u6B63: " + errors.join(" / "));\n    const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();\n    const n = frequencyForCells(spec.resolution.targetCells);\n    const mesh = stage("G1_mesh", "\\u7403\\u9762\\u30E1\\u30C3\\u30B7\\u30E5", () => buildSphereMesh(n));\n    const V = mesh.cellCount, X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = spec.planet.radiusKm;\n    const lat = new Float32Array(V), lon = new Float32Array(V), areaKm2 = new Float32Array(V);\n    stage("G1_derive", "\\u7DEF\\u5EA6\\u7D4C\\u5EA6\\u30FB\\u9762\\u7A4D", () => {\n      for (let c = 0; c < V; c++) {\n        lat[c] = Math.asin(clamp(X[3 * c + 2], -1, 1));\n        lon[c] = Math.atan2(X[3 * c + 1], X[3 * c]);\n        areaKm2[c] = cellArea(mesh, c) * R * R;\n      }\n    });\n    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), spacingRad = spacingKm / R;\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    const nSeed = (name) => hashString(`${seed}::noise::${name}`);\n    const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);\n    const volcanic = new Float32Array(V);\n    stage("G2_plates", "\\u30D7\\u30EC\\u30FC\\u30C8\\u30FB\\u5927\\u9678\\u306E\\u6982\\u5F62", () => {\n      const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];\n      const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);\n      for (let c = 0; c < V; c++) {\n        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];\n        const w = (i) => (fbm3(warpSeed[i], x, y, z, 3, 1.5) - 0.5) * 0.32 + (fbm3(warpSeed[i] + 7, x, y, z, 3, 5.5) - 0.5) * 0.3;\n        const ax = w(0), ay = w(1), az = w(2);\n        const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);\n        wx[c] = px / l;\n        wy[c] = py / l;\n        wz[c] = pz / l;\n      }\n      const rp = makeRng(seed, "plates"), P = spec.plateCount, seeds = [], omega = [];\n      for (let p = 0; p < P; p++) {\n        seeds.push(rp.unitVec());\n        const w = rp.unitVec(), sp = rp.range(0.4, 1.6);\n        omega.push([w[0] * sp, w[1] * sp, w[2] * sp]);\n      }\n      for (let c = 0; c < V; c++) {\n        let best = -2, bp = 0;\n        for (let p = 0; p < P; p++) {\n          const d = wx[c] * seeds[p][0] + wy[c] * seeds[p][1] + wz[c] * seeds[p][2];\n          if (d > best) {\n            best = d;\n            bp = p;\n          }\n        }\n        plate[c] = bp;\n      }\n      const vel = (p, c) => {\n        const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];\n        return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x];\n      };\n      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V);\n      for (let c = 0; c < V; c++) {\n        let best = 0, bestAbs = 0;\n        const vc = vel(plate[c], c);\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (plate[j] === plate[c]) continue;\n          const vj = vel(plate[j], c);\n          let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2];\n          const dl = Math.hypot(dx, dy, dz) || 1;\n          dx /= dl;\n          dy /= dl;\n          dz /= dl;\n          const conv = (vc[0] - vj[0]) * dx + (vc[1] - vj[1]) * dy + (vc[2] - vj[2]) * dz;\n          if (Math.abs(conv) > bestAbs) {\n            bestAbs = Math.abs(conv);\n            best = conv;\n          }\n        }\n        if (bestAbs > 0) {\n          isSrc[c] = 1;\n          srcStrength[c] = best;\n        }\n      }\n      const widthCells = Math.max(2, 5 * D2R / spacingRad), maxD = Math.ceil(widthCells * 3);\n      const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      for (let c = 0; c < V; c++) if (isSrc[c]) {\n        dist[c] = 0;\n        from[c] = c;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        if (dist[c] >= maxD) continue;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (dist[j] < 0) {\n            dist[j] = dist[c] + 1;\n            from[j] = from[c];\n            q[qt++] = j;\n          }\n        }\n      }\n      const nm = nSeed("ridge");\n      for (let c = 0; c < V; c++) {\n        if (dist[c] < 0) continue;\n        const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));\n        const mod = 0.55 + 0.9 * fbm3(nm, X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3, 3, 1.4);\n        if (s > 0) {\n          mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod;\n          volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;\n        } else rift[c] = clamp(-s / 1.2, 0, 1) * f;\n      }\n      const rc = makeRng(seed, "continents"), K = spec.continentCountTarget;\n      const thetaLand = Math.acos(clamp(1 - 2 * spec.landFraction / K, -1, 1));\n      let bestSet = null, bestSep = -1;\n      for (let trial = 0; trial < 3e3; trial++) {\n        const pts = [];\n        for (let i = 0; i < K; i++) pts.push(rc.unitVec());\n        let sep = 9;\n        for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));\n        if (sep > bestSep) {\n          bestSep = sep;\n          bestSet = pts;\n        }\n      }\n      const cs = bestSet.map((v) => ({ v, r: thetaLand * rc.range(0.8, 0.95) }));\n      const isl = [];\n      const NI = ISLAND_MODES[spec.islandMode];\n      for (let i = 0; i < NI; i++) isl.push({ v: rc.unitVec(), r: rc.range(1.2, 5.5) * D2R, w: rc.range(0.45, 0.95) });\n      const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];\n      for (let c = 0; c < V; c++) {\n        let f = 0;\n        for (const o of cs) {\n          const d = Math.acos(clamp(dotp(c, o.v), -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1);\n          f = Math.max(f, t * t * (3 - 2 * t));\n        }\n        for (const o of isl) {\n          const d = Math.acos(clamp(dotp(c, o.v), -1, 1));\n          if (d < o.r * 1.5) {\n            const t = clamp(1 - d / (o.r * 1.5), 0, 1);\n            f = Math.max(f, o.w * t * t * (3 - 2 * t));\n          }\n        }\n        continent[c] = f;\n      }\n      const rh = makeRng(seed, "hotspots");\n      for (let h = 0; h < 6; h++) {\n        const start = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;\n        const dot2 = start[0] * dirv[0] + start[1] * dirv[1] + start[2] * dirv[2];\n        let t = [dirv[0] - dot2 * start[0], dirv[1] - dot2 * start[1], dirv[2] - dot2 * start[2]];\n        const tl = Math.hypot(...t) || 1;\n        t = t.map((x) => x / tl);\n        for (let i = 0; i < count; i++) {\n          const a = i * step, p = [start[0] * Math.cos(a) + t[0] * Math.sin(a), start[1] * Math.cos(a) + t[1] * Math.sin(a), start[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));\n          for (let c = 0; c < V; c++) {\n            const d = Math.acos(clamp(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));\n            if (d < rad * 2) {\n              const g = Math.exp(-((d / rad) ** 2));\n              continent[c] = Math.max(continent[c], amp * g * 0.9);\n              volcanic[c] = Math.max(volcanic[c], g);\n            }\n          }\n        }\n      }\n    });\n    const elevation = new Float32Array(V);\n    let seaLevelRaw = 0;\n    stage("G3_elevation", "\\u6A19\\u9AD8\\u30FB\\u6D77\\u5CB8\\u30FB\\u5CF6", () => {\n      const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);\n      for (let c = 0; c < V; c++) {\n        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];\n        const land = smooth((cf - 0.25) / 0.45);\n        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) + mountain[c] * (0.03 + 0.97 * land) * 1.5 - rift[c] * 0.22;\n      }\n      const sorted = Float32Array.from(raw).sort();\n      seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];\n      const hi = sorted[Math.min(V - 1, Math.floor(V * 0.998))], lo = sorted[0];\n      for (let c = 0; c < V; c++) {\n        const e = raw[c] - seaLevelRaw;\n        elevation[c] = e >= 0 ? Math.pow(Math.min(1.35, e / Math.max(1e-6, hi - seaLevelRaw)), 1.2) * 6500 : e / Math.max(1e-6, seaLevelRaw - lo) * 5500;\n      }\n    });\n    const isSea = new Uint8Array(V);\n    for (let c = 0; c < V; c++) isSea[c] = elevation[c] <= 0 ? 1 : 0;\n    const coastDist = new Uint16Array(V);\n    stage("G3_coast", "\\u6D77\\u5CB8\\u304B\\u3089\\u306E\\u8DDD\\u96E2", () => {\n      const q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      const seen = new Uint8Array(V);\n      for (let c = 0; c < V; c++) if (isSea[c]) {\n        seen[c] = 1;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!seen[j]) {\n            seen[j] = 1;\n            coastDist[j] = Math.min(65535, coastDist[c] + 1);\n            q[qt++] = j;\n          }\n        }\n      }\n    });\n    const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);\n    const cx = { mesh, lat, lon, elevation, isSea, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };\n    stage("G4_climate", "\\u6C17\\u5019", () => {\n      for (let c = 0; c < V; c++) temp[c] = tempAt(lat[c], elevation[c], cx.lapse);\n      cx.up = new Int32Array(V);\n      for (let c = 0; c < V; c++) cx.up[c] = upwindOf(mesh, lat, lon, c);\n      for (let c = 0; c < V; c++) moisture[c] = isSea[c] ? 1 : 0.5;\n      const passes = Math.min(200, Math.ceil(4e3 / spacingKm) + 4);\n      for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) {\n        if (!isSea[c]) moisture[c] = moistureStep(cx, c);\n      }\n      for (let c = 0; c < V; c++) precip[c] = precipAt(cx, c);\n    });\n    stage("G4_biome", "\\u30D0\\u30A4\\u30AA\\u30FC\\u30E0", () => {\n      for (let c = 0; c < V; c++) biome[c] = isSea[c] ? BIOMES.OCEAN : biomeOf(temp[c], precip[c], elevation[c]);\n    });\n    const parent = new Int32Array(V).fill(-1), filled = new Float32Array(V), flow = new Float32Array(V), basin = new Int32Array(V).fill(-1), landWater = new Uint8Array(V);\n    let lakeCount = 0;\n    const hyd = { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome };\n    stage("G5_rivers", "\\u6C34\\u7CFB", () => {\n      lakeCount = computeHydrology(hyd, null).lakeCount;\n    });\n    let riverThreshold = 0;\n    const river = new Uint8Array(V);\n    stage("G5_riverset", "\\u6CB3\\u5DDD\\u306E\\u9078\\u5B9A", () => {\n      const f = [];\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND) f.push(flow[c]);\n      f.sort((a, b) => a - b);\n      riverThreshold = f.length ? f[Math.floor(f.length * 0.93)] : 0;\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && flow[c] >= riverThreshold && flow[c] > 0) river[c] = 1;\n    });\n    const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);\n    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };\n    stage("G6_soil", "\\u571F\\u58CC\\u30FB\\u80A5\\u6C83\\u5EA6\\u30FB\\u8CC7\\u6E90", () => {\n      for (let c = 0; c < V; c++) landUseAt(lu, c);\n    });\n    const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };\n    const populations = stage("G7_groups", "\\u521D\\u671F\\u4EBA\\u53E3\\u96C6\\u56E3", () => placeInitialGroups(gctx, spec, 0));\n    const stats = stage("G8_stats", "\\u7D71\\u8A08", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));\n    const world = {\n      spec: { ...spec, generatorVersion: GENERATOR_VERSION },\n      mesh,\n      cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },\n      entities: { populations },\n      stats,\n      timings\n    };\n    timings.total = Math.round(performance.now() - tAll);\n    world.hash = worldHash(world);\n    return world;\n  }\n  function tempAt(latRad, elevation, lapse) {\n    const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1e3;\n    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;\n  }\n  function upwindOf(mesh, lat, lon, c) {\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;\n    const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);\n    const wx = -east * ex, wy = -east * ey;\n    let best = -2, bj = -1;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      const j = nb[k], dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2], dl = Math.hypot(dx, dy, dz) || 1, s = (dx * wx + dy * wy) / dl;\n      if (s > best) {\n        best = s;\n        bj = j;\n      }\n    }\n    return bj;\n  }\n  var upOf = (cx, c) => cx.up ? cx.up[c] : upwindOf(cx.mesh, cx.lat, cx.lon, c);\n  function liftRaw(cx, c) {\n    const u = upOf(cx, c);\n    return Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3;\n  }\n  function moistureStep(cx, c) {\n    const u = upOf(cx, c);\n    return clamp(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);\n  }\n  function precipAt(cx, c) {\n    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));\n    const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];\n    let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);\n    if (!sea && cx.elevation[c] > 3500) p *= 0.6;\n    return clamp(p, 0, 6e3);\n  }\n  function computeHydrology(h, members = null) {\n    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;\n    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;\n    const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);\n    let on = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      filled[c] = elevation[c];\n      parent[c] = -1;\n      basin[c] = -1;\n    }\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) {\n        done[c] = 1;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && (!members || members[j])) {\n            heap.push(filled[c], c);\n            break;\n          }\n        }\n      } else if (members && !members[c]) done[c] = 1;\n    }\n    while (heap.n > 0) {\n      const c = heap.pop();\n      order[on++] = c;\n      for (let k = off[c]; k < off[c + 1]; k++) {\n        const j = nb[k];\n        if (done[j]) continue;\n        done[j] = 1;\n        parent[j] = c;\n        filled[j] = Math.max(elevation[j], filled[c] + EPS);\n        heap.push(filled[j], j);\n      }\n    }\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 95e-7;\n    }\n    for (let i = on - 1; i >= 0; i--) {\n      const c = order[i], p = parent[c];\n      if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c];\n    }\n    for (let i = 0; i < on; i++) {\n      const c = order[i];\n      if (isSea[c]) continue;\n      const p = parent[c];\n      basin[c] = isSea[p] ? c : basin[p];\n    }\n    let lakeCount = 0, unreached = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;\n      else {\n        if (parent[c] < 0) unreached++;\n        if (filled[c] - elevation[c] >= 40) {\n          landWater[c] = LAND_WATER.LAKE;\n          lakeCount++;\n          biome[c] = BIOMES.LAKE;\n        } else landWater[c] = LAND_WATER.LAND;\n      }\n    }\n    return { lakeCount, unreached };\n  }\n  function landUseNoise(seed) {\n    const ns = (name) => hashString(`${seed}::noise::${name}`);\n    return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };\n  }\n  var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };\n  function seaToLand(mesh, isSea, c) {\n    const off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    let fr = [c];\n    const seen = /* @__PURE__ */ new Set([c]);\n    for (let d = 0; d <= 6; d++) {\n      const nx = [];\n      for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) {\n        const j = nb[k];\n        if (!isSea[j]) return d + 1;\n        if (!seen.has(j)) {\n          seen.add(j);\n          nx.push(j);\n        }\n      }\n      fr = nx;\n      if (!fr.length) break;\n    }\n    return 99;\n  }\n  function landUseAt(g, c) {\n    const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];\n    let relief = 0, kn = 0;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      relief += Math.abs(elevation[nb[k]] - e);\n      kn++;\n    }\n    relief /= Math.max(1, kn);\n    const nearRiver = river[c] === 1;\n    let res = 0;\n    if (sea) {\n      if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH;\n    } else {\n      const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);\n      if (land) {\n        if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;\n        if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;\n        if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;\n        if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;\n        if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;\n        if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;\n        if (e > 200 && relief > 120) res |= RES.STONE;\n        if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;\n        if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;\n        if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;\n        if (nearRiver) res |= RES.FISH;\n      } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;\n    }\n    resource[c] = res;\n    let sl = SOILS.NONE;\n    if (!sea) {\n      if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;\n      else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;\n      else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;\n      else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;\n      else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;\n      else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;\n      else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;\n      else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;\n      else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;\n      else sl = SOILS.LOAM;\n    }\n    soil[c] = sl;\n    if (land) {\n      const t = temp[c], p = precip[c];\n      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);\n      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);\n      const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3e3, 0, 1);\n      fertility[c] = clamp(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);\n      capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];\n    } else {\n      fertility[c] = 0;\n      capacity[c] = 0;\n    }\n  }\n  function placeInitialGroups(g, spec, variant = 0) {\n    const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;\n    const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];\n    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });\n    cand.sort((a, b) => b.s - a.s || a.c - b.c);\n    const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R);\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    for (const { c } of cand) {\n      if (out.length >= spec.initialGroups) break;\n      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });\n    }\n    return out;\n  }\n  function biomeOf(T, P, e) {\n    if (e > 4500 || e > 3500 && T < 0) return BIOMES.ALPINE;\n    if (T < -8) return BIOMES.ICE;\n    if (T < 0) return BIOMES.TUNDRA;\n    if (T < 5) return P > 300 ? BIOMES.TAIGA : BIOMES.COLD_DESERT;\n    if (T < 18) return P < 200 ? BIOMES.COLD_DESERT : P < 600 ? BIOMES.GRASSLAND : P > 2600 ? BIOMES.WETLAND : BIOMES.TEMPERATE_FOREST;\n    if (P < 250) return BIOMES.HOT_DESERT;\n    if (P < 900) return BIOMES.SAVANNA;\n    if (P < 1800) return BIOMES.TROPICAL_SEASONAL;\n    return BIOMES.RAINFOREST;\n  }\n  function landmasses(V, off, nb, isSea) {\n    const comp = new Int32Array(V).fill(-1), sizes = [];\n    const q = new Int32Array(V);\n    for (let s = 0; s < V; s++) {\n      if (isSea[s] || comp[s] >= 0) continue;\n      let qh = 0, qt = 0;\n      q[qt++] = s;\n      comp[s] = sizes.length;\n      let cnt = 0;\n      while (qh < qt) {\n        const c = q[qh++];\n        cnt++;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && comp[j] < 0) {\n            comp[j] = comp[s];\n            q[qt++] = j;\n          }\n        }\n      }\n      sizes.push(cnt);\n    }\n    return { comp, sizes };\n  }\n  function computeStats(a) {\n    const { V, off, nb, isSea, landWater, elevation, temp, biome, lat, riverThreshold, river, lakeCount, parent, populations } = a;\n    let mouthCount = 0;\n    for (let c = 0; c < V; c++) if (river[c] && parent[c] >= 0 && isSea[parent[c]]) mouthCount++;\n    let sea = 0, lake = 0, mount = 0, rivers = 0, cold = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) sea++;\n      else {\n        if (landWater[c] === LAND_WATER.LAKE) lake++;\n        if (elevation[c] > 2500) mount++;\n        if (river[c]) rivers++;\n      }\n    }\n    const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea), total = sizes.reduce((s, x) => s + x, 0);\n    const continents = sizes.filter((s) => s >= total * 0.03), islands = sizes.filter((s) => s < total * 0.03);\n    const biomeCounts = new Array(14).fill(0);\n    for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;\n    let tl = 0, nl = 0, th = 0, nh = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) continue;\n      const la = Math.abs(lat[c]) / D2R;\n      if (la < 20) {\n        tl += temp[c];\n        nl++;\n      } else if (la > 60) {\n        th += temp[c];\n        nh++;\n      }\n    }\n    return {\n      cells: V,\n      landFraction: landCells / V,\n      lakeFraction: lake / V,\n      mountainFraction: mount / Math.max(1, landCells),\n      riverCells: rivers,\n      riverFlowThreshold: riverThreshold,\n      riverMouths: mouthCount,\n      lakeCells: lakeCount,\n      continentCount: continents.length,\n      continentShares: continents.map((s) => +(s / total).toFixed(3)).sort((x, y) => y - x),\n      islandCount: islands.length,\n      largestIslandCells: islands.length ? Math.max(...islands) : 0,\n      meanTempLow: nl ? tl / nl : null,\n      meanTempHigh: nh ? th / nh : null,\n      biomeCounts,\n      initialGroups: populations.length\n    };\n  }\n  function validateWorld(world) {\n    const errs = [], { cell, mesh } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    for (const k of ["elevation", "temp", "precip", "riverFlow", "fertility", "capacity"]) for (let c = 0; c < V; c++) if (!Number.isFinite(cell[k][c])) {\n      errs.push(`${k}[${c}] \\u304C\\u6709\\u9650\\u3067\\u306A\\u3044`);\n      break;\n    }\n    const state = new Uint8Array(V);\n    const stack = [];\n    for (let s = 0; s < V; s++) {\n      if (state[s]) continue;\n      let c = s;\n      stack.length = 0;\n      while (true) {\n        if (cell.landWater[c] === LAND_WATER.OCEAN) {\n          state[c] = 2;\n          break;\n        }\n        if (state[c] === 2) break;\n        if (state[c] === 1) {\n          errs.push(`\\u6D41\\u8DEF\\u306B\\u5FAA\\u74B0: ${c}`);\n          break;\n        }\n        state[c] = 1;\n        stack.push(c);\n        const p = cell.riverTo[c];\n        if (p < 0) {\n          errs.push(`\\u884C\\u304D\\u6B62\\u307E\\u308A\\u306E\\u6D41\\u8DEF: ${c}`);\n          break;\n        }\n        let adj = false;\n        for (let k = off[c]; k < off[c + 1]; k++) if (nb[k] === p) {\n          adj = true;\n          break;\n        }\n        if (!adj) {\n          errs.push(`\\u6D41\\u8DEF\\u304C\\u96A3\\u63A5\\u3057\\u3066\\u3044\\u306A\\u3044: ${c}\\u2192${p}`);\n          break;\n        }\n        c = p;\n      }\n      const ok = state[c] === 2;\n      for (const u of stack) state[u] = ok ? 2 : state[u];\n      if (errs.length > 20) break;\n    }\n    for (let c = 0; c < V; c++) {\n      if (cell.elevation[c] <= 0 !== (cell.landWater[c] === LAND_WATER.OCEAN)) {\n        errs.push(`\\u6D77\\u9678\\u3068\\u6A19\\u9AD8\\u304C\\u4E0D\\u4E00\\u81F4: ${c}`);\n        break;\n      }\n    }\n    for (const p of world.entities.populations) {\n      if (cell.landWater[p.cell] !== LAND_WATER.LAND) errs.push(`\\u521D\\u671F\\u96C6\\u56E3 ${p.id} \\u304C\\u9678\\u306B\\u3044\\u306A\\u3044`);\n    }\n    return errs;\n  }\n  function worldHash(world) {\n    let h = 2166136261;\n    const { cell } = world;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < cell.elevation.length; i++) mix(Math.round(cell.elevation[i]) | 0);\n    for (let i = 0; i < cell.landWater.length; i++) mix(cell.landWater[i] | cell.biome[i] << 8 | cell.soil[i] << 16);\n    for (let i = 0; i < cell.riverTo.length; i++) mix(cell.riverTo[i] | 0);\n    for (let i = 0; i < cell.resource.length; i++) mix(cell.resource[i]);\n    mix(meshHash(world.mesh).length);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n  function generateWorldChecked(specInput, options = {}, maxAttempts = 6) {\n    const rejected = [];\n    const base = normalizeWorldSpec(specInput).spec;\n    for (let a = 0; a < maxAttempts; a++) {\n      const seedUsed = a === 0 ? base.worldSeed : `${base.worldSeed}#r${a}`;\n      const world = generateWorld({ ...base, worldSeed: seedUsed }, options), reasons = statsProblems(world.stats, base);\n      reasons.push(...validateWorld(world).slice(0, 5));\n      if (!reasons.length) return { world, rejected, attempts: a + 1, seedUsed };\n      rejected.push({ seed: seedUsed, reasons });\n    }\n    throw new Error(`\\u8A31\\u5BB9\\u5E2F\\u306B\\u5165\\u308B\\u4E16\\u754C\\u3092\\u4F5C\\u308C\\u306A\\u304B\\u3063\\u305F\\uFF08${maxAttempts} \\u56DE\\uFF09: ` + JSON.stringify(rejected));\n  }\n  function statsProblems(st, spec) {\n    const r = [];\n    if (Math.abs(st.landFraction - spec.landFraction) > 0.04) r.push(`\\u9678\\u5730\\u7387 ${st.landFraction.toFixed(3)} \\u304C\\u76EE\\u6A19 ${spec.landFraction} \\u304B\\u3089\\u5916\\u308C\\u3066\\u3044\\u308B`);\n    const K = spec.continentCountTarget;\n    if (st.continentCount < Math.max(1, K - 2) || st.continentCount > K + 3) r.push(`\\u5927\\u9678\\u7D1A\\u306E\\u9678\\u584A\\u304C ${st.continentCount} \\u500B\\uFF08\\u76EE\\u6A19 ${K}\\uFF09`);\n    if (spec.islandMode === "many" && st.islandCount < 20) r.push(`\\u5CF6\\u304C\\u5C11\\u306A\\u3044\\uFF08${st.islandCount}\\uFF09`);\n    if (st.continentShares[0] > 0.45) r.push(`\\u6700\\u5927\\u306E\\u9678\\u584A\\u304C\\u9678\\u306E ${(st.continentShares[0] * 100).toFixed(0)}%\\uFF08\\u504F\\u308A\\u3059\\u304E\\uFF09`);\n    if (st.meanTempLow != null && st.meanTempHigh != null && st.meanTempLow <= st.meanTempHigh + 10) r.push("\\u4F4E\\u7DEF\\u5EA6\\u304C\\u9AD8\\u7DEF\\u5EA6\\u3088\\u308A\\u5341\\u5206\\u306B\\u6696\\u304B\\u304F\\u306A\\u3044");\n    return r;\n  }\n\n  // js/workers/worldgen.worker.js\n  function collectBuffers(world) {\n    const seen = /* @__PURE__ */ new Set(), list = [];\n    const add = (o) => {\n      for (const v of Object.values(o)) if (ArrayBuffer.isView(v) && !seen.has(v.buffer)) {\n        seen.add(v.buffer);\n        list.push(v.buffer);\n      }\n    };\n    add(world.mesh);\n    add(world.cell);\n    return list;\n  }\n  self.onmessage = (e) => {\n    const m = e.data;\n    if (!m || m.type !== "generate") return;\n    try {\n      const r = generateWorldChecked(m.spec, { onProgress: (p) => self.postMessage({ type: "progress", ...p }) }, m.maxAttempts ?? 4);\n      r.world.generation = { seedUsed: r.seedUsed, attempts: r.attempts, rejected: r.rejected };\n      self.postMessage({ type: "done", world: r.world }, collectBuffers(r.world));\n    } catch (err) {\n      self.postMessage({ type: "error", message: err && err.message ? err.message : String(err) });\n    }\n  };\n})();\n';
+
   // js/main.js
   function start() {
     const Delaunator = globalThis.Delaunator;
@@ -20485,7 +23649,26 @@ ${shown}${more}`;
       download: downloadBlob,
       createCanvas: createBrowserCanvas
     });
-    const files = initFileInput({ actions });
+    const createWorldWorker = () => {
+      if (typeof Worker === "undefined") return null;
+      const url = URL.createObjectURL(new Blob([worldgen_worker_default], { type: "text/javascript" }));
+      const w = new Worker(url);
+      const t = w.terminate.bind(w);
+      w.terminate = () => {
+        t();
+        URL.revokeObjectURL(url);
+      };
+      return w;
+    };
+    const worldService = createWorldService({ createWorker: createWorldWorker });
+    const worldActions = createWorldActions({ service: worldService, download: downloadBlob, appVersion: APP_VERSION });
+    let worldWorkspace = null;
+    const routedActions = { ...actions, openFile: async (file) => {
+      if (worldWorkspace && await worldWorkspace.routeFile(file)) return;
+      if (worldWorkspace?.active) await worldWorkspace.setActive(false);
+      return actions.openFile(file);
+    } };
+    const files = initFileInput({ actions: routedActions });
     const editActions = createEditActions({ store, renderer });
     const simActions = createSimActions({ store, renderer });
     const autoCheck = createAutoCheck({ store });
@@ -20518,6 +23701,8 @@ ${shown}${more}`;
     const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome });
     winsRef = wins;
     initHub({ store, wins });
+    worldWorkspace = initWorldWorkspace({ worldActions, openFileDialog: files.open, legacyHasMap: () => !!store.getState().map });
+    byId("btn-world").addEventListener("click", () => worldWorkspace.setActive(!worldWorkspace.active));
     const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
     const setupActions = createSetupActions({ store, renderer });
     const setupWindow = initSetupWindow({
@@ -20591,7 +23776,7 @@ ${shown}${more}`;
     initShortcuts({ ...deps, editMode, editToolbar, timeActions });
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
     renderer.resize();
-    globalThis.alterhistory = { wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+    globalThis.alterhistory = { worldActions, worldService, worldWorkspace, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

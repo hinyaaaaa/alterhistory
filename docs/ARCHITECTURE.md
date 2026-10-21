@@ -215,3 +215,24 @@ alterhistory/
 - **読み込みの向き**: `ai.js` → `edit/wars.js`・`edit/treaties.js`・`sim/war-engine.js`・`sim/ideas.js`・`sim/pressure.js`。`tech-progress.js` → `ai-pace.js`（`ai.js` は読まない）。
 - **時計に依存しない**: 判断の間隔はゲーム内の月で数える（`(月の通し番号 + 国ID) % 間隔`）。倍速にしても、1年あたりの行動数は変わらない。
 
+
+## v4.0.0 で足した層（球面世界）
+
+```
+js/core/world/   純粋ロジック（DOM・旧モデル非依存。決定的）
+  sphere-mesh.js   球面メッシュ（正二十面体の分割）・投影・距離・面積・検査
+  spec.js noise.js WorldSpec・乱数
+  worldgen.js      G1〜G8 と、再利用できる部品（気候・水系・土地利用・初期集団）
+  spatial-index.js 最近傍・半径内・拡張
+  edit.js          標高ブラシ・局所再計算・Undo/Redo
+  ahmap2.js        .ahmap v2 コンテナ（docs/AHMAP2_SPEC.md）
+js/render/         sphere-view.js（描画）・world-colors.js（レイヤー）・pixel-map.js（画素→セル）
+js/workers/        worldgen.worker.js（生成）。ビルドで js/generated/worldgen-worker.txt に埋め込み、Blob URL で起動
+js/app/            world-service.js（生成の Worker・中断・フォールバック）・world-actions.js（意味のある操作）
+js/ui/             world-workspace.js（画面）
+```
+- 依存の向き: `ui → app → core/world / render`。旧モデル（`core/model`・`derive`・`edit`・`sim`）と `io` は、球面世界を import しない。逆も同じ。境界は `tests/v400-architecture.test.mjs` が確認する。
+- 正本は球面上の座標と隣接。矩形投影は表示の都合で、地理計算（距離・面積・隣接）は球面で行う。
+- 地理生成の乱数は WorldSpec の worldSeed から段階別に作る（歴史の乱数とは別系統）。同じ worldSeed・WorldSpec・generatorVersion なら出力は一致する。
+- 局所再計算（編集）は、生成と同じ式を 1 か所（`worldgen.js` の部品）に置いて共有している。
+- v5 は、`entities.*`・`history.*` を `.ahmap` v2 の別チャンクとして足す（既存チャンクの意味は変えない）。

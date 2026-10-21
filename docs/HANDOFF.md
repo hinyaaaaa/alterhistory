@@ -17,6 +17,15 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
+## 追加済み：v4.0.0「球面世界」（いちばん新しい）
+- 方針: v3.1.0（アルゴリズム国家の完全化）は **v5.0.0 に含める**。次は `02` の文書（v5.0.0〜5.x：文明史・国家の意思決定・イベントグラフ・月次履歴・Obsidian・UI）に基づく実装。判断の記録は `docs/DECISIONS.md`。
+- 世界は `js/core/world/`（純粋ロジック・旧モデルを import しない。`tests/v400-architecture.test.mjs` が確認）。画面は `js/ui/world-workspace.js`（ハブの「球面世界」）。保存形式は `docs/AHMAP2_SPEC.md`。変更の詳細は `docs/CHANGELOG.md` の v4.0.0。
+- **v5 が使う入口**: `world.entities.start`（選んだ開始集団。`.ahmap` v2 の拡張チャンク `entities.start`）、`world.cell.*`（地理の正本）、拡張チャンク（`extensions.*`・`history.*` など）は読み込み・再保存で保持される。
+- 球面世界と旧エディタの地図は、まだ統合していない（球面世界の上での国家・月次シミュレーションは v5 の仕事）。
+- 実ブラウザの確認: `npm run build` のあと `node tests/e2e/world.e2e.mjs`（`E2E_BIG=1` で 100 万セルも）。`preview/world.html` でも測れる。
+- 性能の目標（250k セルで生成 60 秒・全体の描き直し 5 秒）は、この開発環境（Xeon 2.1GHz・1 コア）では余裕で満たす（生成 約 5.4 秒・描き直し 約 8 ms）。**Surface Go 4 での測定値はまだ無い**。
+- 利用者の評価: 地理生成の見た目と統計帯は承認済み（「完璧」）。統計帯（大陸 4〜9・島 20 以上・最大の陸塊 45% 以下・陸地率 ±4%）は暫定から確定に。
+
 ## 追加済み：v3.0.0「自ら動く国家」（いちばん新しい）
 詳細は `CHANGELOG.md` の v3.0.0。月ごとの更新の順は、人口 → 思潮 → 技術の進捗 → 言語 → **アルゴリズム国家の行動** → 連鎖・出来事 → 機運。
 - **設定**: `core/sim/ai-settings.js`（`ext.data.ai = { enabled, tempo, verbs, players, targetPlayers }`。既定に戻ると保存から消える）。`isAutonomous(map, id)` = 有効で、プレイヤー国が1つ以上あり、その国がプレイヤー国ではない。
@@ -530,17 +539,3 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 - v2.7.0（因果が巡る世界と、簡易言語）: 完了。独自言語の簡易版を入れた。
 - **v2.8: 土地の造成**（水域を陸にする。海上にも造成できる）。着手前に、`cells.t` / `cells.f` と海岸線が標高から導かれるか、読み込み時の固定値かを調べ、短くまとめて質問する（B7 の方針をそのまま引き継ぐ）。
 
-
-## 追記 2026-10-20: v3.1.0 → v4.0.0 の開発開始（途中経過）
-- 呼称を「アルゴリズム国家」に統一した（詳細は `docs/DECISIONS.md`）。保存キー `ext.data.ai` は据え置き。
-- **完了**: V4-M0 の一部（球面メッシュ `js/core/world/sphere-mesh.js` とテスト、計測 `docs/plans/v4.0.0-M0-球面メッシュ計測.md`）。
-- **未着手**: v3.1.0 全体（行動レジストリ・4 層の意思決定・戦争計画・全分野の自律）。v4.0.0 の M1〜M9（Worldモデル抽象化、`.ahmap` v2、球面レンダラー、地形・気候・水系、初期集団、Worker・性能、地形編集）。
-- 性能目標（250k セルで生成 60 秒・再描画 5 秒）は **未検証**。Surface Go 4 相当での測定が必要。
-- 版（`package.json`）はまだ 3.0.0 のまま。
-
-## 追記 2026-10-20（続き）: v4.0.0 の地理生成と .ahmap v2 の核
-- 方針変更: v3.1.0 は v5.0.0 に含める。v4.0.0 の完成が先（`docs/DECISIONS.md`）。
-- **完了（コア）**: V4-M0（メッシュ・計測）、V4-M2 の核（`ahmap2.js`）、V4-M4/M5 の生成（G1〜G8）、G7 の初期集団の自動配置。
-- **未完了**: M1（Worldモデル抽象化・旧モデル隔離）、M2 の残り（アプリの保存・読み込みへの接続、v1 の移行アダプタ、一時ファイル経由の保存）、M3（アプリの球面レンダラー・矩形投影の描画・空間インデックス）、M6（初期集団の選択画面）、M7（Worker・LOD・キャッシュ・実機の性能測定）、M8（地形編集・局所再計算・Undo）、M9（E2E・CI・文書の仕上げ）。
-- 確認用: `npm run build` のあと `preview/world.html` をブラウザで開く（シード・セル数・表示レイヤーを選べる）。`node tests/helpers/render-world-png.mjs <seed> <cells> <out.png> [layer]` で PNG も出せる。
-- 地理の統計帯と見た目は、利用者のレビュー待ち（暫定値）。

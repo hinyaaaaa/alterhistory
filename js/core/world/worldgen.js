@@ -165,65 +165,23 @@ export function generateWorld(specInput, options = {}) {
   });
 
   // ---- G4: 気候・バイオーム ----
-  const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V);
+  const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);
+  const cx = { mesh, lat, lon, elevation, isSea, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };
   stage("G4_climate", "気候", () => {
-    const lapse = spec.climateModel.lapseRateCPerKm, Lkm = spec.climateModel.windMoistureLengthKm;
-    for (let c = 0; c < V; c++) {
-      const a = Math.abs(lat[c]) / (Math.PI / 2), h = Math.max(0, elevation[c]) / 1000;
-      temp[c] = 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;
-    }
-    // 風向き: 貿易風（東から）・偏西風・極東風。風上のセルを、緯度の風から決める
-    const up = new Int32Array(V).fill(-1);
-    for (let c = 0; c < V; c++) {
-      const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1; // 東向きの風なら +1（西から吹く）
-      const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]); // 東向きの単位ベクトル（xy 平面）
-      const wx = -east * ex, wy = -east * ey; // 風上へ向かう向き
-      let best = -2, bj = -1;
-      for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2]; const dl = Math.hypot(dx, dy, dz) || 1; const s = (dx * wx + dy * wy) / dl; if (s > best) { best = s; bj = j; } }
-      up[c] = bj;
-    }
-    const pn = nSeed("precip"), decay = Math.exp(-spacingKm / Lkm), m = new Float32Array(V).fill(0.5), lift = new Float32Array(V);
-    for (let c = 0; c < V; c++) if (isSea[c]) m[c] = 1;
+    for (let c = 0; c < V; c++) temp[c] = tempAt(lat[c], elevation[c], cx.lapse);
+    cx.up = new Int32Array(V); for (let c = 0; c < V; c++) cx.up[c] = upwindOf(mesh, lat, lon, c);
+    for (let c = 0; c < V; c++) moisture[c] = isSea[c] ? 1 : 0.5;
     const passes = Math.min(200, Math.ceil(4000 / spacingKm) + 4);
-    for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) {
-      if (isSea[c]) continue;
-      const u = up[c], l = Math.max(0, elevation[c] - Math.max(0, elevation[u])) / 1000; // 風上より高い分だけ持ち上がる（km）
-      lift[c] = l; m[c] = clamp(m[u] * decay - 0.3 * l, 0.42, 1);
-    }
-    for (let c = 0; c < V; c++) {
-      const la = Math.abs(lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
-      let p = zonal * (0.35 + 0.85 * m[c]) * (0.7 + 0.6 * fbm3(pn, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift[c] * m[c] * (isSea[c] ? 0 : 1);
-      if (!isSea[c] && elevation[c] > 3500) p *= 0.6; // 高所は降水が減る
-      precip[c] = clamp(p, 0, 6000);
-    }
+    for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) { if (!isSea[c]) moisture[c] = moistureStep(cx, c); }
+    for (let c = 0; c < V; c++) precip[c] = precipAt(cx, c);
   });
   stage("G4_biome", "バイオーム", () => { for (let c = 0; c < V; c++) biome[c] = isSea[c] ? BIOMES.OCEAN : biomeOf(temp[c], precip[c], elevation[c]); });
 
   // ---- G5: 水系（優先度つき洪水法: すべての流路が海か湖へ到達する）----
   const parent = new Int32Array(V).fill(-1), filled = new Float32Array(V), flow = new Float32Array(V), basin = new Int32Array(V).fill(-1), landWater = new Uint8Array(V);
   let lakeCount = 0;
-  stage("G5_rivers", "水系", () => {
-    const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V); let on = 0; const EPS = 0.05;
-    for (let c = 0; c < V; c++) filled[c] = elevation[c];
-    for (let c = 0; c < V; c++) {
-      if (!isSea[c]) continue; done[c] = 1; // 海: 内側は処理しない。陸に接する海だけをキューへ
-      for (let k = off[c]; k < off[c + 1]; k++) if (!isSea[nb[k]]) { heap.push(filled[c], c); break; }
-    }
-    while (heap.n > 0) {
-      const c = heap.pop(); order[on++] = c;
-      for (let k = off[c]; k < off[c + 1]; k++) {
-        const j = nb[k]; if (done[j]) continue; done[j] = 1; parent[j] = c;
-        filled[j] = Math.max(elevation[j], filled[c] + EPS); heap.push(filled[j], j);
-      }
-    }
-    // 流量: 降水 × 面積 × 流出係数（m³/s の目安）を、上流から下流へ足し合わせる
-    for (let c = 0; c < V; c++) flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 9.5e-6;
-    for (let i = on - 1; i >= 0; i--) { const c = order[i], p = parent[c]; if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c]; }
-    for (let i = 0; i < on; i++) { const c = order[i]; if (isSea[c]) continue; const p = parent[c]; basin[c] = isSea[p] ? c : basin[p]; }
-    // 湖: くぼ地を埋めた深さが十分あるセル（かつ海岸ではない）
-    for (let c = 0; c < V; c++) { if (isSea[c]) landWater[c] = LAND_WATER.OCEAN; else if (filled[c] - elevation[c] >= 40) { landWater[c] = LAND_WATER.LAKE; lakeCount++; } else landWater[c] = LAND_WATER.LAND; }
-    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAKE) biome[c] = BIOMES.LAKE;
-  });
+  const hyd = { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome };
+  stage("G5_rivers", "水系", () => { lakeCount = computeHydrology(hyd, null).lakeCount; });
   // 河川: 流量が上位のセル。閾値は陸のセルの分位点（解像度に依存しない）
   let riverThreshold = 0; const river = new Uint8Array(V);
   stage("G5_riverset", "河川の選定", () => {
@@ -234,87 +192,160 @@ export function generateWorld(specInput, options = {}) {
 
   // ---- G6: 土壌・肥沃度・資源・人口の受け皿 ----
   const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);
-  stage("G6_soil", "土壌・肥沃度・資源", () => {
-    const rs = ["iron", "copper", "tin", "gold", "coal", "gems"].map(nSeed), sSalt = nSeed("salt");
-    // 起伏（隣との標高差の平均）
-    for (let c = 0; c < V; c++) {
-      const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];
-      let relief = 0, kn = 0; for (let k = off[c]; k < off[c + 1]; k++) { relief += Math.abs(elevation[nb[k]] - e); kn++; } relief /= Math.max(1, kn);
-      const nearRiver = river[c] === 1;
-      let res = 0;
-      if (sea) { if (e > -300 && coastDistSea(c) <= 6) res |= RES.FISH; }
-      else {
-        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);
-        if (land) {
-          if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;
-          if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;
-          if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;
-          if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;
-          if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;
-          if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;
-          if (e > 200 && relief > 120) res |= RES.STONE;
-          if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;
-          if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;
-          if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;
-          if (nearRiver) res |= RES.FISH;
-        } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;
-      }
-      resource[c] = res;
-      // 土壌
-      let sl = SOILS.NONE;
-      if (!sea) {
-        if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;
-        else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;
-        else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;
-        else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;
-        else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;
-        else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;
-        else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;
-        else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;
-        else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;
-        else sl = SOILS.LOAM;
-      }
-      soil[c] = sl;
-      // 肥沃度 0〜1（気候の適合 × 土壌 × 地形）
-      if (!sea && landWater[c] === LAND_WATER.LAND) {
-        const t = temp[c], p = precip[c];
-        const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);
-        const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);
-        const sf = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 }[sl];
-        const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3000, 0, 1);
-        fertility[c] = clamp(tf * pf * sf * slope * alt, 0, 1);
-        // 人口の受け皿（農耕を想定した、1 セルあたりの人数の目安）。海辺・河川・湖畔は有利
-        const density = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)); // 人/km²
-        capacity[c] = density * areaKm2[c];
-      }
-    }
-    function coastDistSea(c) { // 海のセルから、最も近い陸までのセル数（6 まで）
-      let fr = [c], seen = new Set([c]);
-      for (let d = 0; d <= 6; d++) { const nx = []; for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) { const j = nb[k]; if (!isSea[j]) return d + 1; if (!seen.has(j)) { seen.add(j); nx.push(j); } } fr = nx; if (!fr.length) break; }
-      return 99;
-    }
-  });
+  const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };
+  stage("G6_soil", "土壌・肥沃度・資源", () => { for (let c = 0; c < V; c++) landUseAt(lu, c); });
 
   // ---- G7: 初期人口集団の配置 ----
-  const populations = stage("G7_groups", "初期人口集団", () => {
-    const rg = makeRng(seed, "groups"), cand = [];
-    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });
-    cand.sort((a, b) => b.s - a.s || a.c - b.c);
-    const out = [], minSep = Math.min(0.25 * Math.PI, (2000 / R)) * 1.0;
-    for (const { c } of cand) { if (out.length >= spec.initialGroups) break; if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" }); }
-    return out;
-  });
+  const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };
+  const populations = stage("G7_groups", "初期人口集団", () => placeInitialGroups(gctx, spec, 0));
 
   // ---- G8: 統計と検証 ----
   const stats = stage("G8_stats", "統計", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
   const world = {
     spec: { ...spec, generatorVersion: GENERATOR_VERSION }, mesh,
-    cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain },
+    cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },
     entities: { populations }, stats, timings,
   };
   timings.total = Math.round(performance.now() - tAll);
   world.hash = worldHash(world);
   return world;
+}
+
+// ---------------------------------------------------------------------------
+// 再利用できる部品（地形編集の局所再計算も、これを使う。全体生成と同じ式を 1 か所に置く）
+// ---------------------------------------------------------------------------
+/** 年平均気温（℃）: 緯度による低下と、標高による低下 */
+export function tempAt(latRad, elevation, lapse) {
+  const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1000;
+  return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;
+}
+/** 風上の隣接セル。貿易風（東から）・偏西風・極東風を緯度から決める */
+export function upwindOf(mesh, lat, lon, c) {
+  const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+  const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1; // 東向きの風なら +1（西から吹く）
+  const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]); // 東向きの単位ベクトル（xy 平面）
+  const wx = -east * ex, wy = -east * ey; // 風上へ向かう向き
+  let best = -2, bj = -1;
+  for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k], dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2], dl = Math.hypot(dx, dy, dz) || 1, s = (dx * wx + dy * wy) / dl; if (s > best) { best = s; bj = j; } }
+  return bj;
+}
+const upOf = (cx, c) => (cx.up ? cx.up[c] : upwindOf(cx.mesh, cx.lat, cx.lon, c)); // 全体生成では事前計算した風上表を使う（同じ値）
+function liftRaw(cx, c) { const u = upOf(cx, c); return Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1000; } // 風上より高い分だけ持ち上がる（km）
+/** 水蒸気量の 1 ステップ（陸のセル）: 風上の値を減衰させ、山で持ち上がった分を失う */
+export function moistureStep(cx, c) { const u = upOf(cx, c); return clamp(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1000), 0.42, 1); }
+/** 年降水量（mm）: 緯度帯の基準 × 水蒸気量 × ゆらぎ ＋ 地形性降雨 */
+export function precipAt(cx, c) {
+  const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
+  const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];
+  let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);
+  if (!sea && cx.elevation[c] > 3500) p *= 0.6; // 高所は降水が減る
+  return clamp(p, 0, 6000);
+}
+export function biomeAt(T, P, e, sea) { return sea ? BIOMES.OCEAN : biomeOf(T, P, e); }
+
+/**
+ * 水系（優先度つき洪水法）。members（Uint8Array）を渡すと、そのセルだけを再計算する（局所再計算）。null なら全体。
+ * 海に接する海セルを種にして、低い方から陸へ広げる。親が流下先になるので、すべての流路が海へ着く。
+ * 戻り値: { lakeCount, unreached }（unreached: 海に着けなかった陸セルの数。0 でなければ呼び出し側が全体を再計算する）
+ */
+export function computeHydrology(h, members = null) {
+  const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;
+  const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;
+  const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V); let on = 0;
+  for (let c = 0; c < V; c++) { if (members && !members[c]) continue; filled[c] = elevation[c]; parent[c] = -1; basin[c] = -1; }
+  for (let c = 0; c < V; c++) {
+    if (isSea[c]) { done[c] = 1; for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (!isSea[j] && (!members || members[j])) { heap.push(filled[c], c); break; } } } // 海: 内側は処理しない。陸に接する海だけをキューへ
+    else if (members && !members[c]) done[c] = 1; // 対象外の陸は広げない
+  }
+  while (heap.n > 0) {
+    const c = heap.pop(); order[on++] = c;
+    for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (done[j]) continue; done[j] = 1; parent[j] = c; filled[j] = Math.max(elevation[j], filled[c] + EPS); heap.push(filled[j], j); }
+  }
+  // 流量: 降水 × 面積 × 流出係数（m³/s の目安）を、上流から下流へ足し合わせる
+  for (let c = 0; c < V; c++) { if (members && !members[c]) continue; flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 9.5e-6; }
+  for (let i = on - 1; i >= 0; i--) { const c = order[i], p = parent[c]; if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c]; }
+  for (let i = 0; i < on; i++) { const c = order[i]; if (isSea[c]) continue; const p = parent[c]; basin[c] = isSea[p] ? c : basin[p]; }
+  // 湖: くぼ地を埋めた深さが十分あるセル
+  let lakeCount = 0, unreached = 0;
+  for (let c = 0; c < V; c++) {
+    if (members && !members[c]) continue;
+    if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;
+    else { if (parent[c] < 0) unreached++; if (filled[c] - elevation[c] >= 40) { landWater[c] = LAND_WATER.LAKE; lakeCount++; biome[c] = BIOMES.LAKE; } else landWater[c] = LAND_WATER.LAND; }
+  }
+  return { lakeCount, unreached };
+}
+
+/** 土壌・資源・肥沃度のノイズ種（シードから決まる） */
+export function landUseNoise(seed) { const ns = (name) => hashString(`${seed}::noise::${name}`); return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") }; }
+const SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };
+/** 海のセルから、最も近い陸までのセル数（6 まで見る。見つからなければ 99） */
+function seaToLand(mesh, isSea, c) {
+  const off = mesh.neighborOffsets, nb = mesh.neighborIds; let fr = [c]; const seen = new Set([c]);
+  for (let d = 0; d <= 6; d++) { const nx = []; for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) { const j = nb[k]; if (!isSea[j]) return d + 1; if (!seen.has(j)) { seen.add(j); nx.push(j); } } fr = nx; if (!fr.length) break; }
+  return 99;
+}
+/** 1 セルの土壌・資源・肥沃度・人口の受け皿を決める（全体生成と局所再計算で共通） */
+export function landUseAt(g, c) {
+  const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;
+  const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+  const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];
+  let relief = 0, kn = 0; for (let k = off[c]; k < off[c + 1]; k++) { relief += Math.abs(elevation[nb[k]] - e); kn++; } relief /= Math.max(1, kn); // 起伏（隣との標高差の平均）
+  const nearRiver = river[c] === 1; let res = 0;
+  if (sea) { if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH; }
+  else {
+    const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);
+    if (land) {
+      if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;
+      if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;
+      if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;
+      if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;
+      if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;
+      if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;
+      if (e > 200 && relief > 120) res |= RES.STONE;
+      if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;
+      if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;
+      if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;
+      if (nearRiver) res |= RES.FISH;
+    } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;
+  }
+  resource[c] = res;
+  let sl = SOILS.NONE;
+  if (!sea) {
+    if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;
+    else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;
+    else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;
+    else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;
+    else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;
+    else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;
+    else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;
+    else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;
+    else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;
+    else sl = SOILS.LOAM;
+  }
+  soil[c] = sl;
+  if (land) { // 肥沃度 0〜1（気候の適合 × 土壌 × 地形）
+    const t = temp[c], p = precip[c];
+    const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);
+    const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);
+    const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3000, 0, 1);
+    fertility[c] = clamp(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);
+    capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c]; // 人口の受け皿（農耕を想定。海辺・河川・湖畔は有利）
+  } else { fertility[c] = 0; capacity[c] = 0; }
+}
+
+/**
+ * 初期人口集団の候補を置く。variant を変えると別の候補になる（0 が生成時の既定）。
+ * g: { mesh, landWater, fertility, temp, river, coastDist, lat, lon }
+ */
+export function placeInitialGroups(g, spec, variant = 0) {
+  const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;
+  const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];
+  for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });
+  cand.sort((a, b) => b.s - a.s || a.c - b.c);
+  const out = [], minSep = Math.min(0.25 * Math.PI, 2000 / R);
+  const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
+  for (const { c } of cand) { if (out.length >= spec.initialGroups) break; if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" }); }
+  return out;
 }
 
 function biomeOf(T, P, e) {
@@ -338,6 +369,13 @@ export function landmasses(V, off, nb, isSea) {
     sizes.push(cnt);
   }
   return { comp, sizes };
+}
+
+/** 編集後などに、統計を作り直す（生成時と同じ計算） */
+export function recomputeStats(world) {
+  const { mesh, cell } = world, V = mesh.cellCount, isSea = new Uint8Array(V); let lakes = 0;
+  for (let c = 0; c < V; c++) { isSea[c] = cell.elevation[c] <= 0 ? 1 : 0; if (cell.landWater[c] === LAND_WATER.LAKE) lakes++; }
+  return computeStats({ V, off: mesh.neighborOffsets, nb: mesh.neighborIds, isSea, landWater: cell.landWater, elevation: cell.elevation, temp: cell.temp, biome: cell.biome, lat: cell.lat, riverThreshold: world.stats.riverFlowThreshold, river: cell.river, lakeCount: lakes, parent: cell.riverTo, populations: world.entities.populations });
 }
 
 function computeStats(a) {

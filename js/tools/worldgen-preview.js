@@ -39,7 +39,7 @@ function draw() {
   $("redraw").textContent = `${(performance.now() - t0).toFixed(0)} ms（${W}×${H} を全部描き直した時間。本物のレンダラーではない）`;
 }
 function run() {
-  const seed = $("seed").value.trim() || makeWorldSeed(), cells = Number($("cells").value) || 250000;
+  const seed = $("seed").value.trim() || makeWorldSeed(Date.now()), cells = Number($("cells").value) || 250000;
   $("seed").value = seed; $("status").textContent = "生成中…（この間、画面は止まります）";
   setTimeout(() => {
     try {
@@ -52,7 +52,7 @@ function run() {
     } catch (e) { $("status").textContent = "失敗: " + e.message; }
   }, 30);
 }
-$("gen").addEventListener("click", run); $("layer").addEventListener("change", draw); $("rand").addEventListener("click", () => { $("seed").value = makeWorldSeed(); });
+$("gen").addEventListener("click", run); $("layer").addEventListener("change", draw); $("rand").addEventListener("click", () => { $("seed").value = makeWorldSeed(Date.now()); });
 $("map").addEventListener("mousemove", (ev) => {
   if (!world || !pixelCell) return; const r = ev.target.getBoundingClientRect(), px = Math.floor((ev.clientX - r.left) / r.width * PW), py = Math.floor((ev.clientY - r.top) / r.height * PH), c = pixelCell[py * PW + px], cell = world.cell;
   const res = Object.entries(RES_NAMES).filter(([b]) => cell.resource[c] & Number(b)).map(([, n]) => n).join("・") || "なし";

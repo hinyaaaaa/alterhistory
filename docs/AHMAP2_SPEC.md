@@ -11,9 +11,10 @@
 - 版は 3 つに分ける: コンテナ版（バイト配置）、スキーマ版（チャンクの意味）、アプリ版（情報）。
 
 ## 必須チャンク
-`world.spec`、`geom.centerXYZ / verticesXYZ / neighborOffsets / neighborIds / cellVertexIds`、`cell.*`（elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo, riverFlow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain）、`entities.populations`、`world.stats`。
+`world.spec`、`geom.centerXYZ / verticesXYZ / neighborOffsets / neighborIds / cellVertexIds`、`cell.*`（elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo, riverFlow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture）、`entities.populations`、`world.stats`。
 
 ## 拡張
+- 既知の拡張チャンク: `entities.start`（JSON。選んだ開始集団 `{groupId, cell, lat, lon, population, subsistence, species}`。v5 の起点）。
 - 名前が必須一覧にないチャンク（`extensions.*`、将来版の追加）は、読み込み時に保持し、再保存で必ず戻す。
 - v5 は `entities.*`・`history.*` などを別チャンクで追加する（既存チャンクの意味は変えない）。
 
@@ -21,8 +22,8 @@
 マジック／コンテナ版・スキーマ版（新しすぎる版は拒否）／manifest の切断／必須チャンクの欠落／チャンク範囲外／展開失敗／長さ・要素数／CRC32／セル数と周波数の整合／配列の大きさ／隣接・頂点 ID の範囲／landWater・biome・riverTo・basin の値域／WorldSpec／世界のハッシュ／球面トポロジー／流路が海へ着くこと。
 
 ## 保存の原則
-- 保存はスナップショットから全体を組み立てて 1 つのバイト列にする。呼び出し側（アプリ）は、一時ファイルへ書いてから置き換える（未実装・M2 の残り）。
+- 保存はスナップショットから全体を組み立てて 1 つのバイト列にする。アプリはブラウザのダウンロードとして書き出す（元のファイルを上書きしない）。
 - 更新されていないチャンクは、前回の圧縮結果（`chunkCache`）を再利用できる。
 
 ## 計測（Xeon 2.1GHz 1 コア・Node 22・249,642 セル。Surface Go 4 ではない）
-保存 約 1.1 秒／読み込み（展開と全検証）約 0.7 秒／ファイル 21.3 MB（非圧縮 39.2 MB）。
+保存 約 1.1 秒／読み込み（展開と全検証）約 0.7 秒／ファイル 約 22 MB（非圧縮 約 43 MB）。

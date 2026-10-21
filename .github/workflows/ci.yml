@@ -18,4 +18,4 @@ jobs:
       # dist/app.js は js/ から作る成果物。ソースと食い違っていたら失敗にして、
       # 「distだけが新しい」状態（ソースの取り残し）を防ぐ。
       - name: dist がソースと一致しているか
-        run: git diff --exit-code -- dist
+        run: git diff --exit-code -- dist js/generated
