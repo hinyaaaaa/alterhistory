@@ -1,11 +1,11 @@
 // v2.2.0: 世界情報の詳細化（E）・国史の書き出し（F）
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { planSetWorldInfo, tagLabels, epithet, STATE_TAGS, RESOURCES } from "../js/core/edit/world-info.js";
 import { planChangeLeader } from "../js/core/edit/lineage.js";
 import { describeTarget } from "../js/ui/hover-connector.js";
-import { serializeNativeJson, parseNativeJson } from "../js/io/native-map.js";
+import { serializeNativeJson, parseNativeJson } from "./helpers/legacy/native-map.js";
 let failed = 0;
 const check = (l, ok, x = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${l}${x ? "  " + x : ""}`); if (!ok) failed++; };
 const D = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");

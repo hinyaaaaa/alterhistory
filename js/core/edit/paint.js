@@ -18,7 +18,7 @@
 
 import { makeCommand, setIndexed, setProps } from "./commands.js";
 import { computePole } from "./pole.js";
-import { cellAreas } from "../geometry.js";
+import { cellAreas } from "../cell-areas.js";
 import { cellIndexOf } from "../spatial.js";
 
 export const PAINT_KINDS = Object.freeze({
@@ -197,22 +197,4 @@ export function planBiomePaint(map, { target, cells }) {
 }
 
 
-/** 標高の調整（v2.4.0）。陸のセルの標高を上げる・下げる・ならす。水域は変えない。陸が水域になる（標高20未満）ことも、100を超えることもない */
 export const HEIGHT_MODES = Object.freeze({ 1: { key: "up", label: "標高を上げる", step: 6 }, 2: { key: "down", label: "標高を下げる", step: -6 }, 3: { key: "smooth", label: "標高をならす", step: 0 } });
-export function planHeightPaint(map, { mode, cells }) {
-  const m = HEIGHT_MODES[mode]; if (!m) throw new Error("標高の調整の種類を選んでください");
-  const h = map.geometry.pack.h, nb = map.geometry.pack.cells.c; if (!h) throw new Error("標高のデータがありません");
-  const changes = [], seen = new Set(), report = { requested: 0, changed: 0, skippedWater: 0 };
-  for (const cell of cells) {
-    if (seen.has(cell)) continue; seen.add(cell); report.requested++;
-    if (cell < 0 || cell >= h.length) continue;
-    if (h[cell] < 20) { report.skippedWater++; continue; }
-    let next = h[cell];
-    if (m.key === "smooth") { const land = nb[cell].filter((j) => h[j] >= 20); if (!land.length) continue; const avg = land.reduce((a, j) => a + h[j], 0) / land.length; next = Math.round(h[cell] + (avg - h[cell]) * 0.5); }
-    else next = Math.min(100, Math.max(20, h[cell] + m.step));
-    if (next === h[cell]) continue;
-    changes.push([cell, h[cell], next]); report.changed++;
-  }
-  if (!changes.length) return { command: null, report };
-  return { command: makeCommand(m.label, ["terrain"], [setIndexed((mm) => mm.geometry.pack.h, changes)]), report };
-}

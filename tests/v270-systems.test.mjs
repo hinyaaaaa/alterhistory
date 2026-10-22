@@ -15,7 +15,7 @@ import { constraintReport } from "../js/core/sim/capacity.js";
 import { computeAnnualUpdate } from "../js/core/sim/economy.js";
 import { getTechDoctrine, getTechProgress, techLevelFine, planSetTechDoctrine } from "../js/core/edit/doctrines.js";
 import { setProps } from "../js/core/edit/commands.js";
-import { serializeNativeJson, parseNativeJson } from "../js/io/native-map.js";
+import { serializeNativeJson, parseNativeJson } from "./helpers/legacy/native-map.js";
 import { getLanguage } from "../js/core/edit/language.js";
 import { IDEA_NOTABLE, ideaNotified } from "../js/core/sim/ideas.js";
 

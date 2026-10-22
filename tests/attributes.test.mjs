@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { planSetAttributes, getAttributes, normalizeAttributes, MAX_ATTRS } from "../js/core/edit/attributes.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
-import { parseAzgaarText } from "../js/io/azgaar-reader.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
+import { parseAzgaarText } from "./helpers/legacy/azgaar-reader.js";
 import { attachExtension } from "../js/io/native-format.js";
 
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";

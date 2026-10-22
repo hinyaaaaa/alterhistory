@@ -1,17 +1,17 @@
 // 旅（経路探索・所要時間・編集）とゾーン（編集・塗り・おまかせ）の検査。合成マップ。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { createRandom } from "../js/core/random.js";
 import { planAddTemporaryZone, resolveZoneScope, zoneActive, addMonthsTo, findZoneByZid, TEMP_ZONE_TYPES, ZONE_PERIODS, zoneColor } from "../js/core/edit/zones.js";
 import { drawZones } from "../js/render/layers/zones.js";
 import { planPlague } from "../js/core/sim/natural-events.js";
 import { buildTimeline } from "../js/io/chronicle.js";
-import { parseNativeJson, serializeNativeJson } from "../js/io/native-map.js";
+import { parseNativeJson, serializeNativeJson } from "./helpers/legacy/native-map.js";
 import { placeLabel } from "../js/core/query.js";
 import { renderMapToSvg } from "../js/io/exporter.js";
 import { viewToRenderOptions } from "../js/render/options.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
 
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };

@@ -45,8 +45,8 @@ console.log("\n全テスト合格");
 {
   const { readFileSync } = await import("node:fs");
   const { createRequire } = await import("node:module");
-  const { loadFromBytes } = await import("../js/io/loader.js");
-  const { serializeAzgaar } = await import("../js/io/azgaar-writer.js");
+  const { loadFromBytes } = await import("./helpers/legacy/loader.js");
+  const { serializeAzgaar } = await import("./helpers/legacy/azgaar-writer.js");
   const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
   const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
   const { map: m } = await loadFromBytes(new Uint8Array(readFileSync(SAMPLES + "/新世界より.map")), Delaunator);

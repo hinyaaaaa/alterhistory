@@ -1,7 +1,7 @@
 // 共通の初期設定：確定するまで何も作られない／確定すると1回の操作で作られ、年表には最終内容で1件だけ残る。
 import assert from "node:assert/strict";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { createSetupActions } from "../js/app/setup-actions.js";
 import { createEditActions } from "../js/app/edit-actions.js";

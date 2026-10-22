@@ -1,4 +1,5 @@
 // 時間進行・軍事・外交UIの統合テスト（jsdom）。実際の index.html とビルド済み dist/app.js を動かす。
+import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -65,7 +66,7 @@ const errors = []; window.addEventListener("error", (e) => errors.push(e.message
 console.log("=== 地図を開く ===");
 const input = $("file-input");
 Object.defineProperty(input, "files", { value: [new File([readFileSync(`${SAMPLES}/境界線の貴方.map`)], "境界線の貴方.map")], configurable: true });
-input.dispatchEvent(new window.Event("change"));
+await loadLegacyInto(window, $("file-input").files[0]);
 check("読み込みが完了する", await waitFor(() => store.getState().map, 15000, "読み込み"));
 viewport.fit();
 const map = store.getState().map;

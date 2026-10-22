@@ -1,5 +1,6 @@
 // 条約と外交の統合テスト（jsdom）: 条約を結ぶ → 宣戦 → 違約の警告 → 参戦招集 → 年表、までが一連で動く。
 // 実際の index.html とビルド済み dist/app.js（npm run build 後）を動かす。
+import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +44,7 @@ const { store, viewport, editActions } = window.alterhistory;
 const { text } = buildSyntheticMapText({ seed: 11 });
 const input = $("file-input");
 Object.defineProperty(input, "files", { value: [new File([text], "synth.map")], configurable: true });
-input.dispatchEvent(new window.Event("change"));
+await loadLegacyInto(window, $("file-input").files[0]);
 check("地図が読み込める", await waitFor(() => store.getState().map, 15000, "読み込み"));
 
 const qa = (sel) => [...window.document.querySelectorAll(sel)];

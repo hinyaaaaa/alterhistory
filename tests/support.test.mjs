@@ -5,7 +5,7 @@ import { createCellIndex } from "../js/core/spatial.js";
 import { describeCell, listEntities, entityPosition } from "../js/core/query.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
-import { loadFromBytes, LoadError } from "../js/io/loader.js";
+import { loadFromBytes, LoadError } from "./helpers/legacy/loader.js";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;

@@ -1,32 +1,17 @@
 /* ==========================================================================
-   球面世界の作業画面（v4.0.0）。旧エディタの上に重なる別の画面。js/ui/world-workspace.js が中身を作る。
+   世界づくり（v5.0.0）。別の画面ではなく、メインの地図の上に出るダイアログと、初期集団を選ぶパネル。
+   js/ui/world-new-dialog.js と js/ui/groups-panel.js が中身を作る。
    ========================================================================== */
-.world-mode #clock, .world-mode #news, .world-mode #war-status, .world-mode #sidebar, .world-mode #edit-panel, .world-mode .map-corner, .world-mode #panel-tabs, .world-mode #empty-state { display: none !important; }
-.world-stage { position: absolute; inset: 0; z-index: 30; background: #0a1a33; overflow: hidden; }
-.world-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; outline: none; }
-.world-top { position: absolute; top: 8px; left: 64px; right: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: rgba(20, 24, 26, 0.92); border: 1px solid var(--line-strong); border-radius: var(--radius-win); box-shadow: var(--shadow-panel); z-index: 5; }
-.world-top button, .world-top select { padding: 4px 10px; min-height: 28px; }
-.world-top button.on { background: var(--brass-dim); color: var(--brass-bright); border-color: var(--brass); }
-.world-modes { display: inline-flex; gap: 0; } .world-modes button { border-radius: 0; } .world-modes button:first-child { border-radius: var(--radius) 0 0 var(--radius); } .world-modes button:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
-.world-sep { width: 1px; align-self: stretch; background: var(--line-strong); margin: 0 4px; }
-.world-chk { display: inline-flex; align-items: center; gap: 4px; color: var(--text-dim); white-space: nowrap; }
-.world-panel { position: absolute; top: 64px; right: 8px; bottom: 44px; width: 320px; max-width: calc(100% - 80px); overflow: auto; padding: 8px 12px 12px; background: rgba(20, 24, 26, 0.94); border: 1px solid var(--line-strong); border-radius: var(--radius-win); box-shadow: var(--shadow-panel); z-index: 4; }
-.world-sec h4 { margin: 8px 0 6px; font-size: 12px; letter-spacing: 0.08em; color: var(--brass); font-weight: 600; }
-.world-kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; margin: 0 0 6px; } .world-kv dt { color: var(--muted); } .world-kv dd { margin: 0; text-align: right; word-break: break-all; }
-.world-panel .hint { color: var(--text-dim); font-size: 12px; margin: 6px 0; } .world-panel .hint.warn { color: var(--warn); }
-.world-groups { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow: auto; }
-.world-group { display: grid; grid-template-columns: 2.2em 1fr 1fr; gap: 1px 8px; text-align: left; padding: 5px 8px; font-size: 12px; } .world-group b { grid-row: span 3; align-self: center; color: var(--warn); font-size: 14px; }
-.world-group span { color: var(--text-dim); } .world-group.on { border-color: var(--warn); background: var(--panel-3); }
-.world-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
 .world-row { display: grid; grid-template-columns: 8.5em 1fr; gap: 4px 8px; align-items: center; margin: 6px 0; } .world-row-l { color: var(--text-dim); } .world-row-h { grid-column: 2; font-size: 11px; color: var(--muted); } .world-row-v { color: var(--text-dim); min-width: 4.5em; text-align: right; }
 .world-seedbox { display: flex; gap: 6px; align-items: center; } .world-seedbox input[type=text] { flex: 1; min-width: 0; } .world-seedbox input[type=range] { flex: 1; }
 .world-form input[type=text], .world-form input[type=number], .world-form select { width: 100%; padding: 4px 6px; background: var(--panel-2); border: 1px solid var(--line-strong); border-radius: var(--radius); }
 dialog.world-new { min-width: min(520px, 94vw); }
-.world-legend { position: absolute; left: 64px; bottom: 44px; max-height: 40%; overflow: auto; padding: 6px 10px; background: rgba(20, 24, 26, 0.88); border: 1px solid var(--line-strong); border-radius: var(--radius-win); font-size: 12px; z-index: 3; }
-.world-legend-row { display: flex; align-items: center; gap: 6px; line-height: 1.5; } .world-legend-row i { width: 14px; height: 10px; border-radius: 2px; border: 1px solid rgba(255, 255, 255, 0.25); flex: none; }
-.world-status { position: absolute; left: 64px; right: 8px; bottom: 8px; padding: 4px 10px; background: rgba(20, 24, 26, 0.9); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text-dim); font: 12px var(--font-mono); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; z-index: 3; }
-.world-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; text-align: center; padding: 20px; z-index: 2; } .world-empty h1 { margin: 0; font-family: var(--font-serif); font-size: 26px; } .world-empty p { max-width: 42em; color: var(--text-dim); margin: 0; }
-.world-busy { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; background: rgba(10, 14, 16, 0.62); z-index: 8; } .world-busy-t { font-size: 15px; }
-.world-bar { width: min(420px, 80%); height: 8px; background: var(--panel-3); border-radius: 4px; overflow: hidden; } .world-bar i { display: block; height: 100%; background: var(--brass); transition: width 0.2s; }
-.world-banner { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); max-width: min(720px, 70%); padding: 8px 14px; background: rgba(30, 38, 40, 0.97); border: 1px solid var(--info); border-radius: var(--radius-win); z-index: 9; cursor: pointer; font-size: 13px; } .world-banner.err { border-color: var(--danger); color: var(--danger-bright); }
-@media (max-width: 900px) { .world-panel { width: 260px; } .world-top { left: 60px; } }
+
+.groups-panel { position: absolute; left: 50%; bottom: 40px; transform: translateX(-50%); width: min(760px, calc(100% - 120px)); max-height: 44%; overflow: auto; padding: 8px 12px 12px; background: rgba(20, 24, 26, 0.95); border: 1px solid var(--line-strong); border-radius: var(--radius-win); box-shadow: var(--shadow-panel); z-index: 6; }
+.groups-panel h4 { margin: 4px 0 6px; font-size: 13px; letter-spacing: 0.08em; color: var(--brass); font-weight: 600; }
+.groups-panel .hint { color: var(--text-dim); font-size: 12px; margin: 4px 0 6px; }
+.world-groups { display: flex; flex-wrap: wrap; gap: 4px; }
+.world-group { display: grid; grid-template-columns: 2.2em 1fr; gap: 1px 8px; text-align: left; padding: 5px 8px; font-size: 12px; min-width: 190px; flex: 1 1 190px; } .world-group b { grid-row: span 3; align-self: center; color: var(--warn); font-size: 14px; }
+.world-group span { color: var(--text-dim); } .world-group.on { border-color: var(--warn); background: var(--panel-3); }
+.world-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+@media (max-width: 900px) { .groups-panel { width: calc(100% - 80px); } }

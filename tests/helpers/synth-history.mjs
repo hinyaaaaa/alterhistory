@@ -1,7 +1,7 @@
 // 合成マップに「歴史」を積む。実際の編集コマンドを使うので、保存される ext.data の形は本物と同じ。
 import { createRequire } from "node:module";
 import { buildSyntheticMapText } from "./synth-map.mjs";
-import { loadFromBytes } from "../../js/io/loader.js";
+import { loadFromBytes } from "./legacy/loader.js";
 import { createStore } from "../../js/core/store.js";
 import { createRandom } from "../../js/core/random.js";
 import { planSetEra } from "../../js/core/edit/eras.js";

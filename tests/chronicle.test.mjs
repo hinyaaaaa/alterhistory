@@ -12,7 +12,7 @@
 import { createRequire } from "node:module";
 import { buildHistoricalWorld } from "./helpers/synth-history.mjs";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { buildChronicle, serializeChronicle, chronicleToMarkdown, rle, unrle, readChronicleCells, describePosition } from "../js/io/chronicle.js";
 import { htmlToEditableText } from "../js/io/chronicle-text.js";
 import { planMergeStates } from "../js/core/edit/sovereignty.js";

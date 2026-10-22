@@ -1,6 +1,6 @@
 // 歴史ビルダーのロジック検査（おまかせ領土・首都選び）。合成マップで動く。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { pickAutoTerritory, pickCapitalCell, countFreeLand } from "../js/core/edit/territory.js";
 import { createRandom } from "../js/core/random.js";
 

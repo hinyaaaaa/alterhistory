@@ -10,7 +10,7 @@
 //   3. 新バージョンは末尾に行を足すだけ。存在しない行は既定値で読む
 //   4. バージョン間でフィールドが変わるため、全項目を任意扱いにする
 
-import { createEmptyMap } from "../core/model.js";
+import { createEmptyMap } from "../../../js/core/model.js";
 
 /** 行番号（save.ts の mapData 配列の順序） */
 export const LINE = Object.freeze({

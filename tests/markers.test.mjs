@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { planAddMarker, planMoveMarker, planEditMarker, planRemoveMarker, defaultMarkerName } from "../js/core/edit/markers.js";
 import { planSetNote, getNote } from "../js/core/edit/notes.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
-import { parseAzgaarText } from "../js/io/azgaar-reader.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
+import { parseAzgaarText } from "./helpers/legacy/azgaar-reader.js";
 
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");

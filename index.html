@@ -47,16 +47,16 @@
       <!-- 凡例の項目を押したとき、その境界線を赤く光らせるための透明な層（地図の描画とは別。クリックは通す） -->
       <canvas id="highlight-canvas" aria-hidden="true"></canvas>
       <div id="empty-state">
-        <h1>地図ファイルを開いてください</h1>
-        <p>Azgaar 形式の <code>.map</code>（<code>.map.gz</code> も可）や、ALTERHISTORY 形式のファイルを、<br>
-           この画面にドラッグ＆ドロップするか、下のボタンから選んでください。</p>
+        <h1>世界を作って、歴史を始めましょう</h1>
+        <p>地図を作り、初期集団を選ぶと、国家が成立して歴史が動き出します。<br>
+           保存した世界（<code>.ahmap</code>）は、この画面にドラッグ＆ドロップするか、下のボタンから開けます。</p>
         <ol class="empty-steps">
-          <li><b>地図を開く</b> — 左のハブの「開く」かドラッグ＆ドロップ</li>
-          <li><b>国家・文化・宗教</b> — 左のハブから一覧を開き、「＋ 追加」で新しく作れます</li>
-          <li><b>時間を進める</b> — 上の時計の再生ボタンで年月が進み、戦争や経済が動く</li>
-          <li><b>保存する</b> — ハブの「保存」でいつでも続きから再開できる</li>
+          <li><b>地図を作る</b> — 大陸・気候・川・資源を持つ球面の世界を生成します</li>
+          <li><b>初期集団を選ぶ</b> — 歴史を始める人口集団を、候補から選びます</li>
+          <li><b>歴史が進む</b> — 上の時計の再生ボタンで月ごとに時間が進み、国家・外交・戦争が動きます</li>
+          <li><b>保存する</b> — ハブの「保存」でいつでも続きから再開できます</li>
         </ol>
-        <button id="btn-open-empty" class="primary large">ファイルを選ぶ</button>
+        <div class="empty-actions"><button id="btn-new-world-empty" class="primary large">世界を作る</button> <button id="btn-open-empty" class="large">ファイルを開く</button></div>
       </div>
       <div id="loading" hidden><span id="loading-text">読み込み中…</span></div>
       <div id="banner" role="alert" hidden>
@@ -68,8 +68,6 @@
         <button id="tab-edit-panel" class="panel-tab" title="地図編集を開く" aria-label="地図編集を開く" hidden><svg class="ico ico-edit" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
       </div>
       <div id="drop-hint" hidden>ここにドロップして開く</div>
-      <!-- 球面世界の作業画面（v4.0.0）。js/ui/world-workspace.js が中身を作る。旧エディタの地図とは独立 -->
-      <section id="world-stage" hidden aria-label="球面世界"></section>
 
     </section>
 
@@ -112,7 +110,7 @@
     <span id="status-zoom"></span>
   </footer>
 
-  <input type="file" id="file-input" accept=".ahmap,.map,.gz" hidden>
+  <input type="file" id="file-input" accept=".ahmap" hidden>
 
   <!-- 軍事・外交・属州の各パネルの中身が実際に入る場所。国家タブ（editor-panel.js）が
        サブタブを開いたときに、ここから該当パネルの要素を取り出して差し込む。
@@ -124,8 +122,6 @@
 
 </div>
 
-<!-- Delaunator（ISC License）。ボロノイ図の構築に使う。グローバル Delaunator を定義する -->
-<script src="js/vendor/delaunator.min.js"></script>
 <!-- ビルド済みのアプリ本体（js/ の ES Modules を1つにまとめたもの）。file:// で直接開ける -->
 <script src="dist/app.js"></script>
 </body>

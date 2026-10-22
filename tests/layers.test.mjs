@@ -4,7 +4,7 @@ import { viewToRenderOptions } from "../js/render/options.js";
 import { entityOutlineSegments, segmentsBounds } from "../js/render/edges.js";
 import { highlightAlpha, HIGHLIGHT_MS } from "../js/ui/highlight.js";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");

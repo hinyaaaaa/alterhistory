@@ -4,8 +4,8 @@
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import fs from "node:fs";
-import { loadFromBytes } from "../js/io/loader.js";
-import { serializeNativeJson } from "../js/io/native-map.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
+import { serializeNativeJson } from "./helpers/legacy/native-map.js";
 import { createStore } from "../js/core/store.js";
 import { createRandom } from "../js/core/random.js";
 import { listWars, planAdvanceWars } from "../js/core/edit/wars.js";

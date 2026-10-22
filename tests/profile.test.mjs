@@ -1,9 +1,9 @@
 // 政治・文化の深さ（種類・政体・起源・都市の設備）の検査。合成マップ。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { planSetEntityProfile, planSetOrigin, planSetBurgProfile, originTree, descendantsOf, CULTURE_TYPES } from "../js/core/edit/profile.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
 
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };

@@ -1,6 +1,6 @@
 // 書き出しの付属物（題名・凡例・スケールバー）の検査。合成マップ＋SVG記録コンテキストで文字を確認する。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { renderMapToSvg, renderMapToCanvas } from "../js/io/exporter.js";
 import { niceDistance, getScale, drawAnnotations } from "../js/render/layers/annotations.js";

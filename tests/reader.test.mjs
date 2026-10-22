@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { parseAzgaarBytes, parseAzgaarText, isLegacySettings, compareVersions, MapParseError } from "../js/io/azgaar-reader.js";
+import { parseAzgaarBytes, parseAzgaarText, isLegacySettings, compareVersions, MapParseError } from "./helpers/legacy/azgaar-reader.js";
 import { validateMap, cellCount } from "../js/core/model.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
@@ -8,7 +8,7 @@ const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 // 通常の npm test は合成マップだけで完結させ、実マップ検証は npm run test:compat に分ける。
 const REAL = process.env.REAL_MAPS === "1";
 const compat = (label, ok, extra = "") => REAL ? check(label, ok, extra) : console.log(`  SKIP ${label}  (実マップ専用: npm run test:compat)`);
-import { buildGeometry, GeometryError } from "../js/core/derive.js";
+import { buildGeometry, GeometryError } from "./helpers/legacy/derive.js";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;

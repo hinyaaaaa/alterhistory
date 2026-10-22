@@ -1,6 +1,6 @@
 // 経済・交易の検査（合成マップ）。産物・需要・取引・税・年次の税収。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { GOODS, computeProduction, computeDemand, computeTrade, getFinance, annualRevenue, tradePartners, stateAdjacency, TAX_BASE } from "../js/core/sim/trade.js";
 import { planSetFinance } from "../js/core/edit/finance.js";

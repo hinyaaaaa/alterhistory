@@ -1,6 +1,6 @@
 // 戦争の純粋ロジック：戦争名の重複防止・召集する部隊の保存・戦績の記録（合成マップ）。
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
 import { planDeclareWar, planSetMuster, planRecordBattle, warNameTaken, listWars } from "../js/core/edit/wars.js";
 import { planCreateRegiment } from "../js/core/sim/military.js";

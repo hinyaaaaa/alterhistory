@@ -17,7 +17,7 @@ import { attachCauses } from "../core/edit/lineage.js";
 //
 // 純粋ロジック層：DOM に依存しない。map を書き換えない。
 
-import { cellAreas } from "../core/geometry.js";
+import { cellAreas } from "../core/cell-areas.js";
 import { listEras, eraAt } from "../core/edit/eras.js";
 import { listWars } from "../core/edit/wars.js";
 import { listAlliances } from "../core/edit/alliances.js";

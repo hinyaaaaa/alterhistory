@@ -1,3 +1,5 @@
+import { planSculpt } from "../core/edit/sculpt.js";
+import { createWorldEditor } from "../core/world/edit.js";
 import { planSetWorldInfo } from "../core/edit/world-info.js";
 import { planChangeLeader, leaderCandidates, ensureLeaders } from "../core/edit/leaders.js";
 import { planSetRegime, REGIME_BY_KEY } from "../core/edit/regimes.js";
@@ -5,7 +7,7 @@ import { planSetTechDoctrine, planSetMilitaryDoctrine, getTechDoctrine } from ".
 // 編集アクション：編集ツールの操作を Store の commit に変換する。
 // UI から呼ばれる。ロジック自体は core/edit/* にあり、ここは配線と通知だけ。
 
-import { PAINT_KINDS, planPaint, planBiomePaint, planHeightPaint } from "../core/edit/paint.js";
+import { PAINT_KINDS, planPaint, planBiomePaint } from "../core/edit/paint.js";
 import { planAddMarker, planMoveMarker, planEditMarker, planRemoveMarker } from "../core/edit/markers.js";
 import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapital, whyCannotRemoveBurg } from "../core/edit/burgs.js";
 import { planSetNote, getNote, noteTarget } from "../core/edit/notes.js";
@@ -104,10 +106,13 @@ export function createEditActions({ store, renderer }) {
         return report;
       }));
     },
-    /** 標高の調整（target: 1=上げる 2=下げる 3=ならす）。水域は変わらない（Undo可能） */
-    paintHeight(target, cells) {
-      withMap((map) => safeRun("標高の変更", () => {
-        const { command } = planHeightPaint(map, { mode: target, cells });
+    /** 標高ブラシ（球面世界の地形編集）。center: 中心セル / radius: 地図上の半径（ワールド座標）/ target: 1=上げる 2=下げる 3=ならす */
+    sculpt(center, radius, target) {
+      withMap((map) => safeRun("地形の編集", () => {
+        if (!map.world) throw new Error("世界のデータがない地図では、標高を編集できません");
+        const editor = (map.worldEditor ??= createWorldEditor(map.world));
+        const km = map.settings?.options?.units?.distance?.scale ?? 20;
+        const { command } = planSculpt(map, editor, { center, radiusKm: Math.min(3000, Math.max(editor.spacingKm * 0.6, radius * km)), target });
         if (command) commitOrThrow(command);
       }));
     },

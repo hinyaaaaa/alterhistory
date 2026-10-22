@@ -236,3 +236,20 @@ js/ui/             world-workspace.js（画面）
 - 地理生成の乱数は WorldSpec の worldSeed から段階別に作る（歴史の乱数とは別系統）。同じ worldSeed・WorldSpec・generatorVersion なら出力は一致する。
 - 局所再計算（編集）は、生成と同じ式を 1 か所（`worldgen.js` の部品）に置いて共有している。
 - v5 は、`entities.*`・`history.*` を `.ahmap` v2 の別チャンクとして足す（既存チャンクの意味は変えない）。
+
+## 世界生成の統合（v5.0.0 V5-M0）
+
+```
+core/world/*  純粋・決定的な球面世界（生成・編集・.ahmap v2 のコンテナ）。国家運営層を知らない
+     ↑
+core/world-bridge.js   World → MapData（国家運営層の地図）。唯一の橋渡し（導出・局所更新 refreshMapCells / refreshRivers）
+     ↑
+io/ahmap-file.js       保存・読み込み（.ahmap v2。国家運営層の状態は拡張チャンク app.map-state、開始集団は entities.start）
+core/edit/sculpt.js    標高ブラシ（世界の編集器の履歴と対の Undo）
+app/actions.js         newWorld / openFile / saveNative、app/group-actions.js が初期集団（すべて Undo 可能なコマンド）
+ui/world-new-dialog.js, ui/groups-panel.js
+```
+- 地理の正本は `map.world`。`pack.cells.biome`・`geometry.pack.h`・河川などは導出値で、保存しない（バイオームの手塗りだけ保存）。
+- 描画は旧来の Canvas 経路をそのまま使う（地形・国境・都市・ラベル）。初期集団の印は `render/layers/groups.js`。
+- 依存の向きは `tests/v400-architecture.test.mjs` が検査する。
+

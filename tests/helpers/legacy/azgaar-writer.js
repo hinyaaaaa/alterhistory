@@ -11,7 +11,7 @@
 // 純粋ロジック層：DOM に依存しない。
 
 import { LINE } from "./azgaar-reader.js";
-import { NATIVE_MARKER, MIN_EXT_INDEX, createExtension } from "./native-format.js";
+import { NATIVE_MARKER, MIN_EXT_INDEX, createExtension } from "../../../js/io/native-format.js";
 
 const CRLF = "\r\n";
 const json = (v) => JSON.stringify(v);

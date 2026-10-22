@@ -1,6 +1,6 @@
 // v2.1.0: 原因リンク・君主と継承・国の連続性
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { planChangeLeader, leaderRecord, lineageOf, attachCauses, causeChain, consequences, eventKey } from "../js/core/edit/lineage.js";
 import { buildTimeline } from "../js/io/chronicle.js";

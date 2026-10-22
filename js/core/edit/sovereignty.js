@@ -19,7 +19,7 @@
 
 import { makeCommand, setIndexed, setProps, setList } from "./commands.js";
 import { computePole } from "./pole.js";
-import { cellAreas } from "../geometry.js";
+import { cellAreas } from "../cell-areas.js";
 import { ensureExt } from "./ext.js";
 import { defaultMarkerName } from "./markers.js";
 import { retargetParts, reconcileParts } from "./relations.js";

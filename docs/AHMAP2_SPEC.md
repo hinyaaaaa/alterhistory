@@ -27,3 +27,9 @@
 
 ## 計測（Xeon 2.1GHz 1 コア・Node 22・249,642 セル。Surface Go 4 ではない）
 保存 約 1.1 秒／読み込み（展開と全検証）約 0.7 秒／ファイル 約 22 MB（非圧縮 約 43 MB）。
+
+## 拡張チャンク（v5.0.0 V5-M0）
+- `app.map-state`（JSON）: 国家運営層の状態。`stateVersion`、`time`（年・月）、`cells`（biome・burg・culture・pop・state・religion・province を RLE）、`pack`（states・cultures・religions・provinces・burgs）、markers・zones・routes・relief・ice・measurers・goods・markets・deals・namesbase・notes、`data`（ALTERHISTORY 独自データ。`saveFormat` を含む）。セル数が世界と合わない属性は、警告して世界から作り直す。
+- `entities.start`（JSON）: 開始集団。
+- 未知の拡張チャンクは、読み込み時に保持し、保存時に必ず戻す。
+

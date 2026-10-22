@@ -3,12 +3,12 @@
 //       ここでは実ファイルを元に「公式の仕様どおりの中身」を合成して検証する（実ファイルでの検証ではない）。
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
-import { applyVertexOverrides } from "../js/core/geometry.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
+import { applyVertexOverrides } from "./helpers/legacy/geometry.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
-import { parseAzgaarText } from "../js/io/azgaar-reader.js";
+import { parseAzgaarText } from "./helpers/legacy/azgaar-reader.js";
 
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");
 let failed = 0;

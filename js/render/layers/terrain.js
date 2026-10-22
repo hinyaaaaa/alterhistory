@@ -12,12 +12,15 @@ const LAKE = "#8bbbe0";
 
 /** セルの多角形をパスに追加する */
 export function addCellPath(ctx, cells, vertices, i) {
-  const poly = cells.v[i];
-  for (let k = 0; k < poly.length; k++) {
-    const p = vertices.p[poly[k]];
-    if (k === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
-  }
-  ctx.closePath();
+  const ring = (poly) => {
+    for (let k = 0; k < poly.length; k++) {
+      const p = vertices.p[poly[k]];
+      if (k === 0) ctx.moveTo(p[0], p[1]); else ctx.lineTo(p[0], p[1]);
+    }
+    ctx.closePath();
+  };
+  ring(cells.v[i]);
+  if (cells.alt?.[i]) ring(cells.alt[i]); // 世界の継ぎ目をまたぐセルは反対側の端にも描く（球面世界の経度の継ぎ目）
 }
 
 /** 水域セルの色。海岸からの距離(grid.t)で決める。湖は別の色 */

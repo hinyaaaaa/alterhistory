@@ -4,15 +4,20 @@
 //   「配線が正しく、例外を出さず、状態と表示が期待通りに変わること」まで。
 //   実際の見た目・操作感・速度は、実ブラウザ（Surface Go 4）で確認が必要。
 //   描画結果そのものは render_png での目視確認と、tests/geometry.test.mjs で検証済み。
+import { generateWorld } from "../js/core/world/worldgen.js";
+import { worldToMap } from "../js/core/world-bridge.js";
+import { saveMapBytes, loadMapBytes } from "../js/io/ahmap-file.js";
+import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
-import { gzipSync } from "node:zlib";
 import { fileURLToPath } from "node:url";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 import path from "node:path";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+// .ahmap v2 のファイル（小さな世界）。本番の開き方（v2 だけ）を通すための固定データ
+async function worldFile(name = "世界.ahmap", cells = 1500) { const map = worldToMap(generateWorld({ worldSeed: "ui-" + name, resolution: { targetCells: cells } })); return new File([await saveMapBytes(map, { appVersion: "test", savedAt: "2026-10-22" })], name); }
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -93,10 +98,13 @@ console.log("=== ファイルを開く（<input> の change 経由） ===");
 const input = $("file-input");
 let sawBusy = false, sawLoadingVisible = false;
 store.subscribe((s) => { if (s.busy) { sawBusy = true; if (!$("loading").hidden) sawLoadingVisible = true; } });
-Object.defineProperty(input, "files", { value: [mapFile("境界線の貴方.map")], configurable: true });
+Object.defineProperty(input, "files", { value: [await worldFile()], configurable: true });
 input.dispatchEvent(new window.Event("change"));
 check("読み込み中の状態になり、画面に表示される", await waitFor(() => sawBusy, 3000, "busy") && await waitFor(() => sawLoadingVisible, 3000, "loading表示"), `busy=${sawBusy} 表示=${sawLoadingVisible}`);
 check("読み込みが完了する", await waitFor(() => store.getState().map, 15000, "読み込み"));
+check("世界の地図（球面世界つき）として開く", !!store.getState().map?.world);
+// 以降の国家・戦争・経済などの検査は、旧形式の固定データで行う（本番は .ahmap v2 のみ）
+await loadLegacyInto(window, mapFile("境界線の貴方.map"));
 await sleep(100);
 check("空の状態の案内が消える", $("empty-state").hidden);
 check("読み込み中の表示が消える", $("loading").hidden);
@@ -175,14 +183,14 @@ const dropTo = (file) => {
   ev.dataTransfer = { types: ["Files"], files: [file] };
   window.dispatchEvent(ev);
 };
-const { parseAzgaarBytes: parseB } = await import("../js/io/azgaar-reader.js");
-const gzMap = parseB(readFileSync(SAMPLES + "/新世界より.map")).map;
-const { cellCount: cc } = await import("../js/core/model.js");
-const gzCells = cc(gzMap);
-dropTo(new File([gzipSync(readFileSync(SAMPLES + "/新世界より.map"))], "新世界より.map.gz"));
-check("gzip をドロップして開ける", await waitFor(() => $("status-map").textContent.includes(`${gzCells}セル`), 15000, "gz読み込み"), $("status-map").textContent);
-check("別の地図が開く", store.getState().map.pack.states.length > 1);
+const dropped = await worldFile("ドロップ世界.ahmap", 1200);
+dropTo(dropped);
+check(".ahmap をドロップして開ける", await waitFor(() => store.getState().fileName === "ドロップ世界.ahmap" && store.getState().map?.world, 15000, "ドロップ読み込み"), $("status-map").textContent);
+check("別の地図が開く（世界つき・国家はまだ無い）", store.getState().map.world && store.getState().map.pack.states.length === 1);
 check("色分けなどの表示設定は引き継がれる", store.getState().view.states === true);
+dropTo(new File([new Uint8Array([49, 46, 49, 53, 51, 124])], "旧形式.map"));
+check("Azgaar の .map は開かず、理由を知らせる（いまの地図は残る）", await waitFor(() => /読み込めません/.test(store.getState().error ?? ""), 8000, "拒否") && store.getState().fileName === "ドロップ世界.ahmap");
+$("banner-close").click();
 
 console.log("=== 保存・書き出し ===");
 const lastDownload = async (n0) => { await waitFor(() => window.__downloads.length > n0, 8000, "ダウンロード"); return window.__downloads.at(-1); };
@@ -195,11 +203,9 @@ let n = window.__downloads.length;
 $("btn-save").click();
 let d = await lastDownload(n);
 check("[保存] ファイル名は 地図名.ahmap", d?.name === `${store.getState().map.meta.name || "新世界より"}.ahmap`, d?.name);
-const { gunzipSync } = await import("node:zlib");
-const { parseNativeJson } = await import("../js/io/native-map.js");
-const savedBuf = d ? Buffer.from(await d.blob.arrayBuffer()) : Buffer.alloc(0);
-const reread = parseNativeJson((savedBuf[0] === 0x1f ? gunzipSync(savedBuf) : savedBuf).toString("utf-8")) // jsdom には CompressionStream が無く、無圧縮で保存される;
-check("[保存] 中身は ALTERHISTORY 形式（gzip した JSON）として読み戻せる", reread.map.meta.source === "alterhistory");
+const savedBuf = d ? new Uint8Array(await d.blob.arrayBuffer()) : new Uint8Array(0);
+const reread = await loadMapBytes(savedBuf);
+check("[保存] 中身は .ahmap v2 として読み戻せる（世界つき）", !!reread.map.world && reread.map.world.hash === store.getState().map.world.hash);
 check("[保存] 国家・都市が元と同じ", reread.map.pack.states.length === store.getState().map.pack.states.length && reread.map.pack.burgs.length === store.getState().map.pack.burgs.length);
 check("[保存] Azgaar 形式の書き出しは無い", !q('[data-export="azgaar"]'));
 check("[保存] 完了の通知が出る", await waitFor(() => !$("banner").hidden && $("banner").classList.contains("info"), 3000, "通知"), $("banner-body").textContent);
@@ -246,10 +252,11 @@ window.HTMLCanvasElement.prototype.toBlob = origToBlob;
 $("banner-close").click();
 
 console.log("=== エラー処理 ===");
+const keepCells = store.getState().map.pack.cells.biome.length;
 dropTo(new File(["これは地図ではありません"], "bad.map"));
 check("不正なファイル → エラー表示", await waitFor(() => !$("banner").hidden, 5000, "エラー表示"), $("banner-body").textContent.slice(0, 60));
-check("エラー表示に原因が書かれる", $("banner-body").textContent.includes("読み込めませんでした"));
-check("失敗しても前の地図が残る", store.getState().map && $("status-map").textContent.includes(`${gzCells}セル`));
+check("エラー表示に原因が書かれる", $("banner-body").textContent.includes("読み込めません"));
+check("失敗しても前の地図が残る", store.getState().map && $("status-map").textContent.includes(`${keepCells}セル`));
 check("エラー時に読み込み中表示が残らない", $("loading").hidden);
 $("banner-close").click();
 check("×でエラー表示を閉じられる", $("banner").hidden);

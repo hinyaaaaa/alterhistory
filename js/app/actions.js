@@ -5,9 +5,11 @@
 import { planKatakanaBurgs } from "../core/edit/katakana.js";
 import { createRandom as createKanaRandom } from "../core/random.js";
 import { entityPosition, ENTITY_KINDS } from "../core/query.js";
-import { importAzgaarMilitary } from "../core/sim/military.js";
 import { entityOutlineSegments, segmentsBounds } from "../render/edges.js";
-import { serializeNative, NATIVE_EXT } from "../io/native-map.js";
+import { loadMapFile, saveMapBytes, AHMAP_EXT } from "../io/ahmap-file.js";
+import { normalizeWorldSpec } from "../core/world/spec.js";
+import { worldToMap } from "../core/world-bridge.js";
+import { createGroupActions } from "./group-actions.js";
 import { renderMapToCanvas, renderMapToSvg, canvasToPngBlob, exportFileName, todayString } from "../io/exporter.js";
 import { viewToRenderOptions } from "../render/options.js";
 import { DEFAULT_ANNOTATIONS } from "../render/layers/annotations.js";
@@ -23,12 +25,13 @@ const NOTICE_MS = 5000;
 const PNG_SCALE = 2;
 
 /**
+ * @param deps.worldService  createWorldService() の戻り値（世界の生成。Worker で動く）
  * @param deps.download      (blob, fileName) => void   ブラウザのダウンロード
  * @param deps.createCanvas  (w, h) => Canvas            PNG 書き出し用
  */
-export function createActions({ store, viewport, renderer, load, Delaunator, download, createCanvas }) {
+export function createActions({ store, viewport, renderer, worldService, download, createCanvas, appVersion = "" }) {
   const rerender = () => renderer.requestRender();
-  let noticeTimer = 0;
+  let noticeTimer = 0, genToken = 0;
 
   const showNotice = (text) => {
     store.update((s) => { s.notice = text; });
@@ -61,26 +64,58 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
   const annotationOpts = () => ({ ...DEFAULT_ANNOTATIONS, ...(store.getState().exportOpts ?? {}) });
 
   return {
-    /** ファイルを開く。失敗しても前の地図は残す */
+    /** ファイル（.ahmap）を開く。失敗しても前の地図は残す。Azgaar の .map・旧 .ahmap は読み込まない */
     async openFile(file) {
       store.update((s) => { s.busy = `${file.name} を読み込み中…`; s.error = null; });
       await nextPaint(); // 「読み込み中」を先に表示してから重い処理を始める
       try {
-        const { map, warnings } = await load(file, Delaunator);
-        const nMil = importAzgaarMilitary(map); // Azgaar に記録された部隊の人数を、そのまま取り込む
-        if (nMil) warnings.push(`Azgaar の部隊 ${nMil} 隊を、人数そのままで取り込みました`);
-        const prev = store.getState();
-        viewport.setMapSize(map.meta.width || 1280, map.meta.height || 774);
-        store.replace({ ...prev, map, fileName: file.name, warnings, error: null, notice: null, busy: null, hover: null });
-        viewport.fit();
-        rerender();
-        // 英語の都市名のカタカナ化は必須の自動処理（切り替えは無い）。1回の操作として Undo で戻せる
+        const { map, warnings } = await loadMapFile(file);
+        this.adoptMap(map, file.name, warnings);
         const n = this.katakanaBurgs(file.name);
         if (n) showNotice(`英語名の都市 ${n} 件をカタカナにしました（「元に戻す」で英語名に戻せます）`);
       } catch (e) {
         store.update((s) => { s.busy = null; s.error = e.message; });
       }
     },
+
+    /** 作った・開いた地図を、画面の地図として採用する */
+    adoptMap(map, fileName, warnings = []) {
+      const prev = store.getState();
+      viewport.setMapSize(map.meta.width || 2048, map.meta.height || 1024);
+      store.replace({ ...prev, map, fileName, warnings, error: null, notice: null, busy: null, hover: null, groups: { selected: map.world?.entities?.start?.groupId ?? null, variant: 0 } });
+      viewport.fit();
+      rerender();
+    },
+
+    /**
+     * 新しい世界を作る（地図づくりは、国家・外交・戦争と同じ、このアプリの 1 つの機能）。
+     * 生成 → 地図として採用 → 初期集団を選ぶ → 歴史が始まる、の流れの最初の段。
+     */
+    async newWorld(specInput) {
+      const { spec, errors } = normalizeWorldSpec(specInput);
+      if (errors.length) { store.update((s) => { s.error = "世界の設定が不正です: " + errors.join(" / "); }); return { ok: false, errors }; }
+      const my = ++genToken;
+      store.update((s) => { s.busy = "世界を生成中…"; s.error = null; });
+      try {
+        const world = await worldService.generate(spec, { onProgress: (p) => { if (my === genToken) store.update((s) => { s.busy = `世界を生成中: ${p.label ?? p.stage}`; }); } });
+        if (my !== genToken) return { ok: false, cancelled: true };
+        world.entities.start = null;
+        store.update((s) => { s.busy = "地図を準備中…"; });
+        await nextPaint();
+        const map = worldToMap(world);
+        this.adoptMap(map, `${world.spec.worldSeed}.${AHMAP_EXT}`, []);
+        const g = world.generation;
+        showNotice(g?.rejected?.length ? `統計の許容帯に入るまで ${g.attempts} 回作り直しました（破棄したシード: ${g.rejected.map((r) => r.seed).join("、")}）。使ったシード: ${g.seedUsed}` : "世界ができました。次は、歴史を始める初期集団を選びます");
+        return { ok: true, map };
+      } catch (e) {
+        if (e.name === "Cancelled") { store.update((s) => { s.busy = null; }); return { ok: false, cancelled: true }; }
+        store.update((s) => { s.busy = null; s.error = `世界の生成に失敗しました: ${e.message}`; });
+        return { ok: false, error: e.message };
+      }
+    },
+    cancelWorldGeneration() { genToken++; worldService.cancel(); store.update((s) => { s.busy = null; }); },
+
+    ...createGroupActions({ store, rerender, showNotice }),
 
     /** 英語名の都市をカタカナにする（地図を開くたびに自動で呼ばれる）。付け替えた件数を返す（Undo 1回で戻る） */
     katakanaBurgs(seedText = "katakana") {
@@ -144,11 +179,11 @@ export function createActions({ store, viewport, renderer, load, Delaunator, dow
       return !!(map?.geometry && ENTITY_KINDS[kind] && entity);
     },
 
-    /** ALTERHISTORY 形式（.ahmap）で保存。Azgaar の地図は読み込めるが、保存はこの形式になる */
+    /** .ahmap（v2）で保存する。世界の地理は正本のチャンク、国家運営層の状態は拡張チャンクに入る */
     saveNative() {
       return runExport("保存ファイル", async (map, fileName) => {
-        const bytes = await serializeNative(map, { savedAt: todayString() });
-        return { blob: new Blob([bytes], { type: "application/gzip" }), name: exportFileName(map, fileName, NATIVE_EXT) };
+        const bytes = await saveMapBytes(map, { appVersion, savedAt: todayString() });
+        return { blob: new Blob([bytes], { type: "application/octet-stream" }), name: exportFileName(map, fileName, AHMAP_EXT) };
       }, () => store.markSaved());
     },
     /**

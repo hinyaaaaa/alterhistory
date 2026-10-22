@@ -1,4 +1,5 @@
 // v2.7.0 の画面: 国家タブの「国勢」・技術の進捗・文化の言語（jsdom）。ビルド済み dist/app.js を動かす。
+import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -30,7 +31,7 @@ check("アプリが起動する", await waitFor(() => window.alterhistory, 8000,
 const { store, editActions, simActions } = window.alterhistory;
 const { text } = buildSyntheticMapText({ seed: 11 });
 Object.defineProperty($("file-input"), "files", { value: [new File([text], "synth.map")], configurable: true });
-$("file-input").dispatchEvent(new window.Event("change"));
+await loadLegacyInto(window, $("file-input").files[0]);
 check("地図が読み込める", await waitFor(() => store.getState().map, 15000, "読み込み"));
 const M = () => store.getState().map, win = () => q('[data-win="nation"]');
 const live = () => M().pack.states.filter((s) => s && s.i > 0 && !s.removed);

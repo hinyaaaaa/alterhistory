@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { createRandom } from "../js/core/random.js";
 import { planAddBurg, planMoveBurg, planRenameBurg, planRemoveBurg, planSetCapital, whyCannotRemoveBurg, estimatePopulation } from "../js/core/edit/burgs.js";
 import { checkIntegrity, snapshotBaseline } from "../js/core/edit/integrity.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
-import { parseAzgaarText } from "../js/io/azgaar-reader.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
+import { parseAzgaarText } from "./helpers/legacy/azgaar-reader.js";
 
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");

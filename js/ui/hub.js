@@ -8,7 +8,7 @@ import { activeWars } from "../core/edit/wars.js";
 // kind: win=ウィンドウを開く / el=既存の部品に配線済みのボタン（id を保つ）/ layers=レイヤー欄の開閉
 export const HUB_SECTIONS = [
   { title: "ファイル", items: [
-    { id: "btn-open", icon: "open", label: "開く", kind: "el", tip: "地図ファイルを開く (O)" },
+    { id: "btn-open", icon: "open", label: "開く", kind: "el", tip: "保存した世界（.ahmap）を開く (O)" },
     { id: "btn-save", icon: "save", label: "保存", kind: "el", tip: "ALTERHISTORY 形式（.ahmap）で保存 (Ctrl+S)" },
     { win: "export", icon: "export", label: "書き出し", tip: "画像・年表などに書き出す" },
   ] },
@@ -16,7 +16,7 @@ export const HUB_SECTIONS = [
     { id: "btn-edit-mode", icon: "edit", label: "地図編集", kind: "el", tip: "地図編集 — 塗る・都市・目印" },
     { id: "hub-layers", icon: "layers", label: "レイヤー", kind: "layers", tip: "地図に何を重ねるか" },
     { id: "btn-fit", icon: "fit", label: "全体表示", kind: "el", tip: "地図全体を表示 (F)" },
-    { id: "btn-world", icon: "terrain", label: "球面世界", kind: "el", tip: "v4 の球面世界 — 生成・初期集団・地形編集（旧エディタとは別の画面）" },
+    { id: "btn-new-world", icon: "terrain", label: "世界を作る", kind: "el", tip: "新しい世界を生成する — 地図を作り、初期集団を選んで、歴史を始める" },
   ] },
   { title: "国家と社会", items: [
     { win: "nation", icon: "state", label: "国家" },

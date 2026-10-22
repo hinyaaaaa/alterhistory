@@ -8,6 +8,7 @@ import { drawRivers, drawRoutes } from "./layers/lines.js";
 import { drawBurgs, drawLabels } from "./layers/places.js";
 import { drawTradeLines } from "./layers/trade-lines.js";
 import { drawZones } from "./layers/zones.js";
+import { drawGroups } from "./layers/groups.js";
 
 export const DEFAULT_RENDER_OPTIONS = Object.freeze({
   terrain: "biome",       // "biome" | "height" | "both" | "none"（旧オプション base も受け付ける）
@@ -60,5 +61,6 @@ export function drawScene(ctx, map, vp, options = {}, dpr = 1) {
   if (o.tradeLines) drawTradeLines(ctx, vp, o.tradeLines);
   if (o.burgs) drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" });
   if (o.labels) drawLabels(ctx, map, vp, o.labels);
+  if (o.groups?.length) drawGroups(ctx, map, vp, o.groups); // 初期集団の印（歴史が始まる前）
   ctx.restore();
 }

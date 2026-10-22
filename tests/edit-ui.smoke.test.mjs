@@ -1,4 +1,5 @@
 // 編集UIの統合テスト（jsdom）。実際の index.html とビルド済み dist/app.js を動かす。
+import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -64,7 +65,7 @@ const errors = []; window.addEventListener("error", (e) => errors.push(e.message
 console.log("=== 地図を開く ===");
 const input = $("file-input");
 Object.defineProperty(input, "files", { value: [new File([readFileSync(`${SAMPLES}/境界線の貴方.map`)], "境界線の貴方.map")], configurable: true });
-input.dispatchEvent(new window.Event("change"));
+await loadLegacyInto(window, $("file-input").files[0]);
 check("読み込みが完了する", await waitFor(() => store.getState().map, 15000, "読み込み"));
 viewport.fit();
 const map = store.getState().map;
@@ -173,17 +174,13 @@ console.log("=== ショートカット一覧は廃止 ===");
 check("ヘルプのダイアログは無い", !$("help-dialog"));
 
 console.log("=== 保存に編集内容が反映される ===");
-const blobs = new Map();
-window.URL.createObjectURL = (b) => { const u = "blob:test/" + blobs.size; blobs.set(u, b); return u; };
-window.URL.revokeObjectURL = () => {};
-window.__downloads = [];
-window.HTMLAnchorElement.prototype.click = function () { if (this.hasAttribute("download")) window.__downloads.push({ name: this.getAttribute("download"), blob: blobs.get(this.href) }); };
-const n0 = window.__downloads.length;
-$("btn-save").click();
-await waitFor(() => window.__downloads.length > n0, 8000, "保存");
-const saved = await window.__downloads.at(-1).blob.text();
-check("保存ファイルに新しい都市名が入る", saved.includes("新しい村") || saved.includes("新しい名前"));
-check("保存ファイルに文章が入る", saved.includes("海沿いの交易都市"));
+// 保存の中身は、国家運営層の状態の直列化（.ahmap v2 の拡張チャンク "app.map-state" の中身）で確かめる。
+// （旧形式の固定データには世界が無く、ファイルとしての保存は tests/v500-world-map.test.mjs の往復で検査している）
+const { serializeMapState } = await import("../js/io/map-state.js");
+const saved = JSON.stringify(serializeMapState(store.getState().map));
+check("保存される状態に新しい都市名が入る", saved.includes("新しい村") || saved.includes("新しい名前"));
+check("保存される状態に文章が入る", saved.includes("海沿いの交易都市"));
+check("世界のない地図は、ファイルとして保存せず理由を知らせる", await (async () => { const n0 = (window.__downloads ??= []).length; $("btn-save").click(); await waitFor(() => /世界のデータがない/.test(store.getState().error ?? ""), 5000, "保存の拒否"); return window.__downloads.length === n0; })());
 
 check("スクリプトエラーなし", errors.length === 0, errors.join("|"));
 console.log(failed === 0 ? "\n全テスト合格" : `\n${failed}件失敗`);

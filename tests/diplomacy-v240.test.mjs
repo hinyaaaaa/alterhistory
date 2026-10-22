@@ -1,6 +1,6 @@
 // v2.4.0 の外交: 条約4種・参加国を後から変える・中立条約が同盟の参戦招集を止める・同盟の拘束力。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { planConcludeTreaty, planSetTreatyParties, planAmendTreaty, planBreakTreaty, listTreaties, partyIds, neutralStates, SIGNABLE_KINDS } from "../js/core/edit/treaties.js";
 import { listAlliances } from "../js/core/edit/alliances.js";

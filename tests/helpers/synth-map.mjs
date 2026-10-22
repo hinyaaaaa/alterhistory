@@ -9,7 +9,7 @@
 //       セル数の整合検査・形状構築・書き出しの往復は実物と同じ経路で検証できる。
 import { createRequire } from "node:module";
 const Delaunator = createRequire(import.meta.url)("../../js/vendor/delaunator.min.js");
-import { buildVoronoi, rebuildPack } from "../../js/core/geometry.js";
+import { buildVoronoi, rebuildPack } from "./legacy/geometry.js";
 
 // 乱数(決定論)
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }

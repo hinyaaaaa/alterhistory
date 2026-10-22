@@ -6,7 +6,6 @@ import { createStore } from "./core/store.js";
 import { createViewport } from "./render/viewport.js";
 import { createRenderer } from "./render/renderer.js";
 import { viewToRenderOptions } from "./render/options.js";
-import { loadFromFile } from "./io/loader.js";
 import { createActions } from "./app/actions.js";
 import { byId } from "./ui/dom.js";
 import { downloadBlob, createBrowserCanvas } from "./ui/download.js";
@@ -50,18 +49,13 @@ import { initTimeBar } from "./ui/time-bar.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
 import { initWarOutcome } from "./ui/war-outcome-window.js";
 import { createWorldService } from "./app/world-service.js";
-import { createWorldActions } from "./app/world-actions.js";
-import { initWorldWorkspace } from "./ui/world-workspace.js";
+import { visibleGroups } from "./app/group-actions.js";
+import { openNewWorldDialog } from "./ui/world-new-dialog.js";
+import { initGroupsPanel } from "./ui/groups-panel.js";
 import worldWorkerSource from "./generated/worldgen-worker.txt";
 import { APP_VERSION } from "./version.js";
 
 function start() {
-  const Delaunator = globalThis.Delaunator;
-  if (!Delaunator) {
-    document.body.textContent = "内部エラー: js/vendor/delaunator.min.js を読み込めませんでした。フォルダ構成を確認してください。";
-    return;
-  }
-
   const store = createStore({
     map: null, fileName: "", warnings: [], error: null, notice: null, busy: null, hover: null,
     view: { biomes: true, heights: false, states: true, cultures: false, religions: false, provinces: false, borders: true, coast: true, rivers: true, routes: true, burgs: true, labels: true, legendKind: "state" },
@@ -74,24 +68,20 @@ function start() {
     canvas: byId("map-canvas"),
     viewport,
     getMap: () => store.getState().map,
-    getOptions: () => viewToRenderOptions(store.getState().view),
+    getOptions: () => ({ ...viewToRenderOptions(store.getState().view), groups: visibleGroups(store.getState()) }),
   });
-  const actions = createActions({
-    store, viewport, renderer, load: loadFromFile, Delaunator,
-    download: downloadBlob, createCanvas: createBrowserCanvas,
-  });
-
-  // 球面世界（v4.0.0）。.ahmap v2 は球面世界の画面で、それ以外（Azgaar の .map・旧 .ahmap）は旧エディタで開く
+  // 世界の生成は Worker で行う（画面が止まらない・中断できる）。地図づくりは国家や戦争と同じ、このアプリの 1 つの機能
   const createWorldWorker = () => {
     if (typeof Worker === "undefined") return null;
     const url = URL.createObjectURL(new Blob([worldWorkerSource], { type: "text/javascript" }));
     const w = new Worker(url); const t = w.terminate.bind(w); w.terminate = () => { t(); URL.revokeObjectURL(url); }; return w;
   };
   const worldService = createWorldService({ createWorker: createWorldWorker });
-  const worldActions = createWorldActions({ service: worldService, download: downloadBlob, appVersion: APP_VERSION });
-  let worldWorkspace = null;
-  const routedActions = { ...actions, openFile: async (file) => { if (worldWorkspace && await worldWorkspace.routeFile(file)) return; if (worldWorkspace?.active) await worldWorkspace.setActive(false); return actions.openFile(file); } };
-  const files = initFileInput({ actions: routedActions });
+  const actions = createActions({
+    store, viewport, renderer, worldService, appVersion: APP_VERSION,
+    download: downloadBlob, createCanvas: createBrowserCanvas,
+  });
+  const files = initFileInput({ actions });
 
   const editActions = createEditActions({ store, renderer });
   const simActions = createSimActions({ store, renderer });
@@ -120,8 +110,9 @@ function start() {
   const wins = initSettingsWindows({ store, panels, editorPanel, editActions, actions, warOutcome }); // 設定メニューと、戦争・外交・軍事のウィンドウ
   winsRef = wins;
   initHub({ store, wins }); // 左ハブ。ファイル・地図・各窓の入口（ボタンの id を持つので、ツールバー等の配線より先に作る）
-  worldWorkspace = initWorldWorkspace({ worldActions, openFileDialog: files.open, legacyHasMap: () => !!store.getState().map }); // 球面世界の画面（ハブの「保存」を引き受けるため、ツールバーの配線より先に作る）
-  byId("btn-world").addEventListener("click", () => worldWorkspace.setActive(!worldWorkspace.active));
+  const newWorld = () => openNewWorldDialog({ actions, store });
+  byId("btn-new-world").addEventListener("click", newWorld);
+  byId("btn-new-world-empty").addEventListener("click", newWorld);
   const builderActions = createBuilderActions({ store, editActions, editMode: { setTool: (t) => editModeRef?.setTool(t), setTarget: (t) => editModeRef?.setTarget(t) }, actions });
   const setupActions = createSetupActions({ store, renderer });
   const setupWindow = initSetupWindow({
@@ -159,6 +150,7 @@ function start() {
   initFontsSync(deps);
   const editMode = initEditMode(deps);
   editModeRef = editMode;
+  initGroupsPanel({ store, actions, viewport, renderer, editMode }); // 初期集団を選ぶ（世界ができて、開始集団が決まるまで）
   const editToolbar = initEditToolbar({ store, editMode, editActions, openSetup });
   const editPanel = initEditPanel();
   // 右のパネルは × で小さくでき、元の場所（右端）の小さなボタンで開き直せる
@@ -186,7 +178,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { worldActions, worldService, worldWorkspace, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

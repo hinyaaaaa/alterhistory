@@ -3,13 +3,13 @@
 // 実際の解釈は各 reader に任せる。ブラウザでも Node 22 でも動く（Blob / DecompressionStream を使用）。
 
 import { parseAzgaarBytes } from "./azgaar-reader.js";
-import { buildGeometry } from "../core/derive.js";
-import { attachExtension } from "./native-format.js";
+import { buildGeometry } from "./derive.js";
+import { attachExtension } from "../../../js/io/native-format.js";
 import { isNativeBytes, parseNativeJson } from "./native-map.js";
-import { validateMap } from "../core/model.js";
-import { checkIntegrity, checkHistoryRefs } from "../core/edit/integrity.js";
-import { diplomacyMismatches } from "../core/edit/relations.js";
-import { migrateToV240 } from "../core/edit/migrate.js";
+import { validateMap } from "../../../js/core/model.js";
+import { checkIntegrity, checkHistoryRefs } from "../../../js/core/edit/integrity.js";
+import { diplomacyMismatches } from "../../../js/core/edit/relations.js";
+import { migrateToV240 } from "../../../js/core/edit/migrate.js";
 
 export class LoadError extends Error {
   constructor(message, cause) { super(message); this.name = "LoadError"; this.cause = cause; }

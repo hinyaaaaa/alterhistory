@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { JSDOM } from "jsdom";
 import { createCanvas, loadImage } from "@napi-rs/canvas";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { renderMapToCanvas, renderMapToSvg, exportFileName, sanitizeFileName, todayString } from "../js/io/exporter.js";
 import { parseColor, createSvgContext } from "../js/render/svg-context.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる

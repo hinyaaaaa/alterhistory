@@ -2,11 +2,11 @@
 // 合成マップを使うので、実サンプル .map が無くても動く。
 import { createRequire } from "node:module";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { createRandom } from "../js/core/random.js";
 import { createEditActions } from "../js/app/edit-actions.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
 import {
   NAME_STYLES, STYLE_KEYS, validate, generatePlaceName, generateStateName,
   generateReligionName, generateCultureName, generateProvinceName, stateForms,

@@ -187,33 +187,8 @@ export function planAnnualConscription(map, stateId, { rate = 1, rnd = null, fil
 const AZ_ALIAS = { fleet: "navy", ships: "navy", navy: "navy", cavalry: "cavalry", archers: "archers", artillery: "artillery", infantry: "infantry" };
 const AZ_BY_TYPE = { melee: "infantry", ranged: "archers", mounted: "cavalry", machinery: "artillery", naval: "navy", armored: "armor", aviation: "air", magical: "special" };
 
-/** 読み込み直後に呼ぶ。人数は変えず、兵科名だけを揃える。何度呼んでも結果は同じ。変えた部隊数を返す */
-export function importAzgaarMilitary(map) {
-  const defs = Array.isArray(map.settings?.military) ? map.settings.military : [];
-  const typeOf = new Map(defs.map((d) => [String(d.name).toLowerCase(), d.type]));
-  let changed = 0;
-  for (const st of map.pack.states) {
-    if (!st || !Array.isArray(st.military)) continue;
-    for (const r of st.military) {
-      if (!r || !r.u || r.azU) continue; // 取り込み済みは触らない
-      const keys = Object.keys(r.u);
-      if (keys.every((k) => UNIT_KEYS.includes(k))) continue; // すでにこちらの兵科名
-      const out = emptyForce();
-      for (const [k, v] of Object.entries(r.u)) {
-        const n = Number(v) || 0;
-        const key = UNIT_KEYS.includes(k) ? k : AZ_ALIAS[String(k).toLowerCase()] ?? AZ_BY_TYPE[typeOf.get(String(k).toLowerCase())] ?? "infantry";
-        out[key] += n;
-      }
-      r.azU = { ...r.u };
-      r.u = out; changed++;
-    }
-  }
-  return changed;
-}
-
-
 // ---- 軍隊の自動編成（v2.4.0） ----
-//   ・軍隊は、国家ができるときに自動で生成される（部隊を持たない国には、月ごとの更新で作る）。Azgaar の部隊があれば、そのまま取り込む（importAzgaarMilitary）
+//   ・軍隊は、国家ができるときに自動で生成される（部隊を持たない国には、月ごとの更新で作る）。
 //   ・編成は技術ドクトリンに比例して、毎月少しずつ更新される。昔は将軍が率いる軍で、技術が進むと 連隊 → 師団 → 軍団 → 軍 と近代的な編成に変わる
 //   ・年をまたいだ急な増減を避けるため、1か月に1つだけ、分けるか合わせる
 export const ECHELONS = Object.freeze([

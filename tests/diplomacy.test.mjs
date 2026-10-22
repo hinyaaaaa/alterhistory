@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { planSetDiplomacy, getRelation, inverseRelation, relationLabel, RELATIONS } from "../js/core/edit/diplomacy.js";
 

@@ -1,8 +1,8 @@
 // 旧形式（保存形式の版 1）の同盟・従属・過去の講和が、読み込み時に条約へ変換され、保存し直すと新形式（版 2）になる。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
-import { parseNativeJson, serializeNativeJson } from "../js/io/native-map.js";
+import { parseNativeJson, serializeNativeJson } from "./helpers/legacy/native-map.js";
 import { migrateLegacyToTreaties, listTreaties, planConcludeTreaty, planBreakTreaty, planAmendTreaty, findWarViolations, planWarBreach, treatyStatus, treatyText, pairBoost, tradeBoost, SAVE_FORMAT, SIGNABLE_KINDS, TREATY_KINDS } from "../js/core/edit/treaties.js";
 
 let failed = 0;

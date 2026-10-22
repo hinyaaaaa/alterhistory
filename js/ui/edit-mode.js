@@ -28,6 +28,7 @@ export function initEditMode({ store, viewport, editActions, panels, openSetup }
   let radius = 40;         // ブラシ半径（ワールド座標）
   let markerType = { type: "marker", icon: "📍" };
   let zoneMode = "add";     // ゾーンを塗るとき: "add"（塗る）| "erase"（消す）
+  let lastSculpt = null;   // 直前に標高ブラシを当てた位置（間引き用）
   let picker = null;        // 「地図でセルを1つ選ぶ」待ち。クリックされたセルで呼ばれる（Esc で取り消し）
 
   const localPos = (e) => { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -39,11 +40,14 @@ export function initEditMode({ store, viewport, editActions, panels, openSetup }
     onStroke(cell, r, painted) {
       const map = store.getState().map;
       const [wx, wy] = [map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1]];
+      if (tool === TOOLS.PAINT_HEIGHT) { // 標高は球面世界の編集器で行う（気候・水系を再計算するので、間引いて当てる）
+        if (lastSculpt && Math.hypot(wx - lastSculpt[0], wy - lastSculpt[1]) < r * 0.6) return;
+        lastSculpt = [wx, wy]; editActions.sculpt(cell, r, target); return;
+      }
       const cells = editActions.cellsWithin(wx, wy, r).filter((c) => !painted.has(c));
       if (!cells.length) return;
       cells.forEach((c) => painted.add(c));
       if (tool === TOOLS.PAINT_BIOME) editActions.paintBiome(target, cells);
-      else if (tool === TOOLS.PAINT_HEIGHT) editActions.paintHeight(target, cells);
       else if (tool === TOOLS.PAINT_ZONE) editActions.paintZone(target, cells, zoneMode);
       else editActions.paintCells(PAINT_TOOL_KIND[tool], target, cells);
     },
@@ -96,6 +100,7 @@ export function initEditMode({ store, viewport, editActions, panels, openSetup }
     e.preventDefault();
     canvas.setPointerCapture(e.pointerId);
     store.beginBatch(`${PAINT_KINDS[PAINT_TOOL_KIND[tool]]?.label ?? "地形"}を塗る`);
+    lastSculpt = null;
     brush.begin(cell, radius);
   });
 

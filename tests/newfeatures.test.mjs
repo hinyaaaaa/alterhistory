@@ -1,7 +1,7 @@
 // 新機能（実体の新規作成・属州の独立・国家の統合・時代区分・外交年表・ランキング）の実データ検証
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { createRandom } from "../js/core/random.js";
 import { planAddEntity, planAddProvince } from "../js/core/edit/entities.js";
@@ -10,8 +10,8 @@ import { listEras, eraAt, planSetEra, planRemoveEra } from "../js/core/edit/eras
 import { planSetDiplomacy, listDiplomacyLog, getRelation } from "../js/core/edit/diplomacy.js";
 import { rankStates, stateRank, statePopulation, stateMilitaryPower } from "../js/core/query.js";
 import { checkIntegrity, snapshotBaseline } from "../js/core/edit/integrity.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
-import { parseAzgaarText } from "../js/io/azgaar-reader.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
+import { parseAzgaarText } from "./helpers/legacy/azgaar-reader.js";
 import { attachExtension } from "../js/io/native-format.js";
 import { ensureExt } from "../js/core/edit/ext.js";
 import { planCreateAlliance, planDissolveAlliance, listAlliances } from "../js/core/edit/alliances.js";

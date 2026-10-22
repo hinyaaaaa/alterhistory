@@ -2,13 +2,13 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { createEditActions } from "../js/app/edit-actions.js";
 import { listHistory } from "../js/core/edit/history-log.js";
 import { suggestLabel } from "../js/core/edit/naming.js";
 import { createRandom } from "../js/core/random.js";
-import { serializeNativeJson, parseNativeJson, serializeNative, rleFlat, unrleFlat } from "../js/io/native-map.js";
+import { serializeNativeJson, parseNativeJson, serializeNative, rleFlat, unrleFlat } from "./helpers/legacy/native-map.js";
 import { buildChronicle, chronicleToMarkdown } from "../js/io/chronicle.js";
 
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";

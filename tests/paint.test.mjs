@@ -2,7 +2,7 @@
 // 「整合性が保たれること」「Undo で完全に元に戻ること」「Redo で再現できること」を確かめる。
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { createCellIndex } from "../js/core/spatial.js";
 import { planPaint, planBiomePaint, PAINT_KINDS } from "../js/core/edit/paint.js";

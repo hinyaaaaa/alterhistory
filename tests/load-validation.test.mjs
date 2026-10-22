@@ -3,8 +3,8 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import { buildHistoricalWorld } from "./helpers/synth-history.mjs";
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
-import { serializeNativeJson } from "../js/io/native-map.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
+import { serializeNativeJson } from "./helpers/legacy/native-map.js";
 import { validateMap } from "../js/core/model.js";
 import { checkHistoryRefs } from "../js/core/edit/integrity.js";
 

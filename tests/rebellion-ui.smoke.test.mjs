@@ -1,4 +1,5 @@
 // 反乱・独立ウィンドウ（属州の「反乱・独立…」→ 属州を選ぶ → 確定）の統合テスト（jsdom）。
+import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,7 +39,7 @@ const { store } = window.alterhistory;
 const { text } = buildSyntheticMapText({ seed: 11 });
 const input = $("file-input");
 Object.defineProperty(input, "files", { value: [new File([text], "synth.map")], configurable: true });
-input.dispatchEvent(new window.Event("change"));
+await loadLegacyInto(window, $("file-input").files[0]);
 check("地図が読み込める", await waitFor(() => store.getState().map, 15000, "読み込み"));
 const M = () => store.getState().map;
 const live = () => M().pack.states.filter((s) => s && s.i > 0 && !s.removed);

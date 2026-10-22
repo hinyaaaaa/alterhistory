@@ -1,6 +1,6 @@
 // 講和の区画: 敗者の領土を、飛び地のない区画に分ける。首都の区画は出さない。国境側から並ぶ。依存（needs）の整合。
 import { buildSyntheticMapText } from "./helpers/synth-map.mjs";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createRequire } from "node:module";
 import { partitionParcels } from "../js/core/edit/parcels.js";
 import { suggestCessionChunks } from "../js/core/edit/wars.js";

@@ -1,5 +1,6 @@
 // 講和の区画（自動生成・赤い強調・依存・傀儡国家の新設）の統合テスト（jsdom）。
 // 実際の index.html とビルド済み dist/app.js（npm run build 後）を動かす。
+import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -43,7 +44,7 @@ const { store, simActions, wins } = window.alterhistory;
 const { text } = buildSyntheticMapText({ seed: 11 });
 const input = $("file-input");
 Object.defineProperty(input, "files", { value: [new File([text], "synth.map")], configurable: true });
-input.dispatchEvent(new window.Event("change"));
+await loadLegacyInto(window, $("file-input").files[0]);
 check("地図が読み込める", await waitFor(() => store.getState().map, 15000, "読み込み"));
 const M = () => store.getState().map, win = () => q('[data-win="war"]');
 const live = () => M().pack.states.filter((s) => s && s.i > 0 && !s.removed);

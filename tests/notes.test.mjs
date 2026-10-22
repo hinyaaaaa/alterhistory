@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { loadFromBytes } from "../js/io/loader.js";
+import { loadFromBytes } from "./helpers/legacy/loader.js";
 import { createStore } from "../js/core/store.js";
 import { planSetNote, getNote, noteTarget, htmlToEditable, editableToHtml } from "../js/core/edit/notes.js";
-import { serializeAzgaar } from "../js/io/azgaar-writer.js";
+import { serializeAzgaar } from "./helpers/legacy/azgaar-writer.js";
 
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 const Delaunator = createRequire(import.meta.url)("../js/vendor/delaunator.min.js");

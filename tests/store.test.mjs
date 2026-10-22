@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { parseAzgaarBytes } from "../js/io/azgaar-reader.js";
+import { parseAzgaarBytes } from "./helpers/legacy/azgaar-reader.js";
 // テスト用の実マップの置き場所。既定は開発環境のパス。SAMPLES_DIR=... で変更できる
 const SAMPLES = process.env.SAMPLES_DIR ?? "tests/.samples";
 import { createStore, cellChangeCommand } from "../js/core/store.js";

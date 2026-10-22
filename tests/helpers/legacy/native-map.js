@@ -15,9 +15,9 @@
 //
 // 純粋ロジック層（gzip だけは標準の CompressionStream を使う。ブラウザでも Node 22 でも動く）。
 
-import { createEmptyMap } from "../core/model.js";
-import { createExtension, APP_NAME, EXT_FORMAT } from "./native-format.js";
-import { migrateLegacyToTreaties, SAVE_FORMAT } from "../core/edit/treaties.js";
+import { createEmptyMap } from "../../../js/core/model.js";
+import { createExtension, APP_NAME, EXT_FORMAT } from "../../../js/io/native-format.js";
+import { migrateLegacyToTreaties, SAVE_FORMAT } from "../../../js/core/edit/treaties.js";
 
 export const NATIVE_FORMAT = "alterhistory-map";
 export const NATIVE_VERSION = 1;
