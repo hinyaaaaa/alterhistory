@@ -1,0 +1,42 @@
+// 人口集団の窓（V5-M1）の描画・操作。jsdom の最小環境で、実際の ui/civ-window.js を動かす。
+import { JSDOM } from "jsdom";
+const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true });
+for (const k of ["window", "document", "HTMLElement", "Element", "Node", "Event", "CustomEvent"]) globalThis[k] = k === "window" ? dom.window : dom.window[k];
+globalThis.requestAnimationFrame = (f) => setTimeout(f, 0);
+const { generateWorld } = await import("../js/core/world/worldgen.js");
+const { worldToMap } = await import("../js/core/world-bridge.js");
+const { createStore } = await import("../js/core/store.js");
+const { createCivActions } = await import("../js/app/civ-actions.js");
+const { createCivSim } = await import("../js/core/civ/civ-sim.js");
+const { initCivWindow } = await import("../js/ui/civ-window.js");
+let failed = 0; const check = (l, ok, x = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${l}${x ? "  " + x : ""}`); if (!ok) failed++; };
+
+const m = worldToMap(generateWorld({ worldSeed: "civ-win", resolution: { targetCells: 5000 } })); m.worldTime = { year: 0, month: 1 };
+const p = m.world.entities.populations[0]; m.world.entities.start = { groupId: p.id, cell: p.cell };
+const store = createStore({ map: m }), civActions = createCivActions({ store });
+let reg = null, open = false; const wins = { register: (id, d) => { reg = { id, ...d }; }, isOpen: () => open };
+initCivWindow({ store, wins, civActions });
+check("窓が「civ」として登録される", reg?.id === "civ" && reg.title === "人口集団");
+reg.onOpen(); const txt = () => reg.body.textContent;
+check("始める前は、開始ボタンが有効で説明がある", /歴史を始め/.test(txt()) && !reg.body.querySelector("button").disabled);
+reg.body.querySelector("button").click();
+check("押すと歴史が始まり、集団数と総人口が出る", civActions.has() && /集団 \d+/.test(txt()) && /総人口/.test(txt()), txt().slice(0, 60));
+check("プレイヤー集団の欄と、移住先の選択肢・「ここへ移る」がある", /あなたの集団/.test(txt()) && reg.body.querySelectorAll("select option").length >= 2 && [...reg.body.querySelectorAll("button")].some((b) => b.textContent === "ここへ移る"));
+check("一覧にプレイヤー（★）が出る", /★ pop_/.test(txt()));
+[...reg.body.querySelectorAll("button")].find((b) => b.textContent === "ここへ移る").click();
+check("移動命令を出すと、移動中の表示になる", /移動中/.test(txt()));
+createCivSim(m.world, m.civ).advanceMonths(1200); reg.onOpen();
+check("100年後も描画できる（集団が増えたらページ送りの欄が出る）", /\d+ \/ \d+/.test(txt()));
+const q = reg.body.querySelector("input[type=search]"); q.value = "農耕"; q.dispatchEvent(new dom.window.Event("change"));
+check("絞り込みが効く（該当なしでも壊れない）", /件/.test(txt()));
+// --- 国家（V5-M2〜M5） ---
+const { formState } = await import("../js/core/civ/states.js");
+const sim = createCivSim(m.world, m.civ); const g0 = Object.values(m.civ.groups).find((g) => !g.player); const ns = formState(sim.ctx, { via: "agri_union", groupIds: [g0.id] }); ns.pop = 5000; sim.advanceMonths(120); reg.onOpen();
+check("国家の一覧が出る（名前・政体・形成の経路・人口・安定）", /国家（\d+）/.test(txt()) && txt().includes(ns.name) && /農耕集落の統合/.test(txt()));
+[...reg.body.querySelectorAll(".ent-row")].find((r) => r.textContent.includes(ns.name)).click();
+check("国家の行を押すと、AI の判断記録（層・選択・結果）が見える", /\[(routine|strategy|crisis|campaign)\]/.test(txt()));
+const pst = formState(sim.ctx, { via: "agri_union", groupIds: [Object.values(m.civ.groups).find((g) => g.player).id], player: true }); pst.treasury = 200; reg.onOpen();
+check("プレイヤー国家があると、行動ボタンが並ぶ（実行できない行動は理由つきで件数表示）", /あなたの国家/.test(txt()) && [...reg.body.querySelectorAll(".civ-player button")].some((b) => b.textContent === "増税") && /今はできない行動/.test(txt()));
+[...reg.body.querySelectorAll(".civ-player button")].find((b) => b.textContent === "増税").click();
+check("ボタンで行動を実行すると、判断記録（player）と結果が残り、画面に反映される", m.civ.decisions.at(-1).provenance === "player" && pst.policy.tax === 0.15 && /増税を実行しました/.test(txt()));
+if (failed) { console.log(`\n${failed} 件失敗`); process.exit(1); } else console.log("\n全て成功"); process.exit(0);

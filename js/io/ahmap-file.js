@@ -4,12 +4,14 @@
 // 純粋ロジック（DOM 非依存）。圧縮は CompressionStream（ブラウザ・Node 22）。
 import { encodeAhmap2, decodeAhmap2, Ahmap2Error, AHMAP2_MAGIC } from "../core/world/ahmap2.js";
 import { worldToMap } from "../core/world-bridge.js";
+import { encodeCiv, decodeCiv, CIV_CHUNK } from "../core/civ/civ-state.js";
 import { serializeMapState, applyMapState, MAP_STATE_CHUNK } from "./map-state.js";
 import { inspectMap } from "./inspect.js";
 import { migrateToV240 } from "../core/edit/migrate.js";
 
 export const AHMAP_EXT = "ahmap";
 export const START_CHUNK = "entities.start";
+export { CIV_CHUNK };
 const enc = new TextEncoder(), dec = new TextDecoder();
 
 export class LoadError extends Error { constructor(message, cause) { super(message); this.name = "LoadError"; this.cause = cause; } }
@@ -21,6 +23,7 @@ export async function saveMapBytes(map, { appVersion = "", savedAt = "" } = {}) 
   const world = map?.world; if (!world) throw new Error("世界のデータがない地図は保存できません");
   const ext = { ...(map.fileExt?.extensions ?? {}) };
   ext[MAP_STATE_CHUNK] = enc.encode(JSON.stringify(serializeMapState(map, { savedAt })));
+  if (map.civ) ext[CIV_CHUNK] = encodeCiv(map.civ); else delete ext[CIV_CHUNK];
   if (world.entities.start) ext[START_CHUNK] = enc.encode(JSON.stringify(world.entities.start)); else delete ext[START_CHUNK];
   const r = await encodeAhmap2(world, { appVersion, savedAt, extensions: ext, reuse: map.fileExt?.chunkCache });
   map.fileExt = { extensions: ext, chunkCache: r.chunkCache };
@@ -40,6 +43,7 @@ export async function loadMapBytes(bytes) {
   world.entities.start = start; world.generation = null;
   const map = worldToMap(world);
   if (extensions.has(MAP_STATE_CHUNK)) { let st = null; try { st = JSON.parse(dec.decode(extensions.get(MAP_STATE_CHUNK))); } catch { /* applyMapState が警告する */ } applyMapState(map, st, warnings); }
+  if (extensions.has(CIV_CHUNK)) { try { map.civ = decodeCiv(extensions.get(CIV_CHUNK)); } catch (e) { warnings.push(`人口集団・集落の履歴を読めなかったため、歴史の開始前の状態に戻しました（${e.message}）`); } }
   map.fileExt = { extensions: Object.fromEntries(extensions), chunkCache };
   migrateToV240(map);
   warnings.push(...inspectMap(map));

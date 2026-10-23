@@ -44,6 +44,8 @@ import { createEconomyView } from "./ui/economy-view.js";
 import { initEditorPanel } from "./ui/panels/editor-panel.js";
 import { createSimActions } from "./app/sim-actions.js";
 import { createTimeActions } from "./app/time-actions.js";
+import { createCivActions } from "./app/civ-actions.js";
+import { initCivWindow } from "./ui/civ-window.js";
 import { createAutoCheck } from "./app/auto-check.js";
 import { initTimeBar } from "./ui/time-bar.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
@@ -86,7 +88,8 @@ function start() {
   const editActions = createEditActions({ store, renderer });
   const simActions = createSimActions({ store, renderer });
   const autoCheck = createAutoCheck({ store }); // データ検査の窓は無い。操作後と5年ごとに、問題があるときだけ右下に出す
-  const timeActions = createTimeActions({ store, renderer, simActions, autoCheck });
+  const civActions = createCivActions({ store });
+  const timeActions = createTimeActions({ store, renderer, simActions, autoCheck, civActions });
   let highlightRef = null; // 講和の割譲区画を赤く強調するために、あとで入る
   const warOutcome = initWarOutcome({ store, simActions, getHighlight: () => highlightRef });
   let winsRef = null;
@@ -124,6 +127,7 @@ function start() {
   initEntityLists({ store, wins, panels, editActions, highlight, builderActions, openSetup });
   initGenealogy({ store, wins, editActions });
   initTimelineWindow({ store, wins, editActions, viewport, renderer, actions });
+  initCivWindow({ store, wins, civActions });
   initNuclearWindow({ store, simActions, wins });
   initCovertWindow({ store, simActions, wins });
   // 地図上の国・州などを選んだときも、ズームせず強調だけする
@@ -178,7 +182,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { civActions, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

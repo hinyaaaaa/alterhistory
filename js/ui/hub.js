@@ -19,6 +19,7 @@ export const HUB_SECTIONS = [
     { id: "btn-new-world", icon: "terrain", label: "世界を作る", kind: "el", tip: "新しい世界を生成する — 地図を作り、初期集団を選んで、歴史を始める" },
   ] },
   { title: "国家と社会", items: [
+    { win: "civ", icon: "culture", label: "人口集団", tip: "初期集団の人口・生業・集落（国家が成立するまでの歴史）" },
     { win: "nation", icon: "state", label: "国家" },
     { win: "list-culture", icon: "culture", label: "文化" },
     { win: "list-religion", icon: "religion", label: "宗教" },
