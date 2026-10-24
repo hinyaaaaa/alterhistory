@@ -46,6 +46,8 @@ import { createSimActions } from "./app/sim-actions.js";
 import { createTimeActions } from "./app/time-actions.js";
 import { createCivActions } from "./app/civ-actions.js";
 import { initCivWindow } from "./ui/civ-window.js";
+import { createHistoryActions } from "./app/history-actions.js";
+import { initHistoryWindow } from "./ui/history-window.js";
 import { createAutoCheck } from "./app/auto-check.js";
 import { initTimeBar } from "./ui/time-bar.js";
 import { initWarsPanel } from "./ui/panels/wars-panel.js";
@@ -128,6 +130,8 @@ function start() {
   initGenealogy({ store, wins, editActions });
   initTimelineWindow({ store, wins, editActions, viewport, renderer, actions });
   initCivWindow({ store, wins, civActions });
+  const history = createHistoryActions({ store, civActions }); // V5-M10: 歴史ビューア（検索・一覧・過去の閲覧）
+  initHistoryWindow({ store, wins, history, civActions });
   initNuclearWindow({ store, simActions, wins });
   initCovertWindow({ store, simActions, wins });
   // 地図上の国・州などを選んだときも、ズームせず強調だけする
@@ -182,7 +186,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { civActions, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

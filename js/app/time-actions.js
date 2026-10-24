@@ -25,6 +25,7 @@ export function createTimeActions({ store, renderer, simActions = null, autoChec
   function tick() {
     const map = store.getState().map;
     if (!map) return;
+    if (civActions?.isPast?.()) { if (timer) { clearInterval(timer); timer = null; store.update((x) => { x.timeRunning = false; }); } return; } // 過去を閲覧中は時間を進めない（世界時計と文明の月がずれるのを防ぐ）
     const { time, yearChanged } = advanceMonth(map.worldTime);
     store.update((s) => { s.map.worldTime = time; });
     civActions?.advance?.(); // 人口集団・集落の月次更新（V5-M1）。失敗しても時間は止めない

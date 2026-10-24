@@ -30,6 +30,7 @@ export const HUB_SECTIONS = [
     { win: "war", icon: "war", label: "戦争", badge: "wars" },
   ] },
   { title: "記録と設定", items: [
+    { win: "history", icon: "timeline", label: "歴史ビューア", tip: "国家・戦争・出来事・AI判断を検索して辿る。過去の月の状態も見られる (Ctrl+K)" },
     { win: "timeline", icon: "timeline", label: "年表" },
     { win: "settings", icon: "settings", label: "詳細設定" },
   ] },

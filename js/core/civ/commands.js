@@ -6,6 +6,7 @@ import { LAND_WATER } from "./world-consts.js";
 import { formState, evaluateFormation } from "./states.js";
 import { ACTION, findCandidate } from "./actions.js";
 import { runPlayerAction } from "./ai.js";
+import { recentEventsFor, asCauses } from "./graph.js";
 
 const fail = (error) => ({ ok: false, error });
 function playerGroup(civ, groupId) { const g = civ.groups[groupId]; if (!g) return [null, "その集団は存在しません"]; if (!g.player) return [null, "プレイヤーの集団ではありません"]; return [g, null]; }
@@ -50,7 +51,7 @@ export function applyCommand(ctx, cmd) {
       for (const o of Object.values(civ.groups)) if (territoryOf(world, o.cell).includes(cmd.to) || o.cell === cmd.to) return fail("そこはほかの集団の領域です");
       const moved = Math.round(g.pop * POP.budShare); g.pop -= moved; g.lastBudAt = civ.monthIndex;
       const child = spawnGroup(civ, ids, g, cmd.to, moved); child.player = false; // 分派した集団は NPC として動く（プレイヤーは本隊のみ）
-      makeEvent(civ, ids, { kind: "group_split", title: "集団の分派", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: cmd.to }, provenance: "player" });
+      makeEvent(civ, ids, { kind: "group_split", title: "集団の分派", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: cmd.to }, causes: asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible"), provenance: "player" });
       return { ok: true, childId: child.id };
     }
     case "formState": { // プレイヤー集団が、国家をつくる（経路は条件を満たしたものから選ぶ）

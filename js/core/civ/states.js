@@ -8,6 +8,8 @@ import { neighborGroups, byState, spatialOf } from "./spatial.js";
 import { reachable, addProposal } from "./population.js";
 import { taxMult } from "./techfx.js";
 import { hashSeed } from "./civ-state.js";
+import { recentEventsFor, asCauses } from "./graph.js";
+import { speciesOf, lifeScale } from "./species.js";
 
 export const POLITY = Object.freeze({ tribal: "部族", chiefdom: "首長制", kingdom: "王国", empire: "帝国", republic: "共和制", theocracy: "神権制" });
 export const VIA = Object.freeze({ city_state: { ja: "都市国家", suffix: "市国" }, agri_union: { ja: "農耕集落の統合", suffix: "連合" }, nomad_confederation: { ja: "遊牧連合", suffix: "部族連合" }, religious_polity: { ja: "宗教共同体", suffix: "教団国" }, defense_league: { ja: "防衛連合", suffix: "同盟" }, secession: { ja: "分離", suffix: "国" } });
@@ -19,7 +21,7 @@ export function formState(ctx, { via, groupIds, predecessor = null, player = fal
   if (!gs.length) return null;
   const cap = gs.reduce((a, b) => (b.pop > a.pop ? b : a)), id = ids.next("state"), h = hashSeed(id);
   const st = { id, name: makeNameJa(rng) + VIA[via].suffix, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, alive: true, player, dissolvedAt: null, predecessor, polity: via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal", stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
-    policy: { tax: 0.1, mobilization: 0, assimilation: 0, tolerance: 0.5, autonomy: 0 }, techAdopted: {}, strategy: null, campaign: null, defense: 0, boostUntil: -1, sanctions: {}, relations: {}, warIds: [], leader: { name: makeNameJa(rng), bornAt: civ.monthIndex - 300 - Math.floor(rng() * 200), heir: false }, lastCrisis: -999,
+    policy: { tax: 0.1, mobilization: 0, assimilation: 0, tolerance: 0.5, autonomy: 0 }, techAdopted: {}, strategy: null, campaign: null, defense: 0, boostUntil: -1, sanctions: {}, relations: {}, warIds: [], leader: { name: makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false }, lastCrisis: -999,
     personality: { security: 0.6 + (h % 100) / 125, prosperity: 0.6 + ((h >> 7) % 100) / 125, expansion: 0.6 + ((h >> 14) % 100) / 125, stability: 0.6 + ((h >> 21) % 100) / 125, culture: 0.6 + ((h >> 4) % 100) / 125, tech: 0.6 + ((h >> 11) % 100) / 125, prestige: 0.6 + ((h >> 18) % 100) / 125 } };
   civ.states[id] = st; for (const g of gs) g.stateId = id; if (gs.some((g) => g.player)) st.player = true;
   const causes = []; if (cause) causes.push({ targetId: cause, relation: "caused_by", basis: "plausible" }); if (threat) causes.push({ targetId: threat, relation: "reaction_to", basis: "strong" });
@@ -47,7 +49,7 @@ export function evaluateFormation(ctx, seed) {
 const dissolve = (ctx, st, why) => {
   const { civ, ids } = ctx; st.alive = false; st.dissolvedAt = civ.monthIndex; for (const gid in civ.groups) if (civ.groups[gid].stateId === st.id) civ.groups[gid].stateId = null;
   for (const wid of [...st.warIds]) ctx.endWarHook?.(ctx, civ.wars[wid], "state_dissolved");
-  makeEvent(civ, ids, { kind: "state_dissolved", title: `${st.name}が${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, causes: st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : [] });
+  makeEvent(civ, ids, { kind: "state_dissolved", title: `${st.name}が${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, causes: [...(st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : []), ...asCauses(recentEventsFor(civ, [st.id], ["war_ended"], 24, 1), "contributed_to", "plausible")] });
 };
 export const aliveStates = (civ) => Object.values(civ.states).filter((s) => s.alive);
 
@@ -59,20 +61,20 @@ export function stepStates(ctx) {
   for (const id in civ.states) {
     const st = civ.states[id]; if (!st.alive) continue; const gs = groupsByState.get(id);
     if (!gs?.length) { dissolve(ctx, st, "消滅した"); continue; }
-    let pop = 0, tens = 0, settle = 0, big = gs[0]; for (const g of gs) { pop += g.pop; if (g.settlementId) settle++; if (g.pop > big.pop) big = g; let t = 0; for (const c of g.cohorts) if (c.tension > t) t = c.tension; tens += t * g.pop; }
-    st.pop = pop; st.settlements = settle; if (!civ.groups[st.capitalGroupId] || civ.groups[st.capitalGroupId].stateId !== id) st.capitalGroupId = big.id;
+    let pop = 0, tens = 0, settle = 0, big = gs[0], mar = 0; for (const g of gs) { pop += g.pop; mar += g.pop * speciesOf(g.speciesId).martial; if (g.settlementId) settle++; if (g.pop > big.pop) big = g; let t = 0; for (const c of g.cohorts) if (c.tension > t) t = c.tension; tens += t * g.pop; }
+    st.pop = pop; st.martial = pop ? Math.round((mar / pop) * 1000) / 1000 : 1; st.settlements = settle; if (!civ.groups[st.capitalGroupId] || civ.groups[st.capitalGroupId].stateId !== id) st.capitalGroupId = big.id;
     const cap = civ.groups[st.capitalGroupId]; let far = 0, mx = 0; const dists = []; for (const g of gs) { const d = distKm(world, cap.cell, g.cell); dists.push([d, g]); if (d > mx) mx = d; }
     const adm = st.techAdopted.bureaucracy != null ? 0.6 : st.techAdopted.administration != null ? 0.35 : 0;
-    const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15000) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - (st.policy.mobilization * 0.3) + (st.leader.heir ? 0.03 : 0) + ({ chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity]);
+    const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15000) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - (st.policy.mobilization * 0.3) + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + ({ chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity]);
     const before = st.stability; st.stability = Math.max(0, Math.min(1, st.stability + (target - st.stability) * 0.3));
     st.treasury += pop * st.policy.tax * 0.0012 * taxMult(st) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi).length * 0.1)); st.army = pop * (0.005 + 0.12 * st.policy.mobilization) * (0.5 + st.stability);
     for (const k in st.sanctions) if (st.sanctions[k] <= mi) delete st.sanctions[k];
     // 指導者の継承
-    const age = mi - st.leader.bornAt; if (age > 480 && rng() < Math.min(0.2, (age - 480) / 4000)) { const heir = st.leader.heir; st.leader = { name: makeNameJa(rng), bornAt: mi - 300 - Math.floor(rng() * 100), heir: false }; st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12)); makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); }
+    const ls = lifeScale(civ, st), age = mi - st.leader.bornAt; if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4000 * ls))) { const heir = st.leader.heir; st.interpDirty = true; st.leader = { name: makeNameJa(rng), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false }; st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12)); makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); }
     if (st.stability < 0.08 && before < 0.2) { dissolve(ctx, st, "崩壊した"); continue; }
     if (st.stability < 0.3 && gs.length >= 3 && mi - st.lastCrisis > 60) { // 分離: 首都から遠い半分が独立
       dists.sort((a, b) => b[0] - a[0]); const part = dists.slice(0, Math.max(1, Math.floor(gs.length / 2))).map((x) => x[1]).filter((g) => !g.player || st.player === false);
-      if (part.length && part.length < gs.length) { st.lastCrisis = mi; const ev = makeEvent(civ, ids, { kind: "instability", title: `${st.name}で不満が高まる`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); st.lastCrisisEvent = ev.eventId; const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id, cause: ev.eventId }); if (ns) { ns.relations[st.id] = -40; st.relations[ns.id] = -40; st.stability = Math.min(1, st.stability + 0.1); } }
+      if (part.length && part.length < gs.length) { st.lastCrisis = mi; const ev = makeEvent(civ, ids, { kind: "instability", title: `${st.name}で不満が高まる`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell }, causes: [...asCauses(recentEventsFor(civ, [st.id, ...gs.map((g) => g.id)], ["famine", "disaster_struck", "demand_raised"], 48, 2), "contributed_to", "plausible"), ...asCauses(recentEventsFor(civ, [st.id], ["war_declared", "war_ended", "leader_succession"], 36, 2), "contributed_to", "strong")] }); st.lastCrisisEvent = ev.eventId; const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id, cause: ev.eventId }); if (ns) { ns.relations[st.id] = -40; st.relations[ns.id] = -40; st.stability = Math.min(1, st.stability + 0.1); } }
     }
   }
   // 2) 国家のない集団: 形成の評価と吸収（NPC は自動。プレイヤー集団は提案）

@@ -7,11 +7,13 @@ import { monthIndex } from "../core/civ/tick.js";
 import { ACTIONS, observe } from "../core/civ/actions.js";
 
 export function createCivActions({ store }) {
-  const sims = new WeakMap();
+  const sims = new WeakMap(); let pastGuard = () => false; // 過去の月を見ている間は true を返す（history-actions が設定）。読み取り専用にする
   const mapOf = () => store.getState().map;
   const simOf = (map) => { const civ = map?.civ; if (!civ || !map.world) return null; let s = sims.get(civ); if (!s) { s = createCivSim(map.world, civ); sims.set(civ, s); } return s; };
   return {
     has: () => !!mapOf()?.civ,
+    setPastGuard(fn) { pastGuard = fn; },
+    isPast: () => pastGuard(),
     canStart: () => { const m = mapOf(); return !!(m?.world?.entities.start) && !m.civ; },
     /** 選んだ開始集団から、歴史を始める（月次の人口進行が動き出す） */
     start() {
@@ -24,11 +26,11 @@ export function createCivActions({ store }) {
     },
     /** 月次tick（time-actions から1か月ごとに呼ばれる）。失敗しても時間進行は止めない */
     advance() {
-      const map = mapOf(), sim = simOf(map); if (!sim) return null;
+      const map = mapOf(), sim = simOf(map); if (!sim) return null; if (pastGuard()) return { ok: false, error: "過去を閲覧中は時間を進められません。現在へ戻してください" };
       map.civ.monthIndex = monthIndex(map.worldTime.year, map.worldTime.month) - 1; // 世界時計が正。tick の clock フェーズが +1 して今月に一致する
       try { sim.advanceMonth(); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
     },
-    command(cmd) { const sim = simOf(mapOf()); return sim ? sim.command(cmd) : { ok: false, error: "歴史がまだ始まっていません" }; },
+    command(cmd) { if (pastGuard()) return { ok: false, error: "過去を閲覧中は操作できません（読み取り専用）。現在へ戻してください" }; const sim = simOf(mapOf()); return sim ? sim.command(cmd) : { ok: false, error: "歴史がまだ始まっていません" }; },
     summary() {
       const civ = mapOf()?.civ; if (!civ) return null; let pop = 0, groups = 0; for (const g of Object.values(civ.groups)) { pop += g.pop; groups++; }
       return { groups, settlements: Object.keys(civ.settlements).length, pop: Math.round(pop), events: civ.events.length, proposals: civ.proposals.filter((p) => !p.resolved).length, states: Object.values(civ.states).filter((x) => x.alive).length, wars: civ.activeWarIds.length, date: civ.date };

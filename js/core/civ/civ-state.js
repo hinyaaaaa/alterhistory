@@ -3,7 +3,8 @@
 import { createIdGen } from "./ids.js";
 import { monthIndex, fromMonthIndex } from "./tick.js";
 import { makeNameJa, createCulture, createLanguage } from "./culture.js";
-export const CIV_STATE_VERSION = 2; // 2: 国家・文化・技術・戦争・AI判断記録を追加（1 から自動移行）
+import { assignSpecies } from "./species.js";
+export const CIV_STATE_VERSION = 3; // 3: 歴史認識・表現物・魔法・種族・災害・月次履歴を追加（2 までから自動移行）。2: 国家・文化・技術・戦争・AI判断記録（1 から自動移行）
 export const CIV_CHUNK = "civ.state";
 
 /** 歴史の乱数（地理の決定性とは別。historySeed を保存すれば再現できるが、既定は新しい乱数） */
@@ -14,7 +15,7 @@ export function rngOf(seed) { let a = seed >>> 0; return () => { a = (a + 0x6d2b
  * 世界の初期集団（entities.populations）から文明状態を作る。選んだ開始集団だけがプレイヤー（player: true）。
  * 他の初期集団は NPC として自律的に動く。国家はまだ無い（国家は歴史の中で成立する。M2）。
  */
-export function createCivState(world, { startGroupId, historySeed = null, year = 0, month = 1 } = {}) {
+export function createCivState(world, { startGroupId, historySeed = null, year = 0, month = 1, species = "mixed" } = {}) {
   const civ = { version: CIV_STATE_VERSION, historySeed: historySeed ?? hashSeed(world.spec.worldSeed, "history", Date.now(), Math.random()), seq: {}, date: { year, month }, monthIndex: monthIndex(year, month), groups: {}, settlements: {}, events: [], proposals: [], player: { groupId: null }, ...emptyLayers() };
   const ids = createIdGen(civ.seq), nameRng = rngOf(hashSeed(civ.historySeed, "names"));
   for (const p of world.entities.populations) {
@@ -26,10 +27,11 @@ export function createCivState(world, { startGroupId, historySeed = null, year =
     if (p.id === startGroupId) { civ.groups[id].player = true; civ.player.groupId = id; }
   }
   if (startGroupId != null && !civ.player.groupId) throw new Error(`開始集団 ${startGroupId} は世界に存在しない`);
+  assignSpecies(world, civ, rngOf(hashSeed(civ.historySeed, "species")), { mix: species === "human" ? 0 : 0.4 }); // 種族: 開始集団以外に、生息環境に合う非人間種族を割り当てる
   return civ;
 }
 /** v2 の層（国家・文化・技術・戦争・外交・AI判断）。v1 から読むときもこの形で補う */
-export function emptyLayers() { return { states: {}, cultures: {}, languages: {}, religions: {}, contacts: {}, techWorld: {}, wars: {}, treaties: {}, activeWarIds: [], activeTreatyIds: [], decisions: [], dict: { reasons: [] }, options: { aiInterval: 6 } }; }
+export function emptyLayers() { return { states: {}, cultures: {}, languages: {}, religions: {}, contacts: {}, techWorld: {}, wars: {}, treaties: {}, activeWarIds: [], activeTreatyIds: [], decisions: [], dict: { reasons: [] }, options: { aiInterval: 6 }, interpretations: [], works: [], interpCursor: 0, species: {}, persons: {}, magic: { orgs: {}, living: [] }, disasters: {}, climate: { index: 0, phase: "normal", since: 0 }, memory: {} }; }
 export function newGroup(id, { cell, pop, subsistence = "forage", species = "human", origin = null, bornAt = 0, knowledge = null, parent = null }) {
   return { id, speciesId: species, cell, pop, subsistence, player: false, origin, parent, bornAt, settledMonths: 0, lastBudAt: bornAt, famineAt: -999, stateId: null, pressure: 0, cohorts: [], tech: { known: {}, prog: {}, lost: {} }, knowledge: knowledge ? { ...knowledge } : { agriculture: 0, seafaring: 0, herding: 0 }, order: null, settlementId: null, cells: null };
 }

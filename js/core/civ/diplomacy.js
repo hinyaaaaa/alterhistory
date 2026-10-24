@@ -4,6 +4,7 @@ import { makeEvent } from "./events.js";
 import { byState, neighborGroups } from "./spatial.js";
 import { milMult } from "./techfx.js";
 import { distKm } from "./states.js";
+import { recentEventsFor, asCauses, getEvent } from "./graph.js";
 
 export const TREATY = Object.freeze({ nonaggression: { ja: "不可侵条約", months: 240 }, alliance: { ja: "同盟", months: 480 }, trade: { ja: "通商協定", months: 240 } });
 export const adjustRel = (a, b, d) => { const c = (v) => Math.max(-100, Math.min(100, v)); a.relations[b.id] = c((a.relations[b.id] ?? 0) + d); b.relations[a.id] = c((b.relations[a.id] ?? 0) + d); };
@@ -22,14 +23,19 @@ export function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "s
   civ.treaties[id] = t; civ.activeTreatyIds.push(id); adjustRel(a, b, type === "alliance" ? 25 : 15);
   makeEvent(civ, ids, { kind: "treaty_signed", title: `${a.name}と${b.name}が${TREATY[type].ja}を結んだ`, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, decisionId, provenance }); return t;
 }
-export function endTreaty(ctx, t, why) {
+export function endTreaty(ctx, t, why, byId = null) {
   const { civ, ids } = ctx; t.active = false; t.endedAt = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
-  makeEvent(civ, ids, { kind: "treaty_ended", title: `${TREATY[t.type].ja}が${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: "party" }, { entityId: t.b, role: "party" }], location: null });
+  makeEvent(civ, ids, { kind: "treaty_ended", title: `${TREATY[t.type].ja}が${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId === t.b ? "breaker" : "party" }], location: null, effects: byId ? [{ targetId: t.id, property: "broken_by", before: null, after: byId }] : [] });
+}
+/** 過去の同じ相手との戦争が、今回の宣戦の理由になっていれば「反応」として結ぶ（負けた側が仕掛けるなら根拠は strong） */
+function revengeCauses(civ, atk, def) {
+  const out = []; for (const ev of recentEventsFor(civ, [atk.id], ["war_ended"], 1200, 6)) { if (!ev.participants.some((p) => p.entityId === def.id)) continue; const w = civ.wars[ev.participants.find((p) => p.role === "war")?.entityId]; const lost = w && ((w.sides.a.includes(atk.id) && w.outcome === "defender_victory") || (w.sides.d.includes(atk.id) && w.outcome === "aggressor_victory")); out.push({ targetId: ev.eventId, relation: "reaction_to", basis: lost ? "strong" : "plausible" }); if (out.length >= 2) break; }
+  return out;
 }
 export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation" } = {}) {
   const { civ, ids, rng } = ctx, id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 };
   civ.wars[id] = w; civ.activeWarIds.push(id); atk.warIds.push(id); def.warIds.push(id); adjustRel(atk, def, -40);
-  const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, decisionId, provenance });
+  const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), decisionId, provenance });
   w.declaredEvent = ev.eventId;
   for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) {
     if (t.type !== "alliance" || (t.a !== host.id && t.b !== host.id)) continue; const ally = civ.states[t.a === host.id ? t.b : t.a]; if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;
@@ -59,9 +65,9 @@ export function stepWars(ctx) {
     const lossA = 0.0025 * (sD / (sA + sD + 1)), lossD = 0.0025 * (sA / (sA + sD + 1)); let dead = 0;
     for (const [side, loss] of [[A, lossA], [D, lossD]]) for (const s of side) { const gs = groups.get(s.id); if (!gs?.length) continue; const g = gs[Math.floor(rng() * gs.length)], l = g.pop * loss * 4; g.pop -= l; dead += l; }
     w.casualties += dead;
-    if (mi % 3 === 0 && rng() < 0.4) makeEvent(civ, ids, { kind: "battle_fought", title: `${civ.states[w.aggressor].name}と${civ.states[w.defender].name}の戦闘`, participants: [{ entityId: w.id, role: "war" }, { entityId: w.aggressor, role: "aggressor" }, { entityId: w.defender, role: "defender" }], location: { cell: civ.groups[civ.states[w.defender].capitalGroupId]?.cell ?? null }, effects: [{ targetId: w.id, property: "score", before: null, after: Math.round(w.score) }] });
+    if (mi % 3 === 0 && rng() < 0.4) makeEvent(civ, ids, { kind: "battle_fought", title: `${civ.states[w.aggressor].name}と${civ.states[w.defender].name}の戦闘`, participants: [{ entityId: w.id, role: "war" }, { entityId: w.aggressor, role: "aggressor" }, { entityId: w.defender, role: "defender" }], location: { cell: civ.groups[civ.states[w.defender].capitalGroupId]?.cell ?? null }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: [{ targetId: w.id, property: "score", before: null, after: Math.round(w.score) }] });
     if (w.score >= 35 && w.occupied.length < 3 && rng() < 0.08) { // 占領: 防衛側のうち、攻撃側の首都に最も近い集団
-      const cap = civ.groups[civ.states[w.aggressor].capitalGroupId]; const cand = D.flatMap((s) => groups.get(s.id) ?? []).filter((g) => !w.occupied.includes(g.id)); if (cap && cand.length) { cand.sort((a, b) => distKm(world, cap.cell, a.cell) - distKm(world, cap.cell, b.cell)); const g = cand[0]; w.occupied.push(g.id); makeEvent(civ, ids, { kind: "territory_occupied", title: "領土が占領された", participants: [{ entityId: g.id, role: "territory" }, { entityId: w.id, role: "war" }], location: { cell: g.cell } }); }
+      const cap = civ.groups[civ.states[w.aggressor].capitalGroupId]; const cand = D.flatMap((s) => groups.get(s.id) ?? []).filter((g) => !w.occupied.includes(g.id)); if (cap && cand.length) { cand.sort((a, b) => distKm(world, cap.cell, a.cell) - distKm(world, cap.cell, b.cell)); const g = cand[0]; w.occupied.push(g.id); makeEvent(civ, ids, { kind: "territory_occupied", title: "領土が占領された", participants: [{ entityId: g.id, role: "territory" }, { entityId: w.id, role: "war" }], location: { cell: g.cell }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }] }); }
     }
     const age = mi - w.startedAt;
     if (w.score >= 80) endWar(ctx, w, "aggressor_victory"); else if (w.score <= -80) endWar(ctx, w, "defender_victory"); else if (age > 120) endWar(ctx, w, "stalemate");

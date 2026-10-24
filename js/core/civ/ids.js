@@ -1,6 +1,6 @@
 // v5 M0: 不変ID（指示書 §1.1）。IDは作成時に連番から発行し、年月・タイトルからは決して作らない。
 // 形式: <種別>_<連番を36進・検査文字つき>。連番は文明状態（civ.seq）に保存され、保存・読み込みをまたいで続く。
-export const ID_KINDS = Object.freeze(["state", "pop", "settle", "person", "event", "decision", "proposal", "tech", "culture", "lang", "religion", "species", "war", "treaty", "battle", "disaster", "work"]);
+export const ID_KINDS = Object.freeze(["state", "pop", "settle", "person", "event", "decision", "proposal", "tech", "culture", "lang", "religion", "species", "war", "treaty", "battle", "disaster", "work", "interp", "org"]);
 const ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz";
 const check = (kind, n) => { let h = n * 2654435761 >>> 0; for (let i = 0; i < kind.length; i++) h = (h * 31 + kind.charCodeAt(i)) >>> 0; return ALPHA[h % 36]; };
 /** @param {Record<string,number>} seq 種別ごとの発行済み数（この関数が書き換える。保存対象） */

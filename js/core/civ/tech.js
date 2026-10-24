@@ -5,6 +5,9 @@ import { makeEvent } from "./events.js";
 import { dominant } from "./cohorts.js";
 import { neighborGroups } from "./spatial.js";
 import { BIOMES } from "./world-consts.js";
+import { recentEventsFor, asCauses } from "./graph.js";
+import { speciesOf } from "./species.js";
+import { magicTech } from "./magic.js";
 
 const T = (key, name, field, cost, prereq = [], extra = {}) => ({ key, name, field, cost, prereq, minPop: extra.minPop ?? 0, settled: !!extra.settled, cond: extra.cond ?? null, tier: cost < 600 ? 1 : cost < 1500 ? 2 : cost < 3000 ? 3 : cost < 6000 ? 4 : 5 });
 const nearWater = (w, g) => w.cell.coastDist[g.cell] <= 2 || w.cell.river[g.cell];
@@ -46,7 +49,7 @@ export function stepTech(ctx) {
   for (const id in civ.groups) {
     const g = civ.groups[id], k = g.tech.known, d = dominant(g);
     // 1) 進捗と発見
-    const rate = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * (g.settlementId ? 1.3 : 1) * (g.stateId ? 1.2 : 1);
+    const rate = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * (g.settlementId ? 1.3 : 1) * (g.stateId ? 1.2 : 1) * speciesOf(g.speciesId).techRate * (g.stateId && civ.states[g.stateId] ? 1 + magicTech(civ.states[g.stateId]) : 1);
     if (!g.tech.cand) refreshCand(g);
     for (const key of [...g.tech.cand]) {
       const t = TECH[key]; if (g.pop < t.minPop || (t.settled && !g.settlementId) || (t.cond && !t.cond(world, g))) continue;
@@ -61,7 +64,7 @@ export function stepTech(ctx) {
       const ns = [...neighborGroups(ctx, g)]; if (ns.length) {
         const o = civ.groups[ns[Math.floor(rng() * ns.length)]], cand = TECHS.filter((t) => o.tech.known[t.key] != null && k[t.key] == null && t.prereq.every((p) => k[p] != null) && g.pop >= t.minPop && (!t.settled || g.settlementId) && (t.key !== "seafaring" || world.cell.coastDist[g.cell] <= 1));
         if (cand.length) { const t = cand[Math.floor(rng() * cand.length)], same = (dominant(o).cultureId === d.cultureId ? 0.15 : 0) + (o.stateId && o.stateId === g.stateId ? 0.2 : 0);
-          if (rng() < 0.25 + same) { learn(g, t.key, mi); const wasLost = !!g.tech.lost[t.key]; delete g.tech.lost[t.key]; makeEvent(civ, ids, { kind: "tech_transferred", title: `${t.name}が伝わった${wasLost ? "（失われていた知識の回復）" : ""}`, participants: [{ entityId: g.id, role: "receiver" }, { entityId: o.id, role: "source" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: `tech.${t.key}`, before: null, after: mi }] }); } }
+          if (rng() < 0.25 + same) { learn(g, t.key, mi); const wasLost = !!g.tech.lost[t.key]; delete g.tech.lost[t.key]; makeEvent(civ, ids, { kind: "tech_transferred", title: `${t.name}が伝わった${wasLost ? "（失われていた知識の回復）" : ""}`, participants: [{ entityId: g.id, role: "receiver" }, { entityId: o.id, role: "source" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [o.id], ["tech_discovered", "tech_rediscovered", "tech_transferred"], 1e9, 12).filter((e) => e.effects.some((x) => x.property === `tech.${t.key}`)).slice(0, 1), "enabled_by", "strong"), effects: [{ targetId: g.id, property: `tech.${t.key}`, before: null, after: mi }] }); } }
       }
     }
     // 3) 喪失（人口が必要規模の半分を割ると、知識が途切れることがある）

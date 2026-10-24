@@ -24,7 +24,7 @@ await acheck("[v5.0.0 の決定] 球面世界（core/world）は国家運営層�
   const legacy = [...walk(path.join(root, "js/core")), ...walk(path.join(root, "js/io"))].filter((f) => f.endsWith(".js") && !f.includes("/core/world/"));
   const gate = new Set(["js/core/world-bridge.js", "js/io/ahmap-file.js"]);
   for (const f of legacy) if (!gate.has(rel(f))) for (const imp of importsOf(f)) assert.ok(!/(^|\/)world\//.test(imp) && !/world-(actions|service|workspace)/.test(imp), `${rel(f)} が ${imp} を直接 import`);
-  const allowed = new Set(["js/main.js", "js/core/world-bridge.js", "js/io/ahmap-file.js", "js/app/actions.js", "js/app/world-service.js", "js/ui/world-new-dialog.js", "js/app/describe-cell.js", "js/app/group-actions.js", "js/app/edit-actions.js", "js/render/sphere-view.js", "js/render/world-colors.js", "js/render/pixel-map.js", "js/tools/worldgen-preview.js", "js/workers/worldgen.worker.js"]);
+  const allowed = new Set(["js/main.js", "js/core/world-bridge.js", "js/io/ahmap-file.js", "js/app/actions.js", "js/app/world-service.js", "js/ui/world-new-dialog.js", "js/app/describe-cell.js", "js/app/group-actions.js", "js/app/edit-actions.js", "js/ui/history-window.js", "js/render/sphere-view.js", "js/render/world-colors.js", "js/render/pixel-map.js", "js/tools/worldgen-preview.js", "js/workers/worldgen.worker.js"]);
   for (const f of walk(path.join(root, "js")).filter((x) => x.endsWith(".js") && !x.includes("/core/world/"))) for (const imp of importsOf(f)) if (/core\/world\//.test(imp)) assert.ok(allowed.has(rel(f)), `${rel(f)} が球面世界の core を import`);
 });
 await acheck("球面世界の描画（js/render/sphere-view.js 等）は、国家運営層（core/model・edit・sim）を import しない", () => {

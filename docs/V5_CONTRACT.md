@@ -47,3 +47,28 @@ clock（時計・月別の乱数）→ economy_pop（人口）→ culture（文�
 
 ### 戦争・条約（`diplomacy.js`）
 戦争 `civ.wars`・条約 `civ.treaties`・関係値 `state.relations`。戦争の終結は占領地の移管を伴い、終結後 180 か月は次の征服計画を立てない。旧エディタの戦争モデルとの統合は未実施。
+
+## V5-M6〜M13 で追加した契約（v5.0.0）
+
+### tick への登録（v5.0.0 の全体）
+climate（`stepClimate`）→ disaster（`stepDisaster`）→ economy_pop（人口）→ culture（`stepCohorts`・`stepMagic`）→ conflict（`stepWars`・`stepInterpretation`）→ … → integrity（検査・`recordMonth`）。
+
+### 因果・判断（`graph.js`）
+- 正本は `civ.events` / `civ.decisions`（配列）。索引（`graphIndex`）は保存せず、増分で更新する。原因は `causes[{targetId, relation, basis, userEdited?}]`。`checkGraph` が参照切れを検出する。
+- 自動の因果は `recentEventsFor` で探し、`asCauses` で付ける（窓は月数）。原因が無いときは付けない（偽の因果を作らない）。
+
+### 歴史認識・表現物（`interpret.js`）
+- `civ.interpretations[]`（国家の認識）・`civ.works[]`（年代記）。事実（`civ.events`）は書き換えない。認識は `supersedes` で置き換える。国家の有効な認識は `st.interp`。
+
+### 月次履歴（`history.js`・`civ-chunks.js`）
+- `civ.history = {v, dict, states, groups, last}`。実体ごと・項目ごとに `[t0,v0,t1,v1,…]`（値は整数・文字列は辞書）。`recordMonth` が変化だけを書く。`stateAt`・`statesAt`・`groupsAt`・`ownerMapAt`・`compositionAt` で復元。
+- 保存チャンク: `civ.state`（核・`chunked` あり）・`civ.events.<p0000…>`・`civ.decisions.<…>`（100 年）・`civ.history.index`・`civ.history.data`。`.ahmap` 保存時に `civ.*` はすべて書き直す。
+
+### 種族・魔法（`species.js`・`magic.js`）
+- `civ.species`・`civ.persons`（`person_…`）・`civ.magic.orgs`（`org_…`）・`civ.magic.living`（存命の人物ID）。国家の制度は `st.magic = {kind, foundedAt, orgId, power}`。効果の上限は `CAPS`。
+
+### 災害・気候（`disaster.js`）
+- `civ.climate = {index, phase, since}`（指数は seed と月から決まる）・`civ.disasters[disaster_…]`。集団の一時的な収容力低下は `g.capMult`/`g.capUntil`。国家の記憶は `st.memory.disaster`・備蓄は `st.resilience`。
+
+### プレイヤー不変条件（追加）
+- 魔法制度・災害対応・備蓄も、プレイヤー国家は自動で実行されない（`runPlayerAction` 経由のみ）。過去を閲覧中は命令と時間送りが止まる（`civActions.setPastGuard`）。`tests/v500-m13-release.test.mjs` が 600 年で確認する。

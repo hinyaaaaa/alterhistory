@@ -12,6 +12,25 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
+## v5.0.0 開発の現況（V5-M13 完了＝v5.0.0「文明史」・2026-10-24）
+
+**状態**: V5-M0〜M13 を実装。`npm test` は ui.smoke（サンドボックスで環境依存の1件）以外すべて合格。長期検証は `docs/LONG_RUN.md`。
+
+**追加したモジュール（`js/core/civ/`）**: `graph.js`（因果グラフ・索引）・`interpret.js`（歴史認識・年代記）・`history.js`（月次履歴・過去の復元）・`civ-chunks.js`（チャンク保存）・`species.js`・`magic.js`・`disaster.js`（気候・災害）。画面・書き出し: `js/io/obsidian.js`・`zip.js`・`png.js`、`js/app/history-actions.js`・`js/ui/history-window.js`・`virtual-list.js`、`js/core/world/cell-raster.js`。
+
+**tick の登録順（追加分）**: climate→`stepClimate`／disaster→`stepDisaster`／culture→`stepMagic`／conflict→`stepInterpretation`／integrity→`recordMonth`（整合性検査のあと）。命令を実行したときも `recordMonth` を呼び、同じ月の記録を上書きする。
+
+**テスト**: `v500-m6-graph`・`m7-history`・`m8-magic-species`・`m9-obsidian`・`m10-history-ui`・`m11-disaster`・`m13-release`。長期は `node --max-old-space-size=6144 tests/long/long-run.mjs 1000`（npm test には含めない）。
+
+**次にやること（v5.x。データに基づいて）**: AI バランス（イベント数が多い: `demand_raised` が全体の半分近い。要求の発生率・減衰の見直し）、歴史ビューアの地図をメイン地図へ統合、魔法と軍事・外交・宗教の接続、災害からの復興、Obsidian の巨大歴史の分割出力、10,000 年の性能（`LONG_RUN.md`）。
+
+**落とし穴**:
+- `pkill -f` で自分のシェルまで止まる。長いプロセスは PID を指定して止める。
+- 文明のテストで種族を揃えたいときは `createCivState(..., { species: "human" })`。
+- `civ.history` の値は量子化済み（安定度 0.0001・財政 0.01・人口は整数）。復元した値と生の値は等しくない。比較は量子化してから。
+- Obsidian: 名前に `[[` を含む実体があっても、出力時に全角へ置き換える（自前のリンクだけが `[[ ]]` になる）。表の中のリンクは `\|`。
+- 災害の避難による分派は 1 回の災害で最大 1 集団。増やすと集団数・イベント数が増えて性能が落ちる（調整済み）。
+
 ## v5.0.0 開発の現況（V5-M5 完了時点＝v4.2.0・2026-10-22）
 - 済み: M0〜M5（`docs/V5_CONTRACT.md`・`docs/CHANGELOG.md` の v4.2.0）。文明層は `js/core/civ/`、アプリとの接続は `js/app/civ-actions.js`・`js/ui/civ-window.js`。テストは `tests/v500-civ-*.test.mjs`。
 - 次（v5.0.0 まで）: **M6 因果グラフ**（イベントの双方向索引・原因の信頼度・失敗した外交の記録）→ **M7 月次履歴**（判断記録・イベントのチャンク化。容量の未解決問題 `DECISIONS.md` 参照）→ M8 魔法 → M9 Obsidian → M10 UI 再構築（`UI_SCALE_DESIGN.md`）→ M11 気候・災害 → M12 長期検証（10,000 年）→ M13 リリース基準。

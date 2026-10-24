@@ -1,6 +1,7 @@
 // V5-M4: 人口コホート（文化・言語・宗教・種族ごとの人口の塊）。1つの集団・国家の中に複数が共存し、
 // 同化・緊張・要求（自治など）が月次で動く。コホートの割合 share の合計は常に 1。
 import { makeEvent } from "./events.js";
+import { recentEventsFor, asCauses } from "./graph.js";
 export const INTERESTS = Object.freeze({ autonomy: "自治", religious_freedom: "信仰の自由", language_rights: "言語の権利", tax_relief: "減税", land: "土地", security: "安全" });
 export const dominant = (g) => { let b = g.cohorts[0]; for (const c of g.cohorts) if (c.share > b.share) b = c; return b; };
 export const normalize = (g) => { let t = 0; for (const c of g.cohorts) t += c.share; for (const c of g.cohorts) c.share /= t || 1; };
@@ -28,7 +29,8 @@ export function stepCohorts(ctx) {
     for (const c of g.cohorts) {
       if (!st && c === dominant(g)) continue;
       const { target, interest } = tensionTarget(c, ref, st); const was = c.tension; c.tension += (target + assim * 0.2 - c.tension) * 0.14; c.interest = interest;
-      if (was < 0.7 && c.tension >= 0.7) makeEvent(civ, ids, { kind: "demand_raised", title: `少数の人々が「${INTERESTS[interest] ?? "改善"}」を求める`, participants: [{ entityId: g.id, role: "group" }, ...(st ? [{ entityId: st.id, role: "state" }] : [])], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "cohort_tension", before: Math.round(was * 100) / 100, after: Math.round(c.tension * 100) / 100 }] });
+      if (c.tension < 0.5) c.demandSpent = false; // 要求の再発は、緊張が十分に下がってから（0.7 付近の揺れで同じ要求のイベントを量産しない）
+      if (was < 0.7 && c.tension >= 0.7 && !c.demandSpent && (c.demandSpent = true)) makeEvent(civ, ids, { kind: "demand_raised", title: `少数の人々が「${INTERESTS[interest] ?? "改善"}」を求める`, participants: [{ entityId: g.id, role: "group" }, ...(st ? [{ entityId: st.id, role: "state" }] : [])], location: { cell: g.cell }, causes: [...asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible"), ...(st ? asCauses(recentEventsFor(civ, [st.id], ["war_ended", "leader_succession"], 36, 1), "contributed_to", "plausible") : [])], effects: [{ targetId: g.id, property: "cohort_tension", before: Math.round(was * 100) / 100, after: Math.round(c.tension * 100) / 100 }] });
       const d = dominant(g); if (c !== d && c.speciesId === d.speciesId) { const mv = c.share * 0.0024 * (1 + 3 * assim); c.share -= mv; d.share += mv; changed = true; } // 同じ種族の少数は、ゆっくり多数派へ同化する
     }
     if (changed) { const before = g.cohorts.length; g.cohorts = g.cohorts.filter((c) => c.share >= 0.01 || c === dominant(g)); normalize(g); if (g.cohorts.length < before) makeEvent(civ, ids, { kind: "cohort_assimilated", title: "少数の人々が多数派へ溶け込んだ", participants: [{ entityId: g.id, role: "group" }], location: { cell: g.cell } }); }

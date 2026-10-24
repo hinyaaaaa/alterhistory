@@ -6,6 +6,8 @@ import { makeEvent } from "./events.js";
 import { densityMult } from "./techfx.js";
 import { TECH, TECHS as TECHS_ORDER, refreshCand } from "./tech.js";
 import { LAND_WATER, BIOMES } from "./world-consts.js";
+import { recentEventsFor, asCauses } from "./graph.js";
+import { speciesOf } from "./species.js";
 
 export const SUBSISTENCE = Object.freeze({ forage: "採集狩猟", pastoral: "牧畜", agriculture: "農耕", fishing: "漁撈" });
 export const POP = Object.freeze({
@@ -113,10 +115,10 @@ export function stepPopulation(ctx) {
   const { world, civ, ids, rng } = ctx, occ = occupancy(world, civ), mi = civ.monthIndex;
   for (const id of sortedGroupIds(civ)) {
     const g = civ.groups[id]; if (!g) continue;
-    const K = Math.max(1, groupCapacity(world, g, occ)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1);
+    const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId).growth;
     // 1) 人口（ロジスティック。収容力を超えると減る）。乱数は ±20%
     const noise = 0.8 + 0.4 * rng(); g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0)); // 収容力を超えた分は、飢えで早く減る
-    if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) { g.famineAt = mi; makeEvent(civ, ids, { kind: "famine", title: "飢え", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] }); }
+    if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) { g.famineAt = mi; makeEvent(civ, ids, { kind: "famine", title: "飢え", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck"], 36, 1), "caused_by", "strong"), effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] }); }
     if (g.pop < 5) { delete civ.groups[id]; if (g.settlementId) delete civ.settlements[g.settlementId]; makeEvent(civ, ids, { kind: "group_extinct", title: "集団の消滅", participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell } }); continue; }
     g.settledMonths = g.order ? 0 : g.settledMonths + 1;
     // 2) 命令の進行（移動）
@@ -129,13 +131,13 @@ export function stepPopulation(ctx) {
     // 5) 定住（集落の成立）
     if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && g.settledMonths >= POP.settleMinMonths) { if (g.player) addProposal(civ, ids, g, "found_settlement", {}); else foundSettlement(world, civ, ids, g); }
     const st = g.settlementId ? civ.settlements[g.settlementId] : null;
-    if (st) { st.pop = Math.round(g.pop * POP.settledShare); const ns = stageOf(st.pop); if (ns !== st.stage) { const old = st.stage; st.stage = ns; makeEvent(civ, ids, { kind: "settlement_stage", title: `${STAGE_JA[old]}から${STAGE_JA[ns]}へ`, participants: [{ entityId: st.id, role: "settlement" }], location: { cell: st.cell } }); } }
+    if (st) { st.pop = Math.round(g.pop * POP.settledShare); const ns = stageOf(st.pop); if (ns !== st.stage) { const old = st.stage; st.stage = ns; makeEvent(civ, ids, { kind: "settlement_stage", title: `${STAGE_JA[old]}から${STAGE_JA[ns]}へ`, participants: [{ entityId: st.id, role: "settlement" }], location: { cell: st.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck", "famine"], 24, 1), "contributed_to", "plausible") }); } }
     // 6) 分派（人口圧が高いとき）。移住は海・山・気候のコストで制限される
     if (pressure > POP.budPressure && g.pop >= POP.minBudPop * 2 && mi - g.lastBudAt >= POP.budCooldown && !g.order) {
       const targets = bestTargets(world, civ, g, occ, 3);
       if (targets.length) {
         if (g.player) addProposal(civ, ids, g, "split", { targets });
-        else { const t = targets[0], moved = Math.round(g.pop * POP.budShare); g.pop -= moved; g.lastBudAt = mi; const child = spawnGroup(civ, ids, g, t.cell, moved); occ.set(t.cell, 1); for (const x of ensureCells(world, child)) occ.set(x, (occ.get(x) ?? 0) + 1); makeEvent(civ, ids, { kind: "group_split", title: "集団の分派", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t.cell } }); }
+        else { const t = targets[0], moved = Math.round(g.pop * POP.budShare); g.pop -= moved; g.lastBudAt = mi; const child = spawnGroup(civ, ids, g, t.cell, moved); occ.set(t.cell, 1); for (const x of ensureCells(world, child)) occ.set(x, (occ.get(x) ?? 0) + 1); makeEvent(civ, ids, { kind: "group_split", title: "集団の分派", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible") }); }
       } else g.lastBudAt = mi - POP.budCooldown + POP.noTargetBackoff; // 行き先が無いなら一定期間あとに再評価（空きが無い世界での無駄な探索を避ける）
     }
   }

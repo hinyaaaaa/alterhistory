@@ -9,28 +9,38 @@ import { stepTech } from "./tech.js";
 import { stepStates } from "./states.js";
 import { stepWars, endWar } from "./diplomacy.js";
 import { stepAIPlan, stepAIApply } from "./ai.js";
+import { stepInterpretation } from "./interpret.js";
+import { recordMonth } from "./history.js";
+import { stepMagic } from "./magic.js";
+import { stepClimate, stepDisaster, climateGrowth } from "./disaster.js";
+import { byState } from "./spatial.js";
 import { applyCommand } from "./commands.js";
 
 export function createCivSim(world, civ) {
   const ids = createIdGen(civ.seq), ticker = createTicker();
   ticker.register("clock", (ctx) => { setDate(ctx.civ, ctx.civ.monthIndex + 1); ctx.rng = rngOf(hashSeed(ctx.civ.historySeed, ctx.civ.monthIndex)); }, "advanceClock");
+  ticker.register("climate", stepClimate, "stepClimate");
+  ticker.register("disaster", stepDisaster, "stepDisaster");
   ticker.register("economy_pop", stepPopulation, "stepPopulation");
   ticker.register("culture", stepCulture, "stepCulture");
   ticker.register("culture", stepCohorts, "stepCohorts");
+  ticker.register("culture", stepMagic, "stepMagic");
   ticker.register("tech", stepTech, "stepTech");
   ticker.register("ai_plan", stepAIPlan, "stepAIPlan");
   ticker.register("apply", stepAIApply, "stepAIApply");
   ticker.register("conflict", stepStates, "stepStates");
   ticker.register("conflict", stepWars, "stepWars");
+  ticker.register("conflict", stepInterpretation, "stepInterpretation");
   // 毎月は軽い検査（今月増えたイベントと集団）。全件の検査は10年ごと（全イベントの走査を毎月しない）
   ticker.register("integrity", (ctx) => { const full = ctx.civ.monthIndex % 120 === 0, errs = checkCivIntegrity(ctx.world, ctx.civ, { sinceEvent: full ? 0 : ctx.eventsChecked ?? 0, structure: full || ctx.civ.monthIndex % 12 === 0 }); ctx.eventsChecked = ctx.civ.events.length; if (errs.length) throw new Error("文明状態の整合性違反: " + errs.slice(0, 3).join(" / ")); }, "checkIntegrity");
-  const ctx = { world, civ, ids, rng: rngOf(hashSeed(civ.historySeed, civ.monthIndex)), trace: [], eventsChecked: civ.events.length, plans: [], endWarHook: endWar,
+  ticker.register("integrity", (ctx) => recordMonth(ctx), "recordMonth"); // 整合性検査のあとに、全国家の月次状態を確定する
+  const ctx = { world, civ, ids, rng: rngOf(hashSeed(civ.historySeed, civ.monthIndex)), growthMult: () => climateGrowth(civ), trace: [], eventsChecked: civ.events.length, plans: [], endWarHook: endWar,
     stateMult: (g) => { const st = g.stateId ? civ.states[g.stateId] : null; return st ? (st.boostUntil > civ.monthIndex ? 1.2 : 1) * (1 - 0.4 * st.policy.mobilization) : 1; } };
   return {
     ctx, ticker,
     advanceMonth() { ticker.runMonth(ctx); return civ.date; },
     advanceMonths(n, onProgress) { for (let i = 0; i < n; i++) { ticker.runMonth(ctx); if (onProgress && i % 120 === 119) onProgress(i + 1, n); } return civ.date; },
-    command: (cmd) => applyCommand(ctx, cmd),
+    command: (cmd) => { const r = applyCommand(ctx, cmd); if (r.ok) { ctx._byState = null; recordMonth(ctx); } return r; }, // 命令で変わった状態は、同じ月の記録を上書きする
   };
 }
 
