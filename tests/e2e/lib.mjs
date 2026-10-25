@@ -2,14 +2,19 @@
 //   使い方: node tests/e2e/xxx.e2e.mjs   （事前に npm run build。Chromium は @sparticuz/chromium が同梱）
 //   画面は /tmp/e2e-shots/ に保存する。コンソールエラーとページ内例外は集めて、最後に失敗として数える。
 import { createRequire } from "node:module";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, mkdtempSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { buildSyntheticMapText } from "../helpers/synth-map.mjs";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { worldToMap } from "../../js/core/world-bridge.js";
+import { saveMapBytes } from "../../js/io/ahmap-file.js";
 const require = createRequire(import.meta.url);
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 export const SHOTS = process.env.SHOTS_DIR ?? "/tmp/e2e-shots";
 mkdirSync(SHOTS, { recursive: true });
+// 一時ファイル（生成した世界・保存ファイル・書き出し）は、実行ごとの専用フォルダに置く（前回の残りを読み込む取り違えを防ぐ）
+export const TMP = process.env.E2E_TMP ?? mkdtempSync(path.join(os.tmpdir(), "ah-e2e-"));
 
 export async function launch({ width = 1280, height = 853, touch = false } = {}) {
   const chromium = require("@sparticuz/chromium").default ?? require("@sparticuz/chromium");
@@ -25,14 +30,39 @@ export async function launch({ width = 1280, height = 853, touch = false } = {})
   return { browser, ctx, page, problems };
 }
 
-export async function openApp(page, { seed = 11 } = {}) {
+// v5: 本番が開けるのは .ahmap（v2）だけ。世界を Node で生成して .ahmap にし、ページに「ファイルを開く」で渡す。
+// 国家は本番と同じ経路（setupActions.create）でページ内に作る（E2E が操作する国・都市・戦争の土台）。
+export async function makeWorldFile(seed = 11, cells = 1500) {
+  let lastErr;
+  for (let k = 0; k < 8; k++) { // 小さい世界は統計の許容帯に入らず生成に失敗することがある。シードをずらして最初に成功したものを使う
+    try {
+      const map = worldToMap(generateWorld({ worldSeed: `e2e-${seed}-${k}`, resolution: { targetCells: cells } }));
+      const file = path.join(TMP, `e2e-world-${seed}.ahmap`);
+      writeFileSync(file, await saveMapBytes(map, { appVersion: "e2e", savedAt: "2026-10-25" }));
+      return file;
+    } catch (e) { lastErr = e; }
+  }
+  throw new Error(`E2E 用の世界を生成できませんでした: ${lastErr?.message}`);
+}
+
+export async function openApp(page, { seed = 11, cells = 1500, states = 4 } = {}) {
   await page.goto(pathToFileURL(path.join(root, "index.html")).href);
   await page.bringToFront();
-  const { text } = buildSyntheticMapText({ seed });
-  const file = `/tmp/e2e-map-${seed}.map`;
-  writeFileSync(file, text);
-  await page.setInputFiles("#file-input", file);
+  await page.setInputFiles("#file-input", await makeWorldFile(seed, cells));
   await page.waitForFunction(() => /セル/.test(document.getElementById("status-map")?.textContent ?? ""), null, { timeout: 30000, polling: 100 });
+  if (states > 0) {
+    const made = await page.evaluate((n) => {
+      const { setupActions } = window.alterhistory; const ids = [];
+      for (let i = 0; i < n; i++) { try { const r = setupActions.create("state", { territory: "m", capital: true }); if (r?.id) ids.push(r.id); } catch (e) { return { error: e.message, ids }; } }
+      return { ids };
+    }, states);
+    if (made.error || made.ids.length < Math.min(2, states)) throw new Error(`E2E 用の国家を作れませんでした: ${made.error ?? made.ids.length + " か国"}`);
+    // 国家を作った操作は Undo 履歴に残るので、保存→開き直しで「編集前」の状態にする（本物の保存・読み込みの経路でもある）
+    const [dl] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }), page.evaluate(() => window.alterhistory.actions.saveNative())]);
+    const seeded = path.join(TMP, `e2e-seeded-${seed}.ahmap`); await dl.saveAs(seeded);
+    await page.setInputFiles("#file-input", seeded);
+    await page.waitForFunction(() => window.alterhistory.store.getState().fileName?.endsWith(".ahmap") && !window.alterhistory.store.canUndo() && window.alterhistory.store.getState().map.pack.states.length > 1, null, { timeout: 30000, polling: 100 });
+  }
 }
 
 export function reporter() {

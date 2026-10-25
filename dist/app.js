@@ -15406,8 +15406,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "5.0.0";
-  var APP_VERSION_NAME = "\u6587\u660E\u53F2";
+  var APP_VERSION = "5.1.0";
+  var APP_VERSION_NAME = "\u5B89\u5B9A\u5316";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/icons.js

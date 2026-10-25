@@ -63,5 +63,10 @@ await check("壊れた文明チャンクがあっても世界は開く（警告�
   const dm = Array.from(bytes); const idx = new TextDecoder("latin1").decode(bytes).indexOf("civ.events.p0000"); assert.ok(idx > 0, "期間チャンク名が見つからない"); // チャンク名の1文字を壊す（索引と本体が合わなくなる）
   const broken = new Uint8Array(bytes); broken[idx + 5] = broken[idx + 5] ^ 0x20; let opened = null, err = null; try { opened = await loadMapBytes(broken); } catch (e) { err = e; } assert.ok(opened || err); if (opened) { const m = opened.map ?? opened; assert.ok(m.world, "世界が開けていない"); }
 });
-await check("版: v5.0.0（package.json・js/version.js・CHANGELOG が一致）", async () => { assert.equal(APP_VERSION, "5.0.0"); });
+await check("版: package.json・js/version.js・CHANGELOG の先頭が一致し、5.x である", async () => {
+  const { readFileSync } = await import("node:fs");
+  const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version;
+  const top = readFileSync(new URL("../docs/CHANGELOG.md", import.meta.url), "utf8").match(/^## v(\d+\.\d+\.\d+)/m)?.[1];
+  assert.equal(APP_VERSION, pkg); assert.equal(top, APP_VERSION); assert.match(APP_VERSION, /^5\./);
+});
 if (failed) { console.log(`\n${failed} 件失敗`); process.exit(1); } else console.log("\n全て成功");

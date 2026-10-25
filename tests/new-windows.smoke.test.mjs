@@ -32,7 +32,7 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
     window.Element.prototype.setPointerCapture = () => {};
     window.Element.prototype.releasePointerCapture = () => {};
     window.Element.prototype.hasPointerCapture = () => false;
-    Object.assign(window, { TextDecoder, Blob, Response, DecompressionStream });
+    Object.assign(window, { TextDecoder, Blob, Response, CompressionStream, DecompressionStream });
   },
 });
 const { window } = dom;

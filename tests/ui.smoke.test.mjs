@@ -55,7 +55,7 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
     window.Element.prototype.releasePointerCapture = () => {};
     window.Element.prototype.hasPointerCapture = () => false;
     // jsdom に無い Web API を Node のものから補う（gzip 展開・デコードに必要）
-    Object.assign(window, { TextDecoder, Blob, Response, DecompressionStream });
+    Object.assign(window, { TextDecoder, Blob, Response, CompressionStream, DecompressionStream });
     // ダウンロードの捕捉: createObjectURL で渡された Blob と、a[download] のクリックを記録する
     const blobs = new Map();
     window.URL.createObjectURL = (b) => { const u = "blob:test/" + blobs.size; blobs.set(u, b); return u; };

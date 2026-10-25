@@ -32,7 +32,7 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
     window.Element.prototype.setPointerCapture = () => {};
     window.Element.prototype.releasePointerCapture = () => {};
     window.Element.prototype.hasPointerCapture = () => false;
-    Object.assign(window, { TextDecoder, Blob, Response, DecompressionStream });
+    Object.assign(window, { TextDecoder, Blob, Response, CompressionStream, DecompressionStream });
   },
 });
 const { window } = dom;
@@ -51,9 +51,19 @@ const live = () => M().pack.states.filter((s) => s && s.i > 0 && !s.removed);
 // 強い国と弱い国で戦争を起こし、勝敗を付ける
 const [A, B] = live().map((s) => s.i);
 M().pack.states[A].military = M().pack.states[A].military?.length ? M().pack.states[A].military : [];
-const out = simActions.declareWarInstant([A], [B], null, "conventional");
+// 戦力が互角の合成マップでは、勝敗は乱数で決まり、引き分け（stalemate）になることもある。引き分けの講和は別に確かめ、
+// 区画の検証には「勝敗がついた戦争」を使う（引き分けを守備側の勝利とみなして失敗していた間欠失敗の原因）。
+let out, w0, sawStalemate = null;
+for (let i = 0; i < 60; i++) {
+  out = simActions.declareWarInstant([A], [B], null, "conventional");
+  w0 = out?.id && M().ext.data.wars.find((x) => x.id === out.id);
+  if (!w0 || w0.result?.winner !== "stalemate") break;
+  if (!sawStalemate) sawStalemate = simActions.suggestTerms(out.id, { size: "s" });
+  store.undo();
+}
 check("戦争が始まる", !!out?.id);
-const w0 = M().ext.data.wars.find((x) => x.id === out.id);
+check("勝敗がついた戦争が得られる", w0?.result?.winner === "attacker" || w0?.result?.winner === "defender", w0?.result?.winner);
+if (sawStalemate) check("引き分けの戦争は、領土を取らない（区画なし・白紙講和）", sawStalemate.cessions.length === 0 && sawStalemate.kind === "white", `${sawStalemate.kind}/${sawStalemate.cessions.length}`);
 const winner = w0.result.winner === "attacker" ? w0.attackers[0] : w0.defenders[0], loser = winner === A ? B : A;
 const terms0 = simActions.suggestTerms(out.id, { size: "s" });
 check("自動案に、区画（依存・深さつき）が出る", terms0 && terms0.cessions.length > 0 && terms0.cessions.every((c) => Array.isArray(c.needs) && c.depth >= 0 && !c.regionCells.includes(M().pack.burgs[M().pack.states[loser].capital]?.cell)));

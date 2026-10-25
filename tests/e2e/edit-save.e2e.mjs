@@ -1,4 +1,4 @@
-import { launch, openApp, reporter, shot, root } from "./lib.mjs";
+import { launch, openApp, reporter, shot, root, TMP } from "./lib.mjs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { statSync, readFileSync } from "node:fs";
@@ -54,14 +54,16 @@ try {
   await page.mouse.down(); await page.mouse.move(b.x + b.width * 0.45, b.y + b.height * 0.5, { steps: 8 }); await page.mouse.up();
   await page.waitForTimeout(200);
   const [land1, water1] = await hSum();
-  check("標高ツールで塗ると、陸の標高が上がる（水域は変わらない）", land1 > land0 && water1 === water0, `${land0}→${land1}`);
+  check("標高ツールで塗ると、陸の標高の合計が上がる（v5 では海が陸になることもある）", land1 > land0, `${land0}→${land1}`);
   await page.keyboard.press("Control+z"); await page.waitForTimeout(250);
-  check("標高の調整も Undo で戻る", (await hSum())[0] === land0);
+  { const [l2, w2] = await hSum(); check("標高の調整も Undo で戻る（陸の標高も水域の数も）", l2 === land0 && w2 === water0, `${l2}/${w2} vs ${land0}/${water0}`); }
   await page.locator('#edit-panel [data-tool="select"]').click();
-  await page.mouse.dblclick(b.x + b.width * 0.3, b.y + b.height * 0.45); // 単クリックは何もしない仕様。ダブルクリックで国家を開く
-  await page.waitForTimeout(300);
+  // 単クリックは何もしない仕様。ダブルクリックで国家を開く。国の領土は実行ごとに違うので、国に当たるまで地図上の点を順に試す
+  const detailVisible = () => page.locator('[data-win="nation"] .nation-detail').isVisible();
+  let opened = false;
+  for (const fy of [0.45, 0.35, 0.55, 0.65, 0.25, 0.75]) { for (const fx of [0.3, 0.4, 0.5, 0.6, 0.7, 0.2, 0.8]) { await page.mouse.dblclick(b.x + b.width * fx, b.y + b.height * fy); await page.waitForTimeout(150); if (await detailVisible()) { opened = true; break; } } if (opened) break; }
   await shot(page, "32-select-state");
-  check("選択ツールで国をダブルクリックすると、国家タブの詳細が出る", await page.locator('[data-win="nation"] .nation-detail').isVisible());
+  check("選択ツールで国をダブルクリックすると、国家タブの詳細が出る", opened);
 
   console.log("=== 確認ダイアログ（実物の <dialog>）===");
   await page.keyboard.press("Escape");
@@ -98,7 +100,7 @@ try {
   const warName = await page.locator("#tab-wars .war-band button").nth(1).textContent();
   const dateBefore = await page.textContent("#world-date");
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("#btn-save")]);
-  const savePath = "/tmp/e2e-saved.ahmap"; await dl.saveAs(savePath);
+  const savePath = `${TMP}/e2e-saved.ahmap`; await dl.saveAs(savePath);
   check("保存ファイルができる（空でない）", statSync(savePath).size > 10000, String(statSync(savePath).size));
   await freshPage(savePath); // ブラウザを起こし直して、保存ファイルを開く
   check("開き直しても同じ年月", (await page.textContent("#world-date")) === dateBefore, `${dateBefore} → ${await page.textContent("#world-date")}`);
@@ -111,24 +113,24 @@ try {
   for (const [kind, min, head] of [["png", 5000, "PNG"], ["svg", 2000, "<svg"], ["chronicle", 200, null]]) {
     await page.evaluate(() => window.alterhistory.wins.open("export"));
     const [d] = await Promise.all([page.waitForEvent("download", { timeout: 20000 }), page.click(`[data-win="export"] [data-export="${kind}"]`)]);
-    const pth = `/tmp/e2e-export.${kind}`; await d.saveAs(pth);
+    const pth = `${TMP}/e2e-export.${kind}`; await d.saveAs(pth);
     const buf = readFileSync(pth);
     check(`${kind} を書き出せる`, buf.length > min && (!head || buf.slice(0, 200).toString("latin1").includes(head)), `${buf.length}`);
     await page.waitForTimeout(100);
   }
 
   console.log("=== バランス調整は地図に保存される（保存→開き直しで残る／別の地図には持ち越さない）===");
-  await freshPage("/tmp/e2e-map-11.map");
+  await freshPage(`${TMP}/e2e-world-11.ahmap`);
   await page.evaluate(() => window.alterhistory.wins.open("balance"));
   const noiseInput = () => page.locator('.float-win[data-win="balance"] input').nth(2);
   const noise = noiseInput();
   await noise.fill("0.05"); await noise.dispatchEvent("change");
   const [dlBal] = await Promise.all([page.waitForEvent("download"), page.click("#btn-save")]);
-  const balPath = "/tmp/e2e-saved-balance.ahmap"; await dlBal.saveAs(balPath);
+  const balPath = `${TMP}/e2e-saved-balance.ahmap`; await dlBal.saveAs(balPath);
   await freshPage(balPath);
   await page.evaluate(() => window.alterhistory.wins.open("balance"));
   check("保存した地図を開き直すと、バランス設定が残る", (await noiseInput().inputValue()) === "0.05");
-  await freshPage("/tmp/e2e-map-11.map");
+  await freshPage(`${TMP}/e2e-world-11.ahmap`);
   await page.evaluate(() => window.alterhistory.wins.open("balance"));
   check("上書きの無い別の地図には、前の地図の値を持ち越さない（既定値）", (await noiseInput().inputValue()) === "0.18");
   await shot(page, "34-balance");

@@ -21,7 +21,7 @@ const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
     window.window.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
     window.window.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); this.dispatchEvent(new window.Event("close")); };
     window.Element.prototype.setPointerCapture = () => {}; window.Element.prototype.releasePointerCapture = () => {}; window.Element.prototype.hasPointerCapture = () => false;
-    Object.assign(window, { TextDecoder, Blob, Response, DecompressionStream });
+    Object.assign(window, { TextDecoder, Blob, Response, CompressionStream, DecompressionStream });
   },
 });
 const { window } = dom;
