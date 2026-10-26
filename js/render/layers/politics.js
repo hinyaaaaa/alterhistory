@@ -33,6 +33,9 @@ export function shadeOf(color, step) {
   return `rgb(${rgb.map((v) => Math.round(v + (mix - v) * a)).join(",")})`;
 }
 
+/** 世界の一部しか画面にかからないときだけ、画面外の線分を描かないための範囲（全体表示では null）。縦は円筒図法の変換後の範囲を sim へ戻したもの */
+export function cullBounds(vp) { return (vp.cullable?.() ?? (vp.fitK > 0 && vp.k / vp.fitK > 4)) ? vp.visibleBounds(40) : null; }
+
 /** 境界線の計算結果のキャッシュ。配列の同一性が変わらない限り再計算しない */
 const edgeCache = new WeakMap();
 export function cachedBoundary(geometry, values, include, tag) {
@@ -110,7 +113,7 @@ export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, li
   if (provOf && shadeGroups.size) {
     const psegs = cachedBoundary(map.geometry, provOf, isLand, "land:province"); // 州の配列だけで決まるのでキャッシュが効く
     ctx.strokeStyle = "rgba(40,30,20,0.35)"; ctx.lineWidth = 0.6 / vp.k; ctx.lineCap = "round";
-    ctx.setLineDash([2 / vp.k, 2 / vp.k]); strokeSegments(ctx, psegs); ctx.setLineDash([]);
+    ctx.setLineDash([2 / vp.k, 2 / vp.k]); strokeSegments(ctx, psegs, cullBounds(vp)); ctx.setLineDash([]);
   }
 
   // 境界線（陸どうしの間のみ）
@@ -119,7 +122,7 @@ export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, li
   ctx.lineWidth = (kind === "state" ? 1.4 : 0.9) / vp.k;
   ctx.lineCap = "round";
   if (kind !== "state") ctx.setLineDash([3 / vp.k, 2 / vp.k]);
-  strokeSegments(ctx, segs);
+  strokeSegments(ctx, segs, cullBounds(vp));
   ctx.setLineDash([]);
 }
 
@@ -130,5 +133,5 @@ export function drawCoast(ctx, map, vp) {
   ctx.strokeStyle = "rgba(45,50,60,0.85)";
   ctx.lineWidth = 0.9 / vp.k;
   ctx.lineCap = "round";
-  strokeSegments(ctx, segs);
+  strokeSegments(ctx, segs, cullBounds(vp));
 }

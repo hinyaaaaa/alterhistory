@@ -1,0 +1,69 @@
+{
+ "env": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 1,
+  "ramMB": 3996,
+  "node": "v22.22.2"
+ },
+ "cells": 250000,
+ "seed": "bench52",
+ "steps": {
+  "generate": {
+   "ms": 2500,
+   "cells": 249642,
+   "heapMB": 16
+  },
+  "worldToMap": {
+   "ms": 1516,
+   "heapMB": 366,
+   "mapW": 2048,
+   "mapH": 1024
+  },
+  "draw_full_first": {
+   "ms": 1104,
+   "heapMB": 381
+  },
+  "draw_full_cached": {
+   "ms": 910
+  },
+  "draw_seam_cross": {
+   "ms": 1026,
+   "copies": 2
+  },
+  "draw_zoom4x": {
+   "ms": 196,
+   "a": 0.8
+  },
+  "draw_zoom16x": {
+   "ms": 61,
+   "a": 0.9750000000000001
+  },
+  "draw_zoom64x": {
+   "ms": 54,
+   "a": 1
+  },
+  "draw_pan_x5_zoom16": {
+   "msTotal": 307
+  },
+  "hit_index_build": {
+   "ms": 24
+  },
+  "hit_test_x2000": {
+   "ms": 39,
+   "hits": 1928
+  },
+  "save": {
+   "ms": 1212,
+   "bytesMB": 20.4,
+   "heapMB": 384,
+   "rssMB": 722
+  },
+  "load": {
+   "ms": 3600,
+   "cells": 249642,
+   "warnings": 0,
+   "heapMB": 746,
+   "rssMB": 1137
+  }
+ }
+}

@@ -6,7 +6,7 @@ import { planKatakanaBurgs } from "../core/edit/katakana.js";
 import { createRandom as createKanaRandom } from "../core/random.js";
 import { entityPosition, ENTITY_KINDS } from "../core/query.js";
 import { entityOutlineSegments, segmentsBounds } from "../render/edges.js";
-import { loadMapFile, saveMapBytes, AHMAP_EXT } from "../io/ahmap-file.js";
+import { loadMapFile, saveMapParts, AHMAP_EXT } from "../io/ahmap-file.js";
 import { normalizeWorldSpec } from "../core/world/spec.js";
 import { worldToMap } from "../core/world-bridge.js";
 import { createGroupActions } from "./group-actions.js";
@@ -16,7 +16,9 @@ import { DEFAULT_ANNOTATIONS } from "../render/layers/annotations.js";
 import { buildChronicle, chronicleToMarkdown } from "../io/chronicle.js";
 import { LAYERS, FILL_KEY, FILL_KINDS, isLayerOn, exclusiveFillPatch, snapshotFills } from "./layers.js";
 
-const nextPaint = () => new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+// 「読み込み中」を先に描いてから重い処理を始める。タブが裏に回る・ウィンドウが隠れる・省電力で rAF が止まると来ないので、
+// 一定時間（150ms）で必ず先へ進める（v5.2: Edge で生成後に「地図を準備中…」から進まないことがあった）
+const nextPaint = () => new Promise((resolve) => { let done = false; const go = () => { if (!done) { done = true; resolve(); } }; if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 150); });
 
 export const OVERLAYS = ["none", ...FILL_KINDS];
 const LAYER_KEYS = new Set(LAYERS.map((l) => l.key));
@@ -94,18 +96,23 @@ export function createActions({ store, viewport, renderer, worldService, downloa
     async newWorld(specInput) {
       const { spec, errors } = normalizeWorldSpec(specInput);
       if (errors.length) { store.update((s) => { s.error = "世界の設定が不正です: " + errors.join(" / "); }); return { ok: false, errors }; }
-      const my = ++genToken;
+      const my = ++genToken, T0 = performance.now(), el = () => `${Math.round((performance.now() - T0) / 1000)}秒`, stages = [];
       store.update((s) => { s.busy = "世界を生成中…"; s.error = null; });
       try {
-        const world = await worldService.generate(spec, { onProgress: (p) => { if (my === genToken) store.update((s) => { s.busy = `世界を生成中: ${p.label ?? p.stage}`; }); } });
+        // 経過時間を、待っている間も表示する（遅い端末で、止まっているのか進んでいるのかが分かる）。段階ごとの所要時間は console.info と最後の通知に残す
+        let stageT = T0, stageName = "開始";
+        const world = await worldService.generate(spec, { onProgress: (p) => { if (my !== genToken) return; const now = performance.now(); stages.push([stageName, now - stageT]); stageT = now; stageName = p.label ?? p.stage; store.update((s) => { s.busy = `世界を生成中: ${stageName}（${el()}経過）`; }); } });
         if (my !== genToken) return { ok: false, cancelled: true };
+        const tGen = performance.now() - T0;
         world.entities.start = null;
-        store.update((s) => { s.busy = "地図を準備中…"; });
+        store.update((s) => { s.busy = `地図を準備中…（${el()}経過）`; });
         await nextPaint();
-        const map = worldToMap(world);
-        this.adoptMap(map, `${world.spec.worldSeed}.${AHMAP_EXT}`, []);
-        const g = world.generation;
-        showNotice(g?.rejected?.length ? `統計の許容帯に入るまで ${g.attempts} 回作り直しました（破棄したシード: ${g.rejected.map((r) => r.seed).join("、")}）。使ったシード: ${g.seedUsed}` : "世界ができました。次は、歴史を始める初期集団を選びます");
+        const tMap0 = performance.now(), map = worldToMap(world), tMap = performance.now() - tMap0;
+        const tAdopt0 = performance.now(); this.adoptMap(map, `${world.spec.worldSeed}.${AHMAP_EXT}`, []); const tAdopt = performance.now() - tAdopt0;
+        const sec = (ms) => (ms / 1000).toFixed(1), g = world.generation, total = performance.now() - T0;
+        console.info(`[世界生成] 合計 ${sec(total)}秒（生成 ${sec(tGen)}・地図化 ${sec(tMap)}・採用と描画 ${sec(tAdopt)}）`, stages.filter(([, ms]) => ms >= 50).map(([n, ms]) => `${n} ${sec(ms)}秒`).join(" / "));
+        const timing = `（合計 ${sec(total)}秒: 生成 ${sec(tGen)}・地図化 ${sec(tMap)}・採用と描画 ${sec(tAdopt)}）`;
+        showNotice((g?.rejected?.length ? `統計の許容帯に入るまで ${g.attempts} 回作り直しました（破棄したシード: ${g.rejected.map((r) => r.seed).join("、")}）。使ったシード: ${g.seedUsed}` : "世界ができました。次は、歴史を始める初期集団を選びます") + timing);
         return { ok: true, map };
       } catch (e) {
         if (e.name === "Cancelled") { store.update((s) => { s.busy = null; }); return { ok: false, cancelled: true }; }
@@ -182,8 +189,8 @@ export function createActions({ store, viewport, renderer, worldService, downloa
     /** .ahmap（v2）で保存する。世界の地理は正本のチャンク、国家運営層の状態は拡張チャンクに入る */
     saveNative() {
       return runExport("保存ファイル", async (map, fileName) => {
-        const bytes = await saveMapBytes(map, { appVersion, savedAt: todayString() });
-        return { blob: new Blob([bytes], { type: "application/octet-stream" }), name: exportFileName(map, fileName, AHMAP_EXT) };
+        const r = await saveMapParts(map, { appVersion, savedAt: todayString() });
+        return { blob: new Blob(r.parts, { type: "application/octet-stream" }), name: exportFileName(map, fileName, AHMAP_EXT) };
       }, () => store.markSaved());
     },
     /**

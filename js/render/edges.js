@@ -34,9 +34,20 @@ export function buildBoundarySegments(geometry, values, include = () => true, di
 }
 
 /** 線分の配列を1本のパスとして描く（呼び出し側が線の色・太さを設定する） */
-export function strokeSegments(ctx, segs) {
+export function strokeSegments(ctx, segs, bounds = null) {
+  // bounds: { x0, y0, x1, y1 }（ワールド座標）。与えると、その外にある線分は描かない（拡大して見ているとき用）
+  const raw = ctx.rawCtx, wy = ctx.warpY; // warpContext 経由のとき（記録用の模擬 ctx など、どちらも持たないものは通常の経路）: 代理を通さず、y だけ変換して直接描く
+  if (raw && typeof raw.beginPath === "function" && typeof wy === "function") {
+    raw.beginPath();
+    for (let i = 0; i < segs.length; i += 4) {
+      if (bounds && ((segs[i] < bounds.x0 && segs[i + 2] < bounds.x0) || (segs[i] > bounds.x1 && segs[i + 2] > bounds.x1) || (segs[i + 1] < bounds.y0 && segs[i + 3] < bounds.y0) || (segs[i + 1] > bounds.y1 && segs[i + 3] > bounds.y1))) continue;
+      raw.moveTo(segs[i], wy(segs[i + 1])); raw.lineTo(segs[i + 2], wy(segs[i + 3]));
+    }
+    raw.stroke(); return;
+  }
   ctx.beginPath();
   for (let i = 0; i < segs.length; i += 4) {
+    if (bounds && ((segs[i] < bounds.x0 && segs[i + 2] < bounds.x0) || (segs[i] > bounds.x1 && segs[i + 2] > bounds.x1) || (segs[i + 1] < bounds.y0 && segs[i + 3] < bounds.y0) || (segs[i + 1] > bounds.y1 && segs[i + 3] > bounds.y1))) continue;
     ctx.moveTo(segs[i], segs[i + 1]);
     ctx.lineTo(segs[i + 2], segs[i + 3]);
   }

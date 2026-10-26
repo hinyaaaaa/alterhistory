@@ -311,6 +311,44 @@
     }
     return sum / norm2;
   }
+  function makeFbm3(seed, octaves = 4, freq = 1, gain = 0.5) {
+    const O = octaves, kx = new Int32Array(O).fill(2147483647), ky = new Int32Array(O), kz = new Int32Array(O), cv = new Float64Array(O * 8), fs = new Float64Array(O), sd = new Int32Array(O);
+    let f = freq, norm2 = 0, amp = 1;
+    const amps = new Float64Array(O);
+    for (let o = 0; o < O; o++) {
+      fs[o] = f;
+      sd[o] = seed + o * 101;
+      amps[o] = amp;
+      norm2 += amp;
+      amp *= gain;
+      f *= 2.03;
+    }
+    return (x, y, z) => {
+      let sum = 0;
+      for (let o = 0; o < O; o++) {
+        const X = x * fs[o], Y = y * fs[o], Z = z * fs[o], xi = Math.floor(X), yi = Math.floor(Y), zi = Math.floor(Z), b = o * 8;
+        if (xi !== kx[o] || yi !== ky[o] || zi !== kz[o]) {
+          const s0 = sd[o];
+          kx[o] = xi;
+          ky[o] = yi;
+          kz[o] = zi;
+          cv[b] = hash3(s0, xi, yi, zi);
+          cv[b + 1] = hash3(s0, xi + 1, yi, zi);
+          cv[b + 2] = hash3(s0, xi, yi + 1, zi);
+          cv[b + 3] = hash3(s0, xi + 1, yi + 1, zi);
+          cv[b + 4] = hash3(s0, xi, yi, zi + 1);
+          cv[b + 5] = hash3(s0, xi + 1, yi, zi + 1);
+          cv[b + 6] = hash3(s0, xi, yi + 1, zi + 1);
+          cv[b + 7] = hash3(s0, xi + 1, yi + 1, zi + 1);
+        }
+        const fx = fade(X - xi), fy = fade(Y - yi), fz = fade(Z - zi);
+        const x00 = cv[b] + (cv[b + 1] - cv[b]) * fx, x10 = cv[b + 2] + (cv[b + 3] - cv[b + 2]) * fx, x01 = cv[b + 4] + (cv[b + 5] - cv[b + 4]) * fx, x11 = cv[b + 6] + (cv[b + 7] - cv[b + 6]) * fx;
+        const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;
+        sum += amps[o] * (y0 + (y1 - y0) * fz);
+      }
+      return sum / norm2;
+    };
+  }
 
   // js/core/world/worldgen.js
   var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
@@ -395,10 +433,10 @@
     stage("G2_plates", "\u30D7\u30EC\u30FC\u30C8\u30FB\u5927\u9678\u306E\u6982\u5F62", () => {
       const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];
       const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);
+      const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));
       for (let c = 0; c < V; c++) {
         const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
-        const w = (i) => (fbm3(warpSeed[i], x, y, z, 3, 1.5) - 0.5) * 0.32 + (fbm3(warpSeed[i] + 7, x, y, z, 3, 5.5) - 0.5) * 0.3;
-        const ax = w(0), ay = w(1), az = w(2);
+        const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;
         const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);
         wx[c] = px / l;
         wy[c] = py / l;
@@ -469,11 +507,11 @@
           }
         }
       }
-      const nm = nSeed("ridge");
+      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4);
       for (let c = 0; c < V; c++) {
         if (dist[c] < 0) continue;
         const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));
-        const mod = 0.55 + 0.9 * fbm3(nm, X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3, 3, 1.4);
+        const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3);
         if (s > 0) {
           mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod;
           volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;
@@ -492,19 +530,29 @@
           bestSet = pts;
         }
       }
-      const cs = bestSet.map((v) => ({ v, r: thetaLand * rc.range(0.8, 0.95) }));
+      const cs = bestSet.map((v) => {
+        const r = thetaLand * rc.range(0.8, 0.95);
+        return { v, r, cosCut: Math.cos(Math.min(Math.PI, r * 1.1)) - 1e-9 };
+      });
       const isl = [];
       const NI = ISLAND_MODES[spec.islandMode];
-      for (let i = 0; i < NI; i++) isl.push({ v: rc.unitVec(), r: rc.range(1.2, 5.5) * D2R, w: rc.range(0.45, 0.95) });
+      for (let i = 0; i < NI; i++) {
+        const v = rc.unitVec(), r = rc.range(1.2, 5.5) * D2R, w = rc.range(0.45, 0.95);
+        isl.push({ v, r, w, cosCut: Math.cos(r * 1.5) - 1e-9 });
+      }
       const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];
       for (let c = 0; c < V; c++) {
         let f = 0;
         for (const o of cs) {
-          const d = Math.acos(clamp(dotp(c, o.v), -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1);
+          const dp = dotp(c, o.v);
+          if (dp < o.cosCut) continue;
+          const d = Math.acos(clamp(dp, -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1);
           f = Math.max(f, t * t * (3 - 2 * t));
         }
         for (const o of isl) {
-          const d = Math.acos(clamp(dotp(c, o.v), -1, 1));
+          const dp = dotp(c, o.v);
+          if (dp < o.cosCut) continue;
+          const d = Math.acos(clamp(dp, -1, 1));
           if (d < o.r * 1.5) {
             const t = clamp(1 - d / (o.r * 1.5), 0, 1);
             f = Math.max(f, o.w * t * t * (3 - 2 * t));

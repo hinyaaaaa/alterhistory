@@ -9,6 +9,7 @@ import { drawBurgs, drawLabels } from "./layers/places.js";
 import { drawTradeLines } from "./layers/trade-lines.js";
 import { drawZones } from "./layers/zones.js";
 import { drawGroups } from "./layers/groups.js";
+import { warpContext } from "./warp-ctx.js";
 
 export const DEFAULT_RENDER_OPTIONS = Object.freeze({
   terrain: "biome",       // "biome" | "height" | "both" | "none"（旧オプション base も受け付ける）
@@ -38,8 +39,43 @@ export function drawScene(ctx, map, vp, options = {}, dpr = 1) {
   ctx.fillStyle = o.background;
   ctx.fillRect(0, 0, vp.screenWidth * dpr, vp.screenHeight * dpr);
 
+  // 球面世界は、経度の継ぎ目の外側の繰り返し（n = -1, 0, 1）ごとに描く。各回は [0, W) の帯に切り取る（二重塗りを防ぐ）。
+  //   描画は sim 座標のまま行い、y だけを warpContext が円筒図法へ変える。球面世界でなければ 1 回だけ（従来どおり）。
+  //   世界の一部しか画面にかからない回（拡大・継ぎ目の外側の細い繰り返し）は、地形・境界が見える所だけを描くので軽い。
+  for (const n of vp.copyOffsets()) drawCopy(ctx, map, vp.shifted(n), o, options, dpr);
+}
+
+function drawCopy(ctx, map, v, o, options, dpr) {
   ctx.save();
-  vp.apply(ctx, dpr);
+  v.apply(ctx, dpr);
+  if (v.proj) {
+    // 帯に切り取る。両端を少し（0.6 sim 画素）はみ出させて、継ぎ目に細い線が出ないようにする（SVG など clip が無い出力では、書き出しの枠が切り取る）
+    if (typeof ctx.clip === "function") { ctx.beginPath(); ctx.rect(-0.6, v.proj.top, v.mapWidth + 1.2, v.proj.totalHeight); ctx.clip(); }
+    fillPolarBands(ctx, map, v);
+  }
+  const c = warpContext(ctx, v);
+  drawLayers(c, map, v, o, options);
+  ctx.restore();
+}
+
+/** 極域バンド（緯度 ±80° の外）の下地。極に近いセルのうち最も多いバイオームの色で塗る（セルの描画が届かない端の隙間を埋める） */
+const bandCache = new WeakMap();
+function polarColors(map) {
+  const stamp = `${map.rev?.terrain ?? 0}`, hit = bandCache.get(map.geometry);
+  if (hit && hit.stamp === stamp) return hit.colors;
+  const P = map.geometry.pack.p, biome = map.pack.cells.biome, H = map.meta.height, lim = (10 / 180) * H; // 緯度 80° より極側（sim の y）
+  const tally = [new Map(), new Map()];
+  for (let i = 0; i < P.length; i++) { const y = P[i][1], side = y < lim ? 0 : y > H - lim ? 1 : -1; if (side < 0) continue; const m = tally[side]; m.set(biome[i], (m.get(biome[i]) ?? 0) + 1); }
+  const colors = tally.map((m) => { let best = 0, bn = -1; for (const [b, n] of m) if (n > bn) { bn = n; best = b; } return bn < 0 ? null : best === 0 ? "#5a82ad" : (map.biomesData[best]?.color ?? null); }); // 海は地形層の「外洋」と同じ色
+  bandCache.set(map.geometry, { stamp, colors }); return colors;
+}
+function fillPolarBands(ctx, map, v) {
+  const [north, south] = polarColors(map), pr = v.proj;
+  if (north) { ctx.fillStyle = north; ctx.fillRect(-1, pr.top, v.mapWidth + 2, -pr.top + 0.5); }
+  if (south) { ctx.fillStyle = south; ctx.fillRect(-1, pr.height - 0.5, v.mapWidth + 2, pr.band + 0.5); }
+}
+
+function drawLayers(ctx, map, vp, o, options) {
   // 旧オプション（base / overlay）との互換: 古い形で渡されても動く（overlay 省略時は国家のみ）
   const terrain = options.terrain ?? (options.base === "height" ? "height" : "biome");
   const fills = Array.isArray(options.fills) ? options.fills
@@ -62,5 +98,4 @@ export function drawScene(ctx, map, vp, options = {}, dpr = 1) {
   if (o.burgs) drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" });
   if (o.labels) drawLabels(ctx, map, vp, o.labels);
   if (o.groups?.length) drawGroups(ctx, map, vp, o.groups); // 初期集団の印（歴史が始まる前）
-  ctx.restore();
 }

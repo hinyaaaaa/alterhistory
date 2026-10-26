@@ -4,7 +4,7 @@
 //   歴史（月次シミュレーション）は走らせない。地理だけを作る。
 import { buildSphereMesh, frequencyForCells, cellArea, greatCircleRad, meshHash } from "./sphere-mesh.js";
 import { normalizeWorldSpec, GENERATOR_VERSION, ISLAND_MODES } from "./spec.js";
-import { makeRng, hashString, fbm3 } from "./noise.js";
+import { makeRng, hashString, fbm3, makeFbm3 } from "./noise.js";
 
 export const LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
 export const BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });
@@ -68,10 +68,10 @@ export function generateWorld(specInput, options = {}) {
   stage("G2_plates", "プレート・大陸の概形", () => {
     const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];
     const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);
+    const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));
     for (let c = 0; c < V; c++) {
       const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
-      const w = (i) => (fbm3(warpSeed[i], x, y, z, 3, 1.5) - 0.5) * 0.32 + (fbm3(warpSeed[i] + 7, x, y, z, 3, 5.5) - 0.5) * 0.3;
-      const ax = w(0), ay = w(1), az = w(2);
+      const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;
       const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz); wx[c] = px / l; wy[c] = py / l; wz[c] = pz / l;
     }
     // プレート: 種の点と、オイラー極（回転軸）。位置 x での速度 = ω × x
@@ -96,11 +96,11 @@ export function generateWorld(specInput, options = {}) {
     const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V); let qh = 0, qt = 0;
     for (let c = 0; c < V; c++) if (isSrc[c]) { dist[c] = 0; from[c] = c; q[qt++] = c; }
     while (qh < qt) { const c = q[qh++]; if (dist[c] >= maxD) continue; for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (dist[j] < 0) { dist[j] = dist[c] + 1; from[j] = from[c]; q[qt++] = j; } } }
-    const nm = nSeed("ridge");
+    const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4);
     for (let c = 0; c < V; c++) {
       if (dist[c] < 0) continue;
       const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));
-      const mod = 0.55 + 0.9 * fbm3(nm, X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3, 3, 1.4); // 稜線の途切れ・ばらつき
+      const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3); // 稜線の途切れ・ばらつき
       if (s > 0) { mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod; volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0; } else rift[c] = clamp(-s / 1.2, 0, 1) * f;
     }
     // 大陸: 互いに離れた種から、ゆがめた距離で広がる場。島の種は小さく、重みがまちまち
@@ -113,14 +113,14 @@ export function generateWorld(specInput, options = {}) {
       let sep = 9; for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));
       if (sep > bestSep) { bestSep = sep; bestSet = pts; }
     }
-    const cs = bestSet.map((v) => ({ v, r: thetaLand * rc.range(0.8, 0.95) }));
+    const cs = bestSet.map((v) => { const r = thetaLand * rc.range(0.8, 0.95); return { v, r, cosCut: Math.cos(Math.min(Math.PI, r * 1.1)) - 1e-9 }; });
     const isl = []; const NI = ISLAND_MODES[spec.islandMode];
-    for (let i = 0; i < NI; i++) isl.push({ v: rc.unitVec(), r: rc.range(1.2, 5.5) * D2R, w: rc.range(0.45, 0.95) });
+    for (let i = 0; i < NI; i++) { const v = rc.unitVec(), r = rc.range(1.2, 5.5) * D2R, w = rc.range(0.45, 0.95); isl.push({ v, r, w, cosCut: Math.cos(r * 1.5) - 1e-9 }); }
     const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];
     for (let c = 0; c < V; c++) {
       let f = 0;
-      for (const o of cs) { const d = Math.acos(clamp(dotp(c, o.v), -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1); f = Math.max(f, t * t * (3 - 2 * t)); }
-      for (const o of isl) { const d = Math.acos(clamp(dotp(c, o.v), -1, 1)); if (d < o.r * 1.5) { const t = clamp(1 - d / (o.r * 1.5), 0, 1); f = Math.max(f, o.w * t * t * (3 - 2 * t)); } }
+      for (const o of cs) { const dp = dotp(c, o.v); if (dp < o.cosCut) continue; const d = Math.acos(clamp(dp, -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1); f = Math.max(f, t * t * (3 - 2 * t)); }
+      for (const o of isl) { const dp = dotp(c, o.v); if (dp < o.cosCut) continue; const d = Math.acos(clamp(dp, -1, 1)); if (d < o.r * 1.5) { const t = clamp(1 - d / (o.r * 1.5), 0, 1); f = Math.max(f, o.w * t * t * (3 - 2 * t)); } }
       continent[c] = f;
     }
     // ホットスポット: 火山島列（海の上でも島になる）

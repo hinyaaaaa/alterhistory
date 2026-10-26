@@ -1,0 +1,37 @@
+{
+ "env": {
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "cores": 1,
+  "ramMB": 3996,
+  "node": "v22.22.2"
+ },
+ "years": 1500,
+ "cells": 6000,
+ "simSeconds": 100,
+ "counts": {
+  "events": 68265,
+  "decisions": 45198,
+  "groups": 1910
+ },
+ "historyPoints": 517331,
+ "liveHeapMB": 146.4,
+ "storedMB": {
+  "events": 25.09,
+  "decisions": 33.3,
+  "history": 13.03,
+  "core": 4.83
+ },
+ "gzipMB": 10.42,
+ "encodeMs": 1027,
+ "eager": {
+  "ms": 1143,
+  "heapMB": 153.5,
+  "restoreOk": true
+ },
+ "lazy": {
+  "ms": 251,
+  "heapMB": 21.69999999999999,
+  "restoreOk": true,
+  "note": "索引＋履歴ビュー＋1 期間のイベント・判断"
+ }
+}

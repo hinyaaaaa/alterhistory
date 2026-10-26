@@ -20,7 +20,10 @@ export class LoadError extends Error { constructor(message, cause) { super(messa
 export const isAhmap2Bytes = (bytes) => bytes.length >= 8 && dec.decode(bytes.subarray(0, 8)) === AHMAP2_MAGIC;
 
 /** 保存用のバイト列。map.world が無い地図（世界が無い）は保存できない */
-export async function saveMapBytes(map, { appVersion = "", savedAt = "" } = {}) {
+export async function saveMapBytes(map, opts = {}) { return (await saveMapParts(map, opts)).bytes; }
+
+/** 保存用の部品列（Blob へ連結なしで渡せる）。{ parts, bytes(必要時に連結) } */
+export async function saveMapParts(map, { appVersion = "", savedAt = "" } = {}) {
   const world = map?.world; if (!world) throw new Error("世界のデータがない地図は保存できません");
   const ext = { ...(map.fileExt?.extensions ?? {}) };
   ext[MAP_STATE_CHUNK] = enc.encode(JSON.stringify(serializeMapState(map, { savedAt })));
@@ -29,7 +32,7 @@ export async function saveMapBytes(map, { appVersion = "", savedAt = "" } = {}) 
   if (world.entities.start) ext[START_CHUNK] = enc.encode(JSON.stringify(world.entities.start)); else delete ext[START_CHUNK];
   const r = await encodeAhmap2(world, { appVersion, savedAt, extensions: ext, reuse: map.fileExt?.chunkCache });
   map.fileExt = { extensions: ext, chunkCache: r.chunkCache };
-  return r.bytes;
+  return r;
 }
 
 /** @returns {Promise<{map:object, warnings:string[]}>} */

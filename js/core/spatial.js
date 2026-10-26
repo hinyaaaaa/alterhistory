@@ -5,7 +5,8 @@
  * @param {Array<[number,number]>} points  セルの点（添字がセルID）
  * @param {number} bucket  格子の1辺（ワールド座標）
  */
-export function createCellIndex(points, bucket = 16) {
+export function createCellIndex(points, bucket = 16, wrapW = 0) {
+  // wrapW > 0: 経度の継ぎ目で折り返す世界（幅 wrapW）。継ぎ目をまたぐ検索（ホバー・ブラシ）が反対側のセルも拾う
   let maxX = 0, maxY = 0;
   for (const [x, y] of points) { if (x > maxX) maxX = x; if (y > maxY) maxY = y; }
   const cols = Math.floor(maxX / bucket) + 1;
@@ -13,9 +14,9 @@ export function createCellIndex(points, bucket = 16) {
   const buckets = Array.from({ length: cols * rows }, () => []);
   points.forEach(([x, y], id) => buckets[Math.floor(y / bucket) * cols + Math.floor(x / bucket)].push(id));
 
-  return {
+  const index = {
     /** 中心が (x, y) から半径 r 以内にあるセルの ID の配列（ブラシ用） */
-    findWithin(x, y, r) {
+    _within(x, y, r) {
       const out = [];
       const r2 = r * r;
       const gx0 = Math.max(0, Math.floor((x - r) / bucket)), gx1 = Math.min(cols - 1, Math.floor((x + r) / bucket));
@@ -32,7 +33,7 @@ export function createCellIndex(points, bucket = 16) {
     },
 
     /** 最も近いセルの ID。点が1つも無ければ -1 */
-    find(x, y) {
+    _find(x, y) {
       if (!points.length) return -1;
       const cx = Math.min(cols - 1, Math.max(0, Math.floor(x / bucket)));
       const cy = Math.min(rows - 1, Math.max(0, Math.floor(y / bucket)));
@@ -56,12 +57,34 @@ export function createCellIndex(points, bucket = 16) {
       return best;
     },
   };
+  const wd = (a, b) => { let d = Math.abs(a - b); if (wrapW && d > wrapW / 2) d = wrapW - d; return d; };
+  return {
+    findWithin(x, y, r) {
+      const out = index._within(x, y, r);
+      if (!wrapW) return out;
+      const seen = new Set(out);
+      if (x - r < 0) for (const id of index._within(x + wrapW, y, r)) if (!seen.has(id)) { seen.add(id); out.push(id); }
+      if (x + r > wrapW) for (const id of index._within(x - wrapW, y, r)) if (!seen.has(id)) { seen.add(id); out.push(id); }
+      return out;
+    },
+    find(x, y) {
+      let best = index._find(x, y);
+      if (!wrapW || best < 0) return best;
+      let bd = Math.hypot(wd(points[best][0], x), points[best][1] - y);
+      for (const xx of [x + wrapW, x - wrapW]) {
+        if (xx < -bucket * 4 || xx > wrapW + bucket * 4) continue;
+        const c = index._find(xx, y); if (c < 0) continue;
+        const d = Math.hypot(wd(points[c][0], x), points[c][1] - y); if (d < bd) { bd = d; best = c; }
+      }
+      return best;
+    },
+  };
 }
 
 const indexCache = new WeakMap(); // geometry → 索引
 /** 地図のセル索引（形状ごとに1つだけ作って使い回す） */
 export function cellIndexOf(map) {
   let idx = indexCache.get(map.geometry);
-  if (!idx) { idx = createCellIndex(map.geometry.pack.p); indexCache.set(map.geometry, idx); }
+  if (!idx) { idx = createCellIndex(map.geometry.pack.p, 16, map.meta?.height * 2 === map.meta?.width ? map.meta.width : 0); indexCache.set(map.geometry, idx); }
   return idx;
 }

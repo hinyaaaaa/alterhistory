@@ -14,8 +14,9 @@ import { drawAnnotations, DEFAULT_ANNOTATIONS } from "../render/layers/annotatio
 /** 出力用のビューポート: 地図全体を等倍(k=1)で収める */
 function wholeMapViewport(map) {
   const w = map.meta.width || 1280;
-  const h = map.meta.height || 774;
-  const vp = createViewport(w, h);
+  const h0 = map.meta.height || 774;
+  const vp = createViewport(w, h0);
+  const h = vp.proj ? Math.round(vp.displayHeight()) : h0; // 球面世界は円筒図法（極域バンドを含む）の縦の長さで出力する
   vp.resize(w, h);
   vp.fit(0);
   return { vp, w, h };

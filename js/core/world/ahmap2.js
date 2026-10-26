@@ -70,11 +70,14 @@ export async function encodeAhmap2(world, options = {}) {
     cellCount: m.cellCount, triangleCount: m.triangleCount, meshFrequency: m.n, worldHash: world.hash, required: REQUIRED_CHUNKS,
     chunks: chunks.map(({ _stored, ...c }) => c), ...(options.extraManifest ? { extra: options.extraManifest } : {}),
   };
-  const mb = enc.encode(JSON.stringify(manifest)), head = 8 + 4 + 4 + mb.length, out = new Uint8Array(head + offset);
-  out.set(enc.encode(AHMAP2_MAGIC), 0);
-  const dv = new DataView(out.buffer); dv.setUint32(8, AHMAP2_CONTAINER_VERSION, true); dv.setUint32(12, mb.length, true); out.set(mb, 16);
-  for (const c of chunks) out.set(c._stored, head + c.offset);
-  return { bytes: out, manifest, chunkCache: cache };
+  const mb = enc.encode(JSON.stringify(manifest)), head = 8 + 4 + 4 + mb.length, headBytes = new Uint8Array(head);
+  headBytes.set(enc.encode(AHMAP2_MAGIC), 0);
+  const dv = new DataView(headBytes.buffer); dv.setUint32(8, AHMAP2_CONTAINER_VERSION, true); dv.setUint32(12, mb.length, true); headBytes.set(mb, 16);
+  // parts: [ヘッダ, チャンク本体…]。大きな保存でも 1 本の連続した領域へコピーせずに、Blob へそのまま渡せる（v5.2）。bytes は必要なときだけ連結する
+  const parts = [headBytes, ...chunks.map((c) => c._stored)], res = { parts, manifest, chunkCache: cache };
+  let joined = null;
+  Object.defineProperty(res, "bytes", { enumerable: true, get() { if (!joined) { joined = new Uint8Array(head + offset); let o = 0; for (const p of parts) { joined.set(p, o); o += p.length; } } return joined; } });
+  return res;
 }
 
 export class Ahmap2Error extends Error { constructor(msg, problems = []) { super(msg); this.name = "Ahmap2Error"; this.problems = problems; } }

@@ -14,7 +14,6 @@
 // 重い再描画は「データが変わったとき」と「ズーム・移動が止まって、タイルの範囲を出たとき」だけ。
 
 import { drawScene } from "./scene.js";
-import { createViewport } from "./viewport.js";
 
 const SETTLE_MS = 120;
 const OVERSCAN = 0.4;          // 画面の外側に、この割合だけ余分に描いておく
@@ -62,11 +61,8 @@ export function createRenderer({ canvas, viewport, getMap, getOptions }) {
     const pw = Math.max(1, Math.round(cssW * tdpr)), ph = Math.max(1, Math.round(cssH * tdpr));
     const cv = tile?.canvas ?? document.createElement("canvas");
     if (cv.width !== pw || cv.height !== ph) { cv.width = pw; cv.height = ph; }
-    // タイル用の視点：画面の視点を、余白ぶんずらして広げたもの
-    const tvp = createViewport(viewport.mapWidth, viewport.mapHeight);
-    tvp.resize(cssW, cssH);
-    tvp.k = viewport.k; tvp.fitK = viewport.fitK; tvp.minK = viewport.minK; tvp.maxK = viewport.maxK;
-    tvp.x = viewport.x + mx; tvp.y = viewport.y + my;
+    // タイル用の視点：画面の視点を、余白ぶんずらして広げたもの（投影の実体も共有する）
+    const tvp = viewport.cloneFor(cssW, cssH, mx, my);
     drawScene(cv.getContext("2d"), map, tvp, getOptions(), tdpr);
     tile = { canvas: cv, x: viewport.x, y: viewport.y, k: viewport.k, mx, my, cssW, cssH };
   }

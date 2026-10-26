@@ -5,7 +5,7 @@
 //   地理の正本は World（球面）のまま。MapData の pack / geometry は、World から導出した「国家運営層から見える面」で、
 //   Azgaar 形式の再構築（Delaunator・grid→pack）は一切通らない。
 //
-// 投影: 等距円筒（経度→x、緯度→y）。meta.width × meta.height を 2:1 にする。
+// 地図座標（sim）: 等距円筒（経度→x、緯度→y）。meta.width × meta.height を 2:1 にする。画面への表示は円筒図法（v5.2。core/world/projection.js と render/viewport.js）。
 // 経度の継ぎ目（±180°）をまたぐセルは、継ぎ目の外へはみ出した位置に複製頂点を置いて 1 つの多角形として保つ
 //   （反対側には対応する半セル分の隙間ができる。国境は継ぎ目をまたいで引かれない — 既知の制約）。
 // 極を囲むセルは、極の緯度に 2 点を足して閉じる。
@@ -14,6 +14,7 @@
 import { createEmptyMap } from "./model.js";
 import { LAND_WATER, BIOMES } from "./world/worldgen.js";
 import { cellViewPolygon } from "./world/sphere-mesh.js";
+import { simFrame } from "./world/projection.js";
 
 export const MAP_WIDTH = 2048, MAP_HEIGHT = 1024;
 export const WORLD_SOURCE = "alterhistory-world";
@@ -109,10 +110,11 @@ export function refreshRivers(map) {
 /** セルの多角形・隣接・頂点（等距円筒）。継ぎ目と極を処理する */
 function buildGeometry(mesh, h, W, H) {
   const N = mesh.cellCount, V = mesh.vertexXYZ.length / 3, vx = mesh.vertexXYZ;
+  const frame = simFrame(W); // 球面 → 地図座標（sim）の変換は projection.js の 1 か所だけ。表示用の円筒図法は視点側（render/viewport）が適用する
   const vp = new Array(V), vv = new Array(V), vc = new Array(V);
   for (let t = 0; t < V; t++) {
     const lon = Math.atan2(vx[3 * t + 1], vx[3 * t]), lat = Math.asin(Math.max(-1, Math.min(1, vx[3 * t + 2])));
-    vp[t] = [r2((lon + Math.PI) / (2 * Math.PI) * W), r2((Math.PI / 2 - lat) / Math.PI * H)]; vv[t] = []; vc[t] = [];
+    vp[t] = frame.toSim(lat, lon).map(r2); vv[t] = []; vc[t] = [];
   }
   const p = new Array(N), cv = new Array(N), cc = new Array(N), cb = new Array(N), alt = new Array(N).fill(null), dup = new Map();
   const addV = (a, b) => { if (!vv[a].includes(b)) vv[a].push(b); if (!vv[b].includes(a)) vv[b].push(a); };
@@ -126,7 +128,7 @@ function buildGeometry(mesh, h, W, H) {
   for (let c = 0; c < N; c++) {
     const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1];
     const lon0 = Math.atan2(mesh.centerXYZ[3 * c + 1], mesh.centerXYZ[3 * c]), lat0 = Math.asin(Math.max(-1, Math.min(1, mesh.centerXYZ[3 * c + 2])));
-    p[c] = [r2((lon0 + Math.PI) / (2 * Math.PI) * W), r2((Math.PI / 2 - lat0) / Math.PI * H)];
+    p[c] = frame.toSim(lat0, lon0).map(r2);
     const poly = cellViewPolygon(mesh, c), ids = [], shifts = [];
     for (let k = 0; k < e - s; k++) {
       const t = mesh.cellVertexIds[s + k];
