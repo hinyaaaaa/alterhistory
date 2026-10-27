@@ -5,7 +5,7 @@ const vis = (sel) => page.locator(sel).first().isVisible();
 try {
   await openApp(page);
   console.log("=== 画面の基本構成 ===");
-  check("起動直後は地図が画面いっぱい（サイドバー・凡例は出ない設計）", !(await vis("#sidebar")) && (await page.locator("#stage").boundingBox()).width > 1200);
+  check("起動直後は地図が中央いっぱい（サイドバー・凡例は出ない。v5.3: 左レールと右ドックの間）", !(await vis("#sidebar")) && (await page.locator("#stage").boundingBox()).width > 700);
   console.log("=== 設定メニューの全ウィンドウ ===");
   const wins = await page.$$eval("#hub [data-open-win]", (bs) => bs.map((b) => [b.dataset.openWin, b.textContent.trim()]));
   for (const [id, label] of wins) {
@@ -29,9 +29,9 @@ try {
     const b0 = await w.boundingBox();
     const hb = await w.locator(".rs-se").boundingBox();
     await page.mouse.move(hb.x + hb.width / 2, hb.y + hb.height / 2);
-    await page.mouse.down(); await page.mouse.move(hb.x + hb.width / 2 + 120, hb.y + hb.height / 2 + 60, { steps: 5 }); await page.mouse.up();
+    await page.mouse.down(); await page.mouse.move(hb.x + hb.width / 2 - 140, hb.y + hb.height / 2 - 70, { steps: 5 }); await page.mouse.up();
     const b1 = await w.boundingBox();
-    check("右下のつまみをドラッグすると、ウィンドウが広がる", b1.width > b0.width + 100 && b1.height > b0.height + 40, `${Math.round(b0.width)}x${Math.round(b0.height)} → ${Math.round(b1.width)}x${Math.round(b1.height)}`);
+    check("右下のつまみをドラッグすると、ウィンドウの大きさが変わる（v5.3: 縮める向き）", b1.width < b0.width - 100 && b1.height < b0.height - 40, `${Math.round(b0.width)}x${Math.round(b0.height)} → ${Math.round(b1.width)}x${Math.round(b1.height)}`);
     const hw = await w.locator(".rs-w").boundingBox();
     await page.mouse.move(hw.x + hw.width / 2, hw.y + hw.height / 2);
     await page.mouse.down(); await page.mouse.move(hw.x + hw.width / 2 + 2000, hw.y + hw.height / 2, { steps: 4 }); await page.mouse.up();

@@ -24,6 +24,16 @@ export async function launch({ width = 1280, height = 853, touch = false } = {})
   // 外部ネットワーク（Googleフォント等）は遮断。ローカルのファイルだけ通す
   await ctx.route((u) => !u.toString().startsWith("file:"), (r) => r.abort());
   const page = await ctx.newPage();
+  // v5.3: 従来のハブ（#btn-*・[data-open-win]）は画面外へ退けてあるが、部品は生きている（従来のウィンドウ・保存・編集モードの入口）。
+  //   従来のハブを操作するテストは、見えない部品を DOM のクリックで押す。v5.3 の画面は v53-live.e2e.mjs が、見える操作で確かめる
+  const rawClick = page.click.bind(page);
+  page.click = async (sel, opts) => {
+    if (typeof sel === "string" && /^#btn-|\[data-open-win=|\[data-click=/.test(sel)) {
+      const ok = await page.evaluate((q) => { const e = document.querySelector(q); if (!e) return false; e.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window })); return true; }, sel);
+      if (!ok) throw new Error(`従来のハブの部品が見つかりません: ${sel}`); return;
+    }
+    return rawClick(sel, opts);
+  };
   const problems = [];
   page.on("pageerror", (e) => problems.push(`例外: ${e.message}`));
   page.on("console", (m) => { if (m.type() === "error" && !/Failed to load resource|net::ERR/.test(m.text())) problems.push(`console.error: ${m.text()}`); });

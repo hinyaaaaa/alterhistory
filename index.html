@@ -13,8 +13,13 @@
   <link rel="stylesheet" href="css/components.css">
   <link rel="stylesheet" href="css/shell.css">
   <link rel="stylesheet" href="css/world.css">
+  <!-- v5.3 UI（ドック方式）。画面の骨格は js/ui/v53/。文字は Zen Old Mincho / Zen Kaku Gothic New -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@500;700;900&display=swap">
+  <link rel="stylesheet" href="css/v53.css">
 </head>
 <body>
+<!-- v5.3 UI の置き場。js/main.js が #stage（地図）をここへ移して、左レール・右ドック・時間軸を組み立てる -->
+<div id="v53-root"></div>
 <div id="app">
   <!-- 左ハブ（js/ui/hub.js が中身を作る）。ファイル・地図・各ウィンドウの入口は、すべてここに集める -->
   <nav id="hub" class="hub" aria-label="メニュー"></nav>

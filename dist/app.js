@@ -25,9 +25,9 @@
       ID_KINDS = Object.freeze(["state", "pop", "settle", "person", "event", "decision", "proposal", "tech", "culture", "lang", "religion", "species", "war", "treaty", "battle", "disaster", "work", "interp", "org"]);
       ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz";
       check = (kind, n) => {
-        let h = n * 2654435761 >>> 0;
-        for (let i = 0; i < kind.length; i++) h = h * 31 + kind.charCodeAt(i) >>> 0;
-        return ALPHA[h % 36];
+        let h2 = n * 2654435761 >>> 0;
+        for (let i = 0; i < kind.length; i++) h2 = h2 * 31 + kind.charCodeAt(i) >>> 0;
+        return ALPHA[h2 % 36];
       };
     }
   });
@@ -37,16 +37,16 @@
     const handlers = new Map(PHASE_KEYS.map((k) => [k, []]));
     return {
       /** @param {string} phase PHASE_KEYS のいずれか @param {(ctx:object)=>void} fn @param {string} [label] */
-      register(phase, fn, label2 = fn.name || "anonymous") {
+      register(phase, fn, label3 = fn.name || "anonymous") {
         if (!handlers.has(phase)) throw new Error(`\u672A\u77E5\u306E\u30D5\u30A7\u30FC\u30BA: ${phase}`);
-        handlers.get(phase).push({ fn, label: label2 });
+        handlers.get(phase).push({ fn, label: label3 });
       },
       runMonth(ctx) {
         ctx.trace = [];
-        for (const key3 of PHASE_KEYS) for (const h of handlers.get(key3)) {
+        for (const key3 of PHASE_KEYS) for (const h2 of handlers.get(key3)) {
           ctx.phase = key3;
-          h.fn(ctx);
-          ctx.trace.push(`${key3}:${h.label}`);
+          h2.fn(ctx);
+          ctx.trace.push(`${key3}:${h2.label}`);
         }
         ctx.phase = null;
         return ctx;
@@ -389,10 +389,10 @@
   });
 
   // js/core/civ/civ-chunks.js
-  function periodChunks(civ, name, list, mi) {
+  function periodChunks(civ, name, list, mi2) {
     const out = {}, groups = /* @__PURE__ */ new Map(), cache4 = closed.get(civ) ?? (closed.set(civ, /* @__PURE__ */ new Map()), closed.get(civ)), cur = key(civ.monthIndex);
     for (const x of list) {
-      const k = key(mi(x));
+      const k = key(mi2(x));
       (groups.get(k) ?? groups.set(k, []).get(k)).push(x);
     }
     for (const [k, arr] of groups) {
@@ -412,9 +412,9 @@
     core.chunked = { events: events.length, decisions: decisions.length, history: !!history };
     const out = { "civ.state": enc3.encode(JSON.stringify(core)), ...periodChunks(civ, "events", events, evMi), ...periodChunks(civ, "decisions", decisions, (d) => evMi(d)) };
     if (history) {
-      const h = encodeHistory(history);
-      out["civ.history.index"] = h.index;
-      out["civ.history.data"] = h.data;
+      const h2 = encodeHistory(history);
+      out["civ.history.index"] = h2.index;
+      out["civ.history.data"] = h2.data;
     }
     return out;
   }
@@ -445,8 +445,8 @@
       PREFIX = "civ.";
       enc3 = new TextEncoder();
       dec2 = new TextDecoder();
-      key = (mi) => {
-        const k = Math.floor(mi / PERIOD_MONTHS);
+      key = (mi2) => {
+        const k = Math.floor(mi2 / PERIOD_MONTHS);
         return k < 0 ? `n${String(-k).padStart(4, "0")}` : `p${String(k).padStart(4, "0")}`;
       };
       keyNum = (s) => (s[0] === "n" ? -1 : 1) * Number(s.slice(1));
@@ -626,8 +626,8 @@
     return { target: Math.min(1, t), interest };
   }
   function stepCohorts(ctx) {
-    const { civ, ids: ids2 } = ctx, mi = civ.monthIndex;
-    if (mi % 3 !== 0) return;
+    const { civ, ids: ids2 } = ctx, mi2 = civ.monthIndex;
+    if (mi2 % 3 !== 0) return;
     for (const id in civ.groups) {
       const g = civ.groups[id];
       if (g.cohorts.length < 2) continue;
@@ -739,9 +739,9 @@
     return id;
   }
   function stepCulture(ctx) {
-    const { world, civ, ids: ids2, rng } = ctx, mi = civ.monthIndex;
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
     for (const id in civ.groups) {
-      const g = civ.groups[id], d = dominant(g), age = mi - g.bornAt;
+      const g = civ.groups[id], d = dominant(g), age = mi2 - g.bornAt;
       if (age > 360 && rng() < 3e-4) {
         const old = d.languageId, nl = createLanguage2(civ, ids2, rng, { parent: old, cultureId: d.cultureId });
         d.languageId = nl;
@@ -765,10 +765,10 @@
         if (od.cultureId !== d.cultureId) {
           const key3 = [d.cultureId, od.cultureId].sort().join("|");
           if (!civ.contacts[key3]) {
-            civ.contacts[key3] = mi;
+            civ.contacts[key3] = mi2;
             makeEvent(civ, ids2, { kind: "culture_contact", title: `${civ.cultures[d.cultureId].name}\u3068${civ.cultures[od.cultureId].name}\u304C\u51FA\u4F1A\u3063\u305F`, participants: [{ entityId: d.cultureId, role: "culture_a" }, { entityId: od.cultureId, role: "culture_b" }, { entityId: g.id, role: "place_a" }, { entityId: o.id, role: "place_b" }], location: { cell: g.cell } });
           }
-          if (mi - (g.lastMixAt ?? -999) >= 240 && rng() < 0.06 && (g.lastMixAt = mi, addCohort(g, od, 0.06))) makeEvent(civ, ids2, { kind: "cohort_formed", title: "\u7570\u306A\u308B\u6587\u5316\u306E\u4EBA\u3005\u304C\u6DF7\u3056\u308A\u5408\u3044\u59CB\u3081\u305F", participants: [{ entityId: g.id, role: "group" }, { entityId: od.cultureId, role: "culture" }], location: { cell: g.cell } });
+          if (mi2 - (g.lastMixAt ?? -999) >= 240 && rng() < 0.06 && (g.lastMixAt = mi2, addCohort(g, od, 0.06))) makeEvent(civ, ids2, { kind: "cohort_formed", title: "\u7570\u306A\u308B\u6587\u5316\u306E\u4EBA\u3005\u304C\u6DF7\u3056\u308A\u5408\u3044\u59CB\u3081\u305F", participants: [{ entityId: g.id, role: "group" }, { entityId: od.cultureId, role: "culture" }], location: { cell: g.cell } });
         }
         if (d.religionId && od.religionId !== d.religionId && !od.religionId && rng() < 0.2) {
           od.religionId = d.religionId;
@@ -840,17 +840,17 @@
 
   // js/core/civ/civ-state.js
   function hashSeed(...parts) {
-    let h = 2166136261 >>> 0;
+    let h2 = 2166136261 >>> 0;
     for (const p of parts) {
       const s = String(p);
       for (let i = 0; i < s.length; i++) {
-        h ^= s.charCodeAt(i);
-        h = Math.imul(h, 16777619) >>> 0;
+        h2 ^= s.charCodeAt(i);
+        h2 = Math.imul(h2, 16777619) >>> 0;
       }
-      h ^= 255;
-      h = Math.imul(h, 16777619) >>> 0;
+      h2 ^= 255;
+      h2 = Math.imul(h2, 16777619) >>> 0;
     }
-    return h >>> 0;
+    return h2 >>> 0;
   }
   function rngOf(seed) {
     let a = seed >>> 0;
@@ -916,9 +916,9 @@
       init_species();
       CIV_STATE_VERSION = 3;
       CIV_CHUNK = "civ.state";
-      setDate = (civ, mi) => {
-        civ.monthIndex = mi;
-        civ.date = fromMonthIndex(mi);
+      setDate = (civ, mi2) => {
+        civ.monthIndex = mi2;
+        civ.date = fromMonthIndex(mi2);
       };
       sortedGroupIds = (civ) => Object.keys(civ.groups).sort();
     }
@@ -958,13 +958,13 @@
     return { n: ids2.length, power: ids2.length ? Math.min(1, ids2.length / CAPS.supplyFull) * (sum / ids2.length) : 0, ids: ids2 };
   }
   function stepMagic(ctx) {
-    const { civ, ids: ids2, rng } = ctx, mi = civ.monthIndex;
-    if (mi % 3 !== 0) return;
+    const { civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
+    if (mi2 % 3 !== 0) return;
     const rate = civ.options.magicRate ?? 1;
     for (const gid in civ.groups) {
       const g = civ.groups[gid], d = dominant(g), sp = speciesOf(d.speciesId);
       if (rng() >= g.pop * 3 * BASE_RATE2 * (sp.magic / 2e-3) * rate) continue;
-      const ab = pickAbility(rng), pid = ids2.next("person"), age = (14 + Math.floor(rng() * 16)) * 12, p = { id: pid, name: makeNameJa(rng), speciesId: sp.id, groupId: gid, bornAt: mi - age, diedAt: null, ability: ab.id, power: Math.round(Math.pow(rng(), 1.5) * 100) / 100 + 0.05, emergedAt: mi, orgId: null };
+      const ab = pickAbility(rng), pid = ids2.next("person"), age = (14 + Math.floor(rng() * 16)) * 12, p = { id: pid, name: makeNameJa(rng), speciesId: sp.id, groupId: gid, bornAt: mi2 - age, diedAt: null, ability: ab.id, power: Math.round(Math.pow(rng(), 1.5) * 100) / 100 + 0.05, emergedAt: mi2, orgId: null };
       p.power = Math.min(1, p.power);
       civ.persons[pid] = p;
       living(civ).push(pid);
@@ -978,8 +978,8 @@
         makeEvent(civ, ids2, { kind: "magic_discrimination", title: `${ab.ja}\u306E\u7D20\u8CEA\u8005\u304C\u3001${st.name}\u3067\u8FEB\u5BB3\u3055\u308C\u305F`, participants: [{ entityId: pid, role: "victim" }, { entityId: st.id, role: "state" }, { entityId: gid, role: "group" }], location: { cell: g.cell }, causes: [{ targetId: found.eventId, relation: "caused_by", basis: "strong" }], effects: [{ targetId: gid, property: "cohort_tension", before: Math.round(was * 100) / 100, after: Math.round(d.tension * 100) / 100 }] });
       }
     }
-    if (mi % 12 === 0) yearly(ctx);
-    if (mi % 12 === 3) institutions(ctx);
+    if (mi2 % 12 === 0) yearly(ctx);
+    if (mi2 % 12 === 3) institutions(ctx);
   }
   function incident(ctx, g, p, ab, found) {
     const { civ, ids: ids2 } = ctx, before = Math.round(g.pop);
@@ -1004,12 +1004,12 @@
     makeEvent(civ, ids2, { kind: "magic_incident", title, participants: [{ entityId: p.id, role: "gifted" }, { entityId: g.id, role: "group" }], location: { cell: g.cell }, causes: [{ targetId: found.eventId, relation: "caused_by", basis: "direct" }], effects: delta ? [{ targetId: g.id, property: "pop", before, after: Math.round(g.pop) }] : [] });
   }
   function yearly(ctx) {
-    const { civ, ids: ids2, rng } = ctx, mi = civ.monthIndex, groups = byState(ctx);
+    const { civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, groups = byState(ctx);
     for (const id of [...living(civ)]) {
       const p = civ.persons[id];
       const life = speciesOf(p.speciesId).lifespan * (0.8 + 0.4 * (hashSeed(id) % 100 / 100));
-      if (mi - p.bornAt > life) {
-        kill(civ, p, mi);
+      if (mi2 - p.bornAt > life) {
+        kill(civ, p, mi2);
         if (p.power > 0.8) makeEvent(civ, ids2, { kind: "magic_gifted_died", title: `\u5F37\u5927\u306A${ABILITIES[p.ability].ja}\u306E\u4F7F\u3044\u624B\u304C\u4E16\u3092\u53BB\u3063\u305F`, participants: [{ entityId: id, role: "gifted" }], location: null });
       }
     }
@@ -1020,13 +1020,13 @@
       let org = Object.values(civ.magic.orgs).find((o) => o.stateId === sid && o.endedAt == null);
       if (!org && sup2.n >= ORG_MIN) {
         const oid = ids2.next("org"), kind = st.policy.tolerance < 0.4 ? "\u79D8\u5BC6\u7D50\u793E" : st.techAdopted.writing != null ? "\u5B66\u3073\u820E" : "\u8853\u8005\u306E\u96C6\u3044";
-        org = civ.magic.orgs[oid] = { id: oid, name: makeNameJa(rng) + (kind === "\u5B66\u3073\u820E" ? "\u306E\u5B66\u3073\u820E" : kind === "\u79D8\u5BC6\u7D50\u793E" ? "\u306E\u7D50\u793E" : "\u306E\u96C6\u3044"), kind, stateId: sid, foundedAt: mi, endedAt: null, members: sup2.ids.slice() };
+        org = civ.magic.orgs[oid] = { id: oid, name: makeNameJa(rng) + (kind === "\u5B66\u3073\u820E" ? "\u306E\u5B66\u3073\u820E" : kind === "\u79D8\u5BC6\u7D50\u793E" ? "\u306E\u7D50\u793E" : "\u306E\u96C6\u3044"), kind, stateId: sid, foundedAt: mi2, endedAt: null, members: sup2.ids.slice() };
         for (const m of sup2.ids) civ.persons[m].orgId = oid;
         makeEvent(civ, ids2, { kind: "magic_org_founded", title: `${org.name}\uFF08${kind}\uFF09\u304C\u7D50\u3070\u308C\u305F`, participants: [{ entityId: oid, role: "organization" }, { entityId: sid, role: "state" }, ...sup2.ids.slice(0, 3).map((m) => ({ entityId: m, role: "member" }))], location: null });
       } else if (org) {
         org.members = sup2.ids.slice();
         for (const m of sup2.ids) civ.persons[m].orgId = org.id;
-        if (!sup2.n) org.endedAt = mi;
+        if (!sup2.n) org.endedAt = mi2;
       }
       if (org && org.endedAt == null && st.stability < 0.4 && !st.magic && rng() < 0.15) {
         st.stability = Math.max(0, st.stability - 0.03);
@@ -1097,8 +1097,8 @@
         var _a;
         return (_a = civ.magic).living ?? (_a.living = Object.keys(civ.persons).filter((i) => civ.persons[i].diedAt == null));
       };
-      kill = (civ, p, mi) => {
-        p.diedAt = mi;
+      kill = (civ, p, mi2) => {
+        p.diedAt = mi2;
         civ.magic.living = living(civ).filter((i) => i !== p.id);
       };
       pickAbility = (rng) => {
@@ -1117,7 +1117,7 @@
   // js/core/civ/tech.js
   function stepTech(ctx) {
     var _a, _b;
-    const { world, civ, ids: ids2, rng } = ctx, mi = civ.monthIndex;
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
     for (const id in civ.groups) {
       const g = civ.groups[id], k = g.tech.known, d = dominant(g);
       const rate = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * (g.settlementId ? 1.3 : 1) * (g.stateId ? 1.2 : 1) * speciesOf(g.speciesId).techRate * (g.stateId && civ.states[g.stateId] ? 1 + magicTech(civ.states[g.stateId]) : 1);
@@ -1131,10 +1131,10 @@
           continue;
         }
         const rediscovered = !!g.tech.lost[t.key], prior = civ.techWorld[t.key];
-        learn(g, t.key, mi);
+        learn(g, t.key, mi2);
         delete g.tech.lost[t.key];
-        const ev = makeEvent(civ, ids2, { kind: rediscovered ? "tech_rediscovered" : "tech_discovered", title: `${t.name}\u3092${rediscovered ? "\u518D\u767A\u898B" : prior ? "\u72EC\u81EA\u306B\u767A\u898B" : "\u521D\u3081\u3066\u767A\u898B"}`, participants: [{ entityId: g.id, role: "discoverer" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: `tech.${t.key}`, before: null, after: mi }] });
-        ((_a = civ.techWorld)[_b = t.key] ?? (_a[_b] = { discoveries: [] })).discoveries.push({ eventId: ev.eventId, groupId: g.id, month: mi, independent: !!prior });
+        const ev = makeEvent(civ, ids2, { kind: rediscovered ? "tech_rediscovered" : "tech_discovered", title: `${t.name}\u3092${rediscovered ? "\u518D\u767A\u898B" : prior ? "\u72EC\u81EA\u306B\u767A\u898B" : "\u521D\u3081\u3066\u767A\u898B"}`, participants: [{ entityId: g.id, role: "discoverer" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: `tech.${t.key}`, before: null, after: mi2 }] });
+        ((_a = civ.techWorld)[_b = t.key] ?? (_a[_b] = { discoveries: [] })).discoveries.push({ eventId: ev.eventId, groupId: g.id, month: mi2, independent: !!prior });
       }
       if (rng() < 0.03) {
         const ns = [...neighborGroups(ctx, g)];
@@ -1143,10 +1143,10 @@
           if (cand2.length) {
             const t = cand2[Math.floor(rng() * cand2.length)], same = (dominant(o).cultureId === d.cultureId ? 0.15 : 0) + (o.stateId && o.stateId === g.stateId ? 0.2 : 0);
             if (rng() < 0.25 + same) {
-              learn(g, t.key, mi);
+              learn(g, t.key, mi2);
               const wasLost = !!g.tech.lost[t.key];
               delete g.tech.lost[t.key];
-              makeEvent(civ, ids2, { kind: "tech_transferred", title: `${t.name}\u304C\u4F1D\u308F\u3063\u305F${wasLost ? "\uFF08\u5931\u308F\u308C\u3066\u3044\u305F\u77E5\u8B58\u306E\u56DE\u5FA9\uFF09" : ""}`, participants: [{ entityId: g.id, role: "receiver" }, { entityId: o.id, role: "source" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [o.id], ["tech_discovered", "tech_rediscovered", "tech_transferred"], 1e9, 12).filter((e) => e.effects.some((x) => x.property === `tech.${t.key}`)).slice(0, 1), "enabled_by", "strong"), effects: [{ targetId: g.id, property: `tech.${t.key}`, before: null, after: mi }] });
+              makeEvent(civ, ids2, { kind: "tech_transferred", title: `${t.name}\u304C\u4F1D\u308F\u3063\u305F${wasLost ? "\uFF08\u5931\u308F\u308C\u3066\u3044\u305F\u77E5\u8B58\u306E\u56DE\u5FA9\uFF09" : ""}`, participants: [{ entityId: g.id, role: "receiver" }, { entityId: o.id, role: "source" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [o.id], ["tech_discovered", "tech_rediscovered", "tech_transferred"], 1e9, 12).filter((e) => e.effects.some((x) => x.property === `tech.${t.key}`)).slice(0, 1), "enabled_by", "strong"), effects: [{ targetId: g.id, property: `tech.${t.key}`, before: null, after: mi2 }] });
             }
           }
         }
@@ -1156,7 +1156,7 @@
           const dependants = TECHS.some((u) => k[u.key] != null && u.prereq.includes(t.key) && u.tier >= t.tier);
           if (dependants) continue;
           forget(g, t.key);
-          makeEvent(civ, ids2, { kind: "tech_lost", title: `${t.name}\u306E\u77E5\u8B58\u304C\u5931\u308F\u308C\u305F`, participants: [{ entityId: g.id, role: "holder" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: `tech.${t.key}`, before: mi, after: null }] });
+          makeEvent(civ, ids2, { kind: "tech_lost", title: `${t.name}\u306E\u77E5\u8B58\u304C\u5931\u308F\u308C\u305F`, participants: [{ entityId: g.id, role: "holder" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: `tech.${t.key}`, before: mi2, after: null }] });
           break;
         }
       }
@@ -1229,8 +1229,8 @@
       BASE_KNOWLEDGE = { agriculture: "agriculture", pastoralism: "herding", seafaring: "seafaring" };
       REDISCOVER = 0.3;
       refreshCand = (g) => g.tech.cand = TECHS.filter((t) => g.tech.known[t.key] == null && t.prereq.every((p) => g.tech.known[p] != null)).map((t) => t.key);
-      learn = (g, key3, mi) => {
-        g.tech.known[key3] = mi;
+      learn = (g, key3, mi2) => {
+        g.tech.known[key3] = mi2;
         refreshCand(g);
         delete g.tech.prog[key3];
         if (BASE_KNOWLEDGE[key3]) g.knowledge[BASE_KNOWLEDGE[key3]] = 1;
@@ -1395,15 +1395,15 @@
     return s;
   }
   function stepPopulation(ctx) {
-    const { world, civ, ids: ids2, rng } = ctx, occ = occupancy(world, civ), mi = civ.monthIndex;
+    const { world, civ, ids: ids2, rng } = ctx, occ = occupancy(world, civ), mi2 = civ.monthIndex;
     for (const id of sortedGroupIds(civ)) {
       const g = civ.groups[id];
       if (!g) continue;
-      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId).growth;
+      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi2 ? g.capMult : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId).growth;
       const noise = 0.8 + 0.4 * rng();
       g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0));
-      if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) {
-        g.famineAt = mi;
+      if (pressure > POP.famineRatio && mi2 - g.famineAt >= POP.famineGap) {
+        g.famineAt = mi2;
         makeEvent(civ, ids2, { kind: "famine", title: "\u98E2\u3048", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck"], 36, 1), "caused_by", "strong"), effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] });
       }
       if (g.pop < 5) {
@@ -1413,7 +1413,7 @@
         continue;
       }
       g.settledMonths = g.order ? 0 : g.settledMonths + 1;
-      if (g.order?.type === "move" && mi >= g.order.arriveAt) {
+      if (g.order?.type === "move" && mi2 >= g.order.arriveAt) {
         g.cell = g.order.to;
         g.cells = null;
         g.order = null;
@@ -1446,20 +1446,20 @@
           makeEvent(civ, ids2, { kind: "settlement_stage", title: `${STAGE_JA[old]}\u304B\u3089${STAGE_JA[ns]}\u3078`, participants: [{ entityId: st.id, role: "settlement" }], location: { cell: st.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck", "famine"], 24, 1), "contributed_to", "plausible") });
         }
       }
-      if (pressure > POP.budPressure && g.pop >= POP.minBudPop * 2 && mi - g.lastBudAt >= POP.budCooldown && !g.order) {
+      if (pressure > POP.budPressure && g.pop >= POP.minBudPop * 2 && mi2 - g.lastBudAt >= POP.budCooldown && !g.order) {
         const targets = bestTargets(world, civ, g, occ, 3);
         if (targets.length) {
           if (g.player) addProposal(civ, ids2, g, "split", { targets });
           else {
             const t = targets[0], moved = Math.round(g.pop * POP.budShare);
             g.pop -= moved;
-            g.lastBudAt = mi;
+            g.lastBudAt = mi2;
             const child = spawnGroup(civ, ids2, g, t.cell, moved);
             occ.set(t.cell, 1);
             for (const x of ensureCells(world, child)) occ.set(x, (occ.get(x) ?? 0) + 1);
             makeEvent(civ, ids2, { kind: "group_split", title: "\u96C6\u56E3\u306E\u5206\u6D3E", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible") });
           }
-        } else g.lastBudAt = mi - POP.budCooldown + POP.noTargetBackoff;
+        } else g.lastBudAt = mi2 - POP.budCooldown + POP.noTargetBackoff;
       }
     }
   }
@@ -1521,7 +1521,7 @@
   function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null }) {
     const { world, civ, ids: ids2, rng } = ctx, gs = groupIds.map((i) => civ.groups[i]).filter(Boolean);
     if (!gs.length) return null;
-    const cap = gs.reduce((a, b) => b.pop > a.pop ? b : a), id = ids2.next("state"), h = hashSeed(id);
+    const cap = gs.reduce((a, b) => b.pop > a.pop ? b : a), id = ids2.next("state"), h2 = hashSeed(id);
     const st = {
       id,
       name: makeNameJa(rng) + VIA[via].suffix,
@@ -1549,7 +1549,7 @@
       warIds: [],
       leader: { name: makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false },
       lastCrisis: -999,
-      personality: { security: 0.6 + h % 100 / 125, prosperity: 0.6 + (h >> 7) % 100 / 125, expansion: 0.6 + (h >> 14) % 100 / 125, stability: 0.6 + (h >> 21) % 100 / 125, culture: 0.6 + (h >> 4) % 100 / 125, tech: 0.6 + (h >> 11) % 100 / 125, prestige: 0.6 + (h >> 18) % 100 / 125 }
+      personality: { security: 0.6 + h2 % 100 / 125, prosperity: 0.6 + (h2 >> 7) % 100 / 125, expansion: 0.6 + (h2 >> 14) % 100 / 125, stability: 0.6 + (h2 >> 21) % 100 / 125, culture: 0.6 + (h2 >> 4) % 100 / 125, tech: 0.6 + (h2 >> 11) % 100 / 125, prestige: 0.6 + (h2 >> 18) % 100 / 125 }
     };
     civ.states[id] = st;
     for (const g of gs) g.stateId = id;
@@ -1595,8 +1595,8 @@
     return null;
   }
   function stepStates(ctx) {
-    const { world, civ, ids: ids2, rng } = ctx, mi = civ.monthIndex;
-    if (mi % 3 !== 0) return;
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
+    if (mi2 % 3 !== 0) return;
     const groupsByState = byState(ctx);
     for (const id in civ.states) {
       const st = civ.states[id];
@@ -1632,14 +1632,14 @@
       const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15e3) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - st.policy.mobilization * 0.3 + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + { chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity];
       const before = st.stability;
       st.stability = Math.max(0, Math.min(1, st.stability + (target - st.stability) * 0.3));
-      st.treasury += pop * st.policy.tax * 12e-4 * taxMult(st) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi).length * 0.1));
+      st.treasury += pop * st.policy.tax * 12e-4 * taxMult(st) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi2).length * 0.1));
       st.army = pop * (5e-3 + 0.12 * st.policy.mobilization) * (0.5 + st.stability);
-      for (const k in st.sanctions) if (st.sanctions[k] <= mi) delete st.sanctions[k];
-      const ls = lifeScale(civ, st), age = mi - st.leader.bornAt;
+      for (const k in st.sanctions) if (st.sanctions[k] <= mi2) delete st.sanctions[k];
+      const ls = lifeScale(civ, st), age = mi2 - st.leader.bornAt;
       if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4e3 * ls))) {
         const heir = st.leader.heir;
         st.interpDirty = true;
-        st.leader = { name: makeNameJa(rng), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
+        st.leader = { name: makeNameJa(rng), bornAt: mi2 - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
         st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12));
         makeEvent(civ, ids2, { kind: "leader_succession", title: `${st.name}\u306E\u6307\u5C0E\u8005\u304C\u4EE3\u308F\u3063\u305F${heir ? "\uFF08\u7D99\u627F\u8005\u304C\u6C7A\u307E\u3063\u3066\u3044\u305F\uFF09" : "\uFF08\u7D99\u627F\u306E\u6DF7\u4E71\uFF09"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } });
       }
@@ -1647,11 +1647,11 @@
         dissolve(ctx, st, "\u5D29\u58CA\u3057\u305F");
         continue;
       }
-      if (st.stability < 0.3 && gs.length >= 3 && mi - st.lastCrisis > 60) {
+      if (st.stability < 0.3 && gs.length >= 3 && mi2 - st.lastCrisis > 60) {
         dists.sort((a, b) => b[0] - a[0]);
         const part2 = dists.slice(0, Math.max(1, Math.floor(gs.length / 2))).map((x) => x[1]).filter((g) => !g.player || st.player === false);
         if (part2.length && part2.length < gs.length) {
-          st.lastCrisis = mi;
+          st.lastCrisis = mi2;
           const ev = makeEvent(civ, ids2, { kind: "instability", title: `${st.name}\u3067\u4E0D\u6E80\u304C\u9AD8\u307E\u308B`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell }, causes: [...asCauses(recentEventsFor(civ, [st.id, ...gs.map((g) => g.id)], ["famine", "disaster_struck", "demand_raised"], 48, 2), "contributed_to", "plausible"), ...asCauses(recentEventsFor(civ, [st.id], ["war_declared", "war_ended", "leader_succession"], 36, 2), "contributed_to", "strong")] });
           st.lastCrisisEvent = ev.eventId;
           const ns = formState(ctx, { via: "secession", groupIds: part2.map((g) => g.id), predecessor: st.id, cause: ev.eventId });
@@ -1666,8 +1666,8 @@
     for (const id in civ.groups) {
       const g = civ.groups[id];
       if (g.stateId) continue;
-      if (!(g.nextStateCheck <= mi) && g.nextStateCheck !== void 0) continue;
-      g.nextStateCheck = mi + CHECK_EVERY + hashSeed(id) % 6;
+      if (!(g.nextStateCheck <= mi2) && g.nextStateCheck !== void 0) continue;
+      g.nextStateCheck = mi2 + CHECK_EVERY + hashSeed(id) % 6;
       if (g.pop < 300 || g.subsistence === "forage") continue;
       if (!g.player) {
         const ns = [...neighborGroups(ctx, g)].map((o) => civ.groups[o]).filter((o) => o?.stateId && civ.states[o.stateId].alive), best = ns.reduce((a, o) => !a || civ.states[o.stateId].pop > civ.states[a.stateId].pop ? o : a, null);
@@ -1805,11 +1805,11 @@
     makeEvent(civ, ids2, { kind: "war_ended", title: `${atk?.name ?? "?"}\u3068${def?.name ?? "?"}\u306E\u6226\u4E89\u304C\u7D42\u308F\u3063\u305F\uFF08${{ aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", stalemate: "\u6C7A\u7740\u3064\u304B\u305A", negotiated: "\u8B1B\u548C", state_dissolved: "\u56FD\u5BB6\u306E\u6D88\u6EC5" }[outcome] ?? outcome}\uFF09`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => ({ targetId: gid, property: "stateId", before: w.defender, after: atk.id })) });
   }
   function stepWars(ctx) {
-    const { world, civ, ids: ids2, rng } = ctx, mi = civ.monthIndex;
-    if (mi % 12 === 0) {
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
+    if (mi2 % 12 === 0) {
       for (const i of [...civ.activeTreatyIds]) {
         const t = civ.treaties[i];
-        if (t.expiresAt <= mi || !civ.states[t.a]?.alive || !civ.states[t.b]?.alive) endTreaty(ctx, t, "\u671F\u9650\u3092\u8FCE\u3048\u305F");
+        if (t.expiresAt <= mi2 || !civ.states[t.a]?.alive || !civ.states[t.b]?.alive) endTreaty(ctx, t, "\u671F\u9650\u3092\u8FCE\u3048\u305F");
       }
       for (const id in civ.states) {
         const s = civ.states[id];
@@ -1838,7 +1838,7 @@
         dead += l;
       }
       w.casualties += dead;
-      if (mi % 3 === 0 && rng() < 0.4) makeEvent(civ, ids2, { kind: "battle_fought", title: `${civ.states[w.aggressor].name}\u3068${civ.states[w.defender].name}\u306E\u6226\u95D8`, participants: [{ entityId: w.id, role: "war" }, { entityId: w.aggressor, role: "aggressor" }, { entityId: w.defender, role: "defender" }], location: { cell: civ.groups[civ.states[w.defender].capitalGroupId]?.cell ?? null }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: [{ targetId: w.id, property: "score", before: null, after: Math.round(w.score) }] });
+      if (mi2 % 3 === 0 && rng() < 0.4) makeEvent(civ, ids2, { kind: "battle_fought", title: `${civ.states[w.aggressor].name}\u3068${civ.states[w.defender].name}\u306E\u6226\u95D8`, participants: [{ entityId: w.id, role: "war" }, { entityId: w.aggressor, role: "aggressor" }, { entityId: w.defender, role: "defender" }], location: { cell: civ.groups[civ.states[w.defender].capitalGroupId]?.cell ?? null }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: [{ targetId: w.id, property: "score", before: null, after: Math.round(w.score) }] });
       if (w.score >= 35 && w.occupied.length < 3 && rng() < 0.08) {
         const cap = civ.groups[civ.states[w.aggressor].capitalGroupId];
         const cand2 = D2.flatMap((s) => groups.get(s.id) ?? []).filter((g) => !w.occupied.includes(g.id));
@@ -1849,7 +1849,7 @@
           makeEvent(civ, ids2, { kind: "territory_occupied", title: "\u9818\u571F\u304C\u5360\u9818\u3055\u308C\u305F", participants: [{ entityId: g.id, role: "territory" }, { entityId: w.id, role: "war" }], location: { cell: g.cell }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }] });
         }
       }
-      const age = mi - w.startedAt;
+      const age = mi2 - w.startedAt;
       if (w.score >= 80) endWar(ctx, w, "aggressor_victory");
       else if (w.score <= -80) endWar(ctx, w, "defender_victory");
       else if (age > 120) endWar(ctx, w, "stalemate");
@@ -1979,18 +1979,18 @@
   });
 
   // js/core/civ/disaster.js
-  function climateIndex(civ, mi) {
-    const h = hashSeed(civ.historySeed, "climate"), a = h % 1e3 / 1e3 * 2 * Math.PI;
-    return 0.62 * Math.sin(2 * Math.PI * mi / 3600 + a) + 0.38 * Math.sin(2 * Math.PI * mi / 11e3 + 2 * a);
+  function climateIndex(civ, mi2) {
+    const h2 = hashSeed(civ.historySeed, "climate"), a = h2 % 1e3 / 1e3 * 2 * Math.PI;
+    return 0.62 * Math.sin(2 * Math.PI * mi2 / 3600 + a) + 0.38 * Math.sin(2 * Math.PI * mi2 / 11e3 + 2 * a);
   }
   function stepClimate(ctx) {
-    const { civ, ids: ids2 } = ctx, mi = civ.monthIndex, idx = climateIndex(civ, mi), ph = phaseOf(idx);
+    const { civ, ids: ids2 } = ctx, mi2 = civ.monthIndex, idx = climateIndex(civ, mi2), ph = phaseOf(idx);
     civ.climate.index = r32(idx);
     if (ph !== civ.climate.phase) {
       const old = civ.climate.phase;
       civ.climate.phase = ph;
-      civ.climate.since = mi;
-      if (mi > 12) makeEvent(civ, ids2, { kind: "climate_shift", title: `\u6C17\u5019\u304C${CLIMATE_JA[old]}\u304B\u3089${CLIMATE_JA[ph]}\u3078\u79FB\u3063\u305F`, participants: [], location: null, effects: [{ targetId: "world", property: "climate.phase", before: old, after: ph }] });
+      civ.climate.since = mi2;
+      if (mi2 > 12) makeEvent(civ, ids2, { kind: "climate_shift", title: `\u6C17\u5019\u304C${CLIMATE_JA[old]}\u304B\u3089${CLIMATE_JA[ph]}\u3078\u79FB\u3063\u305F`, participants: [], location: null, effects: [{ targetId: "world", property: "climate.phase", before: old, after: ph }] });
     }
   }
   function disasterMemory(civ, st) {
@@ -2006,7 +2006,7 @@
     m[kind] = { w: r32(cur + sev), at: civ.monthIndex };
   }
   function stepDisaster(ctx) {
-    const { world, civ, ids: ids2, rng } = ctx, mi = civ.monthIndex, rate = (civ.options.disasterRate ?? 1) * RATE2;
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, rate = (civ.options.disasterRate ?? 1) * RATE2;
     if (rng() < rate) {
       const gl = Object.keys(civ.groups);
       if (gl.length) {
@@ -2017,21 +2017,21 @@
     for (const id in civ.disasters) {
       const d = civ.disasters[id];
       if (d.ended) continue;
-      if (d.kind === "drought" && mi > d.startedAt) for (const gid of d.groupIds) {
+      if (d.kind === "drought" && mi2 > d.startedAt) for (const gid of d.groupIds) {
         const g = civ.groups[gid];
         if (g) g.pop = Math.max(5, g.pop * (1 - 3e-3 * d.severity * resist(civ, g)));
       }
-      if (mi >= d.endsAt) {
+      if (mi2 >= d.endsAt) {
         d.ended = true;
         makeEvent(civ, ids2, { kind: "disaster_ended", title: `${KIND_JA[d.kind]}\u304C\u53CE\u307E\u3063\u305F`, participants: [{ entityId: id, role: "disaster" }], location: { cell: d.center }, causes: [{ targetId: d.eventId, relation: "part_of", basis: "direct" }] });
       }
     }
-    if (mi % 120 === 0) {
-      for (const id in civ.disasters) if (civ.disasters[id].ended && mi - civ.disasters[id].endsAt > 1200 && !civ.disasters[id].archived) civ.disasters[id].archived = true;
+    if (mi2 % 120 === 0) {
+      for (const id in civ.disasters) if (civ.disasters[id].ended && mi2 - civ.disasters[id].endsAt > 1200 && !civ.disasters[id].archived) civ.disasters[id].archived = true;
     }
   }
   function strike(ctx, g0, kind) {
-    const { world, civ, ids: ids2, rng } = ctx, mi = civ.monthIndex, sev = r32(0.3 + 0.7 * rng()), { terr } = spatialOf(ctx);
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, sev = r32(0.3 + 0.7 * rng()), { terr } = spatialOf(ctx);
     const cells = new Set(territoryOf(world, g0.cell));
     if (kind === "drought") {
       const m = world.mesh;
@@ -2041,7 +2041,7 @@
     for (const c of cells) for (const gid of terr.get(c) ?? []) hit.add(gid);
     hit.add(g0.id);
     const months = kind === "drought" ? 12 + Math.floor(rng() * 36) : kind === "volcano" ? 12 + Math.floor(rng() * 24) : 1 + Math.floor(rng() * 2), id = ids2.next("disaster");
-    const d = civ.disasters[id] = { id, kind, startedAt: mi, endsAt: mi + months, center: g0.cell, cells: [...cells].slice(0, 12), severity: sev, groupIds: [...hit].sort(), eventId: null, ended: false, deaths: 0 };
+    const d = civ.disasters[id] = { id, kind, startedAt: mi2, endsAt: mi2 + months, center: g0.cell, cells: [...cells].slice(0, 12), severity: sev, groupIds: [...hit].sort(), eventId: null, ended: false, deaths: 0 };
     const effects = [], states = /* @__PURE__ */ new Set();
     let dead = 0;
     for (const gid of d.groupIds) {
@@ -2052,7 +2052,7 @@
       else if (kind === "volcano") g.pop = Math.max(5, g.pop * (1 - 0.15 * sev * res));
       if (kind !== "flood") {
         g.capMult = r32(clamp22(1 - (kind === "drought" ? 0.45 : 0.35) * sev * res, 0.3, 1));
-        g.capUntil = mi + months + (kind === "volcano" ? 12 : 6);
+        g.capUntil = mi2 + months + (kind === "volcano" ? 12 : 6);
       }
       dead += Math.max(0, before - g.pop);
       {
@@ -2082,7 +2082,7 @@
           else if (rng() < 0.3) {
             const moved = Math.round(g.pop * POP.budShare);
             g.pop -= moved;
-            g.lastBudAt = mi;
+            g.lastBudAt = mi2;
             const child = spawnGroup(civ, ids2, g, t[0].cell, moved);
             occ.set(t[0].cell, [child.id]);
             makeEvent(civ, ids2, { kind: "group_split", title: "\u707D\u5BB3\u3092\u9003\u308C\u3066\u96C6\u56E3\u304C\u5206\u304B\u308C\u305F", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t[0].cell }, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] });
@@ -2743,14 +2743,14 @@
     return { layer: "campaign", type: `campaign_${key3}`, obs: obsOf(st, e), candidates: cands, chosen: { key: key3, target: c.target, opt: null }, reason: why };
   }
   function stepAIPlan(ctx) {
-    const { civ } = ctx, mi = civ.monthIndex, every = civ.options.aiInterval;
+    const { civ } = ctx, mi2 = civ.monthIndex, every = civ.options.aiInterval;
     ctx.plans = [];
     for (const id in civ.states) {
       const st = civ.states[id];
       if (!st.alive || st.player) continue;
-      if ((hashSeed(id) + mi) % every !== 0) continue;
+      if ((hashSeed(id) + mi2) % every !== 0) continue;
       const e = observe(ctx, st);
-      if (!st.strategy || mi - st.strategy.since >= STRATEGY_EVERY) chooseStrategy(ctx, st, e);
+      if (!st.strategy || mi2 - st.strategy.since >= STRATEGY_EVERY) chooseStrategy(ctx, st, e);
       if (st.campaign) {
         const p = planCampaign(ctx, st, e), d2 = record(ctx, st, p);
         ctx.plans.push({ st, d: d2, campaign: p.chosen.key, why: p.reason });
@@ -2930,14 +2930,14 @@
     body.set(data, t.length);
     return [...be32(data.length), ...body, ...be32(crc322(body))];
   }
-  async function encodePng(rgba, w, h) {
-    const raw = new Uint8Array(h * (w * 4 + 1));
-    for (let y = 0; y < h; y++) {
+  async function encodePng(rgba, w, h2) {
+    const raw = new Uint8Array(h2 * (w * 4 + 1));
+    for (let y = 0; y < h2; y++) {
       raw[y * (w * 4 + 1)] = 0;
       raw.set(rgba.subarray(y * w * 4, (y + 1) * w * 4), y * (w * 4 + 1) + 1);
     }
     const z = new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer());
-    return Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, ...chunk("IHDR", Uint8Array.from([...be32(w), ...be32(h), 8, 6, 0, 0, 0])), ...chunk("IDAT", z), ...chunk("IEND", new Uint8Array(0))]);
+    return Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, ...chunk("IHDR", Uint8Array.from([...be32(w), ...be32(h2), 8, 6, 0, 0, 0])), ...chunk("IDAT", z), ...chunk("IEND", new Uint8Array(0))]);
   }
   var be32;
   var init_png = __esm({
@@ -3004,20 +3004,20 @@
   }
   async function* obsidianFiles(world, civ, worldName, opts = {}) {
     const root = safe(worldName || "\u4E16\u754C"), P3 = planPaths(world, civ, opts), ix = graphIndex(civ), stats = { files: 0, unresolved: 0, outOfScope: 0, missing: [] }, counts = {};
-    const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi) => mi >= from && mi <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false;
-    const link2 = (id, label2) => {
+    const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi2) => mi2 >= from && mi2 <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false;
+    const link2 = (id, label3) => {
       if (id === "world") return "\u4E16\u754C\u5168\u4F53";
       const p = P3.get(id);
       if (!p && scoped && /^(event|decision)_/.test(String(id))) {
         stats.outOfScope++;
-        return String(label2 ?? id).replace(/[\]|\u0001\u0002]/g, " ");
+        return String(label3 ?? id).replace(/[\]|\u0001\u0002]/g, " ");
       }
       if (!p) {
         stats.unresolved++;
         if (stats.missing.length < 10) stats.missing.push(String(id));
-        return label2 ?? String(id);
+        return label3 ?? String(id);
       }
-      return `${p}|${String(label2 ?? id).replace(/[\]|\u0001\u0002]/g, " ")}`;
+      return `${p}|${String(label3 ?? id).replace(/[\]|\u0001\u0002]/g, " ")}`;
     };
     const nameOf5 = (id) => civ.states[id]?.name ?? civ.persons[id]?.name ?? civ.cultures[id]?.name ?? civ.languages[id]?.name ?? civ.religions[id]?.name ?? civ.magic.orgs[id]?.name ?? id;
     const L = (id) => link2(id, nameOf5(id)), cellLoc = (c) => c == null ? "\u4E0D\u660E" : `\u30BB\u30EB ${c}\uFF08\u7DEF\u5EA6 ${r12(world.cell.lat[c] * 180 / Math.PI)}\xB0\u30FB\u7D4C\u5EA6 ${r12(world.cell.lon[c] * 180 / Math.PI)}\xB0\uFF09`;
@@ -3048,7 +3048,7 @@ ${s.magic ? `- \u9B54\u6CD5\u5236\u5EA6: ${INSTITUTIONS[s.magic.kind].ja}\uFF08\
 ` : ""}${s.resilience ? `- \u5099\u84C4\u30FB\u6CBB\u6C34: ${s.resilience}
 ` : ""}
 ## \u63A1\u7528\u3057\u305F\u6280\u8853
-${Object.entries(s.techAdopted).map(([k, mi]) => `- ${link2(`tech:${k}`, TECHS.find((t) => t.key === k)?.name ?? k)}\uFF08${mi2s(mi)}\uFF09`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
+${Object.entries(s.techAdopted).map(([k, mi2]) => `- ${link2(`tech:${k}`, TECHS.find((t) => t.key === k)?.name ?? k)}\uFF08${mi2s(mi2)}\uFF09`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 
 ## \u95A2\u4FC2
 ${table(["\u76F8\u624B", "\u95A2\u4FC2\u5024"], Object.entries(s.relations).map(([k, v]) => [L(k), v]))}
@@ -3170,7 +3170,7 @@ ${(ix.byEntity.get(s.id) ?? []).map((i) => civ.events[i]).slice(0, 50).map((e) =
 ## \u69CB\u6210\uFF08\u30B3\u30DB\u30FC\u30C8\uFF09
 ${table(["\u6587\u5316", "\u8A00\u8A9E", "\u5B97\u6559", "\u7A2E\u65CF", "\u5272\u5408", "\u7DCA\u5F35"], g.cohorts.map((c) => [L(c.cultureId), L(c.languageId), c.religionId ? L(c.religionId) : "\u306A\u3057", SPECIES[c.speciesId]?.ja ?? c.speciesId, r34(c.share), r34(c.tension)]))}
 ## \u77E5\u3063\u3066\u3044\u308B\u6280\u8853
-${Object.entries(g.tech.known).map(([k, mi]) => `${link2(`tech:${k}`, TECHS.find((t) => t.key === k)?.name ?? k)}\uFF08${mi2s(mi)}\uFF09`).join("\u3001") || "\uFF08\u306A\u3057\uFF09"}
+${Object.entries(g.tech.known).map(([k, mi2]) => `${link2(`tech:${k}`, TECHS.find((t) => t.key === k)?.name ?? k)}\uFF08${mi2s(mi2)}\uFF09`).join("\u3001") || "\uFF08\u306A\u3057\uFF09"}
 `);
     for (const r of regionsOf(world)) {
       const inReg = Object.values(civ.groups).filter((g) => world.cell.continent[g.cell] === r.id);
@@ -3302,7 +3302,7 @@ ${ds.map((d) => `| ${d2s(d.date)} | ${d.layer} | ${d.chosen.key ?? "\u4F55\u3082
 ${link2(s.id, "\u2190 " + s.name)}
 `;
   }
-  function graphNote(title, sub2, edges, label2) {
+  function graphNote(title, sub2, edges, label3) {
     const ids2 = [...new Set(edges.flat())].slice(0, 200), set = new Set(ids2), n = new Map(ids2.map((id, i) => [id, `n${i}`])), es = edges.filter(([a, b]) => set.has(a) && set.has(b)).slice(0, 400);
     return fm({ type: "\u95A2\u4FC2\u30B0\u30E9\u30D5", tags: ["\u30B0\u30E9\u30D5"] }) + `# ${title}
 
@@ -3310,7 +3310,7 @@ ${sub2}\u3002Mermaid \u3067\u63CF\u753B\u3055\u308C\u308B\uFF08\u30CE\u30FC\u30C
 
 \`\`\`mermaid
 graph LR
-${ids2.map((id) => `  ${n.get(id)}["${String(label2(id)).replace(/"/g, "'")}"]`).join("\n")}
+${ids2.map((id) => `  ${n.get(id)}["${String(label3(id)).replace(/"/g, "'")}"]`).join("\n")}
 ${es.map(([a, b]) => `  ${n.get(a)} --> ${n.get(b)}`).join("\n")}
 \`\`\`
 `;
@@ -3349,7 +3349,7 @@ ${es.map(([a, b]) => `  ${n.get(a)} --> ${n.get(b)}`).join("\n")}
     };
     await render("\u5730\u5F62.png", null);
     if (civ.history && Object.keys(civ.history.states).length) {
-      const mi = civ.monthIndex, marks = [...new Set([0, 0.25, 0.5, 0.75, 1].map((f) => Math.floor(mi * f / 120) * 120))].filter((x) => x <= mi && x >= 0);
+      const mi2 = civ.monthIndex, marks = [...new Set([0, 0.25, 0.5, 0.75, 1].map((f) => Math.floor(mi2 * f / 120) * 120))].filter((x) => x <= mi2 && x >= 0);
       for (const t of marks) await render(`\u56FD\u5BB6\u9818\u57DF_${Math.floor(t / 12)}\u5E74.png`, ownerMapAt(civ, territoryOf, world, t));
     }
     return files;
@@ -3409,11 +3409,11 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
     return errs;
   }
   async function sha256(bytes) {
-    const h = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-    return [...h].map((b) => b.toString(16).padStart(2, "0")).join("");
+    const h2 = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    return [...h2].map((b) => b.toString(16).padStart(2, "0")).join("");
   }
   async function exportObsidianZip(world, civ, worldName, opts = {}) {
-    const root = safe(worldName || "\u4E16\u754C"), enc6 = new TextEncoder(), index = [];
+    const root = safe(worldName || "\u4E16\u754C"), enc7 = new TextEncoder(), index = [];
     let manifest = null;
     async function* gen() {
       for await (const f of obsidianFiles(world, civ, worldName, opts)) {
@@ -3421,7 +3421,7 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
           manifest = JSON.parse(f.data);
           continue;
         }
-        const raw = typeof f.data === "string" ? enc6.encode(f.data) : f.data;
+        const raw = typeof f.data === "string" ? enc7.encode(f.data) : f.data;
         index.push([f.path.slice(root.length + 1), raw.length, opts.hash === false ? null : await sha256(raw)]);
         yield f;
       }
@@ -3448,7 +3448,7 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
       init_world_consts();
       OBSIDIAN_VERSION = 1;
       FOLDERS = Object.freeze({ state: "\u56FD\u5BB6", person: "\u4EBA\u7269", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5/\u80FD\u529B", org: "\u9B54\u6CD5/\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269", chronicle: "\u5E74\u4EE3\u8A18", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", logState: "\u8A73\u7D30\u30ED\u30B0/\u56FD\u5BB6\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0/AI\u5224\u65AD", map: "\u5730\u56F3" });
-      mi2s = (mi) => `${Math.floor(mi / 12)}\u5E74${(mi % 12 + 12) % 12 + 1}\u6708`;
+      mi2s = (mi2) => `${Math.floor(mi2 / 12)}\u5E74${(mi2 % 12 + 12) % 12 + 1}\u6708`;
       d2s = (d) => `${d.year}\u5E74${d.month}\u6708`;
       d2mi = (d) => d.year * 12 + d.month - 1;
       safe = (s) => String(s ?? "").replace(/[\\/:*?"<>|#^\[\]\n\r\t]/g, "_").replace(/\.{2,}/g, "_").replace(/^\.+/, "_").replace(/\s+/g, " ").trim().slice(0, 48) || "\u7121\u984C";
@@ -3465,9 +3465,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       r12 = (x) => Math.round(x * 10) / 10;
       r34 = (x) => Math.round(x * 1e3) / 1e3;
       colorOf2 = (id) => {
-        let h = 2166136261;
-        for (const ch of String(id)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-        const hue = (h >>> 0) % 360, s = 0.55 + (h >>> 9) % 30 / 100, l = 0.5 + (h >>> 17) % 20 / 100;
+        let h2 = 2166136261;
+        for (const ch of String(id)) h2 = Math.imul(h2 ^ ch.charCodeAt(0), 16777619);
+        const hue = (h2 >>> 0) % 360, s = 0.55 + (h2 >>> 9) % 30 / 100, l = 0.5 + (h2 >>> 17) % 20 / 100;
         const f = (n) => {
           const k = (n + hue / 30) % 12, a = s * Math.min(l, 1 - l);
           return Math.round(255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1))));
@@ -3522,13 +3522,13 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/core/edit/commands.js
-  function makeCommand(label2, layers, parts) {
+  function makeCommand(label3, layers, parts) {
     const bump = (state) => {
       const r = state.map.rev;
       for (const l of layers) r[l]++;
     };
     return {
-      label: label2,
+      label: label3,
       layers,
       parts,
       // 途中の部品が例外を出したら、適用済みの部品を逆順に戻してから投げ直す（半分だけ変わった状態を残さない）
@@ -3688,30 +3688,30 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
        * 複数の commit を1つのUndo単位にまとめる。
        * 例: ブラシで1回なぞる間の全セル変更を、Undo 1回で戻せるようにする。
        */
-      beginBatch(label2) {
+      beginBatch(label3) {
         if (batch) throw new Error("\u30D0\u30C3\u30C1\u306F\u5165\u308C\u5B50\u306B\u3067\u304D\u307E\u305B\u3093");
-        batch = { label: label2, commands: [] };
+        batch = { label: label3, commands: [] };
       },
       endBatch() {
         if (!batch) return;
-        const { label: label2, commands } = batch;
+        const { label: label3, commands } = batch;
         batch = null;
         if (commands.length === 0) return;
         pushHistory({
-          label: label2,
+          label: label3,
           apply: (s) => commands.forEach((c) => c.apply(s)),
           revert: (s) => [...commands].reverse().forEach((c) => c.revert(s))
         });
-        notify({ type: "commit", label: label2 });
+        notify({ type: "commit", label: label3 });
       },
       /**
        * 複数の commit を「全部成功か、全部取り消し」にする。1つのUndo単位にもなる。
        * fn の途中で例外が起きたら、それまでに適用した変更を逆順に戻し、履歴にも通知にも残さず、例外をそのまま投げ直す。
        * すでに beginBatch の中にいるときは、その中で今回の分だけを戻す（入れ子にできる）。
        */
-      transaction(label2, fn) {
+      transaction(label3, fn) {
         const own = !batch;
-        if (own) batch = { label: label2, commands: [] };
+        if (own) batch = { label: label3, commands: [] };
         const start2 = batch.commands.length;
         let result;
         try {
@@ -3725,7 +3725,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
             }
           }
           if (own) batch = null;
-          notify({ type: "rollback", label: label2 });
+          notify({ type: "rollback", label: label3 });
           throw e;
         }
         if (own) this.endBatch();
@@ -3771,9 +3771,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         notify({ type: "replace" });
       },
       /** 履歴に載せない軽い状態変更（ツール選択・ズーム等）用 */
-      update(mutator, label2 = "update") {
+      update(mutator, label3 = "update") {
         mutator(state);
-        notify({ type: "update", label: label2 });
+        notify({ type: "update", label: label3 });
       }
     };
   }
@@ -3869,7 +3869,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/render/viewport.js
-  var isSphereSize = (w, h) => Math.abs(h * 2 - w) < 1e-6;
+  var isSphereSize = (w, h2) => Math.abs(h2 * 2 - w) < 1e-6;
   function createViewport(mapWidth, mapHeight) {
     const vp = {
       mapWidth,
@@ -3896,9 +3896,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       vp.proj = vp.projected ? createProjection({ a: A_WORLD, mapWidth: vp.mapWidth }) : null;
     }
     configure();
-    vp.setMapSize = (w, h) => {
+    vp.setMapSize = (w, h2) => {
       vp.mapWidth = w;
-      vp.mapHeight = h;
+      vp.mapHeight = h2;
       configure();
     };
     vp.warpY = function warpY(y) {
@@ -3949,9 +3949,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       clampY();
       vp.normalize();
     };
-    vp.resize = (w, h) => {
+    vp.resize = (w, h2) => {
       vp.screenWidth = w;
-      vp.screenHeight = h;
+      vp.screenHeight = h2;
     };
     vp.toWorld = function(sx, sy) {
       const wx = (sx - this.x) / this.k, yd = (sy - this.y) / this.k;
@@ -3984,9 +3984,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       clampY();
       vp.normalize();
     };
-    vp.visibleBounds = function(pad = 0) {
-      const x0 = (-pad - this.x) / this.k, x1 = (this.screenWidth + pad - this.x) / this.k;
-      const yd0 = (-pad - this.y) / this.k, yd1 = (this.screenHeight + pad - this.y) / this.k;
+    vp.visibleBounds = function(pad2 = 0) {
+      const x0 = (-pad2 - this.x) / this.k, x1 = (this.screenWidth + pad2 - this.x) / this.k;
+      const yd0 = (-pad2 - this.y) / this.k, yd1 = (this.screenHeight + pad2 - this.y) / this.k;
       if (!this.proj) return { x0, y0: yd0, x1, y1: yd1 };
       return { x0, x1, y0: this.proj.displayToSimY(Math.max(this.proj.top, yd0)), y1: this.proj.displayToSimY(Math.min(this.proj.top + this.proj.totalHeight, yd1)) };
     };
@@ -4014,9 +4014,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     vp.apply = function(ctx, dpr = 1) {
       ctx.setTransform(this.k * dpr, 0, 0, this.k * dpr, this.x * dpr, this.y * dpr);
     };
-    vp.cloneFor = (w, h, tileX = 0, tileY = 0) => {
+    vp.cloneFor = (w, h2, tileX = 0, tileY = 0) => {
       const c = createViewport(vp.mapWidth, vp.mapHeight);
-      c.resize(w, h);
+      c.resize(w, h2);
       c.k = vp.k;
       c.fitK = vp.fitK;
       c.minK = vp.minK;
@@ -4033,8 +4033,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var NEUTRAL_COLOR = "#d8d2c0";
   var clamp01 = (v) => Math.min(1, Math.max(0, v));
   function hexToRgb(hex) {
-    const h = hex.replace("#", "");
-    const f = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+    const h2 = hex.replace("#", "");
+    const f = h2.length === 3 ? h2.split("").map((c) => c + c).join("") : h2;
     return [parseInt(f.slice(0, 2), 16), parseInt(f.slice(2, 4), 16), parseInt(f.slice(4, 6), 16)];
   }
   function mix(a, b, t) {
@@ -4043,8 +4043,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const c = (x, y) => Math.round(x + (y - x) * u).toString(16).padStart(2, "0");
     return `#${c(r13, r25)}${c(g1, g2)}${c(b1, b2)}`;
   }
-  function landHeightColor(h) {
-    const t = clamp01((h - 20) / 80);
+  function landHeightColor(h2) {
+    const t = clamp01((h2 - 20) / 80);
     if (t < 0.25) return mix("#8fbf7a", "#d9d27a", t / 0.25);
     if (t < 0.6) return mix("#d9d27a", "#b58a5c", (t - 0.25) / 0.35);
     return mix("#b58a5c", "#f4f1ec", (t - 0.6) / 0.4);
@@ -4076,7 +4076,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var pathCache = /* @__PURE__ */ new WeakMap();
   var PLAIN_LAND = "#d8d2b4";
   function drawTerrain(ctx, map, vp, mode = "biome") {
-    const { cells, vertices, h } = map.geometry.pack;
+    const { cells, vertices, h: h2 } = map.geometry.pack;
     const biome = map.pack.cells.biome;
     const biomeColor = map.biomesData.map((b) => b?.color ?? "#999");
     let cache4 = pathCache.get(map.geometry);
@@ -4104,7 +4104,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (!entries) {
         const groups = /* @__PURE__ */ new Map();
         for (let i = 0; i < cells.v.length; i++) {
-          const hi = h[i];
+          const hi = h2[i];
           let color;
           if (hi < 20) color = water ? waterColorOf(map, i) : null;
           else color = landColor(i, hi);
@@ -4142,7 +4142,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const groups = /* @__PURE__ */ new Map();
       for (let i = 0; i < cells.v.length; i++) {
         if (!visible(i)) continue;
-        const hi = h[i];
+        const hi = h2[i];
         let color;
         if (hi < 20) color = water ? waterColorOf(map, i) : null;
         else color = landColor(i, hi);
@@ -4245,12 +4245,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (m) return [+m[1], +m[2], +m[3]];
     m = /^hsla?\(\s*([\d.]+)[,\s]+([\d.]+)%[,\s]+([\d.]+)%/i.exec(c);
     if (m) {
-      const h = +m[1] / 360, sat = +m[2] / 100, l = +m[3] / 100, q2 = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q2;
+      const h2 = +m[1] / 360, sat = +m[2] / 100, l = +m[3] / 100, q2 = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, p = 2 * l - q2;
       const f = (t) => {
         t = (t + 1) % 1;
         return t < 1 / 6 ? p + (q2 - p) * 6 * t : t < 1 / 2 ? q2 : t < 2 / 3 ? p + (q2 - p) * (2 / 3 - t) * 6 : p;
       };
-      return [f(h + 1 / 3) * 255, f(h) * 255, f(h - 1 / 3) * 255];
+      return [f(h2 + 1 / 3) * 255, f(h2) * 255, f(h2 - 1 / 3) * 255];
     }
     return null;
   }
@@ -4706,10 +4706,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function supportBars(state) {
     const r = regimeOf(state);
     const keys = Object.keys(IDEOLOGIES);
-    let h = (state?.i ?? 0) * 2654435761 >>> 0;
+    let h2 = (state?.i ?? 0) * 2654435761 >>> 0;
     const rnd = () => {
-      h = Math.imul(h ^ h >>> 15, 2246822507) + 2654435769 >>> 0;
-      return h / 4294967296;
+      h2 = Math.imul(h2 ^ h2 >>> 15, 2246822507) + 2654435769 >>> 0;
+      return h2 / 4294967296;
     };
     const main = 55 + Math.floor(rnd() * 25);
     const rest = keys.filter((k) => k !== r.ideology);
@@ -4733,7 +4733,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var FX = { inf: "infantry", cav: "cavalry", arc: "archers", art: "artillery", arm: "armor", air: "air", nav: "navy", spc: "special", adv: "advanced" };
   var BRANCHES = Object.freeze([{ key: "land", label: "\u9678" }, { key: "sea", label: "\u6D77" }, { key: "air", label: "\u7A7A" }]);
   var TIER_LABEL = Object.freeze(["\u53E4\u4EE3\u30FB\u4E2D\u4E16", "\u706B\u5668\u306E\u767B\u5834", "\u8FD1\u4E16", "\u8FD1\u4EE3", "\u6A5F\u68B0\u5316", "\u73FE\u4EE3"]);
-  var T = (branch, tier, a, b, c) => [a, b, c].map(([label2, desc, fx], i) => ({ key: `${branch}.${tier}.${"abc"[i]}`, branch, tier, label: label2, desc, fx }));
+  var T = (branch, tier, a, b, c) => [a, b, c].map(([label3, desc, fx], i) => ({ key: `${branch}.${tier}.${"abc"[i]}`, branch, tier, label: label3, desc, fx }));
   var TREE_NODES = Object.freeze([
     ...T("land", 1, ["\u5BC6\u96C6\u6226\u5217", "\u69CD\u3068\u76FE\u3067\u968A\u5217\u3092\u7D44\u3080\u3002", { inf: 0.1, def: 0.03 }], ["\u9A0E\u99AC\u7A81\u6483", "\u9A0E\u5175\u306E\u885D\u6483\u529B\u306B\u983C\u308B\u3002", { cav: 0.15, atk: 0.03 }], ["\u7C60\u57CE\u3068\u5C71\u57CE", "\u62E0\u70B9\u306B\u62E0\u3063\u3066\u5B88\u308B\u3002", { def: 0.08, inf: 0.05 }]),
     ...T("land", 2, ["\u706B\u7E04\u9283\u968A", "\u706B\u5668\u3092\u6301\u3063\u305F\u6B69\u5175\u306E\u6589\u5C04\u3002", { inf: 0.12, art: 0.05 }], ["\u8981\u585E\u7DDA", "\u7A1C\u5821\u5F0F\u306E\u8981\u585E\u3067\u56FD\u5883\u3092\u56FA\u3081\u308B\u3002", { def: 0.1 }], ["\u8EFD\u88C5\u6A5F\u52D5", "\u8EAB\u8EFD\u306B\u52D5\u3044\u3066\u6575\u306E\u5F8C\u308D\u3092\u7A81\u304F\u3002", { cav: 0.08, inf: 0.04, mor: -0.05 }]),
@@ -4754,7 +4754,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     ...T("air", 5, ["\u30B8\u30A7\u30C3\u30C8\u6226\u95D8\u6A5F", "\u97F3\u901F\u306B\u8FD1\u3044\u6226\u95D8\u6A5F\u3002", { air: 0.2 }], ["\u7A7A\u633A\u4F5C\u6226", "\u7A7A\u304B\u3089\u90E8\u968A\u3092\u964D\u308D\u3059\u3002", { air: 0.08, spc: 0.12 }], ["\u9632\u7A7A\u30DF\u30B5\u30A4\u30EB", "\u5730\u5BFE\u7A7A\u30DF\u30B5\u30A4\u30EB\u306E\u5098\u3002", { def: 0.08, adv: 0.08 }]),
     ...T("air", 6, ["\u30B9\u30C6\u30EB\u30B9\u3068\u7CBE\u5BC6\u8A98\u5C0E", "\u898B\u3048\u306A\u3044\u6A5F\u4F53\u3068\u8A98\u5C0E\u5175\u5668\u3002", { air: 0.18, adv: 0.12 }], ["\u7121\u4EBA\u6A5F", "\u4EBA\u304C\u4E57\u3089\u306A\u3044\u6A5F\u4F53\u3067\u6226\u3046\u3002", { air: 0.1, adv: 0.15 }], ["\u5B87\u5B99\u30FB\u96FB\u5B50\u6226", "\u885B\u661F\u3068\u96FB\u6CE2\u3092\u62BC\u3055\u3048\u308B\u3002", { adv: 0.2 }])
   ]);
-  var U = (regime, a, b, c) => [a, b, c].map(([label2, desc, fx], i) => ({ key: `u.${regime}.${i + 1}`, branch: "unique", regime, tier: 0, label: label2, desc, fx }));
+  var U = (regime, a, b, c) => [a, b, c].map(([label3, desc, fx], i) => ({ key: `u.${regime}.${i + 1}`, branch: "unique", regime, tier: 0, label: label3, desc, fx }));
   var UNIQUE_NODES = Object.freeze([
     ...U("absolute", ["\u738B\u6A29\u306E\u5E38\u5099\u8ECD", "\u738B\u76F4\u5C5E\u306E\u5E38\u5099\u5175\u3002", { inf: 0.08, mor: -0.05 }], ["\u5BAE\u5EF7\u7832\u5175", "\u738B\u306E\u7832\u5175\u5DE5\u623F\u3002", { art: 0.1 }], ["\u8FD1\u885B\u9A0E\u58EB\u56E3", "\u7CBE\u92ED\u306E\u8FD1\u885B\u3002", { cav: 0.1, spc: 0.05 }]),
     ...U("constitutional", ["\u8B70\u4F1A\u306E\u7D71\u5236", "\u4E88\u7B97\u3092\u8B70\u4F1A\u304C\u63E1\u308A\u3001\u7121\u8B00\u306A\u6226\u4E89\u3092\u907F\u3051\u308B\u3002", { def: 0.05, mor: -0.05 }], ["\u5FD7\u9858\u5175\u5236", "\u5FD7\u9858\u5175\u306E\u58EB\u6C17\u306F\u9AD8\u3044\u3002", { inf: 0.06, mor: -0.05 }], ["\u6D77\u8ECD\u91CD\u8996", "\u5CF6\u56FD\u578B\u306E\u8ECD\u5099\u3002", { nav: 0.1 }]),
@@ -5023,8 +5023,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (hasSpacing) ctx.letterSpacing = `${sp / k}px`;
       const w = ctx.measureText(text2).width * k;
       const [sx, sy] = vp.toScreen(wx, wy);
-      const pad = 3;
-      const rect = [sx - w / 2 - pad, sy - sizePx / 2 - 2, sx + w / 2 + pad, sy + sizePx / 2 + 2];
+      const pad2 = 3;
+      const rect = [sx - w / 2 - pad2, sy - sizePx / 2 - 2, sx + w / 2 + pad2, sy + sizePx / 2 + 2];
       for (const r of placed) {
         if (rect[0] < r[2] && rect[2] > r[0] && rect[1] < r[3] && rect[3] > r[1]) {
           if (hasSpacing) ctx.letterSpacing = "0px";
@@ -5270,9 +5270,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (!out.cells.length) throw new Error("\u7BC4\u56F2\u306B\u9678\u306E\u30BB\u30EB\u304C\u3042\u308A\u307E\u305B\u3093");
     return out;
   }
-  function replace(map, label2, after) {
+  function replace(map, label3, after) {
     const before = map.zones ?? [];
-    return makeCommand(label2, [], [{ apply: (m) => {
+    return makeCommand(label3, [], [{ apply: (m) => {
       m.zones = after;
     }, revert: (m) => {
       m.zones = before;
@@ -5368,10 +5368,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       lineTo: (x, y) => ctx.lineTo(x, wy(y)),
       arc: (x, y, ...r) => ctx.arc(x, wy(y), ...r),
       ellipse: (x, y, ...r) => ctx.ellipse(x, wy(y), ...r),
-      rect: (x, y, w, h) => ctx.rect(x, wy(y), w, wy(y + h) - wy(y)),
-      fillRect: (x, y, w, h) => ctx.fillRect(x, wy(y), w, wy(y + h) - wy(y)),
-      strokeRect: (x, y, w, h) => ctx.strokeRect(x, wy(y), w, wy(y + h) - wy(y)),
-      clearRect: (x, y, w, h) => ctx.clearRect(x, wy(y), w, wy(y + h) - wy(y)),
+      rect: (x, y, w, h2) => ctx.rect(x, wy(y), w, wy(y + h2) - wy(y)),
+      fillRect: (x, y, w, h2) => ctx.fillRect(x, wy(y), w, wy(y + h2) - wy(y)),
+      strokeRect: (x, y, w, h2) => ctx.strokeRect(x, wy(y), w, wy(y + h2) - wy(y)),
+      clearRect: (x, y, w, h2) => ctx.clearRect(x, wy(y), w, wy(y + h2) - wy(y)),
       fillText: (t, x, y, ...r) => ctx.fillText(t, x, wy(y), ...r),
       strokeText: (t, x, y, ...r) => ctx.strokeText(t, x, wy(y), ...r),
       quadraticCurveTo: (cx, cy, x, y) => ctx.quadraticCurveTo(cx, wy(cy), x, wy(y)),
@@ -5503,12 +5503,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const r = canvas.getBoundingClientRect();
       dpr = window.devicePixelRatio || 1;
       const w = Math.max(1, Math.round(r.width));
-      const h = Math.max(1, Math.round(r.height));
-      const pw = Math.round(w * dpr), ph = Math.round(h * dpr);
-      if (canvas.width === pw && canvas.height === ph && viewport.screenWidth === w && viewport.screenHeight === h) return;
+      const h2 = Math.max(1, Math.round(r.height));
+      const pw = Math.round(w * dpr), ph = Math.round(h2 * dpr);
+      if (canvas.width === pw && canvas.height === ph && viewport.screenWidth === w && viewport.screenHeight === h2) return;
       canvas.width = pw;
       canvas.height = ph;
-      viewport.resize(w, h);
+      viewport.resize(w, h2);
       tile = null;
       interacting = false;
       needFull = true;
@@ -5518,7 +5518,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       }
       frame();
     }
-    function clear() {
+    function clear2() {
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = "#2f4a72";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -5527,7 +5527,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const map = getMap();
       if (!map?.geometry) {
         tile = null;
-        clear();
+        clear2();
         return;
       }
       const mx = Math.round(viewport.screenWidth * OVERSCAN), my = Math.round(viewport.screenHeight * OVERSCAN);
@@ -5544,7 +5544,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       tile = { canvas: cv, x: viewport.x, y: viewport.y, k: viewport.k, mx, my, cssW, cssH };
     }
     function blit() {
-      clear();
+      clear2();
       if (!tile) return;
       const s = viewport.k / tile.k;
       const dx = viewport.x - (tile.x + tile.mx) * s;
@@ -5627,8 +5627,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var isLayerOn = (view2, key3) => view2?.[key3] ?? DEFAULT_ON.get(key3) ?? false;
   var activeFills = (view2) => FILL_KINDS.filter((k) => isLayerOn(view2, FILL_KEY[k]));
   function terrainMode(view2) {
-    const b = isLayerOn(view2, "biomes"), h = isLayerOn(view2, "heights");
-    return b && h ? "both" : b ? "biome" : h ? "height" : "none";
+    const b = isLayerOn(view2, "biomes"), h2 = isLayerOn(view2, "heights");
+    return b && h2 ? "both" : b ? "biome" : h2 ? "height" : "none";
   }
   function legendKindOf(view2) {
     const on = activeFills(view2);
@@ -5706,12 +5706,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function normalizeSeed(seed) {
     if (typeof seed === "number" && Number.isFinite(seed)) return seed >>> 0;
     const str = String(seed ?? Date.now());
-    let h = 2166136261;
+    let h2 = 2166136261;
     for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 16777619);
+      h2 ^= str.charCodeAt(i);
+      h2 = Math.imul(h2, 16777619);
     }
-    return h >>> 0;
+    return h2 >>> 0;
   }
 
   // js/core/names/katakana.js
@@ -5799,7 +5799,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const n = assemble(rnd, style, opts);
       if (n && validate(n, { max: opts.max ?? 9 })) return n;
     }
-    const heads = cfg(style).heads.filter((h) => validate(h) && h.length <= (opts.max ?? 9));
+    const heads = cfg(style).heads.filter((h2) => validate(h2) && h2.length <= (opts.max ?? 9));
     return rnd.pick(heads.length ? heads : cfg(style).heads);
   }
   function generatePlaceName(rnd, style) {
@@ -5978,7 +5978,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     ["east", "\u6771", "soc"],
     ["west", "\u897F", "soc"],
     ["priest", "\u796D\u53F8", "soc"]
-  ].map(([key3, label2, cat]) => Object.freeze({ key: key3, label: label2, cat })));
+  ].map(([key3, label3, cat]) => Object.freeze({ key: key3, label: label3, cat })));
   var CONCEPT_BY_KEY = Object.freeze(Object.fromEntries(CONCEPTS.map((c) => [c.key, c])));
   var SHORT = /* @__PURE__ */ new Set(["river", "sea", "hill", "town", "fort", "port", "land", "fire", "water", "stone", "wind", "tree", "sun", "moon", "god", "king", "war", "house", "child", "spring"]);
   var parseToken = (t) => {
@@ -6146,11 +6146,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (!f) f = renderWord(rnd.pick(lang.proper));
     return { given: g, family: f, full: `${g}\u30FB${f}`, style: "language" };
   }
-  function languageStyle(lang, label2 = "") {
+  function languageStyle(lang, label3 = "") {
     const heads = [...new Set([...lang.proper, ...["sun", "moon", "star", "fire", "water", "stone", "wind", "wolf", "horse", "salt"].map((k) => lang.lex[k])].map(renderWord))].filter((w) => validate(w, { min: 2, max: 5 }));
     const sylls = [...new Set(lang.proper.flatMap((w) => (tokensOf(w) ?? []).filter((t) => !parseToken(t)?.coda).map(renderToken)))].filter((s) => s.length <= 2).slice(0, 10);
     const tails = [...new Set(["town", "fort", "port", "village", "market", "land", "hill", "valley", "bridge", "holy"].map((k) => wordOf(lang, k)))].filter((w) => w && w.length <= 4);
-    return { label: label2 || "\u8A00\u8A9E", heads: heads.length ? heads : ["\u30A2\u30EB", "\u30AB\u30EB"], mids: sylls.length ? sylls : ["\u30E9", "\u30CD"], tails: tails.length ? tails : ["\u30F3", "\u30B9"], midChance: 0.3, fromLanguage: true };
+    return { label: label3 || "\u8A00\u8A9E", heads: heads.length ? heads : ["\u30A2\u30EB", "\u30AB\u30EB"], mids: sylls.length ? sylls : ["\u30E9", "\u30CD"], tails: tails.length ? tails : ["\u30F3", "\u30B9"], midChance: 0.3, fromLanguage: true };
   }
   function lexiconRows(lang, parent = null) {
     return CONCEPTS.map((c) => ({ key: c.key, label: c.label, cat: c.cat, word: renderWord(lang.lex[c.key]), raw: isRaw(lang.lex[c.key]), parentWord: parent ? renderWord(parent.lex[c.key]) : null, edited: !!lang.edited?.[c.key] }));
@@ -6166,12 +6166,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     else delete x.data.languages;
   };
   var hash = (str) => {
-    let h = 2166136261;
+    let h2 = 2166136261;
     for (let i = 0; i < str.length; i++) {
-      h ^= str.charCodeAt(i);
-      h = Math.imul(h, 16777619);
+      h2 ^= str.charCodeAt(i);
+      h2 = Math.imul(h2, 16777619);
     }
-    return h >>> 0;
+    return h2 >>> 0;
   };
   var seedOf = (map, id, salt = "") => hash(`lang|${map.meta?.seed ?? ""}|${id}|${salt}`);
   function parentCultureOf(map, cultureId) {
@@ -6225,9 +6225,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (!C || !(cell >= 0)) return out;
     if ((C.r?.[cell] ?? 0) > 0) out.push("river");
     if (C.t?.[cell] === 1) out.push("coast");
-    const h = C.h?.[cell] ?? 0;
-    if (h >= 70) out.push("mountain");
-    else if (h >= 50) out.push("hill");
+    const h2 = C.h?.[cell] ?? 0;
+    if (h2 >= 70) out.push("mountain");
+    else if (h2 >= 50) out.push("hill");
     const b = BIOME_FEATURE[C.biome?.[cell]];
     if (b) out.push(b);
     return out;
@@ -6256,13 +6256,13 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
     return { command: cmd, created };
   }
-  function edit(map, cultureId, fn, label2) {
+  function edit(map, cultureId, fn, label3) {
     const lang = getLanguage(map, cultureId);
     if (!lang) throw new Error("\u305D\u306E\u6587\u5316\u306E\u8A00\u8A9E\u304C\u3042\u308A\u307E\u305B\u3093");
     const before = listLanguages(map), next = clone(lang);
     fn(next);
     next.phon = phonOf(next);
-    return makeCommand(label2, [], [part(before, { ...before, [cultureId]: next })]);
+    return makeCommand(label3, [], [part(before, { ...before, [cultureId]: next })]);
   }
   function planSetLanguageWord(map, cultureId, key3, kana) {
     if (!CONCEPT_BY_KEY[key3]) throw new Error(`\u672A\u77E5\u306E\u898B\u51FA\u3057\u3067\u3059: ${key3}`);
@@ -6709,20 +6709,20 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     return errs;
   }
   function meshHash(mesh) {
-    let h = 2166136261;
+    let h2 = 2166136261;
     const mix2 = (v) => {
-      h ^= v & 255;
-      h = Math.imul(h, 16777619);
-      h ^= v >>> 8 & 255;
-      h = Math.imul(h, 16777619);
-      h ^= v >>> 16 & 255;
-      h = Math.imul(h, 16777619);
-      h ^= v >>> 24 & 255;
-      h = Math.imul(h, 16777619);
+      h2 ^= v & 255;
+      h2 = Math.imul(h2, 16777619);
+      h2 ^= v >>> 8 & 255;
+      h2 = Math.imul(h2, 16777619);
+      h2 ^= v >>> 16 & 255;
+      h2 = Math.imul(h2, 16777619);
+      h2 ^= v >>> 24 & 255;
+      h2 = Math.imul(h2, 16777619);
     };
     for (let i = 0; i < mesh.centerXYZ.length; i++) mix2(Math.round(mesh.centerXYZ[i] * 1e6) | 0);
     for (let i = 0; i < mesh.neighborIds.length; i++) mix2(mesh.neighborIds[i]);
-    return (h >>> 0).toString(16).padStart(8, "0");
+    return (h2 >>> 0).toString(16).padStart(8, "0");
   }
 
   // js/core/world/spec.js
@@ -6745,7 +6745,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
   function normalizeWorldSpec(input2 = {}) {
     const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input2) ? input2 : {};
-    const num2 = (v, def, lo, hi, name, int = false) => {
+    const num3 = (v, def, lo, hi, name, int = false) => {
       if (v === void 0) return def;
       if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {
         errors.push(`${name} \u306F ${lo}\u301C${hi}${int ? " \u306E\u6574\u6570" : ""}\uFF08\u53D7\u3051\u53D6\u3063\u305F\u5024: ${String(v)}\uFF09`);
@@ -6758,19 +6758,19 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,
       worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),
       planet: {
-        radiusKm: num2(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),
+        radiusKm: num3(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),
         displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection
       },
-      resolution: { targetCells: num2(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },
-      landFraction: num2(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
-      continentCountTarget: num2(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
+      resolution: { targetCells: num3(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },
+      landFraction: num3(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
+      continentCountTarget: num3(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
       islandMode: i.islandMode ?? d.islandMode,
-      plateCount: num2(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
-      initialGroups: num2(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
+      plateCount: num3(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
+      initialGroups: num3(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
       climateModel: {
         fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,
-        lapseRateCPerKm: num2(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),
-        windMoistureLengthKm: num2(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")
+        lapseRateCPerKm: num3(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),
+        windMoistureLengthKm: num3(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")
       }
     };
     if (!spec.worldSeed) errors.push("worldSeed \u304C\u7A7A\uFF08\u30B7\u30FC\u30C9\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u751F\u6210\u3059\u308B\u5834\u5408\u306F makeWorldSeed \u3092\u4F7F\u3046\uFF09");
@@ -6790,14 +6790,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/world/noise.js
   function hashString(str) {
-    let h = 1779033703 ^ str.length;
+    let h2 = 1779033703 ^ str.length;
     for (let i = 0; i < str.length; i++) {
-      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-      h = h << 13 | h >>> 19;
+      h2 = Math.imul(h2 ^ str.charCodeAt(i), 3432918353);
+      h2 = h2 << 13 | h2 >>> 19;
     }
-    h = Math.imul(h ^ h >>> 16, 2246822507);
-    h = Math.imul(h ^ h >>> 13, 3266489909);
-    return (h ^ h >>> 16) >>> 0;
+    h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507);
+    h2 = Math.imul(h2 ^ h2 >>> 13, 3266489909);
+    return (h2 ^ h2 >>> 16) >>> 0;
   }
   function makeRng(seedStr, stage = "") {
     let a = hashString(`${seedStr}::${stage}`);
@@ -6816,10 +6816,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     return next;
   }
   function hash3(seed, x, y, z) {
-    let h = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
-    h = Math.imul(h ^ h >>> 15, 2246822507);
-    h = Math.imul(h ^ h >>> 13, 3266489909);
-    return ((h ^ h >>> 16) >>> 0) / 4294967296;
+    let h2 = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
+    h2 = Math.imul(h2 ^ h2 >>> 15, 2246822507);
+    h2 = Math.imul(h2 ^ h2 >>> 13, 3266489909);
+    return ((h2 ^ h2 >>> 16) >>> 0) / 4294967296;
   }
   var fade = (t) => t * t * (3 - 2 * t);
   function valueNoise3(seed, x, y, z) {
@@ -6931,12 +6931,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   };
   var Cancelled = class extends Error {
   };
-  var makeStager = (onProgress, signal, timings) => (name, label2, fn) => {
+  var makeStager = (onProgress, signal, timings) => (name, label3, fn) => {
     if (signal?.aborted) throw new Cancelled("\u30AD\u30E3\u30F3\u30BB\u30EB\u3055\u308C\u307E\u3057\u305F");
-    onProgress?.({ stage: name, label: label2, fraction: 0 });
+    onProgress?.({ stage: name, label: label3, fraction: 0 });
     const t = performance.now(), r = fn();
     timings[name] = Math.round(performance.now() - t);
-    onProgress?.({ stage: name, label: label2, fraction: 1, ms: timings[name] });
+    onProgress?.({ stage: name, label: label3, fraction: 1, ms: timings[name] });
     return r;
   };
   function generateWorld(specInput, options = {}) {
@@ -7090,7 +7090,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         continent[c] = f;
       }
       const rh = makeRng(seed, "hotspots");
-      for (let h = 0; h < 6; h++) {
+      for (let h2 = 0; h2 < 6; h2++) {
         const start2 = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;
         const dot2 = start2[0] * dirv[0] + start2[1] * dirv[1] + start2[2] * dirv[2];
         let t = [dirv[0] - dot2 * start2[0], dirv[1] - dot2 * start2[1], dirv[2] - dot2 * start2[2]];
@@ -7201,8 +7201,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     return world;
   }
   function tempAt(latRad, elevation, lapse) {
-    const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1e3;
-    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;
+    const a = Math.abs(latRad) / (Math.PI / 2), h2 = Math.max(0, elevation) / 1e3;
+    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h2;
   }
   function upwindOf(mesh, lat, lon, c) {
     const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
@@ -7238,8 +7238,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function biomeAt(T4, P3, e, sea) {
     return sea ? BIOMES.OCEAN : biomeOf(T4, P3, e);
   }
-  function computeHydrology(h, members = null) {
-    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;
+  function computeHydrology(h2, members = null) {
+    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h2;
     const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;
     const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);
     let on = 0;
@@ -7544,24 +7544,24 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     return errs;
   }
   function worldHash(world) {
-    let h = 2166136261;
+    let h2 = 2166136261;
     const { cell } = world;
     const mix2 = (v) => {
-      h ^= v & 255;
-      h = Math.imul(h, 16777619);
-      h ^= v >>> 8 & 255;
-      h = Math.imul(h, 16777619);
-      h ^= v >>> 16 & 255;
-      h = Math.imul(h, 16777619);
-      h ^= v >>> 24 & 255;
-      h = Math.imul(h, 16777619);
+      h2 ^= v & 255;
+      h2 = Math.imul(h2, 16777619);
+      h2 ^= v >>> 8 & 255;
+      h2 = Math.imul(h2, 16777619);
+      h2 ^= v >>> 16 & 255;
+      h2 = Math.imul(h2, 16777619);
+      h2 ^= v >>> 24 & 255;
+      h2 = Math.imul(h2, 16777619);
     };
     for (let i = 0; i < cell.elevation.length; i++) mix2(Math.round(cell.elevation[i]) | 0);
     for (let i = 0; i < cell.landWater.length; i++) mix2(cell.landWater[i] | cell.biome[i] << 8 | cell.soil[i] << 16);
     for (let i = 0; i < cell.riverTo.length; i++) mix2(cell.riverTo[i] | 0);
     for (let i = 0; i < cell.resource.length; i++) mix2(cell.resource[i]);
     mix2(meshHash(world.mesh).length);
-    return (h >>> 0).toString(16).padStart(8, "0");
+    return (h2 >>> 0).toString(16).padStart(8, "0");
   }
   function generateWorldChecked(specInput, options = {}, maxAttempts = 6) {
     const rejected = [];
@@ -7966,10 +7966,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         problems.push(`pack.cells.${key3} \u306E\u9577\u3055(${arr.length})\u304C\u30BB\u30EB\u6570(${n})\u3068\u4E00\u81F4\u3057\u307E\u305B\u3093`);
       }
     }
-    const refCheck = (label2, arr, limit) => {
+    const refCheck = (label3, arr, limit) => {
       for (let i = 0; i < arr.length; i++) {
         if (arr[i] < 0 || arr[i] >= limit) {
-          problems.push(`${label2} \u306E\u30BB\u30EB${i}\u304C\u7BC4\u56F2\u5916\u306E\u5024(${arr[i]})\u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`);
+          problems.push(`${label3} \u306E\u30BB\u30EB${i}\u304C\u7BC4\u56F2\u5916\u306E\u5024(${arr[i]})\u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`);
           return;
         }
       }
@@ -8026,12 +8026,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     map.biomesData = WORLD_BIOMES_DATA.map((b) => ({ ...b }));
     map.world = world;
     const isLand2 = new Uint8Array(N);
-    const biome = new Array(N), h = new Array(N), t = new Array(N), f = new Array(N), zero = () => new Array(N).fill(0);
+    const biome = new Array(N), h2 = new Array(N), t = new Array(N), f = new Array(N), zero = () => new Array(N).fill(0);
     for (let i = 0; i < N; i++) {
       const land = cell.landWater[i] === LAND_WATER.LAND;
       isLand2[i] = land ? 1 : 0;
       biome[i] = land ? cell.biome[i] : 0;
-      h[i] = elevationToHeight(cell.elevation[i], land);
+      h2[i] = elevationToHeight(cell.elevation[i], land);
       const d = Math.min(cell.coastDist[i], 5);
       t[i] = land ? 1 + d : -(1 + Math.min(d, 2));
       f[i] = land ? 2 : cell.landWater[i] === LAND_WATER.LAKE ? 3 : 1;
@@ -8044,10 +8044,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     map.pack.provinces = [0];
     map.pack.burgs = [0];
     map.pack.features = features;
-    map.grid = { ...map.grid, spacing: W / Math.sqrt(N * 2), cellsX: 0, cellsY: 0, boundary: [], points: [], features, h: h.slice(), f, t, temp: Array.from(cell.temp, Math.round), prec: Array.from(cell.precip, Math.round) };
+    map.grid = { ...map.grid, spacing: W / Math.sqrt(N * 2), cellsX: 0, cellsY: 0, boundary: [], points: [], features, h: h2.slice(), f, t, temp: Array.from(cell.temp, Math.round), prec: Array.from(cell.precip, Math.round) };
     map.pack.rivers = buildRivers(world);
     for (const r of map.pack.rivers) for (const c of r.cells) if (cell.landWater[c] === LAND_WATER.LAND) map.pack.cells.river[c] = r.i;
-    map.geometry = { gridVoronoi: null, pack: buildGeometry(mesh, h, W, H), overrideReport: { applied: 0, skipped: 0, unsupported: false } };
+    map.geometry = { gridVoronoi: null, pack: buildGeometry(mesh, h2, W, H), overrideReport: { applied: 0, skipped: 0, unsupported: false } };
     map.geometry.pack.g = Array.from({ length: N }, (_, i) => i);
     map.geometry.cellArea = Float32Array.from(cell.areaKm2, (a) => a / (kmPerUnit * kmPerUnit));
     map.rev = { terrain: 1, politics: 1, places: 1 };
@@ -8056,10 +8056,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function refreshMapCells(map, cells) {
     const w = map.world, cell = w.cell, c = map.pack.cells, g = map.grid, gh = map.geometry.pack.h;
     for (const i of cells) {
-      const land = cell.landWater[i] === LAND_WATER.LAND, d = Math.min(cell.coastDist[i], 5), h = elevationToHeight(cell.elevation[i], land);
+      const land = cell.landWater[i] === LAND_WATER.LAND, d = Math.min(cell.coastDist[i], 5), h2 = elevationToHeight(cell.elevation[i], land);
       c.biome[i] = land ? cell.biome[i] : 0;
-      gh[i] = h;
-      g.h[i] = h;
+      gh[i] = h2;
+      g.h[i] = h2;
       g.t[i] = land ? 1 + d : -(1 + Math.min(d, 2));
       g.f[i] = land ? 2 : cell.landWater[i] === LAND_WATER.LAKE ? 3 : 1;
       g.temp[i] = Math.round(cell.temp[i]);
@@ -8072,7 +8072,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     rv.fill(0);
     for (const r of map.pack.rivers) for (const c of r.cells) if (map.world.cell.landWater[c] === LAND_WATER.LAND) rv[c] = r.i;
   }
-  function buildGeometry(mesh, h, W, H) {
+  function buildGeometry(mesh, h2, W, H) {
     const N = mesh.cellCount, V = mesh.vertexXYZ.length / 3, vx = mesh.vertexXYZ;
     const frame = simFrame(W);
     const vp = new Array(V), vv = new Array(V), vc = new Array(V);
@@ -8142,7 +8142,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       cc[c] = list;
       cb[c] = Math.abs(lat0) > 1.45 ? 1 : 0;
     }
-    return { p, g: null, h: h.slice(), cells: { v: cv, c: cc, b: cb, alt }, vertices: { p: vp, v: vv, c: vc } };
+    return { p, g: null, h: h2.slice(), cells: { v: cv, c: cc, b: cb, alt }, vertices: { p: vp, v: vv, c: vc } };
   }
   function buildRivers(world) {
     const c = world.cell, N = world.mesh.cellCount, out = [], seen = new Uint8Array(N), hasUp = new Uint8Array(N);
@@ -8328,8 +8328,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (topOverlord(map, overlordId) === vassalId) throw new Error("\u5B97\u4E3B\u56FD\u304C\u3059\u3067\u306B\u76F8\u624B\u306B\u5F93\u5C5E\u3057\u3066\u3044\u307E\u3059\uFF08\u5F93\u5C5E\u95A2\u4FC2\u304C\u8F2A\u306B\u306A\u308A\u307E\u3059\uFF09");
     const cur = vassalInfo(map, vassalId);
     if (cur && cur.overlord === overlordId && cur.kind === kind) return null;
-    const label2 = VASSAL_BY_KEY[kind].label;
-    return makeCommand(`${label2}\u306B\u3059\u308B\uFF08${officialName(V)} \u2192 ${officialName(O)}\uFF09`, [], [setProps(V, { vassal: { overlord: overlordId, kind, since: date ?? null } })]);
+    const label3 = VASSAL_BY_KEY[kind].label;
+    return makeCommand(`${label3}\u306B\u3059\u308B\uFF08${officialName(V)} \u2192 ${officialName(O)}\uFF09`, [], [setProps(V, { vassal: { overlord: overlordId, kind, since: date ?? null } })]);
   }
   function planReleaseVassal(map, vassalId) {
     const V = map.pack.states[vassalId];
@@ -8584,25 +8584,25 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       near2.set(best, -1);
       for (const i of mine) if (near2.get(i) >= 0) near2.set(i, Math.min(near2.get(i), dist(i, best)));
     }
-    const label2 = new Int16Array(st.length).fill(-1);
+    const label3 = new Int16Array(st.length).fill(-1);
     const grow = () => {
-      label2.fill(-1);
-      const cost = /* @__PURE__ */ new Map(), h = new Heap();
+      label3.fill(-1);
+      const cost = /* @__PURE__ */ new Map(), h2 = new Heap();
       seeds.forEach((s, k) => {
-        label2[s] = k;
+        label3[s] = k;
         cost.set(s, 0);
-        h.push(0, s);
+        h2.push(0, s);
       });
-      while (h.size) {
-        const [c, i] = h.pop();
+      while (h2.size) {
+        const [c, i] = h2.pop();
         if (c > (cost.get(i) ?? Infinity)) continue;
         for (const j of nb[i]) {
           if (!mineSet.has(j)) continue;
           const nc = c + step(i, j);
           if (nc < (cost.get(j) ?? Infinity)) {
             cost.set(j, nc);
-            label2[j] = label2[i];
-            h.push(nc, j);
+            label3[j] = label3[i];
+            h2.push(nc, j);
           }
         }
       }
@@ -8611,7 +8611,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     for (let it = 0; it < 2; it++) {
       seeds.forEach((s, k) => {
         if (s === first && first === capCell) return;
-        const m = mine.filter((i) => label2[i] === k);
+        const m = mine.filter((i) => label3[i] === k);
         if (!m.length || !pts) return;
         const cx = m.reduce((a, i) => a + pts[i][0], 0) / m.length, cy = m.reduce((a, i) => a + pts[i][1], 0) / m.length;
         let b = s, bd = Infinity;
@@ -8627,32 +8627,32 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       grow();
     }
     for (let pass = 0; pass < 6; pass++) {
-      const next = Int16Array.from(label2);
+      const next = Int16Array.from(label3);
       for (const i of mine) {
         if (seeds.includes(i)) continue;
         const cnt = /* @__PURE__ */ new Map();
-        for (const j of nb[i]) if (mineSet.has(j) && label2[j] >= 0) cnt.set(label2[j], (cnt.get(label2[j]) ?? 0) + 1);
-        const own = cnt.get(label2[i]) ?? 0;
-        let b = label2[i], bc = own;
+        for (const j of nb[i]) if (mineSet.has(j) && label3[j] >= 0) cnt.set(label3[j], (cnt.get(label3[j]) ?? 0) + 1);
+        const own = cnt.get(label3[i]) ?? 0;
+        let b = label3[i], bc = own;
         for (const [l, n] of cnt) if (n > bc) {
           b = l;
           bc = n;
         }
-        if (b !== label2[i]) next[i] = b;
+        if (b !== label3[i]) next[i] = b;
       }
-      label2.set(next);
+      label3.set(next);
     }
     for (let guard = 0; guard < 6; guard++) {
       let moved = false;
       for (let k = 0; k < seeds.length; k++) {
-        const cells = mine.filter((i) => label2[i] === k);
+        const cells = mine.filter((i) => label3[i] === k);
         if (!cells.length) continue;
         const seen = /* @__PURE__ */ new Set(), comps = [];
         for (const s of cells) {
           if (seen.has(s)) continue;
           const comp = [s];
           seen.add(s);
-          for (let q2 = 0; q2 < comp.length; q2++) for (const j of nb[comp[q2]]) if (label2[j] === k && !seen.has(j)) {
+          for (let q2 = 0; q2 < comp.length; q2++) for (const j of nb[comp[q2]]) if (label3[j] === k && !seen.has(j)) {
             seen.add(j);
             comp.push(j);
           }
@@ -8662,17 +8662,17 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         comps.sort((a, b) => b.length - a.length);
         for (const comp of comps.slice(1)) for (const i of comp) {
           const cnt = /* @__PURE__ */ new Map();
-          for (const j of nb[i]) if (mineSet.has(j) && label2[j] !== k && label2[j] >= 0) cnt.set(label2[j], (cnt.get(label2[j]) ?? 0) + 1);
+          for (const j of nb[i]) if (mineSet.has(j) && label3[j] !== k && label3[j] >= 0) cnt.set(label3[j], (cnt.get(label3[j]) ?? 0) + 1);
           const b = [...cnt].sort((a, c) => c[1] - a[1])[0]?.[0];
           if (b != null) {
-            label2[i] = b;
+            label3[i] = b;
             moved = true;
           }
         }
       }
       if (!moved) break;
     }
-    const groups = seeds.map((_, k) => mine.filter((i) => label2[i] === k)).filter((g) => g.length);
+    const groups = seeds.map((_, k) => mine.filter((i) => label3[i] === k)).filter((g) => g.length);
     const lab = /* @__PURE__ */ new Map();
     groups.forEach((g, k) => g.forEach((i) => lab.set(i, k)));
     const capK = lab.get(capCell) ?? -1;
@@ -8919,12 +8919,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     let strongIsAttacker = A.land >= D2.land;
     if (T4.asym) {
       const weakIds = strongIsAttacker ? defenders : attackers;
-      const h = map.geometry?.pack?.h, st = map.pack.cells.state;
+      const h2 = map.geometry?.pack?.h, st = map.pack.cells.state;
       let tot = 0, rough = 0;
-      if (h) {
+      if (h2) {
         for (let i = 0; i < st.length; i++) if (weakIds.includes(st[i])) {
           tot++;
-          if (h[i] >= 55) rough++;
+          if (h2[i] >= 55) rough++;
         }
       }
       const guerrilla = 0.012 + 0.05 * (tot ? rough / tot : 0);
@@ -9045,8 +9045,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       dist.set(i, 0);
       q2.push(i);
     }
-    for (let h = 0; h < q2.length; h++) {
-      const k = q2[h], d = dist.get(k);
+    for (let h2 = 0; h2 < q2.length; h2++) {
+      const k = q2[h2], d = dist.get(k);
       if (d >= maxDepth) continue;
       for (const j of nb[k] ?? []) if (!dist.has(j)) {
         dist.set(j, d + 1);
@@ -9176,7 +9176,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
     return log;
   }
-  var heightMeters = (h) => h > 18 ? Math.round(Math.pow(h - 18, 1.8)) : 0;
+  var heightMeters = (h2) => h2 > 18 ? Math.round(Math.pow(h2 - 18, 1.8)) : 0;
   var riverNameByCell = /* @__PURE__ */ new WeakMap();
   function riverAt(map, cell) {
     const rivers = map.pack.rivers;
@@ -9204,17 +9204,17 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const place = burg.name;
     const culture = map.pack.cultures?.[burg.culture ?? map.pack.cells.culture?.[burg.cell]];
     const type = culture?.type ?? "Generic";
-    const h = map.geometry?.pack?.h?.[burg.cell] ?? 0;
+    const h2 = map.geometry?.pack?.h?.[burg.cell] ?? 0;
     const river = riverAt(map, burg.cell);
     const coastal = burgIsCoastal(map, burg);
-    const alt = heightMeters(h);
+    const alt = heightMeters(h2);
     const cand2 = [];
     const add2 = (name, w = 1) => cand2.push({ name, w });
     if (coastal && navy) {
       add2(`${place}\u6C96\u6D77\u6226`, type === "Naval" ? 5 : 3);
       add2(`${place}\u6E7E\u306E\u6D77\u6226`, 1);
     }
-    if (h >= 55) {
+    if (h2 >= 55) {
       add2(`${alt}\u9AD8\u5730\u306E\u6226\u3044`, type === "Highland" ? 3 : 2);
       add2(`${place}\u9AD8\u5730\u306E\u6226\u3044`, 1);
       if (type === "Highland") add2(`${place}\u306E\u5CE0\u306E\u6226\u3044`, 3);
@@ -10281,8 +10281,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         queue.push(i);
       }
     }
-    for (let h = 0; h < queue.length; h++) {
-      const i = queue[h];
+    for (let h2 = 0; h2 < queue.length; h2++) {
+      const i = queue[h2];
       if (depth[i] >= maxDepth) continue;
       for (const j of geomCells.c[i]) {
         if (c.state[j] === defenderId && c.biome[j] !== 0 && depth[j] < 0) {
@@ -10308,8 +10308,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (visited.has(start2)) continue;
       const comp = [start2];
       visited.add(start2);
-      for (let h = 0; h < comp.length; h++) {
-        for (const j of geomCells.c[comp[h]]) {
+      for (let h2 = 0; h2 < comp.length; h2++) {
+        for (const j of geomCells.c[comp[h2]]) {
           if (noProvince.has(j) && !visited.has(j)) {
             visited.add(j);
             comp.push(j);
@@ -11357,7 +11357,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
     for (let round4 = 0; round4 < 3; round4++) {
       let changed = false;
-      for (const [mine, side, label2, offensive] of [[A, "attacker", "\u653B\u6483\u5074", true], [D2, "defender", "\u9632\u885B\u5074", false]]) {
+      for (const [mine, side, label3, offensive] of [[A, "attacker", "\u653B\u6483\u5074", true], [D2, "defender", "\u9632\u885B\u5074", false]]) {
         for (const o of [...mine]) for (const v of vassalsOf(map, o)) {
           if (A.has(v.stateId) || D2.has(v.stateId)) continue;
           if (offensive && !VASSAL_BY_KEY[v.kind].joinsOffensive) continue;
@@ -11387,12 +11387,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     let men = 0;
     for (const id of ids2) for (const r of regimentsOf(map.pack.states[id])) men += forceHeadcount({ ...r.u, nuclear: 0 });
     const scale = Math.log10(1 + men);
-    const c = map.pack.cells, h = map.geometry?.pack?.h;
+    const c = map.pack.cells, h2 = map.geometry?.pack?.h;
     let total2 = 0, rough = 0;
-    if (h) {
+    if (h2) {
       for (let i = 0; i < c.state.length; i++) if (defenders.includes(c.state[i])) {
         total2++;
-        if (h[i] >= 55) rough++;
+        if (h2[i] >= 55) rough++;
       }
     }
     const terrain2 = 1 + (total2 ? rough / total2 : 0) * 0.8;
@@ -11828,7 +11828,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
   var noticeKey = (t) => monthKey2(t.expiresAt);
   function treatiesNeedingNotice(map, now = nowOf2(map)) {
-    const done = new Set((map.ext?.data?.historyLog ?? []).filter((h) => h.type === "treaty-expiring" && h.data?.treatyId != null).map((h) => `${h.data.treatyId}|${h.data.until}`));
+    const done = new Set((map.ext?.data?.historyLog ?? []).filter((h2) => h2.type === "treaty-expiring" && h2.data?.treatyId != null).map((h2) => `${h2.data.treatyId}|${h2.data.until}`));
     return expiringTreaties(map, now).filter((x) => !done.has(`${x.treaty.id}|${noticeKey(x.treaty)}`)).map((x) => x.treaty);
   }
   function planTreatyExpiryNotice(map, t, now = nowOf2(map)) {
@@ -11932,19 +11932,19 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
     for (const w of data.wars ?? []) for (const id of [...w.attackers ?? [], ...w.defenders ?? []]) if (!exists(map, id)) out.push(`\u6226\u4E89\u300C${w.name}\u300D\u304C\u3001\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6#${id}\u3092\u6307\u3057\u3066\u3044\u307E\u3059`);
     for (const t of data.treaties ?? []) for (const p of t.parties ?? []) if (!exists(map, p.state)) out.push(`\u6761\u7D04\u300C${t.name}\u300D\u304C\u3001\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6#${p.state}\u3092\u6307\u3057\u3066\u3044\u307E\u3059`);
-    for (const h of data.historyLog ?? []) for (const id of h.states ?? []) if (!exists(map, id)) {
-      out.push(`\u5E74\u8868\u306E\u51FA\u6765\u4E8B\u300C${h.title}\u300D\u304C\u3001\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6#${id}\u3092\u6307\u3057\u3066\u3044\u307E\u3059`);
+    for (const h2 of data.historyLog ?? []) for (const id of h2.states ?? []) if (!exists(map, id)) {
+      out.push(`\u5E74\u8868\u306E\u51FA\u6765\u4E8B\u300C${h2.title}\u300D\u304C\u3001\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6#${id}\u3092\u6307\u3057\u3066\u3044\u307E\u3059`);
       break;
     }
     for (const s of map.pack.states) if (s && s.i > 0 && s.parentState > 0 && !exists(map, s.parentState)) out.push(`${s.name}\u306E\u5206\u96E2\u5143\u304C\u3001\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6#${s.parentState}\u3067\u3059`);
-    for (const h of data.historyLog ?? []) {
-      if (!h.cause) continue;
-      const m = /^[^|]*\|(-?\d+)-(\d+)\|/.exec(h.cause);
+    for (const h2 of data.historyLog ?? []) {
+      if (!h2.cause) continue;
+      const m = /^[^|]*\|(-?\d+)-(\d+)\|/.exec(h2.cause);
       if (!m) {
-        out.push(`\u5E74\u8868\u306E\u51FA\u6765\u4E8B\u300C${h.title}\u300D\u306E\u539F\u56E0\u30EA\u30F3\u30AF\u306E\u5F62\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093`);
+        out.push(`\u5E74\u8868\u306E\u51FA\u6765\u4E8B\u300C${h2.title}\u300D\u306E\u539F\u56E0\u30EA\u30F3\u30AF\u306E\u5F62\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093`);
         continue;
       }
-      if (key2(+m[1], +m[2]) > key2(h.year, h.month)) out.push(`\u5E74\u8868\u306E\u51FA\u6765\u4E8B\u300C${h.title}\u300D\u306E\u539F\u56E0\u304C\u3001\u7D50\u679C\u3088\u308A\u5F8C\u306E\u51FA\u6765\u4E8B\u306B\u306A\u3063\u3066\u3044\u307E\u3059`);
+      if (key2(+m[1], +m[2]) > key2(h2.year, h2.month)) out.push(`\u5E74\u8868\u306E\u51FA\u6765\u4E8B\u300C${h2.title}\u300D\u306E\u539F\u56E0\u304C\u3001\u7D50\u679C\u3088\u308A\u5F8C\u306E\u51FA\u6765\u4E8B\u306B\u306A\u3063\u3066\u3044\u307E\u3059`);
     }
     for (const s of map.pack.states) {
       if (!s || !(s.i > 0)) continue;
@@ -12077,9 +12077,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     for (const x of Array.isArray(data.sovereigntyLog) ? data.sovereigntyLog : []) for (const k of ["fromState", "toState"]) if (x[k] != null && !st(x[k])) out.push(`\u4E3B\u6A29\u306E\u8A18\u9332\u304C\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6#${x[k]}\u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`);
     for (const s of P3.states) if (isLive18(s) && s.i && s.vassal?.overlord != null && !st(s.vassal.overlord)) out.push(`\u56FD\u5BB6#${s.i}\u306E\u5B97\u4E3B\u56FD#${s.vassal.overlord}\u304C\u5B58\u5728\u3057\u307E\u305B\u3093`);
     const LISTS2 = { state: P3.states, culture: P3.cultures, religion: P3.religions, province: P3.provinces, burg: P3.burgs };
-    for (const h of Array.isArray(data.historyLog) ? data.historyLog : []) {
-      const r = h.ref;
-      if (r?.kind && LISTS2[r.kind] && r.id != null && !has(LISTS2[r.kind], r.id)) out.push(`\u6B74\u53F2\u30ED\u30B0\u300C${h.title}\u300D\u304C\u5B58\u5728\u3057\u306A\u3044${r.kind}#${r.id}\u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`);
+    for (const h2 of Array.isArray(data.historyLog) ? data.historyLog : []) {
+      const r = h2.ref;
+      if (r?.kind && LISTS2[r.kind] && r.id != null && !has(LISTS2[r.kind], r.id)) out.push(`\u6B74\u53F2\u30ED\u30B0\u300C${h2.title}\u300D\u304C\u5B58\u5728\u3057\u306A\u3044${r.kind}#${r.id}\u3092\u53C2\u7167\u3057\u3066\u3044\u307E\u3059`);
     }
     return out;
   }
@@ -12140,11 +12140,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/io/inspect.js
   function inspectMap(map) {
-    const run = (label2, fn) => {
+    const run = (label3, fn) => {
       try {
         return fn();
       } catch (e) {
-        return [`${label2}\u306E\u691C\u67FB\u4E2D\u306B\u30A8\u30E9\u30FC\u304C\u8D77\u304D\u307E\u3057\u305F: ${e.message}`];
+        return [`${label3}\u306E\u691C\u67FB\u4E2D\u306B\u30A8\u30E9\u30FC\u304C\u8D77\u304D\u307E\u3057\u305F: ${e.message}`];
       }
     };
     const groups = [
@@ -12154,9 +12154,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       ["\u5916\u4EA4\u8868", run("\u5916\u4EA4\u8868", () => diplomacyMismatches(map).map((x) => `\u56FD\u5BB6#${x.a}\u3068#${x.b}\u306F\u3001\u5916\u4EA4\u8868\u3067\u306F\u300C${x.table ?? "\u672A\u8A2D\u5B9A"}\u300D\u3060\u304C\u3001\u540C\u76DF\u30FB\u5F93\u5C5E\u30FB\u6226\u4E89\u304B\u3089\u306F\u300C${x.truth}\u300D\u306B\u306A\u308B`))]
     ];
     const out = [];
-    for (const [label2, list] of groups) {
+    for (const [label3, list] of groups) {
       if (!list.length) continue;
-      out.push(`${label2}\u306E\u691C\u67FB\u3067 ${list.length} \u4EF6\u306E\u554F\u984C\u304C\u898B\u3064\u304B\u308A\u307E\u3057\u305F\uFF08\u5730\u56F3\u306F\u958B\u3051\u307E\u3059\uFF09: ${list[0]}${list.length > 1 ? ` \u307B\u304B${list.length - 1}\u4EF6` : ""}`);
+      out.push(`${label3}\u306E\u691C\u67FB\u3067 ${list.length} \u4EF6\u306E\u554F\u984C\u304C\u898B\u3064\u304B\u308A\u307E\u3057\u305F\uFF08\u5730\u56F3\u306F\u958B\u3051\u307E\u3059\uFF09: ${list[0]}${list.length > 1 ? ` \u307B\u304B${list.length - 1}\u4EF6` : ""}`);
     }
     return out;
   }
@@ -12295,9 +12295,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var hereditaryOf = (st) => regimeOf(st).succession === "hereditary";
   var familyOf = (l) => l?.family ?? (String(l?.name ?? "").includes("\u30FB") ? String(l.name).split("\u30FB").slice(1).join("\u30FB") : "");
   var heirOf = (map, id) => map?.ext?.data?.heirs?.[id] ?? null;
-  var writeHeirs = (m, h) => {
+  var writeHeirs = (m, h2) => {
     const x = ensureExt(m);
-    if (h && Object.keys(h).length) x.data.heirs = h;
+    if (h2 && Object.keys(h2).length) x.data.heirs = h2;
     else delete x.data.heirs;
   };
   var personOf = (rnd, g, family2, lang = null) => {
@@ -12324,10 +12324,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (!isLive19(st) || !hereditaryOf(st)) continue;
       const l = data.leaders?.[st.i]?.current;
       if (!l || l.regentFor || data.heirs?.[st.i]) continue;
-      const h = makeHeir(st, l, now, createRandom(st.i * 733 + now.year * 3 + 11), languageOfState(map, st));
-      if (!h) continue;
+      const h2 = makeHeir(st, l, now, createRandom(st.i * 733 + now.year * 3 + 11), languageOfState(map, st));
+      if (!h2) continue;
       data.heirs = data.heirs ?? {};
-      data.heirs[st.i] = h;
+      data.heirs[st.i] = h2;
       n++;
     }
     return n;
@@ -12407,8 +12407,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const heirsAfter = { ...heirsBefore };
     if (!hereditary || next.regentFor) delete heirsAfter[stateId];
     else {
-      const h = makeHeir(st, next, when, createRandom(seq0 * 101 + stateId * 17 + when.year), lang);
-      if (h) heirsAfter[stateId] = h;
+      const h2 = makeHeir(st, next, when, createRandom(seq0 * 101 + stateId * 17 + when.year), lang);
+      if (h2) heirsAfter[stateId] = h2;
       else delete heirsAfter[stateId];
     }
     const cmd = makeCommand(`\u6307\u5C0E\u8005\u306E\u4EA4\u4EE3\uFF08${nm(st)}\uFF09`, [], [{
@@ -12517,6 +12517,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
   };
   var isAhmap2Bytes = (bytes) => bytes.length >= 8 && dec3.decode(bytes.subarray(0, 8)) === AHMAP2_MAGIC;
+  async function saveMapBytes(map, opts = {}) {
+    return (await saveMapParts(map, opts)).bytes;
+  }
   async function saveMapParts(map, { appVersion = "", savedAt = "" } = {}) {
     const world = map?.world;
     if (!world) throw new Error("\u4E16\u754C\u306E\u30C7\u30FC\u30BF\u304C\u306A\u3044\u5730\u56F3\u306F\u4FDD\u5B58\u3067\u304D\u307E\u305B\u3093");
@@ -12592,13 +12595,13 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       });
       rerender();
     };
-    const commitEntities = (label2, patch) => {
+    const commitEntities = (label3, patch) => {
       const w = world(), before = { populations: w.entities.populations, start: w.entities.start }, after = { ...before, ...patch };
       const set = (m, v) => {
         m.world.entities.populations = v.populations;
         m.world.entities.start = v.start;
       };
-      store.commit(makeCommand(label2, ["places"], [{ apply: (m) => set(m, after), revert: (m) => set(m, before) }]));
+      store.commit(makeCommand(label3, ["places"], [{ apply: (m) => set(m, after), revert: (m) => set(m, before) }]));
       rerender();
     };
     return {
@@ -12658,8 +12661,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const s = String(input2).trim();
     let m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(s);
     if (m) {
-      const h = (x) => Math.round(Number(x)).toString(16).padStart(2, "0");
-      return { color: `#${h(m[1])}${h(m[2])}${h(m[3])}`, alpha: m[4] === void 0 ? 1 : Number(m[4]) };
+      const h2 = (x) => Math.round(Number(x)).toString(16).padStart(2, "0");
+      return { color: `#${h2(m[1])}${h2(m[2])}${h2(m[3])}`, alpha: m[4] === void 0 ? 1 : Number(m[4]) };
     }
     m = /^#([0-9a-f]{3})$/i.exec(s);
     if (m) return { color: "#" + m[1].split("").map((c) => c + c).join(""), alpha: 1 };
@@ -12798,8 +12801,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         body.push(`<g transform="matrix(${num(a * 1e4) / 1e4} ${b} ${c} ${num(d * 1e4) / 1e4} ${num(e)} ${num(f)})">`);
         open = true;
       },
-      fillRect(x, y, w, h) {
-        emit(`<rect x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h)}" ${fillAttrs()}/>`);
+      fillRect(x, y, w, h2) {
+        emit(`<rect x="${num(x)}" y="${num(y)}" width="${num(w)}" height="${num(h2)}" ${fillAttrs()}/>`);
       },
       beginPath() {
         path = [];
@@ -12928,11 +12931,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     return { distance: best, px: best / perPixel };
   }
   var fmt = (v) => Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
-  function panel(ctx, x, y, w, h) {
+  function panel(ctx, x, y, w, h2) {
     ctx.fillStyle = PANEL_LINE;
-    ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+    ctx.fillRect(x - 1, y - 1, w + 2, h2 + 2);
     ctx.fillStyle = PANEL_BG;
-    ctx.fillRect(x, y, w, h);
+    ctx.fillRect(x, y, w, h2);
   }
   function text(ctx, s, x, y, size, { bold = false, align = "left", color = TEXT } = {}) {
     ctx.font = `${bold ? "bold " : ""}${size}px ${FONT}`;
@@ -12947,83 +12950,83 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const era = t ? eraAt(map, t.year) : null;
     const dateText = t ? `${t.year}\u5E74${t.month}\u6708${era ? `\uFF08${era.name}\uFF09` : ""}` : "";
     if (!name && !dateText) return null;
-    const pad = 8 * u, big = 17 * u, small = 12 * u, m = 12 * u;
+    const pad2 = 8 * u, big = 17 * u, small = 12 * u, m = 12 * u;
     ctx.font = `bold ${big}px ${FONT}`;
     const wName = name ? ctx.measureText(name).width : 0;
     ctx.font = `${small}px ${FONT}`;
     const wDate = dateText ? ctx.measureText(dateText).width : 0;
-    const bw = Math.max(wName, wDate) + pad * 2;
-    const bh = (name ? big : 0) + (dateText ? small : 0) + pad * 2 + (name && dateText ? 3 * u : 0);
+    const bw = Math.max(wName, wDate) + pad2 * 2;
+    const bh = (name ? big : 0) + (dateText ? small : 0) + pad2 * 2 + (name && dateText ? 3 * u : 0);
     panel(ctx, m, m, bw, bh);
-    let y = m + pad;
+    let y = m + pad2;
     if (name) {
-      text(ctx, name, m + pad, y + big / 2, big, { bold: true });
+      text(ctx, name, m + pad2, y + big / 2, big, { bold: true });
       y += big + 3 * u;
     }
-    if (dateText) text(ctx, dateText, m + pad, y + small / 2, small, { color: "#d9c58a" });
+    if (dateText) text(ctx, dateText, m + pad2, y + small / 2, small, { color: "#d9c58a" });
     return { x: m, y: m, w: bw, h: bh };
   }
-  function drawLegend(ctx, map, overlay, h, u) {
+  function drawLegend(ctx, map, overlay, h2, u) {
     if (!overlay || overlay === "none" || !ENTITY_KINDS[overlay]) return null;
     const all = listEntities(map, overlay);
     if (!all.length) return null;
     const shown = all.slice(0, MAX_LEGEND);
     const rest = all.length - shown.length;
     const title = `\u51E1\u4F8B\uFF1A${ENTITY_KINDS[overlay].label}`;
-    const row = 15 * u, chip = 10 * u, pad = 8 * u, size = 11.5 * u, m = 12 * u;
+    const row = 15 * u, chip = 10 * u, pad2 = 8 * u, size = 11.5 * u, m = 12 * u;
     ctx.font = `bold ${12 * u}px ${FONT}`;
     let maxW = ctx.measureText(title).width;
     ctx.font = `${size}px ${FONT}`;
     for (const e of shown) maxW = Math.max(maxW, ctx.measureText(e.name).width + chip + 6 * u);
     if (rest > 0) maxW = Math.max(maxW, ctx.measureText(`\u307B\u304B ${rest} \u4EF6`).width);
-    const bw = maxW + pad * 2;
-    const bh = pad * 2 + 16 * u + shown.length * row + (rest > 0 ? row : 0);
-    const x = m, y = h - m - bh;
+    const bw = maxW + pad2 * 2;
+    const bh = pad2 * 2 + 16 * u + shown.length * row + (rest > 0 ? row : 0);
+    const x = m, y = h2 - m - bh;
     panel(ctx, x, y, bw, bh);
-    text(ctx, title, x + pad, y + pad + 6 * u, 12 * u, { bold: true, color: "#e6c877" });
-    let cy = y + pad + 16 * u;
+    text(ctx, title, x + pad2, y + pad2 + 6 * u, 12 * u, { bold: true, color: "#e6c877" });
+    let cy = y + pad2 + 16 * u;
     for (const e of shown) {
       ctx.fillStyle = "rgba(0,0,0,0.6)";
-      ctx.fillRect(x + pad - 1, cy + (row - chip) / 2 - 1, chip + 2, chip + 2);
+      ctx.fillRect(x + pad2 - 1, cy + (row - chip) / 2 - 1, chip + 2, chip + 2);
       ctx.fillStyle = e.color;
-      ctx.fillRect(x + pad, cy + (row - chip) / 2, chip, chip);
-      text(ctx, e.name, x + pad + chip + 6 * u, cy + row / 2, size);
+      ctx.fillRect(x + pad2, cy + (row - chip) / 2, chip, chip);
+      text(ctx, e.name, x + pad2 + chip + 6 * u, cy + row / 2, size);
       cy += row;
     }
-    if (rest > 0) text(ctx, `\u307B\u304B ${rest} \u4EF6`, x + pad, cy + row / 2, size, { color: "#a9a493" });
+    if (rest > 0) text(ctx, `\u307B\u304B ${rest} \u4EF6`, x + pad2, cy + row / 2, size, { color: "#a9a493" });
     return { x, y, w: bw, h: bh };
   }
-  function drawScaleBar(ctx, map, w, h, u) {
+  function drawScaleBar(ctx, map, w, h2, u) {
     const sc = getScale(map);
     if (!sc) return null;
     const { distance, px } = niceDistance(sc.perPixel, w * 0.13);
-    const segs = 4, segW = px / segs, barH = 5 * u, pad = 8 * u, m = 12 * u;
-    const label2 = `${fmt(distance)} ${sc.unit}`;
+    const segs = 4, segW = px / segs, barH = 5 * u, pad2 = 8 * u, m = 12 * u;
+    const label3 = `${fmt(distance)} ${sc.unit}`;
     ctx.font = `${11 * u}px ${FONT}`;
-    const lw = ctx.measureText(label2).width;
-    const bw = Math.max(px, lw / 2 + px) + pad * 2 + 4 * u;
-    const bh = pad * 2 + barH + 14 * u;
-    const x = w - m - bw, y = h - m - bh;
+    const lw = ctx.measureText(label3).width;
+    const bw = Math.max(px, lw / 2 + px) + pad2 * 2 + 4 * u;
+    const bh = pad2 * 2 + barH + 14 * u;
+    const x = w - m - bw, y = h2 - m - bh;
     panel(ctx, x, y, bw, bh);
-    const bx = x + pad + 2 * u, by = y + pad + 12 * u;
+    const bx = x + pad2 + 2 * u, by = y + pad2 + 12 * u;
     ctx.fillStyle = "#000";
     ctx.fillRect(bx - 1, by - 1, px + 2, barH + 2);
     for (let i = 0; i < segs; i++) {
       ctx.fillStyle = i % 2 ? "#222" : "#f1ecdc";
       ctx.fillRect(bx + i * segW, by, segW, barH);
     }
-    text(ctx, "0", bx, y + pad + 5 * u, 11 * u, { align: "center" });
-    text(ctx, label2, bx + px, y + pad + 5 * u, 11 * u, { align: "center" });
+    text(ctx, "0", bx, y + pad2 + 5 * u, 11 * u, { align: "center" });
+    text(ctx, label3, bx + px, y + pad2 + 5 * u, 11 * u, { align: "center" });
     return { x, y, w: bw, h: bh, distance, unit: sc.unit };
   }
-  function drawAnnotations(ctx, map, { w, h, dpr = 1, overlay, options = DEFAULT_ANNOTATIONS }) {
+  function drawAnnotations(ctx, map, { w, h: h2, dpr = 1, overlay, options = DEFAULT_ANNOTATIONS }) {
     const u = Math.max(0.6, w / 1280);
     ctx.save();
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     const done = {};
     if (options.title) done.title = drawTitle(ctx, map, w, u);
-    if (options.legend) done.legend = drawLegend(ctx, map, overlay, h, u);
-    if (options.scaleBar) done.scaleBar = drawScaleBar(ctx, map, w, h, u);
+    if (options.legend) done.legend = drawLegend(ctx, map, overlay, h2, u);
+    if (options.scaleBar) done.scaleBar = drawScaleBar(ctx, map, w, h2, u);
     ctx.restore();
     return done;
   }
@@ -13033,24 +13036,24 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const w = map.meta.width || 1280;
     const h0 = map.meta.height || 774;
     const vp = createViewport(w, h0);
-    const h = vp.proj ? Math.round(vp.displayHeight()) : h0;
-    vp.resize(w, h);
+    const h2 = vp.proj ? Math.round(vp.displayHeight()) : h0;
+    vp.resize(w, h2);
     vp.fit(0);
-    return { vp, w, h };
+    return { vp, w, h: h2 };
   }
   function renderMapToCanvas(map, renderOptions, { scale = 2, createCanvas, annotations = DEFAULT_ANNOTATIONS }) {
-    const { vp, w, h } = wholeMapViewport(map);
-    const canvas = createCanvas(Math.round(w * scale), Math.round(h * scale));
+    const { vp, w, h: h2 } = wholeMapViewport(map);
+    const canvas = createCanvas(Math.round(w * scale), Math.round(h2 * scale));
     const ctx = canvas.getContext("2d");
     drawScene(ctx, map, vp, renderOptions, scale);
-    drawAnnotations(ctx, map, { w, h, dpr: scale, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
+    drawAnnotations(ctx, map, { w, h: h2, dpr: scale, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
     return canvas;
   }
   function renderMapToSvg(map, renderOptions, { annotations = DEFAULT_ANNOTATIONS } = {}) {
-    const { vp, w, h } = wholeMapViewport(map);
-    const ctx = createSvgContext(w, h);
+    const { vp, w, h: h2 } = wholeMapViewport(map);
+    const ctx = createSvgContext(w, h2);
     drawScene(ctx, map, vp, renderOptions, 1);
-    drawAnnotations(ctx, map, { w, h, dpr: 1, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
+    drawAnnotations(ctx, map, { w, h: h2, dpr: 1, overlay: renderOptions?.legendKind ?? renderOptions?.overlay, options: annotations });
     return ctx.toString();
   }
   function canvasToPngBlob(canvas) {
@@ -13162,8 +13165,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         queue.push(i);
       }
     }
-    for (let h = 0; h < queue.length; h++) {
-      const i = queue[h];
+    for (let h2 = 0; h2 < queue.length; h2++) {
+      const i = queue[h2];
       for (const j of cells.c[i]) if (member[j] && dist[j] < 0) {
         dist[j] = dist[i] + 1;
         queue.push(j);
@@ -13441,8 +13444,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (d.kind === kind && d.cells !== 0) fixPole(kind, d.id, ownerAfter);
       if (d.kind === "province" && kind === "state" && d.cells !== 0) fixPole("province", d.id, provOwnerAfter);
     }
-    const label2 = target > 0 ? `${def.label}\u3092\u5857\u308B` : `${def.label}\u3092\u6D88\u3059`;
-    return { command: makeCommand(label2, ["politics"], parts), report };
+    const label3 = target > 0 ? `${def.label}\u3092\u5857\u308B` : `${def.label}\u3092\u6D88\u3059`;
+    return { command: makeCommand(label3, ["politics"], parts), report };
   }
   function planBiomePaint(map, { target, cells }) {
     const b = map.biomesData[target];
@@ -14593,7 +14596,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       stability: STABILITY.find((x) => x.key === l.stability)?.label ?? null
     });
     const leaders = [...rec.history.map((l) => lead(l, false)), ...rec.current ? [lead(rec.current, true)] : []];
-    const mine = (type) => listHistory(map).filter((h) => h.type === type && (h.states ?? []).includes(s.i) && validDate(h)).map((h) => ({ date: fmtDate2(h), title: h.title, detail: h.detail ?? null }));
+    const mine = (type) => listHistory(map).filter((h2) => h2.type === type && (h2.states ?? []).includes(s.i) && validDate(h2)).map((h2) => ({ date: fmtDate2(h2), title: h2.title, detail: h2.detail ?? null }));
     const tech = getTechDoctrine(s);
     const nodes = (Array.isArray(s.doctrineNodes) ? s.doctrineNodes : []).map((k) => NODE_BY_KEY[k]?.label ?? k);
     const vi = vassalInfo(map, s.i);
@@ -14628,9 +14631,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (y < a.y0) a.y0 = y;
     if (y > a.y1) a.y1 = y;
   }
-  function describePosition(x, y, w, h) {
-    if (!w || !h) return "";
-    const fx = x / w, fy = y / h;
+  function describePosition(x, y, w, h2) {
+    if (!w || !h2) return "";
+    const fx = x / w, fy = y / h2;
     const col = fx < 0.33 ? "\u897F" : fx > 0.67 ? "\u6771" : "";
     const row = fy < 0.33 ? "\u5317" : fy > 0.67 ? "\u5357" : "";
     if (!col && !row) return "\u4E2D\u592E";
@@ -14671,14 +14674,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function makeStateNameAt(map, namer) {
     const strip = (x) => String(x ?? "").replace(/[（(]消滅[）)]/g, "").trim();
     const renames = /* @__PURE__ */ new Map(), observed = /* @__PURE__ */ new Map(), endedAt = /* @__PURE__ */ new Map();
-    for (const h of listHistory(map)) {
-      if (h.ref?.kind !== "state") continue;
-      if (h.type === "rename-state") {
-        const a = renames.get(h.ref.id) ?? [];
-        a.push({ k: dateKey(h), from: strip(h.ref.from), to: strip(h.ref.to) });
-        renames.set(h.ref.id, a);
+    for (const h2 of listHistory(map)) {
+      if (h2.ref?.kind !== "state") continue;
+      if (h2.type === "rename-state") {
+        const a = renames.get(h2.ref.id) ?? [];
+        a.push({ k: dateKey(h2), from: strip(h2.ref.from), to: strip(h2.ref.to) });
+        renames.set(h2.ref.id, a);
       }
-      if (h.type === "removed-state") endedAt.set(h.ref.id, dateKey(h));
+      if (h2.type === "removed-state") endedAt.set(h2.ref.id, dateKey(h2));
     }
     for (const a of renames.values()) a.sort((x, y) => x.k - y.k);
     for (const x of listSovereigntyLog(map)) {
@@ -15116,11 +15119,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       });
     };
     for (const e of eras) push2({ year: e.fromYear, month: 1 }, "era", `\u6642\u4EE3\u300C${e.name}\u300D\u306E\u59CB\u307E\u308A`, `${e.fromYear}\u5E74\u304B\u3089\u3002`);
-    for (const h of listHistory(map)) {
-      let cell = Number.isInteger(h.cell) ? h.cell : null;
-      if (cell == null && h.ref?.kind === "burg" && P3.burgs[h.ref.id] && !P3.burgs[h.ref.id].removed) cell = P3.burgs[h.ref.id].cell;
-      const states = [...h.states ?? [], ...h.ref?.kind === "state" ? [h.ref.id] : []];
-      push2(h, h.type, h.title, [h.detail, h.count != null ? `${h.count}\u30BB\u30EB` : null].filter(Boolean).join(" / ") || null, [], { cell, states, zoneId: h.zoneId ?? null, cause: h.cause ?? null, data: h.data ?? null });
+    for (const h2 of listHistory(map)) {
+      let cell = Number.isInteger(h2.cell) ? h2.cell : null;
+      if (cell == null && h2.ref?.kind === "burg" && P3.burgs[h2.ref.id] && !P3.burgs[h2.ref.id].removed) cell = P3.burgs[h2.ref.id].cell;
+      const states = [...h2.states ?? [], ...h2.ref?.kind === "state" ? [h2.ref.id] : []];
+      push2(h2, h2.type, h2.title, [h2.detail, h2.count != null ? `${h2.count}\u30BB\u30EB` : null].filter(Boolean).join(" / ") || null, [], { cell, states, zoneId: h2.zoneId ?? null, cause: h2.cause ?? null, data: h2.data ?? null });
     }
     for (const a of listAlliances(map)) {
       push2(a.formedAt, "alliance-formed", `\u540C\u76DF\u300C${a.name}\u300D\u7D50\u6210`, `\u52A0\u76DF\u56FD: ${a.members.map((id) => stateAt2(id, a.formedAt, void 0, a.memberNames?.[id])).join("\u3001")}`, stateNames(a.members));
@@ -15354,7 +15357,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     for (const m of ch.markers) L.push(`- ${m.icon ?? ""} ${m.name ?? m.type}\uFF08${m.position}\u30FB${m.inState.name}\u9818\u5185\uFF09${m.note ? ` \u2014 ${oneLine(m.note)}` : ""}`);
     if (!ch.markers.length) L.push("\uFF08\u30DE\u30FC\u30AB\u30FC\u306F\u3042\u308A\u307E\u305B\u3093\uFF09");
     L.push("", "## 10. \u30E9\u30F3\u30AD\u30F3\u30B0", "");
-    for (const [label2, key3] of [["\u9818\u571F", "byTerritory"], ["\u4EBA\u53E3", "byPopulation"], ["\u8ECD\u4E8B\u529B", "byMilitaryPower"], ["\u6280\u8853\u6C34\u6E96", "byTechLevel"]]) L.push(`- ${label2}: ${ch.ranking[key3].map((r) => `${r.rank}\u4F4D ${r.name}(${r.value})`).join(" / ")}`);
+    for (const [label3, key3] of [["\u9818\u571F", "byTerritory"], ["\u4EBA\u53E3", "byPopulation"], ["\u8ECD\u4E8B\u529B", "byMilitaryPower"], ["\u6280\u8853\u6C34\u6E96", "byTechLevel"]]) L.push(`- ${label3}: ${ch.ranking[key3].map((r) => `${r.rank}\u4F4D ${r.name}(${r.value})`).join(" / ")}`);
     L.push("", "## 11. \u30C7\u30FC\u30BF\u306E\u6574\u5408\u6027", "", ch.consistencyChecks.ok ? "- \u7570\u5E38\u306F\u691C\u51FA\u3055\u308C\u307E\u305B\u3093\u3067\u3057\u305F\u3002" : ch.consistencyChecks.issues.map((i) => `- \u26A0 ${i}`).join("\n"));
     L.push("", "## 12. AI \u3078\u306E\u4F9D\u983C\u306E\u4F8B", "");
     for (const x of g.suggestedTasks) L.push(`- ${x}`);
@@ -15448,11 +15451,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         s.notice = null;
       }), NOTICE_MS);
     };
-    async function runExport(label2, produce, onDone) {
+    async function runExport(label3, produce, onDone) {
       const { map, fileName } = store.getState();
       if (!map) return;
       store.update((s) => {
-        s.busy = `${label2}\u3092\u4F5C\u6210\u4E2D\u2026`;
+        s.busy = `${label3}\u3092\u4F5C\u6210\u4E2D\u2026`;
         s.error = null;
       });
       await nextPaint();
@@ -15467,7 +15470,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       } catch (e) {
         store.update((s) => {
           s.busy = null;
-          s.error = `${label2}\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${e.message}`;
+          s.error = `${label3}\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${e.message}`;
         });
       }
     }
@@ -15717,10 +15720,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 3e4);
   }
-  function createBrowserCanvas(w, h) {
+  function createBrowserCanvas(w, h2) {
     const c = document.createElement("canvas");
     c.width = w;
-    c.height = h;
+    c.height = h2;
     return c;
   }
 
@@ -15846,8 +15849,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "5.2.0";
-  var APP_VERSION_NAME = "\u5730\u56F3\u30FB\u63CF\u753B\u30FB\u30E1\u30E2\u30EA\u306E\u518D\u8A2D\u8A08";
+  var APP_VERSION = "5.3.0";
+  var APP_VERSION_NAME = "UI\u306E\u4E00\u65B0\uFF08\u30C9\u30C3\u30AF\u65B9\u5F0F\u30FB\u5927\u898F\u6A21\u5BFE\u5FDC\uFF09";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/icons.js
@@ -15938,9 +15941,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (!tall) s.style.height = "14px";
     return s;
   }
-  function slider({ label: label2, min, max, step, value, format, onCommit }) {
+  function slider({ label: label3, min, max, step, value, format, onCommit }) {
     const wrap = el("label", "b-field");
-    const val = el("span", "b-mini", `${label2} ${format(value)}`);
+    const val = el("span", "b-mini", `${label3} ${format(value)}`);
     const r = document.createElement("input");
     r.type = "range";
     r.min = String(min);
@@ -15948,7 +15951,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     r.step = String(step);
     r.value = String(value);
     r.addEventListener("input", () => {
-      val.textContent = `${label2} ${format(Number(r.value))}`;
+      val.textContent = `${label3} ${format(Number(r.value))}`;
     });
     r.addEventListener("change", () => onCommit(Number(r.value)));
     wrap.append(val, r);
@@ -15984,12 +15987,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (root.dataset.resizable) return;
     root.dataset.resizable = "1";
     for (const dir of ["n", "s", "e", "w", "ne", "nw", "se", "sw"]) {
-      const h = document.createElement("div");
-      h.className = `rs-handle rs-${dir}`;
-      h.dataset.dir = dir;
-      h.setAttribute("aria-hidden", "true");
-      h.style.touchAction = "none";
-      h.addEventListener("pointerdown", (e) => {
+      const h2 = document.createElement("div");
+      h2.className = `rs-handle rs-${dir}`;
+      h2.dataset.dir = dir;
+      h2.setAttribute("aria-hidden", "true");
+      h2.style.touchAction = "none";
+      h2.addEventListener("pointerdown", (e) => {
         e.preventDefault();
         e.stopPropagation();
         const sr = stage.getBoundingClientRect(), r = root.getBoundingClientRect();
@@ -16003,7 +16006,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         root.style.width = `${start2.w}px`;
         root.style.height = `${start2.h}px`;
         root.classList.add("resized");
-        h.setPointerCapture?.(e.pointerId);
+        h2.setPointerCapture?.(e.pointerId);
         const move = (ev) => {
           const dx = ev.clientX - start2.x, dy = ev.clientY - start2.y;
           let l = start2.l, t = start2.t, w = start2.w, hh = start2.h;
@@ -16041,15 +16044,15 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
           root.style.height = `${hh}px`;
         };
         const up = () => {
-          h.removeEventListener("pointermove", move);
-          h.removeEventListener("pointerup", up);
-          h.removeEventListener("pointercancel", up);
+          h2.removeEventListener("pointermove", move);
+          h2.removeEventListener("pointerup", up);
+          h2.removeEventListener("pointercancel", up);
         };
-        h.addEventListener("pointermove", move);
-        h.addEventListener("pointerup", up);
-        h.addEventListener("pointercancel", up);
+        h2.addEventListener("pointermove", move);
+        h2.addEventListener("pointerup", up);
+        h2.addEventListener("pointercancel", up);
       });
-      root.append(h);
+      root.append(h2);
     }
   }
   function initWindows() {
@@ -16279,7 +16282,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var fmt2 = (d) => d ? `${d.year}\u5E74${d.month}\u6708` : "\u2014";
   var selectOf = (options, value) => {
     const s = document.createElement("select");
-    for (const [v, label2] of options) s.append(new Option(label2, String(v)));
+    for (const [v, label3] of options) s.append(new Option(label3, String(v)));
     if (value != null) s.value = String(value);
     return s;
   };
@@ -16305,7 +16308,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       getWarOutcome()?.clearHighlight();
     }
     const detailHost = el("div", "treaty-detail");
-    function renderDetail() {
+    function renderDetail2() {
       detailHost.replaceChildren();
       const map = store.getState().map;
       const t = map && listTreaties(map).find((x) => x.id === detailId);
@@ -16343,7 +16346,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
           const auto = treatyText(map, { ...t, text: null });
           if (text2.value.trim() !== auto && text2.value.trim() !== (t.text ?? "")) patch.text = text2.value;
           simActions.amendTreaty(t.id, patch);
-          renderDetail();
+          renderDetail2();
           render();
         });
         const by = selectOf([["", "\u53CC\u65B9\u306E\u5408\u610F\u3067\u7D42\u3048\u308B\uFF08\u9055\u7D04\u306A\u3057\uFF09"], ...t.parties.map((p) => [p.state, `${nm4(map, p.state)}\u304C\u4E00\u65B9\u7684\u306B\u7834\u68C4\u3059\u308B\uFF08\u9055\u7D04\uFF09`])], "");
@@ -16353,7 +16356,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u3068\u306A\u308A\u3001\u6C11\u610F\u3068\u4FE1\u7528\u304C\u4E0B\u304C\u308A\u307E\u3059\u3002` : ""}
 \uFF08\u5143\u306B\u623B\u305B\u307E\u3059\uFF09`, { danger: true, okLabel: "\u7834\u68C4\u3059\u308B" })) return;
           if (simActions.breakTreaty(t.id, who)) {
-            renderDetail();
+            renderDetail2();
             render();
           }
         });
@@ -16362,11 +16365,11 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
         detailHost.append(save, el("h4", "", "\u7834\u68C4"), row2);
       }
     }
-    wins.register("treaty-detail", { title: "\u6761\u7D04\u306E\u4E2D\u8EAB", width: 520, body: detailHost, onOpen: renderDetail });
+    wins.register("treaty-detail", { title: "\u6761\u7D04\u306E\u4E2D\u8EAB", width: 520, body: detailHost, onOpen: renderDetail2 });
     const openDetail = (id) => {
       detailId = id;
       wins.open("treaty-detail");
-      renderDetail();
+      renderDetail2();
     };
     const newHost = el("div", "treaty-new");
     const draft = { kind: "alliance", picked: /* @__PURE__ */ new Set(), leader: null, bind: "medium", tariff: "mid", vassalKind: "vassal", declaration: "friendship", mode: "nonaggression", months: 0, name: "" };
@@ -16518,9 +16521,9 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       const lead = draft.kind === "alliance" ? draft.leader ?? ids2[0] : null;
       return ids2.map((i) => ({ state: i, role: i === lead ? "\u76DF\u4E3B" : "\u52A0\u76DF" }));
     }
-    const rowOf = (label2, node) => {
+    const rowOf = (label3, node) => {
       const r = el("div", "diplomacy-row");
-      r.append(el("span", "field-label", label2), node);
+      r.append(el("span", "field-label", label3), node);
       return r;
     };
     wins.register("treaty-new", { title: "\u6761\u7D04\u3092\u7D50\u3076", width: 560, body: newHost, onOpen: renderNew });
@@ -16576,11 +16579,11 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
     const isOther = (t) => !["alliance", "peace", "support"].includes(t.kind);
     function treatyCard(map, t, active) {
       const st = treatyStatus(t, map.worldTime), card = el("div", `treaty-card ${st}`);
-      const h = el("button", "treaty-row");
-      h.type = "button";
-      h.append(el("span", "treaty-kind", TREATY_BY_KEY[t.kind].short), el("span", "treaty-title", t.name), el("span", "treaty-meta", `${fmt2(t.signedAt)}${t.endedAt ? ` \u2192 ${fmt2(t.endedAt)}` : ""} \u30FB ${STATUS_LABEL[st]}${t.brokenBy != null ? `\uFF08${nm4(map, t.brokenBy)}\u304C\u7834\u68C4\uFF09` : ""}`));
-      h.addEventListener("click", () => openDetail(t.id));
-      card.append(h, partyChips(map, t, active));
+      const h2 = el("button", "treaty-row");
+      h2.type = "button";
+      h2.append(el("span", "treaty-kind", TREATY_BY_KEY[t.kind].short), el("span", "treaty-title", t.name), el("span", "treaty-meta", `${fmt2(t.signedAt)}${t.endedAt ? ` \u2192 ${fmt2(t.endedAt)}` : ""} \u30FB ${STATUS_LABEL[st]}${t.brokenBy != null ? `\uFF08${nm4(map, t.brokenBy)}\u304C\u7834\u68C4\uFF09` : ""}`));
+      h2.addEventListener("click", () => openDetail(t.id));
+      card.append(h2, partyChips(map, t, active));
       return card;
     }
     function renderAlliances(map, right, dissolved) {
@@ -16666,7 +16669,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       const counts = { alliances: allT.filter((t) => isAlliance(t) && stOf(t) === "active").length, dissolved: allT.filter((t) => isAlliance(t) && stOf(t) !== "active").length, peace: allT.filter((t) => t.kind === "peace").length };
       const bar2 = el("div", "np-seg dip-tabs");
       bar2.dataset.field = "dip-tabs";
-      for (const [k, label2] of TABS3) bar2.append(btn(dipTab === k ? "on" : "", `${label2} ${counts[k]}`, label2, () => {
+      for (const [k, label3] of TABS3) bar2.append(btn(dipTab === k ? "on" : "", `${label3} ${counts[k]}`, label3, () => {
         if (peace) closePeace();
         dipTab = k;
         render();
@@ -16710,7 +16713,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
     store.subscribe((_s, ch) => {
       if (["replace", "commit", "undo", "redo"].includes(ch.type)) {
         if (wins.isOpen("diplomacy")) render();
-        if (wins.isOpen("treaty-detail")) renderDetail();
+        if (wins.isOpen("treaty-detail")) renderDetail2();
       }
     });
     return { body, render, openPeace, closePeace };
@@ -16957,9 +16960,9 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
         const g = sv("g", { "data-id": id, class: `gen-node${selected[kind] === id ? " sel" : ""}${id === 0 ? " root" : ""}`, transform: `translate(${X(p.depth)},${Y(p.y)})`, style: "cursor:grab" });
         g.append(sv("rect", { width: NODE_W, height: NODE_H, rx: 6, fill: "var(--panel-2, #2a2a2a)", stroke: selected[kind] === id ? "var(--brass-bright, #d9b45a)" : "var(--brass-dim, #7a6a3a)", "stroke-width": selected[kind] === id ? 2 : 1 }));
         if (e) g.append(sv("rect", { x: 6, y: 8, width: 12, height: 12, rx: 2, fill: e.color ?? "#888" }));
-        const label2 = id === 0 ? ROOT_LABEL[kind] : e.fullName ?? e.name;
-        g.append(sv("text", { x: e ? 24 : 8, y: 19, fill: "var(--text, #eee)", "font-size": 12 }, label2.length > 11 ? `${label2.slice(0, 10)}\u2026` : label2));
-        g.append(sv("title", {}, label2));
+        const label3 = id === 0 ? ROOT_LABEL[kind] : e.fullName ?? e.name;
+        g.append(sv("text", { x: e ? 24 : 8, y: 19, fill: "var(--text, #eee)", "font-size": 12 }, label3.length > 11 ? `${label3.slice(0, 10)}\u2026` : label3));
+        g.append(sv("title", {}, label3));
         nodeG.set(id, g);
         svg.append(g);
         g.addEventListener("click", () => {
@@ -17139,8 +17142,8 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       kindSel.value = prevK;
       stateSel.value = prevS;
     }
-    const num2 = (i) => i.value === "" || !Number.isFinite(+i.value) ? null : +i.value;
-    const criteria = () => ({ kind: kindSel.value, stateId: stateSel.value ? +stateSel.value : null, fromYear: num2(fromIn), toYear: num2(toIn), text: textIn.value });
+    const num3 = (i) => i.value === "" || !Number.isFinite(+i.value) ? null : +i.value;
+    const criteria = () => ({ kind: kindSel.value, stateId: stateSel.value ? +stateSel.value : null, fromYear: num3(fromIn), toYear: num3(toIn), text: textIn.value });
     function build() {
       const map = store.getState().map;
       mapRef = map;
@@ -17180,8 +17183,8 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
           y1 = Math.max(y1, p[1]);
         }
         if (Number.isFinite(x0)) {
-          const w = Math.max(40, x1 - x0), h = Math.max(40, y1 - y0);
-          const k = Math.min(viewport.screenWidth / (w * 1.8), viewport.screenHeight / (h * 1.8));
+          const w = Math.max(40, x1 - x0), h2 = Math.max(40, y1 - y0);
+          const k = Math.min(viewport.screenWidth / (w * 1.8), viewport.screenHeight / (h2 * 1.8));
           viewport.centerOn((x0 + x1) / 2, (y0 + y1) / 2, Math.max(viewport.fitK, Math.min(k, viewport.fitK * 8)));
         }
         renderer.requestRender();
@@ -17567,7 +17570,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       raf = 0;
       if (draw()) raf = requestAnimationFrame(tick);
     }
-    function clear() {
+    function clear2() {
       segs = null;
       if (raf) {
         cancelAnimationFrame(raf);
@@ -17614,11 +17617,11 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
     });
     store.subscribe((_s, change) => {
       if (change.type === "replace") {
-        clear();
+        clear2();
         overlay = null;
       }
     });
-    return { show, clear, showCells, clearCells, isActive: () => !!segs || !!overlay };
+    return { show, clear: clear2, showCells, clearCells, isActive: () => !!segs || !!overlay };
   }
 
   // js/ui/toolbar.js
@@ -17636,11 +17639,11 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       ["png", "PNG \u753B\u50CF\uFF082\u500D\u306E\u89E3\u50CF\u5EA6\uFF09", "\u5730\u56F3\u3092\u753B\u50CF\u3068\u3057\u3066\u66F8\u304D\u51FA\u3059"],
       ["svg", "SVG \u753B\u50CF\uFF08\u62E1\u5927\u3057\u3066\u3082\u52A3\u5316\u3057\u306A\u3044\uFF09", "\u62E1\u5927\u3057\u3066\u3082\u52A3\u5316\u3057\u306A\u3044\u753B\u50CF"]
     ];
-    for (const [key3, label2, tip] of EXPORTS) {
+    for (const [key3, label3, tip] of EXPORTS) {
       const b = document.createElement("button");
       b.type = "button";
       b.dataset.export = key3;
-      b.textContent = label2;
+      b.textContent = label3;
       b.title = tip;
       exportBody.append(b);
     }
@@ -18311,9 +18314,9 @@ ${shown}${more}`;
       const time = document.createElement("time");
       time.textContent = e.date;
       meta.append(kind, time);
-      const h = document.createElement("h5");
-      h.textContent = e.title;
-      card.append(meta, h);
+      const h2 = document.createElement("h5");
+      h2.textContent = e.title;
+      card.append(meta, h2);
       if (e.detail) {
         const p = document.createElement("p");
         p.textContent = String(e.detail).split("\n")[0];
@@ -18554,7 +18557,7 @@ ${shown}${more}`;
       stopWatch();
     };
     const obstacles = () => [...document.querySelectorAll("#hub, #clock, #news, #war-status:not([hidden]), .float-win:not([hidden]), #sidebar:not([hidden])")].map((e) => e.getBoundingClientRect()).filter((r) => r.width > 0 && r.height > 0);
-    function place(sx, sy, h) {
+    function place(sx, sy, h2) {
       const vw = window.innerWidth, vh = window.innerHeight, ch = card.offsetHeight || 140;
       const obs = obstacles();
       const cands = [
@@ -19164,10 +19167,10 @@ ${shown}${more}`;
     if (!trimmed) throw new Error("\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u304F\u3060\u3055\u3044");
     const field2 = "fullName" in e ? "fullName" : "name";
     if (trimmed === e[field2]) return null;
-    const label2 = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
+    const label3 = { state: "\u56FD\u5BB6", culture: "\u6587\u5316", religion: "\u5B97\u6559", province: "\u5C5E\u5DDE" }[kind];
     const patch = { [field2]: trimmed };
     if (kind === "state" && field2 === "fullName") patch.name = shortNameFrom(trimmed);
-    return makeCommand(`${label2}\u306E\u540D\u524D\u3092\u5909\u66F4`, ["places"], [setProps(e, patch)]);
+    return makeCommand(`${label3}\u306E\u540D\u524D\u3092\u5909\u66F4`, ["places"], [setProps(e, patch)]);
   }
   var EXTRA_KEYS = ["name", "form", "formName", "deity", "type"];
   var HEX = /^#[0-9a-f]{6}$/i;
@@ -19183,10 +19186,10 @@ ${shown}${more}`;
     const light = 45 + (rnd ? Math.round(rnd.float(-10, 10)) : 0);
     return hslToHex(hue, sat, light);
   }
-  function hslToHex(h, s, l) {
+  function hslToHex(h2, s, l) {
     s /= 100;
     l /= 100;
-    const k = (n) => (n + h / 30) % 12;
+    const k = (n) => (n + h2 / 30) % 12;
     const a = s * Math.min(l, 1 - l);
     const f = (n) => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
     const toHex = (n) => Math.round(f(n) * 255).toString(16).padStart(2, "0");
@@ -19257,7 +19260,7 @@ ${shown}${more}`;
     if (!listKey) throw new Error("\u3053\u306E\u7A2E\u985E\u306F\u524A\u9664\u3067\u304D\u307E\u305B\u3093");
     const e = map.pack[listKey]?.[id];
     if (!isLive35(e) || !e.i) throw new Error("\u305D\u306E\u5BFE\u8C61\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    const label2 = LABEL_OF[kind], nm8 = e.fullName ?? e.name;
+    const label3 = LABEL_OF[kind], nm8 = e.fullName ?? e.name;
     const c = map.pack.cells;
     const parts = [];
     const clearCells = (field2, ids2) => {
@@ -19287,7 +19290,7 @@ ${shown}${more}`;
       for (const b of map.pack.burgs) if (isLive35(b) && b.i && b.province === id) parts.push(setProps(b, { province: 0 }));
       parts.push(setProps(e, { removed: true, ...zero }));
     }
-    return makeCommand(`${label2}\u300C${nm8}\u300D\u3092\u524A\u9664`, ["politics", "places"], parts);
+    return makeCommand(`${label3}\u300C${nm8}\u300D\u3092\u524A\u9664`, ["politics", "places"], parts);
   }
 
   // js/core/edit/finance.js
@@ -19489,8 +19492,8 @@ ${shown}${more}`;
     if (!DOCTRINE_BY_KEY[doctrineKey]) throw new Error("\u4E0D\u660E\u306A\u30C9\u30AF\u30C8\u30EA\u30F3\u3067\u3059");
     const before = DOCTRINE_BY_KEY[s.doctrine] ? s.doctrine : DEFAULT_DOCTRINE;
     if (before === doctrineKey) return null;
-    const label2 = DOCTRINE_BY_KEY[doctrineKey].label;
-    return makeCommand(`\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u5909\u66F4\uFF08${s.name}: ${label2}\uFF09`, [], [setProps(s, { doctrine: doctrineKey })]);
+    const label3 = DOCTRINE_BY_KEY[doctrineKey].label;
+    return makeCommand(`\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u5909\u66F4\uFF08${s.name}: ${label3}\uFF09`, [], [setProps(s, { doctrine: doctrineKey })]);
   }
 
   // js/app/edit-actions.js
@@ -19507,12 +19510,12 @@ ${shown}${more}`;
         rerender();
       }
     };
-    const safeRun = (label2, fn) => {
+    const safeRun = (label3, fn) => {
       try {
         fn();
       } catch (e) {
         store.update((s) => {
-          s.error = `${label2}: ${e.message}`;
+          s.error = `${label3}: ${e.message}`;
         });
       }
     };
@@ -19599,8 +19602,8 @@ ${shown}${more}`;
           let out;
           safeRun("\u30DE\u30FC\u30AB\u30FC\u306E\u8FFD\u52A0", () => {
             const r = planAddMarker(map, { cell, ...opts });
-            const label2 = opts?.name || opts?.type || "\u30DE\u30FC\u30AB\u30FC";
-            commitEv(map, r.command, { type: "marker-added", title: `\u30DE\u30FC\u30AB\u30FC\u300C${label2}\u300D\u304C\u7F6E\u304B\u308C\u305F`, cell, states: stateAtCell(map, cell) });
+            const label3 = opts?.name || opts?.type || "\u30DE\u30FC\u30AB\u30FC";
+            commitEv(map, r.command, { type: "marker-added", title: `\u30DE\u30FC\u30AB\u30FC\u300C${label3}\u300D\u304C\u7F6E\u304B\u308C\u305F`, cell, states: stateAtCell(map, cell) });
             out = r.id;
           });
           return out;
@@ -19673,9 +19676,9 @@ ${shown}${more}`;
       setNote(type, id, text2) {
         withMap((map) => safeRun("\u6587\u7AE0\u306E\u4FDD\u5B58", () => {
           const plan = planSetNote(map, type, id, text2);
-          const label2 = NOTE_JP[type] ?? type;
+          const label3 = NOTE_JP[type] ?? type;
           const who = noteTargetName(map, type, id);
-          commitEv(map, plan, plan && { type: "note", title: `${label2}${who ? `\u300C${who}\u300D` : ""}\u306E\u8A18\u9332\u304C\u66F8\u304D\u63DB\u3048\u3089\u308C\u305F`, ref: ["state", "culture", "religion", "province", "burg"].includes(type) ? { kind: type, id } : void 0 });
+          commitEv(map, plan, plan && { type: "note", title: `${label3}${who ? `\u300C${who}\u300D` : ""}\u306E\u8A18\u9332\u304C\u66F8\u304D\u63DB\u3048\u3089\u308C\u305F`, ref: ["state", "culture", "religion", "province", "burg"].includes(type) ? { kind: type, id } : void 0 });
         }));
       },
       noteTarget(type, id) {
@@ -19976,8 +19979,8 @@ ${shown}${more}`;
       },
       setDoctrine(stateId, doctrineKey) {
         withMap((map) => safeRun("\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u5909\u66F4", () => {
-          const label2 = (k) => DOCTRINES.find?.((d) => d.key === k)?.label ?? DOCTRINES[k]?.label ?? k;
-          commitEv(map, planSetDoctrine(map, stateId, doctrineKey), { type: "doctrine", title: `${nameOf5(map.pack.states[stateId])}\u304C\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u3092\u6539\u3081\u305F`, detail: `${label2(getDoctrine(map, stateId))} \u2192 ${label2(doctrineKey)}` });
+          const label3 = (k) => DOCTRINES.find?.((d) => d.key === k)?.label ?? DOCTRINES[k]?.label ?? k;
+          commitEv(map, planSetDoctrine(map, stateId, doctrineKey), { type: "doctrine", title: `${nameOf5(map.pack.states[stateId])}\u304C\u6226\u4E89\u30C9\u30AF\u30C8\u30EA\u30F3\u3092\u6539\u3081\u305F`, detail: `${label3(getDoctrine(map, stateId))} \u2192 ${label3(doctrineKey)}` });
         }));
       },
       /** ブラシの半径(ワールド座標)内にあるセルIDを返す */
@@ -20064,8 +20067,8 @@ ${shown}${more}`;
     }
     async function createNewTarget(kind) {
       if (openSetup) return openSetup(kind);
-      const label2 = PAINT_KINDS[kind].label;
-      const name = await promptDialog(`\u65B0\u3057\u3044${label2}\u306E\u540D\u524D`, "", { suggest: () => editActions.suggestName(kind), hint: "\u7A7A\u6B04\u306E\u307E\u307E OK \u3092\u62BC\u3059\u3068\u3001\u4EEE\u306E\u540D\u524D\u304C\u81EA\u52D5\u3067\u4ED8\u304D\u307E\u3059\uFF08\u3042\u3068\u304B\u3089\u5909\u66F4\u30FB\u78BA\u5B9A\u3067\u304D\u307E\u3059\uFF09" });
+      const label3 = PAINT_KINDS[kind].label;
+      const name = await promptDialog(`\u65B0\u3057\u3044${label3}\u306E\u540D\u524D`, "", { suggest: () => editActions.suggestName(kind), hint: "\u7A7A\u6B04\u306E\u307E\u307E OK \u3092\u62BC\u3059\u3068\u3001\u4EEE\u306E\u540D\u524D\u304C\u81EA\u52D5\u3067\u4ED8\u304D\u307E\u3059\uFF08\u3042\u3068\u304B\u3089\u5909\u66F4\u30FB\u78BA\u5B9A\u3067\u304D\u307E\u3059\uFF09" });
       return name == null ? null : editActions.addEntity(kind, name);
     }
     function sync() {
@@ -20537,8 +20540,8 @@ ${shown}${more}`;
       create(kind, spec = {}) {
         if (!SETUP_KINDS.includes(kind)) throw new Error(`\u3053\u306E\u7A2E\u985E\u306F\u4F5C\u308C\u307E\u305B\u3093: ${kind}`);
         if (!mapOf()) throw new Error("\u5730\u56F3\u3092\u958B\u3044\u3066\u304F\u3060\u3055\u3044");
-        const label2 = SETUP_LABEL[kind];
-        const out = store.transaction(`${label2}\u3092\u65B0\u898F\u4F5C\u6210`, () => {
+        const label3 = SETUP_LABEL[kind];
+        const out = store.transaction(`${label3}\u3092\u65B0\u898F\u4F5C\u6210`, () => {
           const commit = (plan) => {
             if (plan) store.commit(plan);
           };
@@ -20637,9 +20640,9 @@ ${shown}${more}`;
   }
 
   // js/ui/setup-window.js
-  function field(label2, control, hint) {
+  function field(label3, control, hint) {
     const f = el("label", "b-field");
-    f.append(el("span", "b-mini", label2), control);
+    f.append(el("span", "b-mini", label3), control);
     if (hint) f.title = hint;
     return f;
   }
@@ -20683,9 +20686,9 @@ ${shown}${more}`;
     const titleEl = () => document.querySelector('[data-win="setup"] .float-win-bar h3');
     function render(kind, opts) {
       body.replaceChildren();
-      const label2 = setupActions.SETUP_LABEL[kind];
-      if (titleEl()) titleEl().textContent = `\u65B0\u3057\u3044${label2}\u306E\u521D\u671F\u8A2D\u5B9A`;
-      body.append(el("p", "hint", `\u3059\u3079\u3066\u5165\u529B\u3057\u3066\u300C\u78BA\u5B9A\u300D\u3092\u62BC\u3059\u3068\u3001${label2}\u304C\u4F5C\u3089\u308C\u3001\u5E74\u8868\u306B\u8A18\u9332\u3055\u308C\u307E\u3059\u3002\u305D\u308C\u307E\u3067\u306F\u4F55\u3082\u4F5C\u3089\u308C\u307E\u305B\u3093\u3002${kind === "burg" || kind === "marker" ? "\uFF08\u7F6E\u304F\u5834\u6240\u306F\u3001\u30AF\u30EA\u30C3\u30AF\u3057\u305F\u5730\u70B9\u3067\u3059\uFF09" : ""}`));
+      const label3 = setupActions.SETUP_LABEL[kind];
+      if (titleEl()) titleEl().textContent = `\u65B0\u3057\u3044${label3}\u306E\u521D\u671F\u8A2D\u5B9A`;
+      body.append(el("p", "hint", `\u3059\u3079\u3066\u5165\u529B\u3057\u3066\u300C\u78BA\u5B9A\u300D\u3092\u62BC\u3059\u3068\u3001${label3}\u304C\u4F5C\u3089\u308C\u3001\u5E74\u8868\u306B\u8A18\u9332\u3055\u308C\u307E\u3059\u3002\u305D\u308C\u307E\u3067\u306F\u4F55\u3082\u4F5C\u3089\u308C\u307E\u305B\u3093\u3002${kind === "burg" || kind === "marker" ? "\uFF08\u7F6E\u304F\u5834\u6240\u306F\u3001\u30AF\u30EA\u30C3\u30AF\u3057\u305F\u5730\u70B9\u3067\u3059\uFF09" : ""}`));
       let ownerSel = null;
       if (kind === "province") {
         const states = setupActions.choices("state");
@@ -21016,12 +21019,12 @@ ${shown}${more}`;
     if (bd === "goatee") p.push(`<path d="M${cx - 8} ${cy + 28} Q${cx} ${cy + ry + 10} ${cx + 8} ${cy + 28} Z" fill="${hair}"/>`);
     if (bd === "full") p.push(`<path d="M${cx - rx + 2} ${cy + 6} Q${cx - rx + 4} ${cy + ry + 8} ${cx} ${cy + ry + 8} Q${cx + rx - 4} ${cy + ry + 8} ${cx + rx - 2} ${cy + 6} Q${cx} ${cy + 30} ${cx - rx + 2} ${cy + 6} Z" fill="${hair}" opacity=".95"/>`);
     if (bd === "mutton") p.push(`<path d="M${cx - rx} ${cy - 4} v22 M${cx + rx} ${cy - 4} v22" stroke="${hair}" stroke-width="7"/>`);
-    const h = s.hat, tp = cy - ry;
-    if (h === "crown") p.push(`<path d="M${cx - 24} ${tp + 4} L${cx - 22} ${tp - 16} L${cx - 10} ${tp - 6} L${cx} ${tp - 20} L${cx + 10} ${tp - 6} L${cx + 22} ${tp - 16} L${cx + 24} ${tp + 4} Z" fill="#d8c273" stroke="#8d7a2f" stroke-width="1.5"/>`);
-    if (h === "cap") p.push(`<path d="M${cx - rx} ${tp + 10} Q${cx} ${tp - 14} ${cx + rx} ${tp + 10} L${cx + rx + 8} ${tp + 12} L${cx - rx} ${tp + 12} Z" fill="${s.outfit}" stroke="#000" stroke-opacity=".3"/>`);
-    if (h === "helmet") p.push(`<path d="M${cx - rx - 2} ${tp + 14} Q${cx} ${tp - 22} ${cx + rx + 2} ${tp + 14} Z" fill="#7d8186" stroke="#3a3d40" stroke-width="1.5"/>`);
-    if (h === "turban") p.push(`<ellipse cx="${cx}" cy="${tp + 2}" rx="${rx + 4}" ry="14" fill="#e6e0d0"/><path d="M${cx - rx} ${tp + 2} Q${cx} ${tp + 12} ${cx + rx} ${tp + 2}" stroke="#a89f86" fill="none"/>`);
-    if (h === "tall") p.push(`<rect x="${cx - 20}" y="${tp - 26}" width="40" height="30" fill="#25252b"/><rect x="${cx - rx - 6}" y="${tp + 2}" width="${rx * 2 + 12}" height="5" fill="#25252b"/>`);
+    const h2 = s.hat, tp = cy - ry;
+    if (h2 === "crown") p.push(`<path d="M${cx - 24} ${tp + 4} L${cx - 22} ${tp - 16} L${cx - 10} ${tp - 6} L${cx} ${tp - 20} L${cx + 10} ${tp - 6} L${cx + 22} ${tp - 16} L${cx + 24} ${tp + 4} Z" fill="#d8c273" stroke="#8d7a2f" stroke-width="1.5"/>`);
+    if (h2 === "cap") p.push(`<path d="M${cx - rx} ${tp + 10} Q${cx} ${tp - 14} ${cx + rx} ${tp + 10} L${cx + rx + 8} ${tp + 12} L${cx - rx} ${tp + 12} Z" fill="${s.outfit}" stroke="#000" stroke-opacity=".3"/>`);
+    if (h2 === "helmet") p.push(`<path d="M${cx - rx - 2} ${tp + 14} Q${cx} ${tp - 22} ${cx + rx + 2} ${tp + 14} Z" fill="#7d8186" stroke="#3a3d40" stroke-width="1.5"/>`);
+    if (h2 === "turban") p.push(`<ellipse cx="${cx}" cy="${tp + 2}" rx="${rx + 4}" ry="14" fill="#e6e0d0"/><path d="M${cx - rx} ${tp + 2} Q${cx} ${tp + 12} ${cx + rx} ${tp + 2}" stroke="#a89f86" fill="none"/>`);
+    if (h2 === "tall") p.push(`<rect x="${cx - 20}" y="${tp - 26}" width="40" height="30" fill="#25252b"/><rect x="${cx - rx - 6}" y="${tp + 2}" width="${rx * 2 + 12}" height="5" fill="#25252b"/>`);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 130" width="${size}" height="${Math.round(size * 130 / 120)}" class="face-svg" role="img" aria-label="\u6307\u5C0E\u8005\u306E\u8096\u50CF">${p.join("")}</svg>`;
   }
 
@@ -21104,10 +21107,10 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         row.append(el("span", "np-k", mk3 ? `${t.label} \u25C6` : t.label));
         if (mk3) row.title = `\u6A5F\u904B: ${mk3.target}\u6BB5\u300C${mk3.step}\u300D\u3092\u63A1\u7528\u3067\u304D\u308B`;
         const chain = el("div", "np-chain");
-        t.steps.forEach((label2, i) => {
-          const b = el("button", `np-step${i + 1 <= lv[t.key] ? " on" : ""}${i + 1 === lv[t.key] ? " cur" : ""}`, label2);
+        t.steps.forEach((label3, i) => {
+          const b = el("button", `np-step${i + 1 <= lv[t.key] ? " on" : ""}${i + 1 === lv[t.key] ? " cur" : ""}`, label3);
           b.type = "button";
-          b.title = `${t.label} ${i + 1}\u6BB5\uFF1A${label2}`;
+          b.title = `${t.label} ${i + 1}\u6BB5\uFF1A${label3}`;
           if (mk3 && i + 1 === mk3.target) {
             b.classList.add("momentum");
             b.title += "\uFF08\u6A5F\u904B\u3042\u308A\uFF09";
@@ -21129,13 +21132,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   // js/ui/condition-view.js
   var pct2 = (v) => `${Math.round(v * 100)}%`;
   var clamp013 = (v) => Math.max(0, Math.min(1, v));
-  function bar(label2, value, text2, { hint = "", level = "" } = {}) {
+  function bar(label3, value, text2, { hint = "", level = "" } = {}) {
     const row = el("div", "cond-row");
     if (hint) row.title = hint;
     const track = el("div", "cond-bar"), fill = el("i", level ? `lv-${level}` : "");
     fill.style.width = `${Math.round(clamp013(value) * 100)}%`;
     track.append(fill);
-    row.append(el("span", "np-k", label2), track, el("span", "cond-val", text2));
+    row.append(el("span", "np-k", label3), track, el("span", "cond-val", text2));
     return row;
   }
   var lvl = (v, warn, bad2) => v < bad2 ? "bad" : v < warn ? "warn" : "ok";
@@ -21213,7 +21216,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     if (v.player) sec.append(el("p", "hint", "\u3053\u306E\u56FD\u306F\u81EA\u5206\u3067\u52D5\u304B\u3057\u307E\u3059\u3002\u5BA3\u6226\u30FB\u6761\u7D04\u30FB\u8B1B\u548C\u30FB\u6280\u8853\u306E\u63A1\u7528\u306F\u3001\u3059\u3079\u3066\u64CD\u4F5C\u3057\u305F\u3068\u304D\u3060\u3051\u884C\u308F\u308C\u307E\u3059\u3002"));
     else {
       sec.append(el("p", "hint", `\u3053\u306E\u56FD\u306F\u81EA\u5F8B\u3057\u3066\u52D5\u304D\u307E\u3059\uFF08\u5224\u65AD\u306E\u901F\u3055: ${v.tempo}\uFF09\u3002\u7D04${v.nextThinkMonths}\u304B\u6708\u5F8C\u306B\u6B21\u306E\u5224\u65AD\u3092\u3057\u307E\u3059\u3002`));
-      if (v.character) for (const [k, label2] of [["expansion", "\u62E1\u5F35"], ["security", "\u5B89\u5168"], ["prosperity", "\u7E41\u6804"], ["prestige", "\u5A01\u4FE1"]]) sec.append(bar(label2, v.character[k], pct2(v.character[k]), { hint: "\u56FD\u306E\u6027\u683C\uFF08\u76EE\u6A19\u306E\u91CD\u307F\uFF09\u3002\u653F\u4F53\u30FB\u601D\u6F6E\u30FB\u98DF\u6599\u30FB\u6226\u4E89\u304B\u3089\u6C7A\u307E\u308B" }));
+      if (v.character) for (const [k, label3] of [["expansion", "\u62E1\u5F35"], ["security", "\u5B89\u5168"], ["prosperity", "\u7E41\u6804"], ["prestige", "\u5A01\u4FE1"]]) sec.append(bar(label3, v.character[k], pct2(v.character[k]), { hint: "\u56FD\u306E\u6027\u683C\uFF08\u76EE\u6A19\u306E\u91CD\u307F\uFF09\u3002\u653F\u4F53\u30FB\u601D\u6F6E\u30FB\u98DF\u6599\u30FB\u6226\u4E89\u304B\u3089\u6C7A\u307E\u308B" }));
       if (v.pace) sec.append(bar("\u767A\u5C55\u306E\u30DA\u30FC\u30B9", Math.min(1, v.pace.index / 2), `\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u306E ${v.pace.index.toFixed(2)} \u500D\uFF08\u901F\u3055 \xD7${v.pace.mult.toFixed(2)}\uFF09`, { level: v.pace.index > 1.6 || v.pace.index < 0.6 ? "warn" : "ok", hint: "\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u3088\u308A\u9032\u307F\u3059\u304E\u305F\u56FD\u306F\u920D\u308A\u3001\u9045\u308C\u305F\u56FD\u306F\u901F\u307E\u308A\u307E\u3059\uFF08\u6280\u8853\u306E\u9032\u6357\u3068\u5BA3\u6226\u306E\u610F\u6B32\uFF09" }));
     }
     sec.append(el("h5", "", "\u76F4\u8FD1\u306E\u5224\u65AD"));
@@ -21246,7 +21249,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     const stab = leaderRecord(map, state.i)?.current?.stability;
     if (LEADER_PENALTY[stab]) factors.push({ label: stab === "chaos" ? "\u7D99\u627F\u306E\u5927\u304D\u306A\u6DF7\u4E71" : "\u7D99\u627F\u306E\u4E89\u3044", delta: -LEADER_PENALTY[stab] });
     const now = (map.worldTime?.year ?? 0) * 12 + (map.worldTime?.month ?? 1);
-    const recent = listHistory(map).filter((h) => UNSETTLING_EVENTS.includes(h.type) && (h.states ?? []).includes(state.i) && h.year != null && now - (h.year * 12 + (h.month ?? 1)) <= EVENT_WINDOW_MONTHS && now >= h.year * 12 + (h.month ?? 1));
+    const recent = listHistory(map).filter((h2) => UNSETTLING_EVENTS.includes(h2.type) && (h2.states ?? []).includes(state.i) && h2.year != null && now - (h2.year * 12 + (h2.month ?? 1)) <= EVENT_WINDOW_MONTHS && now >= h2.year * 12 + (h2.month ?? 1));
     if (recent.length) factors.push({ label: `\u76F4\u8FD1\u306E\u51FA\u6765\u4E8B${recent.length}\u4EF6`, delta: -Math.min(EVENT_PENALTY_MAX, recent.length * EVENT_PENALTY) });
     const score = factors.reduce((n, f) => n + f.delta, 0);
     const level = STABILITY_LEVELS.find((l) => score >= l.min);
@@ -21295,7 +21298,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     if (!Number.isInteger(count) || count < 0) throw new Error("\u6838\u306E\u4FDD\u6709\u6570\u306F0\u4EE5\u4E0A\u306E\u6574\u6570\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     const regs = regimentsOf(state), cur = nuclearStock(state);
     if (count === cur) return null;
-    const label2 = "\u6838\u306E\u4FDD\u6709\u6570\u3092\u8A2D\u5B9A";
+    const label3 = "\u6838\u306E\u4FDD\u6709\u6570\u3092\u8A2D\u5B9A";
     const withNuke = (r, n) => setProps(r, { u: { ...r.u, nuclear: n } });
     if (count < cur) {
       let need = cur - count;
@@ -21306,15 +21309,15 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         need -= cut;
         if (!need) break;
       }
-      return makeCommand(label2, ["places"], parts);
+      return makeCommand(label3, ["places"], parts);
     }
     const add2 = count - cur, holder = [...regs].sort((a, b) => (b.u?.nuclear ?? 0) - (a.u?.nuclear ?? 0))[0];
-    if (holder) return makeCommand(label2, ["places"], [withNuke(holder, (holder.u?.nuclear ?? 0) + add2)]);
+    if (holder) return makeCommand(label3, ["places"], [withNuke(holder, (holder.u?.nuclear ?? 0) + add2)]);
     const cell = map.pack.burgs?.[state.capital]?.cell;
     if (cell === void 0 || map.pack.cells.state[cell] !== stateId) throw new Error("\u90E8\u968A\u3082\u9996\u90FD\u3082\u7121\u3044\u305F\u3081\u3001\u6838\u3092\u7F6E\u304F\u5834\u6240\u304C\u3042\u308A\u307E\u305B\u3093");
     const { p } = map.geometry.pack;
     const reg = { i: 0, name: `${state.name}\u6226\u7565\u8ECD`, icon: "", state: stateId, cell, x: p[cell][0], y: p[cell][1], bx: p[cell][0], by: p[cell][1], u: { ...emptyForce(), nuclear: add2 } };
-    return makeCommand(label2, ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
+    return makeCommand(label3, ["places"], [setList((m) => m.pack.states[stateId].military, (m, v) => {
       m.pack.states[stateId].military = v;
     }, [reg])]);
   }
@@ -21415,11 +21418,11 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         draw();
       }));
       body.append(sm);
-      for (const [cat, label2] of Object.entries(v.cats)) {
+      for (const [cat, label3] of Object.entries(v.cats)) {
         const rows = v.rows.filter((r) => r.cat === cat);
         if (!rows.length) continue;
         const grp = el("div", "lang-grp");
-        grp.append(el("h5", "", label2));
+        grp.append(el("h5", "", label3));
         for (const r of rows) {
           const row = el("label", "lang-row");
           row.dataset.concept = r.key;
@@ -21468,9 +21471,9 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   // js/ui/profile-fields.js
   var LIST_KEY4 = { state: "states", culture: "cultures", religion: "religions" };
   var live3 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  function selectField(label2, options, value, onChange, hint) {
+  function selectField(label3, options, value, onChange, hint) {
     const f = el("label", "b-field");
-    f.append(el("span", "b-mini", label2));
+    f.append(el("span", "b-mini", label3));
     const sel = document.createElement("select");
     for (const o of options) sel.append(new Option(o.label, String(o.id)));
     if (!options.some((o) => String(o.id) === String(value))) sel.append(new Option(String(value ?? "\uFF08\u672A\u8A2D\u5B9A\uFF09"), String(value ?? "")));
@@ -21480,9 +21483,9 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     if (hint) f.title = hint;
     return f;
   }
-  function textField(label2, value, onChange, suggest) {
+  function textField(label3, value, onChange, suggest) {
     const f = el("label", "b-field");
-    f.append(el("span", "b-mini", label2));
+    f.append(el("span", "b-mini", label3));
     const inp = document.createElement("input");
     inp.value = value ?? "";
     inp.addEventListener("change", () => {
@@ -21590,10 +21593,10 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       });
       mg.append(go);
       bar2.append(mg);
-      const SORTS = [["default", "\u767B\u9332\u9806"], ["name", "\u540D\u524D"], ["pop", "\u4EBA\u53E3"], ["regime", "\u653F\u4F53"]];
+      const SORTS2 = [["default", "\u767B\u9332\u9806"], ["name", "\u540D\u524D"], ["pop", "\u4EBA\u53E3"], ["regime", "\u653F\u4F53"]];
       const sortRow = el("div", "np-row nation-sort"), ss = document.createElement("select");
       ss.dataset.field = "nation-sort";
-      for (const [k, t] of SORTS) ss.append(new Option(t, k, false, k === sortBy));
+      for (const [k, t] of SORTS2) ss.append(new Option(t, k, false, k === sortBy));
       ss.addEventListener("change", () => {
         sortBy = ss.value;
         render();
@@ -21610,7 +21613,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       });
       const table2 = el("div", "nation-table");
       const head = el("div", "nation-row nation-head");
-      for (const h of ["", "\u56FD\u5BB6", "\u653F\u4F53", "\u6307\u5C0E\u8005", "\u4EBA\u53E3", "\u5C5E\u5DDE"]) head.append(el("span", "", h));
+      for (const h2 of ["", "\u56FD\u5BB6", "\u653F\u4F53", "\u6307\u5C0E\u8005", "\u4EBA\u53E3", "\u5C5E\u5DDE"]) head.append(el("span", "", h2));
       table2.append(head);
       for (const s of states) {
         const l = leaderRecord(map, s.i).current, r = el("div", "nation-row b-click");
@@ -21651,9 +21654,9 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         crumbs.append(c);
       });
       const pane = el("div", "np-pane");
-      const field2 = (label2, node) => {
+      const field2 = (label3, node) => {
         const l = el("label", "np-row");
-        l.append(el("span", "np-k", label2), node);
+        l.append(el("span", "np-k", label3), node);
         return l;
       };
       const text2 = (k, ph) => {
@@ -21861,13 +21864,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     }
     function infoBlock(map, s) {
       const box = el("div", "nation-info"), l = leaderRecord(map, s.i).current, f = editActions.getFinance(s.i) ?? { treasury: 0 };
-      const stat = (k, v) => {
+      const stat2 = (k, v) => {
         const d = el("div", "b-stat");
         d.append(el("div", "b-stat-v", v), el("div", "b-mini", k));
         return d;
       };
       const stab = nationStability(map, s), stats = el("div", "nation-stats");
-      stats.append(stat("\u4EBA\u53E3", fmt3(statePopulation(s))), stat("\u652F\u6301", `${Math.round(supportOf(s))}%`), stat("\u5B89\u5B9A\u5EA6", stab.label), stat("\u56FD\u5EAB", fmt3(f.treasury)));
+      stats.append(stat2("\u4EBA\u53E3", fmt3(statePopulation(s))), stat2("\u652F\u6301", `${Math.round(supportOf(s))}%`), stat2("\u5B89\u5B9A\u5EA6", stab.label), stat2("\u56FD\u5EAB", fmt3(f.treasury)));
       const r = regimeOf(s), reg = el("div", "nation-regime");
       const sl = document.createElement("select");
       for (const x of REGIMES) sl.append(new Option(x.label, x.key, false, x.key === r.key));
@@ -22017,10 +22020,10 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       pane.append(war, reb, land, basic);
       const l = leaderRecord(map, s.i);
       if (l.history.length) {
-        const h = el("section", "nation-sec");
-        h.append(el("h4", "", "\u6B74\u4EE3\u306E\u6307\u5C0E\u8005"));
-        for (const x of l.history.slice().reverse().slice(0, 8)) h.append(el("div", "hint", `${x.since.year}\u2013${x.until?.year ?? ""}\u3000${x.title}${x.name}`));
-        pane.append(h);
+        const h2 = el("section", "nation-sec");
+        h2.append(el("h4", "", "\u6B74\u4EE3\u306E\u6307\u5C0E\u8005"));
+        for (const x of l.history.slice().reverse().slice(0, 8)) h2.append(el("div", "hint", `${x.since.year}\u2013${x.until?.year ?? ""}\u3000${x.title}${x.name}`));
+        pane.append(h2);
       }
     }
     function militaryPane(pane, map, s) {
@@ -22081,9 +22084,9 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         sel2.addEventListener("change", () => on(sel2.value));
         return sel2;
       };
-      const kindRow = (label2, cur, on) => {
+      const kindRow = (label3, cur, on) => {
         const r = el("div", "np-row");
-        r.append(el("span", "np-k", label2), kindSelect(cur, on), el("span", "hint", VASSAL_KINDS.find((x) => x.key === cur)?.desc ?? ""));
+        r.append(el("span", "np-k", label3), kindSelect(cur, on), el("span", "hint", VASSAL_KINDS.find((x) => x.key === cur)?.desc ?? ""));
         return r;
       };
       const vs = el("section", "nation-sec");
@@ -22175,8 +22178,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   function growthMods(ind) {
     if (!ind) return { growthMult: 1 };
     const strength2 = BALANCE.causalStrength ?? 1;
-    const f = clamp14(0.3 + 0.7 * ind.food, 0.2, 1.25), h = 1 - 0.4 * clamp14(ind.stress.health, 0, 1.5), w = 1 - 0.3 * ind.war;
-    const mult = clamp14(f * h * w, 0.1, 1.3);
+    const f = clamp14(0.3 + 0.7 * ind.food, 0.2, 1.25), h2 = 1 - 0.4 * clamp14(ind.stress.health, 0, 1.5), w = 1 - 0.3 * ind.war;
+    const mult = clamp14(f * h2 * w, 0.1, 1.3);
     return { growthMult: 1 + (mult - 1) * strength2 };
   }
   function maxUrbanShare(lv) {
@@ -22314,13 +22317,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       const total2 = eco.trade.deals.reduce((a, d) => a + d.value, 0);
       const box = el("div", "b-eco-sum");
       box.append(
-        stat("\u53D6\u5F15", `${eco.trade.deals.length}\u4EF6`),
-        stat("\u53D6\u5F15\u984D", fmt4(total2)),
-        stat("\u56FD\u306E\u6570", `${states.length}`)
+        stat2("\u53D6\u5F15", `${eco.trade.deals.length}\u4EF6`),
+        stat2("\u53D6\u5F15\u984D", fmt4(total2)),
+        stat2("\u56FD\u306E\u6570", `${states.length}`)
       );
       return box;
     }
-    const stat = (k, v) => {
+    const stat2 = (k, v) => {
       const d = el("div", "b-stat");
       d.append(el("div", "b-stat-v", v), el("div", "b-mini", k));
       return d;
@@ -22685,9 +22688,9 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       wrap.append(ta);
       return wrap;
     }
-    function textField2(label2, value, onChange, suggest) {
+    function textField2(label3, value, onChange, suggest) {
       const row = el("label", "field");
-      row.append(el("span", "field-label", label2));
+      row.append(el("span", "field-label", label3));
       const input2 = document.createElement("input");
       input2.value = value ?? "";
       input2.addEventListener("change", () => onChange(input2.value));
@@ -22875,8 +22878,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       ...attackerRegs.map((r) => setProps(r, { u: applyLosses(r.u, result.attackerLossFraction) })),
       ...defenderRegs.map((r) => setProps(r, { u: applyLosses(r.u, result.defenderLossFraction) }))
     ];
-    const label2 = `\u4F1A\u6226\uFF08${aState.name}\u8ECD ${attackerRegs.length}\u90E8\u968A vs ${bState.name}\u8ECD ${defenderRegs.length}\u90E8\u968A\uFF09`;
-    const command = makeCommand(label2, [], parts);
+    const label3 = `\u4F1A\u6226\uFF08${aState.name}\u8ECD ${attackerRegs.length}\u90E8\u968A vs ${bState.name}\u8ECD ${defenderRegs.length}\u90E8\u968A\uFF09`;
+    const command = makeCommand(label3, [], parts);
     return { command, result };
   }
 
@@ -23231,7 +23234,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     if (!isLive50(s)) return null;
     const view2 = { enabled: ai.enabled, hasPlayers: ai.players.length > 0, player: ai.players.includes(stateId), autonomous: isAutonomous(map, stateId, ai), tempo: TEMPOS[ai.tempo].label, recent: [] };
     const log = map.ext?.data?.historyLog ?? [];
-    view2.recent = log.filter((h) => h.type === "ai" && (h.states ?? []).includes(stateId)).slice(-6).reverse().map((h) => ({ year: h.year, month: h.month, text: h.title, kind: h.detail }));
+    view2.recent = log.filter((h2) => h2.type === "ai" && (h2.states ?? []).includes(stateId)).slice(-6).reverse().map((h2) => ({ year: h2.year, month: h2.month, text: h2.title, kind: h2.detail }));
     if (!view2.autonomous) return view2;
     const ctx = makeContext(map, date), ind = ctx.inds.get(stateId);
     if (!ind) return view2;
@@ -23389,15 +23392,15 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     if (list.length) x.data.pendingEvents = list;
     else delete x.data.pendingEvents;
   };
-  var pendingCmd = (map, next, label2) => {
+  var pendingCmd = (map, next, label3) => {
     const before = listPending(map);
-    return makeCommand(label2, [], [{ apply: (m) => writePending(m, next), revert: (m) => writePending(m, before) }]);
+    return makeCommand(label3, [], [{ apply: (m) => writePending(m, next), revert: (m) => writePending(m, before) }]);
   };
   function causeKeyOf(map, key3, stateId, date) {
     const log = listHistory(map);
     for (let i = log.length - 1; i >= 0 && i >= log.length - 40; i--) {
-      const h = log[i];
-      if ((h.type === `natural-${key3}` || h.type === key3) && (h.states ?? []).includes(stateId) && h.year === date.year && h.month === date.month) return `${h.type}|${h.year}-${h.month}|${h.title}`;
+      const h2 = log[i];
+      if ((h2.type === `natural-${key3}` || h2.type === key3) && (h2.states ?? []).includes(stateId) && h2.year === date.year && h2.month === date.month) return `${h2.type}|${h2.year}-${h2.month}|${h2.title}`;
     }
     return null;
   }
@@ -23449,8 +23452,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     const support = typeof s.support === "number" ? s.support : 70;
     if (support >= 30) return null;
     const now = date ?? map.worldTime ?? { year: 1, month: 1 };
-    const recent = listHistory(map).filter((h) => FOLLOW_KEYS.some((k) => h.type === `natural-${k}`) && (h.states ?? []).includes(stateId) && mk2(now) - mk2(h) <= 36 && mk2(now) >= mk2(h));
-    return { support, level: support < 15 ? "\u5F37\u3044" : "\u304F\u3059\u3076\u3063\u3066\u3044\u308B", causes: recent.map((h) => h.title).slice(-3) };
+    const recent = listHistory(map).filter((h2) => FOLLOW_KEYS.some((k) => h2.type === `natural-${k}`) && (h2.states ?? []).includes(stateId) && mk2(now) - mk2(h2) <= 36 && mk2(now) >= mk2(h2));
+    return { support, level: support < 15 ? "\u5F37\u3044" : "\u304F\u3059\u3076\u3063\u3066\u3044\u308B", causes: recent.map((h2) => h2.title).slice(-3) };
   }
 
   // js/app/sim-actions.js
@@ -23467,19 +23470,19 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         rerender();
       }
     };
-    const safeRun = (label2, fn) => {
+    const safeRun = (label3, fn) => {
       try {
         return fn();
       } catch (e) {
         store.update((s) => {
-          s.error = `${label2}: ${e.message}`;
+          s.error = `${label3}: ${e.message}`;
         });
         return void 0;
       }
     };
-    const atomic = (label2, fn) => {
+    const atomic = (label3, fn) => {
       try {
-        return store.transaction(label2, fn);
+        return store.transaction(label3, fn);
       } catch (e) {
         rerender();
         throw e;
@@ -23722,10 +23725,10 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       createAlliance(name, memberIds, bond = "standard", leader = null) {
         return withMap((map) => safeRun("\u540C\u76DF\u306E\u7D50\u6210", () => {
           const given2 = (name ?? "").trim();
-          const label2 = given2 || suggestLabel(map, { kind: "alliance", rnd, stateId: leader ?? memberIds[0] });
+          const label3 = given2 || suggestLabel(map, { kind: "alliance", rnd, stateId: leader ?? memberIds[0] });
           const bind = BIND_LEVELS.find((b) => b.bond === bond)?.key ?? "medium";
           const lead = leader ?? memberIds[0];
-          const r = planConcludeTreaty(map, { kind: "alliance", name: label2, parties: memberIds.map((id) => ({ state: id, role: id === lead ? "\u76DF\u4E3B" : "\u52A0\u76DF" })), terms: { bind }, date: currentDate() });
+          const r = planConcludeTreaty(map, { kind: "alliance", name: label3, parties: memberIds.map((id) => ({ state: id, role: id === lead ? "\u76DF\u4E3B" : "\u52A0\u76DF" })), terms: { bind }, date: currentDate() });
           commitOrThrow(r.command);
           return r.treaty.ref.allianceId;
         }));
@@ -24001,8 +24004,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         }) ?? false;
       },
       advanceMonthly(date, rng = rnd) {
-        const stat = { leaders: 0, army: 0, events: 0 };
-        if (!store.getState().map) return stat;
+        const stat2 = { leaders: 0, army: 0, events: 0 };
+        if (!store.getState().map) return stat2;
         try {
           atomic("\u6708\u3054\u3068\u306E\u66F4\u65B0", () => {
             const map = store.getState().map;
@@ -24011,12 +24014,12 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
               const rg = rollRegencyEnd(map, st.i, date);
               if (rg) {
                 store.commit(planChangeLeader(map, st.i, { reason: "majority", stability: "stable", name: rg.name, gender: rg.gender, title: rg.title, age: rg.age, date, rnd: rng }));
-                stat.leaders++;
+                stat2.leaders++;
               }
               const hit = rg ? null : rollSuccession(map, st.i, date, rng);
               if (hit) {
                 store.commit(planChangeLeader(map, st.i, { reason: hit.reason, stability: hit.stability, date, rnd: rng }));
-                stat.leaders++;
+                stat2.leaders++;
               }
               const up = planArmyUpkeep(map, st.i, rng);
               if (up) {
@@ -24026,7 +24029,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
                   const f = planAnnualConscription(map, st.i, { fill: true });
                   if (f) store.commit(f);
                 }
-                stat.army++;
+                stat2.army++;
               } else {
                 const c = planAnnualConscription(map, st.i, { rate: 1 / 12, rnd: rng });
                 if (c) store.commit(c);
@@ -24036,13 +24039,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
               const cur = store.getState().map, pm = planPopulationMonth(cur, date);
               if (pm) {
                 store.commit(pm.command);
-                stat.population = 1;
+                stat2.population = 1;
                 for (const mv of pm.moves) {
                   const c = planMigrationEvent(store.getState().map, mv, date);
                   if (c) {
                     store.commit(c);
-                    stat.events++;
-                    stat.migration = (stat.migration ?? 0) + 1;
+                    stat2.events++;
+                    stat2.migration = (stat2.migration ?? 0) + 1;
                   }
                 }
               }
@@ -24055,8 +24058,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
                   const c = planIdeaNotable(store.getState().map, nt, date);
                   if (c) {
                     store.commit(c);
-                    stat.events++;
-                    stat.ideas = (stat.ideas ?? 0) + 1;
+                    stat2.events++;
+                    stat2.ideas = (stat2.ideas ?? 0) + 1;
                   }
                 }
               }
@@ -24065,20 +24068,20 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
               const tp = planTechProgressMonth(store.getState().map, date);
               if (tp) {
                 store.commit(tp);
-                stat.progress = 1;
+                stat2.progress = 1;
               }
             }
             {
               const lg = planEnsureLanguages(store.getState().map, date);
               if (lg) {
                 store.commit(lg.command);
-                stat.languages = lg.created.length;
+                stat2.languages = lg.created.length;
               }
             }
             {
               for (const d of planAutonomy(store.getState().map, date, rng)) if (runDecision(d, date, rng)) {
-                stat.ai = (stat.ai ?? 0) + 1;
-                stat.events++;
+                stat2.ai = (stat2.ai ?? 0) + 1;
+                stat2.events++;
               }
             }
             const chain = (ev, depth) => {
@@ -24091,13 +24094,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
               for (const c of run.commands) store.commit(c);
               const done = run.after();
               if (!done) continue;
-              stat.events++;
-              stat.chained = (stat.chained ?? 0) + 1;
+              stat2.events++;
+              stat2.chained = (stat2.chained ?? 0) + 1;
               if (done.leaderChange) {
                 const lc = planTurnoverLeader(store.getState().map, done.stateId, date, rng);
                 if (lc) {
                   store.commit(lc);
-                  stat.leaders++;
+                  stat2.leaders++;
                 }
               }
               chain(done, done.depth);
@@ -24110,7 +24113,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
               const c = planMinorEvent(store.getState().map, ev, date);
               if (c) {
                 store.commit(c);
-                stat.events++;
+                stat2.events++;
                 chain(ev, 0);
               }
             }
@@ -24118,13 +24121,13 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
               const c = planTechMomentum(store.getState().map, ev, date);
               if (c) {
                 store.commit(c);
-                stat.momentum = (stat.momentum ?? 0) + 1;
+                stat2.momentum = (stat2.momentum ?? 0) + 1;
               }
             }
           });
         } catch {
         }
-        return stat;
+        return stat2;
       },
       /** 予約されている後続の出来事・反乱の火種（国家タブの表示用。反乱は起こさない） */
       pendingEvents(stateId = null) {
@@ -25202,10 +25205,10 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   init_tech();
   var WAR_FAMILY_GAP = 120;
   var colorOf = (id) => {
-    let h = 2166136261;
-    for (const ch of String(id)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
-    const hue = (h >>> 0) % 360;
-    return `hsl(${hue} ${55 + (h >>> 9) % 30}% ${50 + (h >>> 17) % 18}%)`;
+    let h2 = 2166136261;
+    for (const ch of String(id)) h2 = Math.imul(h2 ^ ch.charCodeAt(0), 16777619);
+    const hue = (h2 >>> 0) % 360;
+    return `hsl(${hue} ${55 + (h2 >>> 9) % 30}% ${50 + (h2 >>> 17) % 18}%)`;
   };
   function createHistoryActions({ store, civActions }) {
     const mapOf = () => store.getState().map, civOf = () => mapOf()?.civ ?? null;
@@ -25240,10 +25243,10 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         return { first, now: civ.monthIndex, view: view2, past: view2 != null, groups: Object.keys(civ.groups).length, states: Object.keys(civ.states).length, events: civ.events.length, decisions: civ.decisions.length };
       },
       /** 過去の月を見る（null で現在へ戻る）。過去の間は読み取り専用 */
-      setView(mi) {
+      setView(mi2) {
         const civ = civOf();
         if (!civ) return;
-        view2 = mi == null || mi >= civ.monthIndex ? null : Math.max(A.meta().first, Math.floor(mi));
+        view2 = mi2 == null || mi2 >= civ.monthIndex ? null : Math.max(A.meta().first, Math.floor(mi2));
         cache4.clear();
         notify();
       },
@@ -25529,7 +25532,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   init_states();
   init_ai();
   var fmt6 = (n) => Math.round(n).toLocaleString("ja-JP");
-  var ym = (mi) => `${Math.floor(mi / 12)}\u5E74${(mi % 12 + 12) % 12 + 1}\u6708`;
+  var ym = (mi2) => `${Math.floor(mi2 / 12)}\u5E74${(mi2 % 12 + 12) % 12 + 1}\u6708`;
   var TABS2 = [["states", "\u56FD\u5BB6"], ["wars", "\u6226\u4E89"], ["events", "\u51FA\u6765\u4E8B"], ["decisions", "AI\u5224\u65AD"], ["search", "\u691C\u7D22"]];
   var OUTCOME = { aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", negotiated: "\u8B1B\u548C", stalemate: "\u81A0\u7740" };
   var MAPW = 480;
@@ -26039,7 +26042,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
       box.append(el("h4", "", `\u5224\u65AD ${x.date.year}\u5E74${x.date.month}\u6708`), el("p", "muted", `${x.layer}\u30FB${x.provenance}\u3000\u9078\u629E: ${x.chosen.key ?? "\u4F55\u3082\u3057\u306A\u3044"}\u3000\u7D50\u679C: ${x.result ? x.result.ok ? "\u6210\u529F" : `\u5931\u6557\uFF08${x.result.error}\uFF09` : "\u2014"}`));
       const t = el("table", "hv-table");
       t.append(el("tr", "", ""));
-      for (const h of ["\u884C\u52D5", "\u5F97\u70B9", "\u8CC7\u683C\u30FB\u7406\u7531"]) t.firstChild.append(el("th", "", h));
+      for (const h2 of ["\u884C\u52D5", "\u5F97\u70B9", "\u8CC7\u683C\u30FB\u7406\u7531"]) t.firstChild.append(el("th", "", h2));
       for (const c of x.candidates.slice(0, 30)) {
         const tr = el("tr", c.chosen ? "on" : "");
         tr.append(el("td", "", c.key + (c.opt ? `\uFF08${c.opt}\uFF09` : "")), el("td", "", String(c.total)), el("td", "", c.eligible ? "\u53EF" : c.reason ?? "\u4E0D\u53EF"));
@@ -26081,8 +26084,8 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
     }
     function parseHsl(s) {
       const m = s.match(/hsl\((\d+) (\d+)% (\d+)%\)/);
-      const h = +m[1], sa = +m[2] / 100, l = +m[3] / 100, a = sa * Math.min(l, 1 - l), f = (n) => {
-        const k = (n + h / 30) % 12;
+      const h2 = +m[1], sa = +m[2] / 100, l = +m[3] / 100, a = sa * Math.min(l, 1 - l), f = (n) => {
+        const k = (n + h2 / 30) % 12;
         return 255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)));
       };
       return [f(0), f(8), f(4)];
@@ -26353,12 +26356,12 @@ ${shown}${more}`;
       dialog.append(aiRow);
       const verbRow = el("div", "time-settings-row ai-verbs");
       const verbBoxes = {};
-      for (const [k, label2] of [["tech", "\u6280\u8853\u306E\u63A1\u7528"], ["treaty", "\u6761\u7D04"], ["war", "\u5BA3\u6226"], ["peace", "\u8B1B\u548C"]]) {
+      for (const [k, label3] of [["tech", "\u6280\u8853\u306E\u63A1\u7528"], ["treaty", "\u6761\u7D04"], ["war", "\u5BA3\u6226"], ["peace", "\u8B1B\u548C"]]) {
         const c = document.createElement("input");
         c.type = "checkbox";
         c.id = `ai-verb-${k}`;
         verbBoxes[k] = c;
-        const l = el("label", "", ` ${label2}`);
+        const l = el("label", "", ` ${label3}`);
         l.htmlFor = c.id;
         verbRow.append(c, l);
         c.addEventListener("change", () => {
@@ -26540,9 +26543,9 @@ ${shown}${more}`;
         }
         left.append(per);
       }
-      const sideBox = (label2, key3, other) => {
+      const sideBox = (label3, key3, other) => {
         const box = el("div", "war-side");
-        box.append(el("strong", "", label2));
+        box.append(el("strong", "", label3));
         const chips = el("div", "war-chips");
         for (const s of states) {
           const l = el("label", `war-chip${draft[key3].has(s.i) ? " on" : ""}${draft[other].has(s.i) ? " off" : ""}`);
@@ -26757,8 +26760,8 @@ ${shown}${more}`;
       const TABS3 = [["ov", "\u6982\u8981", ov], ["mu", "\u90E8\u968A", mu], ["lg", "\u7D4C\u904E", lg], ["pc", "\u8B1B\u548C", pc]];
       if (!TABS3.some(([k]) => k === wTab)) wTab = "ov";
       const wrap = el("div", "war-tabs-wrap"), bar2 = el("div", "war-tabs");
-      for (const [k, label2, pane] of TABS3) {
-        const b = el("button", k === wTab ? "active" : "", label2);
+      for (const [k, label3, pane] of TABS3) {
+        const b = el("button", k === wTab ? "active" : "", label3);
         b.type = "button";
         pane.hidden = k !== wTab;
         b.addEventListener("click", () => {
@@ -26799,11 +26802,11 @@ ${shown}${more}`;
     const clearHighlight = () => getHighlight()?.clearCells?.();
     const sname2 = (map, id) => map.pack.states[id]?.fullName ?? map.pack.states[id]?.name ?? `#${id}`;
     const names2 = (map, ids2) => ids2.map((i) => sname2(map, i)).join("\u30FB");
-    function bar2(label2, aShare, aText, dText) {
+    function bar2(label3, aShare, aText, dText) {
       const wrap = el("div", "wo-bar-wrap");
       const row = el("div", "wo-bar-row");
       const none = aText === "0" && dText === "0";
-      row.append(el("span", "wo-bar-val a", none ? "\u2014" : aText), el("span", "wo-bar-label", label2), el("span", "wo-bar-val d", none ? "\u2014" : dText));
+      row.append(el("span", "wo-bar-val a", none ? "\u2014" : aText), el("span", "wo-bar-label", label3), el("span", "wo-bar-val d", none ? "\u2014" : dText));
       const track = el("div", "wo-bar");
       const a = el("div", "wo-bar-a");
       a.style.width = pct3(aShare);
@@ -26835,7 +26838,7 @@ ${shown}${more}`;
       const r = ongoing ? { ...r0, ...simActions.previewWar(war.attackers, war.defenders, war.muster && Object.keys(war.muster).length ? war.muster : null, war.type) ?? {} } : r0;
       box.append(bars(r));
       if (ongoing && r.aStrength?.support != null && r.dStrength?.support != null) {
-        const gap = (label2, v) => v <= EXHAUST_SUPPORT ? `${label2}\uFF1A\u6C11\u610F ${fmt7(v)}\uFF08\u964D\u4F0F\u30E9\u30A4\u30F3 ${EXHAUST_SUPPORT} \u4EE5\u4E0B\u3002\u6B21\u306E\u6708\u306E\u9032\u884C\u3067\u964D\u4F0F\u3057\u307E\u3059\uFF09` : `${label2}\uFF1A\u6C11\u610F ${fmt7(v)}\uFF08\u964D\u4F0F\u307E\u3067\u3042\u3068 ${fmt7(v - EXHAUST_SUPPORT)}\uFF09`;
+        const gap = (label3, v) => v <= EXHAUST_SUPPORT ? `${label3}\uFF1A\u6C11\u610F ${fmt7(v)}\uFF08\u964D\u4F0F\u30E9\u30A4\u30F3 ${EXHAUST_SUPPORT} \u4EE5\u4E0B\u3002\u6B21\u306E\u6708\u306E\u9032\u884C\u3067\u964D\u4F0F\u3057\u307E\u3059\uFF09` : `${label3}\uFF1A\u6C11\u610F ${fmt7(v)}\uFF08\u964D\u4F0F\u307E\u3067\u3042\u3068 ${fmt7(v - EXHAUST_SUPPORT)}\uFF09`;
         box.append(el("p", "hint", `${gap("\u653B\u6483\u5074", r.aStrength.support)} \uFF0F ${gap("\u9632\u885B\u5074", r.dStrength.support)}\u3002\u6C11\u610F\u306F\u6226\u4E89\u304C\u9577\u5F15\u304F\u307B\u3069\u3001\u307E\u305F\u640D\u5BB3\u304C\u5927\u304D\u3044\u307B\u3069\u4E0B\u304C\u308A\u307E\u3059\u3002`));
       }
       if (showVerdict) {
@@ -26972,9 +26975,9 @@ ${shown}${more}`;
       left.append(det);
       if (sug) {
         const t = el("table", "win-table");
-        const h = el("tr");
-        for (const x of ["\u56FD", "\u7ACB\u5834", "\u5175\u529B\u306E\u640D\u5931", "\u5272\u5408", "\u58EB\u6C17", "\u6C11\u610F"]) h.append(el("th", "", x));
-        t.append(h);
+        const h2 = el("tr");
+        for (const x of ["\u56FD", "\u7ACB\u5834", "\u5175\u529B\u306E\u640D\u5931", "\u5272\u5408", "\u58EB\u6C17", "\u6C11\u610F"]) h2.append(el("th", "", x));
+        t.append(h2);
         for (const e of sug.exhaustion) {
           const tr = el("tr");
           const frac = e.before > 0 ? e.lost / e.before : 0;
@@ -26985,10 +26988,10 @@ ${shown}${more}`;
       }
       const kinds = [["standard", "\u901A\u5E38\u306E\u8B1B\u548C"], ["white", "\u767D\u7D19\u548C\u5E73"], ["vassal", "\u5F93\u5C5E\u5316"], ["annex", "\u5168\u9762\u964D\u4F0F\uFF08\u4F75\u5408\uFF09"]];
       const kindSel = document.createElement("select");
-      for (const [k, label2] of kinds) {
+      for (const [k, label3] of kinds) {
         const o = document.createElement("option");
         o.value = k;
-        o.textContent = label2;
+        o.textContent = label3;
         o.selected = draft.kind === k;
         kindSel.append(o);
       }
@@ -27063,9 +27066,9 @@ ${shown}${more}`;
         const terms = currentTerms();
         const rows = simActions.treatyBudget(war.id, terms);
         const t = el("table", "win-table");
-        const h = el("tr");
-        for (const x of ["\u52DD\u8005", "\u53D6\u308A\u5206", "\u8CBB\u7528 / \u4E0A\u9650"]) h.append(el("th", "", x));
-        t.append(h);
+        const h2 = el("tr");
+        for (const x of ["\u52DD\u8005", "\u53D6\u308A\u5206", "\u8CBB\u7528 / \u4E0A\u9650"]) h2.append(el("th", "", x));
+        t.append(h2);
         let overAny = false;
         for (const r of rows) {
           const over = r.spent > r.budget + 0.05;
@@ -27120,10 +27123,10 @@ ${shown}${more}`;
         ensureCessions();
         ensureRepar();
         const sizeSel = document.createElement("select");
-        for (const [k, label2] of [["s", "\u5C0F\u3055\u306A\u533A\u753B"], ["m", "\u4E2D\u304F\u3089\u3044\u306E\u533A\u753B"], ["l", "\u5927\u304D\u306A\u533A\u753B"]]) {
+        for (const [k, label3] of [["s", "\u5C0F\u3055\u306A\u533A\u753B"], ["m", "\u4E2D\u304F\u3089\u3044\u306E\u533A\u753B"], ["l", "\u5927\u304D\u306A\u533A\u753B"]]) {
           const o = document.createElement("option");
           o.value = k;
-          o.textContent = label2;
+          o.textContent = label3;
           o.selected = draft.size === k;
           sizeSel.append(o);
         }
@@ -27363,9 +27366,9 @@ ${shown}${more}`;
     dlg.append(el("h2", null, "\u65B0\u3057\u3044\u4E16\u754C"));
     const form = el("div", "world-form");
     dlg.append(form);
-    const row = (label2, ctl, hint) => {
+    const row = (label3, ctl, hint) => {
       const r = el("label", "world-row");
-      r.append(el("span", "world-row-l", label2), ctl);
+      r.append(el("span", "world-row-l", label3), ctl);
       if (hint) r.append(el("span", "world-row-h", hint));
       form.append(r);
       return ctl;
@@ -27552,6 +27555,2498 @@ ${shown}${more}`;
   // js/generated/worldgen-worker.txt
   var worldgen_worker_default = '(() => {\n  // js/core/world/sphere-mesh.js\n  var MESH_VERSION = "sphere-ico-1";\n  var cellCountForFrequency = (n) => 10 * n * n + 2;\n  var frequencyForCells = (target) => Math.max(1, Math.round(Math.sqrt((target - 2) / 10)));\n  var PHI = (1 + Math.sqrt(5)) / 2;\n  function baseIcosahedron() {\n    const raw = [[-1, PHI, 0], [1, PHI, 0], [-1, -PHI, 0], [1, -PHI, 0], [0, -1, PHI], [0, 1, PHI], [0, -1, -PHI], [0, 1, -PHI], [PHI, 0, -1], [PHI, 0, 1], [-PHI, 0, -1], [-PHI, 0, 1]];\n    const faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];\n    const a = norm(raw[0]);\n    let u = cross([0, 0, 1], a), s = Math.hypot(...u);\n    const verts = raw.map(norm);\n    if (s > 1e-12) {\n      u = u.map((v) => v / s);\n      const ang = Math.acos(Math.min(1, Math.max(-1, a[2]))), c = Math.cos(ang), sn = Math.sin(ang);\n      for (let i = 0; i < verts.length; i++) {\n        const v = verts[i], k = cross(u, v), d = dot(u, v);\n        verts[i] = [v[0] * c + k[0] * sn * -1 + u[0] * d * (1 - c), v[1] * c + k[1] * sn * -1 + u[1] * d * (1 - c), v[2] * c + k[2] * sn * -1 + u[2] * d * (1 - c)];\n      }\n    }\n    const fixed = faces.map(([p, q, r]) => {\n      const A = verts[p], B = verts[q], C = verts[r];\n      return dot(cross(sub(B, A), sub(C, A)), A) >= 0 ? [p, q, r] : [p, r, q];\n    });\n    return { verts, faces: fixed };\n  }\n  function norm(v) {\n    const l = Math.hypot(v[0], v[1], v[2]);\n    return [v[0] / l, v[1] / l, v[2] / l];\n  }\n  function cross(a, b) {\n    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];\n  }\n  function dot(a, b) {\n    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\n  }\n  function sub(a, b) {\n    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];\n  }\n  function buildSphereMesh(n) {\n    if (!Number.isInteger(n) || n < 1) throw new Error("\\u5468\\u6CE2\\u6570 n \\u306F 1 \\u4EE5\\u4E0A\\u306E\\u6574\\u6570");\n    const { verts: bv, faces } = baseIcosahedron();\n    const V = cellCountForFrequency(n), T = 20 * n * n;\n    const centerXYZ = new Float32Array(3 * V);\n    for (let i = 0; i < 12; i++) {\n      centerXYZ[3 * i] = bv[i][0];\n      centerXYZ[3 * i + 1] = bv[i][1];\n      centerXYZ[3 * i + 2] = bv[i][2];\n    }\n    const edgeBase = /* @__PURE__ */ new Map();\n    let nextEdge = 12;\n    const interiorPerFace = (n - 1) * (n - 2) / 2, faceBase0 = 12 + 30 * (n - 1);\n    const rowStart = new Int32Array(n + 1);\n    for (let i = 1, acc = 0; i <= n - 2; i++) {\n      rowStart[i] = acc;\n      acc += n - 1 - i;\n    }\n    const tmp = [0, 0, 0];\n    const place = (id, a, b, c, wa, wb, wc) => {\n      tmp[0] = a[0] * wa + b[0] * wb + c[0] * wc;\n      tmp[1] = a[1] * wa + b[1] * wb + c[1] * wc;\n      tmp[2] = a[2] * wa + b[2] * wb + c[2] * wc;\n      const l = Math.hypot(tmp[0], tmp[1], tmp[2]);\n      centerXYZ[3 * id] = tmp[0] / l;\n      centerXYZ[3 * id + 1] = tmp[1] / l;\n      centerXYZ[3 * id + 2] = tmp[2] / l;\n    };\n    const tri = new Uint32Array(3 * T);\n    let tp = 0;\n    const gid = new Int32Array((n + 1) * (n + 1));\n    for (let f = 0; f < 20; f++) {\n      const [fa, fb, fc] = faces[f], A = bv[fa], B = bv[fb], C = bv[fc], ids = [fa, fb, fc];\n      for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) {\n        const k = n - i - j, w = [k, i, j];\n        let id;\n        const zeros = (k === 0 ? 1 : 0) + (i === 0 ? 1 : 0) + (j === 0 ? 1 : 0);\n        if (zeros === 2) id = ids[k === n ? 0 : i === n ? 1 : 2];\n        else if (zeros === 1) {\n          const slots = [0, 1, 2].filter((s) => w[s] > 0), u = ids[slots[0]], v = ids[slots[1]];\n          const lo = Math.min(u, v), hi = Math.max(u, v), key = lo * 12 + hi;\n          let base = edgeBase.get(key);\n          if (base === void 0) {\n            base = nextEdge;\n            nextEdge += n - 1;\n            edgeBase.set(key, base);\n          }\n          const wLo = u === lo ? w[slots[0]] : w[slots[1]];\n          id = base + (wLo - 1);\n          if (!(centerXYZ[3 * id] || centerXYZ[3 * id + 1] || centerXYZ[3 * id + 2])) place(id, A, B, C, k, i, j);\n        } else {\n          id = faceBase0 + f * interiorPerFace + rowStart[i] + (j - 1);\n          place(id, A, B, C, k, i, j);\n        }\n        gid[i * (n + 1) + j] = id;\n      }\n      for (let i = 0; i < n; i++) for (let j = 0; i + j < n; j++) {\n        const p = gid[i * (n + 1) + j], q = gid[(i + 1) * (n + 1) + j], r = gid[i * (n + 1) + j + 1];\n        tri[tp++] = p;\n        tri[tp++] = q;\n        tri[tp++] = r;\n        if (i + j < n - 1) {\n          const s = gid[(i + 1) * (n + 1) + j + 1];\n          tri[tp++] = q;\n          tri[tp++] = s;\n          tri[tp++] = r;\n        }\n      }\n    }\n    if (tp !== 3 * T) throw new Error(`\\u4E09\\u89D2\\u5F62\\u306E\\u6570\\u304C\\u5408\\u308F\\u306A\\u3044: ${tp / 3} != ${T}`);\n    {\n      const a = tri[0] * 3, b = tri[1] * 3, c = tri[2] * 3, P = [centerXYZ[a], centerXYZ[a + 1], centerXYZ[a + 2]];\n      const Q = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];\n      if (dot(cross(sub(Q, P), sub(R, P)), P) < 0) for (let t = 0; t < T; t++) {\n        const x = tri[3 * t + 1];\n        tri[3 * t + 1] = tri[3 * t + 2];\n        tri[3 * t + 2] = x;\n      }\n    }\n    const deg = new Uint32Array(V + 1);\n    for (let t = 0; t < 3 * T; t++) deg[tri[t] + 1]++;\n    const offs = new Uint32Array(V + 1);\n    for (let i = 0; i < V; i++) offs[i + 1] = offs[i] + deg[i + 1];\n    const fill = new Uint32Array(V), sV = new Uint32Array(3 * T), sW = new Uint32Array(3 * T), sT = new Uint32Array(3 * T);\n    for (let t = 0; t < T; t++) for (let r = 0; r < 3; r++) {\n      const u = tri[3 * t + r], v = tri[3 * t + (r + 1) % 3], w = tri[3 * t + (r + 2) % 3], s = offs[u] + fill[u]++;\n      sV[s] = v;\n      sW[s] = w;\n      sT[s] = t;\n    }\n    const neighborIds = new Uint32Array(3 * T), cellVertexIds = new Uint32Array(3 * T);\n    for (let u = 0; u < V; u++) {\n      const s0 = offs[u], e0 = offs[u + 1], d = e0 - s0;\n      let cur = s0;\n      for (let k = 0; k < d; k++) {\n        neighborIds[s0 + k] = sV[cur];\n        cellVertexIds[s0 + k] = sT[cur];\n        const want = sW[cur];\n        let nx = -1;\n        for (let s = s0; s < e0; s++) if (sV[s] === want) {\n          nx = s;\n          break;\n        }\n        if (nx < 0) throw new Error(`\\u9802\\u70B9 ${u} \\u306E\\u5468\\u308A\\u304C\\u9589\\u3058\\u3066\\u3044\\u306A\\u3044`);\n        cur = nx;\n      }\n    }\n    const vertexXYZ = new Float32Array(3 * T);\n    for (let t = 0; t < T; t++) {\n      const a = tri[3 * t] * 3, b = tri[3 * t + 1] * 3, c = tri[3 * t + 2] * 3;\n      const x = centerXYZ[a] + centerXYZ[b] + centerXYZ[c], y = centerXYZ[a + 1] + centerXYZ[b + 1] + centerXYZ[c + 1], z = centerXYZ[a + 2] + centerXYZ[b + 2] + centerXYZ[c + 2], l = Math.hypot(x, y, z);\n      vertexXYZ[3 * t] = x / l;\n      vertexXYZ[3 * t + 1] = y / l;\n      vertexXYZ[3 * t + 2] = z / l;\n    }\n    return { meshVersion: MESH_VERSION, n, cellCount: V, triangleCount: T, centerXYZ, neighborOffsets: offs, neighborIds, vertexXYZ, cellVertexOffsets: offs, cellVertexIds };\n  }\n  function greatCircleRad(ax, ay, az, bx, by, bz) {\n    const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;\n    return Math.atan2(Math.hypot(cx, cy, cz), ax * bx + ay * by + az * bz);\n  }\n  function sphericalTriangleArea(ax, ay, az, bx, by, bz, cx, cy, cz) {\n    const triple = ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);\n    const den = 1 + (ax * bx + ay * by + az * bz) + (bx * cx + by * cy + bz * cz) + (cx * ax + cy * ay + cz * az);\n    return 2 * Math.atan2(Math.abs(triple), den);\n  }\n  function cellArea(mesh, c) {\n    const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1], cx = mesh.centerXYZ[3 * c], cy = mesh.centerXYZ[3 * c + 1], cz = mesh.centerXYZ[3 * c + 2];\n    let a = 0;\n    for (let k = s; k < e; k++) {\n      const p = mesh.cellVertexIds[k], q = mesh.cellVertexIds[k + 1 < e ? k + 1 : s];\n      a += sphericalTriangleArea(cx, cy, cz, mesh.vertexXYZ[3 * p], mesh.vertexXYZ[3 * p + 1], mesh.vertexXYZ[3 * p + 2], mesh.vertexXYZ[3 * q], mesh.vertexXYZ[3 * q + 1], mesh.vertexXYZ[3 * q + 2]);\n    }\n    return a;\n  }\n  function meshHash(mesh) {\n    let h = 2166136261;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < mesh.centerXYZ.length; i++) mix(Math.round(mesh.centerXYZ[i] * 1e6) | 0);\n    for (let i = 0; i < mesh.neighborIds.length; i++) mix(mesh.neighborIds[i]);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n\n  // js/core/world/spec.js\n  var GENERATOR_VERSION = "4.0.0-alpha.1";\n  var WORLD_SPEC_SCHEMA = 1;\n  var ISLAND_MODES = Object.freeze({ few: 12, normal: 40, many: 90 });\n  var DEFAULT_WORLD_SPEC = Object.freeze({\n    schemaVersion: WORLD_SPEC_SCHEMA,\n    generatorVersion: GENERATOR_VERSION,\n    worldSeed: "",\n    planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),\n    resolution: Object.freeze({ targetCells: 25e4 }),\n    landFraction: 0.5,\n    continentCountTarget: 6,\n    islandMode: "many",\n    plateCount: 14,\n    initialGroups: 12,\n    climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })\n  });\n  var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);\n  function normalizeWorldSpec(input = {}) {\n    const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input) ? input : {};\n    const num = (v, def, lo, hi, name, int = false) => {\n      if (v === void 0) return def;\n      if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {\n        errors.push(`${name} \\u306F ${lo}\\u301C${hi}${int ? " \\u306E\\u6574\\u6570" : ""}\\uFF08\\u53D7\\u3051\\u53D6\\u3063\\u305F\\u5024: ${String(v)}\\uFF09`);\n        return def;\n      }\n      return v;\n    };\n    const spec = {\n      schemaVersion: WORLD_SPEC_SCHEMA,\n      generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,\n      worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),\n      planet: {\n        radiusKm: num(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),\n        displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection\n      },\n      resolution: { targetCells: num(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },\n      landFraction: num(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),\n      continentCountTarget: num(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),\n      islandMode: i.islandMode ?? d.islandMode,\n      plateCount: num(i.plateCount, d.plateCount, 4, 40, "plateCount", true),\n      initialGroups: num(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),\n      climateModel: {\n        fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,\n        lapseRateCPerKm: num(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),\n        windMoistureLengthKm: num(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")\n      }\n    };\n    if (!spec.worldSeed) errors.push("worldSeed \\u304C\\u7A7A\\uFF08\\u30B7\\u30FC\\u30C9\\u3092\\u6307\\u5B9A\\u3057\\u3066\\u304F\\u3060\\u3055\\u3044\\u3002\\u751F\\u6210\\u3059\\u308B\\u5834\\u5408\\u306F makeWorldSeed \\u3092\\u4F7F\\u3046\\uFF09");\n    if (!(spec.islandMode in ISLAND_MODES)) {\n      errors.push(`islandMode \\u306F ${Object.keys(ISLAND_MODES).join("/")} \\u306E\\u3044\\u305A\\u308C\\u304B`);\n      spec.islandMode = d.islandMode;\n    }\n    if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \\u306F\\u73FE\\u5728 equirectangular \\u306E\\u307F");\n    if (isObj(input) && input.schemaVersion !== void 0 && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} \\u306F\\u672A\\u5BFE\\u5FDC`);\n    return { spec, errors };\n  }\n\n  // js/core/world/noise.js\n  function hashString(str) {\n    let h = 1779033703 ^ str.length;\n    for (let i = 0; i < str.length; i++) {\n      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);\n      h = h << 13 | h >>> 19;\n    }\n    h = Math.imul(h ^ h >>> 16, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return (h ^ h >>> 16) >>> 0;\n  }\n  function makeRng(seedStr, stage = "") {\n    let a = hashString(`${seedStr}::${stage}`);\n    const next = () => {\n      a = a + 1831565813 | 0;\n      let t = Math.imul(a ^ a >>> 15, 1 | a);\n      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;\n      return ((t ^ t >>> 14) >>> 0) / 4294967296;\n    };\n    next.range = (lo, hi) => lo + (hi - lo) * next();\n    next.int = (lo, hi) => Math.floor(next.range(lo, hi + 1));\n    next.unitVec = () => {\n      const z = next.range(-1, 1), t = next.range(0, 2 * Math.PI), r = Math.sqrt(1 - z * z);\n      return [r * Math.cos(t), r * Math.sin(t), z];\n    };\n    return next;\n  }\n  function hash3(seed, x, y, z) {\n    let h = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);\n    h = Math.imul(h ^ h >>> 15, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return ((h ^ h >>> 16) >>> 0) / 4294967296;\n  }\n  var fade = (t) => t * t * (3 - 2 * t);\n  function valueNoise3(seed, x, y, z) {\n    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx = fade(x - xi), fy = fade(y - yi), fz = fade(z - zi);\n    const c000 = hash3(seed, xi, yi, zi), c100 = hash3(seed, xi + 1, yi, zi), c010 = hash3(seed, xi, yi + 1, zi), c110 = hash3(seed, xi + 1, yi + 1, zi);\n    const c001 = hash3(seed, xi, yi, zi + 1), c101 = hash3(seed, xi + 1, yi, zi + 1), c011 = hash3(seed, xi, yi + 1, zi + 1), c111 = hash3(seed, xi + 1, yi + 1, zi + 1);\n    const x00 = c000 + (c100 - c000) * fx, x10 = c010 + (c110 - c010) * fx, x01 = c001 + (c101 - c001) * fx, x11 = c011 + (c111 - c011) * fx;\n    const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;\n    return y0 + (y1 - y0) * fz;\n  }\n  function fbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {\n    let sum = 0, amp = 1, norm2 = 0, f = freq;\n    for (let o = 0; o < octaves; o++) {\n      sum += amp * valueNoise3(seed + o * 101, x * f, y * f, z * f);\n      norm2 += amp;\n      amp *= gain;\n      f *= 2.03;\n    }\n    return sum / norm2;\n  }\n  function makeFbm3(seed, octaves = 4, freq = 1, gain = 0.5) {\n    const O = octaves, kx = new Int32Array(O).fill(2147483647), ky = new Int32Array(O), kz = new Int32Array(O), cv = new Float64Array(O * 8), fs = new Float64Array(O), sd = new Int32Array(O);\n    let f = freq, norm2 = 0, amp = 1;\n    const amps = new Float64Array(O);\n    for (let o = 0; o < O; o++) {\n      fs[o] = f;\n      sd[o] = seed + o * 101;\n      amps[o] = amp;\n      norm2 += amp;\n      amp *= gain;\n      f *= 2.03;\n    }\n    return (x, y, z) => {\n      let sum = 0;\n      for (let o = 0; o < O; o++) {\n        const X = x * fs[o], Y = y * fs[o], Z = z * fs[o], xi = Math.floor(X), yi = Math.floor(Y), zi = Math.floor(Z), b = o * 8;\n        if (xi !== kx[o] || yi !== ky[o] || zi !== kz[o]) {\n          const s0 = sd[o];\n          kx[o] = xi;\n          ky[o] = yi;\n          kz[o] = zi;\n          cv[b] = hash3(s0, xi, yi, zi);\n          cv[b + 1] = hash3(s0, xi + 1, yi, zi);\n          cv[b + 2] = hash3(s0, xi, yi + 1, zi);\n          cv[b + 3] = hash3(s0, xi + 1, yi + 1, zi);\n          cv[b + 4] = hash3(s0, xi, yi, zi + 1);\n          cv[b + 5] = hash3(s0, xi + 1, yi, zi + 1);\n          cv[b + 6] = hash3(s0, xi, yi + 1, zi + 1);\n          cv[b + 7] = hash3(s0, xi + 1, yi + 1, zi + 1);\n        }\n        const fx = fade(X - xi), fy = fade(Y - yi), fz = fade(Z - zi);\n        const x00 = cv[b] + (cv[b + 1] - cv[b]) * fx, x10 = cv[b + 2] + (cv[b + 3] - cv[b + 2]) * fx, x01 = cv[b + 4] + (cv[b + 5] - cv[b + 4]) * fx, x11 = cv[b + 6] + (cv[b + 7] - cv[b + 6]) * fx;\n        const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;\n        sum += amps[o] * (y0 + (y1 - y0) * fz);\n      }\n      return sum / norm2;\n    };\n  }\n\n  // js/core/world/worldgen.js\n  var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });\n  var BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });\n  var BIOME_NAMES = Object.freeze(["\\u6D77", "\\u6C37\\u96EA", "\\u30C4\\u30F3\\u30C9\\u30E9", "\\u30BF\\u30A4\\u30AC", "\\u6E29\\u5E2F\\u6797", "\\u8349\\u539F", "\\u71B1\\u5E2F\\u7802\\u6F20", "\\u5BD2\\u51B7\\u7802\\u6F20", "\\u30B5\\u30D0\\u30F3\\u30CA", "\\u71B1\\u5E2F\\u5B63\\u7BC0\\u6797", "\\u71B1\\u5E2F\\u96E8\\u6797", "\\u9AD8\\u5C71", "\\u6E7F\\u5730", "\\u6E56"]);\n  var SOILS = Object.freeze({ NONE: 0, ROCK: 1, SAND: 2, LOAM: 3, CLAY: 4, VOLCANIC: 5, PERMAFROST: 6, ALLUVIAL: 7, PODZOL: 8, BLACK_EARTH: 9 });\n  var RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 });\n  var RES_NAMES = Object.freeze({ 1: "\\u9244", 2: "\\u9285", 4: "\\u932B", 8: "\\u91D1", 16: "\\u77F3\\u70AD", 32: "\\u5869", 64: "\\u6728\\u6750", 128: "\\u6F01\\u5834", 256: "\\u77F3\\u6750", 512: "\\u7C98\\u571F", 1024: "\\u5B9D\\u77F3" });\n  var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;\n  var smooth = (t) => {\n    t = clamp(t, 0, 1);\n    return t * t * (3 - 2 * t);\n  };\n  var D2R = Math.PI / 180;\n  var MinHeap = class {\n    constructor(cap) {\n      this.k = new Float64Array(cap);\n      this.v = new Int32Array(cap);\n      this.n = 0;\n    }\n    push(key, val) {\n      let i = this.n++;\n      const k = this.k, v = this.v;\n      while (i > 0) {\n        const p = i - 1 >> 1;\n        if (k[p] <= key) break;\n        k[i] = k[p];\n        v[i] = v[p];\n        i = p;\n      }\n      k[i] = key;\n      v[i] = val;\n    }\n    pop() {\n      const k = this.k, v = this.v, top = v[0], key = k[--this.n], val = v[this.n];\n      let i = 0;\n      const n = this.n;\n      while (true) {\n        let c = 2 * i + 1;\n        if (c >= n) break;\n        if (c + 1 < n && k[c + 1] < k[c]) c++;\n        if (k[c] >= key) break;\n        k[i] = k[c];\n        v[i] = v[c];\n        i = c;\n      }\n      k[i] = key;\n      v[i] = val;\n      return top;\n    }\n  };\n  var Cancelled = class extends Error {\n  };\n  var makeStager = (onProgress, signal, timings) => (name, label, fn) => {\n    if (signal?.aborted) throw new Cancelled("\\u30AD\\u30E3\\u30F3\\u30BB\\u30EB\\u3055\\u308C\\u307E\\u3057\\u305F");\n    onProgress?.({ stage: name, label, fraction: 0 });\n    const t = performance.now(), r = fn();\n    timings[name] = Math.round(performance.now() - t);\n    onProgress?.({ stage: name, label, fraction: 1, ms: timings[name] });\n    return r;\n  };\n  function generateWorld(specInput, options = {}) {\n    const { spec, errors } = normalizeWorldSpec(specInput);\n    if (errors.length) throw new Error("WorldSpec \\u304C\\u4E0D\\u6B63: " + errors.join(" / "));\n    const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();\n    const n = frequencyForCells(spec.resolution.targetCells);\n    const mesh = stage("G1_mesh", "\\u7403\\u9762\\u30E1\\u30C3\\u30B7\\u30E5", () => buildSphereMesh(n));\n    const V = mesh.cellCount, X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = spec.planet.radiusKm;\n    const lat = new Float32Array(V), lon = new Float32Array(V), areaKm2 = new Float32Array(V);\n    stage("G1_derive", "\\u7DEF\\u5EA6\\u7D4C\\u5EA6\\u30FB\\u9762\\u7A4D", () => {\n      for (let c = 0; c < V; c++) {\n        lat[c] = Math.asin(clamp(X[3 * c + 2], -1, 1));\n        lon[c] = Math.atan2(X[3 * c + 1], X[3 * c]);\n        areaKm2[c] = cellArea(mesh, c) * R * R;\n      }\n    });\n    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), spacingRad = spacingKm / R;\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    const nSeed = (name) => hashString(`${seed}::noise::${name}`);\n    const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);\n    const volcanic = new Float32Array(V);\n    stage("G2_plates", "\\u30D7\\u30EC\\u30FC\\u30C8\\u30FB\\u5927\\u9678\\u306E\\u6982\\u5F62", () => {\n      const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];\n      const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);\n      const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));\n      for (let c = 0; c < V; c++) {\n        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];\n        const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;\n        const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);\n        wx[c] = px / l;\n        wy[c] = py / l;\n        wz[c] = pz / l;\n      }\n      const rp = makeRng(seed, "plates"), P = spec.plateCount, seeds = [], omega = [];\n      for (let p = 0; p < P; p++) {\n        seeds.push(rp.unitVec());\n        const w = rp.unitVec(), sp = rp.range(0.4, 1.6);\n        omega.push([w[0] * sp, w[1] * sp, w[2] * sp]);\n      }\n      for (let c = 0; c < V; c++) {\n        let best = -2, bp = 0;\n        for (let p = 0; p < P; p++) {\n          const d = wx[c] * seeds[p][0] + wy[c] * seeds[p][1] + wz[c] * seeds[p][2];\n          if (d > best) {\n            best = d;\n            bp = p;\n          }\n        }\n        plate[c] = bp;\n      }\n      const vel = (p, c) => {\n        const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];\n        return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x];\n      };\n      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V);\n      for (let c = 0; c < V; c++) {\n        let best = 0, bestAbs = 0;\n        const vc = vel(plate[c], c);\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (plate[j] === plate[c]) continue;\n          const vj = vel(plate[j], c);\n          let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2];\n          const dl = Math.hypot(dx, dy, dz) || 1;\n          dx /= dl;\n          dy /= dl;\n          dz /= dl;\n          const conv = (vc[0] - vj[0]) * dx + (vc[1] - vj[1]) * dy + (vc[2] - vj[2]) * dz;\n          if (Math.abs(conv) > bestAbs) {\n            bestAbs = Math.abs(conv);\n            best = conv;\n          }\n        }\n        if (bestAbs > 0) {\n          isSrc[c] = 1;\n          srcStrength[c] = best;\n        }\n      }\n      const widthCells = Math.max(2, 5 * D2R / spacingRad), maxD = Math.ceil(widthCells * 3);\n      const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      for (let c = 0; c < V; c++) if (isSrc[c]) {\n        dist[c] = 0;\n        from[c] = c;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        if (dist[c] >= maxD) continue;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (dist[j] < 0) {\n            dist[j] = dist[c] + 1;\n            from[j] = from[c];\n            q[qt++] = j;\n          }\n        }\n      }\n      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4);\n      for (let c = 0; c < V; c++) {\n        if (dist[c] < 0) continue;\n        const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));\n        const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3);\n        if (s > 0) {\n          mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod;\n          volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;\n        } else rift[c] = clamp(-s / 1.2, 0, 1) * f;\n      }\n      const rc = makeRng(seed, "continents"), K = spec.continentCountTarget;\n      const thetaLand = Math.acos(clamp(1 - 2 * spec.landFraction / K, -1, 1));\n      let bestSet = null, bestSep = -1;\n      for (let trial = 0; trial < 3e3; trial++) {\n        const pts = [];\n        for (let i = 0; i < K; i++) pts.push(rc.unitVec());\n        let sep = 9;\n        for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));\n        if (sep > bestSep) {\n          bestSep = sep;\n          bestSet = pts;\n        }\n      }\n      const cs = bestSet.map((v) => {\n        const r = thetaLand * rc.range(0.8, 0.95);\n        return { v, r, cosCut: Math.cos(Math.min(Math.PI, r * 1.1)) - 1e-9 };\n      });\n      const isl = [];\n      const NI = ISLAND_MODES[spec.islandMode];\n      for (let i = 0; i < NI; i++) {\n        const v = rc.unitVec(), r = rc.range(1.2, 5.5) * D2R, w = rc.range(0.45, 0.95);\n        isl.push({ v, r, w, cosCut: Math.cos(r * 1.5) - 1e-9 });\n      }\n      const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];\n      for (let c = 0; c < V; c++) {\n        let f = 0;\n        for (const o of cs) {\n          const dp = dotp(c, o.v);\n          if (dp < o.cosCut) continue;\n          const d = Math.acos(clamp(dp, -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1);\n          f = Math.max(f, t * t * (3 - 2 * t));\n        }\n        for (const o of isl) {\n          const dp = dotp(c, o.v);\n          if (dp < o.cosCut) continue;\n          const d = Math.acos(clamp(dp, -1, 1));\n          if (d < o.r * 1.5) {\n            const t = clamp(1 - d / (o.r * 1.5), 0, 1);\n            f = Math.max(f, o.w * t * t * (3 - 2 * t));\n          }\n        }\n        continent[c] = f;\n      }\n      const rh = makeRng(seed, "hotspots");\n      for (let h = 0; h < 6; h++) {\n        const start = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;\n        const dot2 = start[0] * dirv[0] + start[1] * dirv[1] + start[2] * dirv[2];\n        let t = [dirv[0] - dot2 * start[0], dirv[1] - dot2 * start[1], dirv[2] - dot2 * start[2]];\n        const tl = Math.hypot(...t) || 1;\n        t = t.map((x) => x / tl);\n        for (let i = 0; i < count; i++) {\n          const a = i * step, p = [start[0] * Math.cos(a) + t[0] * Math.sin(a), start[1] * Math.cos(a) + t[1] * Math.sin(a), start[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));\n          for (let c = 0; c < V; c++) {\n            const d = Math.acos(clamp(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));\n            if (d < rad * 2) {\n              const g = Math.exp(-((d / rad) ** 2));\n              continent[c] = Math.max(continent[c], amp * g * 0.9);\n              volcanic[c] = Math.max(volcanic[c], g);\n            }\n          }\n        }\n      }\n    });\n    const elevation = new Float32Array(V);\n    let seaLevelRaw = 0;\n    stage("G3_elevation", "\\u6A19\\u9AD8\\u30FB\\u6D77\\u5CB8\\u30FB\\u5CF6", () => {\n      const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);\n      for (let c = 0; c < V; c++) {\n        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];\n        const land = smooth((cf - 0.25) / 0.45);\n        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) + mountain[c] * (0.03 + 0.97 * land) * 1.5 - rift[c] * 0.22;\n      }\n      const sorted = Float32Array.from(raw).sort();\n      seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];\n      const hi = sorted[Math.min(V - 1, Math.floor(V * 0.998))], lo = sorted[0];\n      for (let c = 0; c < V; c++) {\n        const e = raw[c] - seaLevelRaw;\n        elevation[c] = e >= 0 ? Math.pow(Math.min(1.35, e / Math.max(1e-6, hi - seaLevelRaw)), 1.2) * 6500 : e / Math.max(1e-6, seaLevelRaw - lo) * 5500;\n      }\n    });\n    const isSea = new Uint8Array(V);\n    for (let c = 0; c < V; c++) isSea[c] = elevation[c] <= 0 ? 1 : 0;\n    const coastDist = new Uint16Array(V);\n    stage("G3_coast", "\\u6D77\\u5CB8\\u304B\\u3089\\u306E\\u8DDD\\u96E2", () => {\n      const q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      const seen = new Uint8Array(V);\n      for (let c = 0; c < V; c++) if (isSea[c]) {\n        seen[c] = 1;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!seen[j]) {\n            seen[j] = 1;\n            coastDist[j] = Math.min(65535, coastDist[c] + 1);\n            q[qt++] = j;\n          }\n        }\n      }\n    });\n    const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);\n    const cx = { mesh, lat, lon, elevation, isSea, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };\n    stage("G4_climate", "\\u6C17\\u5019", () => {\n      for (let c = 0; c < V; c++) temp[c] = tempAt(lat[c], elevation[c], cx.lapse);\n      cx.up = new Int32Array(V);\n      for (let c = 0; c < V; c++) cx.up[c] = upwindOf(mesh, lat, lon, c);\n      for (let c = 0; c < V; c++) moisture[c] = isSea[c] ? 1 : 0.5;\n      const passes = Math.min(200, Math.ceil(4e3 / spacingKm) + 4);\n      for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) {\n        if (!isSea[c]) moisture[c] = moistureStep(cx, c);\n      }\n      for (let c = 0; c < V; c++) precip[c] = precipAt(cx, c);\n    });\n    stage("G4_biome", "\\u30D0\\u30A4\\u30AA\\u30FC\\u30E0", () => {\n      for (let c = 0; c < V; c++) biome[c] = isSea[c] ? BIOMES.OCEAN : biomeOf(temp[c], precip[c], elevation[c]);\n    });\n    const parent = new Int32Array(V).fill(-1), filled = new Float32Array(V), flow = new Float32Array(V), basin = new Int32Array(V).fill(-1), landWater = new Uint8Array(V);\n    let lakeCount = 0;\n    const hyd = { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome };\n    stage("G5_rivers", "\\u6C34\\u7CFB", () => {\n      lakeCount = computeHydrology(hyd, null).lakeCount;\n    });\n    let riverThreshold = 0;\n    const river = new Uint8Array(V);\n    stage("G5_riverset", "\\u6CB3\\u5DDD\\u306E\\u9078\\u5B9A", () => {\n      const f = [];\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND) f.push(flow[c]);\n      f.sort((a, b) => a - b);\n      riverThreshold = f.length ? f[Math.floor(f.length * 0.93)] : 0;\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && flow[c] >= riverThreshold && flow[c] > 0) river[c] = 1;\n    });\n    const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);\n    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };\n    stage("G6_soil", "\\u571F\\u58CC\\u30FB\\u80A5\\u6C83\\u5EA6\\u30FB\\u8CC7\\u6E90", () => {\n      for (let c = 0; c < V; c++) landUseAt(lu, c);\n    });\n    const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };\n    const populations = stage("G7_groups", "\\u521D\\u671F\\u4EBA\\u53E3\\u96C6\\u56E3", () => placeInitialGroups(gctx, spec, 0));\n    const stats = stage("G8_stats", "\\u7D71\\u8A08", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));\n    const world = {\n      spec: { ...spec, generatorVersion: GENERATOR_VERSION },\n      mesh,\n      cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },\n      entities: { populations },\n      stats,\n      timings\n    };\n    timings.total = Math.round(performance.now() - tAll);\n    world.hash = worldHash(world);\n    return world;\n  }\n  function tempAt(latRad, elevation, lapse) {\n    const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1e3;\n    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;\n  }\n  function upwindOf(mesh, lat, lon, c) {\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;\n    const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);\n    const wx = -east * ex, wy = -east * ey;\n    let best = -2, bj = -1;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      const j = nb[k], dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2], dl = Math.hypot(dx, dy, dz) || 1, s = (dx * wx + dy * wy) / dl;\n      if (s > best) {\n        best = s;\n        bj = j;\n      }\n    }\n    return bj;\n  }\n  var upOf = (cx, c) => cx.up ? cx.up[c] : upwindOf(cx.mesh, cx.lat, cx.lon, c);\n  function liftRaw(cx, c) {\n    const u = upOf(cx, c);\n    return Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3;\n  }\n  function moistureStep(cx, c) {\n    const u = upOf(cx, c);\n    return clamp(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);\n  }\n  function precipAt(cx, c) {\n    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));\n    const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];\n    let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);\n    if (!sea && cx.elevation[c] > 3500) p *= 0.6;\n    return clamp(p, 0, 6e3);\n  }\n  function computeHydrology(h, members = null) {\n    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;\n    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;\n    const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);\n    let on = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      filled[c] = elevation[c];\n      parent[c] = -1;\n      basin[c] = -1;\n    }\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) {\n        done[c] = 1;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && (!members || members[j])) {\n            heap.push(filled[c], c);\n            break;\n          }\n        }\n      } else if (members && !members[c]) done[c] = 1;\n    }\n    while (heap.n > 0) {\n      const c = heap.pop();\n      order[on++] = c;\n      for (let k = off[c]; k < off[c + 1]; k++) {\n        const j = nb[k];\n        if (done[j]) continue;\n        done[j] = 1;\n        parent[j] = c;\n        filled[j] = Math.max(elevation[j], filled[c] + EPS);\n        heap.push(filled[j], j);\n      }\n    }\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 95e-7;\n    }\n    for (let i = on - 1; i >= 0; i--) {\n      const c = order[i], p = parent[c];\n      if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c];\n    }\n    for (let i = 0; i < on; i++) {\n      const c = order[i];\n      if (isSea[c]) continue;\n      const p = parent[c];\n      basin[c] = isSea[p] ? c : basin[p];\n    }\n    let lakeCount = 0, unreached = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;\n      else {\n        if (parent[c] < 0) unreached++;\n        if (filled[c] - elevation[c] >= 40) {\n          landWater[c] = LAND_WATER.LAKE;\n          lakeCount++;\n          biome[c] = BIOMES.LAKE;\n        } else landWater[c] = LAND_WATER.LAND;\n      }\n    }\n    return { lakeCount, unreached };\n  }\n  function landUseNoise(seed) {\n    const ns = (name) => hashString(`${seed}::noise::${name}`);\n    return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };\n  }\n  var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };\n  function seaToLand(mesh, isSea, c) {\n    const off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    let fr = [c];\n    const seen = /* @__PURE__ */ new Set([c]);\n    for (let d = 0; d <= 6; d++) {\n      const nx = [];\n      for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) {\n        const j = nb[k];\n        if (!isSea[j]) return d + 1;\n        if (!seen.has(j)) {\n          seen.add(j);\n          nx.push(j);\n        }\n      }\n      fr = nx;\n      if (!fr.length) break;\n    }\n    return 99;\n  }\n  function landUseAt(g, c) {\n    const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];\n    let relief = 0, kn = 0;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      relief += Math.abs(elevation[nb[k]] - e);\n      kn++;\n    }\n    relief /= Math.max(1, kn);\n    const nearRiver = river[c] === 1;\n    let res = 0;\n    if (sea) {\n      if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH;\n    } else {\n      const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);\n      if (land) {\n        if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;\n        if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;\n        if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;\n        if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;\n        if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;\n        if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;\n        if (e > 200 && relief > 120) res |= RES.STONE;\n        if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;\n        if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;\n        if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;\n        if (nearRiver) res |= RES.FISH;\n      } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;\n    }\n    resource[c] = res;\n    let sl = SOILS.NONE;\n    if (!sea) {\n      if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;\n      else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;\n      else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;\n      else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;\n      else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;\n      else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;\n      else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;\n      else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;\n      else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;\n      else sl = SOILS.LOAM;\n    }\n    soil[c] = sl;\n    if (land) {\n      const t = temp[c], p = precip[c];\n      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);\n      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);\n      const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3e3, 0, 1);\n      fertility[c] = clamp(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);\n      capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];\n    } else {\n      fertility[c] = 0;\n      capacity[c] = 0;\n    }\n  }\n  function placeInitialGroups(g, spec, variant = 0) {\n    const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;\n    const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];\n    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });\n    cand.sort((a, b) => b.s - a.s || a.c - b.c);\n    const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R);\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    for (const { c } of cand) {\n      if (out.length >= spec.initialGroups) break;\n      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });\n    }\n    return out;\n  }\n  function biomeOf(T, P, e) {\n    if (e > 4500 || e > 3500 && T < 0) return BIOMES.ALPINE;\n    if (T < -8) return BIOMES.ICE;\n    if (T < 0) return BIOMES.TUNDRA;\n    if (T < 5) return P > 300 ? BIOMES.TAIGA : BIOMES.COLD_DESERT;\n    if (T < 18) return P < 200 ? BIOMES.COLD_DESERT : P < 600 ? BIOMES.GRASSLAND : P > 2600 ? BIOMES.WETLAND : BIOMES.TEMPERATE_FOREST;\n    if (P < 250) return BIOMES.HOT_DESERT;\n    if (P < 900) return BIOMES.SAVANNA;\n    if (P < 1800) return BIOMES.TROPICAL_SEASONAL;\n    return BIOMES.RAINFOREST;\n  }\n  function landmasses(V, off, nb, isSea) {\n    const comp = new Int32Array(V).fill(-1), sizes = [];\n    const q = new Int32Array(V);\n    for (let s = 0; s < V; s++) {\n      if (isSea[s] || comp[s] >= 0) continue;\n      let qh = 0, qt = 0;\n      q[qt++] = s;\n      comp[s] = sizes.length;\n      let cnt = 0;\n      while (qh < qt) {\n        const c = q[qh++];\n        cnt++;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && comp[j] < 0) {\n            comp[j] = comp[s];\n            q[qt++] = j;\n          }\n        }\n      }\n      sizes.push(cnt);\n    }\n    return { comp, sizes };\n  }\n  function computeStats(a) {\n    const { V, off, nb, isSea, landWater, elevation, temp, biome, lat, riverThreshold, river, lakeCount, parent, populations } = a;\n    let mouthCount = 0;\n    for (let c = 0; c < V; c++) if (river[c] && parent[c] >= 0 && isSea[parent[c]]) mouthCount++;\n    let sea = 0, lake = 0, mount = 0, rivers = 0, cold = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) sea++;\n      else {\n        if (landWater[c] === LAND_WATER.LAKE) lake++;\n        if (elevation[c] > 2500) mount++;\n        if (river[c]) rivers++;\n      }\n    }\n    const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea), total = sizes.reduce((s, x) => s + x, 0);\n    const continents = sizes.filter((s) => s >= total * 0.03), islands = sizes.filter((s) => s < total * 0.03);\n    const biomeCounts = new Array(14).fill(0);\n    for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;\n    let tl = 0, nl = 0, th = 0, nh = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) continue;\n      const la = Math.abs(lat[c]) / D2R;\n      if (la < 20) {\n        tl += temp[c];\n        nl++;\n      } else if (la > 60) {\n        th += temp[c];\n        nh++;\n      }\n    }\n    return {\n      cells: V,\n      landFraction: landCells / V,\n      lakeFraction: lake / V,\n      mountainFraction: mount / Math.max(1, landCells),\n      riverCells: rivers,\n      riverFlowThreshold: riverThreshold,\n      riverMouths: mouthCount,\n      lakeCells: lakeCount,\n      continentCount: continents.length,\n      continentShares: continents.map((s) => +(s / total).toFixed(3)).sort((x, y) => y - x),\n      islandCount: islands.length,\n      largestIslandCells: islands.length ? Math.max(...islands) : 0,\n      meanTempLow: nl ? tl / nl : null,\n      meanTempHigh: nh ? th / nh : null,\n      biomeCounts,\n      initialGroups: populations.length\n    };\n  }\n  function validateWorld(world) {\n    const errs = [], { cell, mesh } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    for (const k of ["elevation", "temp", "precip", "riverFlow", "fertility", "capacity"]) for (let c = 0; c < V; c++) if (!Number.isFinite(cell[k][c])) {\n      errs.push(`${k}[${c}] \\u304C\\u6709\\u9650\\u3067\\u306A\\u3044`);\n      break;\n    }\n    const state = new Uint8Array(V);\n    const stack = [];\n    for (let s = 0; s < V; s++) {\n      if (state[s]) continue;\n      let c = s;\n      stack.length = 0;\n      while (true) {\n        if (cell.landWater[c] === LAND_WATER.OCEAN) {\n          state[c] = 2;\n          break;\n        }\n        if (state[c] === 2) break;\n        if (state[c] === 1) {\n          errs.push(`\\u6D41\\u8DEF\\u306B\\u5FAA\\u74B0: ${c}`);\n          break;\n        }\n        state[c] = 1;\n        stack.push(c);\n        const p = cell.riverTo[c];\n        if (p < 0) {\n          errs.push(`\\u884C\\u304D\\u6B62\\u307E\\u308A\\u306E\\u6D41\\u8DEF: ${c}`);\n          break;\n        }\n        let adj = false;\n        for (let k = off[c]; k < off[c + 1]; k++) if (nb[k] === p) {\n          adj = true;\n          break;\n        }\n        if (!adj) {\n          errs.push(`\\u6D41\\u8DEF\\u304C\\u96A3\\u63A5\\u3057\\u3066\\u3044\\u306A\\u3044: ${c}\\u2192${p}`);\n          break;\n        }\n        c = p;\n      }\n      const ok = state[c] === 2;\n      for (const u of stack) state[u] = ok ? 2 : state[u];\n      if (errs.length > 20) break;\n    }\n    for (let c = 0; c < V; c++) {\n      if (cell.elevation[c] <= 0 !== (cell.landWater[c] === LAND_WATER.OCEAN)) {\n        errs.push(`\\u6D77\\u9678\\u3068\\u6A19\\u9AD8\\u304C\\u4E0D\\u4E00\\u81F4: ${c}`);\n        break;\n      }\n    }\n    for (const p of world.entities.populations) {\n      if (cell.landWater[p.cell] !== LAND_WATER.LAND) errs.push(`\\u521D\\u671F\\u96C6\\u56E3 ${p.id} \\u304C\\u9678\\u306B\\u3044\\u306A\\u3044`);\n    }\n    return errs;\n  }\n  function worldHash(world) {\n    let h = 2166136261;\n    const { cell } = world;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < cell.elevation.length; i++) mix(Math.round(cell.elevation[i]) | 0);\n    for (let i = 0; i < cell.landWater.length; i++) mix(cell.landWater[i] | cell.biome[i] << 8 | cell.soil[i] << 16);\n    for (let i = 0; i < cell.riverTo.length; i++) mix(cell.riverTo[i] | 0);\n    for (let i = 0; i < cell.resource.length; i++) mix(cell.resource[i]);\n    mix(meshHash(world.mesh).length);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n  function generateWorldChecked(specInput, options = {}, maxAttempts = 6) {\n    const rejected = [];\n    const base = normalizeWorldSpec(specInput).spec;\n    for (let a = 0; a < maxAttempts; a++) {\n      const seedUsed = a === 0 ? base.worldSeed : `${base.worldSeed}#r${a}`;\n      const world = generateWorld({ ...base, worldSeed: seedUsed }, options), reasons = statsProblems(world.stats, base);\n      reasons.push(...validateWorld(world).slice(0, 5));\n      if (!reasons.length) return { world, rejected, attempts: a + 1, seedUsed };\n      rejected.push({ seed: seedUsed, reasons });\n    }\n    throw new Error(`\\u8A31\\u5BB9\\u5E2F\\u306B\\u5165\\u308B\\u4E16\\u754C\\u3092\\u4F5C\\u308C\\u306A\\u304B\\u3063\\u305F\\uFF08${maxAttempts} \\u56DE\\uFF09: ` + JSON.stringify(rejected));\n  }\n  function statsProblems(st, spec) {\n    const r = [];\n    if (Math.abs(st.landFraction - spec.landFraction) > 0.04) r.push(`\\u9678\\u5730\\u7387 ${st.landFraction.toFixed(3)} \\u304C\\u76EE\\u6A19 ${spec.landFraction} \\u304B\\u3089\\u5916\\u308C\\u3066\\u3044\\u308B`);\n    const K = spec.continentCountTarget;\n    if (st.continentCount < Math.max(1, K - 2) || st.continentCount > K + 3) r.push(`\\u5927\\u9678\\u7D1A\\u306E\\u9678\\u584A\\u304C ${st.continentCount} \\u500B\\uFF08\\u76EE\\u6A19 ${K}\\uFF09`);\n    if (spec.islandMode === "many" && st.islandCount < 20) r.push(`\\u5CF6\\u304C\\u5C11\\u306A\\u3044\\uFF08${st.islandCount}\\uFF09`);\n    if (st.continentShares[0] > 0.45) r.push(`\\u6700\\u5927\\u306E\\u9678\\u584A\\u304C\\u9678\\u306E ${(st.continentShares[0] * 100).toFixed(0)}%\\uFF08\\u504F\\u308A\\u3059\\u304E\\uFF09`);\n    if (st.meanTempLow != null && st.meanTempHigh != null && st.meanTempLow <= st.meanTempHigh + 10) r.push("\\u4F4E\\u7DEF\\u5EA6\\u304C\\u9AD8\\u7DEF\\u5EA6\\u3088\\u308A\\u5341\\u5206\\u306B\\u6696\\u304B\\u304F\\u306A\\u3044");\n    return r;\n  }\n\n  // js/workers/worldgen.worker.js\n  function collectBuffers(world) {\n    const seen = /* @__PURE__ */ new Set(), list = [];\n    const add = (o) => {\n      for (const v of Object.values(o)) if (ArrayBuffer.isView(v) && !seen.has(v.buffer)) {\n        seen.add(v.buffer);\n        list.push(v.buffer);\n      }\n    };\n    add(world.mesh);\n    add(world.cell);\n    return list;\n  }\n  self.onmessage = (e) => {\n    const m = e.data;\n    if (!m || m.type !== "generate") return;\n    try {\n      const r = generateWorldChecked(m.spec, { onProgress: (p) => self.postMessage({ type: "progress", ...p }) }, m.maxAttempts ?? 4);\n      r.world.generation = { seedUsed: r.seedUsed, attempts: r.attempts, rejected: r.rejected };\n      self.postMessage({ type: "done", world: r.world }, collectBuffers(r.world));\n    } catch (err) {\n      self.postMessage({ type: "error", message: err && err.message ? err.message : String(err) });\n    }\n  };\n})();\n';
 
+  // js/ui/v53/ui-state.js
+  function createUiState(initial = {}) {
+    let s = {
+      domain: "world",
+      // 左ハブの領域 id（domains.js）
+      selection: null,
+      // { kind, id } 右パネルに出す対象
+      trail: [],
+      // 右パネルの「戻る」用の履歴
+      panelOpen: true,
+      hubOpen: false,
+      startFlow: false,
+      // 開始フローを表示中か
+      toasts: [],
+      // 通常通知（通知カード）
+      majorQueue: [],
+      // 確認待ちの重大イベント（先頭が表示中）
+      resumeAfterMajor: false,
+      // 重大イベントで止める前に時間が動いていたか
+      listFilter: {},
+      // 領域ごとの検索語・絞り込み { [domain]: { query, filter, sort } }
+      settings: { showToasts: true, reduceMotion: false },
+      ...initial
+    };
+    const subs = /* @__PURE__ */ new Set();
+    const emit = (prev) => {
+      for (const f of subs) f(s, prev);
+    };
+    return {
+      get: () => s,
+      subscribe(fn) {
+        subs.add(fn);
+        return () => subs.delete(fn);
+      },
+      set(patch) {
+        const prev = s;
+        s = { ...s, ...patch };
+        emit(prev);
+      },
+      /** 右パネルの対象を変える。同じ対象は積まない */
+      select(sel, { domain = null } = {}) {
+        const prev = s, cur = s.selection;
+        const same = cur && sel && cur.kind === sel.kind && cur.id === sel.id;
+        const trail = cur && !same && sel ? [...s.trail, cur].slice(-30) : sel ? s.trail : [];
+        s = { ...s, selection: sel, trail, panelOpen: sel ? true : s.panelOpen, ...domain ? { domain } : {} };
+        emit(prev);
+      },
+      back() {
+        if (!s.trail.length) return false;
+        const prev = s, trail = s.trail.slice(0, -1), selection = s.trail.at(-1);
+        s = { ...s, selection, trail };
+        emit(prev);
+        return true;
+      },
+      setFilter(domain, patch) {
+        this.set({ listFilter: { ...s.listFilter, [domain]: { ...s.listFilter[domain] ?? {}, ...patch } } });
+      }
+    };
+  }
+
+  // js/ui/v53/format.js
+  var monthOf = (year, month = 1) => year * 12 + (month - 1);
+  var yearOfMonth = (mi2) => Math.floor(mi2 / 12);
+  var monthNumber = (mi2) => (mi2 % 12 + 12) % 12 + 1;
+  var fmtMonth = (mi2) => mi2 == null || !Number.isFinite(mi2) ? "\u2014" : `${yearOfMonth(mi2)}\u5E74${monthNumber(mi2)}\u6708`;
+  var fmtYear = (mi2) => mi2 == null || !Number.isFinite(mi2) ? "\u2014" : `${yearOfMonth(mi2)}\u5E74`;
+  function fmtNum(n) {
+    if (n == null || !Number.isFinite(n)) return "\u2014";
+    const a = Math.abs(n);
+    if (a >= 1e8) return `${(n / 1e8).toFixed(a >= 1e9 ? 0 : 1).replace(/\.0$/, "")}\u5104`;
+    if (a >= 1e4) return `${(n / 1e4).toFixed(a >= 1e5 ? 0 : 1).replace(/\.0$/, "")}\u4E07`;
+    return Math.round(n).toLocaleString("ja-JP");
+  }
+  var fmtPct = (x, digits = 0) => x == null || !Number.isFinite(x) ? "\u2014" : `${(x * 100).toFixed(digits)}%`;
+  var fmtBytes = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(2)} GB` : n >= 1e6 ? `${(n / 1e6).toFixed(1)} MB` : n >= 1e3 ? `${(n / 1e3).toFixed(0)} KB` : `${n} B`;
+  var clamp25 = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+
+  // js/ui/v53/impact.js
+  var num2 = (x) => Number.isFinite(x) ? x : 0;
+  var MAJOR_THRESHOLD = 1;
+  var NOTABLE_THRESHOLD = 0.45;
+  var BASE_SCORE = Object.freeze({
+    state_formed: 0.35,
+    state_dissolved: 0.45,
+    war_declared: 0.3,
+    war_ended: 0.3,
+    disaster_struck: 0.15,
+    famine: 0.1,
+    climate_shift: 0.2,
+    conquest: 0.25,
+    territory_occupied: 0.15,
+    tech_discovered: 0.1,
+    tech_transferred: 0.05,
+    tech_lost: 0.2,
+    religion_founded: 0.15,
+    magic_org_founded: 0.2,
+    magic_incident: 0.2,
+    treaty_signed: 0.1,
+    leader_succession: 0.05
+  });
+  var IMPACT_WEIGHTS = Object.freeze({
+    popLoss: 6,
+    // 世界人口に対する被害割合（5% で +0.3）
+    territory: 3,
+    // 世界の陸地に対する、領土が動いた割合
+    actorPop: 2.5,
+    // 関与主体の人口が世界人口に占める割合
+    actorCount: 1,
+    // 関与国数 / 存続国数（上限 1 で打ち切り）
+    ripple: 0.08,
+    // 後続への波及（直接の結果の件数。5 件で打ち切り）
+    player: 0.45
+    // プレイヤー国家が当事者
+  });
+  function evaluateImpact(ev, scale = {}, { threshold = MAJOR_THRESHOLD, weights = IMPACT_WEIGHTS, base = BASE_SCORE } = {}) {
+    const imp = ev?.impact ?? {}, reasons = [];
+    const add2 = (key3, label3, value) => {
+      if (value > 5e-4) reasons.push({ key: key3, label: label3, value: Math.round(value * 1e3) / 1e3 });
+      return value;
+    };
+    let score = add2("kind", "\u51FA\u6765\u4E8B\u306E\u7A2E\u985E", base[ev?.kind] ?? 0.05);
+    score += add2("popLoss", "\u4EBA\u53E3\u306E\u88AB\u5BB3", weights.popLoss * clamp25(num2(imp.popLossShare), 0, 1));
+    score += add2("territory", "\u9818\u571F\u306E\u5909\u52D5", weights.territory * clamp25(num2(imp.territoryShare), 0, 1));
+    score += add2("actorPop", "\u95A2\u4E0E\u3057\u305F\u56FD\u306E\u898F\u6A21", weights.actorPop * clamp25(num2(imp.actorPopShare), 0, 1));
+    const states = Math.max(1, num2(scale.states) || 1);
+    score += add2("actorCount", "\u95A2\u4E0E\u56FD\u306E\u6570", weights.actorCount * clamp25(num2(imp.actorCount) / states, 0, 1));
+    score += add2("ripple", "\u5F8C\u7D9A\u3078\u306E\u6CE2\u53CA", weights.ripple * clamp25(num2(imp.ripple), 0, 5));
+    score += add2("player", "\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u5BB6\u304C\u5F53\u4E8B\u8005", imp.player ? weights.player : 0);
+    score = Math.round(score * 1e3) / 1e3;
+    return { score, major: score >= threshold, notable: score >= NOTABLE_THRESHOLD, reasons };
+  }
+  var TIER_LABEL2 = Object.freeze({ large: "\u5927", mid: "\u4E2D", small: "\u5C0F" });
+
+  // js/ui/v53/categories.js
+  var CATEGORIES = Object.freeze([
+    { id: "state", label: "\u56FD\u5BB6", tone: "accent", test: /^state_|^leader_|^group_joined_state|^conquest|^territory_/ },
+    { id: "war", label: "\u6226\u4E89", tone: "danger", test: /^war_|^battle_|^campaign_|^ally_joined/ },
+    { id: "diplomacy", label: "\u5916\u4EA4", tone: "info", test: /^treaty_|^diplomacy_|^demand_/ },
+    { id: "disaster", label: "\u707D\u5BB3", tone: "warn", test: /^disaster_|^famine|^climate_|^instability/ },
+    { id: "tech", label: "\u6280\u8853", tone: "ally", test: /^tech_/ },
+    { id: "culture", label: "\u6587\u5316\u30FB\u5B97\u6559", tone: "info", test: /^culture_|^language_|^religion_|^cohort_/ },
+    { id: "magic", label: "\u9B54\u6CD5", tone: "accent", test: /^magic_/ },
+    { id: "society", label: "\u793E\u4F1A", tone: "muted", test: /^group_|^settlement_|^subsistence_/ }
+  ]);
+  var FALLBACK = Object.freeze({ id: "record", label: "\u8A18\u9332", tone: "muted" });
+  var categoryOf2 = (kind) => CATEGORIES.find((c) => c.test.test(String(kind ?? ""))) ?? FALLBACK;
+  var categoryById = (id) => CATEGORIES.find((c) => c.id === id) ?? FALLBACK;
+  function countByCategory(events) {
+    const m = /* @__PURE__ */ new Map();
+    for (const e of events) {
+      const c = categoryOf2(e.kind);
+      m.set(c.id, (m.get(c.id) ?? 0) + 1);
+    }
+    return [...m].map(([id, n]) => ({ id, label: categoryById(id).label, n })).sort((a, b) => b.n - a.n);
+  }
+
+  // js/ui/v53/notifications.js
+  function createNotifier({ adapter, ui, schedule = (f, ms) => setTimeout(f, ms), cancel = (t) => clearTimeout(t), toastMs = 6e3, summaryMs = 12e3, maxToasts = 3, summaryThreshold = 4, pollMs = 500, threshold } = {}) {
+    let seq = 0, pollTimer = null;
+    const timers = /* @__PURE__ */ new Map();
+    const opts = threshold == null ? void 0 : { threshold };
+    const setToasts = (list) => ui.set({ toasts: list });
+    function addToast(t, ms) {
+      const toast = { ...t, key: `t${++seq}` };
+      setToasts([toast, ...ui.get().toasts].slice(0, maxToasts + 1));
+      timers.set(toast.key, schedule(() => dismissToast(toast.key), ms));
+      return toast;
+    }
+    function dismissToast(key3) {
+      cancel(timers.get(key3));
+      timers.delete(key3);
+      setToasts(ui.get().toasts.filter((t) => t.key !== key3));
+    }
+    const held = { events: [] };
+    function release() {
+      const list = held.events;
+      held.events = [];
+      if (!list.length || !ui.get().settings.showToasts) return;
+      const months = list.map((e) => e.month);
+      addToast({ type: "summary", total: list.length, majorCount: 0, categories: countByCategory(list), fromMonth: Math.min(...months), toMonth: Math.max(...months) }, summaryMs);
+    }
+    function ingest(events) {
+      if (!events?.length) return { major: [], notable: [], minor: [] };
+      if (ui.get().startFlow) {
+        held.events.push(...events.map((e) => ({ month: e.month, kind: e.kind })));
+        if (held.events.length > 5e3) held.events.splice(0, held.events.length - 5e3);
+        return { major: [], notable: [], minor: [], held: true };
+      }
+      const scale = adapter.worldScale();
+      const major = [], notable = [], minor = [];
+      for (const e of events) {
+        const r = evaluateImpact(e, scale, opts);
+        const ev = { ...e, impactResult: r };
+        (r.major ? major : r.notable ? notable : minor).push(ev);
+      }
+      if (major.length) {
+        const known = new Set(ui.get().majorQueue.map((x) => x.id));
+        const fresh2 = major.filter((e) => !known.has(e.id));
+        if (fresh2.length) {
+          const wasEmpty = ui.get().majorQueue.length === 0;
+          if (wasEmpty) ui.set({ resumeAfterMajor: adapter.time.isRunning() });
+          if (adapter.time.isRunning()) adapter.time.stop();
+          ui.set({ majorQueue: [...ui.get().majorQueue, ...fresh2] });
+        }
+      }
+      if (ui.get().settings.showToasts) {
+        const rest = [...notable, ...minor], lo = Math.min(...rest.map((e) => e.month)), hi = Math.max(...rest.map((e) => e.month));
+        if (notable.length > summaryThreshold || rest.length > summaryThreshold * 3) {
+          addToast({ type: "summary", total: rest.length + major.length, majorCount: major.length, categories: countByCategory([...rest, ...major]), fromMonth: lo, toMonth: hi }, summaryMs);
+        } else {
+          for (const e of notable) addToast({ type: "event", eventId: e.id, title: e.title, month: e.month, kind: e.kind, detail: e.detail ?? "", causeText: e.causeText ?? "" }, toastMs);
+        }
+      }
+      return { major, notable, minor };
+    }
+    function poll() {
+      return ingest(adapter.newEvents());
+    }
+    function confirmMajor({ resume = false } = {}) {
+      const q2 = ui.get().majorQueue;
+      if (!q2.length) return null;
+      const done = q2[0], rest = q2.slice(1);
+      ui.set({ majorQueue: rest });
+      if (!rest.length && resume && ui.get().resumeAfterMajor && !adapter.meta().past) adapter.time.start();
+      if (!rest.length) ui.set({ resumeAfterMajor: false });
+      return done;
+    }
+    return {
+      ingest,
+      poll,
+      dismissToast,
+      confirmMajor,
+      release,
+      start() {
+        if (pollTimer == null) pollTimer = setInterval(poll, pollMs);
+      },
+      stop() {
+        if (pollTimer != null) {
+          clearInterval(pollTimer);
+          pollTimer = null;
+        }
+      },
+      dispose() {
+        this.stop();
+        for (const t of timers.values()) cancel(t);
+        timers.clear();
+      }
+    };
+  }
+
+  // js/ui/v53/dom.js
+  function h(tag, props = null, ...kids) {
+    const el2 = document.createElement(tag);
+    if (props) {
+      for (const [k, v] of Object.entries(props)) {
+        if (v == null || v === false) continue;
+        if (k === "class") el2.className = v;
+        else if (k === "text") el2.textContent = v;
+        else if (k === "dataset") Object.assign(el2.dataset, v);
+        else if (k === "style" && typeof v === "object") Object.assign(el2.style, v);
+        else if (k.length > 2 && k.startsWith("on") && typeof v === "function") el2.addEventListener(k.slice(2).toLowerCase(), v);
+        else if (v === true) el2.setAttribute(k, "");
+        else el2.setAttribute(k, String(v));
+      }
+    }
+    append(el2, kids);
+    return el2;
+  }
+  function append(el2, kids) {
+    for (const k of kids.flat(Infinity)) {
+      if (k == null || k === false) continue;
+      el2.append(k instanceof Node ? k : document.createTextNode(String(k)));
+    }
+    return el2;
+  }
+  var clear = (el2) => {
+    el2.replaceChildren();
+    return el2;
+  };
+
+  // js/ui/v53/domains.js
+  var DOMAINS = Object.freeze([
+    { id: "world", glyph: "\u4E16", label: "\u4E16\u754C", icon: "terrain", view: "world", tip: "\u4E16\u754C\u306E\u6982\u8981\u30FB\u30EC\u30A4\u30E4\u30FC\u30FB\u65B0\u3057\u3044\u4E16\u754C\u30FB\u30D5\u30A1\u30A4\u30EB\u3092\u958B\u304F" },
+    { id: "state", glyph: "\u56FD", label: "\u56FD\u5BB6", icon: "state", list: "state", tip: "\u56FD\u5BB6\u306E\u4E00\u89A7\u3068\u8A73\u7D30" },
+    { id: "diplomacy", glyph: "\u5916", label: "\u5916\u4EA4", icon: "diplomacy", list: "treaty", tip: "\u6761\u7D04\u30FB\u540C\u76DF\u30FB\u95A2\u4FC2" },
+    { id: "war", glyph: "\u8ECD", label: "\u6226\u4E89", icon: "war", list: "war", badge: "wars", tip: "\u500B\u3005\u306E\u6226\u4E89\uFF08\u6226\u4E89\u306E\u5BB6\u65CF\u5316\u306F\u3057\u306A\u3044\uFF09" },
+    { id: "economy", glyph: "\u653F", label: "\u5185\u653F\u30FB\u7D4C\u6E08", icon: "economy", list: "economy", tip: "\u8CA1\u653F\u30FB\u751F\u7523\u30FB\u4EA4\u6613\u30FB\u5099\u84C4" },
+    { id: "tech", glyph: "\u6280", label: "\u6280\u8853", icon: "tech", list: "tech", tip: "\u6280\u8853\u306E\u767A\u898B\u30FB\u4F1D\u64AD\u30FB\u5B9F\u7528\u5316\u30FB\u666E\u53CA" },
+    { id: "culture", glyph: "\u6587", label: "\u6587\u5316\u30FB\u5B97\u6559", icon: "culture", list: "culture", tip: "\u6587\u5316\u30FB\u8A00\u8A9E\u30FB\u5B97\u6559" },
+    { id: "magic", glyph: "\u9B54", label: "\u9B54\u6CD5", icon: "magic", list: "magic", tip: "\u9B54\u6CD5\u306E\u4E3B\u4F53\u30FB\u7D44\u7E54\u30FB\u7D99\u627F" },
+    { id: "history", glyph: "\u53F2", label: "\u6B74\u53F2\u7814\u7A76", icon: "timeline", list: "event", tip: "\u51FA\u6765\u4E8B\u30FBAI\u5224\u65AD\u30FB\u56E0\u679C\u3092\u8FBF\u308B" },
+    { id: "export", glyph: "\u51FA", label: "\u51FA\u529B", icon: "export", view: "export", tip: "Chronicle\u30FB.ahmap\u30FBObsidian\u30FBPNG" },
+    { id: "settings", glyph: "\u8A2D", label: "\u8A2D\u5B9A", icon: "settings", view: "settings", tip: "\u8868\u793A\u30FB\u64CD\u4F5C\u306E\u8A2D\u5B9A" }
+  ]);
+  var domainById = (id) => DOMAINS.find((d) => d.id === id) ?? null;
+  var KIND_DOMAIN = Object.freeze({ state: "state", war: "war", event: "history", treaty: "diplomacy", economy: "economy", tech: "tech", culture: "culture", religion: "culture", language: "culture", magic: "magic", decision: "history" });
+  var LEGACY_MIGRATION = Object.freeze([
+    { legacy: "btn-open", to: "world", disposition: "moved", note: "\u4E16\u754C\u306E\u6982\u8981\u306E\u300C\u30D5\u30A1\u30A4\u30EB\u3092\u958B\u304F\u300D" },
+    { legacy: "btn-save", to: "export", disposition: "moved", note: "\u51FA\u529B\u306E .ahmap\uFF08\u5B8C\u5168\u4FDD\u5B58\uFF09" },
+    { legacy: "export", to: "export", disposition: "moved", note: "\u51FA\u529B\u306E4\u9805\u76EE" },
+    { legacy: "btn-edit-mode", to: "world", disposition: "moved", note: "\u4E16\u754C\u306E\u6982\u8981\u306E\u300C\u5730\u56F3\u7DE8\u96C6\u300D\uFF08\u7DE8\u96C6\u30C4\u30FC\u30EB\u672C\u4F53\u306F v5.2 \u306E\u63CF\u753B\u57FA\u76E4\u306B\u4F9D\u5B58\u3059\u308B\u305F\u3081\u5165\u53E3\u306E\u307F\uFF09" },
+    { legacy: "hub-layers", to: "world", disposition: "moved", note: "\u5730\u56F3\u5DE6\u4E0A\u306E\u30EC\u30A4\u30E4\u30FC\u5217\uFF08\u5165\u53E3\u306F\u3053\u30531\u304B\u6240\uFF09" },
+    { legacy: "btn-fit", to: "world", disposition: "moved", note: "\u4E16\u754C\u306E\u6982\u8981\u306E\u300C\u5168\u4F53\u8868\u793A\u300D" },
+    { legacy: "btn-new-world", to: "world", disposition: "moved", note: "\u958B\u59CB\u30D5\u30ED\u30FC\uFF08\u4E16\u754C\u306E\u751F\u6210\u2192\u521D\u671F\u96C6\u56E3\u2192\u81EA\u52D5\u9032\u884C\u2192\u56FD\u5BB6\u6210\u7ACB\uFF09" },
+    { legacy: "civ", to: null, disposition: "retired", note: "\u72EC\u7ACB\u3057\u305F\u4EBA\u53E3\u96C6\u56E3\u30A6\u30A3\u30F3\u30C9\u30A6\u306F\u5EC3\u6B62\uFF08\u6307\u793A\u66F8 5.3\uFF09\u3002\u5185\u90E8\u306E\u96C6\u56E3\u30E2\u30C7\u30EB\u30FB\u5C65\u6B74\u306F\u524A\u9664\u3057\u306A\u3044" },
+    { legacy: "nation", to: "state", disposition: "moved" },
+    { legacy: "list-culture", to: "culture", disposition: "moved" },
+    { legacy: "list-religion", to: "culture", disposition: "moved" },
+    { legacy: "economy", to: "economy", disposition: "moved" },
+    { legacy: "diplomacy", to: "diplomacy", disposition: "moved" },
+    { legacy: "war", to: "war", disposition: "moved" },
+    { legacy: "history", to: "history", disposition: "moved", note: "\u72EC\u7ACB\u3057\u305F\u6B74\u53F2\u30D3\u30E5\u30FC\u30A2\u306F\u4E2D\u6838\u306B\u3057\u306A\u3044\u3002\u6642\u9593\u8EF8\uFF0B\u5730\u56F3\uFF0B\u53F3\u30D1\u30CD\u30EB\uFF0B\u6B74\u53F2\u7814\u7A76\u306E\u4E00\u89A7\u3067\u4EE3\u66FF\uFF08Ctrl+K \u306E\u5168\u4F53\u691C\u7D22\u306F\u63A1\u7528\u3057\u306A\u3044\uFF09" },
+    { legacy: "timeline", to: "history", disposition: "moved", note: "\u5E74\u8868\u306F\u6B74\u53F2\u7814\u7A76\u306E\u51FA\u6765\u4E8B\u4E00\u89A7\u3068\u4E0B\u90E8\u306E\u6642\u9593\u8EF8\u306B\u7D71\u5408" },
+    { legacy: "settings", to: "settings", disposition: "moved", note: "\u30D0\u30E9\u30F3\u30B9\u8ABF\u6574UI\u306F\u5EC3\u6B62\uFF08\u6307\u793A\u66F8 5.3\uFF09\u3002\u6570\u5024\u8ABF\u6574\u306F\u30B3\u30FC\u30C9\u30FB\u691C\u8A3C\u7528\u30C4\u30FC\u30EB\u3067\u7BA1\u7406" }
+  ]);
+
+  // js/ui/v53/hub-nav.js
+  function createHubNav({ ui, adapter }) {
+    const buttons = /* @__PURE__ */ new Map(), badges = /* @__PURE__ */ new Map();
+    const mk3 = (d) => {
+      const badge = d.badge ? h("em", { class: "v53-badge", hidden: true }) : null;
+      if (badge) badges.set(d.badge, badge);
+      const b = h("button", { type: "button", class: "v53-ri", dataset: { domain: d.id }, title: `${d.label} \u2014 ${d.tip}`, "aria-label": d.label }, h("span", { "aria-hidden": "true", text: d.glyph }), badge);
+      b.addEventListener("click", () => ui.set({ domain: d.id, selection: null, trail: [], panelOpen: true, startFlow: false }));
+      buttons.set(d.id, b);
+      return b;
+    };
+    const main = DOMAINS.filter((d) => d.id !== "export" && d.id !== "settings").map(mk3);
+    const util = DOMAINS.filter((d) => d.id === "export" || d.id === "settings").map(mk3);
+    const el2 = h("nav", { class: "v53-rail", "aria-label": "\u9818\u57DF" }, h("div", { class: "v53-logo", "aria-hidden": "true", text: "AH" }), ...main, h("span", { class: "v53-rail-gap" }), ...util);
+    function sync() {
+      const s = ui.get();
+      const active = s.selection ? KIND_DOMAIN[s.selection.kind] ?? s.domain : s.domain;
+      for (const [id, b] of buttons) {
+        const on = id === active && !s.startFlow;
+        b.classList.toggle("on", on);
+        if (on) b.setAttribute("aria-current", "page");
+        else b.removeAttribute("aria-current");
+      }
+      const m = adapter.meta(), w = badges.get("wars");
+      if (w) {
+        w.hidden = !m.wars;
+        w.textContent = String(m.wars);
+      }
+    }
+    ui.subscribe(sync);
+    adapter.subscribe(sync);
+    sync();
+    return { el: el2, sync };
+  }
+
+  // js/ui/v53/virtual-list.js
+  var MAX_PX = 6e6;
+  function createVList({ rowHeight = 48, overscan = 6, maxPx = MAX_PX, getPage, renderRow, onPick = null, label: label3 = "\u4E00\u89A7", empty = "\u8A72\u5F53\u3059\u308B\u3082\u306E\u304C\u3042\u308A\u307E\u305B\u3093" }) {
+    const root = document.createElement("div");
+    root.className = "v53-vlist";
+    root.tabIndex = 0;
+    root.setAttribute("role", "listbox");
+    root.setAttribute("aria-label", label3);
+    const spacer = document.createElement("div");
+    spacer.className = "v53-vlist-spacer";
+    const box = document.createElement("div");
+    box.className = "v53-vlist-rows";
+    const emptyEl = document.createElement("p");
+    emptyEl.className = "v53-empty";
+    emptyEl.textContent = empty;
+    emptyEl.hidden = true;
+    spacer.append(box);
+    root.append(spacer, emptyEl);
+    let total2 = 0, selectedId = null, lastFirst = 0, raf = 0, rows = [], isScaled = false;
+    const vHeight = () => Math.min(total2 * rowHeight, maxPx);
+    function topIndex(vh) {
+      if (!isScaled) return root.scrollTop / rowHeight;
+      const visible = Math.ceil(vh / rowHeight), maxScroll = Math.max(1, vHeight() - vh);
+      return Math.min(1, Math.max(0, root.scrollTop / maxScroll)) * Math.max(0, total2 - visible);
+    }
+    function render() {
+      raf = 0;
+      const vh = root.clientHeight || 400, count = Math.ceil(vh / rowHeight) + overscan * 2;
+      isScaled = total2 * rowHeight > maxPx;
+      let top = topIndex(vh), first = Math.max(0, Math.floor(top) - overscan), page = getPage(first, count);
+      if (page.total !== total2) {
+        total2 = page.total;
+        isScaled = total2 * rowHeight > maxPx;
+        top = Math.min(topIndex(vh), Math.max(0, total2 - 1));
+        first = Math.max(0, Math.floor(top) - overscan);
+        page = getPage(first, count);
+      }
+      total2 = page.total;
+      rows = page.rows;
+      lastFirst = first;
+      spacer.style.height = `${vHeight()}px`;
+      box.style.transform = `translateY(${isScaled ? root.scrollTop + (first - top) * rowHeight : first * rowHeight}px)`;
+      emptyEl.hidden = total2 > 0;
+      box.replaceChildren();
+      page.rows.forEach((r, k) => {
+        const el2 = renderRow(r, first + k);
+        el2.style.height = `${rowHeight}px`;
+        el2.dataset.index = String(first + k);
+        el2.setAttribute("role", "option");
+        const on = r.id != null && String(r.id) === String(selectedId);
+        el2.classList.toggle("on", on);
+        el2.setAttribute("aria-selected", String(on));
+        if (onPick) el2.addEventListener("click", () => {
+          selectedId = r.id;
+          onPick(r, first + k);
+          render();
+        });
+        box.append(el2);
+      });
+    }
+    const schedule = () => {
+      if (raf) return;
+      if (typeof requestAnimationFrame === "function") raf = requestAnimationFrame(render);
+      else render();
+    };
+    root.addEventListener("scroll", schedule);
+    function scrollToIndex(n) {
+      const vh = root.clientHeight || 400, visible = Math.ceil(vh / rowHeight);
+      if (!isScaled) {
+        if (n * rowHeight < root.scrollTop) root.scrollTop = n * rowHeight;
+        else if ((n + 1) * rowHeight > root.scrollTop + vh) root.scrollTop = (n + 1) * rowHeight - vh;
+        return;
+      }
+      const top = topIndex(vh);
+      if (n >= top && n + 1 <= top + visible) return;
+      const want = Math.min(Math.max(0, n - Math.floor(visible / 2)), Math.max(0, total2 - visible));
+      root.scrollTop = want / Math.max(1, total2 - visible) * Math.max(1, vHeight() - vh);
+    }
+    root.addEventListener("keydown", (e) => {
+      if (!onPick || e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      e.preventDefault();
+      const idx = rows.findIndex((r4) => String(r4.id) === String(selectedId));
+      const n = Math.max(0, Math.min(total2 - 1, (idx < 0 ? lastFirst : lastFirst + idx) + (e.key === "ArrowDown" ? 1 : -1)));
+      const r = getPage(n, 1).rows[0];
+      if (!r) return;
+      selectedId = r.id;
+      onPick(r, n);
+      scrollToIndex(n);
+      render();
+    });
+    return {
+      el: root,
+      refresh: render,
+      reset() {
+        root.scrollTop = 0;
+        render();
+      },
+      setSelected(id) {
+        selectedId = id;
+        render();
+      },
+      total: () => total2,
+      renderedCount: () => box.children.length,
+      scaled: () => isScaled,
+      scrollToIndex,
+      /** 全体の割合（0〜1）の位置へ移る。打ち切り時のおおまかなジャンプ用 */
+      scrollToFraction(f) {
+        const vh = root.clientHeight || 400;
+        root.scrollTop = Math.min(1, Math.max(0, f)) * Math.max(0, vHeight() - vh);
+        render();
+      }
+    };
+  }
+
+  // js/ui/v53/entity-list.js
+  var FILTERS = {
+    state: { label: "\u72B6\u614B", options: [["", "\u5B58\u7D9A\u4E2D"], ["dead", "\u6EC5\u4EA1"]] },
+    war: { label: "\u72B6\u614B", options: [["active", "\u7D99\u7D9A\u4E2D"], ["", "\u3059\u3079\u3066"], ["ended", "\u7D42\u7D50"]] },
+    // 既定は継続中（積もった戦争の中から、まず今のものを見る）
+    event: { label: "\u5206\u985E", options: [["", "\u3059\u3079\u3066"], ...CATEGORIES.map((c) => [c.id, c.label])] }
+  };
+  var RANGES = { war: [["", "\u5168\u671F\u9593"], ["10", "\u76F4\u8FD110\u5E74"], ["100", "\u76F4\u8FD1100\u5E74"], ["1000", "\u76F4\u8FD11000\u5E74"]], event: [["", "\u5168\u671F\u9593"], ["10", "\u76F4\u8FD110\u5E74"], ["100", "\u76F4\u8FD1100\u5E74"], ["1000", "\u76F4\u8FD11000\u5E74"]] };
+  var SORTS = { state: [["pop", "\u4EBA\u53E3\u9806"], ["name", "\u540D\u524D\u9806"]] };
+  function createEntityList({ adapter, ui, domain, debounceMs = 150 }) {
+    const kind = domain.list;
+    const saved = ui.get().listFilter[domain.id] ?? {};
+    let query = saved.query ?? "", filter = saved.filter ?? (kind === "war" ? "active" : ""), sort = saved.sort ?? "";
+    let entity = saved.entity ?? "", entityLabel = saved.entityLabel ?? "", range = saved.range ?? "", pollTimer = 0;
+    let memoKey = "", memo2 = null;
+    const search = h("input", { type: "search", class: "v53-input", placeholder: `${domain.label}\u3092\u691C\u7D22`, "aria-label": `${domain.label}\u3092\u691C\u7D22`, value: query });
+    const fcfg = FILTERS[kind];
+    const fsel = fcfg ? h("select", { class: "v53-select", "aria-label": fcfg.label }, fcfg.options.map(([v, t]) => h("option", { value: v, selected: v === filter }, t))) : null;
+    const scfg = SORTS[kind];
+    const ssel = scfg ? h("select", { class: "v53-select", "aria-label": "\u4E26\u3073\u9806" }, scfg.map(([v, t]) => h("option", { value: v, selected: v === sort }, t))) : null;
+    const rcfg = RANGES[kind];
+    const rsel = rcfg ? h("select", { class: "v53-select", "aria-label": "\u671F\u9593" }, rcfg.map(([v, t]) => h("option", { value: v, selected: v === range }, t))) : null;
+    const chip = h("p", { class: "v53-entity-chip", hidden: true });
+    const count = h("p", { class: "v53-list-count", "aria-live": "polite" });
+    const note = h("p", { class: "v53-hint", hidden: true });
+    function page(offset, limit) {
+      const m = adapter.meta();
+      const key3 = `${kind}|${query}|${filter}|${sort}|${entity}|${range}|${offset}|${limit}|${m.now}|${m.view}|${m.events}|${m.states}|${m.wars}`;
+      if (key3 === memoKey && memo2) return memo2;
+      const res = adapter.list(kind, { query, filter, sort, offset, limit, entity, range });
+      if (res.pending) {
+        memoKey = "";
+        memo2 = null;
+        clearTimeout(pollTimer);
+        pollTimer = setTimeout(() => vl.refresh(), 40);
+      } else {
+        memoKey = key3;
+        memo2 = res;
+      }
+      count.textContent = res.unsupported ? "" : res.pending ? `\u691C\u7D22\u4E2D\u2026 \u3053\u3053\u307E\u3067 ${res.total.toLocaleString("ja-JP")} \u4EF6` : `\u5168 ${res.total.toLocaleString("ja-JP")} \u4EF6`;
+      note.hidden = !res.unsupported;
+      if (res.unsupported) note.textContent = `${domain.label}\u306E\u60C5\u5831\u306F\u3001\u3053\u306E\u7248\u3067\u306F\u307E\u3060\u672C\u4F53\u306B\u63A5\u7D9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093\u3002`;
+      return res;
+    }
+    const vl = createVList({
+      label: `${domain.label}\u306E\u4E00\u89A7`,
+      rowHeight: 52,
+      getPage: page,
+      renderRow: (r) => h(
+        "div",
+        { class: `v53-row${r.tone ? " tone-" + r.tone : ""}`, tabindex: -1 },
+        h("div", { class: "v53-row-main" }, h("b", { text: r.title }), r.sub ? h("span", { text: r.sub }) : null),
+        r.tag ? h("span", { class: "v53-chip", text: r.tag }) : null
+      ),
+      onPick: (r) => ui.select({ kind, id: r.id }, { domain: domain.id }),
+      empty: `${domain.label}\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093`
+    });
+    let timer = 0;
+    const showChip = () => {
+      chip.hidden = !entity;
+      chip.replaceChildren();
+      if (!entity) return;
+      chip.append(h("span", { text: `${entityLabel || entity} \u306B\u95A2\u308F\u308B\u3082\u306E\u3060\u3051` }), h("button", { type: "button", class: "v53-btn v53-btn-sm", text: "\u89E3\u9664 \xD7", onclick: () => {
+        entity = "";
+        entityLabel = "";
+        apply();
+      } }));
+    };
+    const apply = () => {
+      memoKey = "";
+      ui.setFilter(domain.id, { query, filter, sort, entity, entityLabel, range });
+      showChip();
+      vl.reset();
+    };
+    rsel?.addEventListener("change", () => {
+      range = rsel.value;
+      apply();
+    });
+    const off = ui.subscribe((s) => {
+      const f = s.listFilter[domain.id] ?? {};
+      if ((f.entity ?? "") !== entity) {
+        entity = f.entity ?? "";
+        entityLabel = f.entityLabel ?? "";
+        showChip();
+        memoKey = "";
+        vl.reset();
+      }
+    });
+    search.addEventListener("input", () => {
+      query = search.value;
+      clearTimeout(timer);
+      if (debounceMs <= 0) apply();
+      else timer = setTimeout(apply, debounceMs);
+    });
+    fsel?.addEventListener("change", () => {
+      filter = fsel.value;
+      apply();
+    });
+    ssel?.addEventListener("change", () => {
+      sort = ssel.value;
+      apply();
+    });
+    const el2 = h(
+      "section",
+      { class: "v53-list", "aria-label": `${domain.label}\u306E\u4E00\u89A7` },
+      h("div", { class: "v53-list-tools" }, search, fsel, rsel, ssel),
+      chip,
+      count,
+      note,
+      vl.el
+    );
+    return {
+      el: el2,
+      vlist: vl,
+      refresh() {
+        memoKey = "";
+        vl.refresh();
+      },
+      mounted() {
+        showChip();
+        vl.refresh();
+      },
+      dispose() {
+        clearTimeout(timer);
+        clearTimeout(pollTimer);
+        off();
+      }
+    };
+  }
+
+  // js/ui/v53/export/obsidian-split.js
+  var DEFAULT_PART_BYTES = 64 * 1024 * 1024;
+  var DEFAULT_PART_FILES = 2e4;
+  var enc6 = new TextEncoder();
+  var rawBytes = (d) => typeof d === "string" ? enc6.encode(d) : d;
+  var pad = (n, w = 3) => String(n).padStart(w, "0");
+  async function* splitIntoParts(files, { root = "\u4E16\u754C", zip, maxPartBytes = DEFAULT_PART_BYTES, maxPartFiles = DEFAULT_PART_FILES, hash: hash2 = null, signal = null, onProgress = null } = {}) {
+    if (typeof zip !== "function") throw new Error("splitIntoParts: zip \u304C\u5FC5\u8981\u3067\u3059");
+    if (maxPartBytes < 1024 || maxPartFiles < 1) throw new Error("splitIntoParts: \u4E0A\u9650\u304C\u5C0F\u3055\u3059\u304E\u307E\u3059");
+    const parts = [];
+    const seen = /* @__PURE__ */ new Set();
+    let cur = [], curBytes = 0, entries = [], total2 = 0, totalBytes = 0, index = 0;
+    const flush = async (isLast, extraFiles = []) => {
+      index++;
+      const n = pad(index);
+      const summary = { index, name: `${root}_obsidian_${n}.zip`, fileCount: entries.length, rawBytes: curBytes, first: entries[0]?.path ?? null, last: entries.at(-1)?.path ?? null };
+      const partManifest = { format: "alterhistory-obsidian-part", part: index, final: isLast, fileCount: entries.length, rawBytes: curBytes, first: summary.first, last: summary.last, files: entries };
+      const out = [...cur, ...extraFiles, { path: `${root}/_parts/part-${n}.json`, data: JSON.stringify(partManifest) }];
+      if (isLast) {
+        const idx = { format: "alterhistory-obsidian-index", parts: parts.length + 1, fileCount: total2, rawBytes: totalBytes, partSummaries: [...parts, summary] };
+        out.push({ path: `${root}/_parts/index.json`, data: JSON.stringify(idx, null, 1) });
+      }
+      const bytes = await zip(out);
+      parts.push(summary);
+      const part2 = { ...summary, bytes, zipBytes: bytes.length, final: isLast, entries };
+      cur = [];
+      curBytes = 0;
+      entries = [];
+      return part2;
+    };
+    for await (const f of files) {
+      if (signal?.aborted) {
+        const e = new Error("\u4E2D\u65AD\u3057\u307E\u3057\u305F");
+        e.name = "AbortError";
+        throw e;
+      }
+      if (seen.has(f.path)) throw new Error(`\u540C\u3058\u30D1\u30B9\u304C 2 \u56DE\u51FA\u307E\u3057\u305F: ${f.path}`);
+      seen.add(f.path);
+      const raw = rawBytes(f.data);
+      const entry = { path: f.path, bytes: raw.length, sha256: hash2 ? await hash2(raw) : null };
+      if (cur.length && (curBytes + raw.length > maxPartBytes || cur.length >= maxPartFiles)) yield await flush(false);
+      cur.push({ path: f.path, data: raw });
+      entries.push(entry);
+      curBytes += raw.length;
+      total2++;
+      totalBytes += raw.length;
+      onProgress?.({ files: total2, parts: index, bytes: totalBytes });
+    }
+    yield await flush(true);
+  }
+  function verifyParts(parts, { expectedFiles = null } = {}) {
+    const problems = [];
+    if (!parts.length) return ["\u30D1\u30FC\u30C8\u304C\u3042\u308A\u307E\u305B\u3093"];
+    parts.forEach((p, i) => {
+      if (p.index !== i + 1) problems.push(`\u9023\u756A\u304C\u98DB\u3093\u3067\u3044\u307E\u3059: ${i + 1} \u756A\u76EE\u306E\u30D1\u30FC\u30C8\u304C ${p.index} \u756A`);
+    });
+    if (!parts.at(-1).final) problems.push("\u6700\u5F8C\u306E\u30D1\u30FC\u30C8\u306B\u6700\u7D42\u5370\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u9014\u4E2D\u3067\u5207\u308C\u305F\u53EF\u80FD\u6027\uFF09");
+    if (parts.slice(0, -1).some((p) => p.final)) problems.push("\u6700\u5F8C\u4EE5\u5916\u306E\u30D1\u30FC\u30C8\u306B\u6700\u7D42\u5370\u304C\u3042\u308A\u307E\u3059");
+    const seen = /* @__PURE__ */ new Map();
+    let total2 = 0;
+    for (const p of parts) {
+      if (!p.entries) {
+        total2 += p.fileCount;
+        continue;
+      }
+      if (p.fileCount !== p.entries.length) problems.push(`\u30D1\u30FC\u30C8 ${p.index}: \u4EF6\u6570\u3068\u660E\u7D30\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093`);
+      for (const e of p.entries) {
+        if (seen.has(e.path)) problems.push(`\u91CD\u8907: ${e.path}\uFF08\u30D1\u30FC\u30C8 ${seen.get(e.path)} \u3068 ${p.index}\uFF09`);
+        else seen.set(e.path, p.index);
+        total2++;
+      }
+    }
+    if (expectedFiles != null && total2 !== expectedFiles) problems.push(`\u4EF6\u6570\u304C\u5408\u3044\u307E\u305B\u3093: \u671F\u5F85 ${expectedFiles} \u4EF6\u30FB\u5B9F\u969B ${total2} \u4EF6`);
+    return problems.slice(0, 30);
+  }
+
+  // js/ui/v53/export/png-meta.js
+  var PNG_KINDS = Object.freeze([
+    { id: "current", label: "\u73FE\u5728\u306E\u5730\u56F3", desc: "\u4ECA\u753B\u9762\u306B\u51FA\u3066\u3044\u308B\u30EC\u30A4\u30E4\u30FC\u306E\u307E\u307E\u66F8\u304D\u51FA\u3057\u307E\u3059" },
+    { id: "territory", label: "\u9078\u629E\u5E74\u6708\u306E\u9818\u571F\u56F3", desc: "\u6642\u9593\u8EF8\u3067\u9078\u3093\u3060\u5E74\u6708\u306E\u3001\u5404\u56FD\u306E\u9818\u571F\u3092\u8272\u5206\u3051\u3057\u3066\u66F8\u304D\u51FA\u3057\u307E\u3059" }
+  ]);
+  function describePng({ kind, month, worldName = "", layers = [], projection = "\u5186\u7B52\u56F3\u6CD5\uFF08\u8868\u793A\u7528\u306E\u6295\u5F71\u3002\u30C7\u30FC\u30BF\u306F\u7403\u9762\u4E0A\u306B\u4FDD\u6301\uFF09", legendCount = 0 }) {
+    const k = PNG_KINDS.find((x) => x.id === kind) ?? PNG_KINDS[0];
+    const on = layers.filter((l) => l.on).map((l) => l.label);
+    const lines = [
+      `${worldName || "\u7121\u984C\u306E\u4E16\u754C"} \u2014 ${k.label}${kind === "territory" ? `\uFF08${fmtMonth(month)}\uFF09` : ""}`,
+      kind === "territory" ? `\u5E74\u6708: ${fmtMonth(month)}\u3000\u51E1\u4F8B: \u9818\u571F\u3092\u6301\u3064 ${legendCount} \u56FD` : `\u5E74\u6708: ${fmtMonth(month)}\u3000\u8868\u793A\u30EC\u30A4\u30E4\u30FC: ${on.length ? on.join("\u30FB") : "\u306A\u3057"}`,
+      `\u6295\u5F71: ${projection}`
+    ];
+    return { kind: k.id, label: k.label, month, layers: on, projection, captionLines: lines, summary: lines.slice(1).join(" \uFF0F ") };
+  }
+  function withCaption(srcCanvas, lines, { createCanvas, fontPx = 15, pad: pad2 = 10 } = {}) {
+    const lh = Math.round(fontPx * 1.5), bar2 = lines.length * lh + pad2 * 2;
+    const out = createCanvas(srcCanvas.width, srcCanvas.height + bar2), g = out.getContext("2d");
+    g.drawImage(srcCanvas, 0, 0);
+    g.fillStyle = "#0e1112";
+    g.fillRect(0, srcCanvas.height, out.width, bar2);
+    g.fillStyle = "#e6e4dc";
+    g.font = `${fontPx}px "Noto Sans JP", "Yu Gothic UI", sans-serif`;
+    g.textBaseline = "top";
+    lines.forEach((t, i) => g.fillText(t, pad2, srcCanvas.height + pad2 + i * lh));
+    return out;
+  }
+
+  // js/ui/v53/export-panel.js
+  var PART_SIZES = [[32, "32 MB"], [64, "64 MB\uFF08\u6A19\u6E96\uFF09"], [128, "128 MB"], [256, "256 MB"]];
+  function createExportPanel({ adapter, ui, download }) {
+    const card = (id, title, desc, ...body) => h("section", { class: "v53-card", dataset: { export: id } }, h("h3", { text: title }), h("p", { class: "v53-hint", text: desc }), ...body);
+    const status = (id) => h("p", { class: "v53-export-status", dataset: { status: id }, role: "status", "aria-live": "polite" });
+    let busy = false;
+    const buttons = [];
+    const run = async (st, label3, fn) => {
+      if (busy) return;
+      busy = true;
+      buttons.forEach((b) => {
+        b.disabled = true;
+      });
+      st.textContent = `${label3}\u3092\u4F5C\u6210\u4E2D\u2026`;
+      st.classList.remove("err");
+      try {
+        st.textContent = await fn(st);
+      } catch (e) {
+        st.classList.add("err");
+        st.textContent = e?.name === "AbortError" ? "\u4E2D\u65AD\u3057\u307E\u3057\u305F" : `${label3}\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${e?.message ?? e}`;
+      }
+      busy = false;
+      sync();
+    };
+    const btn2 = (text2, fn, { primary = true, id } = {}) => {
+      const b = h("button", { type: "button", class: `v53-btn${primary ? " primary" : ""}`, dataset: { act: id }, text: text2, onclick: fn });
+      buttons.push(b);
+      return b;
+    };
+    const stC = status("chronicle");
+    const cChron = card(
+      "chronicle",
+      "Chronicle\uFF08.md\uFF09",
+      "\u5E74\u8868\u306B\u52A0\u3048\u3066\u3001\u6587\u660E\u53F2\uFF08\u56FD\u5BB6\u30FB\u6226\u4E89\u30FB\u51FA\u6765\u4E8B\u30FBAI\u5224\u65AD\uFF09\u3092\u542B\u3080\u5E74\u4EE3\u8A18\u3067\u3059\u3002\u4FDD\u5B58\u3055\u308C\u305F\u540D\u79F0\u30FB\u65E5\u4ED8\u30FB\u539F\u56E0\u3092\u305D\u306E\u307E\u307E\u66F8\u304D\u307E\u3059\u3002",
+      btn2("Chronicle \u3092\u66F8\u304D\u51FA\u3059", () => run(stC, "Chronicle", async () => {
+        const r = await adapter.exports.chronicle();
+        download(r.blob, r.name);
+        return `${r.name} \u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\uFF08${fmtBytes(r.blob.size)}\uFF09`;
+      }), { id: "chronicle" }),
+      stC
+    );
+    const stA = status("ahmap");
+    const pastNote = h("p", { class: "v53-hint", hidden: true, text: "\u904E\u53BB\u3092\u95B2\u89A7\u4E2D\u3067\u3082\u3001\u4FDD\u5B58\u3055\u308C\u308B\u306E\u306F\u73FE\u5728\u306E\u4E16\u754C\u306E\u72B6\u614B\u3067\u3059\uFF08\u95B2\u89A7\u4E2D\u306E\u6708\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF09\u3002" });
+    const cAhmap = card(
+      "ahmap",
+      "\u5B8C\u5168\u4FDD\u5B58\uFF08.ahmap\uFF09",
+      "\u4E16\u754C\u3068\u6587\u660E\u53F2\u3092\u3059\u3079\u3066\u4FDD\u6301\u3059\u308B\u6B63\u672C\u306E\u5F62\u5F0F\u3067\u3059\u3002\u3042\u3068\u3067\u958B\u3044\u3066\u7D9A\u304D\u304B\u3089\u518D\u958B\u3067\u304D\u307E\u3059\u3002",
+      pastNote,
+      btn2(".ahmap \u3067\u4FDD\u5B58", () => run(stA, "\u4FDD\u5B58", async () => {
+        const r = await adapter.exports.ahmap();
+        download(r.blob, r.name);
+        return `${r.name} \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F\uFF08${fmtBytes(r.blob.size)}\uFF09`;
+      }), { id: "ahmap" }),
+      stA
+    );
+    const stO = status("obsidian");
+    const scope = h("select", { class: "v53-select", "aria-label": "\u7BC4\u56F2" }, h("option", { value: "all", text: "\u5168\u671F\u9593\u30FB\u5168\u8A18\u9332\uFF08\u6A19\u6E96\uFF09" }), h("option", { value: "range", text: "\u671F\u9593\u3092\u7D5E\u308B" }));
+    const from = h("input", { type: "number", class: "v53-input narrow", "aria-label": "\u958B\u59CB\u5E74", placeholder: "\u958B\u59CB\u5E74" }), to = h("input", { type: "number", class: "v53-input narrow", "aria-label": "\u7D42\u4E86\u5E74", placeholder: "\u7D42\u4E86\u5E74" });
+    const rangeBox = h("div", { class: "v53-range", hidden: true }, from, h("span", { text: "\u5E74\u301C" }), to, h("span", { text: "\u5E74" }));
+    const size = h("select", { class: "v53-select", "aria-label": "1\u30D5\u30A1\u30A4\u30EB\u306E\u5927\u304D\u3055" }, PART_SIZES.map(([v, t]) => h("option", { value: v, selected: v === 64 }, t)));
+    const est = h("p", { class: "v53-hint", dataset: { role: "estimate" } });
+    const partList = h("ul", { class: "v53-parts", dataset: { role: "parts" } });
+    let abort = null;
+    const cancel = h("button", { type: "button", class: "v53-btn", hidden: true, text: "\u4E2D\u65AD", onclick: () => abort?.abort() });
+    const rangeOf = () => scope.value === "range" ? { fromMonth: from.value === "" ? -Infinity : monthOf(Number(from.value), 1), toMonth: to.value === "" ? Infinity : monthOf(Number(to.value), 12) } : {};
+    let estKey = "";
+    const updateEst = (force = false) => {
+      const key3 = `${scope.value}|${from.value}|${to.value}|${adapter.meta().events}`;
+      if (!force && key3 === estKey) return;
+      estKey = key3;
+      try {
+        const e = adapter.exports.obsidianEstimate(rangeOf());
+        est.textContent = `\u66F8\u304D\u51FA\u3059\u5185\u5BB9: \u30CE\u30FC\u30C8\u7D04 ${e.files.toLocaleString("ja-JP")} \u4EF6\uFF08\u51FA\u6765\u4E8B ${e.events.toLocaleString("ja-JP")}\u30FBAI\u5224\u65AD ${e.decisions.toLocaleString("ja-JP")}\uFF09\u3002\u5927\u304D\u3044\u5834\u5408\u306F\u8907\u6570\u306E ZIP \u306B\u81EA\u52D5\u3067\u5206\u5272\u3057\u307E\u3059\u3002`;
+      } catch {
+        est.textContent = "";
+      }
+    };
+    scope.addEventListener("change", () => {
+      rangeBox.hidden = scope.value !== "range";
+      updateEst();
+    });
+    from.addEventListener("input", () => updateEst());
+    to.addEventListener("input", () => updateEst());
+    const cObs = card(
+      "obsidian",
+      "Obsidian\uFF08.zip\uFF09",
+      "\u65E2\u5B9A\u306F\u5168\u671F\u9593\u30FB\u5168\u8A18\u9332\u3067\u3059\u3002\u5DE8\u5927\u306A\u5834\u5408\u306F\u9023\u756A\u3064\u304D\u306E\u8907\u6570 ZIP \u306B\u5206\u3051\u307E\u3059\u3002\u3059\u3079\u3066\u540C\u3058\u30D5\u30A9\u30EB\u30C0\u3078\u5C55\u958B\u3059\u308B\u3068\u30011 \u3064\u306E vault \u306B\u306A\u308A\u307E\u3059\u3002",
+      h("div", { class: "v53-form" }, scope, rangeBox, size),
+      est,
+      h("div", { class: "v53-actions" }, btn2("Obsidian \u3078\u66F8\u304D\u51FA\u3059", () => run(stO, "Obsidian", async (st) => {
+        abort = new AbortController();
+        cancel.hidden = false;
+        partList.replaceChildren();
+        const parts = [];
+        let files = 0;
+        try {
+          for await (const part2 of adapter.exports.obsidian({ ...rangeOf(), maxPartBytes: Number(size.value) * 1024 * 1024, signal: abort.signal, onProgress: (p) => {
+            files = p.files;
+            st.textContent = `\u66F8\u304D\u51FA\u3057\u4E2D\u2026 ${p.files.toLocaleString("ja-JP")} \u30D5\u30A1\u30A4\u30EB\uFF08${p.parts} \u30D1\u30FC\u30C8\u5B8C\u4E86\uFF09`;
+          } })) {
+            download(new Blob([part2.bytes], { type: "application/zip" }), part2.name);
+            const { bytes, entries, ...summary } = part2;
+            parts.push(summary);
+            partList.append(h("li", { text: `${part2.name} \u2014 ${part2.fileCount.toLocaleString("ja-JP")} \u30D5\u30A1\u30A4\u30EB\u30FB${fmtBytes(part2.zipBytes)}` }));
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        } finally {
+          cancel.hidden = true;
+          abort = null;
+        }
+        const problems = verifyParts(parts);
+        const total2 = parts.reduce((a, p) => a + p.fileCount, 0);
+        if (problems.length) {
+          st.classList.add("err");
+          partList.append(...problems.map((p) => h("li", { class: "err", text: p })));
+          return `\u66F8\u304D\u51FA\u3057\u306F\u7D42\u308F\u308A\u307E\u3057\u305F\u304C\u3001\u691C\u67FB\u3067\u554F\u984C\u304C\u898B\u3064\u304B\u308A\u307E\u3057\u305F\uFF08${problems.length} \u4EF6\uFF09`;
+        }
+        return `${parts.length} \u500B\u306E ZIP\u30FB\u8A08 ${total2.toLocaleString("ja-JP")} \u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\u3002\u9023\u756A\u30FB\u4EF6\u6570\u3092\u691C\u67FB\u3057\u3066\u3001\u6B20\u843D\u30FB\u91CD\u8907\u306F\u3042\u308A\u307E\u305B\u3093\u3067\u3057\u305F\u3002${parts.length > 1 ? "\u30D6\u30E9\u30A6\u30B6\u304C\u8907\u6570\u30D5\u30A1\u30A4\u30EB\u306E\u30C0\u30A6\u30F3\u30ED\u30FC\u30C9\u3092\u78BA\u8A8D\u3057\u305F\u3089\u3001\u8A31\u53EF\u3057\u3066\u304F\u3060\u3055\u3044\u3002" : ""}`;
+      }), { id: "obsidian" }), cancel),
+      stO,
+      partList
+    );
+    const stP = status("png");
+    let kind = "current";
+    const radios = PNG_KINDS.map((k) => {
+      const r = h("input", { type: "radio", name: "v53-png-kind", value: k.id, id: `v53-png-${k.id}`, checked: k.id === kind });
+      r.addEventListener("change", () => {
+        kind = k.id;
+        describe();
+      });
+      return h("label", { class: "v53-radio", for: r.id }, r, h("span", null, h("b", { text: k.label }), h("small", { text: k.desc })));
+    });
+    const what = h("p", { class: "v53-png-what", dataset: { role: "png-what" } });
+    const cPng = card(
+      "png",
+      "PNG \u753B\u50CF",
+      "\u3069\u306E\u72B6\u614B\u3092\u8868\u3059\u753B\u50CF\u304B\u306F\u3001\u753B\u50CF\u306E\u4E0B\u90E8\u306B\u3082\u66F8\u304D\u8FBC\u307E\u308C\u307E\u3059\u3002",
+      h("div", { class: "v53-radios" }, radios),
+      what,
+      btn2("PNG \u3092\u66F8\u304D\u51FA\u3059", () => run(stP, "PNG", async () => {
+        const r = await adapter.exports.png({ kind, month: adapter.meta().view ?? adapter.meta().now });
+        download(r.blob, r.name);
+        return `${r.name} \u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\u3002${r.meta?.summary ?? ""}`;
+      }), { id: "png" }),
+      stP
+    );
+    function describe() {
+      const m = adapter.meta(), d = describePng({ kind, month: m.view ?? m.now, worldName: m.name, layers: adapter.layers(), legendCount: m.states });
+      what.textContent = `\u3053\u306E\u753B\u50CF\u304C\u8868\u3059\u3082\u306E: ${d.label}\uFF08${fmtMonth(m.view ?? m.now)}\uFF09\uFF0F ${d.summary}`;
+    }
+    function sync() {
+      const m = adapter.meta(), has = m.hasWorld;
+      const av = adapter.exports.describe();
+      cChron.querySelector("button").disabled = busy || !av.chronicle.available;
+      cAhmap.querySelector("button").disabled = busy || !av.ahmap.available;
+      cObs.querySelector("[data-act=obsidian]").disabled = busy || !av.obsidian.available;
+      cPng.querySelector("button").disabled = busy || !av.png.available || !has;
+      pastNote.hidden = !m.past;
+      describe();
+      updateEst();
+    }
+    let pending = 0;
+    const throttled = () => {
+      if (pending) return;
+      pending = setTimeout(() => {
+        pending = 0;
+        sync();
+      }, 500);
+    };
+    const unsub = adapter.subscribe(throttled);
+    sync();
+    const el2 = h("div", { class: "v53-export" }, cChron, cAhmap, cObs, cPng);
+    return { el: el2, sync, dispose() {
+      unsub();
+      clearTimeout(pending);
+      abort?.abort();
+    } };
+  }
+
+  // js/ui/v53/views/detail-view.js
+  var PAST_REASON = "\u904E\u53BB\u3092\u95B2\u89A7\u4E2D\u306F\u64CD\u4F5C\u3067\u304D\u307E\u305B\u3093\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09\u3002\u73FE\u5728\u3078\u623B\u3057\u3066\u304F\u3060\u3055\u3044";
+  function renderDetail(detail, { adapter, ui, past, onResult }) {
+    const frag = document.createDocumentFragment();
+    if (detail.notice || past) frag.append(h("p", { class: "v53-banner", role: "status", text: detail.notice ?? "\u904E\u53BB\u306E\u72B6\u614B\u3092\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09" }));
+    if (detail.progress?.length) frag.append(h("ol", { class: "v53-progress-steps", "aria-label": "\u7D4C\u904E" }, detail.progress.map((p) => h("li", { class: p.state, text: `${p.state === "done" ? "\u2713 " : ""}${p.label}` }))));
+    if (detail.summary) frag.append(section("\u6982\u8981", h("p", { class: "v53-summary", text: detail.summary })));
+    if (detail.stats?.length) {
+      frag.append(section("\u72B6\u614B", h("dl", { class: "v53-stats" }, detail.stats.map((s) => h("div", { class: `v53-stat${s.tone ? " tone-" + s.tone : ""}` }, h("dt", { text: s.label }), h("dd", { text: s.value }))))));
+    }
+    if (detail.related?.length) {
+      const groups = /* @__PURE__ */ new Map();
+      for (const r of detail.related) {
+        const k = r.relation ?? "\u95A2\u9023";
+        (groups.get(k) ?? groups.set(k, []).get(k)).push(r);
+      }
+      frag.append(section("\u95A2\u9023", [...groups].map(([rel2, list]) => h(
+        "div",
+        { class: "v53-rel" },
+        h("span", { class: "v53-rel-label", text: rel2 }),
+        h(
+          "div",
+          { class: "v53-rel-items" },
+          list.slice(0, 24).map((r) => h("button", { type: "button", class: "v53-link", dataset: { kind: r.kind, id: r.id }, text: r.label, onclick: () => ui.select({ kind: r.kind, id: r.id }) })),
+          list.length > 24 ? h("span", { class: "v53-hint", text: `\u307B\u304B ${list.length - 24} \u4EF6` }) : null
+        )
+      ))));
+    }
+    if (detail.events?.length) {
+      frag.append(section("\u6700\u8FD1\u306E\u51FA\u6765\u4E8B", h("ul", { class: "v53-evlist" }, detail.events.map((e) => h("li", null, h(
+        "button",
+        { type: "button", class: "v53-link", onclick: () => ui.select({ kind: "event", id: e.id }) },
+        h("time", { text: fmtMonth(e.month) }),
+        h("span", { text: e.title }),
+        h("i", { class: `v53-dot tone-${categoryOf2(e.kind).tone}`, "aria-hidden": "true" })
+      ))))));
+    }
+    if (detail.browse?.length) {
+      frag.append(section("\u4E00\u89A7\u3067\u898B\u308B", h("div", { class: "v53-browse" }, detail.browse.map((b) => h("button", { type: "button", class: "v53-btn", dataset: { browse: b.domain }, text: b.label, onclick: () => {
+        ui.setFilter(b.domain, { entity: b.entity, entityLabel: detail.title ?? b.entity, query: "", filter: "", range: "" });
+        ui.select(null, { domain: b.domain });
+      } })))));
+    }
+    if (detail.legacy && adapter.world?.openLegacy) {
+      frag.append(section("\u8A73\u7D30\u7DE8\u96C6", h("div", { class: "v53-browse" }, h("button", { type: "button", class: "v53-btn", dataset: { legacy: detail.kind }, title: "\u540D\u79F0\u30FB\u9818\u571F\u30FB\u5185\u653F\u306A\u3069\u3001\u5F93\u6765\u306E\u8A73\u7D30\u7DE8\u96C6\u30A6\u30A3\u30F3\u30C9\u30A6\u3092\u958B\u304D\u307E\u3059", text: "\u5F93\u6765\u306E\u753B\u9762\u3067\u8A73\u7D30\u7DE8\u96C6", onclick: () => adapter.world.openLegacy(detail.kind, detail.id) }))));
+    }
+    const acts = adapter.actions(detail.kind, detail.id);
+    if (acts.length) {
+      const msg = h("p", { class: "v53-action-msg", role: "status", "aria-live": "polite" });
+      frag.append(section("\u64CD\u4F5C", [
+        h("div", { class: "v53-actions" }, acts.map((a) => {
+          const off = past || !a.enabled, why = past ? PAST_REASON : a.reason;
+          const b = h("button", { type: "button", class: `v53-btn${a.danger ? " danger" : ""}`, dataset: { action: a.id }, title: off ? why : "", text: a.label });
+          b.disabled = off;
+          b.addEventListener("click", () => {
+            const r = adapter.runAction(detail.kind, detail.id, a.id);
+            msg.textContent = r.ok ? `${a.label}\u3092\u5B9F\u884C\u3057\u307E\u3057\u305F` : r.error ?? "\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F";
+            onResult?.(r);
+          });
+          return b;
+        })),
+        acts.some((a) => past || !a.enabled) ? h("p", { class: "v53-hint", text: past ? PAST_REASON : acts.find((a) => !a.enabled)?.reason ?? "" }) : null,
+        msg
+      ]));
+    }
+    return frag;
+  }
+  var section = (title, body) => h("section", { class: "v53-sec" }, h("h3", { text: title }), body);
+
+  // js/ui/v53/views/world-view.js
+  function renderWorldView({ adapter, ui }) {
+    const m = adapter.meta(), past = m.past;
+    const root = h("div", { class: "v53-world" });
+    root.append(h(
+      "section",
+      { class: "v53-sec" },
+      h("h3", { text: "\u4E16\u754C" }),
+      h(
+        "dl",
+        { class: "v53-stats" },
+        stat("\u540D\u524D", m.name || "\u2014"),
+        stat("\u73FE\u5728", m.hasCiv ? fmtMonth(m.now) : "\u6B74\u53F2\u306F\u307E\u3060\u59CB\u307E\u3063\u3066\u3044\u307E\u305B\u3093"),
+        stat("\u30BB\u30EB\u6570", m.cells ? fmtNum(m.cells) : "\u2014"),
+        stat("\u56FD\u5BB6", m.hasCiv ? String(m.states) : "\u2014"),
+        stat("\u6226\u4E89", m.hasCiv ? String(m.wars) : "\u2014", m.wars ? "danger" : ""),
+        stat("\u8A18\u9332\u3055\u308C\u305F\u51FA\u6765\u4E8B", m.hasCiv ? fmtNum(m.events) : "\u2014")
+      )
+    ));
+    const mk3 = (label3, fn, { writes = false, primary = false, id } = {}) => {
+      const b = h("button", { type: "button", class: `v53-btn${primary ? " primary" : ""}`, dataset: { act: id }, text: label3, title: writes && past ? PAST_REASON : "", onclick: fn });
+      b.disabled = writes && past;
+      return b;
+    };
+    root.append(h("section", { class: "v53-sec" }, h("h3", { text: "\u64CD\u4F5C" }), h(
+      "div",
+      { class: "v53-actions" },
+      mk3(m.hasWorld ? "\u65B0\u3057\u3044\u4E16\u754C\u3092\u4F5C\u308B" : "\u4E16\u754C\u3092\u4F5C\u308B", () => ui.set({ startFlow: true }), { writes: true, primary: !m.hasCiv, id: "new-world" }),
+      mk3("\u30D5\u30A1\u30A4\u30EB\u3092\u958B\u304F", () => adapter.world.openFile(), { writes: true, id: "open" }),
+      mk3("\u5168\u4F53\u8868\u793A", () => adapter.world.fitView(), { id: "fit" }),
+      mk3("\u5730\u56F3\u3092\u7DE8\u96C6", () => adapter.world.editMap(), { writes: true, id: "edit-map" })
+    )));
+    const lw = adapter.world?.legacyWindows?.() ?? [];
+    if (lw.length) root.append(h(
+      "section",
+      { class: "v53-sec" },
+      h("h3", { text: "\u5F93\u6765\u306E\u753B\u9762" }),
+      h("p", { class: "v53-hint", text: "\u624B\u52D5\u3067\u4F5C\u3063\u305F\u56FD\u5BB6\u306E\u7DE8\u96C6\u30FB\u5916\u4EA4\u30FB\u8ECD\u4E8B\u306A\u3069\u3001\u5F93\u6765\u306E\u30A6\u30A3\u30F3\u30C9\u30A6\u3092\u5730\u56F3\u306E\u4E0A\u306B\u958B\u304D\u307E\u3059\u3002\u6587\u660E\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u306E\u56FD\u5BB6\u30FB\u6226\u4E89\u306F\u3001\u53F3\u306E\u30C9\u30C3\u30AF\u3067\u6271\u3044\u307E\u3059\u3002" }),
+      h("div", { class: "v53-browse" }, lw.map((w) => h("button", { type: "button", class: "v53-btn", dataset: { legacyWin: w.id }, text: w.label, onclick: () => adapter.world.openLegacyWindow(w.id) })))
+    ));
+    return root;
+  }
+  var stat = (label3, value, tone = "") => h("div", { class: `v53-stat${tone ? " tone-" + tone : ""}` }, h("dt", { text: label3 }), h("dd", { text: value }));
+
+  // js/ui/v53/views/settings-view.js
+  function renderSettingsView({ ui }) {
+    const s = ui.get().settings;
+    const row = (key3, label3, hint) => {
+      const id = `v53-set-${key3}`, cb = h("input", { type: "checkbox", id, checked: !!s[key3] });
+      cb.addEventListener("change", () => ui.set({ settings: { ...ui.get().settings, [key3]: cb.checked } }));
+      return h("label", { class: "v53-setting", for: id }, cb, h("span", null, h("b", { text: label3 }), h("small", { text: hint })));
+    };
+    return h("div", { class: "v53-settings" }, h(
+      "section",
+      { class: "v53-sec" },
+      h("h3", { text: "\u901A\u77E5" }),
+      row("showToasts", "\u901A\u5E38\u901A\u77E5\u3092\u8868\u793A\u3059\u308B", "\u91CD\u5927\u30A4\u30D9\u30F3\u30C8\u306F\u3001\u3053\u306E\u8A2D\u5B9A\u306B\u95A2\u308F\u3089\u305A\u5FC5\u305A\u8868\u793A\u3055\u308C\u3001\u78BA\u8A8D\u3059\u308B\u307E\u3067\u6642\u9593\u304C\u6B62\u307E\u308A\u307E\u3059\u3002"),
+      row("reduceMotion", "\u52D5\u304D\u3092\u6291\u3048\u308B", "\u65B0\u805E\u6F14\u51FA\u3084\u30D1\u30CD\u30EB\u306E\u52D5\u304D\u3092\u6700\u5C0F\u9650\u306B\u3057\u307E\u3059\u3002")
+    ));
+  }
+
+  // js/ui/v53/context-panel.js
+  var KIND_LABEL5 = { state: "\u56FD\u5BB6", war: "\u6226\u4E89", event: "\u51FA\u6765\u4E8B", treaty: "\u6761\u7D04", economy: "\u7D4C\u6E08", tech: "\u6280\u8853", culture: "\u6587\u5316\u30FB\u5B97\u6559", magic: "\u9B54\u6CD5" };
+  function createContextPanel({ adapter, ui, download }) {
+    const back = h("button", { type: "button", class: "v53-iconbtn", "aria-label": "\u623B\u308B", title: "\u623B\u308B", text: "\u2190" });
+    const kicker = h("small", { class: "v53-kicker" });
+    const title = h("h2", { class: "v53-panel-title" });
+    const tag = h("span", { class: "v53-chip", hidden: true });
+    const close = h("button", { type: "button", class: "v53-iconbtn", "aria-label": "\u30D1\u30CD\u30EB\u3092\u9589\u3058\u308B", title: "\u30D1\u30CD\u30EB\u3092\u9589\u3058\u308B", text: "\xD7" });
+    const head = h("header", { class: "v53-panel-head" }, back, h("div", { class: "v53-panel-headtext" }, kicker, title, tag), close);
+    const body = h("div", { class: "v53-panel-body" });
+    const foot = h("footer", { class: "v53-panel-foot", hidden: true }, h("button", { type: "button", class: "v53-btn", dataset: { act: "chronicle" }, text: "\u5E74\u4EE3\u8A18\u3092\u958B\u304F", onclick: () => ui.set({ domain: "history", selection: null, trail: [], panelOpen: true }) }));
+    const el2 = h("aside", { class: "v53-panel v53-dock", "aria-label": "\u8A73\u7D30\u30D1\u30CD\u30EB" }, head, body, foot);
+    back.addEventListener("click", () => {
+      if (!ui.back()) ui.select(null);
+    });
+    close.addEventListener("click", () => ui.set({ panelOpen: false }));
+    let cur = { key: "", list: null, exp: null };
+    const disposeCur = () => {
+      cur.list?.dispose?.();
+      cur.exp?.dispose?.();
+      cur = { key: "", list: null, exp: null };
+    };
+    function renderDetailBody() {
+      const s = ui.get().selection, m = adapter.meta();
+      const d = s ? adapter.detail(s.kind, s.id) : null;
+      clear(body);
+      foot.hidden = !d;
+      kicker.textContent = d ? `\u9078\u629E\u4E2D \u30FB ${KIND_LABEL5[s.kind] ?? s.kind}` : "";
+      if (!d) {
+        title.textContent = "\u898B\u3064\u304B\u308A\u307E\u305B\u3093";
+        tag.hidden = true;
+        body.append(h("p", { class: "v53-empty", text: "\u3053\u306E\u5BFE\u8C61\u306F\u3001\u898B\u3066\u3044\u308B\u6642\u70B9\u306B\u306F\u5B58\u5728\u3057\u307E\u305B\u3093\u3002" }));
+        return;
+      }
+      title.textContent = d.title;
+      tag.hidden = !d.tag;
+      tag.textContent = d.tag ?? "";
+      tag.className = `v53-chip${d.tone ? " tone-" + d.tone : ""}`;
+      body.append(h("p", { class: "v53-subtitle", text: d.subtitle ?? "" }), renderDetail(d, { adapter, ui, past: m.past }));
+    }
+    function render(force = false) {
+      const s = ui.get(), sel = s.selection;
+      el2.dataset.open = String(s.panelOpen);
+      const dom = domainById(s.domain) ?? domainById("world");
+      const key3 = sel ? `sel:${sel.kind}:${sel.id}` : `dom:${dom.id}`;
+      back.hidden = !sel;
+      if (sel) {
+        if (key3 !== cur.key) {
+          disposeCur();
+          cur.key = key3;
+        }
+        renderDetailBody();
+        return;
+      }
+      if (key3 === cur.key && !force) {
+        cur.list?.refresh();
+        return;
+      }
+      disposeCur();
+      cur.key = key3;
+      clear(body);
+      title.textContent = dom.label;
+      tag.hidden = true;
+      kicker.textContent = dom.tip ?? "";
+      foot.hidden = true;
+      if (dom.view === "world") body.append(renderWorldView({ adapter, ui }));
+      else if (dom.view === "settings") body.append(renderSettingsView({ ui }));
+      else if (dom.view === "export") {
+        cur.exp = createExportPanel({ adapter, ui, download });
+        body.append(cur.exp.el);
+      } else if (dom.list) {
+        cur.list = createEntityList({ adapter, ui, domain: dom });
+        body.append(cur.list.el);
+        cur.list.mounted();
+      }
+    }
+    let pend = 0, lastView = adapter.meta().view;
+    const onAdapter = () => {
+      const v = adapter.meta().view;
+      if (v !== lastView) {
+        lastView = v;
+        clearTimeout(pend);
+        pend = 0;
+        render(true);
+        return;
+      }
+      if (pend) return;
+      pend = setTimeout(() => {
+        pend = 0;
+        const s = ui.get();
+        if (!s.selection && domainById(s.domain)?.view === "world") render(true);
+        else if (!s.selection && domainById(s.domain)?.view) return;
+        else render();
+      }, 250);
+    };
+    const u1 = ui.subscribe((s, prev) => {
+      if (s.domain !== prev.domain || s.selection !== prev.selection || s.panelOpen !== prev.panelOpen) render();
+    });
+    const u2 = adapter.subscribe(onAdapter);
+    render();
+    return { el: el2, render, dispose() {
+      u1();
+      u2();
+      clearTimeout(pend);
+      disposeCur();
+    } };
+  }
+
+  // js/ui/v53/timeline.js
+  var SPANS = [[0, "\u5168\u671F\u9593"], [1e3, "\u76F4\u8FD11000\u5E74"], [100, "\u76F4\u8FD1100\u5E74"], [10, "\u76F4\u8FD110\u5E74"]];
+  var SPEEDS = [[12e4, "\xD71"], [6e4, "\xD72"], [3e4, "\xD74"]];
+  var PAST_REASON2 = "\u904E\u53BB\u3092\u95B2\u89A7\u4E2D\u306F\u6642\u9593\u3092\u9032\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u73FE\u5728\u3078\u623B\u3057\u3066\u304F\u3060\u3055\u3044";
+  var MAJOR_REASON = "\u91CD\u5927\u30A4\u30D9\u30F3\u30C8\u3092\u78BA\u8A8D\u3059\u308B\u307E\u3067\u3001\u6642\u9593\u306F\u9032\u3081\u3089\u308C\u307E\u305B\u3093";
+  function createTimeline({ adapter, ui, maxBuckets = 160, scrubDebounceMs = 60 }) {
+    const date = h("output", { class: "v53-clock-date" });
+    const era = h("span", { class: "v53-clock-sub" });
+    const ro = h("span", { class: "v53-clock-ro", hidden: true, text: "\u904E\u53BB\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09" });
+    const play = h("button", { type: "button", class: "v53-tlbtn", dataset: { act: "play" }, "aria-label": "\u518D\u751F", text: "\u25B6" });
+    const step = h("button", { type: "button", class: "v53-tlbtn wide", dataset: { act: "step" }, text: "+1\u304B\u6708" });
+    const speedBtns = SPEEDS.map(([v, t]) => h("button", { type: "button", class: "v53-speed", dataset: { speed: v }, "aria-pressed": "false", text: t, onclick: () => adapter.time.setSpeedPerYear(v) }));
+    const clock = h("div", { class: "v53-clock", role: "toolbar", "aria-label": "\u6642\u9593" }, date, era, ro, play, step, h("span", { class: "v53-speeds", role: "group", "aria-label": "\u9032\u3080\u901F\u3055" }, speedBtns));
+    const ticker = h("div", { class: "v53-ticker", "aria-label": "\u6700\u8FD1\u306E\u51FA\u6765\u4E8B" });
+    const news = h("button", { type: "button", class: "v53-ticker-open", text: "\u5E74\u4EE3\u8A18", title: "\u6B74\u53F2\u7814\u7A76\u3092\u958B\u304F", onclick: () => ui.set({ domain: "history", selection: null, trail: [], panelOpen: true, startFlow: false }) });
+    const back = h("button", { type: "button", class: "v53-btn warn", dataset: { act: "return" }, text: "\u73FE\u5728\u3078\u623B\u308B", hidden: true, onclick: () => adapter.setView(null) });
+    const scrub = h("input", { type: "range", class: "v53-tl-scrub", min: "0", max: "0", step: "1", value: "0", "aria-label": "\u8868\u793A\u3059\u308B\u5E74\u6708" });
+    const ticks = h("div", { class: "v53-tl-ticks", "aria-hidden": "true" });
+    const labels = h("div", { class: "v53-tl-labels", "aria-hidden": "true" }, h("span"), h("span"));
+    let spanYears = 0;
+    const spanSel = h("select", { class: "v53-select v53-tl-span", "aria-label": "\u6642\u9593\u8EF8\u306E\u7BC4\u56F2", title: "\u6642\u9593\u8EF8\u306B\u8868\u793A\u3059\u308B\u7BC4\u56F2" }, SPANS.map(([v, t]) => h("option", { value: String(v), text: t })));
+    spanSel.addEventListener("change", () => {
+      spanYears = Number(spanSel.value);
+      markKey = "";
+      sync();
+    });
+    const el2 = h(
+      "footer",
+      { class: "v53-timeline", "aria-label": "\u5C65\u6B74\u5E2F", dataset: { past: "false" } },
+      h("div", { class: "v53-tl-top" }, h("b", { class: "v53-ticker-title", text: "\u30CB\u30E5\u30FC\u30B9" }), news, ticker, back),
+      h("div", { class: "v53-tl-axis" }, ticks, scrub, labels, spanSel)
+    );
+    let markKey = "", newsKey = "", dragTimer = 0;
+    const commit = (v) => {
+      const m = adapter.meta();
+      adapter.setView(v >= m.now ? null : v);
+    };
+    const axisFrom = (m) => {
+      let lo = spanYears ? Math.max(m.first, m.now - spanYears * 12) : m.first;
+      if (m.view != null && m.view < lo) lo = m.view;
+      return lo;
+    };
+    let lastDraw = 0, drawTimer = 0, lastRange = "";
+    function drawMarks(m) {
+      const lo = axisFrom(m), key3 = `${lo}|${m.now}|${m.events}`;
+      if (key3 === markKey) return;
+      const range = `${lo}|${spanYears}`, wait = 400 - (Date.now() - lastDraw);
+      if (range === lastRange && wait > 0) {
+        clearTimeout(drawTimer);
+        drawTimer = setTimeout(() => drawMarks(adapter.meta()), wait);
+        return;
+      }
+      clearTimeout(drawTimer);
+      markKey = key3;
+      lastRange = range;
+      lastDraw = Date.now();
+      ticks.replaceChildren();
+      if (!m.hasCiv || m.now <= lo) return;
+      const span = m.now - lo, n = Math.min(maxBuckets, span);
+      for (const b of adapter.bandBuckets({ from: lo, to: m.now, buckets: n })) {
+        const t = h("button", { type: "button", class: `v53-tick tone-${b.danger ? "danger" : "muted"}${b.n > 1 ? " multi" : ""}`, style: { left: `${b.index / n * 100}%` }, tabindex: -1, title: b.n > 1 ? `${fmtMonth(b.month)} \u307B\u304B ${(b.n - 1).toLocaleString("ja-JP")} \u4EF6` : `${fmtMonth(b.month)} ${b.title}` });
+        t.addEventListener("click", () => commit(b.month));
+        ticks.append(t);
+      }
+    }
+    function drawNews(m) {
+      const key3 = `${m.view}|${m.now}|${m.events}`;
+      if (key3 === newsKey) return;
+      newsKey = key3;
+      ticker.replaceChildren();
+      if (!m.hasCiv) return;
+      for (const r of adapter.list("event", { limit: 3 }).rows) {
+        ticker.append(h(
+          "button",
+          { type: "button", class: "v53-news-item", title: r.title, onclick: () => ui.select({ kind: "event", id: r.id }) },
+          h("i", { class: `v53-dot tone-${r.tone || "muted"}`, "aria-hidden": "true" }),
+          h("span", { text: `${r.sub} ${r.title}` })
+        ));
+      }
+    }
+    function sync() {
+      const m = adapter.meta(), s = ui.get(), blocked = s.majorQueue.length > 0, v = m.view ?? m.now;
+      el2.dataset.past = String(m.past);
+      clock.dataset.past = String(m.past);
+      const lo = axisFrom(m);
+      scrub.min = String(lo);
+      scrub.max = String(Math.max(lo, m.now));
+      scrub.value = String(v);
+      scrub.disabled = !m.hasCiv || m.now <= lo;
+      spanSel.disabled = !m.hasCiv || m.now <= m.first;
+      date.textContent = m.hasCiv ? fmtMonth(v) : "\u2014";
+      ro.hidden = !m.past;
+      back.hidden = !m.past;
+      labels.children[0].textContent = m.hasCiv ? fmtYear(lo) : "";
+      labels.children[1].textContent = m.hasCiv ? fmtYear(m.now) : "";
+      const running = adapter.time.isRunning(), off = !m.hasCiv || m.past || blocked;
+      play.textContent = running ? "\u23F8" : "\u25B6";
+      play.setAttribute("aria-label", running ? "\u505C\u6B62" : "\u518D\u751F");
+      play.classList.toggle("running", running);
+      const why = m.past ? PAST_REASON2 : blocked ? MAJOR_REASON : !m.hasCiv ? "\u6B74\u53F2\u304C\u59CB\u307E\u3063\u3066\u304B\u3089\u4F7F\u3048\u307E\u3059" : "";
+      play.disabled = off && !running;
+      step.disabled = off;
+      play.title = play.disabled ? why : running ? "\u505C\u6B62" : "\u518D\u751F";
+      step.title = step.disabled ? why : "1\u304B\u6708\u3060\u3051\u9032\u3081\u308B";
+      const sp = String(adapter.time.speedPerYear());
+      for (const b of speedBtns) {
+        const on = b.dataset.speed === sp;
+        b.setAttribute("aria-pressed", String(on));
+        b.classList.toggle("on", on);
+        b.disabled = !m.hasCiv;
+      }
+      drawMarks(m);
+      drawNews(m);
+    }
+    play.addEventListener("click", () => {
+      if (adapter.time.isRunning()) adapter.time.stop();
+      else if (!ui.get().majorQueue.length) adapter.time.start();
+      sync();
+    });
+    step.addEventListener("click", () => {
+      if (!ui.get().majorQueue.length) adapter.time.step();
+    });
+    scrub.addEventListener("input", () => {
+      const v = Number(scrub.value);
+      date.textContent = fmtMonth(v);
+      clearTimeout(dragTimer);
+      dragTimer = setTimeout(() => commit(v), scrubDebounceMs);
+    });
+    scrub.addEventListener("change", () => {
+      clearTimeout(dragTimer);
+      commit(Number(scrub.value));
+    });
+    scrub.addEventListener("keydown", (e) => {
+      if (!e.shiftKey || e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      e.preventDefault();
+      const d = e.key === "ArrowLeft" ? -12 : 12, m = adapter.meta();
+      commit(clamp25((m.view ?? m.now) + d, m.first, m.now));
+    });
+    const u1 = adapter.subscribe(sync), u2 = ui.subscribe((s, p) => {
+      if (s.majorQueue !== p.majorQueue) sync();
+    });
+    sync();
+    return { el: el2, clock, sync, dispose() {
+      u1();
+      u2();
+      clearTimeout(dragTimer);
+      clearTimeout(drawTimer);
+    } };
+  }
+
+  // js/ui/v53/layers-bar.js
+  function createLayersBar({ adapter }) {
+    const el2 = h("div", { class: "v53-layers", role: "group", "aria-label": "\u5730\u56F3\u306E\u30EC\u30A4\u30E4\u30FC" });
+    let key3 = "";
+    function sync() {
+      const ls = adapter.layers(), k = ls.map((l) => `${l.key}:${l.on}`).join("|");
+      if (k === key3) return;
+      key3 = k;
+      el2.replaceChildren(...ls.map((l) => h("button", { type: "button", class: `v53-chipbtn${l.on ? " on" : ""}`, "aria-pressed": String(l.on), dataset: { layer: l.key }, text: l.label, onclick: () => adapter.toggleLayer(l.key) })));
+    }
+    const u = adapter.subscribe(sync);
+    sync();
+    return { el: el2, sync, dispose: u };
+  }
+
+  // js/ui/v53/start-flow.js
+  var CELL_PRESETS = [[5e4, "50,000\uFF08\u8EFD\u3044\uFF09"], [1e5, "100,000"], [25e4, "250,000\uFF08\u6A19\u6E96\uFF09"], [5e5, "500,000"]];
+  var WARN_AFTER_MONTHS = 12 * 1500;
+  var STEPS2 = [["none", "\u4E16\u754C"], ["group", "\u521D\u671F\u96C6\u56E3"], ["running", "\u81EA\u52D5\u9032\u884C"], ["ready", "\u56FD\u5BB6\u6210\u7ACB"]];
+  var stepIndex = (phase) => phase === "founded" ? 4 : Math.max(0, STEPS2.findIndex(([p]) => p === phase));
+  function createStartFlow({ adapter, ui, warnAfterMonths = WARN_AFTER_MONTHS, now = () => Date.now() }) {
+    const el2 = h("section", { class: "v53-start", role: "region", "aria-label": "\u6B74\u53F2\u306E\u59CB\u307E\u308A" });
+    const body = h("div", { class: "v53-start-body" });
+    const steps = h("ol", { class: "v53-steps", "aria-label": "\u624B\u9806" }, STEPS2.map(([p, t], i) => h("li", { dataset: { step: p } }, h("span", { class: "n", text: String(i + 1) }), h("span", { text: t }))));
+    const close = h("button", { type: "button", class: "v53-iconbtn", "aria-label": "\u9589\u3058\u308B", title: "\u9589\u3058\u308B", text: "\xD7", onclick: () => ui.set({ startFlow: false }) });
+    el2.append(h("header", { class: "v53-start-head" }, h("h2", { text: "\u6B74\u53F2\u3092\u59CB\u3081\u308B" }), close), steps, body);
+    let abort = null, progress = null, runError = "", startedAt = 0, genBusy = "", genError = "";
+    function setSteps(phase) {
+      const idx = stepIndex(phase);
+      [...steps.children].forEach((li, i) => {
+        li.classList.toggle("done", i < idx);
+        li.classList.toggle("on", i === idx);
+        if (i === idx) li.setAttribute("aria-current", "step");
+        else li.removeAttribute("aria-current");
+      });
+    }
+    function viewWorld() {
+      const seed = h("input", { type: "text", class: "v53-input", value: `world-${Date.now().toString(36)}`, "aria-label": "\u30B7\u30FC\u30C9" });
+      const cells = h("select", { class: "v53-select", "aria-label": "\u30BB\u30EB\u6570" }, CELL_PRESETS.map(([v, t]) => h("option", { value: v, selected: v === 25e4 }, t)));
+      const land = h("input", { type: "range", min: "20", max: "80", value: "50", "aria-label": "\u9678\u5730\u306E\u5272\u5408" });
+      const landV = h("span", { class: "v53-hint", text: "50%" });
+      land.addEventListener("input", () => {
+        landV.textContent = `${land.value}%`;
+      });
+      const go = h("button", { type: "button", class: "v53-btn primary large", dataset: { act: "generate" }, text: genBusy ? "\u751F\u6210\u4E2D\u2026" : "\u4E16\u754C\u3092\u751F\u6210\u3059\u308B" });
+      go.disabled = !!genBusy;
+      go.addEventListener("click", async () => {
+        abort = new AbortController();
+        genBusy = "\u4E16\u754C\u3092\u751F\u6210\u4E2D\u2026";
+        genError = "";
+        render();
+        const r = await adapter.world.newWorld({ worldSeed: seed.value.trim(), resolution: { targetCells: Number(cells.value) }, landFraction: Number(land.value) / 100 }, { signal: abort.signal, onProgress: (p) => {
+          genBusy = `\u4E16\u754C\u3092\u751F\u6210\u4E2D: ${p?.label ?? p?.stage ?? ""}`;
+        } });
+        abort = null;
+        genBusy = "";
+        if (!r?.ok && !r?.cancelled) genError = r?.error ?? "\u4E16\u754C\u306E\u751F\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F";
+        render();
+      });
+      return [
+        h("p", { class: "v53-lead", text: "\u5927\u9678\u30FB\u6C17\u5019\u30FB\u5DDD\u30FB\u8CC7\u6E90\u3092\u6301\u3064\u7403\u9762\u306E\u4E16\u754C\u3092\u4F5C\u308A\u307E\u3059\u3002\u540C\u3058\u30B7\u30FC\u30C9\u3068\u8A2D\u5B9A\u306A\u3089\u3001\u540C\u3058\u5730\u5F62\u306B\u306A\u308A\u307E\u3059\u3002" }),
+        h("div", { class: "v53-form grid" }, label2("\u30B7\u30FC\u30C9", seed), label2("\u30BB\u30EB\u6570", cells), label2("\u9678\u5730\u306E\u5272\u5408", h("span", { class: "v53-inline" }, land, landV))),
+        genBusy ? h("p", { class: "v53-hint", role: "status", text: genBusy }) : null,
+        genError ? h("p", { class: "v53-error", role: "alert", text: genError }) : null,
+        h("div", { class: "v53-actions" }, go, h("button", { type: "button", class: "v53-btn", dataset: { act: "open" }, text: "\u30D5\u30A1\u30A4\u30EB\u3092\u958B\u304F", onclick: () => adapter.world.openFile() }))
+      ];
+    }
+    function viewGroup() {
+      const groups = adapter.start.initialGroups(), sel = groups.find((g) => g.selected);
+      const list = h("div", { class: "v53-groups", role: "listbox", "aria-label": "\u521D\u671F\u96C6\u56E3\u306E\u5019\u88DC" }, groups.map((g) => {
+        const b = h(
+          "button",
+          { type: "button", class: `v53-group${g.selected ? " on" : ""}`, role: "option", "aria-selected": String(!!g.selected), dataset: { id: g.id } },
+          h("b", { text: g.title }),
+          h("span", { text: g.sub ?? "" }),
+          h("small", { text: (g.stats ?? []).map((s) => `${s.label} ${s.value}`).join("\u30FB") })
+        );
+        b.addEventListener("click", () => {
+          adapter.start.chooseGroup(g.id);
+          render();
+        });
+        return b;
+      }));
+      const go = h("button", { type: "button", class: "v53-btn primary large", dataset: { act: "begin" }, text: "\u3053\u306E\u96C6\u56E3\u3067\u6B74\u53F2\u3092\u59CB\u3081\u308B", onclick: () => {
+        const r = adapter.start.begin();
+        if (!r.ok) runError = r.error ?? "";
+        else {
+          runError = "";
+          startRun();
+        }
+        render();
+      } });
+      go.disabled = !sel;
+      return [h("p", { class: "v53-lead", text: "\u6B74\u53F2\u3092\u59CB\u3081\u308B\u4EBA\u53E3\u96C6\u56E3\u3092\u9078\u3073\u307E\u3059\u3002\u56FD\u5BB6\u306F\u3001\u3053\u3053\u304B\u3089\u6642\u9593\u3068\u3068\u3082\u306B\u6210\u7ACB\u3057\u3066\u3044\u304D\u307E\u3059\u3002" }), list, runError ? h("p", { class: "v53-error", role: "alert", text: runError }) : null, h("div", { class: "v53-actions" }, go)];
+    }
+    function startRun() {
+      if (abort) return;
+      abort = new AbortController();
+      runError = "";
+      startedAt = now();
+      progress = { months: 0, year: 0, states: 0 };
+      adapter.start.run({ signal: abort.signal, onProgress: (p) => {
+        progress = p;
+        renderProgress();
+      } }).then((res) => {
+        abort = null;
+        if (res?.stopped === "error") runError = res.error ?? "\u81EA\u52D5\u9032\u884C\u3067\u30A8\u30E9\u30FC\u304C\u8D77\u304D\u307E\u3057\u305F";
+        render();
+      }).catch((e) => {
+        abort = null;
+        runError = e?.message ?? String(e);
+        render();
+      });
+    }
+    const bar2 = h("div", { class: "v53-progress", dataset: { role: "progress" } });
+    function renderProgress() {
+      const p = progress ?? { months: 0 }, secs = Math.round((now() - startedAt) / 1e3), long = p.months >= warnAfterMonths;
+      bar2.replaceChildren(
+        h("p", { class: "v53-progress-line" }, h("b", { text: `${Math.floor(p.months / 12).toLocaleString("ja-JP")} \u5E74\u7D4C\u904E` }), h("span", { text: `\u3000\u4E16\u754C\u306E\u5E74: ${fmtNum(p.year ?? 0)}\u5E74\u3000\u56FD\u5BB6 ${p.states ?? 0}\u3000${secs}\u79D2` })),
+        long ? h("p", { class: "v53-warn", role: "status", text: "\u56FD\u5BB6\u306E\u6210\u7ACB\u307E\u3067\u9577\u5F15\u3044\u3066\u3044\u307E\u3059\u3002\u3053\u306E\u307E\u307E\u7D9A\u3051\u308B\u3053\u3068\u3082\u3001\u3044\u3063\u305F\u3093\u4E2D\u65AD\u3059\u308B\u3053\u3068\u3082\u3067\u304D\u307E\u3059\uFF08\u9032\u884C\u306F\u6B62\u307E\u308A\u307E\u305B\u3093\u3002\u6253\u3061\u5207\u308A\u3082\u3057\u307E\u305B\u3093\uFF09\u3002" }) : null,
+        p.stalled ? h("p", { class: "v53-warn", role: "status", text: "\u4EBA\u53E3\u3084\u96C6\u843D\u306B\u307B\u3068\u3093\u3069\u5909\u5316\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u9032\u884C\u304C\u6B62\u307E\u3063\u3066\u3044\u308B\u53EF\u80FD\u6027\u304C\u3042\u308A\u307E\u3059\u3002" }) : null,
+        p.warning ? h("p", { class: "v53-warn", role: "status", text: p.warning }) : null
+      );
+    }
+    function viewRunning() {
+      const running = !!abort;
+      renderProgress();
+      const stop = h("button", { type: "button", class: "v53-btn", dataset: { act: "abort" }, text: "\u4E2D\u65AD\u3059\u308B", onclick: () => abort?.abort() });
+      const resume = h("button", { type: "button", class: "v53-btn primary", dataset: { act: "resume" }, text: "\u7D9A\u304D\u304B\u3089\u9032\u3081\u308B", onclick: () => {
+        startRun();
+        render();
+      } });
+      return [
+        h("p", { class: "v53-lead", text: "\u56FD\u5BB6\u304C\u6210\u7ACB\u3059\u308B\u76F4\u524D\u307E\u3067\u3001\u4E16\u754C\u3092\u81EA\u52D5\u3067\u9032\u3081\u3066\u3044\u307E\u3059\u3002\u4ED6\u306E\u56FD\u5BB6\u3082\u901A\u5E38\u3069\u304A\u308A\u6210\u7ACB\u30FB\u767A\u5C55\u3057\u307E\u3059\u3002" }),
+        bar2,
+        runError ? h("p", { class: "v53-error", role: "alert", text: runError }) : null,
+        h("div", { class: "v53-actions" }, running ? stop : resume)
+      ];
+    }
+    function viewReady() {
+      const r = adapter.start.readiness();
+      const found = h("button", { type: "button", class: "v53-btn primary large", dataset: { act: "found" }, text: "\u56FD\u5BB6\u3092\u6210\u7ACB\u3055\u305B\u308B" });
+      found.addEventListener("click", () => {
+        const res = adapter.start.found(r.proposalId);
+        if (res.ok) {
+          ui.set({ startFlow: false, domain: "state", selection: null, trail: [] });
+        } else {
+          runError = res.error ?? "";
+          render();
+        }
+      });
+      return [
+        h("p", { class: "v53-lead", text: "\u56FD\u5BB6\u306E\u6210\u7ACB\u6761\u4EF6\u304C\u6574\u3044\u307E\u3057\u305F\u3002\u3053\u3053\u304B\u3089\u5148\u306F\u3001\u3042\u306A\u305F\u304C\u64CD\u4F5C\u3092\u5F15\u304D\u7D99\u304E\u307E\u3059\u3002" }),
+        h("div", { class: "v53-card" }, h("h3", { text: `\u6210\u7ACB\u306E\u7D4C\u8DEF: ${r.label ?? r.via}` }), h("ul", { class: "v53-checks" }, (r.conditions ?? []).map((c) => h("li", { class: c.met ? "met" : "", text: `${c.met ? "\u2713" : "\u30FB"} ${c.label}` })))),
+        runError ? h("p", { class: "v53-error", role: "alert", text: runError }) : null,
+        h("div", { class: "v53-actions" }, found)
+      ];
+    }
+    function viewFounded() {
+      return [h("p", { class: "v53-lead", text: "\u6B74\u53F2\u306F\u9032\u884C\u4E2D\u3067\u3059\u3002" }), h("div", { class: "v53-actions" }, h("button", { type: "button", class: "v53-btn primary", text: "\u9589\u3058\u308B", onclick: () => ui.set({ startFlow: false }) }))];
+    }
+    function render() {
+      const st = adapter.start.state();
+      let phase = st.phase;
+      if (genBusy) phase = "none";
+      setSteps(phase);
+      el2.dataset.phase = phase;
+      body.replaceChildren();
+      const view2 = phase === "none" ? viewWorld : phase === "group" ? viewGroup : phase === "running" ? viewRunning : phase === "ready" ? viewReady : viewFounded;
+      body.append(...view2().filter(Boolean));
+    }
+    render();
+    return { el: el2, render, isRunning: () => !!abort, dispose() {
+      abort?.abort();
+    } };
+  }
+  var label2 = (t, c) => h("label", { class: "v53-field" }, h("span", { text: t }), c);
+
+  // js/ui/v53/notification-view.js
+  function createNotificationView({ ui, notifier, adapter }) {
+    const toasts = h("div", { class: "v53-toasts", "aria-live": "polite", "aria-label": "\u901A\u77E5" });
+    const major = h("div", { class: "v53-major", role: "dialog", "aria-modal": "true", "aria-label": "\u91CD\u5927\u30A4\u30D9\u30F3\u30C8", hidden: true });
+    let lastMajorId = null;
+    function renderToasts() {
+      toasts.replaceChildren();
+      for (const t of ui.get().toasts.slice(0, 3)) {
+        if (t.type === "summary") {
+          const card = h(
+            "article",
+            { class: "v53-toast summary", dataset: { type: "summary" } },
+            h("div", { class: "v53-toast-meta" }, h("span", { text: "\u8981\u7D04" }), h("time", { text: `${fmtMonth(t.fromMonth)}\u301C${fmtMonth(t.toMonth)}` })),
+            h("h4", { text: `\u3053\u306E\u9593\u306B ${t.total} \u4EF6\u306E\u51FA\u6765\u4E8B` }),
+            h("p", { text: t.categories.slice(0, 4).map((c) => `${c.label} ${c.n}`).join("\u30FB") }),
+            h("button", { type: "button", class: "v53-link", text: "\u6B74\u53F2\u7814\u7A76\u3067\u5168\u4EF6\u3092\u898B\u308B", onclick: () => {
+              ui.set({ domain: "history", selection: null, trail: [], panelOpen: true });
+              notifier.dismissToast(t.key);
+            } }),
+            h("button", { type: "button", class: "v53-toast-close", "aria-label": "\u9589\u3058\u308B", text: "\xD7", onclick: () => notifier.dismissToast(t.key) })
+          );
+          toasts.append(card);
+        } else {
+          const c = categoryOf2(t.kind);
+          toasts.append(h(
+            "article",
+            { class: `v53-toast tone-${c.tone}`, dataset: { type: "event", id: t.eventId } },
+            h("div", { class: "v53-toast-meta" }, h("span", { text: c.label }), h("time", { text: fmtMonth(t.month) })),
+            h("h4", null, h("button", { type: "button", class: "v53-toast-title", text: t.title, onclick: () => {
+              ui.select({ kind: "event", id: t.eventId });
+              notifier.dismissToast(t.key);
+            } })),
+            t.causeText ? h("p", { class: "v53-cause", text: t.causeText }) : null,
+            h("button", { type: "button", class: "v53-toast-close", "aria-label": "\u9589\u3058\u308B", text: "\xD7", onclick: () => notifier.dismissToast(t.key) })
+          ));
+        }
+      }
+    }
+    function renderMajor() {
+      const q2 = ui.get().majorQueue, ev = q2[0];
+      major.hidden = !ev;
+      document.body?.classList?.toggle("v53-major-open", !!ev);
+      if (!ev) {
+        major.replaceChildren();
+        lastMajorId = null;
+        return;
+      }
+      if (ev.id === lastMajorId) {
+        const cnt = major.querySelector("[data-role=remaining]");
+        if (cnt) cnt.textContent = q2.length > 1 ? `\u307B\u304B ${q2.length - 1} \u4EF6\u306E\u91CD\u5927\u30A4\u30D9\u30F3\u30C8\u304C\u78BA\u8A8D\u3092\u5F85\u3063\u3066\u3044\u307E\u3059` : "";
+        return;
+      }
+      lastMajorId = ev.id;
+      const cat = categoryOf2(ev.kind), last = q2.length === 1, r = ev.impactResult;
+      const confirm = h("button", { type: "button", class: "v53-btn primary large", dataset: { act: "confirm" }, text: last ? "\u78BA\u8A8D\u3057\u305F" : "\u78BA\u8A8D\u3057\u3066\u6B21\u3078", onclick: () => notifier.confirmMajor({ resume: false }) });
+      const confirmResume = last && ui.get().resumeAfterMajor ? h("button", { type: "button", class: "v53-btn large", dataset: { act: "confirm-resume" }, text: "\u78BA\u8A8D\u3057\u3066\u6642\u9593\u3092\u518D\u958B", onclick: () => notifier.confirmMajor({ resume: true }) }) : null;
+      const open = h("button", { type: "button", class: "v53-btn", text: "\u8A73\u7D30\u3092\u958B\u304F", onclick: () => {
+        ui.select({ kind: "event", id: ev.id });
+        notifier.confirmMajor({ resume: false });
+      } });
+      major.replaceChildren(h(
+        "article",
+        { class: `v53-paper tone-${cat.tone}` },
+        h("header", { class: "v53-paper-head" }, h("span", { class: "v53-paper-name", text: "\u6B74\u53F2\u65B0\u5831" }), h("span", { class: "v53-paper-kind", text: `${cat.label}\u3000\u53F7\u5916` }), h("time", { text: fmtMonth(ev.month) })),
+        h("h2", { class: "v53-paper-title", text: ev.title }),
+        ev.detail ? h("p", { class: "v53-paper-body", text: ev.detail }) : null,
+        ev.causeText ? h("p", { class: "v53-paper-cause", text: ev.causeText }) : null,
+        r ? h("details", { class: "v53-paper-why" }, h("summary", { text: `\u306A\u305C\u91CD\u5927\u304B\uFF08\u5F71\u97FF\u5EA6 ${r.score.toFixed(2)}\uFF09` }), h("ul", null, r.reasons.map((x) => h("li", { text: `${x.label}: +${x.value}` })))) : null,
+        h("p", { class: "v53-paper-remaining", dataset: { role: "remaining" }, text: q2.length > 1 ? `\u307B\u304B ${q2.length - 1} \u4EF6\u306E\u91CD\u5927\u30A4\u30D9\u30F3\u30C8\u304C\u78BA\u8A8D\u3092\u5F85\u3063\u3066\u3044\u307E\u3059` : "" }),
+        h("footer", { class: "v53-paper-actions" }, open, confirmResume, confirm)
+      ));
+      confirm.focus?.();
+    }
+    const unsub = ui.subscribe((s, p) => {
+      if (s.toasts !== p.toasts) renderToasts();
+      if (s.majorQueue !== p.majorQueue || s.resumeAfterMajor !== p.resumeAfterMajor) renderMajor();
+    });
+    renderToasts();
+    renderMajor();
+    return { toasts, major, dispose() {
+      unsub();
+      document.body?.classList?.remove("v53-major-open");
+    } };
+  }
+
+  // js/ui/v53/shell.js
+  function createShell({ adapter, ui, map, notifier, download }) {
+    const rail = createHubNav({ ui, adapter });
+    const panel2 = createContextPanel({ adapter, ui, download });
+    const timeline = createTimeline({ adapter, ui });
+    const layers = createLayersBar({ adapter });
+    const notes = createNotificationView({ ui, notifier, adapter });
+    const reopen = h("button", { type: "button", class: "v53-dock-open", "aria-label": "\u30D1\u30CD\u30EB\u3092\u958B\u304F", title: "\u30D1\u30CD\u30EB\u3092\u958B\u304F", text: "\u2039", onclick: () => ui.set({ panelOpen: true }) });
+    const slot = h("div", { class: "v53-map-slot" }, map.el);
+    const stage = h("main", { class: "v53-stage", "aria-label": "\u5730\u56F3" }, slot, layers.el, timeline.clock, timeline.el, notes.toasts, reopen);
+    const dock = h("div", { class: "v53-dock-host" });
+    const el2 = h("div", { class: "v53 v53-root", dataset: { dock: "open", past: "false", reduce: "false" } }, rail.el, stage, dock, notes.major);
+    let flow = null, mountedFlow = false;
+    function syncDock() {
+      const s = ui.get();
+      el2.dataset.dock = s.panelOpen || s.startFlow ? "open" : "closed";
+      el2.dataset.reduce = String(!!s.settings.reduceMotion);
+      if (s.startFlow) {
+        if (!flow) {
+          flow = createStartFlow({ adapter, ui });
+        }
+        if (!mountedFlow) {
+          dock.replaceChildren(flow.el);
+          mountedFlow = true;
+        }
+        flow.render();
+      } else {
+        if (flow) {
+          flow.dispose();
+          flow = null;
+        }
+        if (mountedFlow || !dock.firstChild) {
+          dock.replaceChildren(panel2.el);
+          mountedFlow = false;
+        }
+      }
+    }
+    function syncPast() {
+      el2.dataset.past = String(adapter.meta().past);
+    }
+    ui.subscribe(syncDock);
+    adapter.subscribe(() => {
+      syncPast();
+      if (flow && ui.get().startFlow) flow.render();
+    });
+    syncDock();
+    syncPast();
+    return {
+      el: el2,
+      rail,
+      panel: panel2,
+      timeline,
+      layers,
+      notes,
+      dispose() {
+        flow?.dispose();
+        panel2.dispose();
+        timeline.dispose();
+        layers.dispose();
+        notes.dispose();
+      }
+    };
+  }
+
+  // js/ui/v53/adapters/contract.js
+  var ROOT_METHODS = ["meta", "subscribe", "setView", "list", "detail", "actions", "runAction", "band", "bandBuckets", "search", "newEvents", "worldScale", "layers", "toggleLayer"];
+  var GROUPS = {
+    time: ["isRunning", "start", "stop", "step", "speedPerYear", "setSpeedPerYear"],
+    world: ["openFile", "newWorld", "fitView", "editMap"],
+    start: ["state", "initialGroups", "chooseGroup", "begin", "run", "readiness", "found"],
+    exports: ["describe", "chronicle", "ahmap", "obsidianEstimate", "obsidian", "png"]
+  };
+  function validateAdapter(a) {
+    const missing = [];
+    for (const m of ROOT_METHODS) if (typeof a?.[m] !== "function") missing.push(m);
+    for (const [g, ms] of Object.entries(GROUPS)) for (const m of ms) if (typeof a?.[g]?.[m] !== "function") missing.push(`${g}.${m}`);
+    return missing;
+  }
+
+  // js/ui/v53/index.js
+  function defaultDownload(blob, name) {
+    const url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    document.body.append(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4e3);
+  }
+  function mountV53({ root, adapter, map, download = defaultDownload, pollMs = 500, notifierOptions = {}, keyboard = true }) {
+    const missing = validateAdapter(adapter);
+    if (missing.length) throw new Error(`v5.3 UI: \u30A2\u30C0\u30D7\u30BF\u30FC\u306B\u4E0D\u8DB3\u304C\u3042\u308A\u307E\u3059: ${missing.join(", ")}`);
+    const ui = createUiState({ startFlow: !adapter.meta().hasCiv });
+    const notifier = createNotifier({ adapter, ui, pollMs, ...notifierOptions });
+    adapter.setRunGuard?.(() => ui.get().majorQueue.length === 0);
+    map.onPick((sel) => ui.select(sel, { domain: KIND_DOMAIN[sel.kind] }));
+    ui.subscribe((s, p) => {
+      if (s.selection !== p.selection) map.highlight(s.selection);
+      if (p.startFlow && !s.startFlow) notifier.release();
+    });
+    const shell = createShell({ adapter, ui, map, notifier, download });
+    root.replaceChildren(shell.el);
+    notifier.start();
+    const onKey = (e) => {
+      const t = e.target, typing = t instanceof HTMLElement && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) && t.type !== "range" && t.type !== "checkbox" && t.type !== "radio");
+      if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (ui.get().majorQueue.length) return;
+      if (e.key === " " && !(t instanceof HTMLButtonElement)) {
+        e.preventDefault();
+        if (adapter.time.isRunning()) adapter.time.stop();
+        else adapter.time.start();
+      } else if (e.key === "Escape") {
+        if (!ui.back()) {
+          if (ui.get().selection) ui.select(null);
+        }
+      }
+    };
+    if (keyboard) document.addEventListener("keydown", onKey);
+    return {
+      ui,
+      notifier,
+      shell,
+      adapter,
+      dispose() {
+        document.removeEventListener("keydown", onKey);
+        notifier.dispose();
+        shell.dispose();
+        map.dispose?.();
+        root.replaceChildren();
+      }
+    };
+  }
+
+  // js/ui/v53/adapters/live-adapter.js
+  init_states();
+  init_tech();
+  init_population();
+  init_graph();
+  init_obsidian();
+  init_zip();
+
+  // js/ui/v53/export/civ-chronicle.js
+  var mi = (d) => d.year * 12 + (d.month - 1);
+  var ymd = (m) => `${Math.floor(m / 12)}\u5E74${(m % 12 + 12) % 12 + 1}\u6708`;
+  var esc2 = (s) => String(s ?? "").replace(/\r?\n/g, " ").replace(/\|/g, "\uFF0F");
+  var VIA2 = { city_state: "\u90FD\u5E02\u56FD\u5BB6", agri_union: "\u8FB2\u8015\u96C6\u843D\u306E\u7D71\u5408", nomad_confederation: "\u904A\u7267\u9023\u5408", religious_polity: "\u5B97\u6559\u5171\u540C\u4F53", defense_league: "\u9632\u885B\u540C\u76DF" };
+  function civChronicleChunks(civ, { fromMonth = -Infinity, toMonth = Infinity, worldName = "" } = {}) {
+    const out = [], inRange = (m) => m >= fromMonth && m <= toMonth;
+    const nameOf5 = (id) => civ.states?.[id]?.name ?? civ.cultures?.[id]?.name ?? civ.religions?.[id]?.name ?? civ.languages?.[id]?.name ?? String(id);
+    const events = civ.events ?? [], decisions = civ.decisions ?? [];
+    out.push(`
+# \u6587\u660E\u53F2${worldName ? `\uFF08${esc2(worldName)}\uFF09` : ""}
+
+`);
+    out.push(`- \u7BC4\u56F2: ${Number.isFinite(fromMonth) ? ymd(fromMonth) : "\u6700\u521D"}\u301C${Number.isFinite(toMonth) ? ymd(toMonth) : "\u73FE\u5728"}
+`);
+    out.push(`- \u56FD\u5BB6 ${Object.keys(civ.states ?? {}).length} \u4EF6\u30FB\u6226\u4E89 ${Object.keys(civ.wars ?? {}).length} \u4EF6\u30FB\u51FA\u6765\u4E8B ${events.length} \u4EF6\u30FBAI\u5224\u65AD ${decisions.length} \u4EF6\uFF08\u7BC4\u56F2\u5916\u3092\u542B\u3080\u7DCF\u6570\uFF09
+
+`);
+    out.push("## \u56FD\u5BB6\n\n| \u56FD\u5BB6 | ID | \u6210\u7ACB | \u7D4C\u8DEF | \u6D88\u6EC5 | \u30D7\u30EC\u30A4\u30E4\u30FC |\n|---|---|---|---|---|---|\n");
+    for (const s of Object.values(civ.states ?? {})) {
+      if (!inRange(s.formedAt) && !(s.dissolvedAt != null && inRange(s.dissolvedAt)) && (Number.isFinite(fromMonth) || Number.isFinite(toMonth)) && !(s.formedAt <= fromMonth && (s.dissolvedAt == null || s.dissolvedAt >= fromMonth))) continue;
+      out.push(`| ${esc2(s.name)} | ${s.id} | ${ymd(s.formedAt)} | ${VIA2[s.via] ?? esc2(s.via)} | ${s.alive ? "\u5B58\u7D9A" : ymd(s.dissolvedAt)} | ${s.player ? "\u306F\u3044" : ""} |
+`);
+    }
+    out.push("\n## \u6226\u4E89\n\n");
+    for (const w of Object.values(civ.wars ?? {})) {
+      if (!inRange(w.startedAt) && !(w.endedAt != null && inRange(w.endedAt))) continue;
+      const a = (w.sides?.a ?? []).map(nameOf5).join("\u30FB"), d = (w.sides?.d ?? []).map(nameOf5).join("\u30FB");
+      out.push(`- **${esc2(nameOf5(w.aggressor))}\u5BFE${esc2(nameOf5(w.defender))}**\uFF08${w.id}\uFF09: ${ymd(w.startedAt)}\u301C${w.endedAt != null ? ymd(w.endedAt) : "\u7D99\u7D9A\u4E2D"}\u3000\u653B\u6483\u5074: ${esc2(a)}\u3000\u9632\u885B\u5074: ${esc2(d)}${w.outcome ? `\u3000\u7D50\u679C: ${esc2(w.outcome)}` : ""}
+`);
+    }
+    out.push("\n## \u51FA\u6765\u4E8B\uFF08\u53E4\u3044\u9806\uFF09\n\n");
+    let n = 0;
+    for (const e of events) {
+      const m = mi(e.date);
+      if (!inRange(m)) continue;
+      n++;
+      const who = (e.participants ?? []).map((p) => `${esc2(nameOf5(p.entityId))}\uFF08${esc2(p.role)}\uFF09`).join("\u3001");
+      const causes = (e.causes ?? []).map((c) => `${c.relation}: ${c.targetId}\uFF08${c.basis}\uFF09`).join("\uFF1B");
+      out.push(`- ${ymd(m)} **${esc2(e.title)}** \`${e.eventId}\` [${esc2(e.kind)}]${who ? `\u3000\u95A2\u4E0E: ${who}` : ""}${causes ? `\u3000\u539F\u56E0: ${causes}` : "\u3000\u539F\u56E0: \u8A18\u9332\u3055\u308C\u305F\u5148\u884C\u4E8B\u8C61\u306A\u3057\uFF08\u74B0\u5883\u30FB\u72B6\u614B\u30FB\u78BA\u7387\u7684\u6761\u4EF6\uFF09"}
+`);
+    }
+    if (!n) out.push("\uFF08\u3053\u306E\u7BC4\u56F2\u306B\u51FA\u6765\u4E8B\u306F\u3042\u308A\u307E\u305B\u3093\uFF09\n");
+    out.push("\n## AI\u5224\u65AD\uFF08\u53E4\u3044\u9806\uFF09\n\n");
+    let k = 0;
+    for (const d of decisions) {
+      const m = mi(d.date);
+      if (!inRange(m)) continue;
+      k++;
+      const ch = d.chosen ?? {};
+      out.push(`- ${ymd(m)} ${esc2(nameOf5(d.actorId))}: ${esc2(d.type)} \u2192 ${esc2(ch.key ?? "")}${ch.target ? `\uFF08\u5BFE\u8C61 ${esc2(nameOf5(ch.target))}\uFF09` : ""} \`${d.decisionId}\`${d.reason ? `\u3000\u7406\u7531: ${esc2(d.reason)}` : ""}
+`);
+    }
+    if (!k) out.push("\uFF08\u3053\u306E\u7BC4\u56F2\u306BAI\u5224\u65AD\u306F\u3042\u308A\u307E\u305B\u3093\uFF09\n");
+    return out;
+  }
+
+  // js/ui/v53/scale-index.js
+  init_graph();
+  function lowerBound(arr, x, hi = arr.length) {
+    let lo = 0;
+    while (lo < hi) {
+      const mid = lo + hi >>> 1;
+      if (arr[mid] < x) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+  function createEventIndex({ classify, isKey, sliceMs = 8, maxQueries = 6, clock = () => typeof performance !== "undefined" ? performance.now() : Date.now() }) {
+    let civ = null, eventsRef = null, n = 0, last = null, monotone = true, lastMonth = -Infinity;
+    let months = new Int32Array(4096);
+    const byCat = /* @__PURE__ */ new Map();
+    let keyPos = [];
+    let dprefix = [0];
+    let queries = /* @__PURE__ */ new Map();
+    function reset() {
+      n = 0;
+      last = null;
+      monotone = true;
+      lastMonth = -Infinity;
+      months = new Int32Array(4096);
+      byCat.clear();
+      keyPos = [];
+      dprefix = [0];
+      queries = /* @__PURE__ */ new Map();
+    }
+    function sync(c) {
+      const E = c?.events;
+      if (!E) {
+        civ = null;
+        eventsRef = null;
+        reset();
+        return 0;
+      }
+      if (c !== civ || E !== eventsRef || n > E.length || n > 0 && E[n - 1] !== last) {
+        civ = c;
+        eventsRef = E;
+        reset();
+      }
+      if (n === E.length) return n;
+      if (E.length > months.length) {
+        const m2 = new Int32Array(Math.max(Math.ceil(E.length * 1.25), months.length * 2));
+        m2.set(months.subarray(0, n));
+        months = m2;
+      }
+      for (; n < E.length; n++) {
+        const e = E[n], m = evMonth(e);
+        months[n] = m;
+        if (m < lastMonth) monotone = false;
+        else lastMonth = m;
+        const c2 = classify(e.kind);
+        let arr = byCat.get(c2.id);
+        if (!arr) byCat.set(c2.id, arr = []);
+        arr.push(n);
+        if (isKey(e.kind)) {
+          keyPos.push(n);
+          dprefix.push(dprefix[dprefix.length - 1] + (c2.tone === "danger" ? 1 : 0));
+        }
+      }
+      last = E[n - 1] ?? null;
+      return n;
+    }
+    function countUpTo(m) {
+      if (m == null) return n;
+      if (monotone) return lowerBound(months, m + 1, n);
+      let k = 0;
+      for (let i = 0; i < n; i++) if (months[i] <= m) k = i + 1;
+      return k;
+    }
+    const countFrom = (m) => m == null ? 0 : monotone ? lowerBound(months, m, n) : 0;
+    const rangeIn = (arr, lo, hi) => [lowerBound(arr, lo), lowerBound(arr, hi)];
+    function matcher(key3, base, pred) {
+      let st = queries.get(key3);
+      if (st) {
+        queries.delete(key3);
+        queries.set(key3, st);
+      } else {
+        st = { pos: [], k: 0 };
+        queries.set(key3, st);
+        if (queries.size > maxQueries) queries.delete(queries.keys().next().value);
+      }
+      const E = civ.events, len = base ? base.length : n, t0 = clock();
+      while (st.k < len) {
+        const lim = Math.min(len, st.k + 48);
+        for (; st.k < lim; st.k++) {
+          const p = base ? base[st.k] : st.k;
+          if (p < n && pred(E[p])) st.pos.push(p);
+        }
+        if (clock() - t0 > sliceMs) break;
+      }
+      return { st, pending: st.k < len };
+    }
+    function page(c, { entityId = null, cat = "", query = "", view: view2 = null, since = null, offset = 0, limit = 40 } = {}) {
+      sync(c);
+      const E = c.events, q2 = (query ?? "").trim();
+      const hi = countUpTo(view2), lo = Math.min(hi, countFrom(since));
+      let base = null;
+      if (entityId) base = graphIndex(c).byEntity.get(entityId) ?? [];
+      else if (cat) base = byCat.get(cat) ?? [];
+      const needScan = q2 || entityId && cat;
+      let arr = base, pending = false;
+      if (needScan) {
+        const pred = (e) => (!cat || classify(e.kind).id === cat) && (!q2 || e.title.includes(q2));
+        const r = matcher(`${entityId ?? ""}|${cat}|${q2}`, base, pred);
+        arr = r.st.pos;
+        pending = r.pending;
+      }
+      let total2, at2;
+      if (arr) {
+        const [a, b] = rangeIn(arr, lo, hi);
+        total2 = b - a;
+        at2 = (i) => arr[b - 1 - i];
+      } else {
+        total2 = hi - lo;
+        at2 = (i) => hi - 1 - i;
+      }
+      const rows = [];
+      for (let i = offset; i < Math.min(total2, offset + limit); i++) rows.push(E[at2(i)]);
+      return { total: total2, rows, pending };
+    }
+    function bandBuckets(c, { from, to, buckets = 160 }) {
+      sync(c);
+      const span = Math.max(1, to - from), nb = Math.max(1, Math.min(buckets, span)), out = [];
+      if (!monotone) {
+        const m = /* @__PURE__ */ new Map();
+        for (let i = 0; i < keyPos.length; i++) {
+          const p = keyPos[i], mo = months[p];
+          if (mo < from || mo > to) continue;
+          const k = Math.min(nb - 1, Math.floor((mo - from) / span * nb)), b = m.get(k) ?? { index: k, n: 0, danger: false, month: mo, pos: p };
+          b.n++;
+          if (dprefix[i + 1] - dprefix[i] > 0) b.danger = true;
+          if (mo < b.month) {
+            b.month = mo;
+            b.pos = p;
+          }
+          m.set(k, b);
+        }
+        return [...m.values()].sort((x, y) => x.index - y.index);
+      }
+      const edge = (i) => i >= nb ? to + 1 : from + Math.ceil(i * span / nb);
+      let A = lowerBoundBy(keyPos, edge(0));
+      for (let i = 0; i < nb; i++) {
+        const B = lowerBoundBy(keyPos, edge(i + 1));
+        if (B > A) out.push({ index: i, n: B - A, danger: dprefix[B] - dprefix[A] > 0, month: months[keyPos[A]], pos: keyPos[A] });
+        A = B;
+      }
+      return out;
+    }
+    function lowerBoundBy(posArr, m) {
+      let lo = 0, hi = posArr.length;
+      while (lo < hi) {
+        const mid = lo + hi >>> 1;
+        if (months[posArr[mid]] < m) lo = mid + 1;
+        else hi = mid;
+      }
+      return lo;
+    }
+    function keyEvents(c, { from, to, limit = 200 }) {
+      sync(c);
+      const out = [], E = c.events;
+      for (let i = lowerBoundBy(keyPos, from); i < keyPos.length && out.length < limit; i++) {
+        const p = keyPos[i];
+        if (months[p] > to) break;
+        out.push(E[p]);
+      }
+      return out;
+    }
+    return { sync, page, bandBuckets, keyEvents, total: () => n, isMonotone: () => monotone, counts: () => ({ events: n, categories: byCat.size, keyEvents: keyPos.length, queries: queries.size }), categoryTotal: (id) => byCat.get(id)?.length ?? 0 };
+  }
+
+  // js/ui/v53/adapters/live-adapter.js
+  var SHOWN_LAYERS = ["states", "cultures", "religions", "biomes", "heights", "borders", "rivers", "burgs"];
+  var REL_JA = { caused_by: "\u539F\u56E0", contributed_to: "\u5BC4\u4E0E", reaction_to: "\u53CD\u5FDC", enabled_by: "\u524D\u63D0", part_of: "\u4E00\u90E8", succeeded_by: "\u5F8C\u7D99", influenced_by: "\u5F71\u97FF", related_to: "\u95A2\u9023" };
+  var BASIS_JA = { direct: "\u76F4\u63A5", strong: "\u5F37\u3044\u6839\u62E0", plausible: "\u3082\u3063\u3068\u3082\u3089\u3057\u3044", contested: "\u7570\u8AD6\u3042\u308A", unknown: "\u4E0D\u660E" };
+  var OUTCOME_JA2 = { aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", negotiated: "\u8B1B\u548C", stalemate: "\u81A0\u7740", state_dissolved: "\u56FD\u5BB6\u306E\u6D88\u6EC5" };
+  var TREATY_JA2 = { nonaggression: "\u4E0D\u53EF\u4FB5\u6761\u7D04", alliance: "\u540C\u76DF", trade: "\u901A\u5546\u6761\u7D04", defense: "\u9632\u885B\u5354\u5B9A", vassal: "\u5F93\u5C5E\u95A2\u4FC2", tribute: "\u671D\u8CA2" };
+  var FORMATION_CONDITIONS = {
+    city_state: ["\u753A\u30FB\u90FD\u5E02\u306E\u6BB5\u968E\u306E\u96C6\u843D\u304C\u3042\u308B", "\u6D77\u5CB8\u304B\u5DDD\u306E\u8FD1\u304F\u306B\u3042\u308B"],
+    agri_union: ["\u8FB2\u8015\u306E\u96C6\u843D\u304C 3 \u3064\u4EE5\u4E0A\u3042\u308B", "\u305D\u308C\u3089\u306E\u4EBA\u53E3\u304C\u5408\u308F\u305B\u3066 3,000 \u4EE5\u4E0A"],
+    religious_polity: ["\u540C\u3058\u5B97\u6559\u3092\u4FE1\u3058\u308B\u96C6\u843D\u304C 2 \u3064\u4EE5\u4E0A\u3042\u308B", "\u305D\u308C\u3089\u306E\u4EBA\u53E3\u304C\u5408\u308F\u305B\u3066 1,500 \u4EE5\u4E0A"],
+    nomad_confederation: ["\u7267\u755C\u306E\u96C6\u56E3\u304C 3 \u3064\u4EE5\u4E0A\u3042\u308B", "\u305D\u308C\u3089\u306E\u4EBA\u53E3\u304C\u5408\u308F\u305B\u3066 1,500 \u4EE5\u4E0A"],
+    defense_league: ["\u7570\u306A\u308B\u6587\u5316\u306E\u96C6\u56E3\u304C\u8FD1\u304F\u306B\u3042\u308B", "\u8FD1\u304F\u306B\u3001\u306F\u308B\u304B\u306B\u5927\u304D\u306A\u56FD\u5BB6\uFF08\u8105\u5A01\uFF09\u304C\u3042\u308B"]
+  };
+  var KEY_KINDS = /* @__PURE__ */ new Set(["state_formed", "state_dissolved", "war_declared", "war_ended", "disaster_struck", "climate_shift", "tech_discovered", "magic_org_founded", "religion_founded"]);
+  var ENTITY_KIND = (id) => {
+    const p = String(id).split("_")[0];
+    return p === "state" || p === "war" || p === "event" || p === "treaty" || p === "decision" ? p : null;
+  };
+  function createLiveAdapter({ store, civActions, history, timeActions, actions, groupActions = null, createCanvas = null, appVersion = "", openFileDialog = null, editMap = null, legacy = null, now = () => Date.now(), eventChunk = 2e3 }) {
+    const mapOf = () => store.getState().map, civOf = () => mapOf()?.civ ?? null, worldOf = () => mapOf()?.world ?? null;
+    const subs = /* @__PURE__ */ new Set();
+    let runGuard = null;
+    const viewMi = () => history.isPast() ? history.viewMonth() : null;
+    const stateName2 = (id) => civOf()?.states[id]?.name ?? String(id);
+    const warTitle = (w) => `${stateName2(w.aggressor)}\u5BFE${stateName2(w.defender)}`;
+    const aliveStates = (civ) => Object.values(civ.states).filter((s) => s.alive);
+    let sig = "";
+    let scCache = { civ: null, key: "", n: 0 };
+    const stateCount = (c) => {
+      if (!c) return 0;
+      const k = `${c.events.length}|${c.monthIndex}`;
+      if (scCache.civ !== c || scCache.key !== k) scCache = { civ: c, key: k, n: Object.keys(c.states).length };
+      return scCache.n;
+    };
+    const signature = () => {
+      const s = store.getState(), c = s.map?.civ, v = s.view;
+      return [!!s.map, !!s.map?.world, c?.monthIndex, c?.events.length, stateCount(c), c?.activeWarIds.length, history.isPast() ? history.viewMonth() : "-", s.timeRunning, s.map?.world?.entities?.start?.groupId, c?.proposals.length, SHOWN_LAYERS.map((k) => isLayerOn(v, k) ? 1 : 0).join("")].join("|");
+    };
+    const emit = () => {
+      for (const f of subs) f();
+    };
+    const onChange = () => {
+      const n = signature();
+      if (n !== sig) {
+        sig = n;
+        metaCache = null;
+        emit();
+      }
+    };
+    store.subscribe(onChange);
+    history.subscribe(() => {
+      sig = "";
+      metaCache = null;
+      onChange();
+    });
+    let metaCache = null;
+    function meta() {
+      const m = mapOf(), civ = civOf(), key3 = `${signature()}`;
+      if (metaCache?.key === key3) return metaCache.v;
+      let v;
+      if (!m) v = { hasWorld: false, hasCiv: false, name: "", cells: 0, first: 0, now: 0, view: null, past: false, states: 0, wars: 0, events: 0, population: 0, land: 1 };
+      else {
+        const w = m.world, hm = civ ? history.meta() : null, al = civ ? aliveStates(civ) : [];
+        v = {
+          hasWorld: !!w,
+          hasCiv: !!civ,
+          name: m.meta?.name || store.getState().fileName?.replace(/\.[^.]+$/, "") || "",
+          cells: w ? w.mesh?.cellCount ?? w.cell?.biome?.length ?? 0 : 0,
+          first: hm?.first ?? 0,
+          now: civ?.monthIndex ?? 0,
+          view: viewMi(),
+          past: history.isPast(),
+          states: al.length,
+          wars: civ?.activeWarIds.length ?? 0,
+          events: civ?.events.length ?? 0,
+          population: al.reduce((a, s) => a + s.pop, 0),
+          land: 1
+        };
+      }
+      metaCache = { key: key3, v };
+      return v;
+    }
+    const evx = createEventIndex({ classify: categoryOf2, isKey: (k) => KEY_KINDS.has(k) });
+    const warMemo = { key: "", rows: [], filtered: /* @__PURE__ */ new Map() };
+    const warRows = () => {
+      const civ = civOf();
+      if (!civ) return [];
+      const m = viewMi() ?? civ.monthIndex, key3 = `${m}|${civ.events.length}|${civ.activeWarIds.length}`;
+      if (warMemo.key !== key3) {
+        warMemo.key = key3;
+        warMemo.filtered = /* @__PURE__ */ new Map();
+        warMemo.rows = Object.values(civ.wars).filter((w) => w.startedAt <= m).sort((a, b) => b.startedAt - a.startedAt || (a.id < b.id ? 1 : -1)).map((w) => ({ w, ended: w.endedAt != null && w.endedAt <= m }));
+      }
+      return warMemo.rows;
+    };
+    const warHas = (w, id) => w.aggressor === id || w.defender === id || !!w.sides?.a?.includes?.(id) || !!w.sides?.d?.includes?.(id);
+    const sinceOf = (range) => {
+      const y = Number(range);
+      if (!Number.isFinite(y) || y <= 0) return null;
+      const civ = civOf();
+      return (viewMi() ?? civ?.monthIndex ?? 0) - y * 12;
+    };
+    function eventRow(e) {
+      const c = categoryOf2(e.kind);
+      return { id: e.eventId, title: e.title, sub: fmtMonth(evMonth(e)), tag: c.label, tone: c.tone };
+    }
+    const rowMemo = /* @__PURE__ */ new Map();
+    const memoRows = (name, extra, build) => {
+      const civ = civOf(), k = `${civ.events.length}|${civ.monthIndex}|${viewMi()}|${extra}`, e = rowMemo.get(name);
+      if (e?.k === k) return e.v;
+      const v = build();
+      rowMemo.set(name, { k, v });
+      return v;
+    };
+    const slice = (rows, offset, limit) => ({ total: rows.length, rows: rows.slice(offset, offset + limit) });
+    function list(kind, { query = "", filter = "", sort = "", offset = 0, limit = 40, entity = "", range = "" } = {}) {
+      const civ = civOf();
+      if (!civ) return { total: 0, rows: [] };
+      const q2 = query.trim();
+      if (kind === "state") {
+        const r = history.listStates({ query: q2, sort: sort || "pop", filter: filter === "dead" ? "dead" : "alive", offset, limit });
+        return { total: r.total, rows: r.rows.map((s) => ({ id: s.id, title: s.name, sub: `${POLITY[s.polity] ?? s.polity}\u30FB\u4EBA\u53E3 ${fmtNum(s.pop)}`, tag: s.player ? "\u30D7\u30EC\u30A4\u30E4\u30FC" : "", tone: s.player ? "accent" : "", pop: s.pop })) };
+      }
+      if (kind === "war") {
+        const since = sinceOf(range), fk = `${filter}|${q2}|${entity}|${since}`, all = warRows();
+        let rows = warMemo.filtered.get(fk);
+        if (!rows) {
+          rows = all.filter(({ w, ended }) => (filter === "active" ? !ended : filter === "ended" ? ended : true) && (since == null || w.startedAt >= since || !ended) && (!entity || warHas(w, entity)) && (!q2 || warTitle(w).includes(q2)));
+          if (warMemo.filtered.size > 8) warMemo.filtered.clear();
+          warMemo.filtered.set(fk, rows);
+        }
+        const r = slice(rows, offset, limit);
+        return { total: r.total, rows: r.rows.map(({ w, ended }) => ({ id: w.id, title: warTitle(w), sub: `${fmtMonth(w.startedAt)}\u301C${ended ? fmtMonth(w.endedAt) : "\u7D99\u7D9A\u4E2D"}`, tag: ended ? "\u7D42\u7D50" : "\u6226\u4E89\u4E2D", tone: ended ? "" : "danger" })) };
+      }
+      if (kind === "event") {
+        const r = evx.page(civ, { entityId: entity || null, cat: filter, query: q2, view: viewMi(), since: sinceOf(range), offset, limit });
+        return { total: r.total, rows: r.rows.map(eventRow), pending: r.pending };
+      }
+      if (kind === "treaty") {
+        const rows = memoRows("treaty", q2, () => {
+          let x = Object.values(civ.treaties ?? {}).filter((t) => t.active).map((t) => ({ id: t.id, title: `${stateName2(t.a)}\u3068${stateName2(t.b)}\u306E${TREATY_JA2[t.type] ?? t.type}`, sub: `${fmtMonth(t.since ?? t.signedAt ?? 0)}\u301C`, tag: TREATY_JA2[t.type] ?? "\u6761\u7D04" }));
+          if (q2) x = x.filter((r) => r.title.includes(q2));
+          return x;
+        });
+        return slice(rows, offset, limit);
+      }
+      if (kind === "tech") {
+        const rows = memoRows("tech", q2, () => {
+          let x = TECHS.map((t) => ({ id: `tech_${t.key}`, title: t.name, sub: `${aliveStates(civ).filter((s) => s.techAdopted?.[t.key] != null).length} \u56FD\u304C\u63A1\u7528`, tag: `\u6BB5\u968E ${t.tier ?? ""}` }));
+          if (q2) x = x.filter((r) => r.title.includes(q2));
+          return x;
+        });
+        return slice(rows, offset, limit);
+      }
+      if (kind === "culture") {
+        const rows = memoRows("culture", q2, () => {
+          let x = [...Object.values(civ.cultures ?? {}).map((c) => ({ id: `culture_${c.id}`, title: c.name, sub: "\u6587\u5316", tag: "\u6587\u5316" })), ...Object.values(civ.religions ?? {}).map((c) => ({ id: `religion_${c.id}`, title: c.name, sub: "\u5B97\u6559", tag: "\u5B97\u6559" })), ...Object.values(civ.languages ?? {}).map((c) => ({ id: `language_${c.id}`, title: c.name, sub: "\u8A00\u8A9E", tag: "\u8A00\u8A9E" }))];
+          if (q2) x = x.filter((r) => r.title.includes(q2));
+          return x;
+        });
+        return slice(rows, offset, limit);
+      }
+      if (kind === "magic") {
+        const rows = memoRows("magic", q2, () => {
+          let x = Object.values(civ.magic?.orgs ?? {}).map((o) => ({ id: `magic_${o.id}`, title: o.name, sub: "\u9B54\u6CD5\u7D44\u7E54", tag: "\u9B54\u6CD5" }));
+          if (q2) x = x.filter((r) => r.title.includes(q2));
+          return x;
+        });
+        return slice(rows, offset, limit);
+      }
+      return { total: 0, rows: [], unsupported: true };
+    }
+    function browseLinks(id, noun, { wars = true } = {}) {
+      const civ = civOf(), out = [];
+      const ne = evx.page(civ, { entityId: id, view: viewMi(), limit: 0 }).total;
+      if (wars) {
+        const nw = list("war", { entity: id, limit: 0 }).total;
+        if (nw > 0) out.push({ label: `\u3053\u306E${noun}\u304C\u95A2\u308F\u3063\u305F\u6226\u4E89\uFF08\u5168 ${nw.toLocaleString("ja-JP")} \u4EF6\uFF09`, domain: "war", entity: id, count: nw });
+      }
+      if (ne > 0) out.push({ label: `\u3053\u306E${noun}\u306B\u95A2\u308F\u308B\u51FA\u6765\u4E8B\uFF08\u5168 ${ne.toLocaleString("ja-JP")} \u4EF6\uFF09`, domain: "history", entity: id, count: ne });
+      return out;
+    }
+    const noticeFor = () => history.isPast() ? `${fmtMonth(history.viewMonth())}\u306E\u72B6\u614B\uFF08\u6708\u6B21\u5C65\u6B74\u304B\u3089\u5FA9\u5143\u30FB\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09` : null;
+    function detail(kind, id) {
+      const civ = civOf();
+      if (!civ) return null;
+      if (kind === "state") {
+        const x = history.stateDetail(id);
+        if (!x) return null;
+        return {
+          kind,
+          id,
+          title: x.name,
+          subtitle: `${POLITY[x.polity] ?? x.polity}\u30FB\u6210\u7ACB ${fmtMonth(x.formedAt)}`,
+          tag: !x.alive ? "\u6EC5\u4EA1" : x.player ? "\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u5BB6" : "\u5B58\u7D9A\u4E2D",
+          tone: !x.alive ? "danger" : "accent",
+          summary: !x.alive ? `${fmtMonth(x.dissolvedAt)}\u306B\u6EC5\u4EA1\u3057\u305F\u3002` : `${x.name}\u306F${POLITY[x.polity] ?? x.polity}\uFF08\u6210\u7ACB\u306E\u7D4C\u8DEF: ${VIA[x.via]?.ja ?? x.via}\uFF09\u3002${x.wars.length ? `\u73FE\u5728 ${x.wars.length} \u4EF6\u306E\u6226\u4E89\u306B\u95A2\u308F\u3063\u3066\u3044\u308B\u3002` : "\u73FE\u5728\u3001\u6226\u4E89\u306B\u306F\u95A2\u308F\u3063\u3066\u3044\u306A\u3044\u3002"}`,
+          stats: [{ label: "\u4EBA\u53E3", value: fmtNum(x.pop) }, { label: "\u5B89\u5B9A\u5EA6", value: fmtPct(x.stability), tone: x.stability < 0.3 ? "danger" : "" }, { label: "\u56FD\u5EAB", value: fmtNum(x.treasury) }, { label: "\u5175\u529B", value: fmtNum(x.army) }, { label: "\u96C6\u843D", value: String(x.settlements ?? "\u2014") }, { label: "\u6226\u4E89", value: String(x.wars.length), tone: x.wars.length ? "danger" : "" }],
+          related: [...x.wars.map((w) => ({ kind: "war", id: w.id, label: w.name, relation: "\u6226\u4E89\u4E2D" })), ...x.relations.slice(0, 4).map((r) => ({ kind: "state", id: r.id, label: r.name, relation: "\u53CB\u597D" })), ...x.relations.slice(-3).filter((r) => r.value < 0).map((r) => ({ kind: "state", id: r.id, label: r.name, relation: "\u6575\u5BFE" }))],
+          events: history.listEvents({ entityId: id, limit: 6 }).rows.map((e) => ({ id: e.eventId, month: evMonth(e), title: e.title, kind: e.kind })),
+          browse: browseLinks(id, "\u56FD"),
+          legacy: !!legacy?.openState,
+          notice: noticeFor()
+        };
+      }
+      if (kind === "war") {
+        const w = history.warDetail(id);
+        if (!w) return null;
+        const m = viewMi() ?? civ.monthIndex, ended = w.endedAt != null && w.endedAt <= m;
+        const nm8 = (arr) => arr.map((s) => s.name).join("\u30FB");
+        return {
+          kind,
+          id,
+          title: w.name,
+          subtitle: `${fmtMonth(w.startedAt)}\u301C${ended ? fmtMonth(w.endedAt) : "\u7D99\u7D9A\u4E2D"}`,
+          tag: ended ? "\u7D42\u7D50" : "\u6226\u4E89\u4E2D",
+          tone: ended ? "" : "danger",
+          summary: ended ? `\u7D50\u679C: ${OUTCOME_JA2[w.outcome] ?? w.outcome ?? "\u2014"}` : "\u6226\u4E89\u306F\u7D9A\u3044\u3066\u3044\u308B\u3002",
+          progress: [{ label: "\u6E96\u5099", state: "done" }, { label: "\u6226\u6CC1", state: ended ? "done" : "now" }, { label: "\u8B1B\u548C", state: ended ? "done" : "todo" }],
+          stats: [{ label: "\u653B\u6483\u5074", value: nm8(w.sides.a) }, { label: "\u9632\u885B\u5074", value: nm8(w.sides.d) }, { label: "\u640D\u5BB3", value: w.casualties != null ? `${fmtNum(typeof w.casualties === "number" ? w.casualties : Object.values(w.casualties).reduce((a, b) => a + b, 0))} \u4EBA` : "\u2014" }, { label: "\u7D4C\u904E", value: `${Math.max(0, (ended ? w.endedAt : m) - w.startedAt)} \u304B\u6708` }],
+          related: [...w.sides.a.map((s) => ({ kind: "state", id: s.id, label: s.name, relation: "\u653B\u6483\u5074" })), ...w.sides.d.map((s) => ({ kind: "state", id: s.id, label: s.name, relation: "\u9632\u885B\u5074" }))],
+          events: w.events.filter((e) => evMonth(e) <= m).slice(-8).reverse().map((e) => ({ id: e.eventId, month: evMonth(e), title: e.title, kind: e.kind })),
+          browse: browseLinks(id, "\u6226\u4E89", { wars: false }),
+          notice: noticeFor()
+        };
+      }
+      if (kind === "event") {
+        const d = history.eventDetail(id);
+        if (!d) return null;
+        const e = d.event, c = categoryOf2(e.kind);
+        const who = e.participants.filter((p) => ENTITY_KIND(p.entityId)).slice(0, 12);
+        const related = [
+          ...who.map((p) => ({ kind: ENTITY_KIND(p.entityId), id: p.entityId, label: ENTITY_KIND(p.entityId) === "state" ? stateName2(p.entityId) : ENTITY_KIND(p.entityId) === "war" ? civ.wars[p.entityId] ? warTitle(civ.wars[p.entityId]) : p.entityId : p.entityId, relation: `\u95A2\u4E0E\uFF08${p.role}\uFF09` })),
+          ...d.causes.filter((x) => x.event).map((x) => ({ kind: "event", id: x.targetId, label: x.event.title, relation: `\u539F\u56E0\uFF08${REL_JA[x.relation] ?? x.relation}\u30FB${BASIS_JA[x.basis] ?? x.basis}\uFF09` })),
+          ...d.consequences.filter((x) => x.event).slice(0, 12).map((x) => ({ kind: "event", id: x.from, label: x.event.title, relation: "\u7D50\u679C\u30FB\u5F8C\u7D9A" })),
+          ...d.decision ? [{ kind: "decision", id: d.decision.decisionId, label: `AI\u5224\u65AD: ${d.decision.type}`, relation: "\u80CC\u666F\u306E\u5224\u65AD" }] : []
+        ];
+        const noCause = !d.causes.length;
+        return {
+          kind,
+          id,
+          title: e.title,
+          subtitle: fmtMonth(evMonth(e)),
+          tag: c.label,
+          tone: c.tone,
+          summary: noCause ? "\u8A18\u9332\u3055\u308C\u305F\u5148\u884C\u4E8B\u8C61\u306F\u3042\u308A\u307E\u305B\u3093\uFF08\u74B0\u5883\u30FB\u72B6\u614B\u30FB\u4E3B\u4F53\u306E\u5224\u65AD\u30FB\u78BA\u7387\u7684\u306A\u6761\u4EF6\u306B\u3088\u308B\u51FA\u6765\u4E8B\uFF09\u3002" : `\u539F\u56E0\u3068\u3057\u3066 ${d.causes.length} \u4EF6\u306E\u95A2\u9023\u304C\u8A18\u9332\u3055\u308C\u3066\u3044\u307E\u3059\u3002`,
+          stats: [{ label: "\u7A2E\u985E", value: e.kind }, { label: "\u95A2\u4E0E", value: String(e.participants.length) }, { label: "\u539F\u56E0", value: String(d.causes.length) }, { label: "\u5F8C\u7D9A", value: String(d.consequences.length) }],
+          related,
+          events: []
+        };
+      }
+      if (kind === "decision") {
+        const x = history.decisionDetail(id);
+        if (!x) return null;
+        return {
+          kind,
+          id,
+          title: `\u5224\u65AD: ${x.type}`,
+          subtitle: fmtMonth(x.date.year * 12 + x.date.month - 1),
+          tag: x.layer,
+          summary: `${stateName2(x.actorId)}\u306E\u5224\u65AD\u3002\u9078\u629E: ${x.chosen?.key ?? "\u4F55\u3082\u3057\u306A\u3044"}${x.result ? `\uFF08\u7D50\u679C: ${x.result.ok ? "\u6210\u529F" : x.result.error}\uFF09` : ""}`,
+          stats: x.candidates.slice(0, 8).map((c) => ({ label: c.key, value: c.eligible ? String(Math.round((c.total ?? 0) * 100) / 100) : `\u4E0D\u53EF\uFF08${c.reason ?? "\u2014"}\uFF09`, tone: c.key === x.chosen?.key ? "warn" : "" })),
+          related: [{ kind: "state", id: x.actorId, label: stateName2(x.actorId), relation: "\u4E3B\u4F53" }],
+          events: []
+        };
+      }
+      const row = list(kind, { limit: 1e6 }).rows.find((r) => String(r.id) === String(id));
+      return row ? { kind, id, title: row.title, subtitle: row.sub, tag: row.tag, summary: kind === "tech" ? "\u6280\u8853\u306E\u8A73\u7D30\uFF08\u524D\u63D0\u30FB\u5B9F\u7528\u5316\u30FB\u666E\u53CA\uFF09\u306F v5.4 \u306E\u6280\u8853\u30E2\u30C7\u30EB\u3067\u63A5\u7D9A\u3055\u308C\u307E\u3059\u3002" : "", stats: [], related: [], events: [] } : null;
+    }
+    const optionsCache = { key: "", v: [] };
+    function playerOptions(stateId) {
+      const o = civActions.playerStateOptions?.();
+      if (!o || o.state.id !== stateId) return [];
+      const list2 = o.options.map((op, i) => ({ ...op, i })).sort((a, b) => Number(b.eligible) - Number(a.eligible)).slice(0, 14);
+      optionsCache.key = stateId;
+      optionsCache.v = list2;
+      return list2;
+    }
+    const actions_ = (kind, id) => kind !== "state" ? [] : playerOptions(id).map((op) => ({ id: `${op.action}|${op.target ?? ""}|${op.opt ?? ""}`, label: op.label, enabled: !!op.eligible, reason: op.reason ?? "" }));
+    function runAction2(kind, id, actionId) {
+      if (history.isPast()) return { ok: false, error: "\u904E\u53BB\u3092\u95B2\u89A7\u4E2D\u306F\u64CD\u4F5C\u3067\u304D\u307E\u305B\u3093\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09" };
+      const op = playerOptions(id).find((o) => `${o.action}|${o.target ?? ""}|${o.opt ?? ""}` === actionId);
+      if (!op) return { ok: false, error: "\u3053\u306E\u64CD\u4F5C\u306F\u3001\u3044\u307E\u306F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093" };
+      const r = civActions.stateAction(id, op.action, op.target ?? null, op.opt ?? null);
+      return r?.ok ? { ok: true } : { ok: false, error: r?.error ?? "\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F" };
+    }
+    let cursor = { civ: null, n: 0 };
+    function impactOf(civ, e, worldPop) {
+      const sts = e.participants.filter((p) => civ.states[p.entityId]).map((p) => civ.states[p.entityId]);
+      const actorPop = sts.reduce((a, s) => a + (s.alive ? s.pop : 0), 0);
+      const groupsOf = (role) => e.participants.filter((p) => p.role === role).map((p) => civ.groups[p.entityId]).filter(Boolean);
+      const exposed = groupsOf("affected").reduce((a, g) => a + g.pop, 0);
+      const changedGroups = (e.effects ?? []).filter((f) => f.property === "stateId").length;
+      return {
+        popLossShare: worldPop ? exposed * 0.5 / worldPop : 0,
+        // 暫定: 被災集団の人口の半分を被害の目安にする（係数は長期統計で調整）
+        territoryShare: changedGroups / Math.max(1, Object.keys(civ.groups).length),
+        actorPopShare: worldPop ? actorPop / worldPop : 0,
+        actorCount: sts.length,
+        ripple: Math.min(5, (e.effects ?? []).length),
+        player: sts.some((s) => s.player)
+      };
+    }
+    function newEvents() {
+      const civ = civOf();
+      if (!civ) {
+        cursor = { civ: null, n: 0 };
+        return [];
+      }
+      if (cursor.civ !== civ || cursor.n > civ.events.length) cursor = { civ, n: civ.events.length };
+      if (history.isPast() || cursor.n === civ.events.length) return [];
+      const fresh2 = civ.events.slice(cursor.n);
+      cursor.n = civ.events.length;
+      const worldPop = aliveStates(civ).reduce((a, s) => a + s.pop, 0);
+      return fresh2.map((e) => {
+        const cause = e.causes.map((c) => getEvent(civ, c.targetId)).find(Boolean);
+        return { id: e.eventId, month: evMonth(e), kind: e.kind, title: e.title, detail: "", causeText: cause ? `\u300C${cause.title}\u300D\u3092\u53D7\u3051\u3066` : "", actors: e.participants.filter((p) => civ.states[p.entityId]).map((p) => ({ kind: "state", id: p.entityId, name: civ.states[p.entityId].name })), impact: impactOf(civ, e, worldPop) };
+      });
+    }
+    const band = ({ from, to, limit = 400 }) => evx.keyEvents(civOf(), { from, to, limit }).map((e) => ({ id: e.eventId, month: evMonth(e), kind: e.kind, title: e.title }));
+    function bandBuckets({ from, to, buckets = 160 }) {
+      const civ = civOf();
+      if (!civ) return [];
+      const E = civ.events;
+      return evx.bandBuckets(civ, { from, to, buckets }).map((b) => ({ index: b.index, n: b.n, danger: b.danger, month: b.month, title: E[b.pos]?.title ?? "" }));
+    }
+    function search(text2, { perKind = 6 } = {}) {
+      const civ = civOf(), q2 = String(text2 ?? "").trim();
+      if (!civ || !q2) return { groups: [], pending: false };
+      const groups = [], add2 = (kind, label3, total2, rows) => {
+        if (total2 > 0) groups.push({ kind, label: label3, total: total2, rows });
+      };
+      const st = history.listStates({ query: q2, sort: "pop", filter: "all", limit: perKind });
+      add2("state", "\u56FD\u5BB6", st.total, st.rows.map((s) => ({ id: s.id, title: s.name, sub: `${s.alive ? "\u5B58\u7D9A\u4E2D" : "\u6EC5\u4EA1"}\u30FB${POLITY[s.polity] ?? s.polity}` })));
+      const wr = list("war", { query: q2, limit: perKind });
+      add2("war", "\u6226\u4E89", wr.total, wr.rows.map((r) => ({ id: r.id, title: r.title, sub: r.sub })));
+      const cu = list("culture", { query: q2, limit: perKind });
+      add2("culture", "\u6587\u5316\u30FB\u5B97\u6559\u30FB\u8A00\u8A9E", cu.total, cu.rows.map((r) => ({ id: r.id, title: r.title, sub: r.sub, kind: String(r.id).split("_")[0] })));
+      const ev = list("event", { query: q2, limit: perKind });
+      add2("event", "\u51FA\u6765\u4E8B", ev.total, ev.rows.map((r) => ({ id: r.id, title: r.title, sub: r.sub })));
+      return { groups, pending: !!ev.pending };
+    }
+    const layers = () => {
+      const v = store.getState().view;
+      return LAYERS.filter((l) => SHOWN_LAYERS.includes(l.key)).map((l) => ({ key: l.key, label: l.label, on: isLayerOn(v, l.key) }));
+    };
+    const guardOk = () => !history.isPast() && (!runGuard || runGuard());
+    const time = {
+      isRunning: () => timeActions.isRunning(),
+      start() {
+        if (guardOk()) timeActions.start();
+      },
+      stop: () => timeActions.stop(),
+      step() {
+        if (!guardOk()) return false;
+        timeActions.stepMonth();
+        return true;
+      },
+      speedPerYear: () => timeActions.getSpeed() * 12,
+      setSpeedPerYear: (ms) => timeActions.setSpeedPerYear(ms)
+    };
+    const proposalOf = () => civOf()?.proposals.find((p) => !p.resolved && p.kind === "form_state") ?? null;
+    const startState = () => {
+      const m = mapOf();
+      if (!m?.world) return { phase: "none", hasWorld: false, groupId: null, months: 0 };
+      const civ = m.civ, gid = m.world.entities.start?.groupId ?? null;
+      if (!civ) return { phase: "group", hasWorld: true, groupId: gid, months: 0 };
+      if (proposalOf()) return { phase: "ready", hasWorld: true, groupId: gid, months: civ.monthIndex };
+      const ps = Object.values(civ.states).find((s) => s.player && s.alive);
+      return { phase: ps ? "founded" : "running", hasWorld: true, groupId: gid, months: civ.monthIndex };
+    };
+    const start2 = {
+      state: startState,
+      initialGroups() {
+        const w = worldOf();
+        if (!w) return [];
+        const sel = w.entities.start?.groupId ?? store.getState().groups?.selected;
+        return w.entities.populations.map((p) => ({ id: p.id, title: `\u96C6\u56E3 #${p.id}`, sub: SUBSISTENCE[p.subsistence] ?? p.subsistence ?? "", stats: [{ label: "\u4EBA\u53E3", value: fmtNum(p.size) }, { label: "\u4F4D\u7F6E", value: `\u7DEF\u5EA6 ${Math.round(p.lat)}\xB0\u30FB\u7D4C\u5EA6 ${Math.round(p.lon)}\xB0` }], selected: p.id === sel }));
+      },
+      chooseGroup(id) {
+        if (!groupActions) return { ok: false, error: "\u521D\u671F\u96C6\u56E3\u306E\u64CD\u4F5C\u304C\u63A5\u7D9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093" };
+        if (!groupActions.selectGroup(id)) return { ok: false, error: "\u305D\u306E\u96C6\u56E3\u306F\u9078\u3079\u307E\u305B\u3093" };
+        const r = groupActions.confirmStart();
+        return r.ok ? { ok: true } : { ok: false, error: r.reason };
+      },
+      begin() {
+        const r = civActions.start();
+        return r.ok ? { ok: true } : { ok: false, error: r.error };
+      },
+      readiness() {
+        const p = proposalOf();
+        if (!p) return { ready: false, via: null, label: "\u6210\u7ACB\u306E\u6761\u4EF6\u306F\u307E\u3060\u6574\u3063\u3066\u3044\u307E\u305B\u3093", conditions: [], proposalId: null };
+        const via = p.payload?.via;
+        return { ready: true, via, label: VIA[via]?.ja ?? via, conditions: (FORMATION_CONDITIONS[via] ?? []).map((label3) => ({ label: label3, met: true })), proposalId: p.proposalId };
+      },
+      async run({ onProgress = null, signal = null, batch = 12, stallMonths = 600 } = {}) {
+        const civ0 = civOf();
+        if (!civ0) return { stopped: "error", error: "\u6B74\u53F2\u304C\u307E\u3060\u59CB\u307E\u3063\u3066\u3044\u307E\u305B\u3093", months: 0 };
+        const t0 = civ0.monthIndex;
+        let lastSig = "", lastChange = civ0.monthIndex;
+        try {
+          while (!proposalOf()) {
+            if (signal?.aborted) return { stopped: "aborted", months: civOf().monthIndex - t0 };
+            if (history.isPast()) return { stopped: "error", error: "\u904E\u53BB\u3092\u95B2\u89A7\u4E2D\u306F\u9032\u3081\u3089\u308C\u307E\u305B\u3093\u3002\u73FE\u5728\u3078\u623B\u3057\u3066\u304F\u3060\u3055\u3044", months: 0 };
+            for (let i = 0; i < batch && !proposalOf(); i++) timeActions.stepMonth();
+            const civ = civOf(), s = `${Object.keys(civ.groups).length}|${Object.keys(civ.settlements).length}|${Math.round(Object.values(civ.groups).reduce((a, g) => a + g.pop, 0))}`;
+            if (s !== lastSig) {
+              lastSig = s;
+              lastChange = civ.monthIndex;
+            }
+            onProgress?.({ months: civ.monthIndex - t0, year: Math.floor(civ.monthIndex / 12), states: aliveStates(civ).length, stalled: civ.monthIndex - lastChange >= stallMonths, warning: null });
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        } catch (e) {
+          return { stopped: "error", error: e?.message ?? String(e), months: 0 };
+        }
+        return { stopped: "ready", months: civOf().monthIndex - t0 };
+      },
+      found(proposalId) {
+        const r = civActions.command({ type: "acceptProposal", proposalId });
+        return r?.ok ? { ok: true } : { ok: false, error: r?.error ?? "\u6210\u7ACB\u3067\u304D\u307E\u305B\u3093\u3067\u3057\u305F" };
+      }
+    };
+    const world = {
+      openFile: () => openFileDialog?.(),
+      async newWorld(spec, { signal } = {}) {
+        const r = await actions.newWorld(spec);
+        if (signal?.aborted) return { ok: false, cancelled: true };
+        return r?.ok ? { ok: true } : r?.cancelled ? { ok: false, cancelled: true } : { ok: false, error: store.getState().error ?? (r?.errors ?? []).join(" / ") };
+      },
+      fitView: () => actions.fit(),
+      editMap: () => editMap?.(),
+      // 従来のウィンドウ（国家の詳細編集・外交・軍事・年表など）への橋渡し。v5.3 の画面にまだ移していない編集機能を失わないための入口
+      openLegacy: (kind, id) => {
+        if (kind === "state" && legacy?.openState) {
+          legacy.openState(id);
+          return { ok: true };
+        }
+        return { ok: false, error: "\u5F93\u6765\u306E\u753B\u9762\u304C\u63A5\u7D9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093" };
+      },
+      legacyWindows: () => legacy?.windows ?? [],
+      openLegacyWindow: (win) => {
+        legacy?.openWindow?.(win);
+      }
+    };
+    const fileName = () => store.getState().fileName;
+    const renderOpts = () => viewToRenderOptions(store.getState().view);
+    const exports_ = {
+      describe() {
+        const m = meta();
+        return { chronicle: { available: m.hasWorld }, ahmap: { available: m.hasWorld }, obsidian: { available: m.hasCiv }, png: { kinds: ["current", "territory"], available: m.hasWorld } };
+      },
+      async chronicle() {
+        const map = mapOf();
+        map.ext ?? (map.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} });
+        const md = chronicleToMarkdown(buildChronicle(map, { fileName: fileName(), includeCells: false, exportedAt: todayString() }));
+        const civ = map.civ, parts = [md, ...civ ? civChronicleChunks(civ, { worldName: meta().name }) : []];
+        return { blob: new Blob(parts, { type: "text/markdown" }), name: `${exportFileName(map, fileName(), "x").replace(/\.x$/, "")}.chronicle.md` };
+      },
+      async ahmap() {
+        const map = mapOf(), bytes = await saveMapBytes(map, { appVersion, savedAt: todayString() });
+        store.markSaved?.();
+        return { blob: new Blob([bytes], { type: "application/octet-stream" }), name: exportFileName(map, fileName(), "ahmap") };
+      },
+      obsidianEstimate(range = {}) {
+        const m = mapOf();
+        return estimateVault(m.world, m.civ, { ...range, cellRaster });
+      },
+      async *obsidian({ fromMonth, toMonth, maxPartBytes = DEFAULT_PART_BYTES, maxPartFiles = DEFAULT_PART_FILES, signal = null, onProgress = null } = {}) {
+        const m = mapOf(), name = meta().name || "\u4E16\u754C", root = String(name).replace(/[\\/:*?"<>|]/g, "_"), enc7 = new TextEncoder(), index = [];
+        let manifest = null;
+        const sha = async (b) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", b))].map((x) => x.toString(16).padStart(2, "0")).join("");
+        const opts = { cellRaster };
+        if (fromMonth != null && Number.isFinite(fromMonth)) opts.fromMonth = fromMonth;
+        if (toMonth != null && Number.isFinite(toMonth)) opts.toMonth = toMonth;
+        async function* gen() {
+          for await (const f of obsidianFiles(m.world, m.civ, name, opts)) {
+            if (f.kind === "manifest") {
+              manifest = JSON.parse(f.data);
+              continue;
+            }
+            const raw = typeof f.data === "string" ? enc7.encode(f.data) : f.data;
+            index.push([f.path.slice(root.length + 1), raw.length, await sha(raw)]);
+            yield f;
+          }
+          manifest.files = index;
+          manifest.split = true;
+          yield { path: `${root}/manifest.json`, data: JSON.stringify(manifest, null, 1) };
+        }
+        yield* splitIntoParts(gen(), { root, maxPartBytes, maxPartFiles, signal, onProgress, zip: (files) => zipFiles(files, { compress: true }) });
+      },
+      async png({ kind, month }) {
+        if (!createCanvas) throw new Error("PNG \u306E\u66F8\u304D\u51FA\u3057\u306B\u5FC5\u8981\u306A\u63CF\u753B\u6A5F\u80FD\u304C\u63A5\u7D9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093");
+        const map = mapOf(), mm = meta(), ls = layers();
+        if (kind === "territory") {
+          if (!map.civ) throw new Error("\u6587\u660E\u306E\u6B74\u53F2\u304C\u59CB\u307E\u3063\u3066\u304B\u3089\u66F8\u304D\u51FA\u305B\u307E\u3059");
+          const t = history.territory(), W = 2048, H = 1024, c = map.world.cell, cellAt = cellRaster(map.world, W, H), cv2 = createCanvas(W, H), g = cv2.getContext("2d"), img = g.createImageData(W, H);
+          const cols = new Map(t.states.map((s) => [s.id, hslToRgb(s.color)]));
+          for (let i = 0; i < W * H; i++) {
+            const ci = cellAt[i], water = c.landWater[ci] !== 1;
+            let r = water ? 24 : 70, gg = water ? 52 : 82, b = water ? 96 : 70;
+            const o = t.owner.get(ci), k = o ? cols.get(o) : null;
+            if (k) {
+              r = r * 0.3 + k[0] * 0.7;
+              gg = gg * 0.3 + k[1] * 0.7;
+              b = b * 0.3 + k[2] * 0.7;
+            }
+            img.data[4 * i] = r;
+            img.data[4 * i + 1] = gg;
+            img.data[4 * i + 2] = b;
+            img.data[4 * i + 3] = 255;
+          }
+          g.putImageData(img, 0, 0);
+          const meta_2 = describePng({ kind, month: t.month, worldName: mm.name, layers: ls, legendCount: t.states.length, projection: "\u7B49\u8DDD\u5186\u7B52\u56F3\uFF08\u7DEF\u5EA6\u30FB\u7D4C\u5EA6\u3092\u305D\u306E\u307E\u307E\u5E73\u9762\u3078\u3002\u8868\u793A\u7528\u306E\u6295\u5F71\u3067\u3001\u30C7\u30FC\u30BF\u306F\u7403\u9762\u4E0A\u306B\u4FDD\u6301\uFF09" });
+          const out = withCaption(cv2, meta_2.captionLines, { createCanvas });
+          return { blob: await canvasToPngBlob(out), name: exportFileName(map, fileName(), "png", `_territory_${Math.floor(t.month / 12)}`), meta: meta_2 };
+        }
+        const cv = renderMapToCanvas(map, renderOpts(), { scale: 2, createCanvas, annotations: { ...DEFAULT_ANNOTATIONS, ...store.getState().exportOpts ?? {} } });
+        const meta_ = describePng({ kind: "current", month: month ?? mm.view ?? mm.now, worldName: mm.name, layers: ls, projection: "\u753B\u9762\u306E\u5730\u56F3\u3068\u540C\u3058\u6295\u5F71" });
+        return { blob: await canvasToPngBlob(withCaption(cv, meta_.captionLines, { createCanvas })), name: exportFileName(map, fileName(), "png"), meta: meta_ };
+      }
+    };
+    return {
+      meta,
+      subscribe(fn) {
+        subs.add(fn);
+        return () => subs.delete(fn);
+      },
+      setView: (mi2) => history.setView(mi2),
+      list,
+      detail,
+      actions: actions_,
+      runAction: runAction2,
+      band,
+      bandBuckets,
+      search,
+      newEvents,
+      worldScale: () => {
+        const civ = civOf();
+        return { states: civ ? aliveStates(civ).length : 0, population: civ ? aliveStates(civ).reduce((a, s) => a + s.pop, 0) : 0 };
+      },
+      layers,
+      toggleLayer: (k) => actions.toggle(k),
+      setRunGuard(fn) {
+        runGuard = fn;
+      },
+      time,
+      world,
+      start: start2,
+      exports: exports_
+    };
+  }
+  function hslToRgb(s) {
+    const m = String(s).match(/hsl\((\d+) (\d+)% (\d+)%\)/);
+    if (!m) return [128, 128, 128];
+    const h2 = +m[1], sa = +m[2] / 100, l = +m[3] / 100, a = sa * Math.min(l, 1 - l), f = (n) => {
+      const k = (n + h2 / 30) % 12;
+      return 255 * (l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)));
+    };
+    return [f(0), f(8), f(4)];
+  }
+  function createLiveMapPort({ stageEl, panels = null, highlight = null, owns = () => true }) {
+    let pick = null;
+    const origOpen = panels?.openEntity;
+    if (panels && origOpen) panels.openEntity = (kind, id) => {
+      if ((kind === "state" || kind === "war") && owns(kind, id)) {
+        pick?.({ kind, id });
+        return;
+      }
+      return origOpen.call(panels, kind, id);
+    };
+    return { el: stageEl, onPick(fn) {
+      pick = fn;
+    }, highlight(sel) {
+      if (sel && highlight) highlight.show(sel.kind, sel.id);
+    }, refresh() {
+    }, dispose() {
+      if (panels && origOpen) panels.openEntity = origOpen;
+    } };
+  }
+
+  // js/ui/v53/boot-live.js
+  function bootV53({ root, store, civActions, history, timeActions, actions, groupActions = null, stageEl, panels = null, highlight = null, createCanvas = null, download, appVersion = "", openFileDialog = null, editMap = null, legacy = null, ...rest }) {
+    const adapter = createLiveAdapter({ store, civActions, history, timeActions, actions, groupActions, createCanvas, appVersion, openFileDialog, editMap, legacy });
+    const map = createLiveMapPort({ stageEl, panels, highlight, owns: (kind, id) => {
+      const c = store.getState().map?.civ;
+      return !!c && !!(kind === "state" ? c.states : c.wars)?.[id];
+    } });
+    const app = mountV53({ root, adapter, map, download, ...rest });
+    return { ...app, adapter, map };
+  }
+
   // js/main.js
   function start() {
     const store = createStore({
@@ -27709,10 +30204,35 @@ ${shown}${more}`;
     store.subscribe((_s, change) => {
       if (change.type === "undo" || change.type === "redo") renderer.requestRender();
     });
-    initShortcuts({ ...deps, editMode, editToolbar, timeActions });
+    let v53 = null;
+    const v53Time = { ...timeActions, start: () => v53 ? v53.adapter.time.start() : timeActions.start(), stop: () => v53 ? v53.adapter.time.stop() : timeActions.stop(), isRunning: () => timeActions.isRunning() };
+    initShortcuts({ ...deps, editMode, editToolbar, timeActions: v53Time });
+    const LEGACY_WINDOWS = [["nation", "\u56FD\u5BB6\uFF08\u624B\u52D5\u4F5C\u6210\u306E\u7DE8\u96C6\uFF09"], ["diplomacy", "\u5916\u4EA4"], ["war", "\u6226\u4E89\u30FB\u8ECD\u4E8B"], ["economy", "\u7D4C\u6E08\u30FB\u4EA4\u6613"], ["list-culture", "\u6587\u5316"], ["list-religion", "\u5B97\u6559"], ["timeline", "\u5E74\u8868\uFF08\u5F93\u6765\uFF09"], ["settings", "\u8A73\u7D30\u8A2D\u5B9A"]];
+    document.body.classList.add("v53-on");
+    v53 = bootV53({
+      root: byId("v53-root"),
+      store,
+      civActions,
+      history,
+      timeActions,
+      actions,
+      groupActions: actions,
+      stageEl: byId("stage"),
+      panels,
+      highlight,
+      createCanvas: createBrowserCanvas,
+      download: downloadBlob,
+      appVersion: APP_VERSION,
+      openFileDialog: files.open,
+      editMap: () => byId("btn-edit-mode")?.click(),
+      keyboard: false,
+      legacy: { openWindow: (id) => wins.open(id), windows: LEGACY_WINDOWS.map(([id, label3]) => ({ id, label: label3 })) }
+      // 従来のウィンドウは「手動で作った国家」用。文明シミュレーションの国家は載らない（国家の詳細は右ドック）
+    });
+    byId("stage").append(byId("sidebar"), byId("edit-panel"));
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
     renderer.resize();
-    globalThis.alterhistory = { civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+    globalThis.alterhistory = { v53, civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

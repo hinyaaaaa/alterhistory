@@ -115,7 +115,7 @@ check("地図全体が画面に収まる(fit)", viewport.k === viewport.fitK && 
 check("スクリプトエラーなし", errors.length === 0, errors.join("|"));
 
 console.log("=== ツールバー ===");
-const layerBtn = (k) => window.document.querySelector(`[data-layer="${k}"]`);
+const layerBtn = (k) => window.document.querySelector(`#hub [data-layer="${k}"]`); // v5.3: 同じ data-layer を持つ v5.3 のレイヤー帯と区別する（従来のハブのボタンの同期を確かめる）
 layerBtn("cultures").click();
 check("文化のレイヤーを重ねる → 国家と重なる（凡例の種類も文化に切り替わる）", store.getState().view.cultures === true && store.getState().view.states !== false && store.getState().view.legendKind === "culture");
 layerBtn("cultures").click(); layerBtn("states").click();

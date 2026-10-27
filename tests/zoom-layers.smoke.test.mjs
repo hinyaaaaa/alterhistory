@@ -87,8 +87,8 @@ check("倍率が上がるほど、現れる都市名が増える", counts.every(
 viewport.fit();
 
 console.log("=== レイヤーのポップアップ（Azgaar 方式） ===");
-const layer = (k) => q(`[data-layer="${k}"]`);
-check("レイヤーのボタンが12個ある（名前はレイヤーではない）", window.document.querySelectorAll("[data-layer]").length === 12 && !q("[data-layer=\"labels\"]"));
+const layer = (k) => q(`#hub [data-layer="${k}"]`); // v5.3: 同じ data-layer を持つ v5.3 のレイヤー帯と区別する
+check("レイヤーのボタンが12個ある（名前はレイヤーではない）", window.document.querySelectorAll("#hub [data-layer]").length === 12 && !q("#hub [data-layer=\"labels\"]"));
 layer("cultures").click();
 check("文化をオンにしても国家は消えない（重ねられる）", store.getState().view.cultures === true && store.getState().view.states !== false);
 check("オンのボタンは選択状態になる", layer("cultures").classList.contains("active") && layer("states").classList.contains("active"));

@@ -1,0 +1,228 @@
+/* ==========================================================================
+   ALTERHISTORY v5.3 UI（ドック方式）。参考モックの確定トークンに合わせる。
+   ・このファイルだけで完結（既存の base/layout/components/shell/world.css には依存しない・上書きもしない）
+   ・全てのクラスは .v53 配下か v53- 接頭辞。統合時は index.html に <link> を 1 行足すだけ
+   ・動きは transform と opacity だけ。低負荷設定（data-reduce）では無効
+   ========================================================================== */
+.v53, .v53 * { box-sizing: border-box; }
+.v53 {
+  --bg: #0d1214; --panel: #141b1f; --panel-2: #1b252b; --line: #2a363c; --line-strong: #42535c;
+  --text: #e6e4dc; --text-dim: #b4b9b4; --muted: #8a9795; --accent: #9db4c0; --accent-text: #0b1413;
+  --brass: #b8a06a; --brass-bright: #d2bb85; --danger: #c4624f; --danger-bright: #e08a78; --warn: #c9a45a; --info: #6f9bb0; --ally: #6fa48a; --magic: #9b8fd0;
+  --rail: 56px; --dock: 400px;
+  --serif: "Zen Old Mincho", "Shippori Mincho", "Yu Mincho", "Hiragino Mincho ProN", serif;
+  --sans: "Zen Kaku Gothic New", "Noto Sans JP", "Yu Gothic UI", "Meiryo UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", Consolas, "SFMono-Regular", monospace;
+  position: relative; display: grid; grid-template-columns: var(--rail) minmax(0, 1fr) var(--dock); width: 100%; height: 100%; min-height: 480px;
+  background: var(--bg); color: var(--text); font: 13px/1.5 var(--sans); overflow: hidden;
+}
+.v53 [hidden] { display: none !important; }
+.v53[data-dock="closed"] { grid-template-columns: var(--rail) minmax(0, 1fr) 0; }
+.v53 button:not(#stage *), .v53 select:not(#stage *), .v53 input:not(#stage *) { font: inherit; color: inherit; } /* 地図の中の従来の部品（ウィンドウ・編集パネル）には掛けない */
+.v53 button { cursor: pointer; }
+.v53 button:disabled { cursor: not-allowed; opacity: .45; }
+.v53 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* --- 左レール --- */
+.v53-rail { display: flex; flex-direction: column; align-items: center; gap: 4px; padding-top: 10px; background: #10171a; border-right: 1px solid var(--line); z-index: 5; }
+.v53-logo { width: 36px; height: 36px; display: grid; place-items: center; margin-bottom: 10px; border: 1px solid var(--brass); color: var(--brass); font: 900 13px var(--serif); box-shadow: inset 0 0 0 3px #10171a, inset 0 0 0 4px #b8a06a55; }
+.v53-ri { position: relative; width: 48px; height: 44px; border: 0; background: none; color: var(--muted); font: 500 16px var(--serif); }
+.v53-ri:hover:not(:disabled) { color: var(--text); background: #151e23; }
+.v53-ri.on { background: var(--panel-2); color: #c7d6df; box-shadow: inset 2px 0 0 var(--accent); }
+.v53-rail-gap { flex: 1; }
+.v53-rail > .v53-ri:last-child { margin-bottom: 8px; }
+.v53-badge { position: absolute; top: 3px; right: 3px; min-width: 16px; padding: 0 4px; border-radius: 8px; background: var(--danger); color: #fff; font: 500 10px/16px var(--mono); font-style: normal; text-align: center; }
+
+/* --- 中央（地図とその上の部品） --- */
+.v53-stage { position: relative; inset: auto; margin: 0;  min-width: 0; overflow: hidden; background: var(--bg); }
+.v53-map-slot, .v53-map { position: absolute; inset: 0; }
+.v53-map-canvas { width: 100%; height: 100%; display: block; object-fit: contain; }
+.v53[data-past="true"] .v53-stage { box-shadow: inset 0 0 0 2px var(--brass); }
+.v53-layers { position: absolute; left: 16px; top: 14px; display: flex; flex-direction: column; align-items: stretch; gap: 3px; width: 84px; z-index: 3; }
+.v53-chipbtn { height: 32px; padding: 0 10px; text-align: left; border: 1px solid var(--line-strong); background: #10171aee; color: var(--muted); font-size: 12px; }
+.v53-chipbtn.on { color: #c7d6df; border-color: var(--accent); background: var(--panel-2); }
+
+/* --- 時計（地図の上部中央） --- */
+.v53-clock { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); z-index: 4; display: flex; align-items: center; gap: 10px; padding: 6px 12px 6px 16px; background: #10171aee; border: 1px solid var(--line-strong); white-space: nowrap; }
+.v53-clock-date { font: 700 17px var(--serif); letter-spacing: .06em; }
+.v53-clock-sub { font: 400 11px var(--mono); color: var(--muted); }
+.v53-clock-ro { padding: 1px 8px; border: 1px solid var(--brass); color: var(--brass-bright); font-size: 11px; letter-spacing: .1em; }
+.v53-tlbtn { min-width: 40px; height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); background: none; font-weight: 700; }
+.v53-tlbtn.wide { min-width: 64px; font-size: 12px; }
+.v53-tlbtn.running { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.v53-speeds { display: inline-flex; }
+.v53-speed { height: 36px; min-width: 38px; border: 1px solid var(--line-strong); margin-left: -1px; background: none; font: 500 12px var(--mono); color: var(--muted); }
+.v53-speed.on { color: var(--accent-text); background: var(--accent); border-color: var(--accent); position: relative; }
+.v53[data-past="true"] .v53-clock { border-color: var(--brass); }
+
+/* --- 履歴帯（地図の下端） --- */
+.v53-timeline { position: absolute; left: 16px; right: 16px; bottom: 16px; z-index: 3; padding: 8px 14px 6px; background: #10171aee; border: 1px solid var(--line); }
+.v53[data-past="true"] .v53-timeline { border-color: var(--brass); }
+.v53-tl-top { display: flex; align-items: center; gap: 14px; min-height: 36px; overflow: hidden; white-space: nowrap; font-size: 12px; color: var(--text-dim); }
+.v53-ticker-title { color: #c7d6df; }
+.v53-ticker-open { border: 0; background: none; color: var(--muted); padding: 4px 2px; text-decoration: underline dotted; }
+.v53-ticker { display: flex; gap: 16px; flex: 1; min-width: 0; overflow: hidden; }
+.v53-news-item { display: inline-flex; align-items: center; gap: 6px; flex: 1 1 0; min-width: 0; border: 0; background: none; color: var(--text-dim); padding: 4px 0; overflow: hidden; white-space: nowrap; }
+.v53-news-item span { overflow: hidden; text-overflow: ellipsis; }
+.v53-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); flex: none; }
+.v53-dot.tone-danger { background: var(--danger-bright); } .v53-dot.tone-accent { background: var(--brass); } .v53-dot.tone-info { background: var(--accent); }
+.v53-dot.tone-warn { background: var(--warn); } .v53-dot.tone-ally { background: var(--ally); }
+.v53-tl-axis { position: relative; height: 44px; }
+.v53-tl-scrub { position: absolute; left: 0; right: 0; bottom: 14px; width: 100%; height: 24px; margin: 0; accent-color: var(--accent); background: transparent; }
+.v53-tl-ticks { position: absolute; left: 6px; right: 6px; top: 0; height: 16px; }
+.v53-tick { position: absolute; top: 2px; width: 6px; height: 12px; margin-left: -3px; padding: 0; border: 0; border-radius: 1px; background: var(--muted); }
+.v53-tick.multi { height: 16px; top: 0; }
+.v53-tick.tone-danger { background: var(--danger-bright); } .v53-tick.tone-accent { background: var(--brass); } .v53-tick.tone-info { background: var(--accent); } .v53-tick.tone-warn { background: var(--warn); } .v53-tick.tone-ally { background: var(--ally); }
+.v53-tl-labels { position: absolute; left: 0; right: 0; bottom: 0; display: flex; justify-content: space-between; font: 400 11px var(--mono); color: var(--muted); }
+
+/* --- 右ドック --- */
+.v53-dock-host { min-width: 0; overflow: hidden; }
+.v53[data-dock="closed"] .v53-dock-host { display: none; }
+.v53-dock-host > * { height: 100%; }
+.v53-dock, .v53-start { display: flex; flex-direction: column; min-height: 0; background: linear-gradient(#161e23, #0f1619); border-left: 1px solid var(--line-strong); box-shadow: -12px 0 32px #0008; animation: v53-in .16s ease-out; }
+@keyframes v53-in { from { opacity: 0; } to { opacity: 1; } }
+.v53-panel-head, .v53-start-head { position: relative; display: flex; align-items: flex-start; gap: 6px; padding: 14px 14px 12px 18px; border-bottom: 1px solid var(--line); }
+.v53-panel-headtext { flex: 1; min-width: 0; }
+.v53-kicker { display: block; font-size: 11px; letter-spacing: .18em; color: var(--brass); }
+.v53-panel-title, .v53-start-head h2 { margin: 2px 0 0; font: 900 20px/1.3 var(--serif); letter-spacing: .06em; overflow-wrap: anywhere; }
+.v53-iconbtn { width: 36px; height: 36px; border: 0; background: none; color: var(--muted); font-size: 18px; }
+.v53-iconbtn:hover { color: var(--text); }
+.v53-panel-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; display: flex; flex-direction: column; }
+.v53-panel-foot { display: flex; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid var(--line-strong); background: #10171a; }
+.v53-panel-foot .v53-btn { flex: 1; }
+.v53-subtitle { margin: 0 0 8px; font: 500 12px var(--mono); color: var(--text-dim); }
+.v53-banner { margin: 0 0 10px; padding: 6px 10px; border: 1px solid var(--brass); background: #b8a06a18; color: var(--brass-bright); font-size: 12px; }
+.v53-sec { margin: 0 0 6px; }
+.v53-sec h3 { margin: 14px 0 6px; font: 400 11px var(--sans); letter-spacing: .18em; color: var(--muted); }
+.v53-summary { margin: 0; color: var(--text-dim); }
+.v53-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; margin: 0; background: var(--line); border: 1px solid var(--line); }
+.v53-stat { background: #141b1f; padding: 8px 12px; min-width: 0; }
+.v53-stat dt { font-size: 11px; color: var(--muted); }
+.v53-stat dd { margin: 0; font: 500 17px var(--serif); overflow-wrap: anywhere; }
+.v53-stat.tone-danger dd { color: var(--danger-bright); } .v53-stat.tone-warn dd { color: var(--warn); }
+.v53-progress-steps { display: flex; gap: 6px; list-style: none; margin: 0 0 8px; padding: 0; font-size: 12px; }
+.v53-progress-steps li { flex: 1; padding: 4px 8px; border: 1px solid var(--line-strong); color: var(--muted); text-align: center; }
+.v53-progress-steps li.done { color: var(--ally); border-color: var(--ally); } .v53-progress-steps li.now { color: var(--accent-text); background: var(--accent); border-color: var(--accent); }
+.v53-rel { margin: 0 0 8px; } .v53-rel-label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 2px; }
+.v53-rel-items { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.v53-link { border: 0; background: none; padding: 4px 0; color: var(--accent); text-align: left; text-decoration: underline dotted; text-underline-offset: 3px; }
+.v53-evlist { list-style: none; margin: 0; padding: 0; }
+.v53-evlist .v53-link { display: flex; align-items: center; gap: 8px; width: 100%; color: var(--text-dim); text-decoration: none; padding: 5px 0; }
+.v53-evlist time { font: 400 11px var(--mono); color: var(--muted); flex: none; }
+.v53-evlist span { flex: 1; min-width: 0; }
+.v53-actions { display: flex; flex-direction: column; gap: 6px; }
+.v53-btn { min-height: 44px; padding: 0 16px; border: 1px solid var(--line-strong); background: none; color: var(--text); font-weight: 700; text-align: left; }
+.v53-btn:hover:not(:disabled) { background: var(--panel-2); }
+.v53-btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+.v53-btn.primary:hover:not(:disabled) { background: #b3c7d1; }
+.v53-btn.warn { border-color: var(--brass); color: var(--brass-bright); text-align: center; min-height: 36px; }
+.v53-btn.danger { border-color: var(--danger); color: var(--danger-bright); }
+.v53-btn.large { min-height: 48px; font-size: 14px; }
+.v53-hint { margin: 4px 0 0; font-size: 12px; color: var(--muted); }
+.v53-action-msg { margin: 4px 0 0; font-size: 12px; color: var(--ally); min-height: 1em; }
+.v53-error { color: var(--danger-bright); font-size: 12px; } .v53-warn { color: var(--warn); font-size: 12px; }
+.v53-empty { margin: 24px 0; text-align: center; color: var(--muted); }
+.v53-chip { display: inline-block; padding: 1px 8px; border: 1px solid var(--line-strong); font-size: 11px; color: var(--text-dim); white-space: nowrap; }
+.v53-chip.tone-danger { border-color: var(--danger); color: var(--danger-bright); } .v53-chip.tone-accent { border-color: var(--brass); color: var(--brass-bright); }
+.v53-input, .v53-select { height: 36px; padding: 0 10px; border: 1px solid var(--line-strong); background: #0f1619; color: var(--text); min-width: 0; }
+.v53-input { flex: 1; } .v53-input.narrow { width: 90px; flex: none; }
+
+/* --- 一覧 --- */
+.v53-list { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.v53-list-tools { display: flex; gap: 6px; margin-bottom: 4px; }
+.v53-list-count { margin: 4px 0; font: 400 11px var(--mono); color: var(--muted); }
+.v53-vlist { position: relative; flex: 1; min-height: 160px; overflow-y: auto; border-top: 1px solid var(--line); }
+.v53-vlist-spacer { position: relative; width: 100%; }
+.v53-vlist-rows { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+.v53-row { display: flex; align-items: center; gap: 8px; padding: 0 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.v53-row:hover, .v53-row.on { background: var(--panel-2); }
+.v53-row.on { box-shadow: inset 2px 0 0 var(--accent); }
+.v53-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.v53-row-main b { font: 500 14px var(--serif); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.v53-row-main span { font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* --- 設定・出力 --- */
+.v53-setting { display: flex; gap: 10px; padding: 8px 0; align-items: flex-start; } .v53-setting small { display: block; color: var(--muted); }
+.v53-card { margin: 0 0 10px; padding: 12px 14px; border: 1px solid var(--line); background: #141b1f; }
+.v53-card h3 { margin: 0 0 2px; font: 500 16px var(--serif); letter-spacing: .04em; }
+.v53-form { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; } .v53-form.grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.v53-range { display: flex; align-items: center; gap: 6px; }
+.v53-export-status { margin: 6px 0 0; font-size: 12px; color: var(--ally); min-height: 1.4em; } .v53-export-status.err, .v53-parts .err { color: var(--danger-bright); }
+.v53-parts { margin: 6px 0 0; padding-left: 18px; font: 400 11px var(--mono); color: var(--text-dim); max-height: 140px; overflow: auto; }
+.v53-radios { display: flex; flex-direction: column; gap: 4px; } .v53-radio { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; } .v53-radio small { display: block; color: var(--muted); }
+.v53-png-what { margin: 6px 0; font-size: 12px; color: var(--text-dim); }
+
+/* --- 開始フロー（ドックの中。ステップ＋カード＋ボタン） --- */
+.v53-steps { display: flex; list-style: none; margin: 0; padding: 10px 18px; gap: 6px; border-bottom: 1px solid var(--line); font-size: 12px; }
+.v53-steps li { flex: 1; display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.v53-steps .n { display: inline-grid; place-items: center; width: 20px; height: 20px; border: 1px solid var(--line-strong); font: 500 11px var(--mono); }
+.v53-steps li.on { color: var(--text); } .v53-steps li.on .n { background: var(--accent); color: var(--accent-text); border-color: var(--accent); } .v53-steps li.done .n { border-color: var(--ally); color: var(--ally); }
+.v53-start-body { flex: 1; min-height: 0; overflow: auto; padding: 14px 18px; }
+.v53-lead { margin: 0 0 12px; color: var(--text-dim); }
+.v53-field { display: flex; flex-direction: column; gap: 4px; } .v53-field > span { font-size: 11px; letter-spacing: .12em; color: var(--muted); }
+.v53-inline { display: flex; align-items: center; gap: 8px; }
+.v53-groups { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+.v53-group { display: grid; gap: 2px; padding: 10px 12px; border: 1px solid var(--line-strong); background: #141b1f; text-align: left; }
+.v53-group b { font: 500 15px var(--serif); } .v53-group span, .v53-group small { color: var(--muted); font-size: 12px; }
+.v53-group.on { border-color: var(--accent); background: var(--panel-2); box-shadow: inset 3px 0 0 var(--accent); }
+.v53-progress { margin: 8px 0 12px; padding: 12px; border: 1px solid var(--line); background: #141b1f; } .v53-progress-line { margin: 0; }
+.v53-checks { list-style: none; margin: 8px 0 0; padding: 0; color: var(--muted); } .v53-checks .met { color: var(--ally); }
+
+/* --- 通知（地図の左上、レイヤー列の下） --- */
+.v53-toasts { position: absolute; left: 112px; top: 70px; width: 300px; z-index: 6; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.v53-toast { position: relative; pointer-events: auto; padding: 10px 30px 10px 14px; background: #1b1a14f2; border: 1px solid var(--brass); border-left-width: 4px; animation: v53-in .16s ease-out; }
+.v53-toast.summary { background: #141b1ff2; border-color: var(--line-strong); border-left-color: var(--accent); }
+.v53-toast-meta { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: .14em; color: var(--brass-bright); } .v53-toast-meta time { font-family: var(--mono); letter-spacing: 0; color: var(--muted); }
+.v53-toast h4 { margin: 2px 0; font: 900 15px var(--serif); } .v53-toast-title { border: 0; background: none; padding: 0; text-align: left; font: inherit; color: inherit; }
+.v53-toast p { margin: 2px 0; font-size: 12px; color: var(--text-dim); } .v53-cause { color: var(--muted) !important; }
+.v53-toast-close { position: absolute; right: 2px; top: 2px; width: 28px; height: 28px; border: 0; background: none; color: var(--muted); }
+.v53-toast.tone-danger { border-color: var(--danger); border-left-color: var(--danger-bright); }
+
+/* --- 重大イベント（全画面の新聞） --- */
+.v53-major { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: #070a0be6; animation: v53-in .22s ease-out; }
+.v53-paper { width: min(720px, 100%); max-height: 100%; overflow: auto; padding: 28px 36px 24px; background: #1b1a14; color: #efe7cf; border: 1px solid var(--brass); box-shadow: 0 0 0 6px #1b1a14, 0 0 0 7px #b8a06a88, 0 24px 80px #000; }
+.v53-paper-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 3px double var(--brass); font-family: var(--serif); }
+.v53-paper-name { font-size: 26px; font-weight: 900; letter-spacing: .3em; color: var(--brass-bright); } .v53-paper-kind { letter-spacing: .2em; color: var(--brass); } .v53-paper-head time { font: 500 13px var(--mono); color: #b9ae8a; }
+.v53-paper-title { margin: 18px 0 10px; font: 900 34px/1.3 var(--serif); letter-spacing: .04em; }
+.v53-paper-body { margin: 0 0 10px; font: 500 16px/1.8 var(--serif); } .v53-paper-cause { margin: 0 0 12px; color: #b9ae8a; font-size: 13px; }
+.v53-paper-why { margin: 8px 0; color: #b9ae8a; font-size: 12px; } .v53-paper-why ul { margin: 4px 0 0; padding-left: 18px; }
+.v53-paper-remaining { margin: 8px 0 0; color: var(--danger-bright); font-size: 12px; min-height: 1.2em; }
+.v53-paper-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid #b8a06a55; }
+.v53-paper-actions .v53-btn { text-align: center; }
+.v53-paper.tone-danger { border-color: var(--danger-bright); }
+
+.v53-dock-open { position: absolute; right: 0; top: 50%; width: 28px; height: 64px; transform: translateY(-50%); border: 1px solid var(--line-strong); border-right: 0; background: #10171aee; color: var(--muted); z-index: 4; display: none; }
+.v53[data-dock="closed"] .v53-dock-open { display: block; }
+
+/* --- 狭い画面: ドックは地図の上に重ねる（1100px 未満） --- */
+@media (max-width: 1100px) {
+  .v53 { grid-template-columns: var(--rail) minmax(0, 1fr); }
+  .v53-dock-host { position: absolute; right: 0; top: 0; bottom: 0; width: min(var(--dock), 92vw); z-index: 8; }
+  .v53[data-dock="closed"] { grid-template-columns: var(--rail) minmax(0, 1fr); }
+}
+.v53[data-reduce="true"] *, body.v53-reduce * { animation: none !important; transition: none !important; }
+@media (prefers-reduced-motion: reduce) { .v53 * { animation: none !important; transition: none !important; } }
+body.v53-major-open { overflow: hidden; }
+
+/* ---- v5.3 大規模対応: 時間軸の範囲・絞り込みチップ・一覧への入口 ---- */
+.v53-tl-labels { align-items: flex-end; }
+.v53-tl-span { position: absolute; right: 0; top: -2px; width: auto; min-height: 0; padding: 0 4px; font-size: 11px; height: 20px; }
+.v53-entity-chip { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 6px; padding: 4px 8px; font-size: 12px; background: var(--panel-2, #1a2327); border: 1px solid var(--line); color: var(--ink, #e8e4d8); }
+.v53-entity-chip[hidden] { display: none; }
+.v53-btn-sm { padding: 2px 8px; min-height: 0; font-size: 11px; }
+.v53-browse { display: flex; flex-direction: column; gap: 6px; }
+.v53-browse .v53-btn { text-align: left; justify-content: flex-start; }
+.v53-list-tools { flex-wrap: wrap; }
+
+/* ---- 本体への組み込み（v5.3.0）: 従来の外枠を隠し、v5.3 の骨格を画面全体に出す ----
+   従来のウィンドウ・編集パネル・ダイアログは、地図（#stage）の上にそのまま重なる（機能は失わない） */
+#v53-root { position: fixed; inset: 0; z-index: 1; }
+body.v53-on #app { position: fixed; left: -99999px; top: 0; width: 1px; height: 1px; overflow: hidden; pointer-events: none; } /* 従来の外枠（ハブ・時計・ニュース・戦争状況）。部品は残し、見せない */
+body.v53-on #stage { position: absolute; inset: 0; }
+body.v53-on #empty-state, body.v53-on #groups-panel { display: none !important; } /* 開始は v5.3 の開始フローが担う */
+body.v53-on .map-corner { display: none; }
+body.v53-on #sidebar, body.v53-on #edit-panel { z-index: 22; }
+body.v53-on .float-win { max-width: calc(100% - 16px); max-height: calc(100% - 16px); } /* 従来のウィンドウは、右ドックの分だけ狭くなった地図の中に収める */
+@media (max-width: 600px) { body.v53-on .float-win { max-width: 100%; } } /* 狭い画面では、従来のウィンドウの内容がはみ出さないよう幅を制限しない */
+/* 従来のウィンドウ・編集パネルの字詰めを、従来どおりに */
+body.v53-on #stage { font-family: var(--font); font-feature-settings: "palt"; } /* 従来の本文は文字詰め（palt）。v5.3 の骨格の font 指定が打ち消すので、地図の中だけ戻す */

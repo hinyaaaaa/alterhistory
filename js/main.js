@@ -57,6 +57,7 @@ import { visibleGroups } from "./app/group-actions.js";
 import { openNewWorldDialog } from "./ui/world-new-dialog.js";
 import { initGroupsPanel } from "./ui/groups-panel.js";
 import worldWorkerSource from "./generated/worldgen-worker.txt";
+import { bootV53 } from "./ui/v53/boot-live.js";
 import { APP_VERSION } from "./version.js";
 
 function start() {
@@ -180,13 +181,28 @@ function start() {
   store.subscribe((s, change) => { if (change.type === "replace") { timeActions.stop(); applyMapBalance(s.map); } });
   // 元に戻す／やり直すでデータは戻るが、地図は自分では描き直さないので、ここで必ず描き直す（直さないと画面だけ編集後のまま残る）
   store.subscribe((_s, change) => { if (change.type === "undo" || change.type === "redo") renderer.requestRender(); });
-  initShortcuts({ ...deps, editMode, editToolbar, timeActions });
+  // v5.3: Space は v5.3 のアダプター経由（重大イベントの確認待ちの間は時間を再開させない）。ほかのショートカットは従来のまま
+  let v53 = null;
+  const v53Time = { ...timeActions, start: () => (v53 ? v53.adapter.time.start() : timeActions.start()), stop: () => (v53 ? v53.adapter.time.stop() : timeActions.stop()), isRunning: () => timeActions.isRunning() };
+  initShortcuts({ ...deps, editMode, editToolbar, timeActions: v53Time });
+
+  // ---- v5.3 UI（ドック方式）。地図（#stage）を中央に差し込み、左レール・右ドック・時間軸・通知を組み立てる ----
+  // 従来のウィンドウ（手動で作った国家の編集・外交・軍事・年表など）は、機能を失わないよう「世界」の入口から開ける
+  const LEGACY_WINDOWS = [["nation", "国家（手動作成の編集）"], ["diplomacy", "外交"], ["war", "戦争・軍事"], ["economy", "経済・交易"], ["list-culture", "文化"], ["list-religion", "宗教"], ["timeline", "年表（従来）"], ["settings", "詳細設定"]];
+  document.body.classList.add("v53-on");
+  v53 = bootV53({
+    root: byId("v53-root"), store, civActions, history, timeActions, actions, groupActions: actions,
+    stageEl: byId("stage"), panels, highlight, createCanvas: createBrowserCanvas, download: downloadBlob, appVersion: APP_VERSION,
+    openFileDialog: files.open, editMap: () => byId("btn-edit-mode")?.click(), keyboard: false,
+    legacy: { openWindow: (id) => wins.open(id), windows: LEGACY_WINDOWS.map(([id, label]) => ({ id, label })) }, // 従来のウィンドウは「手動で作った国家」用。文明シミュレーションの国家は載らない（国家の詳細は右ドック）
+  });
+  byId("stage").append(byId("sidebar"), byId("edit-panel")); // 従来の編集パネルも、地図の上に重ねる（ドラッグ範囲は #stage のまま）
 
   new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { v53, civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

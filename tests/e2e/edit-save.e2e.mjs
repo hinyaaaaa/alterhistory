@@ -30,7 +30,7 @@ try {
   check("地図編集のボタンは 選択・気候帯・標高・マーカー の4つ", (await page.locator("#edit-panel [data-tool]").evaluateAll((bs) => bs.map((b) => b.dataset.tool).join())) === "select,paint:biome,paint:height,add:marker");
   await page.evaluate(() => { const s = window.alterhistory.store.getState().map.pack.states.find((x) => x && x.i > 0 && !x.removed); window.dispatchEvent(new CustomEvent("request-edit-panel-sync", { detail: { tool: "paint:state", target: s.i } })); });
   const b = await mapBox();
-  const px = () => page.evaluate(() => { const c = document.getElementById("map-canvas"); return [...c.getContext("2d").getImageData(Math.round(0.33 * c.width), Math.round(0.5 * c.height), 1, 1).data].join(","); });
+  const px = () => page.evaluate(() => { const c = document.getElementById("map-canvas"), g = c.getContext("2d"); return [0.3, 0.33, 0.36, 0.39, 0.42, 0.45].map((f) => [...g.getImageData(Math.round(f * c.width), Math.round(0.5 * c.height), 1, 1).data].join(",")).join("|"); }); // 塗った線上の数点（v5.3: 地図が狭くなったので、1 点ではなく線上で比べる）
   const px0 = await px();
   await page.mouse.move(b.x + b.width * 0.3, b.y + b.height * 0.5);
   await page.mouse.down(); await page.mouse.move(b.x + b.width * 0.45, b.y + b.height * 0.5, { steps: 8 }); await page.mouse.up();
