@@ -10,6 +10,7 @@ import { drawTradeLines } from "./layers/trade-lines.js";
 import { drawZones } from "./layers/zones.js";
 import { drawGroups } from "./layers/groups.js";
 import { warpContext } from "./warp-ctx.js";
+import { timed } from "./profile.js";
 
 export const DEFAULT_RENDER_OPTIONS = Object.freeze({
   terrain: "biome",       // "biome" | "height" | "both" | "none"（旧オプション base も受け付ける）
@@ -42,7 +43,8 @@ export function drawScene(ctx, map, vp, options = {}, dpr = 1) {
   // 球面世界は、経度の継ぎ目の外側の繰り返し（n = -1, 0, 1）ごとに描く。各回は [0, W) の帯に切り取る（二重塗りを防ぐ）。
   //   描画は sim 座標のまま行い、y だけを warpContext が円筒図法へ変える。球面世界でなければ 1 回だけ（従来どおり）。
   //   世界の一部しか画面にかからない回（拡大・継ぎ目の外側の細い繰り返し）は、地形・境界が見える所だけを描くので軽い。
-  for (const n of vp.copyOffsets()) drawCopy(ctx, map, vp.shifted(n), o, options, dpr);
+  const prof = options.profile ?? null; // v5.3.1: 計測用（無ければ何もしない）
+  for (const n of vp.copyOffsets()) timed(prof, `copy[${n}]`, ctx, () => drawCopy(ctx, map, vp.shifted(n), o, options, dpr));
 }
 
 function drawCopy(ctx, map, v, o, options, dpr) {
@@ -81,21 +83,23 @@ function drawLayers(ctx, map, vp, o, options) {
   const fills = Array.isArray(options.fills) ? options.fills
     : options.overlay === undefined ? ["state"]
     : options.overlay === "none" ? [] : [options.overlay];
-  drawTerrain(ctx, map, vp, terrain);
+  const prof = options.profile ?? null; // v5.3.1: 計測用（無ければ何もしない）
+  const L = (label, fn) => timed(prof, `layer.${label}`, ctx, fn);
+  L("terrain", () => drawTerrain(ctx, map, vp, terrain, prof));
   // 色分けは重ねて描く。2つ以上のときは下の層が見えるよう、少し薄くする
   const alpha = fills.length > 1 ? 0.4 : 0.55;
   for (const kind of fills) {
     // 文化・宗教の破線の境界は、単独のときだけ引く（重ねると線が混ざって読めなくなる）
-    drawPolitics(ctx, map, vp, kind, { alpha, lines: kind === "state" || kind === "province" || fills.length === 1 });
+    L(`politics.${kind}`, () => drawPolitics(ctx, map, vp, kind, { alpha, lines: kind === "state" || kind === "province" || fills.length === 1, prof }));
   }
   // 国家の色分けが無くても、国境だけは引ける（Azgaar の「境界」レイヤー）
-  if (o.borders && !fills.includes("state")) drawPolitics(ctx, map, vp, "state", { fill: false });
-  if (o.coast) drawCoast(ctx, map, vp);
-  if (o.rivers) drawRivers(ctx, map, vp);
-  if (o.routes) drawRoutes(ctx, map, vp, o.routes);
-  if (o.zones) drawZones(ctx, map, vp, { focus: o.zoneFocus ?? null });
-  if (o.tradeLines) drawTradeLines(ctx, vp, o.tradeLines);
-  if (o.burgs) drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" });
-  if (o.labels) drawLabels(ctx, map, vp, o.labels);
-  if (o.groups?.length) drawGroups(ctx, map, vp, o.groups); // 初期集団の印（歴史が始まる前）
+  if (o.borders && !fills.includes("state")) L("politics.borders", () => drawPolitics(ctx, map, vp, "state", { fill: false, prof }));
+  if (o.coast) L("coast", () => drawCoast(ctx, map, vp));
+  if (o.rivers) L("rivers", () => drawRivers(ctx, map, vp));
+  if (o.routes) L("routes", () => drawRoutes(ctx, map, vp, o.routes));
+  if (o.zones) L("zones", () => drawZones(ctx, map, vp, { focus: o.zoneFocus ?? null }));
+  if (o.tradeLines) L("tradeLines", () => drawTradeLines(ctx, vp, o.tradeLines));
+  if (o.burgs) L("burgs", () => drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" }));
+  if (o.labels) L("labels", () => drawLabels(ctx, map, vp, o.labels));
+  if (o.groups?.length) L("groups", () => drawGroups(ctx, map, vp, o.groups)); // 初期集団の印（歴史が始まる前）
 }

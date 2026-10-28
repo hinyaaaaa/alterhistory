@@ -589,3 +589,14 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 - E2E: 従来のハブを操作する旧テストは、`tests/e2e/lib.mjs` の `page.click` が、ハブの部品（`#btn-*`・`[data-open-win]`）を DOM のクリックで押す（ハブは画面外へ退けてあるが部品は生きている）。v5.3 の画面は `v53-live.e2e.mjs` が見える操作で確かめる。ハブの hover・展開を確かめていた `shell.e2e.mjs` は、ハブを見せなくなったため廃止した。
 - 従来のウィンドウは右ドックの分だけ狭くなった地図の中に収める（`max-width`）。`#stage` の字体は従来のもの（`--font`・`palt`）に戻している（v5.3 のルートの `font` 指定が `palt` を打ち消して、内容の幅が変わるため）。
 - 要判断: Ctrl+K 横断検索の画面（`adapter.search` は実装済み）。経済の一覧は v5.4 の集計モデルへ接続（現在は未接続の表示）。
+
+
+## v5.3.1（描画性能の修正）の引き継ぎ
+
+詳細・計測は `docs/V5_3_1_RENDER_PERF.md`。
+
+- **原因**: セルの多角形パスで `closePath()` を呼ぶと、Chromium は 1 本のパスの輪郭数の二乗で遅くなる。`addCellPath` は塗り専用なので呼ばない（`fill()` が自動で閉じる）。**セルのパスに `closePath()` を足し戻さない**（`tests/v531-render.test.mjs` が落とす）。`stroke` する輪郭が必要になったら、別の関数に分けるか、1 本のパスにしない。
+- **描画の完了**: `renderer.requestRender()` は約束を返す。「描画中」の表示や完了の判定には、予約や採用の時刻ではなく、これを使う。`adoptMap` も約束を返す（テストの代役の描画器は undefined を返してよい）。
+- **計測**: 描画の速さは、命令を並べた時間（js）と塗り終わりまでの時間を分けて測る（Canvas 2D は塗りを後でまとめて行う）。`alterhistory.perf()`／`createRenderProfile({ sync: true })`。外挿（標本の線形倍）で見積もらない（二乗のものが隠れる）。
+- **dist**: `npm run build` を忘れると `tests/build-integrity.test.mjs` が落ちる。公開物の確認は `dist/build-info.json` の SHA-256 と、アプリ内のビルド識別子（「このアプリについて」／`alterhistory.build`）。
+- **未確定**: Edge 実機の GPU 描画での塗り終わり（既定キャンバス対 CPU キャンバス）。`alterhistory.perf()` の結果で、タイルのキャンバスを CPU 描画にするか決める。

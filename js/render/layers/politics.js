@@ -2,6 +2,7 @@
 import { NEUTRAL_COLOR } from "../palette.js";
 import { buildBoundarySegments, strokeSegments } from "../edges.js";
 import { addCellPath } from "./terrain.js";
+import { timed } from "../profile.js";
 
 const SOURCES = {
   state:    { cells: (m) => m.pack.cells.state,    entities: (m) => m.pack.states },
@@ -53,7 +54,7 @@ export function cachedBoundary(geometry, values, include, tag) {
  * @param {"state"|"culture"|"religion"|"province"} kind
  * @param {{alpha?:number, fill?:boolean, lines?:boolean}} opts  fill: 色を塗る / lines: 境界線を引く
  */
-export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, lines = true } = {}) {
+export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, lines = true, prof = null } = {}) {
   const src = SOURCES[kind];
   if (!src) return;
   const { cells, vertices } = map.geometry.pack;
@@ -90,11 +91,12 @@ export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, li
   }
   if (fill) {
     ctx.globalAlpha = alpha;
+    prof?.count("politics.groups", groups.size);
     for (const [id, list] of groups) {
       ctx.fillStyle = entities[id].color ?? NEUTRAL_COLOR;
       ctx.beginPath();
-      for (const i of list) addCellPath(ctx, cells, vertices, i);
-      ctx.fill();
+      timed(prof, "politics.buildPath", null, () => { for (const i of list) addCellPath(ctx, cells, vertices, i); });
+      timed(prof, "politics.fill", ctx, () => ctx.fill());
     }
     // 州の濃淡（国の色の上に重ねる。州が無い国は国の色だけ）
     const byState = new Map();
@@ -103,8 +105,8 @@ export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, li
       if ((byState.get(g.id) ?? 0) < 1) continue;
       ctx.fillStyle = shadeOf(entities[g.id].color ?? NEUTRAL_COLOR, g.step);
       ctx.beginPath();
-      for (const i of g.list) addCellPath(ctx, cells, vertices, i);
-      ctx.fill();
+      timed(prof, "politics.buildPath", null, () => { for (const i of g.list) addCellPath(ctx, cells, vertices, i); });
+      timed(prof, "politics.fill", ctx, () => ctx.fill());
     }
     ctx.globalAlpha = 1;
   }

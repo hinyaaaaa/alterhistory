@@ -4050,6 +4050,37 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     return mix("#b58a5c", "#f4f1ec", (t - 0.6) / 0.4);
   }
 
+  // js/render/profile.js
+  function createRenderProfile({ sync = false } = {}) {
+    const ms = /* @__PURE__ */ new Map(), counts = /* @__PURE__ */ new Map();
+    const flush = (ctx) => {
+      if (sync && ctx?.getImageData) ctx.getImageData(0, 0, 1, 1);
+    };
+    const bump = (m, k, v) => m.set(k, (m.get(k) ?? 0) + v);
+    return {
+      sync,
+      /** fn を実行して label に時間を足す。例外のときも時間は足す（失敗を隠さない: 例外はそのまま投げ直す） */
+      run(label3, ctx, fn) {
+        const a = performance.now();
+        try {
+          return fn();
+        } finally {
+          flush(ctx);
+          bump(ms, label3, performance.now() - a);
+          bump(counts, `${label3}#`, 1);
+        }
+      },
+      count(label3, n = 1) {
+        bump(counts, label3, n);
+      },
+      snapshot() {
+        const r = (x) => Math.round(x * 10) / 10;
+        return { sync, ms: Object.fromEntries([...ms].map(([k, v]) => [k, r(v)])), counts: Object.fromEntries(counts) };
+      }
+    };
+  }
+  var timed = (prof, label3, ctx, fn) => prof ? prof.run(label3, ctx, fn) : fn();
+
   // js/render/layers/terrain.js
   var OCEAN_NEAR = "#86aed0";
   var OCEAN_MID = "#6f97c0";
@@ -4062,7 +4093,6 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         if (k === 0) ctx.moveTo(p[0], y);
         else ctx.lineTo(p[0], y);
       }
-      ctx.closePath();
     };
     ring(cells.v[i]);
     if (cells.alt?.[i]) ring(cells.alt[i]);
@@ -4075,7 +4105,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
   var pathCache = /* @__PURE__ */ new WeakMap();
   var PLAIN_LAND = "#d8d2b4";
-  function drawTerrain(ctx, map, vp, mode = "biome") {
+  function drawTerrain(ctx, map, vp, mode = "biome", prof = null) {
     const { cells, vertices, h: h2 } = map.geometry.pack;
     const biome = map.pack.cells.biome;
     const biomeColor = map.biomesData.map((b) => b?.color ?? "#999");
@@ -4101,62 +4131,88 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     function paint(landColor, { water = true, alpha = 1, key: key3 = "" } = {}) {
       if (near2) return paintNear(landColor, water, alpha);
       let entries = cache4.byKey.get(key3);
+      prof?.count(entries ? "terrain.pathCache.hit" : "terrain.pathCache.miss");
       if (!entries) {
         const groups = /* @__PURE__ */ new Map();
+        timed(prof, "terrain.classify", null, () => {
+          for (let i = 0; i < cells.v.length; i++) {
+            const hi = h2[i];
+            let color;
+            if (hi < 20) color = water ? waterColorOf(map, i) : null;
+            else color = landColor(i, hi);
+            if (color == null) continue;
+            let list = groups.get(color);
+            if (!list) {
+              list = [];
+              groups.set(color, list);
+            }
+            list.push(i);
+          }
+        });
+        entries = [];
+        timed(prof, "terrain.buildPath2D", null, () => {
+          for (const [color, list] of groups) {
+            if (hasPath2D) {
+              const path = new Path2D();
+              for (const i of list) addCellPath(path, cells, vertices, i, wyFn);
+              entries.push({ color, path });
+            } else entries.push({ color, list });
+          }
+        });
+        if (prof) {
+          prof.count("terrain.colorGroups", groups.size);
+          let c = 0, vs = 0;
+          for (const list of groups.values()) for (const i of list) {
+            c++;
+            vs += cells.v[i].length + (cells.alt?.[i]?.length ?? 0);
+          }
+          prof.count("terrain.cells", c);
+          prof.count("terrain.verts", vs);
+        }
+        cache4.byKey.set(key3, entries);
+      }
+      timed(prof, "terrain.fill", ctx, () => {
+        ctx.globalAlpha = alpha;
+        for (const e of entries) {
+          ctx.fillStyle = e.color;
+          if (e.path) ctx.fill(e.path);
+          else {
+            ctx.beginPath();
+            for (const i of e.list) addCellPath(ctx, cells, vertices, i);
+            ctx.fill();
+          }
+        }
+        ctx.globalAlpha = 1;
+      });
+    }
+    function paintNear(landColor, water, alpha) {
+      const groups = /* @__PURE__ */ new Map();
+      timed(prof, "terrain.near.filter", null, () => {
         for (let i = 0; i < cells.v.length; i++) {
+          if (!visible(i)) continue;
           const hi = h2[i];
           let color;
           if (hi < 20) color = water ? waterColorOf(map, i) : null;
           else color = landColor(i, hi);
           if (color == null) continue;
           let list = groups.get(color);
-          if (!list) {
-            list = [];
-            groups.set(color, list);
-          }
+          if (!list) groups.set(color, list = []);
           list.push(i);
         }
-        entries = [];
-        for (const [color, list] of groups) {
-          if (hasPath2D) {
-            const path = new Path2D();
-            for (const i of list) addCellPath(path, cells, vertices, i, wyFn);
-            entries.push({ color, path });
-          } else entries.push({ color, list });
-        }
-        cache4.byKey.set(key3, entries);
-      }
-      ctx.globalAlpha = alpha;
-      for (const e of entries) {
-        ctx.fillStyle = e.color;
-        if (e.path) ctx.fill(e.path);
-        else {
-          ctx.beginPath();
-          for (const i of e.list) addCellPath(ctx, cells, vertices, i);
-          ctx.fill();
-        }
-      }
-      ctx.globalAlpha = 1;
-    }
-    function paintNear(landColor, water, alpha) {
-      const groups = /* @__PURE__ */ new Map();
-      for (let i = 0; i < cells.v.length; i++) {
-        if (!visible(i)) continue;
-        const hi = h2[i];
-        let color;
-        if (hi < 20) color = water ? waterColorOf(map, i) : null;
-        else color = landColor(i, hi);
-        if (color == null) continue;
-        let list = groups.get(color);
-        if (!list) groups.set(color, list = []);
-        list.push(i);
+      });
+      if (prof) {
+        let c = 0;
+        for (const list of groups.values()) c += list.length;
+        prof.count("terrain.near.cells", c);
       }
       ctx.globalAlpha = alpha;
       for (const [color, list] of groups) {
         ctx.fillStyle = color;
         ctx.beginPath();
-        for (const i of list) addCellPath(ctx, cells, vertices, i);
-        ctx.fill();
+        timed(prof, "terrain.near.buildPath", null, () => {
+          for (const i of list) addCellPath(ctx, cells, vertices, i);
+        });
+        timed(prof, "terrain.near.fill", ctx, () => ctx.fill());
       }
       ctx.globalAlpha = 1;
     }
@@ -4277,7 +4333,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     byTag.set(tag, { geometry, segs });
     return segs;
   }
-  function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, lines = true } = {}) {
+  function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, lines = true, prof = null } = {}) {
     const src = SOURCES[kind];
     if (!src) return;
     const { cells, vertices } = map.geometry.pack;
@@ -4318,11 +4374,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
     if (fill) {
       ctx.globalAlpha = alpha;
+      prof?.count("politics.groups", groups.size);
       for (const [id, list] of groups) {
         ctx.fillStyle = entities[id].color ?? NEUTRAL_COLOR;
         ctx.beginPath();
-        for (const i of list) addCellPath(ctx, cells, vertices, i);
-        ctx.fill();
+        timed(prof, "politics.buildPath", null, () => {
+          for (const i of list) addCellPath(ctx, cells, vertices, i);
+        });
+        timed(prof, "politics.fill", ctx, () => ctx.fill());
       }
       const byState2 = /* @__PURE__ */ new Map();
       for (const g of shadeGroups.values()) {
@@ -4334,8 +4393,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         if ((byState2.get(g.id) ?? 0) < 1) continue;
         ctx.fillStyle = shadeOf(entities[g.id].color ?? NEUTRAL_COLOR, g.step);
         ctx.beginPath();
-        for (const i of g.list) addCellPath(ctx, cells, vertices, i);
-        ctx.fill();
+        timed(prof, "politics.buildPath", null, () => {
+          for (const i of g.list) addCellPath(ctx, cells, vertices, i);
+        });
+        timed(prof, "politics.fill", ctx, () => ctx.fill());
       }
       ctx.globalAlpha = 1;
     }
@@ -5415,7 +5476,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.fillStyle = o.background;
     ctx.fillRect(0, 0, vp.screenWidth * dpr, vp.screenHeight * dpr);
-    for (const n of vp.copyOffsets()) drawCopy(ctx, map, vp.shifted(n), o, options, dpr);
+    const prof = options.profile ?? null;
+    for (const n of vp.copyOffsets()) timed(prof, `copy[${n}]`, ctx, () => drawCopy(ctx, map, vp.shifted(n), o, options, dpr));
   }
   function drawCopy(ctx, map, v, o, options, dpr) {
     ctx.save();
@@ -5469,20 +5531,22 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function drawLayers(ctx, map, vp, o, options) {
     const terrain2 = options.terrain ?? (options.base === "height" ? "height" : "biome");
     const fills = Array.isArray(options.fills) ? options.fills : options.overlay === void 0 ? ["state"] : options.overlay === "none" ? [] : [options.overlay];
-    drawTerrain(ctx, map, vp, terrain2);
+    const prof = options.profile ?? null;
+    const L = (label3, fn) => timed(prof, `layer.${label3}`, ctx, fn);
+    L("terrain", () => drawTerrain(ctx, map, vp, terrain2, prof));
     const alpha = fills.length > 1 ? 0.4 : 0.55;
     for (const kind of fills) {
-      drawPolitics(ctx, map, vp, kind, { alpha, lines: kind === "state" || kind === "province" || fills.length === 1 });
+      L(`politics.${kind}`, () => drawPolitics(ctx, map, vp, kind, { alpha, lines: kind === "state" || kind === "province" || fills.length === 1, prof }));
     }
-    if (o.borders && !fills.includes("state")) drawPolitics(ctx, map, vp, "state", { fill: false });
-    if (o.coast) drawCoast(ctx, map, vp);
-    if (o.rivers) drawRivers(ctx, map, vp);
-    if (o.routes) drawRoutes(ctx, map, vp, o.routes);
-    if (o.zones) drawZones(ctx, map, vp, { focus: o.zoneFocus ?? null });
-    if (o.tradeLines) drawTradeLines(ctx, vp, o.tradeLines);
-    if (o.burgs) drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" });
-    if (o.labels) drawLabels(ctx, map, vp, o.labels);
-    if (o.groups?.length) drawGroups(ctx, map, vp, o.groups);
+    if (o.borders && !fills.includes("state")) L("politics.borders", () => drawPolitics(ctx, map, vp, "state", { fill: false, prof }));
+    if (o.coast) L("coast", () => drawCoast(ctx, map, vp));
+    if (o.rivers) L("rivers", () => drawRivers(ctx, map, vp));
+    if (o.routes) L("routes", () => drawRoutes(ctx, map, vp, o.routes));
+    if (o.zones) L("zones", () => drawZones(ctx, map, vp, { focus: o.zoneFocus ?? null }));
+    if (o.tradeLines) L("tradeLines", () => drawTradeLines(ctx, vp, o.tradeLines));
+    if (o.burgs) L("burgs", () => drawBurgs(ctx, map, vp, { auto: o.labels?.burgs === "auto" }));
+    if (o.labels) L("labels", () => drawLabels(ctx, map, vp, o.labels));
+    if (o.groups?.length) L("groups", () => drawGroups(ctx, map, vp, o.groups));
   }
 
   // js/render/renderer.js
@@ -5498,6 +5562,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     let needFull = true;
     let tile = null;
     const listeners = /* @__PURE__ */ new Set();
+    let reqSeq = 0;
+    let waiters = [];
+    let lastRender = null;
     const notify = () => listeners.forEach((fn) => fn());
     function resize() {
       const r = canvas.getBoundingClientRect();
@@ -5528,8 +5595,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (!map?.geometry) {
         tile = null;
         clear2();
-        return;
+        return null;
       }
+      const t0 = performance.now();
       const mx = Math.round(viewport.screenWidth * OVERSCAN), my = Math.round(viewport.screenHeight * OVERSCAN);
       const cssW = viewport.screenWidth + mx * 2, cssH = viewport.screenHeight + my * 2;
       const tdpr = Math.min(dpr, Math.sqrt(MAX_TILE_PIXELS / (cssW * cssH)));
@@ -5540,8 +5608,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         cv.height = ph;
       }
       const tvp = viewport.cloneFor(cssW, cssH, mx, my);
-      drawScene(cv.getContext("2d"), map, tvp, getOptions(), tdpr);
+      const profile = createRenderProfile();
+      const t1 = performance.now();
+      drawScene(cv.getContext("2d"), map, tvp, { ...getOptions(), profile }, tdpr);
+      const t2 = performance.now();
       tile = { canvas: cv, x: viewport.x, y: viewport.y, k: viewport.k, mx, my, cssW, cssH };
+      return { setupMs: t1 - t0, sceneMs: t2 - t1, tileMs: t2 - t0, tilePixels: pw * ph, profile: profile.snapshot() };
     }
     function blit() {
       clear2();
@@ -5557,14 +5629,51 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const dx = viewport.x - (tile.x + tile.mx) * s, dy = viewport.y - (tile.y + tile.my) * s;
       return dx <= 0 && dy <= 0 && dx + tile.cssW * s >= viewport.screenWidth && dy + tile.cssH * s >= viewport.screenHeight;
     }
+    function settle(served, result, err) {
+      const done = waiters.filter((w) => w.id <= served);
+      if (!done.length) return;
+      waiters = waiters.filter((w) => w.id > served);
+      for (const w of done) {
+        if (err) w.reject(err);
+        else w.resolve({ ...result, id: w.id });
+      }
+    }
     function frame() {
       rafId = 0;
-      if (needFull || !tile) {
-        drawTile();
-        needFull = false;
+      const served = reqSeq;
+      let timings = null, blitMs = 0;
+      try {
+        if (needFull || !tile) {
+          timings = drawTile();
+          needFull = false;
+        }
+        const b0 = performance.now();
+        blit();
+        blitMs = performance.now() - b0;
+        notify();
+      } catch (e) {
+        needFull = true;
+        settle(served, null, e);
+        throw e;
       }
-      blit();
-      notify();
+      if (timings || waiters.length) {
+        lastRender = { ...timings ?? {}, blitMs };
+        if (waiters.some((w) => w.id <= served)) {
+          const t = performance.now(), result = { ...lastRender };
+          result.presented = new Promise((resolve) => {
+            if (typeof requestAnimationFrame !== "function") {
+              resolve(null);
+              return;
+            }
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+              const ms = performance.now() - t;
+              lastRender.presentMs = ms;
+              resolve(ms);
+            }));
+          });
+          settle(served, result);
+        }
+      }
     }
     const schedule = () => {
       if (!rafId) rafId = requestAnimationFrame(frame);
@@ -5573,7 +5682,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       needFull = true;
       interacting = false;
       clearTimeout(settleTimer);
+      const id = ++reqSeq;
+      const done = new Promise((resolve, reject) => waiters.push({ id, resolve, reject }));
+      done.catch(() => {
+      });
       schedule();
+      return done;
     }
     function interact() {
       interacting = true;
@@ -5592,6 +5706,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       resize,
       requestRender,
       interact,
+      /** 直近のタイル描画の内訳（setupMs・sceneMs・tileMs・blitMs・presentMs・層ごとの時間と件数）。まだ描いていなければ null */
+      get lastRender() {
+        return lastRender;
+      },
       /** 描画のたびに呼ばれるコールバック（ズーム表示の更新用）。解除関数を返す */
       onFrame(fn) {
         listeners.add(fn);
@@ -5601,6 +5719,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         cancelAnimationFrame(rafId);
         clearTimeout(settleTimer);
         listeners.clear();
+        const w = waiters;
+        waiters = [];
+        for (const x of w) x.reject(new Error("\u30EC\u30F3\u30C0\u30E9\u30FC\u304C\u7834\u68C4\u3055\u308C\u307E\u3057\u305F"));
       }
     };
   }
@@ -15435,13 +15556,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0));
     setTimeout(go, 150);
   });
+  var RENDER_BUSY = "\u5730\u56F3\u3092\u63CF\u753B\u4E2D\u2026";
   var OVERLAYS = ["none", ...FILL_KINDS];
   var LAYER_KEYS = new Set(LAYERS.map((l) => l.key));
   var NOTICE_MS = 5e3;
   var PNG_SCALE = 2;
   function createActions({ store, viewport, renderer, worldService, download, createCanvas, appVersion = "" }) {
     const rerender = () => renderer.requestRender();
-    let noticeTimer = 0, genToken = 0;
+    let noticeTimer = 0, genToken = 0, adoptSeq = 0;
     const showNotice = (text2) => {
       store.update((s) => {
         s.notice = text2;
@@ -15487,7 +15609,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         await nextPaint();
         try {
           const { map, warnings } = await loadMapFile(file);
-          this.adoptMap(map, file.name, warnings);
+          store.update((s) => {
+            s.busy = RENDER_BUSY;
+          });
+          await nextPaint();
+          const rendered = await this.adoptMap(map, file.name, warnings);
+          if (!rendered.ok) return;
           const n = this.katakanaBurgs(file.name);
           if (n) showNotice(`\u82F1\u8A9E\u540D\u306E\u90FD\u5E02 ${n} \u4EF6\u3092\u30AB\u30BF\u30AB\u30CA\u306B\u3057\u307E\u3057\u305F\uFF08\u300C\u5143\u306B\u623B\u3059\u300D\u3067\u82F1\u8A9E\u540D\u306B\u623B\u305B\u307E\u3059\uFF09`);
         } catch (e) {
@@ -15497,13 +15624,41 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
           });
         }
       },
-      /** 作った・開いた地図を、画面の地図として採用する */
+      /**
+       * 作った・開いた地図を、画面の地図として採用する。
+       * 戻り値は約束（Promise）で、その地図の初回の描画（タイルを描いて貼る）が終わったときに解決する:
+       *   { ok: true, adoptMs, ...描画の内訳（setupMs・sceneMs・tileMs・blitMs・profile・presented） } / { ok: false, error }
+       * 「処理中」は、データを採用した時点ではなく、描画が終わった時点で消す（描画中も処理中と分かるようにする）。
+       * 描画の失敗は、成功扱いにせず、画面の error に出す。
+       */
       adoptMap(map, fileName, warnings = []) {
+        const t0 = performance.now(), my = ++adoptSeq;
         const prev = store.getState();
         viewport.setMapSize(map.meta.width || 2048, map.meta.height || 1024);
-        store.replace({ ...prev, map, fileName, warnings, error: null, notice: null, busy: null, hover: null, groups: { selected: map.world?.entities?.start?.groupId ?? null, variant: 0 } });
+        const ticket = renderer.requestRender();
+        const tracked = typeof ticket?.then === "function";
+        store.replace({ ...prev, map, fileName, warnings, error: null, notice: null, busy: tracked ? RENDER_BUSY : null, hover: null, groups: { selected: map.world?.entities?.start?.groupId ?? null, variant: 0 } });
         viewport.fit();
-        rerender();
+        const adoptMs = performance.now() - t0;
+        if (!tracked) return Promise.resolve({ ok: true, adoptMs });
+        const clear2 = (patch) => {
+          if (my === adoptSeq) store.update((s) => {
+            if (s.busy === RENDER_BUSY) s.busy = null;
+            patch?.(s);
+          });
+        };
+        return ticket.then(
+          (r) => {
+            clear2();
+            return { ok: true, adoptMs, ...r };
+          },
+          (e) => {
+            clear2((s) => {
+              s.error = `\u5730\u56F3\u306E\u63CF\u753B\u306B\u5931\u6557\u3057\u307E\u3057\u305F: ${e.message}`;
+            });
+            return { ok: false, error: e.message };
+          }
+        );
       },
       /**
        * 新しい世界を作る（地図づくりは、国家・外交・戦争と同じ、このアプリの 1 つの機能）。
@@ -15542,12 +15697,24 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
           });
           await nextPaint();
           const tMap0 = performance.now(), map = worldToMap(world), tMap = performance.now() - tMap0;
-          const tAdopt0 = performance.now();
-          this.adoptMap(map, `${world.spec.worldSeed}.${AHMAP_EXT}`, []);
-          const tAdopt = performance.now() - tAdopt0;
-          const sec = (ms) => (ms / 1e3).toFixed(1), g = world.generation, total2 = performance.now() - T0;
-          console.info(`[\u4E16\u754C\u751F\u6210] \u5408\u8A08 ${sec(total2)}\u79D2\uFF08\u751F\u6210 ${sec(tGen)}\u30FB\u5730\u56F3\u5316 ${sec(tMap)}\u30FB\u63A1\u7528\u3068\u63CF\u753B ${sec(tAdopt)}\uFF09`, stages.filter(([, ms]) => ms >= 50).map(([n, ms]) => `${n} ${sec(ms)}\u79D2`).join(" / "));
-          const timing = `\uFF08\u5408\u8A08 ${sec(total2)}\u79D2: \u751F\u6210 ${sec(tGen)}\u30FB\u5730\u56F3\u5316 ${sec(tMap)}\u30FB\u63A1\u7528\u3068\u63CF\u753B ${sec(tAdopt)}\uFF09`;
+          store.update((s) => {
+            s.busy = RENDER_BUSY;
+          });
+          await nextPaint();
+          const rendered = await this.adoptMap(map, `${world.spec.worldSeed}.${AHMAP_EXT}`, []);
+          if (my !== genToken) return { ok: false, cancelled: true };
+          if (!rendered.ok) return { ok: false, error: rendered.error };
+          const sec = (ms2) => (ms2 / 1e3).toFixed(1), g = world.generation, total2 = performance.now() - T0;
+          const ms = (x) => Math.round(x ?? 0);
+          console.info(
+            `[\u4E16\u754C\u751F\u6210] \u5408\u8A08 ${sec(total2)}\u79D2\uFF08\u751F\u6210 ${sec(tGen)}\u30FB\u5730\u56F3\u5316 ${sec(tMap)}\u30FB\u63A1\u7528 ${sec(rendered.adoptMs)}\u30FB\u63CF\u753B\u5B8C\u4E86 ${sec(rendered.tileMs + rendered.blitMs)}\uFF09`,
+            { \u751F\u6210ms: ms(tGen), \u5730\u56F3\u5316ms: ms(tMap), \u63A1\u7528ms: ms(rendered.adoptMs), \u30BF\u30A4\u30EB\u63CF\u753Bms: ms(rendered.tileMs), \u30B7\u30FC\u30F3\u63CF\u753Bms: ms(rendered.sceneMs), \u8CBC\u308A\u4ED8\u3051ms: ms(rendered.blitMs), \u6E96\u5099ms: ms(rendered.setupMs), \u5C64\u5225: rendered.profile?.ms, \u4EF6\u6570: rendered.profile?.counts },
+            stages.filter(([, st]) => st >= 50).map(([n, st]) => `${n} ${sec(st)}\u79D2`).join(" / ")
+          );
+          rendered.presented?.then((pm) => {
+            if (pm != null) console.info(`[\u4E16\u754C\u751F\u6210] \u63CF\u753B\u306E\u8CBC\u308A\u4ED8\u3051\u5F8C\u3001\u753B\u9762\u306B\u8868\u793A\u3055\u308C\u308B\u307E\u3067 ${ms(pm)} ms`);
+          });
+          const timing = `\uFF08\u5408\u8A08 ${sec(total2)}\u79D2: \u751F\u6210 ${sec(tGen)}\u30FB\u5730\u56F3\u5316 ${sec(tMap)}\u30FB\u63CF\u753B ${sec(rendered.tileMs + rendered.blitMs)}\uFF09`;
           showNotice((g?.rejected?.length ? `\u7D71\u8A08\u306E\u8A31\u5BB9\u5E2F\u306B\u5165\u308B\u307E\u3067 ${g.attempts} \u56DE\u4F5C\u308A\u76F4\u3057\u307E\u3057\u305F\uFF08\u7834\u68C4\u3057\u305F\u30B7\u30FC\u30C9: ${g.rejected.map((r) => r.seed).join("\u3001")}\uFF09\u3002\u4F7F\u3063\u305F\u30B7\u30FC\u30C9: ${g.seedUsed}` : "\u4E16\u754C\u304C\u3067\u304D\u307E\u3057\u305F\u3002\u6B21\u306F\u3001\u6B74\u53F2\u3092\u59CB\u3081\u308B\u521D\u671F\u96C6\u56E3\u3092\u9078\u3073\u307E\u3059") + timing);
           return { ok: true, map };
         } catch (e) {
@@ -15849,9 +16016,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "5.3.0";
-  var APP_VERSION_NAME = "UI\u306E\u4E00\u65B0\uFF08\u30C9\u30C3\u30AF\u65B9\u5F0F\u30FB\u5927\u898F\u6A21\u5BFE\u5FDC\uFF09";
+  var APP_VERSION = "5.3.1";
+  var APP_VERSION_NAME = "\u63CF\u753B\u6027\u80FD\u306E\u4FEE\u6B63\uFF0825\u4E07\u30BB\u30EB\u306E\u521D\u56DE\u8868\u793A\uFF09";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
+  var APP_BUILD_ID = true ? "5db1a70a2776" : "dev";
 
   // js/ui/icons.js
   var P2 = {
@@ -16790,7 +16958,7 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       sect("\u6642\u9593\u30FB\u6642\u4EE3\u533A\u5206", "\u3044\u307E\u306E\u5E74\u6708\u3092\u6307\u5B9A\u3057\u3001\u6642\u4EE3\u306E\u540D\u524D\u3068\u533A\u5207\u308A\u3092\u8A2D\u5B9A\u3057\u307E\u3059\u3002", "\u5E74\u6708\u3068\u6642\u4EE3\u3092\u8A2D\u5B9A\u3059\u308B", () => byId("world-date").click())
     );
     const about = el("section", "settings-sec");
-    about.append(el("h4", "", "\u3053\u306E\u30A2\u30D7\u30EA\u306B\u3064\u3044\u3066"), el("p", "about-version", APP_VERSION_LABEL), el("p", "hint", "ALTERHISTORY \u2014 \u65E5\u672C\u8A9E\u3067\u4F7F\u3048\u308B\u67B6\u7A7A\u4E16\u754C\u5730\u56F3\u30B8\u30A7\u30CD\u30EC\u30FC\u30BF\u30FC"));
+    about.append(el("h4", "", "\u3053\u306E\u30A2\u30D7\u30EA\u306B\u3064\u3044\u3066"), el("p", "about-version", APP_VERSION_LABEL), el("p", "hint", `\u30D3\u30EB\u30C9 ${APP_BUILD_ID}`), el("p", "hint", "ALTERHISTORY \u2014 \u65E5\u672C\u8A9E\u3067\u4F7F\u3048\u308B\u67B6\u7A7A\u4E16\u754C\u5730\u56F3\u30B8\u30A7\u30CD\u30EC\u30FC\u30BF\u30FC"));
     setBody.append(about);
     wins.register("settings", { title: "\u8A73\u7D30\u8A2D\u5B9A", width: 520, body: setBody });
     return wins;
@@ -30047,6 +30215,37 @@ ${shown}${more}`;
     return { ...app, adapter, map };
   }
 
+  // js/render/perf-report.js
+  async function runRenderBenchmark({ map, viewport, getOptions, repeats = 3 }) {
+    if (!map?.geometry) throw new Error("\u5730\u56F3\u304C\u3042\u308A\u307E\u305B\u3093");
+    const dpr = window.devicePixelRatio || 1;
+    const mx = Math.round(viewport.screenWidth * OVERSCAN), my = Math.round(viewport.screenHeight * OVERSCAN);
+    const cssW = viewport.screenWidth + mx * 2, cssH = viewport.screenHeight + my * 2;
+    const tdpr = Math.min(dpr, Math.sqrt(MAX_TILE_PIXELS / (cssW * cssH)));
+    const pw = Math.max(1, Math.round(cssW * tdpr)), ph = Math.max(1, Math.round(cssH * tdpr));
+    const tvp = viewport.cloneFor(cssW, cssH, mx, my);
+    const rows = [];
+    for (const [mode, ctxOpts] of [["\u65E2\u5B9A\uFF08GPU\u304C\u4F7F\u3048\u308C\u3070GPU\uFF09", void 0], ["CPU\uFF08\u30BD\u30D5\u30C8\u30A6\u30A7\u30A2\u63CF\u753B\uFF09", { willReadFrequently: true }]]) {
+      const cv = document.createElement("canvas");
+      cv.width = pw;
+      cv.height = ph;
+      const ctx = cv.getContext("2d", ctxOpts);
+      for (let n = 1; n <= repeats; n++) {
+        await new Promise((r) => setTimeout(r, 0));
+        const profile = createRenderProfile();
+        const a = performance.now();
+        drawScene(ctx, map, tvp, { ...getOptions(), profile }, tdpr);
+        const b = performance.now();
+        ctx.getImageData(0, 0, 1, 1);
+        const c = performance.now();
+        rows.push({ \u30AD\u30E3\u30F3\u30D0\u30B9: mode, \u56DE: n, "js(ms)": Math.round(b - a), "\u5857\u308A\u7D42\u308F\u308A\u307E\u3067(ms)": Math.round(c - b), "\u5408\u8A08(ms)": Math.round(c - a), \u30BF\u30A4\u30EB: `${pw}x${ph}`, \u30B3\u30D4\u30FC: tvp.copyOffsets().join(","), \u5C64\u5225js: profile.snapshot().ms });
+      }
+    }
+    console.info(`[\u63CF\u753B\u30D9\u30F3\u30C1] \u30BB\u30EB ${map.geometry.pack.cells.v.length}\u30FB\u753B\u9762 ${viewport.screenWidth}x${viewport.screenHeight}\u30FBDPR ${dpr}\uFF08\u30BF\u30A4\u30EB ${pw}x${ph}\uFF09`);
+    console.table(rows.map(({ \u5C64\u5225js, ...r }) => r));
+    return rows;
+  }
+
   // js/main.js
   function start() {
     const store = createStore({
@@ -30232,7 +30431,7 @@ ${shown}${more}`;
     byId("stage").append(byId("sidebar"), byId("edit-panel"));
     new ResizeObserver(() => renderer.resize()).observe(byId("stage"));
     renderer.resize();
-    globalThis.alterhistory = { v53, civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+    globalThis.alterhistory = { build: { version: APP_VERSION, buildId: APP_BUILD_ID }, perf: (opts) => runRenderBenchmark({ map: store.getState().map, viewport, getOptions: () => ({ ...viewToRenderOptions(store.getState().view), groups: visibleGroups(store.getState()) }), ...opts }), v53, civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
   }
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();

@@ -20,6 +20,9 @@ import { LAYERS, FILL_KEY, FILL_KINDS, isLayerOn, exclusiveFillPatch, snapshotFi
 // 一定時間（150ms）で必ず先へ進める（v5.2: Edge で生成後に「地図を準備中…」から進まないことがあった）
 const nextPaint = () => new Promise((resolve) => { let done = false; const go = () => { if (!done) { done = true; resolve(); } }; if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 150); });
 
+/** 地図を採用してから、その地図の初回の描画が終わるまでの「処理中」表示（v5.3.1: 採用しただけで処理中を消さない） */
+const RENDER_BUSY = "地図を描画中…";
+
 export const OVERLAYS = ["none", ...FILL_KINDS];
 const LAYER_KEYS = new Set(LAYERS.map((l) => l.key));
 
@@ -33,7 +36,7 @@ const PNG_SCALE = 2;
  */
 export function createActions({ store, viewport, renderer, worldService, download, createCanvas, appVersion = "" }) {
   const rerender = () => renderer.requestRender();
-  let noticeTimer = 0, genToken = 0;
+  let noticeTimer = 0, genToken = 0, adoptSeq = 0;
 
   const showNotice = (text) => {
     store.update((s) => { s.notice = text; });
@@ -72,7 +75,10 @@ export function createActions({ store, viewport, renderer, worldService, downloa
       await nextPaint(); // 「読み込み中」を先に表示してから重い処理を始める
       try {
         const { map, warnings } = await loadMapFile(file);
-        this.adoptMap(map, file.name, warnings);
+        store.update((s) => { s.busy = RENDER_BUSY; });
+        await nextPaint(); // 「地図を描画中」を先に表示してから、重い描画を始める
+        const rendered = await this.adoptMap(map, file.name, warnings);
+        if (!rendered.ok) return; // 描画の失敗は adoptMap が画面（error）に出している
         const n = this.katakanaBurgs(file.name);
         if (n) showNotice(`英語名の都市 ${n} 件をカタカナにしました（「元に戻す」で英語名に戻せます）`);
       } catch (e) {
@@ -80,13 +86,28 @@ export function createActions({ store, viewport, renderer, worldService, downloa
       }
     },
 
-    /** 作った・開いた地図を、画面の地図として採用する */
+    /**
+     * 作った・開いた地図を、画面の地図として採用する。
+     * 戻り値は約束（Promise）で、その地図の初回の描画（タイルを描いて貼る）が終わったときに解決する:
+     *   { ok: true, adoptMs, ...描画の内訳（setupMs・sceneMs・tileMs・blitMs・profile・presented） } / { ok: false, error }
+     * 「処理中」は、データを採用した時点ではなく、描画が終わった時点で消す（描画中も処理中と分かるようにする）。
+     * 描画の失敗は、成功扱いにせず、画面の error に出す。
+     */
     adoptMap(map, fileName, warnings = []) {
+      const t0 = performance.now(), my = ++adoptSeq;
       const prev = store.getState();
       viewport.setMapSize(map.meta.width || 2048, map.meta.height || 1024);
-      store.replace({ ...prev, map, fileName, warnings, error: null, notice: null, busy: null, hover: null, groups: { selected: map.world?.entities?.start?.groupId ?? null, variant: 0 } });
+      const ticket = renderer.requestRender(); // 予約するだけ（描画は後続のフレーム）。完了は ticket で追う
+      const tracked = typeof ticket?.then === "function";
+      store.replace({ ...prev, map, fileName, warnings, error: null, notice: null, busy: tracked ? RENDER_BUSY : null, hover: null, groups: { selected: map.world?.entities?.start?.groupId ?? null, variant: 0 } });
       viewport.fit();
-      rerender();
+      const adoptMs = performance.now() - t0;
+      if (!tracked) return Promise.resolve({ ok: true, adoptMs }); // 描画の完了を追えない描画器（テスト用の代役）
+      const clear = (patch) => { if (my === adoptSeq) store.update((s) => { if (s.busy === RENDER_BUSY) s.busy = null; patch?.(s); }); };
+      return ticket.then(
+        (r) => { clear(); return { ok: true, adoptMs, ...r }; },
+        (e) => { clear((s) => { s.error = `地図の描画に失敗しました: ${e.message}`; }); return { ok: false, error: e.message }; },
+      );
     },
 
     /**
@@ -108,10 +129,19 @@ export function createActions({ store, viewport, renderer, worldService, downloa
         store.update((s) => { s.busy = `地図を準備中…（${el()}経過）`; });
         await nextPaint();
         const tMap0 = performance.now(), map = worldToMap(world), tMap = performance.now() - tMap0;
-        const tAdopt0 = performance.now(); this.adoptMap(map, `${world.spec.worldSeed}.${AHMAP_EXT}`, []); const tAdopt = performance.now() - tAdopt0;
+        store.update((s) => { s.busy = RENDER_BUSY; });
+        await nextPaint(); // 「地図を描画中」を先に表示してから、重い描画を始める
+        const rendered = await this.adoptMap(map, `${world.spec.worldSeed}.${AHMAP_EXT}`, []);
+        if (my !== genToken) return { ok: false, cancelled: true };
+        if (!rendered.ok) return { ok: false, error: rendered.error }; // 描画の失敗を成功扱いにしない（error は adoptMap が画面に出している）
         const sec = (ms) => (ms / 1000).toFixed(1), g = world.generation, total = performance.now() - T0;
-        console.info(`[世界生成] 合計 ${sec(total)}秒（生成 ${sec(tGen)}・地図化 ${sec(tMap)}・採用と描画 ${sec(tAdopt)}）`, stages.filter(([, ms]) => ms >= 50).map(([n, ms]) => `${n} ${sec(ms)}秒`).join(" / "));
-        const timing = `（合計 ${sec(total)}秒: 生成 ${sec(tGen)}・地図化 ${sec(tMap)}・採用と描画 ${sec(tAdopt)}）`;
+        // 世界生成・地図変換・採用・初回の描画（タイルの描画・シーンの描画・貼り付け）を、別々の項目で出す（描画の完了は実際に描き終えた時点）
+        const ms = (x) => Math.round(x ?? 0);
+        console.info(`[世界生成] 合計 ${sec(total)}秒（生成 ${sec(tGen)}・地図化 ${sec(tMap)}・採用 ${sec(rendered.adoptMs)}・描画完了 ${sec(rendered.tileMs + rendered.blitMs)}）`,
+          { 生成ms: ms(tGen), 地図化ms: ms(tMap), 採用ms: ms(rendered.adoptMs), タイル描画ms: ms(rendered.tileMs), シーン描画ms: ms(rendered.sceneMs), 貼り付けms: ms(rendered.blitMs), 準備ms: ms(rendered.setupMs), 層別: rendered.profile?.ms, 件数: rendered.profile?.counts },
+          stages.filter(([, st]) => st >= 50).map(([n, st]) => `${n} ${sec(st)}秒`).join(" / "));
+        rendered.presented?.then((pm) => { if (pm != null) console.info(`[世界生成] 描画の貼り付け後、画面に表示されるまで ${ms(pm)} ms`); });
+        const timing = `（合計 ${sec(total)}秒: 生成 ${sec(tGen)}・地図化 ${sec(tMap)}・描画 ${sec(rendered.tileMs + rendered.blitMs)}）`;
         showNotice((g?.rejected?.length ? `統計の許容帯に入るまで ${g.attempts} 回作り直しました（破棄したシード: ${g.rejected.map((r) => r.seed).join("、")}）。使ったシード: ${g.seedUsed}` : "世界ができました。次は、歴史を始める初期集団を選びます") + timing);
         return { ok: true, map };
       } catch (e) {

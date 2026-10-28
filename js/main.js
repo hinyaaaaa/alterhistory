@@ -58,7 +58,8 @@ import { openNewWorldDialog } from "./ui/world-new-dialog.js";
 import { initGroupsPanel } from "./ui/groups-panel.js";
 import worldWorkerSource from "./generated/worldgen-worker.txt";
 import { bootV53 } from "./ui/v53/boot-live.js";
-import { APP_VERSION } from "./version.js";
+import { APP_VERSION, APP_BUILD_ID } from "./version.js";
+import { runRenderBenchmark } from "./render/perf-report.js";
 
 function start() {
   const store = createStore({
@@ -202,7 +203,7 @@ function start() {
   renderer.resize();
 
   // 開発時にコンソールから触れるように公開する
-  globalThis.alterhistory = { v53, civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
+  globalThis.alterhistory = { build: { version: APP_VERSION, buildId: APP_BUILD_ID }, perf: (opts) => runRenderBenchmark({ map: store.getState().map, viewport, getOptions: () => ({ ...viewToRenderOptions(store.getState().view), groups: visibleGroups(store.getState()) }), ...opts }), v53, civActions, history, worldService, wins, panels, setupActions, openSetup, openRebellion, store, viewport, renderer, actions, highlight: deps.highlight, editActions, simActions, timeActions, editorPanel, builderActions };
 }
 
 if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);

@@ -1,0 +1,224 @@
+{
+ "note": "v5.3.1 描画性能の計測。ヘッドレス Chromium 153（@sparticuz/chromium・1コア・GPUはソフトウェア模擬）。Edge 実機の値ではない。",
+ "before_after_drawScene_jsMs_fullView_firstThenCached": {
+  "50000": {
+   "before": [
+    9088,
+    3166
+   ],
+   "after": [
+    274,
+    85
+   ]
+  },
+  "100000": {
+   "before": [
+    34565,
+    11723
+   ],
+   "after": [
+    357,
+    161
+   ]
+  },
+  "250000": {
+   "before": "約224000（アプリの初回描画。newWorld 完了から最初のフレームまで 229984ms）",
+   "after": [
+    621
+   ]
+  }
+ },
+ "zoom16_250000_jsMs_x3_(CPU canvas)": {
+  "before": [
+   299,
+   316,
+   212
+  ],
+  "after": [
+   185,
+   72,
+   52
+  ]
+ },
+ "closePath_cost_single_Path2D_25835_cells_ms": {
+  "with_closePath": 5713,
+  "without": 11,
+  "by_cells": {
+   "2000": 35,
+   "5000": 224,
+   "10000": 867,
+   "25835": 5713
+  }
+ },
+ "after_app_bench_250000": {
+  "cells": 250000,
+  "build": {
+   "version": "5.3.1",
+   "buildId": "5db1a70a2776"
+  },
+  "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/153.0.8010.0 Safari/537.36",
+  "dpr": 1,
+  "screen": [
+   824,
+   853
+  ],
+  "newWorld": {
+   "ok": true,
+   "totalMs": 6376
+  },
+  "fullFirst": {
+   "tileMs": 621,
+   "sceneMs": 619,
+   "blitMs": 45,
+   "layerMs": {
+    "terrain.near.filter": 55.2,
+    "terrain.near.buildPath": 169.5,
+    "terrain.near.fill": 16,
+    "layer.terrain": 422.8,
+    "layer.politics.state": 25.2,
+    "layer.coast": 135.6,
+    "layer.rivers": 18.9,
+    "layer.routes": 0.2,
+    "layer.zones": 0.1,
+    "layer.burgs": 0.2,
+    "layer.labels": 0.4,
+    "layer.groups": 2.8,
+    "copy[-1]": 225.4,
+    "terrain.classify": 10,
+    "terrain.buildPath2D": 138.6,
+    "terrain.fill": 17.6,
+    "copy[0]": 240.3,
+    "copy[1]": 152.9
+   },
+   "counts": {
+    "terrain.near.filter#": 2,
+    "terrain.near.cells": 245940,
+    "terrain.near.buildPath#": 26,
+    "terrain.near.fill#": 26,
+    "layer.terrain#": 3,
+    "politics.groups": 0,
+    "layer.politics.state#": 3,
+    "layer.coast#": 3,
+    "layer.rivers#": 3,
+    "layer.routes#": 3,
+    "layer.zones#": 3,
+    "layer.burgs#": 3,
+    "layer.labels#": 3,
+    "layer.groups#": 3,
+    "copy[-1]#": 1,
+    "terrain.pathCache.miss": 1,
+    "terrain.classify#": 1,
+    "terrain.buildPath2D#": 1,
+    "terrain.colorGroups": 13,
+    "terrain.cells": 249642,
+    "terrain.verts": 1500988,
+    "terrain.fill#": 1,
+    "copy[0]#": 1,
+    "copy[1]#": 1
+   }
+  },
+  "fullCachedTileMs": [
+   615,
+   450,
+   447
+  ],
+  "zoom16First": {
+   "tileMs": 153,
+   "copies": {
+    "terrain.near.filter#": 1,
+    "terrain.near.cells": 13576,
+    "terrain.near.buildPath#": 13,
+    "terrain.near.fill#": 13,
+    "layer.terrain#": 1,
+    "politics.groups": 0,
+    "layer.politics.state#": 1,
+    "layer.coast#": 1,
+    "layer.rivers#": 1,
+    "layer.routes#": 1,
+    "layer.zones#": 1,
+    "layer.burgs#": 1,
+    "layer.labels#": 1,
+    "layer.groups#": 1,
+    "copy[0]#": 1
+   }
+  },
+  "zoom16CachedTileMs": [
+   93,
+   57,
+   49
+  ],
+  "longTasksMs": [
+   1718,
+   713,
+   659,
+   499,
+   491,
+   163,
+   98,
+   62,
+   59,
+   503,
+   93829,
+   14085,
+   1423,
+   1623,
+   1503
+  ],
+  "rasterTable": [
+   {
+    "キャンバス": "既定（GPUが使えればGPU）",
+    "回": 1,
+    "js(ms)": 2334,
+    "塗り終わりまで(ms)": 91495,
+    "合計(ms)": 93828,
+    "タイル": "1484x1535",
+    "コピー": "-1,0,1"
+   },
+   {
+    "キャンバス": "既定（GPUが使えればGPU）",
+    "回": 2,
+    "js(ms)": 602,
+    "塗り終わりまで(ms)": 13483,
+    "合計(ms)": 14085,
+    "タイル": "1484x1535",
+    "コピー": "-1,0,1"
+   },
+   {
+    "キャンバス": "既定（GPUが使えればGPU）",
+    "回": 3,
+    "js(ms)": 322,
+    "塗り終わりまで(ms)": 1101,
+    "合計(ms)": 1423,
+    "タイル": "1484x1535",
+    "コピー": "-1,0,1"
+   },
+   {
+    "キャンバス": "CPU（ソフトウェア描画）",
+    "回": 1,
+    "js(ms)": 522,
+    "塗り終わりまで(ms)": 1101,
+    "合計(ms)": 1623,
+    "タイル": "1484x1535",
+    "コピー": "-1,0,1"
+   },
+   {
+    "キャンバス": "CPU（ソフトウェア描画）",
+    "回": 2,
+    "js(ms)": 351,
+    "塗り終わりまで(ms)": 1153,
+    "合計(ms)": 1503,
+    "タイル": "1484x1535",
+    "コピー": "-1,0,1"
+   },
+   {
+    "キャンバス": "CPU（ソフトウェア描画）",
+    "回": 3,
+    "js(ms)": 294,
+    "塗り終わりまで(ms)": 1113,
+    "合計(ms)": 1407,
+    "タイル": "1484x1535",
+    "コピー": "-1,0,1"
+   }
+  ]
+ }
+}

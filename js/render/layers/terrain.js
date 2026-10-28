@@ -4,13 +4,21 @@
 //   - 隣接セルの継ぎ目に隙間や二重塗りが出ない（半透明の重ね塗りでも安全）
 //   - 塗り命令の回数が色数まで減り、速い
 import { landHeightColor } from "../palette.js";
+import { timed } from "../profile.js";
 
 const OCEAN_NEAR = "#86aed0";  // 海岸に隣接する水域
 const OCEAN_MID = "#6f97c0";   // その外側
 const OCEAN_FAR = "#5a82ad";
 const LAKE = "#8bbbe0";
 
-/** セルの多角形をパスに追加する */
+/**
+ * セルの多角形を塗りつぶし用のパスに追加する（呼び出し側は、このあと fill() するだけ。stroke には使わない）。
+ *
+ * 輪郭を閉じる closePath() は呼ばない。fill() は閉じていない輪郭を自動で閉じる（Canvas の仕様）ので、塗りの結果は変わらない。
+ * 一方、Chromium（Edge）は、1本のパスに輪郭が増えるほど closePath() 1回あたりの時間が増える（輪郭数の二乗で遅くなる）。
+ *   実測（Chromium 実機相当・5万セルのうち25,835セルを1本のパスに追加）: closePath あり 5,713 ms／なし 11 ms。
+ *   25万セルの世界の初回描画が数分かかった原因はこれ（docs/V5_3_1_RENDER_PERF.md）。
+ */
 export function addCellPath(ctx, cells, vertices, i, wy = null) {
   // wy: 球面世界の表示用に y を円筒図法へ変える関数（本物の Path2D に直接足すときに使う。warpContext 経由なら不要）
   const ring = (poly) => {
@@ -18,7 +26,6 @@ export function addCellPath(ctx, cells, vertices, i, wy = null) {
       const p = vertices.p[poly[k]], y = wy ? wy(p[1]) : p[1];
       if (k === 0) ctx.moveTo(p[0], y); else ctx.lineTo(p[0], y);
     }
-    ctx.closePath();
   };
   ring(cells.v[i]);
   if (cells.alt?.[i]) ring(cells.alt[i]); // 世界の継ぎ目をまたぐセルは反対側の端にも描く（球面世界の経度の継ぎ目）
@@ -39,7 +46,7 @@ const PLAIN_LAND = "#d8d2b4";  // 地形・標高のどちらも切ったとき�
  * @param {"biome"|"height"|"both"|"none"} mode
  *   both: 地形・植生を塗ったあと、標高を半透明で重ねる / none: 陸は無地
  */
-export function drawTerrain(ctx, map, vp, mode = "biome") {
+export function drawTerrain(ctx, map, vp, mode = "biome", prof = null) {
   const { cells, vertices, h } = map.geometry.pack;
   const biome = map.pack.cells.biome;
   const biomeColor = map.biomesData.map((b) => b?.color ?? "#999");
@@ -59,44 +66,59 @@ export function drawTerrain(ctx, map, vp, mode = "biome") {
   function paint(landColor, { water = true, alpha = 1, key = "" } = {}) {
     if (near) return paintNear(landColor, water, alpha);
     let entries = cache.byKey.get(key);
+    prof?.count(entries ? "terrain.pathCache.hit" : "terrain.pathCache.miss");
     if (!entries) {
       const groups = new Map();
-      for (let i = 0; i < cells.v.length; i++) {
-        const hi = h[i];
-        let color;
-        if (hi < 20) color = water ? waterColorOf(map, i) : null;
-        else color = landColor(i, hi);
-        if (color == null) continue;
-        let list = groups.get(color);
-        if (!list) { list = []; groups.set(color, list); }
-        list.push(i);
-      }
+      timed(prof, "terrain.classify", null, () => {
+        for (let i = 0; i < cells.v.length; i++) {
+          const hi = h[i];
+          let color;
+          if (hi < 20) color = water ? waterColorOf(map, i) : null;
+          else color = landColor(i, hi);
+          if (color == null) continue;
+          let list = groups.get(color);
+          if (!list) { list = []; groups.set(color, list); }
+          list.push(i);
+        }
+      });
       entries = [];
-      for (const [color, list] of groups) {
-        if (hasPath2D) { const path = new Path2D(); for (const i of list) addCellPath(path, cells, vertices, i, wyFn); entries.push({ color, path }); }
-        else entries.push({ color, list });
-      }
+      timed(prof, "terrain.buildPath2D", null, () => {
+        for (const [color, list] of groups) {
+          if (hasPath2D) { const path = new Path2D(); for (const i of list) addCellPath(path, cells, vertices, i, wyFn); entries.push({ color, path }); }
+          else entries.push({ color, list });
+        }
+      });
+      if (prof) { prof.count("terrain.colorGroups", groups.size); let c = 0, vs = 0; for (const list of groups.values()) for (const i of list) { c++; vs += cells.v[i].length + (cells.alt?.[i]?.length ?? 0); } prof.count("terrain.cells", c); prof.count("terrain.verts", vs); }
       cache.byKey.set(key, entries);
     }
-    ctx.globalAlpha = alpha;
-    for (const e of entries) {
-      ctx.fillStyle = e.color;
-      if (e.path) ctx.fill(e.path);
-      else { ctx.beginPath(); for (const i of e.list) addCellPath(ctx, cells, vertices, i); ctx.fill(); }
-    }
-    ctx.globalAlpha = 1;
+    timed(prof, "terrain.fill", ctx, () => {
+      ctx.globalAlpha = alpha;
+      for (const e of entries) {
+        ctx.fillStyle = e.color;
+        if (e.path) ctx.fill(e.path);
+        else { ctx.beginPath(); for (const i of e.list) addCellPath(ctx, cells, vertices, i); ctx.fill(); }
+      }
+      ctx.globalAlpha = 1;
+    });
   }
   function paintNear(landColor, water, alpha) {
     const groups = new Map();
-    for (let i = 0; i < cells.v.length; i++) {
-      if (!visible(i)) continue;
-      const hi = h[i]; let color;
-      if (hi < 20) color = water ? waterColorOf(map, i) : null; else color = landColor(i, hi);
-      if (color == null) continue;
-      let list = groups.get(color); if (!list) groups.set(color, (list = [])); list.push(i);
-    }
+    timed(prof, "terrain.near.filter", null, () => {
+      for (let i = 0; i < cells.v.length; i++) {
+        if (!visible(i)) continue;
+        const hi = h[i]; let color;
+        if (hi < 20) color = water ? waterColorOf(map, i) : null; else color = landColor(i, hi);
+        if (color == null) continue;
+        let list = groups.get(color); if (!list) groups.set(color, (list = [])); list.push(i);
+      }
+    });
+    if (prof) { let c = 0; for (const list of groups.values()) c += list.length; prof.count("terrain.near.cells", c); }
     ctx.globalAlpha = alpha;
-    for (const [color, list] of groups) { ctx.fillStyle = color; ctx.beginPath(); for (const i of list) addCellPath(ctx, cells, vertices, i); ctx.fill(); }
+    for (const [color, list] of groups) {
+      ctx.fillStyle = color; ctx.beginPath();
+      timed(prof, "terrain.near.buildPath", null, () => { for (const i of list) addCellPath(ctx, cells, vertices, i); });
+      timed(prof, "terrain.near.fill", ctx, () => ctx.fill());
+    }
     ctx.globalAlpha = 1;
   }
   const byHeight = (_i, hi) => landHeightColor(Math.round(hi / 4) * 4); // 4刻みに量子化して色数を抑える

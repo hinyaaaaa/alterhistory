@@ -1,4 +1,4 @@
-import { APP_VERSION_LABEL } from "../version.js";
+import { APP_VERSION_LABEL, APP_BUILD_ID } from "../version.js";
 import { byId } from "./dom.js";
 import { initWindows } from "./windows.js";
 import { FILL_KEY } from "../app/layers.js";
@@ -66,7 +66,7 @@ export function initSettingsWindows({ store, panels, editorPanel, editActions, a
     sect("時間・時代区分", "いまの年月を指定し、時代の名前と区切りを設定します。", "年月と時代を設定する", () => byId("world-date").click()),
   );
   const about = el("section", "settings-sec");
-  about.append(el("h4", "", "このアプリについて"), el("p", "about-version", APP_VERSION_LABEL), el("p", "hint", "ALTERHISTORY — 日本語で使える架空世界地図ジェネレーター"));
+  about.append(el("h4", "", "このアプリについて"), el("p", "about-version", APP_VERSION_LABEL), el("p", "hint", `ビルド ${APP_BUILD_ID}`), el("p", "hint", "ALTERHISTORY — 日本語で使える架空世界地図ジェネレーター"));
   setBody.append(about);
   wins.register("settings", { title: "詳細設定", width: 520, body: setBody });
   return wins;

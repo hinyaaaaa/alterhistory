@@ -7,8 +7,8 @@ const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"
 const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8"));
 const log = readFileSync(new URL("../docs/CHANGELOG.md", import.meta.url), "utf8");
 check("package.json の version と js/version.js が一致", pkg.version === APP_VERSION, `${pkg.version} / ${APP_VERSION}`);
-check("版の名前と表示（v5.3.0 UIの一新（ドック方式・大規模対応））", APP_VERSION === "5.3.0" && APP_VERSION_NAME === "UIの一新（ドック方式・大規模対応）" && APP_VERSION_LABEL === "v5.3.0 UIの一新（ドック方式・大規模対応）");
-check("docs/CHANGELOG.md に v5.0.0 と v4.2.0 が書かれている", log.includes("## v5.3.0 UIの一新（ドック方式・大規模対応）") && log.includes("## v5.0.0 文明史") && log.includes("## v4.2.0 文明の芽生え"));
+check("版の名前と表示（v5.3.1 描画性能の修正（25万セルの初回表示））", APP_VERSION === "5.3.1" && APP_VERSION_NAME === "描画性能の修正（25万セルの初回表示）" && APP_VERSION_LABEL === "v5.3.1 描画性能の修正（25万セルの初回表示）");
+check("docs/CHANGELOG.md に v5.0.0 と v4.2.0 が書かれている", log.includes("## v5.3.1 描画性能の修正（25万セルの初回表示）") && log.includes("## v5.3.0 UIの一新（ドック方式・大規模対応）") && log.includes("## v5.0.0 文明史") && log.includes("## v4.2.0 文明の芽生え"));
 check("docs/CHANGELOG.md に v4.0.0 が書かれている", log.includes("## v4.0.0 球面世界"));
 check("docs/CHANGELOG.md に v2.0.0 と v2.1.0 が書かれている", log.includes("## v2.0.0 静かな戦略卓") && log.includes("## v2.3.0 内戦と検査") && log.includes("## v2.4.0 国家のハブ") && log.includes("## v2.4.1 磨き上げ") && log.includes("## v2.5.0 戦争と外交の再設計") && log.includes("## v2.6.0 史実の足取り") && log.includes("## v2.6.1 自由な反乱と、史実風の戦争名") && log.includes("## v3.0.0 自ら動く国家"));
 check("保存形式の版は 3（条約の形式は 2、旧形式は 1）", SAVE_FORMAT === 3);
