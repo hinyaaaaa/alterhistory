@@ -42,7 +42,14 @@ export function evaluatePeace(civ, war, proposer, other, terms = { kind: "white"
   return { accept: s >= 0, score: r2(s), factors: f };
 }
 
-const record = (ctx, rec) => { const id = ctx.ids.next("proposal"); ledger(ctx.civ).proposals.push({ id, at: ctx.civ.monthIndex, ...rec }); return id; };
+/** 提案の記録（履歴は消さない）。評価の要因は、短い符号（ラベル表への番号）で保存して、長期の保存量を抑える */
+const record = (ctx, rec) => {
+  const id = ctx.ids.next("proposal"), L = ledger(ctx.civ), lab = (L.labels ??= []), { factors, ...rest } = rec;
+  const f = (factors ?? []).map((x) => { let i = lab.indexOf(x.ja); if (i < 0) i = lab.push(x.ja) - 1; return [i, x.v]; });
+  L.proposals.push({ id, at: ctx.civ.monthIndex, ...rest, f }); return id;
+};
+/** 記録の要因を、読める形（{ ja, v }）に戻す */
+export const factorsOf = (civ, rec) => (rec.f ?? []).map(([i, v]) => ({ ja: civ.wcde.diplomacy.labels[i] ?? String(i), v }));
 const failure = (error, extra = {}) => ({ ok: false, error, diplomacyFailure: true, ...extra });
 
 /** 条約の提案（civ の sign_treaty の実行から呼ばれる）。受諾なら直前に再検証して締結する */

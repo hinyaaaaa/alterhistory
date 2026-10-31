@@ -9,7 +9,7 @@ import { TREATY, strength } from "../../core/civ/diplomacy.js";
 import { interventionsOf } from "../../core/wcde/intervention.js";
 import { FIELDS } from "../../core/wcde/domains/effective.js";
 import { formatWorldDate } from "../../core/wcde/world.js";
-import { packSave, unpackSave, SAVE_SCHEMA } from "../../core/wcde/savefile.js";
+import { packSave, packSaveGz, unpackSaveAny, SAVE_SCHEMA } from "../../core/wcde/savefile.js";
 import { checkWcdeIntegrity } from "../../core/wcde/integrity.js";
 import { timeOf, SPEEDS } from "../../core/wcde/clock.js";
 import { exportObsidianZip } from "../../io/obsidian.js";
@@ -109,7 +109,7 @@ export function pSearch() {
 export function pSettings() {
   const c = civ(), cf = c.wcde.config, T = timeOf(c), errs = checkWcdeIntegrity(S.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
   const dl = (blob, name) => { const a = h("a", { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); };
-  const save = () => { const p = packSave(S.w); dl(new Blob([p.text], { type: "application/json" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw`); msg.textContent = `保存ファイルを書き出しました（${(p.bytes / 1048576).toFixed(1)} MB）`; };
+  const save = async () => { msg.textContent = "圧縮して書き出しています…"; const p = await packSaveGz(S.w); dl(new Blob([p.bytes], { type: "application/gzip" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw.gz`); msg.textContent = `保存ファイルを書き出しました（圧縮 ${(p.bytes.length / 1048576).toFixed(1)} MB／元 ${(p.rawBytes / 1048576).toFixed(1)} MB）`; };
   const obs = async () => { msg.textContent = "Obsidian 用の ZIP を作っています…"; try { const r = await exportObsidianZip(S.w.world, c, cf.name || cf.worldSeed); dl(new Blob([r.bytes], { type: "application/zip" }), `${r.root}.zip`); msg.textContent = `ZIP を書き出しました（${r.files} ファイル）`; } catch (e) { msg.textContent = "書き出せませんでした: " + e.message; } };
   const en = h("input", { id: "epoch-name", value: cal.epochName ?? "", style: "width:120px" });
   const past = h("input", { id: "past-year", type: "number", placeholder: "年", style: "width:90px" });
@@ -120,6 +120,6 @@ export function pSettings() {
     lb("過去の閲覧", "PAST VIEW"), note("過去の国家の状態を読み取り専用で見ます。閲覧中は、世界を変える操作と時間進行が止まります。"), h("div", { class: "rowb" }, past, btn("その年を見る", () => { const y = Number(past.value); if (Number.isFinite(y)) { run({ type: "view.past", month: Math.max(0, Math.min(c.monthIndex, c.monthIndex - (c.date.year - y) * 12)) }); S.hooks.render(); } }), btn("現在へ戻る", () => { run({ type: "view.past", month: null }); S.hooks.render(); })));
 }
 export function fileLoader(done) {
-  const inp = h("input", { type: "file", accept: ".ahw,.json,application/json", id: "loadfile", hidden: true, onchange: async (e) => { const f = e.target.files[0]; if (!f) return; const r = unpackSave(await f.text()); if (!r.ok) { alert("読み込めません:\n" + r.errors.join("\n")); return; } (done ?? S.hooks.loaded)(r.w, r.warnings); } });
+  const inp = h("input", { type: "file", accept: ".ahw,.gz,.json,application/json,application/gzip", id: "loadfile", hidden: true, onchange: async (e) => { const f = e.target.files[0]; if (!f) return; const r = await unpackSaveAny(new Uint8Array(await f.arrayBuffer())); if (!r.ok) { alert("読み込めません:\n" + r.errors.join("\n")); return; } (done ?? S.hooks.loaded)(r.w, r.warnings); } });
   return h("span", {}, inp, btn("保存ファイルを読み込む", () => inp.click(), "", { id: "load" }));
 }

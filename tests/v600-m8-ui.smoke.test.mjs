@@ -8,7 +8,7 @@ const check = async (name, fn) => { try { await fn(); console.log("  OK  ", name
 const html = readFileSync(new URL("../v6.html", import.meta.url), "utf8").replace(/<script[^>]*><\/script>/, ""), bundle = readFileSync(new URL("../dist/v6.js", import.meta.url), "utf8");
 const dom = new JSDOM(html, { runScripts: "outside-only", pretendToBeVisual: true, url: "http://localhost/", virtualConsole: new VirtualConsole() }), { window } = dom, doc = window.document;
 const errors = []; window.addEventListener("error", (e) => errors.push(String(e.message))); window.alert = (m) => errors.push("alert:" + m);
-let blobs = 0; window.URL.createObjectURL = () => { blobs++; return "blob:x"; }; window.HTMLAnchorElement.prototype.click = function () {}; window.structuredClone = structuredClone;
+let blobs = 0; window.URL.createObjectURL = () => { blobs++; return "blob:x"; }; window.HTMLAnchorElement.prototype.click = function () {}; window.structuredClone = structuredClone; Object.assign(window, { CompressionStream, DecompressionStream, TextEncoder, TextDecoder }); // jsdom には無い（実ブラウザーにはある）
 window.eval(bundle);
 const $ = (s) => doc.querySelector(s), $$ = (s) => [...doc.querySelectorAll(s)], click = (el) => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })), wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const set = (el, v, ev = "change") => { el.value = v; el.dispatchEvent(new window.Event(ev, { bubbles: true })); };
@@ -63,7 +63,7 @@ await check("【検索】国家・文化・宗教・出来事などを横断し�
   hub("search"); const nm = Object.values(V().S.w.civ.states)[0].name.slice(0, 2); set($("#q"), nm); await wait(40); assert.ok($$(".vrow").length > 0); const st = $$(".vrow").find((r) => r.textContent.startsWith("国家")); click(st); assert.equal(V().S.hub, "nations");
 });
 await check("【世界設定】生成設定・暦の表示名・保存/読み込み/Obsidian・版（アプリと保存形式は別）・整合性・過去の閲覧", async () => {
-  hub("settings"); assert.ok(/世界の種/.test(txt()) && /保存形式の版/.test(txt()) && /問題なし/.test(txt())); click($("#save")); assert.ok(blobs >= 1 && /書き出しました/.test($("#exp-msg").textContent)); assert.ok($("#load") && $("#obs"));
+  hub("settings"); assert.ok(/世界の種/.test(txt()) && /保存形式の版/.test(txt()) && /問題なし/.test(txt())); click($("#save")); for (let i = 0; i < 100 && !/書き出しました/.test($("#exp-msg").textContent); i++) await wait(100); assert.ok(blobs >= 1 && /書き出しました/.test($("#exp-msg").textContent)); assert.ok($("#load") && $("#obs"));
   set($("#epoch-name"), "試験暦"); click($("#epoch-name").nextSibling); assert.equal(V().S.w.civ.wcde.config.calendar.epochName, "試験暦");
   const w = V().S.w, mi = w.civ.monthIndex; V().run({ type: "view.past", month: mi - 24 }); V().render(); assert.ok(/過去を閲覧中/.test($("#hint").textContent)); assert.equal(V().run({ type: "clock.run", months: 1 }).ok, false); V().run({ type: "view.past", month: null }); V().render();
 });

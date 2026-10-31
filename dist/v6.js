@@ -5571,8 +5571,13 @@
     return { accept: s >= 0, score: r22(s), factors: f };
   }
   var record2 = (ctx, rec) => {
-    const id = ctx.ids.next("proposal");
-    ledger2(ctx.civ).proposals.push({ id, at: ctx.civ.monthIndex, ...rec });
+    const id = ctx.ids.next("proposal"), L = ledger2(ctx.civ), lab = L.labels ?? (L.labels = []), { factors, ...rest } = rec;
+    const f = (factors ?? []).map((x) => {
+      let i = lab.indexOf(x.ja);
+      if (i < 0) i = lab.push(x.ja) - 1;
+      return [i, x.v];
+    });
+    L.proposals.push({ id, at: ctx.civ.monthIndex, ...rest, f });
     return id;
   };
   var failure = (error, extra = {}) => ({ ok: false, error, diplomacyFailure: true, ...extra });
@@ -6794,6 +6799,43 @@
     if (repairs.length) for (const r of repairs) civ3.wcde.diagnostics.push({ at: civ3.monthIndex, repair: r.kind, reason: r.reason });
     return { ok: true, w, warnings, repairs, meta: d.meta ?? null, schema: d.schema };
   }
+  var pipe = async (input, stream) => {
+    const w = stream.writable.getWriter(), wr = (async () => {
+      await w.write(input);
+      await w.close();
+    })();
+    wr.catch(() => {
+    });
+    const chunks = [], r = stream.readable.getReader();
+    for (; ; ) {
+      const { done: done2, value } = await r.read();
+      if (done2) break;
+      chunks.push(value);
+    }
+    await wr;
+    let n = 0;
+    for (const c of chunks) n += c.length;
+    const out = new Uint8Array(n);
+    let o = 0;
+    for (const c of chunks) {
+      out.set(c, o);
+      o += c.length;
+    }
+    return out;
+  };
+  var isGzip = (u8) => u8 instanceof Uint8Array && u8.length > 2 && u8[0] === 31 && u8[1] === 139;
+  async function packSaveGz(w, opts) {
+    const p = packSave(w, opts);
+    return { bytes: await pipe(new TextEncoder().encode(p.text), new CompressionStream("gzip")), rawBytes: p.bytes, meta: p.meta };
+  }
+  async function unpackSaveAny(input, opts) {
+    try {
+      const text = typeof input === "string" ? input : isGzip(input) ? new TextDecoder().decode(await pipe(input, new DecompressionStream("gzip"))) : new TextDecoder().decode(input);
+      return unpackSave(text, opts);
+    } catch (e) {
+      return { ok: false, errors: ["\u5727\u7E2E\u3092\u5C55\u958B\u3067\u304D\u307E\u305B\u3093\uFF08\u30D5\u30A1\u30A4\u30EB\u304C\u58CA\u308C\u3066\u3044\u307E\u3059\uFF09: " + String(e.message ?? e).slice(0, 100)] };
+    }
+  }
 
   // js/io/crc32.js
   var T2 = (() => {
@@ -6996,6 +7038,40 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       stats.files++;
       return { path: `${root2}/${path}`, data, kind };
     };
+    const W6 = civ3.wcde;
+    if (W6) {
+      const ivs = W6.interventions?.records ?? [], STATUS = { active: "\u6709\u52B9", converged: "\u53CE\u675F", superseded: "\u7F6E\u304D\u63DB\u3048", cancelled: "\u53D6\u308A\u6D88\u3057", target_gone: "\u5BFE\u8C61\u6D88\u6EC5" };
+      if (ivs.length) yield out("creator", "\u5275\u9020\u4E3B\u306E\u4ECB\u5165/\u4ECB\u5165\u306E\u8A18\u9332", fm({ type: "\u5275\u9020\u4E3B\u306E\u4ECB\u5165", \u4EF6\u6570: ivs.length, tags: ["\u5275\u9020\u4E3B\u306E\u4ECB\u5165"] }) + `# \u5275\u9020\u4E3B\u306E\u4ECB\u5165\u306E\u8A18\u9332
+
+\u8A08\u7B97\u3055\u308C\u308B\u5024\u3078\u306E\u4E00\u6642\u7684\u306A\u88DC\u6B63\u306E\u8A18\u9332\u3067\u3059\u3002\u4E16\u754C\u306E\u4E8B\u5B9F\uFF08\u51FA\u6765\u4E8B\uFF09\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u88DC\u6B63\u306F\u534A\u6E1B\u671F\u3067\u901A\u5E38\u5024\u3078\u623B\u308A\u3001\u4ECB\u5165\u4E2D\u306B\u8D77\u304D\u305F\u7D50\u679C\u306F\u623B\u308A\u307E\u305B\u3093\u3002
+
+` + table2(["\u958B\u59CB", "\u5BFE\u8C61", "\u9805\u76EE", "\u958B\u59CB\u6642\u306E\u901A\u5E38\u5024", "\u6307\u5B9A\u5024", "\u534A\u6E1B\u671F\uFF08\u6708\uFF09", "\u72B6\u614B", "\u7406\u7531"], ivs.map((r) => [mi2s(r.startMonth), L(r.targetId), r.field, r35(r.nominalAtStart), r35(r.target), r.halfLife, STATUS[r.status] ?? r.status, r.reason || "\u2014"])));
+      const eds = W6.edits ?? [];
+      if (eds.length) yield out("creator", "\u5275\u9020\u4E3B\u306E\u4ECB\u5165/\u76F4\u63A5\u7DE8\u96C6\u306E\u8A18\u9332", fm({ type: "\u5275\u9020\u4E3B\u306E\u76F4\u63A5\u7DE8\u96C6", \u4EF6\u6570: eds.length, tags: ["\u5275\u9020\u4E3B\u306E\u4ECB\u5165"] }) + `# \u5275\u9020\u4E3B\u306E\u76F4\u63A5\u7DE8\u96C6\u306E\u8A18\u9332
+
+` + table2(["\u6642\u671F", "\u5BFE\u8C61", "\u9805\u76EE", "\u5909\u66F4\u524D", "\u5909\u66F4\u5F8C"], eds.map((e) => [mi2s(e.at), L(e.targetId), e.property, String(e.before).slice(0, 40), String(e.after).slice(0, 40)])));
+      const prs = W6.diplomacy?.proposals ?? [], lab = W6.diplomacy?.labels ?? [], TS = { accepted: "\u6210\u7ACB", rejected: "\u62D2\u5426", countered: "\u5225\u6761\u4EF6", failed_recheck: "\u518D\u691C\u8A3C\u3067\u4E0D\u6210\u7ACB" };
+      for (let k = Math.floor((prs[0]?.at ?? 0) / 1200); prs.length && k <= Math.floor(civ3.monthIndex / 1200); k++) {
+        const part = prs.filter((p) => Math.floor(p.at / 1200) === k);
+        if (!part.length) continue;
+        yield out("negotiation", `\u5916\u4EA4\u4EA4\u6E09/${k * 100}\u5E74\u4EE3\u306E\u4EA4\u6E09\u8A18\u9332`, fm({ type: "\u5916\u4EA4\u4EA4\u6E09\u306E\u8A18\u9332", \u4EF6\u6570: part.length, tags: ["\u5916\u4EA4\u4EA4\u6E09"] }) + `# ${k * 100}\u5E74\u4EE3\u306E\u5916\u4EA4\u4EA4\u6E09\u306E\u8A18\u9332
+
+\u63D0\u6848 \u2192 \u76F8\u624B\u306E\u8A55\u4FA1 \u2192 \u518D\u691C\u8A3C \u2192 \u7DE0\u7D50\u306E\u8A18\u9332\u3067\u3059\uFF08\u62D2\u5426\u3082\u6B8B\u3057\u307E\u3059\uFF09\u3002
+
+` + table2(["\u6642\u671F", "\u7A2E\u985E", "\u63D0\u6848", "\u76F8\u624B", "\u7D50\u679C", "\u8A55\u4FA1", "\u4E3B\u306A\u8981\u56E0"], part.map((p) => [mi2s(p.at), p.kind === "peace" ? `\u8B1B\u548C\uFF08${p.terms?.kind === "reparations" ? "\u8CE0\u511F" : "\u767D\u7D19"}\uFF09` : TREATY_JA[p.type] ?? p.type, L(p.from), L(p.to), TS[p.status] ?? p.status, p.score, (p.f ?? []).slice(0, 3).map(([i, v]) => `${lab[i] ?? i} ${v}`).join("\u30FB")])));
+      }
+      const N = W6.news;
+      if (N) yield out("news", "\u30CB\u30E5\u30FC\u30B9/\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u72B6\u6CC1", fm({ type: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9", \u672A\u78BA\u8A8D: N.queue.length, \u78BA\u8A8D\u6E08\u307F: N.acked.length, tags: ["\u30CB\u30E5\u30FC\u30B9"] }) + `# \u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u72B6\u6CC1
+
+\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306F\u753B\u9762\u5411\u3051\u306E\u6295\u5F71\u3067\u3001\u4E16\u754C\u306E\u4E8B\u5B9F\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u6B63\u672C\u306F\u5404\u51FA\u6765\u4E8B\u306E\u30CE\u30FC\u30C8\u3067\u3059\u3002
+
+## \u672A\u78BA\u8A8D\uFF08\u78BA\u8A8D\u5F85\u3061\uFF09
+${N.queue.map((q2) => `- ${link2(q2.eventId, q2.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
+
+## \u78BA\u8A8D\u6E08\u307F\uFF08\u76F4\u8FD1 ${N.acked.length} \u4EF6\uFF09
+${N.acked.slice(-100).map((id) => `- ${link2(id, id)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
+`);
+    }
     for (const s of Object.values(civ3.states)) {
       const evs = (ix.byEntity.get(s.id) ?? []).map((i) => civ3.events[i]).filter((e) => inRange(evMonth(e))), wars = Object.values(civ3.wars).filter((w) => w.sides.a.includes(s.id) || w.sides.d.includes(s.id)), trs = Object.values(civ3.treaties).filter((t) => t.a === s.id || t.b === s.id);
       const cap = civ3.groups[s.capitalGroupId], comp = s.alive ? compositionAt(civ3, s.id, civ3.monthIndex) : null;
@@ -7319,7 +7395,7 @@ ${es.map(([a, b]) => `  ${n.get(a)} --> ${n.get(b)}`).join("\n")}
     return files;
   }
   function readme(root2, world, civ3, counts, stats, opts) {
-    const ja = { state: "\u56FD\u5BB6", person: "\u4EBA\u7269\uFF08\u9B54\u6CD5\u306E\u7D20\u8CEA\u8005\uFF09", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u4EBA\u53E3\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5\u306E\u80FD\u529B", org: "\u9B54\u6CD5\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269\uFF08\u5E74\u4EE3\u8A18\uFF09", chronicle: "\u5E74\u4EE3\u8A18\uFF08100\u5E74\u3054\u3068\uFF09", logState: "\u8A73\u7D30\u30ED\u30B0\u30FB\u56FD\u5BB6\u306E\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0\u30FBAI\u5224\u65AD\u306E\u4E00\u89A7", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", map: "\u5730\u56F3" };
+    const ja = { creator: "\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u306E\u8A18\u9332", negotiation: "\u5916\u4EA4\u4EA4\u6E09\u306E\u8A18\u9332", news: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9", state: "\u56FD\u5BB6", person: "\u4EBA\u7269\uFF08\u9B54\u6CD5\u306E\u7D20\u8CEA\u8005\uFF09", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u4EBA\u53E3\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5\u306E\u80FD\u529B", org: "\u9B54\u6CD5\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269\uFF08\u5E74\u4EE3\u8A18\uFF09", chronicle: "\u5E74\u4EE3\u8A18\uFF08100\u5E74\u3054\u3068\uFF09", logState: "\u8A73\u7D30\u30ED\u30B0\u30FB\u56FD\u5BB6\u306E\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0\u30FBAI\u5224\u65AD\u306E\u4E00\u89A7", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", map: "\u5730\u56F3" };
     return fm({ type: "README", tags: ["README"] }) + `# ${root2} \u2014 AlterHistory \u306E\u66F8\u304D\u51FA\u3057
 
 \u3053\u306E\u30D5\u30A9\u30EB\u30C0\u3092 Obsidian \u306E vault \u3068\u3057\u3066\u958B\u3044\u3066\u304F\u3060\u3055\u3044\uFF08\u89AA\u30D5\u30A9\u30EB\u30C0\u304B\u3089\u958B\u3044\u3066\u3082\u3001\u30EA\u30F3\u30AF\u306F\u89E3\u6C7A\u3057\u307E\u3059\uFF09\u3002
@@ -7613,10 +7689,11 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       a.click();
       a.remove();
     };
-    const save = () => {
-      const p = packSave(S.w);
-      dl(new Blob([p.text], { type: "application/json" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw`);
-      msg.textContent = `\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\uFF08${(p.bytes / 1048576).toFixed(1)} MB\uFF09`;
+    const save = async () => {
+      msg.textContent = "\u5727\u7E2E\u3057\u3066\u66F8\u304D\u51FA\u3057\u3066\u3044\u307E\u3059\u2026";
+      const p = await packSaveGz(S.w);
+      dl(new Blob([p.bytes], { type: "application/gzip" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw.gz`);
+      msg.textContent = `\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\uFF08\u5727\u7E2E ${(p.bytes.length / 1048576).toFixed(1)} MB\uFF0F\u5143 ${(p.rawBytes / 1048576).toFixed(1)} MB\uFF09`;
     };
     const obs = async () => {
       msg.textContent = "Obsidian \u7528\u306E ZIP \u3092\u4F5C\u3063\u3066\u3044\u307E\u3059\u2026";
@@ -7662,10 +7739,10 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     );
   }
   function fileLoader(done2) {
-    const inp = h("input", { type: "file", accept: ".ahw,.json,application/json", id: "loadfile", hidden: true, onchange: async (e) => {
+    const inp = h("input", { type: "file", accept: ".ahw,.gz,.json,application/json,application/gzip", id: "loadfile", hidden: true, onchange: async (e) => {
       const f = e.target.files[0];
       if (!f) return;
-      const r = unpackSave(await f.text());
+      const r = await unpackSaveAny(new Uint8Array(await f.arrayBuffer()));
       if (!r.ok) {
         alert("\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093:\n" + r.errors.join("\n"));
         return;

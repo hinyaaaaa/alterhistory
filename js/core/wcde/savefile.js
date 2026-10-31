@@ -72,3 +72,17 @@ export function unpackSave(text, { generate = defaultGenerate, allowChecksumMism
   if (repairs.length) for (const r of repairs) civ.wcde.diagnostics.push({ at: civ.monthIndex, repair: r.kind, reason: r.reason });
   return { ok: true, w, warnings, repairs, meta: d.meta ?? null, schema: d.schema };
 }
+
+/* ---------- 圧縮（長期の保存ファイルが非常に大きくなるため）。gzip。ブラウザーにも Node にもある CompressionStream を使う ---------- */
+const pipe = async (input, stream) => {
+  const w = stream.writable.getWriter(), wr = (async () => { await w.write(input); await w.close(); })(); wr.catch(() => {}); // 書き込み側の失敗は、読む側の例外として扱う（未処理の拒否にしない）
+  const chunks = [], r = stream.readable.getReader(); for (;;) { const { done, value } = await r.read(); if (done) break; chunks.push(value); }
+  await wr; let n = 0; for (const c of chunks) n += c.length; const out = new Uint8Array(n); let o = 0; for (const c of chunks) { out.set(c, o); o += c.length; } return out;
+};
+export const isGzip = (u8) => u8 instanceof Uint8Array && u8.length > 2 && u8[0] === 0x1f && u8[1] === 0x8b;
+/** 保存データを gzip 圧縮した Uint8Array にする（拡張子 .ahw.gz）。中身は packSave と同じ文字列 */
+export async function packSaveGz(w, opts) { const p = packSave(w, opts); return { bytes: await pipe(new TextEncoder().encode(p.text), new CompressionStream("gzip")), rawBytes: p.bytes, meta: p.meta }; }
+/** 圧縮・非圧縮どちらの保存ファイル（Uint8Array か文字列）も読む。unpackSave と同じ結果を返す（壊れた gzip も、理由つきで拒否） */
+export async function unpackSaveAny(input, opts) {
+  try { const text = typeof input === "string" ? input : isGzip(input) ? new TextDecoder().decode(await pipe(input, new DecompressionStream("gzip"))) : new TextDecoder().decode(input); return unpackSave(text, opts); } catch (e) { return { ok: false, errors: ["圧縮を展開できません（ファイルが壊れています）: " + String(e.message ?? e).slice(0, 100)] }; }
+}

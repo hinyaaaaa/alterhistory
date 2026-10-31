@@ -1,0 +1,22 @@
+// v6.0.0 M7: Obsidian 出力に、創造主の介入・外交交渉・重大ニュースが、世界の事実とは別のノートとして入る。リンク切れが無い。
+import assert from "node:assert/strict";
+import { createNewWorld } from "../js/core/wcde/world.js";
+import { dispatch, AUTHORITY as A } from "../js/core/wcde/contract.js";
+import { obsidianFiles, validateVault } from "../js/io/obsidian.js";
+import { scanNews } from "../js/core/wcde/clock.js";
+import { makeEvent } from "../js/core/civ/events.js";
+let failed = 0;
+const check = async (name, fn) => { try { await fn(); console.log("  OK  ", name); } catch (e) { failed++; console.log("  FAIL", name + ":", String(e.stack ?? e).split("\n").slice(0, 5).join(" | ")); } };
+const R = createNewWorld({ worldSeed: "m7o-1", spec: { resolution: { targetCells: 3000 } }, magic: { enabled: false } }); const w = R.w;
+dispatch(w, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispatch(w, { type: "time.advance", authority: A.ADMIN, months: 240 }).ok);
+const top = Object.values(w.civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop);
+assert.ok(dispatch(w, { type: "creator.intervene", authority: A.CREATOR, stateId: top[0].id, field: "taxRevenue", value: 1.6, reason: "出力試験" }).ok);
+assert.ok(dispatch(w, { type: "creator.editState", authority: A.CREATOR, stateId: top[0].id, changes: { name: "試験の国" } }).ok);
+dispatch(w, { type: "clock.run", authority: A.ADMIN, months: 2 }); makeEvent(w.civ, w.sim.ctx.ids, { kind: "state_dissolved", title: "（試験）大国の滅亡", participants: top.slice(0, 6).map((x) => ({ entityId: x.id, role: "state" })) }); scanNews(w.civ);
+const files = []; for await (const f of obsidianFiles(w.world, w.civ, "試験世界")) files.push(f);
+const by = (re) => files.filter((f) => re.test(f.path));
+await check("介入の記録・直接編集の記録が、世界の事実の出来事とは別のフォルダのノートとして出る", () => { const n = by(/創造主の介入\/介入の記録\.md$/); assert.equal(n.length, 1); assert.ok(/出力試験/.test(n[0].data) && /taxRevenue/.test(n[0].data) && /事実.*ではありません/.test(n[0].data)); assert.equal(by(/創造主の介入\/直接編集の記録\.md$/).length, 1); assert.ok(!/創造主の介入/.test(by(/出来事\//)[0]?.path ?? "")); });
+await check("外交交渉の記録が 100 年ごとのノートで出る（拒否も含む・要因つき）", () => { const n = by(/外交交渉\/.*交渉記録\.md$/); assert.ok(n.length >= 1); const all = n.map((x) => x.data).join("\n"); assert.ok(/成立/.test(all) || /拒否/.test(all)); assert.ok(/・/.test(all) || /関係/.test(all), "要因"); });
+await check("重大ニュースの状況（未確認・確認済み）が出て、元の出来事へリンクする", () => { const n = by(/ニュース\/重大ニュースの状況\.md$/); assert.equal(n.length, 1); assert.ok(/未確認（確認待ち）/.test(n[0].data) && /大国の滅亡/.test(n[0].data)); });
+await check("全体のリンク切れが 0（新しいノートが参照を壊さない）。README に新しい種類の件数が出る", () => { const v = validateVault(files, "試験世界"); assert.equal(v.unresolved?.length ?? v.broken?.length ?? 0, 0, JSON.stringify(v).slice(0, 300)); const rd = by(/README\.md$/)[0].data; assert.ok(/創造主の介入の記録/.test(rd) && /外交交渉の記録/.test(rd) && /重大ニュース/.test(rd)); });
+console.log(failed ? `\n${failed} 件失敗` : "\n全て成功"); process.exit(failed ? 1 : 0);

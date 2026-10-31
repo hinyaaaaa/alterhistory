@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createNewWorld, serializeWorld, deserializeWorld } from "../js/core/wcde/world.js";
 import { dispatch, AUTHORITY as A } from "../js/core/wcde/contract.js";
 import { predictWar, WARLAB_MODEL } from "../js/core/wcde/warlab.js";
-import { evaluateTreaty, evaluatePeace, proposalsOf, negotiateTreaty, negotiatePeace } from "../js/core/wcde/negotiation.js";
+import { evaluateTreaty, evaluatePeace, proposalsOf, factorsOf, negotiateTreaty, negotiatePeace } from "../js/core/wcde/negotiation.js";
 import { declareWar, treatyBetween, atWarWith, TREATY } from "../js/core/civ/diplomacy.js";
 import { checkWcdeIntegrity } from "../js/core/wcde/integrity.js";
 let failed = 0;
@@ -37,7 +37,7 @@ await check("評価は決定的で要因を持ち、評価だけでは何も変�
 });
 await check("関係が良ければ受諾されて条約が結ばれ、記録に残る。悪ければ拒否され、拒否も記録される（条約は結ばれない）", () => {
   const w = fresh(), [a, b] = pair(w), c = ctxOf(w); b.relations[a.id] = 60; for (const t of w.civ.activeTreatyIds.map((i) => w.civ.treaties[i])) t.active = false; w.civ.activeTreatyIds = []; for (const s of [a, b]) s.warIds = [];
-  const ok = negotiateTreaty(c, a, b, "trade"); assert.ok(ok.ok, JSON.stringify(ok)); assert.ok(treatyBetween(w.civ, a, b, "trade")); const rec = proposalsOf(w.civ).at(-1); assert.equal(rec.status, "accepted"); assert.equal(rec.kind, "treaty"); assert.ok(rec.factors.length);
+  const ok = negotiateTreaty(c, a, b, "trade"); assert.ok(ok.ok, JSON.stringify(ok)); assert.ok(treatyBetween(w.civ, a, b, "trade")); const rec = proposalsOf(w.civ).at(-1); assert.equal(rec.status, "accepted"); assert.equal(rec.kind, "treaty"); assert.ok(factorsOf(w.civ, rec).length && factorsOf(w.civ, rec)[0].ja);
   b.relations[a.id] = -60; const no = negotiateTreaty(c, a, b, "nonaggression"); assert.equal(no.ok, false); assert.equal(no.diplomacyFailure, true); assert.ok(!treatyBetween(w.civ, a, b, "nonaggression")); assert.equal(proposalsOf(w.civ).at(-1).status, "rejected"); assert.deepEqual(checkWcdeIntegrity(w.world, w.civ), []);
 });
 await check("同盟は断られても、不可侵なら受け入れる場合は別条件を示す（counter）", () => {

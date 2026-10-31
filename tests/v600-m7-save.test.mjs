@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { createNewWorld } from "../js/core/wcde/world.js";
 import { dispatch, AUTHORITY as A } from "../js/core/wcde/contract.js";
-import { packSave, unpackSave, checksum, SAVE_FORMAT, SAVE_SCHEMA, backupLabel } from "../js/core/wcde/savefile.js";
+import { packSave, unpackSave, packSaveGz, unpackSaveAny, isGzip, checksum, SAVE_FORMAT, SAVE_SCHEMA, backupLabel } from "../js/core/wcde/savefile.js";
 import { interventionsOf } from "../js/core/wcde/intervention.js";
 import { newsOf, timeOf, scanNews } from "../js/core/wcde/clock.js";
 import { makeEvent } from "../js/core/civ/events.js";
@@ -61,5 +61,9 @@ await check("安全に直せる不備だけ直し、直した内容を警告と�
   assert.ok(r.w.civ.wcde.diagnostics.some((x) => x.repair)); assert.equal(JSON.stringify(r.w.civ.events), JSON.stringify(w.civ.events), "事実イベントは無改変");
 });
 await check("読み込みは入力の文字列を変えず、例外も投げない（どんな入力でも ok:false で返る）", () => { const copy = TEXT.slice(); for (const junk of [null, undefined, 42, {}, "null", "123", '{"format":"alterhistory-save"}']) { const r = load(junk); assert.equal(r.ok, false); } assert.equal(TEXT, copy); });
+await check("gzip 圧縮の保存: 小さくなり、往復で元と同じ。壊れた圧縮・切れた圧縮は理由つきで拒否する（非圧縮のファイルも読める）", async () => {
+  const g = await packSaveGz(w); assert.ok(isGzip(g.bytes)); assert.ok(g.bytes.length < g.rawBytes / 3, `圧縮 ${g.bytes.length} < 元 ${g.rawBytes} / 3`); const r = await unpackSaveAny(g.bytes); assert.ok(r.ok, JSON.stringify(r.errors)); assert.equal(packSave(r.w).text, TEXT);
+  const bad = g.bytes.slice(); bad[bad.length >> 1] ^= 0xff; const r2 = await unpackSaveAny(bad); assert.equal(r2.ok, false); assert.ok(r2.errors.length && !r2.w); const r3 = await unpackSaveAny(g.bytes.slice(0, g.bytes.length >> 1)); assert.equal(r3.ok, false); assert.ok((await unpackSaveAny(TEXT)).ok, "非圧縮も読める");
+});
 console.log("     保存サイズ:", (P.bytes / 1048576).toFixed(2), "MB（", w.civ.date.year, "年・イベント", w.civ.events.length, "件）");
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功"); process.exit(failed ? 1 : 0);
