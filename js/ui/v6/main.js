@@ -22,7 +22,7 @@ function setup() {
   root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "ALTERHISTORY v6"), h("h1", {}, "世界を作る"), h("p", { class: "n" }, "約50万年の先史から、国家が生まれる時代へ。"), h("label", {}, "世界の種 ", seed), h("label", {}, "解像度 ", cells), h("label", {}, magic, " 魔法を有効にする"), h("div", { class: "rowb" }, btn("世界を生成", go, "p", { id: "gen" }), fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); })), msg));
 }
 function founding() {
-  const c = listCandidates(S.w), msg = h("p", { class: "n" }, c.length ? "国家になる候補です。担当する国を選ぶか、世界に任せて見守ります。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
+  const c = S.w.civ.wcde.candidates ?? [], msg = h("p", { class: "n" }, c.length ? "国家になる候補です。担当する国を選ぶか、世界に任せて見守ります。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
   for (const x of c.slice(0, 20)) list.append(h("div", { class: "row" }, h("span", { class: "g" }, h("b", {}, x.viaJa), h("br"), h("small", {}, `人口 ${n0(x.pop)}・集団 ${x.groupIds.length}`)), btn("担当して建国", () => { const r = act({ type: "founding.found", candidateId: x.id }); r.ok ? start() : (msg.textContent = S.notice); })));
   root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "FOUNDING"), h("h1", {}, "建国"), msg, list, btn("世界に任せて始める（担当国なし）", () => { run({ type: "founding.delegate" }); start(); }, "", { id: "delegate" })));
 }
