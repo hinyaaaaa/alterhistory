@@ -22,7 +22,7 @@
   var ID_KINDS, ALPHA, check;
   var init_ids = __esm({
     "js/core/civ/ids.js"() {
-      ID_KINDS = Object.freeze(["state", "pop", "settle", "person", "event", "decision", "proposal", "tech", "culture", "lang", "religion", "species", "war", "treaty", "battle", "disaster", "work", "interp", "org"]);
+      ID_KINDS = Object.freeze(["state", "pop", "settle", "person", "event", "decision", "proposal", "tech", "culture", "lang", "religion", "species", "war", "treaty", "battle", "disaster", "work", "interp", "org", "house", "candidate", "unit", "intervention", "proposal"]);
       ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz";
       check = (kind, n) => {
         let h2 = n * 2654435761 >>> 0;
@@ -63,6 +63,9 @@
         { key: "economy_pop", name: "\u751F\u696D\u30FB\u751F\u7523\u30FB\u98DF\u6599\u30FB\u4EBA\u53E3\u30FB\u79FB\u4F4F" },
         { key: "culture", name: "\u6587\u5316\u30FB\u8A00\u8A9E\u30FB\u5B97\u6559\u30FB\u601D\u60F3" },
         { key: "tech", name: "\u6280\u8853\u306E\u767A\u660E\u30FB\u4F1D\u64AD\u30FB\u55AA\u5931\u30FB\u9032\u6357" },
+        { key: "economy", name: "\u751F\u7523\u30FB\u9700\u8981\u30FB\u7523\u696D\u30FB\u4EA4\u6613\u30FB\u56FD\u5BB6\u8CA1\u653F\uFF08v6\uFF09" },
+        { key: "politics", name: "\u56FD\u5185\u653F\u6CBB\u30FB\u652F\u6301\u52E2\u529B\u30FB\u6307\u5C0E\u8005\u30FB\u5236\u5EA6\uFF08v6\uFF09" },
+        { key: "military", name: "\u8ECD\u4E8B\u7D44\u7E54\u30FB\u90E8\u968A\u30FB\u30C9\u30AF\u30C8\u30EA\u30F3\u30FB\u8ECD\u4E8B\u80FD\u529B\uFF08v6\uFF09" },
         { key: "ai_plan", name: "\u56FD\u5BB6AI\u306E\u8A08\u753B\uFF08\u5730\u56F3\u3092\u5909\u3048\u306A\u3044\uFF09" },
         { key: "apply", name: "\u6C7A\u5B9A\u3068\u5165\u529B\u3092\u691C\u8A3C\u6E08\u307F\u30A2\u30AF\u30B7\u30E7\u30F3\u3068\u3057\u3066\u9069\u7528" },
         { key: "conflict", name: "\u6226\u4E89\u30FB\u5916\u4EA4\u30FB\u53CD\u4E71\u30FB\u56FD\u5BB6\u5F62\u6210\uFF0F\u5D29\u58CA" },
@@ -152,6 +155,18 @@
     for (const k in st.sanctions) o[pre("sanct.", k)] = st.sanctions[k];
     o.res = Math.round((st.resilience ?? 0) * 1e3);
     if (st.magic) o.magic = Math.round((st.magic.power ?? 0) * 1e3);
+    if (st.econ) {
+      o.ind = Math.round((st.econ.industry ?? 0) * 10);
+      o.trinc = Math.round((st.econ.tradeIncome ?? 0) * 100);
+    }
+    if (st.politics) {
+      o.leg = Math.round(st.politics.legitimacy * 1e3);
+      o.fat = Math.round(st.politics.fatigue * 1e3);
+    }
+    if (st.military) {
+      o.milb = Math.round((st.milBonus ?? 0) * 1e3);
+      o.doct = Object.keys(st.military.doctrine.taken).length;
+    }
     return o;
   }
   function recordEntity(H, c, bag, lastMap, id, cur, t) {
@@ -256,6 +271,9 @@
     }
     o.resilience = g("res") / 1e3;
     o.techAdopted.sort();
+    if (f.ind) o.econ = { industry: g("ind") / 10, tradeIncome: g("trinc") / 100 };
+    if (f.leg) o.politics = { legitimacy: g("leg") / 1e3, fatigue: g("fat") / 1e3 };
+    if (f.milb) o.military = { bonus: g("milb") / 1e3, doctrines: g("doct") };
     if (f.magic) o.magicPower = (at(f.magic, m) ?? 0) / 1e3;
     return o;
   }
@@ -810,14 +828,14 @@
     for (const id of Object.keys(civ.groups).sort()) {
       const g = civ.groups[id];
       if (g.player) continue;
-      const b = world.cell.biome[g.cell], cands = Object.values(SPECIES).filter((s) => s.id !== "human" && s.env.includes(b));
+      const b = world.cell.biome[g.cell], cands = [...Object.values(SPECIES), ...Object.values(civ.speciesDefs ?? {})].filter((s) => s.id !== "human" && s.env.includes(b));
       if (cands.length && rng() < mix2) {
         const sp = cands[Math.floor(rng() * cands.length)];
         g.speciesId = sp.id;
         for (const c of g.cohorts) c.speciesId = sp.id;
       }
     }
-    for (const g of Object.values(civ.groups)) (_a = civ.species)[_b = g.speciesId] ?? (_a[_b] = { id: g.speciesId, name: speciesOf(g.speciesId).ja, bornAt: civ.monthIndex });
+    for (const g of Object.values(civ.groups)) (_a = civ.species)[_b = g.speciesId] ?? (_a[_b] = { id: g.speciesId, name: speciesOf(g.speciesId, civ).ja, bornAt: civ.monthIndex });
   }
   var SPECIES, speciesOf, lifeScale;
   var init_species = __esm({
@@ -829,10 +847,10 @@
         dwarf: { id: "dwarf", ja: "\u30C9\u30EF\u30FC\u30D5", lifespan: 2400, growth: 0.8, techRate: 1.12, martial: 1.15, magic: 4e-3, env: [BIOMES2.ALPINE, BIOMES2.COLD_DESERT, BIOMES2.TAIGA] },
         beastfolk: { id: "beastfolk", ja: "\u7363\u4EBA", lifespan: 600, growth: 1.05, techRate: 0.9, martial: 1.2, magic: 3e-3, env: [BIOMES2.SAVANNA, BIOMES2.GRASSLAND, BIOMES2.TROPICAL_SEASONAL] }
       });
-      speciesOf = (id) => SPECIES[id] ?? SPECIES.human;
+      speciesOf = (id, civ = null) => civ?.speciesDefs?.[id] ?? SPECIES[id] ?? SPECIES.human;
       lifeScale = (civ, st) => {
         const g = civ.groups[st.capitalGroupId];
-        const sp = g?.cohorts?.length ? speciesOf(g.cohorts.reduce((b, c) => c.share > b.share ? c : b).speciesId) : SPECIES.human;
+        const sp = g?.cohorts?.length ? speciesOf(g.cohorts.reduce((b, c) => c.share > b.share ? c : b).speciesId, civ) : SPECIES.human;
         return sp.lifespan / SPECIES.human.lifespan;
       };
     }
@@ -934,7 +952,7 @@
       };
       milMult = (state) => {
         const a = state.techAdopted;
-        return (state.martial ?? 1) * (1 + (a.bronze_weapons != null ? 0.2 : 0) + (a.iron_weapons != null ? 0.35 : 0) + (a.cavalry != null ? 0.3 : 0) + (a.fortification != null ? 0.1 : 0) + (a.gunpowder != null ? 0.8 : 0) + (state.magic?.kind === "military" ? 0.15 * state.magic.power : 0));
+        return (state.martial ?? 1) * (1 + (a.bronze_weapons != null ? 0.2 : 0) + (a.iron_weapons != null ? 0.35 : 0) + (a.cavalry != null ? 0.3 : 0) + (a.fortification != null ? 0.1 : 0) + (a.gunpowder != null ? 0.8 : 0) + (state.magic?.kind === "military" ? 0.15 * state.magic.power : 0)) * (1 + (state.milBonus ?? 0));
       };
       taxMult = (state) => {
         const a = state.techAdopted;
@@ -960,11 +978,12 @@
   function stepMagic(ctx) {
     const { civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
     if (mi2 % 3 !== 0) return;
+    if (civ.options.magic === false) return;
     const rate = civ.options.magicRate ?? 1;
     for (const gid in civ.groups) {
-      const g = civ.groups[gid], d = dominant(g), sp = speciesOf(d.speciesId);
+      const g = civ.groups[gid], d = dominant(g), sp = speciesOf(d.speciesId, civ);
       if (rng() >= g.pop * 3 * BASE_RATE2 * (sp.magic / 2e-3) * rate) continue;
-      const ab = pickAbility(rng), pid = ids2.next("person"), age = (14 + Math.floor(rng() * 16)) * 12, p = { id: pid, name: makeNameJa(rng), speciesId: sp.id, groupId: gid, bornAt: mi2 - age, diedAt: null, ability: ab.id, power: Math.round(Math.pow(rng(), 1.5) * 100) / 100 + 0.05, emergedAt: mi2, orgId: null };
+      const ab = pickAbility(rng), pid = ids2.next("person"), age = (14 + Math.floor(rng() * 16)) * 12, p = { id: pid, name: ctx.nameGen?.person(civ, g, rng) ?? makeNameJa(rng), speciesId: sp.id, groupId: gid, bornAt: mi2 - age, diedAt: null, ability: ab.id, power: Math.round(Math.pow(rng(), 1.5) * 100) / 100 + 0.05, emergedAt: mi2, orgId: null };
       p.power = Math.min(1, p.power);
       civ.persons[pid] = p;
       living(civ).push(pid);
@@ -1007,7 +1026,7 @@
     const { civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, groups = byState(ctx);
     for (const id of [...living(civ)]) {
       const p = civ.persons[id];
-      const life = speciesOf(p.speciesId).lifespan * (0.8 + 0.4 * (hashSeed(id) % 100 / 100));
+      const life = speciesOf(p.speciesId, civ).lifespan * (0.8 + 0.4 * (hashSeed(id) % 100 / 100));
       if (mi2 - p.bornAt > life) {
         kill(civ, p, mi2);
         if (p.power > 0.8) makeEvent(civ, ids2, { kind: "magic_gifted_died", title: `\u5F37\u5927\u306A${ABILITIES[p.ability].ja}\u306E\u4F7F\u3044\u624B\u304C\u4E16\u3092\u53BB\u3063\u305F`, participants: [{ entityId: id, role: "gifted" }], location: null });
@@ -1120,7 +1139,7 @@
     const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
     for (const id in civ.groups) {
       const g = civ.groups[id], k = g.tech.known, d = dominant(g);
-      const rate = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * (g.settlementId ? 1.3 : 1) * (g.stateId ? 1.2 : 1) * speciesOf(g.speciesId).techRate * (g.stateId && civ.states[g.stateId] ? 1 + magicTech(civ.states[g.stateId]) : 1);
+      const rate = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * (g.settlementId ? 1.3 : 1) * (g.stateId ? 1.2 : 1) * speciesOf(g.speciesId, civ).techRate * (g.stateId && civ.states[g.stateId] ? (1 + magicTech(civ.states[g.stateId])) * (1 + (civ.states[g.stateId].econ?.techBoost ?? 0)) : 1);
       if (!g.tech.cand) refreshCand(g);
       for (const key3 of [...g.tech.cand]) {
         const t = TECH[key3];
@@ -1399,7 +1418,7 @@
     for (const id of sortedGroupIds(civ)) {
       const g = civ.groups[id];
       if (!g) continue;
-      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi2 ? g.capMult : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId).growth;
+      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi2 ? g.capMult : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ).growth * (civ.options.growthScale ?? 1);
       const noise = 0.8 + 0.4 * rng();
       g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0));
       if (pressure > POP.famineRatio && mi2 - g.famineAt >= POP.famineGap) {
@@ -1518,21 +1537,23 @@
   });
 
   // js/core/civ/states.js
-  function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null }) {
+  function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null, name = null, polity = null }) {
     const { world, civ, ids: ids2, rng } = ctx, gs = groupIds.map((i) => civ.groups[i]).filter(Boolean);
     if (!gs.length) return null;
     const cap = gs.reduce((a, b) => b.pop > a.pop ? b : a), id = ids2.next("state"), h2 = hashSeed(id);
     const st = {
       id,
-      name: makeNameJa(rng) + VIA[via].suffix,
+      name: name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix,
       via,
       formedAt: civ.monthIndex,
       capitalGroupId: cap.id,
+      nameLang: name ? null : ctx.nameLangOf?.(cap) ?? null,
+      /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */
       alive: true,
       player,
       dissolvedAt: null,
       predecessor,
-      polity: via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal",
+      polity: polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal"),
       stability: 0.7,
       pop: 0,
       settlements: 0,
@@ -1547,7 +1568,7 @@
       sanctions: {},
       relations: {},
       warIds: [],
-      leader: { name: makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false },
+      leader: { name: ctx.nameGen?.person(civ, cap, rng) ?? makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false },
       lastCrisis: -999,
       personality: { security: 0.6 + h2 % 100 / 125, prosperity: 0.6 + (h2 >> 7) % 100 / 125, expansion: 0.6 + (h2 >> 14) % 100 / 125, stability: 0.6 + (h2 >> 21) % 100 / 125, culture: 0.6 + (h2 >> 4) % 100 / 125, tech: 0.6 + (h2 >> 11) % 100 / 125, prestige: 0.6 + (h2 >> 18) % 100 / 125 }
     };
@@ -1609,7 +1630,7 @@
       let pop = 0, tens = 0, settle = 0, big = gs[0], mar = 0;
       for (const g of gs) {
         pop += g.pop;
-        mar += g.pop * speciesOf(g.speciesId).martial;
+        mar += g.pop * speciesOf(g.speciesId, civ).martial;
         if (g.settlementId) settle++;
         if (g.pop > big.pop) big = g;
         let t = 0;
@@ -1632,14 +1653,14 @@
       const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15e3) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - st.policy.mobilization * 0.3 + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + { chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity];
       const before = st.stability;
       st.stability = Math.max(0, Math.min(1, st.stability + (target - st.stability) * 0.3));
-      st.treasury += pop * st.policy.tax * 12e-4 * taxMult(st) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi2).length * 0.1));
+      st.treasury += pop * st.policy.tax * 12e-4 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi2).length * 0.1));
       st.army = pop * (5e-3 + 0.12 * st.policy.mobilization) * (0.5 + st.stability);
       for (const k in st.sanctions) if (st.sanctions[k] <= mi2) delete st.sanctions[k];
       const ls = lifeScale(civ, st), age = mi2 - st.leader.bornAt;
       if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4e3 * ls))) {
         const heir = st.leader.heir;
         st.interpDirty = true;
-        st.leader = { name: makeNameJa(rng), bornAt: mi2 - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
+        st.leader = { name: ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), bornAt: mi2 - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
         st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12));
         makeEvent(civ, ids2, { kind: "leader_succession", title: `${st.name}\u306E\u6307\u5C0E\u8005\u304C\u4EE3\u308F\u3063\u305F${heir ? "\uFF08\u7D99\u627F\u8005\u304C\u6C7A\u307E\u3063\u3066\u3044\u305F\uFF09" : "\uFF08\u7D99\u627F\u306E\u6DF7\u4E71\uFF09"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } });
       }
@@ -1871,7 +1892,7 @@
       };
       treatyBetween = (civ, a, b, type) => civ.activeTreatyIds.map((i) => civ.treaties[i]).find((t) => t.active && (!type || t.type === type) && (t.a === a.id && t.b === b.id || t.a === b.id && t.b === a.id));
       atWarWith = (civ, a, b) => a.warIds.map((i) => civ.wars[i]).some((w) => w.sides.a.includes(b.id) || w.sides.d.includes(b.id));
-      strength = (civ, st) => st.army * milMult(st) * (1 + st.defense * 0.5);
+      strength = (civ, st) => st.army * milMult(st) * (1 + (st.defense + (st.milDef ?? 0)) * 0.5);
     }
   });
 
@@ -2220,7 +2241,7 @@
           enabled: true,
           candidates(ctx, st, e) {
             const t = st.policy.tax, out = [];
-            if (t < 0.4) out.push(cand("set_tax", { prosperity: 0.9 * e.treasuryNeed, stability: -0.4 - e.tension }, { opt: "up", label: "\u5897\u7A0E" }));
+            if (t < Math.min(0.4, st.politics?.taxCeiling ?? 0.4)) out.push(cand("set_tax", { prosperity: 0.9 * e.treasuryNeed, stability: -0.4 - e.tension }, { opt: "up", label: "\u5897\u7A0E" }));
             else out.push(bad("set_tax", "\u7A0E\u7387\u304C\u4E0A\u9650", { opt: "up" }));
             if (t > 0.03) out.push(cand("set_tax", { stability: 0.2 + 0.7 * e.tension, prosperity: -0.3 * e.treasuryNeed }, { opt: "down", label: "\u6E1B\u7A0E" }));
             else out.push(bad("set_tax", "\u7A0E\u7387\u304C\u4E0B\u9650", { opt: "down" }));
@@ -2239,8 +2260,10 @@
           label: "\u6280\u8853\u306E\u63A1\u7528",
           enabled: true,
           candidates(ctx, st, e) {
-            const cache4 = ctx._adopt ?? (ctx._adopt = /* @__PURE__ */ new Map()), hit = cache4.get(st.id);
-            const list = hit && e.mi - hit.mi < 12 ? hit.list : (cache4.set(st.id, { mi: e.mi, list: adoptable(ctx, st, e.gs) }), cache4.get(st.id).list);
+            var _a;
+            const cache4 = (_a = ctx.civ).adoptCache ?? (_a.adoptCache = {}), hit = cache4[st.id];
+            const keys = hit && e.mi - hit.mi < 12 ? hit.keys : (cache4[st.id] = { mi: e.mi, keys: adoptable(ctx, st, e.gs).map((t) => t.key) }, cache4[st.id].keys);
+            const list = keys.map((k) => TECH[k]).filter(Boolean);
             return list.filter((t) => st.techAdopted[t.key] == null).slice(0, 3).map((t) => {
               const cost = t.tier * 15;
               return st.treasury >= cost ? cand("adopt_tech", { tech: 0.3 + 0.12 * t.tier + e.techLag * 0.4, prosperity: 0.15, prestige: 0.05 * t.tier }, { opt: t.key, label: `${t.name}\u3092\u63A1\u7528` }) : bad("adopt_tech", "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044", { opt: t.key });
@@ -2403,6 +2426,10 @@
           execute(ctx, st, c) {
             const w = ctx.civ.wars[c.target];
             if (!w || w.status !== "active" || !st.warIds.includes(w.id)) return { ok: false, error: "\u305D\u306E\u6226\u4E89\u306F\u9032\u884C\u4E2D\u3067\u306F\u306A\u3044" };
+            {
+              const r = ctx.negotiate?.peace(ctx, st, w, c);
+              if (r) return r;
+            }
             endWar(ctx, w, "negotiated");
             return { ok: true, effects: [], silent: true, targetId: w.id };
           }
@@ -2438,6 +2465,10 @@
             if (!t?.alive || !TREATY[c.opt]) return { ok: false, error: "\u76F8\u624B\u307E\u305F\u306F\u6761\u7D04\u306E\u7A2E\u985E\u304C\u4E0D\u6B63" };
             if (atWarWith(ctx.civ, st, t)) return { ok: false, error: "\u4EA4\u6226\u4E2D\u306E\u76F8\u624B\u3068\u306F\u7D50\u3079\u306A\u3044" };
             if (treatyBetween(ctx.civ, st, t, c.opt)) return { ok: false, error: "\u3059\u3067\u306B\u7D50\u3093\u3067\u3044\u308B" };
+            {
+              const r = ctx.negotiate?.treaty(ctx, st, t, c.opt, c);
+              if (r) return r;
+            }
             const rel2 = st.relations[t.id] ?? 0;
             if (rel2 < -20 || c.opt === "alliance" && rel2 < 10) return { ok: false, error: "\u76F8\u624B\u3068\u306E\u95A2\u4FC2\u304C\u5341\u5206\u3067\u306A\u304F\u3001\u53D7\u3051\u5165\u308C\u3089\u308C\u306A\u304B\u3063\u305F", diplomacyFailure: true, targetId: t.id };
             signTreaty(ctx, c.opt, st, t, { decisionId: c.decisionId, provenance: c.provenance });
@@ -2684,10 +2715,10 @@
             return { ok: true, effects: ef, title: "\u5099\u84C4\u30FB\u6CBB\u6C34\u306E\u6574\u5099" };
           }
         },
-        { key: "magic_institution", domain: "magic", label: "\u9B54\u6CD5\u5236\u5EA6", enabled: true, candidates: (ctx, st, e) => institutionCandidates(ctx, st, e, cand, bad), execute: (ctx, st, c) => institutionExecute(ctx, st, c) },
+        { key: "magic_institution", domain: "magic", label: "\u9B54\u6CD5\u5236\u5EA6", enabled: true, candidates: (ctx, st, e) => ctx.civ.options.magic === false ? [] : institutionCandidates(ctx, st, e, cand, bad), execute: (ctx, st, c) => institutionExecute(ctx, st, c) },
         { key: "nuclear_program", domain: "nuclear", label: "\u6838\u8A08\u753B", enabled: false, disabledReason: "\u6838\u306F\u6280\u8853\u300C\u6838\u300D\u306E\u63A1\u7528\u5F8C\uFF08\u5F8C\u7D9A\uFF09", candidates: () => [], execute: () => ({ ok: false, error: "\u672A\u5B9F\u88C5" }) }
       ];
-      ACTION = Object.freeze(Object.fromEntries(ACTIONS.map((a) => [a.key, a])));
+      ACTION = Object.fromEntries(ACTIONS.map((a) => [a.key, a]));
     }
   });
 
@@ -2729,10 +2760,10 @@
       key3 = "abandon";
       why = "\u56FD\u5185\u304C\u4E0D\u5B89\u5B9A";
     } else if (c.stage === "prepare") {
-      const ratio = (e.my + 1) / (strength(civ, t) + 1);
+      const fc = ctx.warForecast?.(st, t), ratio = fc ? fc.ratio : (e.my + 1) / (strength(civ, t) + 1);
       if (st.policy.mobilization < 0.1) key3 = "mobilize";
       else if (ratio >= 1.2 || civ.monthIndex - c.startedAt >= 12) {
-        key3 = ratio >= 1 ? "declare_war" : "abandon";
+        key3 = ratio >= 1 && (!fc || fc.pAWin >= 0.4) ? "declare_war" : "abandon";
         if (key3 === "abandon") why = "\u6226\u529B\u304C\u898B\u5408\u308F\u306A\u3044";
       }
     } else if (c.stage === "war" && !(c.warId && civ.wars[c.warId]?.status === "active")) {
@@ -16019,7 +16050,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var APP_VERSION = "5.3.1";
   var APP_VERSION_NAME = "\u63CF\u753B\u6027\u80FD\u306E\u4FEE\u6B63\uFF0825\u4E07\u30BB\u30EB\u306E\u521D\u56DE\u8868\u793A\uFF09";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "5db1a70a2776" : "dev";
+  var APP_BUILD_ID = true ? "60f642f50941" : "dev";
 
   // js/ui/icons.js
   var P2 = {
@@ -24937,7 +24968,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
   }
 
   // js/core/civ/civ-sim.js
-  function createCivSim(world, civ) {
+  function createCivSim(world, civ, { extensions = [] } = {}) {
     const ids2 = createIdGen(civ.seq), ticker = createTicker();
     ticker.register("clock", (ctx2) => {
       setDate(ctx2.civ, ctx2.civ.monthIndex + 1);
@@ -24976,6 +25007,7 @@ ${effectText(n.fx)}${atCap(n) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\u3
         return st ? (st.boostUntil > civ.monthIndex ? 1.2 : 1) * (1 - 0.4 * st.policy.mobilization) : 1;
       }
     };
+    for (const ext of extensions) ext(ticker, ctx);
     return {
       ctx,
       ticker,

@@ -12,6 +12,13 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 
 ---
 
+## v6.0.0 開発の現況（M5 まで完了・画面は未着手）
+
+- 実装は `js/core/wcde/`。まず `docs/V6_STATUS.md`（実装状況・制約）と `docs/V6_CONTRACT.md`（契約）を読む。新しいテストは `tests/v600-*.test.mjs`（m1〜m5・m2-scale）。
+- 世界の作り方: `createNewWorld(設定)` → `w`（`w.civ.wcde.phase` は founding）→ `dispatch(w, {type:"founding.found"|"founding.delegate", ...})` → `time.advance`。`w.sim` は復元のたびに作り直されるので、外で保持しない。
+- 次の作業: M6（創造主の介入: 記録・期間・減衰・因果）→ M7（戦争予測・外交交渉）→ M8（UI）→ M9（性能・長期）。月次の重さと 10,000 年のメモリは M9 の主題。
+- 落とし穴: `core/civ` に `Math.random`/`Date.now` を入れない。WCDE のテストは世界の作成が重い（1 ファイル 10〜60 秒）。`apply` が `{ok:false}` を返すときは何も変えない契約。
+
 ## v5.1.0「安定化」の現況（2026-10-25）
 
 **状態**: 仕様 `AlterHistory_v5x_Implementation_Spec.md` §3 を実施。台帳・基準計測は `docs/V5_1_STABILITY.md`。`npm test` 全スイートと E2E 7 本が合格する状態を基準にする。

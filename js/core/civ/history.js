@@ -27,6 +27,10 @@ export function extractState(st, groupCount) {
     tax: Math.round(st.policy.tax * 1000), mob: Math.round(st.policy.mobilization * 1000), assim: Math.round(st.policy.assimilation * 1000), tol: Math.round(st.policy.tolerance * 1000), auto: Math.round(st.policy.autonomy * 1000),
     goal: st.strategy?.goal ?? "", camp: st.campaign ? `${st.campaign.kind}:${st.campaign.stage}:${st.campaign.target}` : "", wars: st.warIds.join(",") };
   for (const k in st.techAdopted) o[pre("tech.", k)] = 1; for (const k in st.relations) o[pre("rel.", k)] = Math.round(st.relations[k] * 10); for (const k in st.sanctions) o[pre("sanct.", k)] = st.sanctions[k]; o.res = Math.round((st.resilience ?? 0) * 1000); if (st.magic) o.magic = Math.round((st.magic.power ?? 0) * 1000);
+  // v6: 経済・政治・軍事の当時の値（WCDE の世界でだけ。後の式で再計算せず、その月の観測値として残す）
+  if (st.econ) { o.ind = Math.round((st.econ.industry ?? 0) * 10); o.trinc = Math.round((st.econ.tradeIncome ?? 0) * 100); }
+  if (st.politics) { o.leg = Math.round(st.politics.legitimacy * 1000); o.fat = Math.round(st.politics.fatigue * 1000); }
+  if (st.military) { o.milb = Math.round((st.milBonus ?? 0) * 1000); o.doct = Object.keys(st.military.doctrine.taken).length; }
   return o;
 }
 function recordEntity(H, c, bag, lastMap, id, cur, t) {
@@ -61,7 +65,9 @@ export function stateAt(civ, id, m) {
     pop: g("pop"), treasury: g("tr") / 100, stability: g("stb") / 10000, army: g("army"), settlements: g("settle"), groupCount: g("ng"), defense: g("def") / 1000, policy: { tax: g("tax") / 1000, mobilization: g("mob") / 1000, assimilation: g("assim") / 1000, tolerance: g("tol") / 1000, autonomy: g("auto") / 1000 },
     strategy: g("goal") || null, campaign: g("camp") || null, warIds: (g("wars") || "").split(",").filter(Boolean), techAdopted: [], relations: {}, sanctions: {} };
   for (const k in f) { const v = at(f[k], m); if (k.startsWith("tech.")) { if (v === 1) o.techAdopted.push(k.slice(5)); } else if (k.startsWith("rel.")) { if (v) o.relations[k.slice(4)] = v / 10; } else if (k.startsWith("sanct.")) { if (v) o.sanctions[k.slice(6)] = v; } }
-  o.resilience = g("res") / 1000; o.techAdopted.sort(); if (f.magic) o.magicPower = (at(f.magic, m) ?? 0) / 1000; return o;
+  o.resilience = g("res") / 1000; o.techAdopted.sort();
+  if (f.ind) o.econ = { industry: g("ind") / 10, tradeIncome: g("trinc") / 100 }; if (f.leg) o.politics = { legitimacy: g("leg") / 1000, fatigue: g("fat") / 1000 }; if (f.milb) o.military = { bonus: g("milb") / 1000, doctrines: g("doct") }; // v6: 当時の経済・政治・軍事の観測値
+  if (f.magic) o.magicPower = (at(f.magic, m) ?? 0) / 1000; return o;
 }
 /** 月 m に存在した（成立済みの）全国家。滅亡した国家も alive:false で含める（existsOnly なら存在中のみ） */
 export function statesAt(civ, m, { aliveOnly = false } = {}) { const out = []; for (const id in civ.history?.states ?? {}) { const s = stateAt(civ, id, m); if (s && (!aliveOnly || s.alive)) out.push(s); } return out; }

@@ -115,7 +115,7 @@ export function stepPopulation(ctx) {
   const { world, civ, ids, rng } = ctx, occ = occupancy(world, civ), mi = civ.monthIndex;
   for (const id of sortedGroupIds(civ)) {
     const g = civ.groups[id]; if (!g) continue;
-    const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId).growth;
+    const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ).growth * (civ.options.growthScale ?? 1);
     // 1) 人口（ロジスティック。収容力を超えると減る）。乱数は ±20%
     const noise = 0.8 + 0.4 * rng(); g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0)); // 収容力を超えた分は、飢えで早く減る
     if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) { g.famineAt = mi; makeEvent(civ, ids, { kind: "famine", title: "飢え", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck"], 36, 1), "caused_by", "strong"), effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] }); }

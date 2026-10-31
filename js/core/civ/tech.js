@@ -49,7 +49,7 @@ export function stepTech(ctx) {
   for (const id in civ.groups) {
     const g = civ.groups[id], k = g.tech.known, d = dominant(g);
     // 1) 進捗と発見
-    const rate = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * (g.settlementId ? 1.3 : 1) * (g.stateId ? 1.2 : 1) * speciesOf(g.speciesId).techRate * (g.stateId && civ.states[g.stateId] ? 1 + magicTech(civ.states[g.stateId]) : 1);
+    const rate = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * (g.settlementId ? 1.3 : 1) * (g.stateId ? 1.2 : 1) * speciesOf(g.speciesId, civ).techRate * (g.stateId && civ.states[g.stateId] ? (1 + magicTech(civ.states[g.stateId])) * (1 + (civ.states[g.stateId].econ?.techBoost ?? 0)) : 1);
     if (!g.tech.cand) refreshCand(g);
     for (const key of [...g.tech.cand]) {
       const t = TECH[key]; if (g.pop < t.minPop || (t.settled && !g.settlementId) || (t.cond && !t.cond(world, g))) continue;

@@ -10,7 +10,7 @@ export const TREATY = Object.freeze({ nonaggression: { ja: "不可侵条約", mo
 export const adjustRel = (a, b, d) => { const c = (v) => Math.max(-100, Math.min(100, v)); a.relations[b.id] = c((a.relations[b.id] ?? 0) + d); b.relations[a.id] = c((b.relations[a.id] ?? 0) + d); };
 export const treatyBetween = (civ, a, b, type) => civ.activeTreatyIds.map((i) => civ.treaties[i]).find((t) => t.active && (!type || t.type === type) && ((t.a === a.id && t.b === b.id) || (t.a === b.id && t.b === a.id)));
 export const atWarWith = (civ, a, b) => a.warIds.map((i) => civ.wars[i]).some((w) => w.sides.a.includes(b.id) || w.sides.d.includes(b.id));
-export const strength = (civ, st) => st.army * milMult(st) * (1 + st.defense * 0.5);
+export const strength = (civ, st) => st.army * milMult(st) * (1 + (st.defense + (st.milDef ?? 0)) * 0.5);
 /** 隣接する国家（領域が接している）。月ごと・国家ごとに1回計算して使い回す */
 export function neighborStates(ctx, st) {
   const cache = ctx._nbr && ctx._nbrMonth === ctx.civ.monthIndex ? ctx._nbr : (ctx._nbr = new Map(), ctx._nbrMonth = ctx.civ.monthIndex, ctx._nbr);

@@ -16,7 +16,7 @@ import { stepClimate, stepDisaster, climateGrowth } from "./disaster.js";
 import { byState } from "./spatial.js";
 import { applyCommand } from "./commands.js";
 
-export function createCivSim(world, civ) {
+export function createCivSim(world, civ, { extensions = [] } = {}) {
   const ids = createIdGen(civ.seq), ticker = createTicker();
   ticker.register("clock", (ctx) => { setDate(ctx.civ, ctx.civ.monthIndex + 1); ctx.rng = rngOf(hashSeed(ctx.civ.historySeed, ctx.civ.monthIndex)); }, "advanceClock");
   ticker.register("climate", stepClimate, "stepClimate");
@@ -36,6 +36,7 @@ export function createCivSim(world, civ) {
   ticker.register("integrity", (ctx) => recordMonth(ctx), "recordMonth"); // 整合性検査のあとに、全国家の月次状態を確定する
   const ctx = { world, civ, ids, rng: rngOf(hashSeed(civ.historySeed, civ.monthIndex)), growthMult: () => climateGrowth(civ), trace: [], eventsChecked: civ.events.length, plans: [], endWarHook: endWar,
     stateMult: (g) => { const st = g.stateId ? civ.states[g.stateId] : null; return st ? (st.boostUntil > civ.monthIndex ? 1.2 : 1) * (1 - 0.4 * st.policy.mobilization) : 1; } };
+  for (const ext of extensions) ext(ticker, ctx); // v6: WCDE の領域（経済・政治・軍事・言語など）を登録する。core/civ は WCDE を知らない
   return {
     ctx, ticker,
     advanceMonth() { ticker.runMonth(ctx); return civ.date; },

@@ -7,13 +7,14 @@ export const SPECIES = Object.freeze({
   dwarf: { id: "dwarf", ja: "ドワーフ", lifespan: 2400, growth: 0.8, techRate: 1.12, martial: 1.15, magic: 0.004, env: [BIOMES.ALPINE, BIOMES.COLD_DESERT, BIOMES.TAIGA] },
   beastfolk: { id: "beastfolk", ja: "獣人", lifespan: 600, growth: 1.05, techRate: 0.9, martial: 1.2, magic: 0.003, env: [BIOMES.SAVANNA, BIOMES.GRASSLAND, BIOMES.TROPICAL_SEASONAL] },
 });
-export const speciesOf = (id) => SPECIES[id] ?? SPECIES.human;
-export const lifeScale = (civ, st) => { const g = civ.groups[st.capitalGroupId]; const sp = g?.cohorts?.length ? speciesOf(g.cohorts.reduce((b, c) => (c.share > b.share ? c : b)).speciesId) : SPECIES.human; return sp.lifespan / SPECIES.human.lifespan; };
+// v6: 世界設定で作った独自種族は civ.speciesDefs に入る（civ を渡すと優先して引く。渡さなければ従来どおり組み込み種族）
+export const speciesOf = (id, civ = null) => civ?.speciesDefs?.[id] ?? SPECIES[id] ?? SPECIES.human;
+export const lifeScale = (civ, st) => { const g = civ.groups[st.capitalGroupId]; const sp = g?.cohorts?.length ? speciesOf(g.cohorts.reduce((b, c) => (c.share > b.share ? c : b)).speciesId, civ) : SPECIES.human; return sp.lifespan / SPECIES.human.lifespan; };
 /** 初期集団の種族を決める（開始集団は元のまま。ほかは生息環境に合う非人間種族をときどき割り当てる。rng は historySeed 由来） */
 export function assignSpecies(world, civ, rng, { mix = 0.4 } = {}) {
   for (const id of Object.keys(civ.groups).sort()) {
-    const g = civ.groups[id]; if (g.player) continue; const b = world.cell.biome[g.cell], cands = Object.values(SPECIES).filter((s) => s.id !== "human" && s.env.includes(b));
+    const g = civ.groups[id]; if (g.player) continue; const b = world.cell.biome[g.cell], cands = [...Object.values(SPECIES), ...Object.values(civ.speciesDefs ?? {})].filter((s) => s.id !== "human" && s.env.includes(b));
     if (cands.length && rng() < mix) { const sp = cands[Math.floor(rng() * cands.length)]; g.speciesId = sp.id; for (const c of g.cohorts) c.speciesId = sp.id; }
   }
-  for (const g of Object.values(civ.groups)) civ.species[g.speciesId] ??= { id: g.speciesId, name: speciesOf(g.speciesId).ja, bornAt: civ.monthIndex };
+  for (const g of Object.values(civ.groups)) civ.species[g.speciesId] ??= { id: g.speciesId, name: speciesOf(g.speciesId, civ).ja, bornAt: civ.monthIndex };
 }

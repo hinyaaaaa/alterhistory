@@ -35,10 +35,10 @@ const pickAbility = (rng) => { const l = Object.values(ABILITIES), t = l.reduce(
 
 /** culture フェーズ（3か月ごと）: 素質者の誕生・事件・差別・組織・権力争い・制度の効果と反動、寿命 */
 export function stepMagic(ctx) {
-  const { civ, ids, rng } = ctx, mi = civ.monthIndex; if (mi % 3 !== 0) return; const rate = civ.options.magicRate ?? 1;
+  const { civ, ids, rng } = ctx, mi = civ.monthIndex; if (mi % 3 !== 0) return; if (civ.options.magic === false) return; /* v6: 魔法の無い世界では、魔法に関わる素質・組織・制度・事件を一切起こさない */ const rate = civ.options.magicRate ?? 1;
   for (const gid in civ.groups) { // 1) 先天的な素質者が現れる（ごく稀）
-    const g = civ.groups[gid], d = dominant(g), sp = speciesOf(d.speciesId); if (rng() >= g.pop * 3 * BASE_RATE * (sp.magic / 0.002) * rate) continue;
-    const ab = pickAbility(rng), pid = ids.next("person"), age = (14 + Math.floor(rng() * 16)) * 12, p = { id: pid, name: makeNameJa(rng), speciesId: sp.id, groupId: gid, bornAt: mi - age, diedAt: null, ability: ab.id, power: Math.round(Math.pow(rng(), 1.5) * 100) / 100 + 0.05, emergedAt: mi, orgId: null }; p.power = Math.min(1, p.power); civ.persons[pid] = p; living(civ).push(pid);
+    const g = civ.groups[gid], d = dominant(g), sp = speciesOf(d.speciesId, civ); if (rng() >= g.pop * 3 * BASE_RATE * (sp.magic / 0.002) * rate) continue;
+    const ab = pickAbility(rng), pid = ids.next("person"), age = (14 + Math.floor(rng() * 16)) * 12, p = { id: pid, name: ctx.nameGen?.person(civ, g, rng) ?? makeNameJa(rng), speciesId: sp.id, groupId: gid, bornAt: mi - age, diedAt: null, ability: ab.id, power: Math.round(Math.pow(rng(), 1.5) * 100) / 100 + 0.05, emergedAt: mi, orgId: null }; p.power = Math.min(1, p.power); civ.persons[pid] = p; living(civ).push(pid);
     const found = makeEvent(civ, ids, { kind: "magic_gifted_found", title: `${ab.ja}の素質を持つ者が現れた`, participants: [{ entityId: pid, role: "gifted" }, { entityId: gid, role: "group" }], location: { cell: g.cell }, effects: [{ targetId: pid, property: "magic.power", before: null, after: p.power }] });
     const st = g.stateId ? civ.states[g.stateId] : null;
     if (rng() < 0.5) incident(ctx, g, p, ab, found);
@@ -54,7 +54,7 @@ function incident(ctx, g, p, ab, found) {
 }
 function yearly(ctx) {
   const { civ, ids, rng } = ctx, mi = civ.monthIndex, groups = byState(ctx);
-  for (const id of [...living(civ)]) { const p = civ.persons[id]; const life = speciesOf(p.speciesId).lifespan * (0.8 + 0.4 * ((hashSeed(id) % 100) / 100)); if (mi - p.bornAt > life) { kill(civ, p, mi); if (p.power > 0.8) makeEvent(civ, ids, { kind: "magic_gifted_died", title: `強大な${ABILITIES[p.ability].ja}の使い手が世を去った`, participants: [{ entityId: id, role: "gifted" }], location: null }); } }
+  for (const id of [...living(civ)]) { const p = civ.persons[id]; const life = speciesOf(p.speciesId, civ).lifespan * (0.8 + 0.4 * ((hashSeed(id) % 100) / 100)); if (mi - p.bornAt > life) { kill(civ, p, mi); if (p.power > 0.8) makeEvent(civ, ids, { kind: "magic_gifted_died", title: `強大な${ABILITIES[p.ability].ja}の使い手が世を去った`, participants: [{ entityId: id, role: "gifted" }], location: null }); } }
   for (const sid in civ.states) { // 2) 組織の結成・権力争い
     const st = civ.states[sid]; if (!st.alive) continue; const sup = supplyOf(civ, st, groups.get(sid) ?? []);
     let org = Object.values(civ.magic.orgs).find((o) => o.stateId === sid && o.endedAt == null);

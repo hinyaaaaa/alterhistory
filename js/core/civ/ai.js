@@ -44,8 +44,8 @@ function chooseStrategy(ctx, st, e) {
 function planCampaign(ctx, st, e) {
   const { civ } = ctx, c = st.campaign, t = civ.states[c.target]; let key = "wait", why = null;
   if (!t?.alive) { key = "abandon"; why = "相手が存在しない"; } else if (civ.monthIndex > c.deadline && c.stage === "prepare") { key = "abandon"; why = "期限切れ"; } else if (st.stability < 0.3) { key = "abandon"; why = "国内が不安定"; } else if (c.stage === "prepare") {
-    const ratio = (e.my + 1) / (strength(civ, t) + 1);
-    if (st.policy.mobilization < 0.1) key = "mobilize"; else if (ratio >= 1.2 || civ.monthIndex - c.startedAt >= 12) { key = ratio >= 1 ? "declare_war" : "abandon"; if (key === "abandon") why = "戦力が見合わない"; }
+    const fc = ctx.warForecast?.(st, t), ratio = fc ? fc.ratio : (e.my + 1) / (strength(civ, t) + 1); /* v6: 戦争研究所の予測（有効値・疲労・持久力を含む）を、画面と同じ数値で使う */
+    if (st.policy.mobilization < 0.1) key = "mobilize"; else if (ratio >= 1.2 || civ.monthIndex - c.startedAt >= 12) { key = ratio >= 1 && (!fc || fc.pAWin >= 0.4) ? "declare_war" : "abandon"; if (key === "abandon") why = "戦力が見合わない"; }
   } else if (c.stage === "war" && !(c.warId && civ.wars[c.warId]?.status === "active")) { key = "abandon"; why = "戦争が終わった"; }
   const cands = ["declare_war", "mobilize", "wait", "abandon"].map((k) => view({ key: k, target: c.target, opt: null, eligible: true, reason: k === key ? why : null, factors: {} }, k === key ? 1 : 0));
   return { layer: "campaign", type: `campaign_${key}`, obs: obsOf(st, e), candidates: cands, chosen: { key, target: c.target, opt: null }, reason: why };
