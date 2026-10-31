@@ -6,6 +6,7 @@ import { reorganize, adoptDoctrine } from "./domains/military.js";
 import { applyDisplayEdit } from "./calendar.js";
 import { clockRun, ackNews, setSpeed, skipNews, timeOf } from "./clock.js";
 import { createIntervention, cancelIntervention, planIntervention } from "./intervention.js";
+import { negotiatePeace } from "./negotiation.js";
 
 const ALL = ["prehistory", "founding", "running"];
 let registered = false;
@@ -28,6 +29,8 @@ export function registerCommands() {
   defineCommand("view.past", { authorities: [A.ADMIN], mutates: false, phases: ALL, validate: (w, c) => (c.month == null || (Number.isInteger(c.month) && c.month <= w.civ.monthIndex) ? null : { ok: false, error: "month は現在以前の整数、または null（現在へ戻る）" }), apply: (w, c) => { w.viewPast = c.month ?? null; return { ok: true }; } });
   // 担当国家の命令（player_order）。AI と同じ行動レジストリ・同じ検証
   defineCommand("state.act", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const r = w.sim.command({ type: "stateAction", stateId: c.stateId, action: c.action, target: c.target ?? null, opt: c.opt ?? null }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
+  // 講和は一般条約の行動ではなく、戦争ごとの専用の手続き（担当国だけが申し入れられる。受諾されたときだけ戦争が終わる）
+  defineCommand("diplomacy.peace", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId], war = w.civ.wars[c.warId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = negotiatePeace(w.sim.ctx, st, war, { terms: c.terms }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   defineCommand("state.reorganize", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; return reorganize(w.sim.ctx, st, c.shares); } });
   defineCommand("state.adoptDoctrine", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = adoptDoctrine(w.sim.ctx, st, c.id, { provenance: "player" }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason }; } });
   // 創造主の直接編集（担当の有無に依らない）
