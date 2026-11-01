@@ -65,7 +65,7 @@ await check("【検索】国家・文化・宗教・出来事などを横断し�
 await check("【世界設定】生成設定・暦の表示名・保存/読み込み/Obsidian・版（アプリと保存形式は別）・整合性・過去の閲覧", async () => {
   hub("settings"); assert.ok(/世界の種/.test(txt()) && /保存形式の版/.test(txt()) && /問題なし/.test(txt())); click($("#save")); for (let i = 0; i < 100 && !/書き出しました/.test($("#exp-msg").textContent); i++) await wait(100); assert.ok(blobs >= 1 && /書き出しました/.test($("#exp-msg").textContent)); assert.ok($("#load") && $("#obs"));
   set($("#epoch-name"), "試験暦"); click($("#epoch-name").nextSibling); assert.equal(V().S.w.civ.wcde.config.calendar.epochName, "試験暦");
-  const w = V().S.w, mi = w.civ.monthIndex; V().run({ type: "view.past", month: mi - 24 }); V().render(); assert.ok(/過去を閲覧中/.test($("#hint").textContent)); assert.equal(V().run({ type: "clock.run", months: 1 }).ok, false); V().run({ type: "view.past", month: null }); V().render();
+  const w = V().S.w, mi = w.civ.monthIndex; V().run({ type: "view.past", month: mi - 24 }); V().render(); assert.ok(/過去を閲覧中/.test($("#hint").textContent)); assert.equal(V().run({ type: "clock.run", months: 1 }).ok, false); hub("nations"); await wait(60); assert.ok(/過去（/.test(txt()), "過去の国家一覧"); assert.ok($$(".vrow").length > 0); assert.ok(V().S.map.owner().size > 0, "過去の領域を復元"); V().run({ type: "view.past", month: null }); V().render();
 });
 await check("重大ニュースで全画面が出て、OK まで時間が進まず、OK で停止前の速度へ自動復帰する", async () => {
   const w = V().S.w; V().run({ type: "clock.setSpeed", speed: 3 }); const big = Object.values(w.civ.states).filter((x) => x.alive).sort((a, b) => b.pop - a.pop).slice(0, 8).map((x) => ({ entityId: x.id, role: "state" }));

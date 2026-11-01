@@ -16081,10 +16081,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "5.3.1";
-  var APP_VERSION_NAME = "\u63CF\u753B\u6027\u80FD\u306E\u4FEE\u6B63\uFF0825\u4E07\u30BB\u30EB\u306E\u521D\u56DE\u8868\u793A\uFF09";
+  var APP_VERSION = "6.0.0";
+  var APP_VERSION_NAME = "\u4E16\u754C\u3068\u6587\u660E\u306E\u529B\u5B66";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "59d24a0ee2ac" : "dev";
+  var APP_BUILD_ID = true ? "84825c92bb8a" : "dev";
 
   // js/ui/icons.js
   var P2 = {

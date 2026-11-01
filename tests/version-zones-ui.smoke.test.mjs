@@ -58,7 +58,7 @@ console.log("=== 詳細設定と版の表示 ===");
 wins.open("settings"); await sleep(50);
 const sw = win("settings");
 check("詳細設定に、バランス調整・時間と時代区分・このアプリについて がある（データ検査の窓は廃止）", ["バランス調整", "時間・時代区分", "このアプリについて"].every((t) => sw.textContent.includes(t)) && !sw.textContent.includes("検査を実行"));
-check("「このアプリについて」に「v5.3.1 描画性能の修正（25万セルの初回表示）」と出る", sw.querySelector(".about-version").textContent === "v5.3.1 描画性能の修正（25万セルの初回表示）");
+check("「このアプリについて」に「v6.0.0 世界と文明の力学」と出る", sw.querySelector(".about-version").textContent === "v6.0.0 世界と文明の力学");
 clickBtn(sw, "バランス調整を開く").click(); await sleep(30);
 check("詳細設定からバランス調整の窓を開ける", wins.isOpen("balance"));
 wins.close("balance"); wins.close("settings");

@@ -286,6 +286,14 @@
     if (f.magic) o.magicPower = (at(f.magic, m) ?? 0) / 1e3;
     return o;
   }
+  function statesAt(civ3, m, { aliveOnly = false } = {}) {
+    const out = [];
+    for (const id in civ3.history?.states ?? {}) {
+      const s = stateAt(civ3, id, m);
+      if (s && (!aliveOnly || s.alive)) out.push(s);
+    }
+    return out;
+  }
   function groupsAt(civ3, m) {
     const H = civ3.history, out = /* @__PURE__ */ new Map();
     for (const id in H?.groups ?? {}) {
@@ -5692,11 +5700,21 @@
     if (civ3.decisions) civ3.decisions.length = cp.dec;
     w.rebuild();
   }
-  var checkpointFull = (civ3) => structuredClone(civ3);
+  var APPEND_ONLY = ["events", "decisions", "works"];
+  var checkpointFull = (civ3) => {
+    const part = {}, lens = {}, order = Object.keys(civ3);
+    for (const k of order) if (APPEND_ONLY.includes(k) && Array.isArray(civ3[k])) lens[k] = civ3[k].length;
+    else part[k] = structuredClone(civ3[k]);
+    return { order, part, lens };
+  };
   function restoreInto(w, snap) {
-    const { civ: civ3 } = w;
+    const { civ: civ3 } = w, keep = {};
+    for (const k of Object.keys(snap.lens)) {
+      civ3[k].length = snap.lens[k];
+      keep[k] = civ3[k];
+    }
     for (const k of Object.keys(civ3)) delete civ3[k];
-    Object.assign(civ3, structuredClone(snap));
+    for (const k of snap.order) civ3[k] = k in keep ? keep[k] : structuredClone(snap.part[k]);
     w.rebuild();
   }
   function log(civ3, entry) {
@@ -6040,6 +6058,7 @@
   var controlled = () => S.w.civ.wcde.control.stateId;
 
   // js/ui/v6/map.js
+  init_history();
   var TAU = Math.PI * 2;
   var FILLS = [["none", "\u5730\u5F62\u306E\u307F"], ["nation", "\u56FD\u5BB6"], ["culture", "\u6587\u5316"], ["language", "\u8A00\u8A9E"], ["religion", "\u5B97\u6559"], ["population", "\u4EBA\u53E3"], ["climate", "\u6C17\u5019\uFF08\u6C17\u6E29\uFF09"]];
   var OVERLAYS = [["borders", "\u56FD\u5883\u7DDA"], ["war", "\u6226\u4E89"], ["cities", "\u90FD\u5E02"]];
@@ -6173,15 +6192,21 @@
       return cv;
     }
     owner() {
-      const civ3 = this.w.civ;
-      if (this._own && this._ownAt === civ3.monthIndex) return this._own;
+      const civ3 = this.w.civ, pv = this.w.viewPast, key = pv ?? civ3.monthIndex;
+      if (this._own && this._ownAt === key) return this._own;
       const o = /* @__PURE__ */ new Map();
+      if (pv != null) {
+        for (const g of groupsAt(civ3, pv).values()) if (g.stateId != null) o.set(g.cell, { cell: g.cell, cells: [g.cell], stateId: g.stateId, pop: g.pop ?? 1, cohorts: [] });
+        this._own = o;
+        this._ownAt = key;
+        return o;
+      }
       for (const g of Object.values(civ3.groups)) {
         const cells = g.cells?.length ? g.cells : [g.cell];
         for (const c of cells) o.set(c, g);
       }
       this._own = o;
-      this._ownAt = civ3.monthIndex;
+      this._ownAt = key;
       return o;
     }
     fillColor(g, maxPop) {
@@ -6469,6 +6494,7 @@
 
   // js/ui/v6/views-a.js
   init_tech();
+  init_history();
   var civ = () => S.w.civ;
   var date = (mi) => formatWorldDate(S.w, mi);
   var link = (id) => civ().states[id] ? h("a", { class: "lk", href: "#", onclick: (e) => {
@@ -6505,8 +6531,8 @@
     }))) || box;
   }
   function pNations() {
-    const c = civ(), all = Object.values(c.states).filter((s) => S.showDead ? true : s.alive), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "\u56FD\u5BB6"));
-    if (S.sel && c.states[S.sel]) box.append(stateDetail(c.states[S.sel]));
+    const c = civ(), pv = S.w.viewPast, all = pv != null ? statesAt(c, pv, { aliveOnly: true }).map((x) => ({ ...c.states[x.id] ?? {}, ...x, name: x.name ?? c.states[x.id]?.name ?? x.id, alive: true })) : Object.values(c.states).filter((s) => S.showDead ? true : s.alive), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "\u56FD\u5BB6"), pv != null ? h("p", { class: "n err" }, `\u904E\u53BB\uFF08${date(pv)}\uFF09\u306E\u56FD\u5BB6\u3092\u3001\u6708\u6B21\u306E\u5C65\u6B74\u304B\u3089\u8868\u793A\u3057\u3066\u3044\u307E\u3059\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09\u3002`) : null);
+    if (pv == null && S.sel && c.states[S.sel]) box.append(stateDetail(c.states[S.sel]));
     box.append(lb("\u56FD\u5BB6\u4E00\u89A7", "\u65B0\u3057\u3044\u9806"), h("div", { class: "rowb" }, h("label", {}, h("input", { type: "checkbox", id: "show-dead", checked: !!S.showDead, onchange: (e) => {
       S.showDead = e.target.checked;
       S.hooks.panel();
@@ -6550,8 +6576,8 @@
     out.append(lb("\u70BA\u653F\u8005", "RULER"), h("div", { class: "row" }, face(L?.name ?? "\u2014", st.id), h("span", { class: "g" }, h("b", {}, L?.name ?? "\u2014"), h("br"), h("small", {}, `${polityJa(st.polity)}\u30FB${L?.heir ? "\u7D99\u627F\u8005\u3092\u6307\u540D\u6E08\u307F" : "\u7D99\u627F\u8005\u306F\u672A\u6307\u540D"}`))));
     const rl = h("div", { class: "rowb" }, btn("\u7D99\u627F\u8005\u3092\u6307\u540D", () => act({ type: "state.act", stateId: st.id, action: "designate_heir" }), "", { disabled: !mine || !!L?.heir, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" }));
     const nm = h("input", { id: "leader-name", placeholder: "\u70BA\u653F\u8005\u306E\u540D\u524D\uFF08\u5275\u9020\u4E3B\u306E\u7DE8\u96C6\uFF09", value: L?.name ?? "" });
-    rl.append(nm, btn("\u540D\u524D\u3092\u5909\u66F4", () => creator({ type: "creator.editState", stateId: st.id, changes: { "leader.name": nm.value } })));
-    out.append(rl, note("\u70BA\u653F\u8005\u306E\u4EA4\u4EE3\u306F\u3001\u7D99\u627F\u30FB\u653F\u5909\u306A\u3069\u306E\u51FA\u6765\u4E8B\u3068\u3057\u3066\u8D77\u304D\u307E\u3059\u3002\u4EFB\u610F\u306E\u4EBA\u7269\u3078\u306E\u5DEE\u3057\u66FF\u3048\u547D\u4EE4\u306F\u3001\u6210\u7ACB\u6761\u4EF6\u306E\u691C\u8A3C\u304C\u30C9\u30E1\u30A4\u30F3\u306B\u7121\u3044\u305F\u3081\u8A2D\u3051\u3066\u3044\u307E\u305B\u3093\uFF08\u6307\u540D\u3068\u540D\u524D\u306E\u7DE8\u96C6\u306E\u307F\uFF09\u3002"));
+    rl.append(nm, btn("\u5225\u306E\u5BB6\u7CFB\u306E\u70BA\u653F\u8005\u306B\u4EA4\u4EE3\u3055\u305B\u308B\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.editState", stateId: st.id, changes: { "leader.name": nm.value } }), "", { id: "leader-replace" }));
+    out.append(rl, note("\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u4EA4\u4EE3\u3055\u305B\u308B\u3068\u3001\u4E16\u754C\u306F\u300C\u5225\u306E\u5BB6\u7CFB\u306E\u65B0\u3057\u3044\u70BA\u653F\u8005\u3078\u306E\u4EA4\u4EE3\u300D\u3068\u3057\u3066\u51E6\u7406\u3057\u3001\u524D\u306E\u70BA\u653F\u8005\u306F\u9000\u4F4D\u3001\u300C\u738B\u671D\u306E\u4EA4\u4EE3\u300D\u306E\u51FA\u6765\u4E8B\u304C\u8D77\u304D\u307E\u3059\uFF08\u7D99\u627F\u8005\u306E\u6307\u540D\u30FB\u7D99\u627F\u306B\u3088\u308B\u4EA4\u4EE3\u306F\u3001\u51FA\u6765\u4E8B\u3068\u3057\u3066\u81EA\u7136\u306B\u8D77\u304D\u307E\u3059\uFF09\u3002"));
     const sn = h("input", { id: "state-name", value: st.name }), pol = h("select", { id: "polity-sel" }, ...Object.entries(POLITY_JA).map(([k, ja]) => h("option", { value: k, selected: k === st.polity }, ja)));
     out.append(lb("\u540D\u79F0\u30FB\u653F\u4F53", "IDENTITY"), h("div", { class: "rowb" }, sn, btn("\u56FD\u540D\u3092\u5909\u66F4", () => creator({ type: "creator.editState", stateId: st.id, changes: { name: sn.value } }))), h("div", { class: "rowb" }, pol, btn("\u653F\u4F53\u3092\u5909\u66F4\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.editState", stateId: st.id, changes: { polity: pol.value } })), btn("\u653F\u4F53\u5909\u66F4\uFF08\u884C\u52D5\uFF09", () => act({ type: "state.act", stateId: st.id, action: "change_polity", opt: pol.value }), "", { disabled: !mine })), note("\u540D\u79F0\u306E\u5909\u66F4\u306F\u8868\u793A\u540D\u3060\u3051\u3092\u5909\u3048\u307E\u3059\u3002\u56FD\u5BB6\u306E\u5206\u88C2\u30FB\u7D99\u627F\u306A\u3069\u306E\u5B9F\u4F53\u306E\u5909\u66F4\u3068\u306F\u5225\u3067\u3059\u3002"));
     if (P) {

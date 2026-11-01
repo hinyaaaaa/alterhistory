@@ -12,6 +12,7 @@ import { predictWar } from "../../core/wcde/warlab.js";
 import { evaluateTreaty, proposalsOf } from "../../core/wcde/negotiation.js";
 import { TREATY } from "../../core/civ/diplomacy.js";
 import { formatWorldDate } from "../../core/wcde/world.js";
+import { statesAt } from "../../core/civ/history.js";
 const civ = () => S.w.civ, date = (mi) => formatWorldDate(S.w, mi);
 export const link = (id) => (civ().states[id] ? h("a", { class: "lk", href: "#", onclick: (e) => { e.preventDefault(); S.hooks.select(id); } }, stateName(id)) : String(id));
 const note = (t) => h("p", { class: "n" }, t), why = (t) => h("p", { class: "n err", id: "why" }, t);
@@ -27,8 +28,8 @@ export function pGeo() {
 
 /* ---------- 国家: 一覧（成立が新しい順）と詳細 ---------- */
 export function pNations() {
-  const c = civ(), all = Object.values(c.states).filter((s) => (S.showDead ? true : s.alive)), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "国家"));
-  if (S.sel && c.states[S.sel]) box.append(stateDetail(c.states[S.sel]));
+  const c = civ(), pv = S.w.viewPast, all = pv != null ? statesAt(c, pv, { aliveOnly: true }).map((x) => ({ ...(c.states[x.id] ?? {}), ...x, name: x.name ?? c.states[x.id]?.name ?? x.id, alive: true })) : Object.values(c.states).filter((s) => (S.showDead ? true : s.alive)), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "国家"), pv != null ? h("p", { class: "n err" }, `過去（${date(pv)}）の国家を、月次の履歴から表示しています（読み取り専用）。`) : null);
+  if (pv == null && S.sel && c.states[S.sel]) box.append(stateDetail(c.states[S.sel]));
   box.append(lb("国家一覧", "新しい順"), h("div", { class: "rowb" }, h("label", {}, h("input", { type: "checkbox", id: "show-dead", checked: !!S.showDead, onchange: (e) => { S.showDead = e.target.checked; S.hooks.panel(); } }), " 滅亡した国家も表示")), note(`${list.length} 件。クリックで詳細を開きます（クリックだけでは担当は変わりません）。`));
   box.append(vlist(list, 26, (s) => h("div", { class: "vrow" + (S.sel === s.id ? " on" : ""), onclick: () => S.hooks.select(s.id) }, h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", { style: "color:var(--dim)" }, ` ${s.alive ? "人口 " + n0(s.pop) : "滅亡"}・成立 ${date(s.formedAt).split("月")[0]}月`))));
   return box;
@@ -47,7 +48,7 @@ function tPolitics(st, mine) {
   if (S.fin) out.append(finance(st, mine));
   out.append(lb("為政者", "RULER"), h("div", { class: "row" }, face(L?.name ?? "—", st.id), h("span", { class: "g" }, h("b", {}, L?.name ?? "—"), h("br"), h("small", {}, `${polityJa(st.polity)}・${L?.heir ? "継承者を指名済み" : "継承者は未指名"}`))));
   const rl = h("div", { class: "rowb" }, btn("継承者を指名", () => act({ type: "state.act", stateId: st.id, action: "designate_heir" }), "", { disabled: !mine || !!L?.heir, title: mine ? "" : "担当国のみ" }));
-  const nm = h("input", { id: "leader-name", placeholder: "為政者の名前（創造主の編集）", value: L?.name ?? "" }); rl.append(nm, btn("名前を変更", () => creator({ type: "creator.editState", stateId: st.id, changes: { "leader.name": nm.value } }))); out.append(rl, note("為政者の交代は、継承・政変などの出来事として起きます。任意の人物への差し替え命令は、成立条件の検証がドメインに無いため設けていません（指名と名前の編集のみ）。"));
+  const nm = h("input", { id: "leader-name", placeholder: "為政者の名前（創造主の編集）", value: L?.name ?? "" }); rl.append(nm, btn("別の家系の為政者に交代させる（創造主）", () => creator({ type: "creator.editState", stateId: st.id, changes: { "leader.name": nm.value } }), "", { id: "leader-replace" })); out.append(rl, note("名前を入力して交代させると、世界は「別の家系の新しい為政者への交代」として処理し、前の為政者は退位、「王朝の交代」の出来事が起きます（継承者の指名・継承による交代は、出来事として自然に起きます）。"));
   const sn = h("input", { id: "state-name", value: st.name }), pol = h("select", { id: "polity-sel" }, ...Object.entries(POLITY_JA).map(([k, ja]) => h("option", { value: k, selected: k === st.polity }, ja)));
   out.append(lb("名称・政体", "IDENTITY"), h("div", { class: "rowb" }, sn, btn("国名を変更", () => creator({ type: "creator.editState", stateId: st.id, changes: { name: sn.value } }))), h("div", { class: "rowb" }, pol, btn("政体を変更（創造主）", () => creator({ type: "creator.editState", stateId: st.id, changes: { polity: pol.value } })), btn("政体変更（行動）", () => act({ type: "state.act", stateId: st.id, action: "change_polity", opt: pol.value }), "", { disabled: !mine })), note("名称の変更は表示名だけを変えます。国家の分裂・継承などの実体の変更とは別です。"));
   if (P) { const rows = factionRows(st); out.append(lb("支持勢力", "FACTIONS"), ...rows.map(([k, v]) => h("div", { class: "fr" }, h("div", { class: "t" }, h("span", {}, FACTION_JA[k] ?? k), h("span", {}, `支持 ${pct(v.support)}・影響力 ${pct(v.influence)}`)), h("div", { class: "bar" }, h("i", { style: `width:${v.support * 100}%;background:${FACTION_COL[k] ?? "#6fa8c9"}` })))), P.assembly ? h("div", {}, h("small", {}, "議会（議席は影響力に比例）"), hemi(rows.map(([k, v]) => [k, v.influence]), rows.map(([k]) => FACTION_COL[k] ?? "#6fa8c9"))) : note("この政体には議会がありません。")); }

@@ -35,9 +35,11 @@ function rollback(w, cp) {
   }
   civ.events.length = cp.ev; if (civ.decisions) civ.decisions.length = cp.dec; w.rebuild();
 }
-export const checkpointFull = (civ) => structuredClone(civ);
-/** 全体の復元（civ オブジェクトの同一性は保つ。他が参照しているため） */
-export function restoreInto(w, snap) { const { civ } = w; for (const k of Object.keys(civ)) delete civ[k]; Object.assign(civ, structuredClone(snap)); w.rebuild(); }
+/** 追記専用の記録（実測: 既存の要素は一度も書き換わらない）。取り消し点では、複製せず長さだけを覚える（長期の世界で、毎回、全体を複製しないため） */
+const APPEND_ONLY = ["events", "decisions", "works"];
+export const checkpointFull = (civ) => { const part = {}, lens = {}, order = Object.keys(civ); for (const k of order) if (APPEND_ONLY.includes(k) && Array.isArray(civ[k])) lens[k] = civ[k].length; else part[k] = structuredClone(civ[k]); return { order, part, lens }; };
+/** 取り消し点へ戻す。追記専用の記録は、長さを戻す（同じ配列のまま）。キーの順序も、取り消し点のとおりに戻す */
+export function restoreInto(w, snap) { const { civ } = w, keep = {}; for (const k of Object.keys(snap.lens)) { civ[k].length = snap.lens[k]; keep[k] = civ[k]; } for (const k of Object.keys(civ)) delete civ[k]; for (const k of snap.order) civ[k] = k in keep ? keep[k] : structuredClone(snap.part[k]); w.rebuild(); }
 
 function log(civ, entry) { const L = (civ.wcde.log ??= []); L.push(entry); if (L.length > LOG_MAX) L.splice(0, L.length - LOG_MAX); }
 

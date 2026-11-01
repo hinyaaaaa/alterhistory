@@ -2,6 +2,7 @@
 //   ・地図の描画用データは WorldState から都度導出する。正本は持たない。
 //   ・色相だけに頼らない: 国境線（実線）・交戦国（赤の破線の縁取り）・都市（点）を重ねる。凡例は選んだ層の実データから作る。
 import { colorOf, polityJa } from "./common.js";
+import { groupsAt } from "../../core/civ/history.js";
 const TAU = Math.PI * 2;
 export const FILLS = [["none", "地形のみ"], ["nation", "国家"], ["culture", "文化"], ["language", "言語"], ["religion", "宗教"], ["population", "人口"], ["climate", "気候（気温）"]];
 export const OVERLAYS = [["borders", "国境線"], ["war", "戦争"], ["cities", "都市"]];
@@ -35,7 +36,9 @@ export class MapView {
     for (let c = 0; c < this.geo.N; c++) { const land = ce.landWater[c] === 1 || ce.elevation[c] > 0, t = Math.max(0, Math.min(1, ce.elevation[c] / emax)); this.fill(ctx, c, land ? `hsl(${Math.round(105 - 75 * t)} 24% ${24 + Math.round(20 * t)}%)` : "hsl(210 38% 14%)", W, H); }
     return cv;
   }
-  owner() { const civ = this.w.civ; if (this._own && this._ownAt === civ.monthIndex) return this._own; const o = new Map(); for (const g of Object.values(civ.groups)) { const cells = g.cells?.length ? g.cells : [g.cell]; for (const c of cells) o.set(c, g); } this._own = o; this._ownAt = civ.monthIndex; return o; }
+  owner() {
+    const civ = this.w.civ, pv = this.w.viewPast, key = pv ?? civ.monthIndex; if (this._own && this._ownAt === key) return this._own; const o = new Map();
+    if (pv != null) { /* 過去の閲覧: 月次の履歴から、その月の領域を復元する（読み取り専用） */ for (const g of groupsAt(civ, pv).values()) if (g.stateId != null) o.set(g.cell, { cell: g.cell, cells: [g.cell], stateId: g.stateId, pop: g.pop ?? 1, cohorts: [] }); this._own = o; this._ownAt = key; return o; } for (const g of Object.values(civ.groups)) { const cells = g.cells?.length ? g.cells : [g.cell]; for (const c of cells) o.set(c, g); } this._own = o; this._ownAt = key; return o; }
   fillColor(g, maxPop) {
     const civ = this.w.civ, L = this.fillLayer;
     if (L === "nation") return g.stateId ? colorOf(g.stateId) : null; if (L === "culture") { const id = dominant(g, "cultureId"); return id ? colorOf(id) : null; } if (L === "language") { const id = dominant(g, "languageId"); return id ? colorOf(id, 52) : null; } if (L === "religion") { const id = dominant(g, "religionId"); return id ? colorOf(id, 60) : null; }
