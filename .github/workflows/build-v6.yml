@@ -1,0 +1,48 @@
+
+name: Build AlterHistory v6
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-package-lock
+
+      - name: Build application
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Commit generated files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add dist/app.js
+          git add dist/worldgen-preview.js
+          git add dist/v6.js
+          git add dist/build-info.json
+          git add js/generated/worldgen-worker.txt
+
+          if git diff --cached --quiet; then
+            echo "No generated changes"
+          else
+            git commit -m "Build generated assets"
+            git push
+          fi
