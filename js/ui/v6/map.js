@@ -2,7 +2,7 @@
 //   ・地図の描画用データは WorldState から都度導出する。正本は持たない。
 //   ・色相だけに頼らない: 国境線（実線）・交戦国（赤の破線の縁取り）・都市（点）を重ねる。凡例は選んだ層の実データから作る。
 import { colorOf, polityJa } from "./common.js";
-import { groupsAt } from "../../core/civ/history.js";
+import { pastView } from "../../core/civ/archive.js";
 const TAU = Math.PI * 2;
 export const FILLS = [["none", "地形のみ"], ["nation", "国家"], ["culture", "文化"], ["language", "言語"], ["religion", "宗教"], ["population", "人口"], ["climate", "気候（気温）"]];
 export const OVERLAYS = [["borders", "国境線"], ["war", "戦争"], ["cities", "都市"]];
@@ -38,7 +38,7 @@ export class MapView {
   }
   owner() {
     const civ = this.w.civ, pv = this.w.viewPast, key = pv ?? civ.monthIndex; if (this._own && this._ownAt === key) return this._own; const o = new Map();
-    if (pv != null) { /* 過去の閲覧: 月次の履歴から、その月の領域を復元する（読み取り専用） */ for (const g of groupsAt(civ, pv).values()) if (g.stateId != null) o.set(g.cell, { cell: g.cell, cells: [g.cell], stateId: g.stateId, pop: g.pop ?? 1, cohorts: [] }); this._own = o; this._ownAt = key; return o; } for (const g of Object.values(civ.groups)) { const cells = g.cells?.length ? g.cells : [g.cell]; for (const c of cells) o.set(c, g); } this._own = o; this._ownAt = key; return o; }
+    if (pv != null) { /* 過去の閲覧: 残っている歴史資料から再構成した領域だけを描く（資料の無い土地は塗らない。読み取り専用） */ for (const [cell, stateId] of pastView(civ, pv).owner) o.set(cell, { cell, cells: [cell], stateId, pop: 1, cohorts: [] }); this._own = o; this._ownAt = key; return o; } for (const g of Object.values(civ.groups)) { const cells = g.cells?.length ? g.cells : [g.cell]; for (const c of cells) o.set(c, g); } this._own = o; this._ownAt = key; return o; }
   fillColor(g, maxPop) {
     const civ = this.w.civ, L = this.fillLayer;
     if (L === "nation") return g.stateId ? colorOf(g.stateId) : null; if (L === "culture") { const id = dominant(g, "cultureId"); return id ? colorOf(id) : null; } if (L === "language") { const id = dominant(g, "languageId"); return id ? colorOf(id, 52) : null; } if (L === "religion") { const id = dominant(g, "religionId"); return id ? colorOf(id, 60) : null; }

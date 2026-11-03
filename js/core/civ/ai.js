@@ -1,5 +1,5 @@
 // V5-M5: 国家AI（NPC 国家だけ）。4層: 戦略（約10年ごとの目標）／計画（数か月〜数年の征服などの手順）／日常（数か月ごとの行動選択）／危機（不安定・戦況悪化時の優先行動）。
-// 計画は ai_plan フェーズで立て（地図を変えない）、適用は apply フェーズ。すべての評価は判断記録（civ.decisions）に、候補・得点・理由・結果ごと残す。
+// 計画は ai_plan フェーズで立て（地図を変えない）、適用は apply フェーズ。v6.1.0: 評価・候補・得点・理由は保存しない。実行の結果だけが歴史資料になる。
 // プレイヤーの国家は AI が動かさない（命令だけ）。
 import { ACTIONS, ACTION, observe, runAction } from "./actions.js";
 import { hashSeed } from "./civ-state.js";
@@ -12,18 +12,15 @@ const BASELINE = 0.15, STRATEGY_EVERY = 120;
 // 判断記録は大量になる（国家数×月数）ため、候補は『キー名のない配列』で持つ: [key, target, opt, total|null(=不可), 理由の辞書番号|null, 欲求の配列|0]
 const FACTORS = Object.freeze(["security", "prosperity", "expansion", "stability", "culture", "tech", "prestige"]);
 const SHOWN = 6, SHOWN_IDLE = 3;
-const intern = (civ, str) => { if (!str) return null; const r = civ.dict.reasons; let i = r.indexOf(str); if (i < 0) { i = r.length; r.push(str); } return i; };
-const packCand = (civ, c, total) => [c.key, c.target ?? null, c.opt ?? null, total === null || total === -Infinity ? null : total, intern(civ, c.reason), c.eligible && Object.keys(c.factors ?? {}).length ? FACTORS.map((f) => Math.round((c.factors[f] ?? 0) * 100) / 100) : 0];
+// v6.1.0: 判断の候補は保存しない（呼び出し側が渡す形は残すが、何も作らない）
+const packCand = () => null;
 /** 判断記録の候補を、読みやすいオブジェクトへ戻す（画面・検査・研究用） */
-export const expandDecision = (civ, d) => ({ ...d, candidates: d.candidates.map(([key, target, opt, total, r, f]) => ({ key, target, opt, total, eligible: total !== null, reason: r === null ? null : civ.dict.reasons[r], factors: f ? Object.fromEntries(FACTORS.map((n, i) => [n, f[i]]).filter(([, v]) => v)) : {} })) });
+export const expandDecision = (civ, d) => ({ ...d, candidates: [] }); // 互換: 判断の記録は保存されないので、展開できる候補は無い
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const round = (x) => Math.round(x * 1000) / 1000;
 
-function record(ctx, st, d) {
-  const { civ, ids } = ctx, id = ids.next("decision");
-  civ.decisions.push({ decisionId: id, date: { ...civ.date }, actorId: st.id, provenance: d.provenance ?? "ai", layer: d.layer, type: d.type, observations: d.obs, strategy: st.strategy ? st.strategy.goal : null, candidates: d.candidates.map(([c, total]) => (Array.isArray(c) ? c : packCand(civ, c, total))), chosen: d.chosen, result: null });
-  return civ.decisions[civ.decisions.length - 1];
-}
+// v6.1.0 M4: 判断の過程（観測・候補・採点・理由）は保存しない。実行の結果だけが歴史資料（出来事）になる。ここは、実行の結果を受け取るための一時のオブジェクトを返す
+function record(ctx, st, d) { return { decisionId: null, actorId: st.id, result: null }; }
 const obsOf = (st, e) => ({ pop: Math.round(st.pop), treasury: Math.round(st.treasury), stability: round(st.stability), army: Math.round(st.army), strength: Math.round(e.my), atWar: e.atWar, neighbors: e.nbs.length, tension: round(e.tension), threat: round(e.threat), campaign: st.campaign ? `${st.campaign.kind}:${st.campaign.stage}` : null });
 
 /** 欲求ごとの評価を、国家の気質・戦略・危機の重みで合計する */

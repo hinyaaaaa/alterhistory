@@ -1,6 +1,7 @@
 // v6 M2: 建国の入口。先史が終わると、国家成立の直前で止まり（phase=founding）、文明候補が示される。
 //   フローA（参加）: 候補を選び、国名・政体を決めて建国し、その国家を担当して始める。
 //   フローB（委任）: 特定の国家を担当せず、世界を AI に任せて始める（創造主モード）。国家は条件が整った順にシミュレーションが成立させる。
+import { groupCaps, POLITY_CAP } from "../civ/tech.js";
 import { evaluateFormation, formState, VIA, POLITY } from "../civ/states.js";
 import { spatialOf, invalidateMonthCaches } from "../civ/spatial.js";
 import { languageOfGroup } from "./domains/language.js";
@@ -18,7 +19,7 @@ export function listCandidates(w) {
     if (used.has(g.id)) continue; const f = evaluateFormation(ctx, g); if (!f || f.groupIds.some((i) => used.has(i))) continue;
     for (const i of f.groupIds) used.add(i);
     const gs = f.groupIds.map((i) => civ.groups[i]), cap = gs.reduce((a, b) => (b.pop > a.pop ? b : a)), d = dominant(cap);
-    out.push({ via: f.via, viaJa: VIA[f.via].ja, groupIds: f.groupIds, seedGroupId: g.id, capitalGroupId: cap.id, cell: cap.cell, pop: Math.round(gs.reduce((s, x) => s + x.pop, 0)), cultureId: d.cultureId, languageId: languageOfGroup(cap), religionId: d.religionId, speciesId: cap.speciesId, polityOptions: POLITY_CHOICES[f.via] ?? ["tribal"] });
+    out.push({ via: f.via, viaJa: VIA[f.via].ja, groupIds: f.groupIds, seedGroupId: g.id, capitalGroupId: cap.id, cell: cap.cell, pop: Math.round(gs.reduce((s, x) => s + x.pop, 0)), cultureId: d.cultureId, languageId: languageOfGroup(cap), religionId: d.religionId, speciesId: cap.speciesId, polityOptions: (() => { const caps = groupCaps(civ, cap), o = (POLITY_CHOICES[f.via] ?? ["tribal"]).filter((p) => !POLITY_CAP[p] || caps.has(POLITY_CAP[p])); return o.length ? o : ["tribal"]; })() });
   }
   return out;
 }

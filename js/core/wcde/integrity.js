@@ -1,4 +1,5 @@
 // v6: WCDE の不変条件（国家・人物・領域の整合）。tick の integrity フェーズ、保存前、テストから呼ぶ。違反を文字列の配列で返す。
+import { checkArchive } from "../civ/archive.js";
 import { DOCTRINE } from "./domains/military.js";
 import { FACTIONS } from "./domains/politics.js";
 import { checkInterventions } from "./intervention.js";
@@ -7,6 +8,7 @@ import { checkClock } from "./clock.js";
 const fin = (x) => typeof x === "number" && Number.isFinite(x);
 export function checkWcdeIntegrity(world, civ) {
   const errs = [], W = civ.wcde; if (!civ.options?.wcde) return errs;
+  if (civ.monthIndex % 12 === 0) errs.push(...checkArchive(civ)); // 歴史資料: ID 重複・直接以外の因果リンク・判断記録が無いこと
   // 担当国家: 高々1つで、civ.wcde.control と国家の player が一致する
   const players = Object.values(civ.states).filter((s) => s.alive && s.player);
   if (players.length > 1) errs.push(`担当国家が複数ある（${players.map((s) => s.id).join(",")}）`);

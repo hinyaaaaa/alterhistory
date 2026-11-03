@@ -2,7 +2,7 @@
 // 行動 = { key, domain, label, enabled, candidates(ctx, st, env) → 候補[], execute(ctx, st, cand) → {ok, error?, effects[]} }
 // 候補 = { key, target, opt, factors（欲求ごとの評価 -1〜1）, eligible, reason }。国家の personality と戦略で重みづけして AI が選ぶ。
 import { makeEvent } from "./events.js";
-import { TECH, adoptable } from "./tech.js";
+import { TECH, adoptable, stateCan, gateReason, ACTION_CAP, TREATY_CAP, POLITY_CAP, learnByAnnexation } from "./tech.js";
 import { byState, neighborGroups } from "./spatial.js";
 import { foundSettlement } from "./population.js";
 import { POLITY } from "./states.js";
@@ -35,14 +35,14 @@ export const ACTIONS = [
     candidates(ctx, st, e) { const t = st.policy.tax, out = []; if (t < Math.min(0.4, st.politics?.taxCeiling ?? 0.4)) out.push(cand("set_tax", { prosperity: 0.9 * e.treasuryNeed, stability: -0.4 - e.tension }, { opt: "up", label: "増税" })); else out.push(bad("set_tax", "税率が上限", { opt: "up" })); if (t > 0.03) out.push(cand("set_tax", { stability: 0.2 + 0.7 * e.tension, prosperity: -0.3 * e.treasuryNeed }, { opt: "down", label: "減税" })); else out.push(bad("set_tax", "税率が下限", { opt: "down" })); return out; },
     execute(ctx, st, c) { const ef = [], b = st.policy.tax, a = r3(clamp(b + (c.opt === "up" ? 0.05 : -0.05), 0.02, 0.4)); st.policy.tax = a; eff(ef, st, "policy.tax", b, a); return { ok: true, effects: ef, title: c.opt === "up" ? "増税" : "減税" }; } },
   { key: "adopt_tech", domain: "tech", label: "技術の採用", enabled: true,
-    candidates(ctx, st, e) { const cache = (ctx.civ.adoptCache ??= {}), hit = cache[st.id]; /* v6: 保存対象（civ）に技術のキーだけを置く。ctx に置くと保存・復元で計算の時点がずれ、未来が変わる */ const keys = hit && e.mi - hit.mi < 12 ? hit.keys : (cache[st.id] = { mi: e.mi, keys: adoptable(ctx, st, e.gs).map((t) => t.key) }, cache[st.id].keys); const list = keys.map((k) => TECH[k]).filter(Boolean); return list.filter((t) => st.techAdopted[t.key] == null).slice(0, 3).map((t) => { const cost = t.tier * 15; return st.treasury >= cost ? cand("adopt_tech", { tech: 0.3 + 0.12 * t.tier + e.techLag * 0.4, prosperity: 0.15, prestige: 0.05 * t.tier }, { opt: t.key, label: `${t.name}を採用` }) : bad("adopt_tech", "財政が足りない", { opt: t.key }); }); },
-    execute(ctx, st, c) { const t = TECH[c.opt]; if (!t || st.techAdopted[t.key] != null) return { ok: false, error: "採用できない技術" }; if (!spend(st, t.tier * 15)) return { ok: false, error: "財政が足りない" }; st.techAdopted[t.key] = ctx.civ.monthIndex; return { ok: true, effects: [{ targetId: st.id, property: `techAdopted.${t.key}`, before: null, after: ctx.civ.monthIndex }], title: `${t.name}を採用` }; } },
+    candidates(ctx, st, e) { const cache = (ctx.civ.adoptCache ??= {}), hit = cache[st.id]; /* v6: 保存対象（civ）に技術のキーだけを置く。ctx に置くと保存・復元で計算の時点がずれ、未来が変わる */ const keys = hit && e.mi - hit.mi < 12 ? hit.keys : (cache[st.id] = { mi: e.mi, keys: adoptable(ctx, st, e.gs).map((t) => t.key) }, cache[st.id].keys); const list = keys.map((k) => TECH[k]).filter(Boolean); return list.filter((t) => st.techAdopted[t.key] == null).slice(0, 3).map((t) => { const cost = t.tier * 15; return st.treasury >= cost ? cand("adopt_tech", { tech: 0.3 + 0.12 * t.tier + e.techLag * 0.4, prosperity: 0.15, prestige: 0.05 * t.tier }, { opt: t.key, label: `${t.name}を制度化` }) : bad("adopt_tech", "財政が足りない", { opt: t.key }); }); },
+    execute(ctx, st, c) { const t = TECH[c.opt]; if (!t || st.techAdopted[t.key] != null) return { ok: false, error: "採用できない技術" }; if (!spend(st, t.tier * 15)) return { ok: false, error: "財政が足りない" }; st.techAdopted[t.key] = ctx.civ.monthIndex; return { ok: true, kind: "tech_institutionalized", effects: [{ targetId: st.id, property: `techAdopted.${t.key}`, before: null, after: ctx.civ.monthIndex }], title: `${t.name}を制度化` }; } },
   { key: "change_polity", domain: "institution", label: "政体の変更", enabled: true,
     candidates(ctx, st) { const a = st.techAdopted, out = [], p = st.polity, n = st.pop;
-      if (p === "tribal") out.push(n >= 2000 ? cand("change_polity", { stability: 0.3, prestige: 0.2 }, { opt: "chiefdom" }) : bad("change_polity", "人口が足りない", { opt: "chiefdom" }));
-      if (p === "chiefdom" || p === "theocracy") { out.push(a.administration != null && n >= 15000 ? cand("change_polity", { stability: 0.3, prestige: 0.4 }, { opt: "kingdom" }) : bad("change_polity", "行政の技術と人口が必要", { opt: "kingdom" })); if (p === "chiefdom") out.push(a.law != null && n >= 15000 && st.policy.tolerance > 0.5 ? cand("change_polity", { stability: 0.25, culture: 0.2 }, { opt: "republic" }) : bad("change_polity", "法の技術・人口・寛容が必要", { opt: "republic" })); }
-      if (p === "kingdom") out.push(a.bureaucracy != null && n >= 150000 ? cand("change_polity", { stability: 0.2, prestige: 0.6, expansion: 0.2 }, { opt: "empire" }) : bad("change_polity", "官僚制と人口が必要", { opt: "empire" })); return out; },
-    execute(ctx, st, c) { const ok = POLITY[c.opt]; if (!ok) return { ok: false, error: "未知の政体" }; const ef = []; eff(ef, st, "polity", st.polity, c.opt); st.polity = c.opt; st.interpDirty = true; return { ok: true, effects: ef, title: `政体を${POLITY[c.opt]}へ` }; } },
+      if (p === "tribal") out.push(n >= 2000 && stateCan(ctx.civ, st, "polity:chiefdom") ? cand("change_polity", { stability: 0.3, prestige: 0.2 }, { opt: "chiefdom" }) : bad("change_polity", n < 2000 ? "人口が足りない" : gateReason(ctx.civ, st, "polity:chiefdom"), { opt: "chiefdom" }));
+      if (p === "chiefdom" || p === "theocracy") { out.push(stateCan(ctx.civ, st, "polity:kingdom") && n >= 15000 ? cand("change_polity", { stability: 0.3, prestige: 0.4 }, { opt: "kingdom" }) : bad("change_polity", n < 15000 ? "人口が足りない" : gateReason(ctx.civ, st, "polity:kingdom"), { opt: "kingdom" })); if (p === "chiefdom") out.push(stateCan(ctx.civ, st, "polity:republic") && n >= 15000 && st.policy.tolerance > 0.5 ? cand("change_polity", { stability: 0.25, culture: 0.2 }, { opt: "republic" }) : bad("change_polity", gateReason(ctx.civ, st, "polity:republic") ?? "人口と寛容が足りない", { opt: "republic" })); }
+      if (p === "kingdom") out.push(stateCan(ctx.civ, st, "polity:empire") && n >= 150000 ? cand("change_polity", { stability: 0.2, prestige: 0.6, expansion: 0.2 }, { opt: "empire" }) : bad("change_polity", n < 150000 ? "人口が足りない" : gateReason(ctx.civ, st, "polity:empire"), { opt: "empire" })); return out; },
+    execute(ctx, st, c) { const ok = POLITY[c.opt]; if (!ok) return { ok: false, error: "未知の政体" }; { const gr = gateReason(ctx.civ, st, POLITY_CAP[c.opt]); if (gr) return { ok: false, error: gr }; } const ef = []; eff(ef, st, "polity", st.polity, c.opt); st.polity = c.opt; st.interpDirty = true; return { ok: true, facts: { stateId: st.id, polity: c.opt }, effects: ef, title: `政体を${POLITY[c.opt]}へ` }; } },
   { key: "designate_heir", domain: "leader", label: "継承者の指名", enabled: true,
     candidates(ctx, st) { return st.leader.heir ? [bad("designate_heir", "すでに指名済み")] : [cand("designate_heir", { stability: 0.35 })]; },
     execute(ctx, st) { if (st.leader.heir) return { ok: false, error: "すでに指名済み" }; st.leader.heir = true; return { ok: true, effects: [{ targetId: st.id, property: "leader.heir", before: false, after: true }] }; } },
@@ -96,7 +96,7 @@ export const ACTIONS = [
     execute(ctx, st, c) { const g = ctx.civ.groups[c.target]; if (!g || g.stateId !== st.id || g.settlementId || g.pop < 250 || g.subsistence === "forage" || g.subsistence === "pastoral") return { ok: false, error: "その集団では建設できない" }; const s = foundSettlement(ctx.world, ctx.civ, ctx.ids, g), ev = ctx.civ.events.at(-1); ev.provenance = c.provenance ?? "simulation"; ev.decisionId = c.decisionId ?? null; return { ok: true, effects: [], silent: true, targetId: s.id }; } },
   { key: "annex_group", domain: "territory", label: "周辺集団の編入", enabled: true,
     candidates(ctx, st, e) { const out = []; for (const g of e.gs) for (const o of neighborGroups(ctx, g)) { const t = ctx.civ.groups[o]; if (t && !t.stateId && !t.player && t.pop < st.pop) out.push(cand("annex_group", { expansion: 0.45, prosperity: 0.1 }, { target: o })); } const seen = new Set(); return out.filter((c) => !seen.has(c.target) && seen.add(c.target)).slice(0, 3); },
-    execute(ctx, st, c) { const t = ctx.civ.groups[c.target]; if (!t || t.stateId || t.player) return { ok: false, error: "その集団は編入できない" }; if (!spend(st, 20)) return { ok: false, error: "財政が足りない" }; t.stateId = st.id; return { ok: true, effects: [{ targetId: t.id, property: "stateId", before: null, after: st.id }], targetId: t.id, title: "周辺の集団を編入" }; } },
+    execute(ctx, st, c) { const t = ctx.civ.groups[c.target]; if (!t || t.stateId || t.player) return { ok: false, error: "その集団は編入できない" }; if (!spend(st, 20)) return { ok: false, error: "財政が足りない" }; t.stateId = st.id; learnByAnnexation(ctx, st, t); return { ok: true, facts: { stateId: st.id, cell: t.cell }, effects: [{ targetId: t.id, property: "stateId", before: null, after: st.id }], targetId: t.id, title: "周辺の集団を編入" }; } },
   { key: "move_capital", domain: "city", label: "遷都", enabled: true,
     candidates(ctx, st, e) { const cap = ctx.civ.groups[st.capitalGroupId], big = e.gs.reduce((a, b) => (b.pop > (a?.pop ?? 0) ? b : a), null); return big && cap && big.id !== cap.id && big.pop > cap.pop * 2 ? [cand("move_capital", { stability: 0.2, prestige: 0.15 }, { target: big.id })] : []; },
     execute(ctx, st, c) { const g = ctx.civ.groups[c.target]; if (!g || g.stateId !== st.id) return { ok: false, error: "その集団は国内にない" }; const ef = []; eff(ef, st, "capitalGroupId", st.capitalGroupId, g.id); st.capitalGroupId = g.id; return { ok: true, effects: ef, targetId: g.id }; } },
@@ -116,6 +116,17 @@ export const ACTIONS = [
 // v6: 行動は後から登録できる（WCDE の新領域の行動）。AI もプレイヤー命令も同じレジストリを通る
 export const ACTION = Object.fromEntries(ACTIONS.map((a) => [a.key, a]));
 export function registerAction(def) { if (ACTION[def.key]) return; ACTIONS.push(def); ACTION[def.key] = def; }
+// v6.1.0 M3: 行動の利用条件は技術ツリーの caps から導く（候補の生成も、命令の実行も、同じ表を通る。UI のボタンの表示条件もここ）
+for (const a of ACTIONS) {
+  const cap = ACTION_CAP[a.key]; if (!cap || a.enabled === false) continue; const c0 = a.candidates, x0 = a.execute;
+  a.requires = cap; a.candidates = (ctx, st, e) => { const r = gateReason(ctx.civ, st, cap); return r ? [bad(a.key, r)] : c0(ctx, st, e); }; a.execute = (ctx, st, c) => { const r = gateReason(ctx.civ, st, cap); return r ? { ok: false, error: r } : x0(ctx, st, c); };
+}
+{ const sg = ACTION.sign_treaty, c0 = sg.candidates, x0 = sg.execute; sg.candidates = (ctx, st, e) => c0(ctx, st, e).map((c) => { const r = gateReason(ctx.civ, st, TREATY_CAP[c.opt]); return r && !c.blocked ? bad("sign_treaty", r, { target: c.target, opt: c.opt }) : c; }); sg.execute = (ctx, st, c) => { const r = gateReason(ctx.civ, st, TREATY_CAP[c.opt]); return r ? { ok: false, error: r } : x0(ctx, st, c); }; }
+/** 国家が今できる行動とその理由（UI のボタンの有効・無効の表示に使う。caps の欠けがあれば理由つき） */
+export const actionGate = (civ, st, key) => { const a = ACTION[key]; if (!a) return { ok: false, reason: "未知の行動" }; const cap = ACTION_CAP[a.key]; const r = cap ? gateReason(civ, st, cap) : null; return r ? { ok: false, reason: r } : { ok: true, reason: null }; };
+// v6.1.0 M4: 歴史資料に残すのは意味のある結果だけ。連続値の小さな調整（税率・動員・政策の傾き・救済・備蓄など）は、個別の出来事にしない
+const RECORDED = new Set(["adopt_tech", "change_polity", "build_fortification", "plan_conquest", "declare_war", "sue_for_peace", "sign_treaty", "break_treaty", "impose_sanctions", "covert_op", "found_city", "annex_group", "move_capital", "reconcile", "grant_autonomy", "nuclear_program"]);
+export const isRecordedAction = (key) => RECORDED.has(key);
 
 /** 行動を実行し、成功なら結果イベントを記録する（AI もプレイヤーもここを通る） */
 export function runAction(ctx, st, def, c, { decisionId = null, provenance = "ai" } = {}) {
@@ -125,7 +136,7 @@ export function runAction(ctx, st, def, c, { decisionId = null, provenance = "ai
     return { ok: false, error: r.error, eventIds: [] };
   }
   let eventId = civ.events.length ? civ.events[civ.events.length - 1].eventId : null;
-  if (!r.silent) { const ev = makeEvent(civ, ids, { kind: "state_action", title: `${st.name}: ${r.title ?? def.label}`, participants: [{ entityId: st.id, role: "actor" }, ...(r.targetId ? [{ entityId: r.targetId, role: "target" }] : [])], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, effects: r.effects ?? [], decisionId, provenance }); eventId = ev.eventId; }
+  if (!r.silent && RECORDED.has(def.key)) { const ev = makeEvent(civ, ids, { kind: r.kind ?? "state_action", title: `${st.name}: ${r.title ?? def.label}`, participants: [{ entityId: st.id, role: "actor" }, ...(r.targetId ? [{ entityId: r.targetId, role: "target" }] : [])], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, effects: r.effects ?? [], facts: r.facts ?? null, provenance }); eventId = ev.eventId; }
   return { ok: true, eventIds: [eventId], warId: r.warId ?? null };
 }
 /** 命令（プレイヤー）用: 候補の一覧から対象・種類が一致するものを探す */

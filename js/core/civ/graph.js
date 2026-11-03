@@ -2,6 +2,7 @@
 // 因果は「イベントID」で持つ。タイトル・年月から原因を逆引きしない（改名・同名事件・日時訂正に強い）。
 import { RELATIONS, BASES } from "./events.js";
 import { invalidateChunks } from "./civ-chunks.js";
+import { findRecord, inLiveRange } from "./archive.js";
 
 export const evMonth = (ev) => ev.date.year * 12 + (ev.date.month - 1);
 const idxCache = new WeakMap();
@@ -20,12 +21,13 @@ export function graphIndex(civ) {
     const seen = new Set(); for (const p of ev.participants) if (!seen.has(p.entityId)) { seen.add(p.entityId); push(ix.byEntity, p.entityId, i); }
     if (ev.decisionId) push(ix.byDecision, ev.decisionId, i);
   }
-  const D = civ.decisions;
+  // v6.1.0: AI の判断は保存しない（decisions は無い）。互換のため、あれば（v5 の保存データ）取り込む
+  const D = civ.decisions ?? [];
   for (; ix.decUpto < D.length; ix.decUpto++) { const d = D[ix.decUpto]; ix.decPos.set(d.decisionId, ix.decUpto); push(ix.decByActor, d.actorId, ix.decUpto); push(ix.decByMonth, d.date.year * 12 + d.date.month - 1, ix.decUpto); }
   return ix;
 }
-export const getEvent = (civ, id) => { const ix = graphIndex(civ), i = ix.pos.get(id); return i === undefined ? null : civ.events[i]; };
-export const getDecision = (civ, id) => { const ix = graphIndex(civ), i = ix.decPos.get(id); return i === undefined ? null : civ.decisions[i]; };
+export const getEvent = (civ, id) => { const ix = graphIndex(civ), i = ix.pos.get(id); return i === undefined ? (civ.archive ? findRecord(civ, id) : null) : civ.events[i]; }; // 作業バッファ → 歴史資料（残っていれば）
+export const getDecision = (civ, id) => { const ix = graphIndex(civ), i = ix.decPos.get(id); return i === undefined ? null : civ.decisions[i]; }; // 互換。v6.1.0 の世界では常に null
 
 /** 直接の原因（イベントを指すものは本体つきで返す） */
 export function causesOf(civ, id) { const ev = getEvent(civ, id); if (!ev) return []; return ev.causes.map((c) => ({ ...c, event: getEvent(civ, c.targetId) })); }
@@ -71,9 +73,9 @@ export const asCauses = (events, relation, basis) => events.map((e) => ({ target
 export function checkGraph(civ) {
   const errs = [], ix = graphIndex(civ);
   for (const ev of civ.events) {
-    for (const c of ev.causes) { if (!RELATIONS.includes(c.relation)) errs.push(`未知の関係 ${ev.eventId}`); if (!BASES.includes(c.basis)) errs.push(`未知の根拠 ${ev.eventId}`); if (/^event_/.test(c.targetId) && !ix.pos.has(c.targetId)) errs.push(`原因の参照切れ ${ev.eventId}→${c.targetId}`); }
-    if (ev.decisionId && !ix.decPos.has(ev.decisionId)) errs.push(`判断の参照切れ ${ev.eventId}→${ev.decisionId}`);
+    for (const c of ev.causes) { if (!RELATIONS.includes(c.relation)) errs.push(`未知の関係 ${ev.eventId}`); if (!BASES.includes(c.basis)) errs.push(`未知の根拠 ${ev.eventId}`); if (/^event_/.test(c.targetId) && !ix.pos.has(c.targetId) && inLiveRange(civ, c.targetId)) errs.push(`原因の参照切れ ${ev.eventId}→${c.targetId}`); } // 原因が資料として移された・失われた場合は切れではない
+    if (ev.decisionId && civ.decisions && !ix.decPos.has(ev.decisionId)) errs.push(`判断の参照切れ ${ev.eventId}→${ev.decisionId}`);
   }
-  for (const d of civ.decisions) for (const e of d.result?.eventIds ?? []) if (e && !ix.pos.has(e)) errs.push(`判断結果のイベント参照切れ ${d.decisionId}→${e}`);
+  for (const d of civ.decisions ?? []) for (const e of d.result?.eventIds ?? []) if (e && !ix.pos.has(e)) errs.push(`判断結果のイベント参照切れ ${d.decisionId}→${e}`);
   return errs;
 }

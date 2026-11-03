@@ -64,7 +64,7 @@ export function regimeChange(ctx, st) {
   const causes = []; const war = civ.events.slice(-60).reverse().find((e) => (e.kind === "war_declared" || e.kind === "war_ended") && e.participants.some((p) => p.entityId === st.id)); if (war) causes.push({ targetId: war.id, relation: "caused_by", basis: "plausible" });
   st.polity = to; P.lastRegimeChange = mi; st.stability = clamp(st.stability - 0.25); P.fatigue = Math.max(0, P.fatigue - 0.3);
   for (const k of Object.keys(f)) f[k].support = clamp(f[k].support + 0.15);
-  makeEvent(civ, ids, { kind: "regime_change", title: `${st.name}で政変が起きた（${who === "commoners" ? "民衆の離反" : "軍の離反"}${before !== to ? "・政体が変わった" : ""}）`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, { targetId: st.id, property: "stability", before: null, after: Math.round(st.stability * 100) / 100 }], causes, provenance: "simulation" });
+  makeEvent(civ, ids, { kind: "regime_change", title: `${st.name}で政変が起きた（${who === "commoners" ? "民衆の離反" : "軍の離反"}${before !== to ? "・政体が変わった" : ""}）`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, { targetId: st.id, property: "stability", before: null, after: Math.round(st.stability * 100) / 100 }], causes, facts: { stateId: st.id, polity: to, name: st.name }, provenance: "simulation" });
   // 政変で指導者が代わる（新しい指導者は別の家系。人物の記録は people.js が事実として残す）
   st.leader = { name: ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true };
 }

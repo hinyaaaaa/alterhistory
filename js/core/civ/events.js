@@ -1,10 +1,15 @@
+import { mediaOf } from "./archive.js";
 // v5: イベントの正本レコード（指示書 §8.1 の最小形。M6 で因果グラフ・索引へ拡張する）。
 // IDは発行時の連番。タイトル・年月から識別子を作らない。原因はIDで持つ（文字列の逆引きをしない）。
 export const RELATIONS = Object.freeze(["caused_by", "contributed_to", "reaction_to", "enabled_by", "part_of", "succeeded_by", "influenced_by", "related_to"]);
 export const BASES = Object.freeze(["direct", "strong", "plausible", "contested", "unknown"]);
 // 根拠（basis）は「関係の確からしさの帯」。校正された確率ではない（指示書 §8.3）。ユーザー編集の因果は causes[].userEdited: true で区別する。
-export function makeEvent(civ, ids, { kind, title, participants = [], location = null, causes = [], effects = [], decisionId = null, provenance = "simulation" }) {
+export function makeEvent(civ, ids, { kind, title, participants = [], location = null, causes = [], effects = [], provenance = "simulation", facts = null, decisionId = null }) {
+  void decisionId; // v6.1.0: AI の判断は保存しない。出来事は結果だけを持つ
   for (const c of causes) { if (!RELATIONS.includes(c.relation)) throw new Error(`未知の関係: ${c.relation}`); if (!BASES.includes(c.basis)) throw new Error(`未知の根拠: ${c.basis}`); }
-  const ev = { eventId: ids.next("event"), date: { ...civ.date }, kind, title, participants, location, causes, effects, decisionId, provenance };
+  // v6.1.0 §11.3: 因果リンクは、直接かつ明確に対応付けられるもの（direct）だけを保存する。推測（strong・plausible・contested・unknown）は、確定した歴史のように残さない
+  const direct = causes.filter((c) => c.basis === "direct");
+  const ev = { eventId: ids.next("event"), date: { ...civ.date }, kind, title, participants, location, causes: direct, effects, provenance, media: mediaOf(civ, participants, kind) };
+  if (facts) ev.facts = facts;
   civ.events.push(ev); return ev;
 }

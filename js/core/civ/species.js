@@ -2,6 +2,7 @@
 import { BIOMES } from "./world-consts.js";
 // lifespan: 月。growth/techRate/martial: 倍率。magic: 魔法素質の相対頻度（人間=0.002 を基準）。env: 好む生態系
 export const SPECIES = Object.freeze({
+  archaic: { id: "archaic", ja: "古代型人類", lifespan: 840, growth: 0.92, techRate: 0.72, martial: 1, magic: 0, env: [] }, // v6.1.0: 人類の祖先系統（先史の初期。現生人類へ置き換わる・混血していく）
   human: { id: "human", ja: "人間", lifespan: 960, growth: 1, techRate: 1, martial: 1, magic: 0.002, env: [] },
   elf: { id: "elf", ja: "エルフ", lifespan: 4800, growth: 0.55, techRate: 1.1, martial: 0.95, magic: 0.02, env: [BIOMES.TEMPERATE_FOREST, BIOMES.TAIGA, BIOMES.RAINFOREST] },
   dwarf: { id: "dwarf", ja: "ドワーフ", lifespan: 2400, growth: 0.8, techRate: 1.12, martial: 1.15, magic: 0.004, env: [BIOMES.ALPINE, BIOMES.COLD_DESERT, BIOMES.TAIGA] },

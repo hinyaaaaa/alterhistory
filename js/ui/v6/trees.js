@@ -2,6 +2,9 @@
 //   ・パン（ドラッグ）とズーム（ホイール）で、ノードが増えても操作できる。
 //   ・技術は「採用済み」「採用できる（前提を満たす）」「発見済みだが採用できない」「未発見」を区別する。
 import { h, sv, colorOf } from "./common.js";
+import { layoutGrid, LANES } from "../../core/civ/tech.js";
+import { STAGES, TREE } from "../../core/civ/techtree.js";
+const NODESTAGE = Object.fromEntries(TREE.map((t) => [t.id, t.stage])); // 列の見出し: その列のノードの「宣言した時代」の中央値
 
 /** SVG にパン・ズームを付ける（viewBox を操作） */
 export function panZoom(svg, W, H) {
@@ -26,16 +29,29 @@ export function lineageTree(items, { selected, onPick, label = (x) => x.name, co
   return svg;
 }
 
-/** 技術ツリー: 系統（field）ごとに四方位へ、中心から階層（tier）が外へ広がる放射状。通信の有無・前提・採用を区別する */
-export function techTree({ techs, status, onPick, selected }) {
-  const fields = [...new Set(techs.map((t) => t.field))], quad = (f) => fields.indexOf(f) % 4, ang = [0, Math.PI / 2, Math.PI, (3 * Math.PI) / 2], R = 90, W = 1000, H = 1000, svg = sv("svg", { class: "tree", viewBox: `0 0 ${W} ${H}`, style: "height:420px" });
-  const byField = new Map(); for (const t of techs) (byField.get(t.field) ?? byField.set(t.field, []).get(t.field)).push(t); const pos = new Map();
-  fields.forEach((f, fi) => { const list = byField.get(f).sort((a, b) => a.tier - b.tier || (a.key < b.key ? -1 : 1)), q = quad(f), sub = Math.floor(fi / 4), base = ang[q] + (sub % 2 ? 0.33 : -0.33) * (sub ? 1 : 0), tiers = new Map(); for (const t of list) (tiers.get(t.tier) ?? tiers.set(t.tier, []).get(t.tier)).push(t); for (const [tier, arr] of tiers) arr.forEach((t, i) => { const a = base + (i - (arr.length - 1) / 2) * 0.17, r = R + tier * 105; pos.set(t.key, { x: 500 + r * Math.cos(a), y: 500 + r * Math.sin(a) }); }); });
-  svg.append(sv("circle", { cx: 500, cy: 500, r: 38, fill: "#1a1d23", stroke: "#d8b45a" }), sv("text", { x: 500, y: 504, "text-anchor": "middle", "font-size": 12, fill: "#d9d6cc" }, "技術"));
-  for (const t of techs) for (const p of t.prereq) { const a = pos.get(p), b = pos.get(t.key); if (a && b) svg.append(sv("line", { x1: a.x, y1: a.y, x2: b.x, y2: b.y, stroke: status(t) === "locked" ? "#2f353e" : "#6fa8c9", "stroke-width": 1.2, opacity: 0.7 })); else if (b) svg.append(sv("line", { x1: 500, y1: 500, x2: b.x, y2: b.y, stroke: "#2f353e", opacity: 0.4 })); }
-  const pz = panZoom(svg, W, H); pz.set({ x: 500 - 230, y: 500 - 230, w: 460, h: 460 }); const COL = { adopted: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], known: ["#a58bd0", "#201a2e"], locked: ["#4a515c", "#14161a"] };
-  for (const t of techs) { const p = pos.get(t.key), s = status(t), [stroke, fill] = COL[s]; svg.append(sv("g", { class: "tnode", onclick: () => { if (!pz.moved) onPick(t); } }, sv("rect", { x: p.x - 42, y: p.y - 12, width: 84, height: 24, fill, stroke: selected === t.key ? "#fff" : stroke, "stroke-width": s === "adopted" ? 2.6 : 1.4, "stroke-dasharray": s === "locked" ? "4 3" : null }), sv("text", { x: p.x, y: p.y + 4, "text-anchor": "middle", "font-size": 12, fill: s === "locked" ? "#838995" : "#d9d6cc" }, t.name.slice(0, 7)))); }
-  return { svg, fields, COL };
+/** 技術ツリー（v6.1.0 M3）: 分野レーン（縦）× 時代の列（左→右）の規則的なグリッド。前提から後続へ、直交する線で結ぶ。
+ *  位置は (lane, col, slot) から決まり、状態では動かない。状態は色だけでなく、枠線の種類・記号でも区別する（色覚に依らない）。
+ *  status(t): adopted=制度化 / available=採用できる / known=保有（まだ採用できない） / lost=失われた / locked=未発見 */
+export function techTree({ techs, status, onPick, selected, lane = null, hit = null }) {
+  const g = layoutGrid(), NW = 128, NH = 24, CW = 196, RH = 34, X0 = 120, Y0 = 34, W = X0 + g.cols * CW + 20, H = Y0 + g.totalRows * RH + 20, byKey = new Map(techs.map((t) => [t.key, t]));
+  const svg = sv("svg", { class: "tree techgrid", viewBox: `0 0 ${W} ${H}`, style: "height:460px;touch-action:none" }), P = (t) => ({ x: X0 + g.pos[t.key].col * CW, y: Y0 + g.pos[t.key].row * RH });
+  const COL = { adopted: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], known: ["#a58bd0", "#201a2e"], lost: ["#c97a6f", "#2a1614"], locked: ["#4a515c", "#14161a"] }, SYM = { adopted: "■", available: "◆", known: "◇", lost: "✕", locked: "○" };
+  // 列の見出し（時代）と、レーンの帯・見出し
+  const eraOfCol = (c) => { const st = techs.filter((t) => t.col === c).map((t) => t.tier); return null; void st; };
+  const stageOf = new Map(); for (const t of techs) { const a = stageOf.get(t.col) ?? []; a.push(NODESTAGE[t.key] ?? 0); stageOf.set(t.col, a); }
+  for (let c = 0; c < g.cols; c++) { const a = (stageOf.get(c) ?? []).sort((x, y) => x - y), m = a.length ? a[a.length >> 1] : 0; svg.append(sv("text", { x: X0 + c * CW + NW / 2, y: 18, "text-anchor": "middle", "font-size": 11, fill: "#838995" }, STAGES[m] ?? "")); }
+  LANES.forEach((l, i) => { const y = Y0 + g.y0[l.id] * RH - 6, hgt = g.rows[l.id] * RH; svg.append(sv("rect", { x: 0, y, width: W, height: hgt, fill: i % 2 ? "#15181d" : "#12151a", opacity: lane && lane !== l.id ? 0.4 : 1 }), sv("text", { x: 8, y: y + hgt / 2 + 4, "font-size": 12, fill: lane === l.id ? "#d8b45a" : "#a1a6b0" }, `${l.glyph} ${l.ja}`.slice(0, 9))); });
+  // 前提の線: 前提の右端 → 後続の左手前の縦の通路 → 後続の左端（直交）。通路は後続の列の手前に、線ごとに少しずらして置く
+  const ek = new Map();
+  for (const t of techs) { const q = P(t); t.prereq.forEach((pk, i) => { const pt = byKey.get(pk); if (!pt) return; const a = P(pt), dim = (lane && t.lane !== lane && pt.lane !== lane) || status(t) === "locked", lane2 = ek.get(t.col) ?? 0; ek.set(t.col, lane2 + 1); const bx = q.x - 26 + ((i * 7) % 20) - 6, ay = a.y + NH / 2, by = q.y + NH / 2;
+    svg.append(sv("path", { d: `M${a.x + NW} ${ay}H${bx}V${by}H${q.x}`, fill: "none", stroke: dim ? "#2b3038" : status(pt) === "locked" ? "#3a414b" : "#6fa8c9", "stroke-width": selected && (selected === t.key || selected === pk) ? 2.2 : 1, opacity: dim ? 0.5 : 0.85 })); }); }
+  const pz = panZoom(svg, W, H);
+  for (const t of techs) { const p = P(t), s = status(t), [stroke, fill] = COL[s], dim = (lane && t.lane !== lane) || (hit && !hit.has(t.key));
+    svg.append(sv("g", { class: "tnode", opacity: dim ? 0.3 : 1, onclick: () => { if (!pz.moved) onPick(t); } }, sv("rect", { x: p.x, y: p.y, width: NW, height: NH, rx: 3, fill, stroke: selected === t.key ? "#fff" : stroke, "stroke-width": s === "adopted" ? 2.6 : selected === t.key ? 2.4 : 1.4, "stroke-dasharray": s === "locked" ? "4 3" : s === "lost" ? "2 2" : null }), sv("text", { x: p.x + 7, y: p.y + 16, "font-size": 12, fill: s === "locked" ? "#838995" : "#d9d6cc" }, `${SYM[s]} ${t.name}`.slice(0, 11)))); }
+  const frontier = Math.max(0, ...techs.filter((t) => status(t) === "adopted" || status(t) === "known" || status(t) === "available").map((t) => g.pos[t.key].col));
+  const view = (col, w = 640) => pz.set({ x: Math.max(0, X0 + col * CW - 160), y: 0, w, h: Math.min(H, (w * 460) / 380) });
+  view(Math.max(0, frontier - 3));
+  return { svg, COL, SYM, fit: () => pz.set({ x: 0, y: 0, w: W, h: H }), left: () => view(0), frontier: () => view(Math.max(0, frontier - 3)) };
 }
 
 /** ドクトリンの木: 階層を左から右へ。共通と政体固有を上下に分ける。前提の線を結ぶ */

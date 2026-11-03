@@ -52,7 +52,7 @@ export function createCivActions({ store }) {
       return { total, pages, page: p, rows: rows.slice(p * pageSize, (p + 1) * pageSize).map((s) => ({ id: s.id, name: s.name, polity: s.polity, via: s.via, pop: Math.round(s.pop), stability: Math.round(s.stability * 100), alive: s.alive, player: s.player, wars: s.warIds.length, goal: s.strategy?.goal ?? null })) };
     },
     /** 国家のAI判断記録（新しい順。候補・得点・結果つき） */
-    recentDecisions(stateId, n = 5) { const civ = mapOf()?.civ; if (!civ) return []; const out = []; for (let i = civ.decisions.length - 1; i >= 0 && out.length < n; i--) if (civ.decisions[i].actorId === stateId) out.push(civ.decisions[i]); return out; },
+    recentDecisions(stateId, n = 5) { const civ = mapOf()?.civ; if (!civ) return []; const out = []; for (let i = (civ.decisions?.length ?? 0) - 1; i >= 0 && out.length < n; i--) if (civ.decisions?.[i].actorId === stateId) out.push(civ.decisions?.[i]); return out; },
     /** プレイヤー国家が今とれる行動（実行できるもの＋できない理由） */
     playerStateOptions() {
       const map = mapOf(), civ = map?.civ, sim = simOf(map), st = civ && Object.values(civ.states).find((x) => x.alive && x.player); if (!st || !sim) return null;

@@ -21,7 +21,7 @@ export function neighborStates(ctx, st) {
 export function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "simulation" } = {}) {
   const { civ, ids } = ctx, id = ids.next("treaty"), t = { id, type, a: a.id, b: b.id, signedAt: civ.monthIndex, expiresAt: civ.monthIndex + TREATY[type].months, active: true };
   civ.treaties[id] = t; civ.activeTreatyIds.push(id); adjustRel(a, b, type === "alliance" ? 25 : 15);
-  makeEvent(civ, ids, { kind: "treaty_signed", title: `${a.name}と${b.name}が${TREATY[type].ja}を結んだ`, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, decisionId, provenance }); return t;
+  makeEvent(civ, ids, { kind: "treaty_signed", title: `${a.name}と${b.name}が${TREATY[type].ja}を結んだ`, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance }); return t;
 }
 export function endTreaty(ctx, t, why, byId = null) {
   const { civ, ids } = ctx; t.active = false; t.endedAt = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
@@ -35,7 +35,7 @@ function revengeCauses(civ, atk, def) {
 export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation" } = {}) {
   const { civ, ids, rng } = ctx, id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 };
   civ.wars[id] = w; civ.activeWarIds.push(id); atk.warIds.push(id); def.warIds.push(id); adjustRel(atk, def, -40);
-  const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), decisionId, provenance });
+  const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance });
   w.declaredEvent = ev.eventId;
   for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) {
     if (t.type !== "alliance" || (t.a !== host.id && t.b !== host.id)) continue; const ally = civ.states[t.a === host.id ? t.b : t.a]; if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;
@@ -50,7 +50,7 @@ export function endWar(ctx, w, outcome) {
   const gained = []; if (lead && atk?.alive) for (const gid of w.occupied) { const g = civ.groups[gid]; if (g && g.stateId === w.defender) { g.stateId = atk.id; gained.push(gid); } }
   for (const s of all) { s.lastWarEnd = civ.monthIndex; s.stability = Math.max(0, s.stability - 0.04); if (s.campaign?.warId === w.id) s.campaign = null; }
   if (atk && def) adjustRel(atk, def, -10);
-  makeEvent(civ, ids, { kind: "war_ended", title: `${atk?.name ?? "?"}と${def?.name ?? "?"}の戦争が終わった（${{ aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: "講和", state_dissolved: "国家の消滅" }[outcome] ?? outcome}）`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => ({ targetId: gid, property: "stateId", before: w.defender, after: atk.id })) });
+  makeEvent(civ, ids, { kind: "war_ended", title: `${atk?.name ?? "?"}と${def?.name ?? "?"}の戦争が終わった（${{ aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: "講和", state_dissolved: "国家の消滅" }[outcome] ?? outcome}）`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => ({ targetId: gid, property: "stateId", before: w.defender, after: atk.id })), facts: { warId: w.id, outcome, stateId: gained.length ? atk?.id ?? null : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
 }
 /** 月次（conflict フェーズ）: 条約の期限・戦況・占領・講和。国家が滅びた戦争は終える */
 export function stepWars(ctx) {

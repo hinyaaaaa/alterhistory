@@ -7,9 +7,12 @@ import { effective } from "./effective.js";
 
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const has = (st, k) => st.techAdopted?.[k] != null;
+import { stateCan } from "../../civ/tech.js";
+// v6.1.0 M3: 部隊の種類の解禁は、技術ツリーの caps（unit:*）から導く
+const can = (ctx, st, cap) => stateCan(ctx.civ, st, cap);
 export const UNIT_KINDS = Object.freeze({
-  infantry: { ja: "歩兵", need: () => true }, ranged: { ja: "弓・投射兵", need: (st) => has(st, "bronze_weapons") }, cavalry: { ja: "騎兵", need: (st) => has(st, "horse_riding") || has(st, "cavalry") },
-  navy: { ja: "水軍", need: (st, ctx) => has(st, "shipbuilding") && coastal(ctx, st) }, garrison: { ja: "守備兵", need: (st) => has(st, "fortification") }, firearms: { ja: "銃兵", need: (st) => has(st, "gunpowder") },
+  infantry: { ja: "歩兵", need: () => true }, ranged: { ja: "弓・投射兵", need: (st, ctx) => can(ctx, st, "unit:ranged") }, cavalry: { ja: "騎兵", need: (st, ctx) => can(ctx, st, "unit:cavalry") },
+  navy: { ja: "水軍", need: (st, ctx) => can(ctx, st, "unit:navy") && coastal(ctx, st) }, garrison: { ja: "守備兵", need: (st, ctx) => can(ctx, st, "unit:garrison") }, firearms: { ja: "銃兵", need: (st, ctx) => can(ctx, st, "unit:firearms") },
 });
 const coastal = (ctx, st) => (byState(ctx).get(st.id) ?? []).some((g) => ctx.world.cell.coastDist[g.cell] <= 1);
 const shareOf = (ctx, st) => {

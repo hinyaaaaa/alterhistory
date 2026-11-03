@@ -2,7 +2,8 @@
 export { WCDE_VERSION, normalizeWorldConfig, derivedSeeds, BIOME_KEYS } from "./config.js";
 export { normalizeCalendar, formatDate, eraOf, applyDisplayEdit } from "./calendar.js";
 export { createWcdeCiv, runPrehistory, glacialAt } from "./prehistory.js";
-export { createWcde, dispatch, safeAdvance, AUTHORITY, COMMANDS, restoreInto, checkpointFull } from "./contract.js";
+export { createWcde, dispatch, safeAdvance, AUTHORITY, COMMANDS, commandTable, domainOfCommand, restoreInto, checkpointFull } from "./contract.js";
+export { DOMAINS, DOMAIN, ENTRY_PATHS, validateRegistry, ownerOf, pathsOverlap } from "./domains/registry.js";
 export { registerCommands } from "./commands.js";
 export { createNewWorld, formatWorldDate, serializeWorld, deserializeWorld } from "./world.js";
 export { listCandidates, refreshCandidates, foundAsPlayer, delegateToWorld } from "./founding.js";

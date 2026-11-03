@@ -5,7 +5,9 @@
 import { createNewWorld, formatWorldDate } from "../../core/wcde/world.js";
 import { listCandidates } from "../../core/wcde/founding.js";
 import { SPEEDS, timeOf, newsOf, newsFeed, isRunning } from "../../core/wcde/clock.js";
-import { h, btn, polityJa, n0, pct, colorOf, face } from "./common.js";
+import { h, btn, polityJa, n0, pct, colorOf, face, sv } from "./common.js";
+import { TECH } from "../../core/civ/tech.js";
+import { ecoSummary } from "../../core/wcde/domains/ecosystem.js";
 import { S, run, act, stateName, aliveStates, controlled } from "./store.js";
 import { MapView } from "./map.js";
 import { pGeo, pNations, link } from "./views-a.js";
@@ -17,14 +19,29 @@ const PANELS = { geo: pGeo, nations: pNations, war: pWar, diplo: pDiplo, culture
 
 /* ---------- 起動: 世界の設定 → 生成 → 建国 ---------- */
 function setup() {
-  const seed = h("input", { id: "seed", value: "alter-" + Math.floor(Math.random() * 9999) }), cells = h("select", { id: "cells" }, ...[3000, 6000, 20000].map((n) => h("option", { value: n, selected: n === 6000 }, n + " セル"))), magic = h("input", { type: "checkbox", id: "magic" }), msg = h("p", { class: "n", id: "setup-msg" });
-  const go = () => { msg.textContent = "生成中…（先史の計算に数秒かかります）"; setTimeout(() => { const r = createNewWorld({ worldSeed: seed.value, spec: { resolution: { targetCells: +cells.value } }, magic: { enabled: magic.checked } }); if (!r.ok) { msg.textContent = r.errors.join(" / "); return; } S.w = r.w; founding(); }, 30); };
-  root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "ALTERHISTORY v6"), h("h1", {}, "世界を作る"), h("p", { class: "n" }, "約50万年の先史から、国家が生まれる時代へ。"), h("label", {}, "世界の種 ", seed), h("label", {}, "解像度 ", cells), h("label", {}, magic, " 魔法を有効にする"), h("div", { class: "rowb" }, btn("世界を生成", go, "p", { id: "gen" }), fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); })), msg));
+  const seed = h("input", { id: "seed", value: "alter-" + Math.floor(Math.random() * 9999) }), cells = h("select", { id: "cells" }, ...[3000, 6000].map((n) => h("option", { value: n, selected: n === 3000 }, n === 3000 ? "3,000 セル（標準）" : "6,000 セル（細かい・遅い）"))), msg = h("p", { class: "n", id: "setup-msg" });
+  const go = () => { msg.textContent = "生成中…（先史の計算に数秒かかります）"; setTimeout(() => { const r = createNewWorld({ worldSeed: seed.value, spec: { resolution: { targetCells: +cells.value } } }); if (!r.ok) { msg.textContent = r.errors.join(" / "); return; } S.w = r.w; founding(); }, 30); };
+  root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "ALTERHISTORY v6"), h("h1", {}, "世界を作る"), h("p", { class: "n" }, "約50万年の先史から、国家が生まれる時代へ。"), h("label", {}, "世界の種 ", seed), h("label", {}, "解像度 ", cells), h("div", { class: "rowb" }, btn("世界を生成", go, "p", { id: "gen" }), fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); })), msg));
 }
 function founding() {
-  const c = listCandidates(S.w), msg = h("p", { class: "n" }, c.length ? "国家になる候補です。担当する国を選ぶか、世界に任せて見守ります。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
-  for (const x of c.slice(0, 20)) list.append(h("div", { class: "row" }, h("span", { class: "g" }, h("b", {}, x.viaJa), h("br"), h("small", {}, `人口 ${n0(x.pop)}・集団 ${x.groupIds.length}`)), btn("担当して建国", () => { const r = act({ type: "founding.found", candidateId: x.id }); r.ok ? start() : (msg.textContent = S.notice); })));
-  root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "FOUNDING"), h("h1", {}, "建国"), msg, list, btn("世界に任せて始める（担当国なし）", () => { run({ type: "founding.delegate" }); start(); }, "", { id: "delegate" })));
+  const c = listCandidates(S.w), civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
+  const msg = h("p", { class: "n" }, c.length ? "国家になる候補です。担当する国を選ぶか、世界に任せて見守ります。先史の経過は読み取り専用で、ここから変えることはできません。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
+  const yrsAgo = (m) => Math.round(((civ.wcde.foundedAt ?? civ.monthIndex) - m) / 12);
+  const fmtYears = (y) => (y >= 10000 ? `約 ${Math.round(y / 1000) / 10} 万年前` : `約 ${n0(y)} 年前`);
+  // 先史の観察: 系統の移行・技術の出現・人口の推移（読み取り専用）
+  const techTl = Object.entries(pre.firstTech ?? {}).sort((x, y) => x[1] - y[1]).map(([k, m]) => `${fmtYears(yrsAgo(m))}　${TECH[k]?.name ?? k}`);
+  const ep = pre.epochs ?? [], mx = Math.max(1, ...ep.map((e) => Math.log10(Math.max(10, e.pop)))), spark = sv("svg", { viewBox: "0 0 300 60", style: "width:100%;height:60px" }, sv("polyline", { points: ep.map((e, i) => `${(i / Math.max(1, ep.length - 1)) * 300},${58 - (Math.log10(Math.max(10, e.pop)) / mx) * 54}`).join(" "), fill: "none", stroke: "#6fa8c9", "stroke-width": 1.6 }), sv("polyline", { points: ep.map((e, i) => `${(i / Math.max(1, ep.length - 1)) * 300},${58 - (e.ice ?? 0) * 54}`).join(" "), fill: "none", stroke: "#c97a6f", "stroke-width": 1, "stroke-dasharray": "3 3" }));
+  const eco = ecoSummary(S.w.world, civ), sp = pre.species ?? {};
+  const obs = h("div", { class: "dt" }, h("b", {}, "先史の観察（読み取り専用）"), h("br"),
+    sp.archaic ? `古代型人類の集団が現れる: ${fmtYears(yrsAgo(sp.archaic.at))}` : "", h("br"), sp.human ? `現生人類が現れる: ${fmtYears(yrsAgo(sp.human.at))}（置き換わり・混血: ${n0(pre.assimilated ?? 0)} 集団）` : "", h("br"),
+    `集団 ${n0(pre.groups ?? Object.keys(civ.groups).length)}・人口 ${n0(Math.round(Object.values(civ.groups).reduce((a, g) => a + g.pop, 0)))}・定住 ${n0(pre.settlements ?? 0)}・氷期の最大 ${Math.round((pre.glacialMax ?? 0) * 100)}%・海を渡った ${n0(pre.seaCrossings ?? 0)} 回`, h("br"),
+    eco ? `生態系: 植物 ${Math.round(eco.flora * 100)}%・動物 ${Math.round(eco.fauna * 100)}%・荒廃した土地 ${Math.round(eco.degraded * 100)}%` : "", h("br"), "人口（青・対数）と氷期（赤の破線）の推移", spark, h("b", {}, "技術の出現"), h("br"), ...techTl.flatMap((t) => [t, h("br")]));
+  for (const x of c.slice(0, 20)) {
+    const cu = civ.cultures[x.cultureId]?.name, lg = civ.languages[x.languageId]?.name, rl = civ.religions[x.religionId]?.name, lat = Math.round((ce.lat[x.cell] * 180) / Math.PI);
+    const sel = x.polityOptions.length > 1 ? h("select", { class: "pol" }, ...x.polityOptions.map((p) => h("option", { value: p }, ja[p] ?? p))) : null;
+    list.append(h("div", { class: "row" }, h("span", { class: "g" }, h("b", {}, x.viaJa), h("br"), h("small", {}, `人口 ${n0(x.pop)}・集団 ${x.groupIds.length}・${lat >= 0 ? "北緯" : "南緯"} ${Math.abs(lat)}°`), h("br"), h("small", {}, [cu && `文化 ${cu}`, lg && `言語 ${lg}`, rl && `宗教 ${rl}`].filter(Boolean).join("・") || "文化・言語・宗教は成立後に定まる"), h("br"), h("small", {}, `選べる政体: ${x.polityOptions.map((p) => ja[p] ?? p).join("・")}（技術から導く）`)), sel, btn("担当して建国", () => { const r = act({ type: "founding.found", candidateId: x.id, polity: sel?.value ?? null }); r.ok ? start() : (msg.textContent = S.notice); })));
+  }
+  root().replaceChildren(h("div", { class: "center", style: "max-width:760px" }, h("div", { class: "code" }, "FOUNDING"), h("h1", {}, "建国"), msg, obs, list, btn("世界に任せて始める（担当国なし）", () => { run({ type: "founding.delegate" }); start(); }, "", { id: "delegate" })));
 }
 
 /* ---------- 画面の骨格（モックと同じ構成） ---------- */

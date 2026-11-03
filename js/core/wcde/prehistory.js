@@ -1,5 +1,7 @@
-// v6 M2: 圧縮された約50万年の先史。通常の月次 tick を 50 万年分回さず、粗い時間刻み（既定 2,500 年）の集計モデルで進める。
-//   人類の出現・拡散、設定された他種族の出現・拡散、氷期による居住可能性の変動、移住（陸路・航海）、
+// v6 M2 / v6.1.0 M2: 圧縮された約50万年の先史。通常の月次 tick を 50 万年分回さず、粗い時間刻み（既定 2,500 年）の集計モデルで進める。
+//   v6.1.0: 古代型人類（人類祖先）の集団から始まり、現生人類が現れて置き換わる・混血していく。ファンタジー種族・魔法は無い。生態系（動植物・資源量・環境容量）は集約モデルで、人口と相互に影響する。
+//   技術は月次と同じ発生率の関数（tech.js の emergenceRate）を、粗い時間刻みの経過年数で積分して使う（研究点は無い）。
+//   人類の出現・拡散、氷期による居住可能性の変動、移住（陸路・航海）、
 //   生業・技術の発展（農耕・牧畜・航海・定住）、文化・言語・宗教の分化を、世界の地形・気候・肥沃度から実際に計算する（固定の結果は返さない）。
 //   終わりは「国家成立の直前」。条件を満たす文明候補を数え、そこで止まる（founding.js）。
 //   純粋ロジック（時刻・Math.random 非依存。乱数は seed と step から作る）。ワーカーに載せても結果は変わらない。
@@ -9,21 +11,19 @@ import { fromMonthIndex, monthIndex } from "../civ/tick.js";
 import { createCulture, createLanguage, createReligion } from "../civ/culture.js";
 import { makeEvent } from "../civ/events.js";
 import { POP, groupCapacity, reachable, cellCapacity, spawnGroup, territoryOf } from "../civ/population.js";
-import { TECHS, TECH, available, refreshCand } from "../civ/tech.js";
+import { TECHS, TECH, refreshCand, emergenceRate, pEmerge, u01, accel } from "../civ/tech.js";
+import { initEco, stepEco, ecoMult } from "./domains/ecosystem.js";
 import { SPECIES, speciesOf } from "../civ/species.js";
 import { BIOMES, LAND_WATER } from "../civ/world-consts.js";
-import { speciesDefsOf, derivedSeeds } from "./config.js";
+import { derivedSeeds } from "./config.js";
 
 export const PREHISTORY_STEP_YEARS = 2500;
-const TECH_CEILING = 900;            // 先史で到達する技術の費用の上限（青銅・文字などは歴史の中で）
-const LEARN_EVERY = 4;               // 技術の評価は数ステップに1回（進捗は積み増す）
-const INNOVATION = 1.9e-4;           // 進捗の基準。調整値（下の PRE_COST・時間形・人口の効果と合わせて、航海が前半、農耕・牧畜が最後の数%に現れるように）
-const POP_REF = 150000;              // 人口の効果の基準（Kremer 型: 世界の人口が多いほど、発明・伝播が速い。上限 1.5 倍）
-/** 先史での費用の倍率（通常の技術費用は月次 tick 用。先史の長い時間では、道具・舟のような技術は早く、農耕・牧畜は人口圧と蓄積のあとになる） */
-const PRE_COST = Object.freeze({ seafaring: 0.12, pottery: 0.6, weaving: 0.8, herbalism: 0.5, construction: 0.9, agriculture: 5.1, pastoralism: 3.9 });
+const LEARN_EVERY = 4;               // 技術の評価は数ステップに1回（経過年数で積分する）
+// 先史の技術の発生率の補正（調整値）。文化の累積（世代を超えた知識の蓄積）で、時間とともに発明の速さが増す。最後の 15% は、定住・農耕が広く現れるよう急に増える（世界が人の住める土地を持つかぎり、建国の候補が現れる）
+const preBoost = (f) => 0.6 + 6 * f ** 3 + 3000 * Math.max(0, f - 0.85) ** 2;
+const isPrehistoricTech = (t) => t.pre; // 先史の技術（原初〜新石器）。青銅以降は歴史の月次の中で
 const LOCAL_SCALE = 0.4; // 近くの探索の範囲（移動の予算に対する比）
 const SPREAD_P = 0.6, SPREAD_HOPS = 12; // 技術の伝播: 隣接する集団へ 1 ステップあたり最大 SPREAD_HOPS 跳び。1 跳びの確率 SPREAD_P（同じ文化なら +0.15）
-const shapeAt = (f) => 0.1 + 4.5 * f * f * f; // 知識の蓄積による加速（時間とともに発明が速まる）
 const EPOCHS = 20;                   // 要約イベント（時代ごとの集計）の数
 const DEG = Math.PI / 180;
 
@@ -31,8 +31,7 @@ const DEG = Math.PI / 180;
 export function createWcdeCiv(world, config, { historySeed = null } = {}) {
   const seeds = derivedSeeds(config), start = -Math.round(config.prehistory.years);
   const civ = { version: CIV_STATE_VERSION, historySeed: historySeed ?? hashSeed(config.worldSeed, "history"), seq: {}, date: fromMonthIndex(monthIndex(start, 1)), monthIndex: monthIndex(start, 1), groups: {}, settlements: {}, events: [], proposals: [], player: { groupId: null }, ...emptyLayers() };
-  civ.options = { aiInterval: 6, wcde: true, magic: config.magic.enabled, magicRate: config.magic.rate, growthScale: config.laws.fertilityScale, disasterRate: config.laws.disasterRate, climateVolatility: config.laws.climateVolatility };
-  civ.speciesDefs = speciesDefsOf(config);
+  civ.options = { aiInterval: 6, wcde: true, magic: false, growthScale: config.laws.fertilityScale, disasterRate: config.laws.disasterRate, climateVolatility: config.laws.climateVolatility };
   civ.wcde = { v: 1, phase: "prehistory", config, seeds, startMonth: civ.monthIndex, prehistory: null, candidates: [], control: { stateId: null }, cmdIds: [], diagnostics: [], edits: [] };
   return civ;
 }
@@ -73,11 +72,10 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
   const note = (kind, title, parts, g, causes = []) => makeEvent(civ, ids, { kind, title, participants: parts, location: g ? { cell: g.cell } : null, causes, provenance: "simulation" });
   const KB = { agriculture: "agriculture", pastoralism: "herding", seafaring: "seafaring" };
   let pending = [];
-  const learn = (g, key, mi, independent) => {
+  const learn = (g, key, mi) => {
     const t = TECH[key]; g.tech.known[key] = mi; delete g.tech.prog[key]; refreshCand(g); if (KB[key]) g.knowledge[KB[key]] = 1;
-    const prior = civ.techWorld[key]; (civ.techWorld[key] ??= { discoveries: [] });
-    let evId = null; if (!prior) { stats.firstTech[key] = mi; evId = note("tech_discovered", `${t.name}を初めて発見`, [{ entityId: g.id, role: "discoverer" }], g).eventId; }
-    if (independent) civ.techWorld[key].discoveries.push({ eventId: evId, groupId: g.id, month: mi, independent: !!prior });
+    const prior = civ.techWorld[key], rec = (civ.techWorld[key] ??= { discoveries: [], first: mi, independent: 0, spread: 0, byChannel: {}, firstGroupId: g.id });
+    rec.independent++; if (!prior) { stats.firstTech[key] = mi; rec.firstEventId = note("tech_discovered", `${t.name}を初めて発見`, [{ entityId: g.id, role: "discoverer" }], g).eventId; }
     pending.push({ g, key, d: 0 });
   };
   const neighborsOf = (g) => { const out = new Set(), m = world.mesh; for (const c of g.cells) for (let k = m.neighborOffsets[c]; k < m.neighborOffsets[c + 1]; k++) { const o = home.get(m.neighborIds[k]); if (o && o !== g.id) out.add(o); } return [...out].sort(); };
@@ -88,7 +86,7 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
       for (const oid of neighborsOf(g)) {
         const o = civ.groups[oid]; if (!o || o.tech.known[key] != null || !t.prereq.every((p) => o.tech.known[p] != null) || o.pop < t.minPop || (key === "seafaring" && ce.coastDist[o.cell] > 1)) continue;
         if (rng() >= SPREAD_P + (o.cohorts[0].cultureId === dom.cultureId ? 0.15 : 0)) continue;
-        o.tech.known[key] = mi; delete o.tech.prog[key]; refreshCand(o); if (KB[key]) o.knowledge[KB[key]] = 1; stats.transfers = (stats.transfers ?? 0) + 1;
+        o.tech.known[key] = mi; delete o.tech.prog[key]; refreshCand(o); if (KB[key]) o.knowledge[KB[key]] = 1; stats.transfers = (stats.transfers ?? 0) + 1; { const rec = civ.techWorld[key]; if (rec) { rec.spread++; rec.byChannel.contact = (rec.byChannel.contact ?? 0) + 1; } }
         if (d + 1 < SPREAD_HOPS) q.push({ g: o, key, d: d + 1 }); else pending.push({ g: o, key, d: 0 });
       }
     }
@@ -106,46 +104,49 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
   if (!landCells.length) throw new Error("陸地がない世界では先史を進められません");
   const score = (c, sp) => { const b = ce.biome[c], base = ce.fertility[c] * 0.6 + (ce.coastDist[c] <= 3 || ce.river[c] ? 0.3 : 0) + Math.min(1, (ce.capacity[c] ?? 0) / (ce.areaKm2[c] || 1)) * 0.4; return base * envFit(sp, b); };
   const { comp, sizes } = landComponents(world, landCells), bigMin = Math.min(Math.max(...sizes), Math.max(20, landCells.length * 0.1));
-  const human = SPECIES.human, hcands = landCells.filter((c) => sizes[comp[c]] >= bigMin && Math.abs(ce.lat[c]) < 35 * DEG && [BIOMES.SAVANNA, BIOMES.TROPICAL_SEASONAL, BIOMES.GRASSLAND, BIOMES.TEMPERATE_FOREST].includes(ce.biome[c])).sort((a, b) => score(b, human) - score(a, human) || a - b);
-  const pool = (hcands.length ? hcands : landCells.filter((c) => sizes[comp[c]] >= bigMin).sort((a, b) => score(b, human) - score(a, human) || a - b)).slice(0, 10), origin = pool[Math.floor(ctxRng() * pool.length)];
+  const archaic = SPECIES.archaic, hcands = landCells.filter((c) => sizes[comp[c]] >= bigMin && Math.abs(ce.lat[c]) < 35 * DEG && [BIOMES.SAVANNA, BIOMES.TROPICAL_SEASONAL, BIOMES.GRASSLAND, BIOMES.TEMPERATE_FOREST].includes(ce.biome[c])).sort((a, b) => score(b, archaic) - score(a, archaic) || a - b);
+  const pool = (hcands.length ? hcands : landCells.filter((c) => sizes[comp[c]] >= bigMin).sort((a, b) => score(b, archaic) - score(a, archaic) || a - b)).slice(0, 10), origin = pool[Math.floor(ctxRng() * pool.length)];
   civ.monthIndex = start; civ.date = fromMonthIndex(start);
-  const hg = mk(origin, 120, "human"); civ.species.human = { id: "human", name: "人間", bornAt: start };
-  note("species_emerged", "人類が現れた", [{ entityId: "human", role: "species" }, { entityId: hg.id, role: "first_group" }], hg); stats.species.human = { at: start, cell: origin };
-  const others = [...(cfg.builtinSpecies ?? []).map((k) => SPECIES[k]).filter(Boolean), ...cfg.species.map((s) => civ.speciesDefs[s.id])];
-  const emergeAt = new Map(); for (const sp of others) emergeAt.set(sp.id, Math.floor(steps * (0.35 + 0.3 * (hashSeed(seed, "emerge", sp.id) % 1000) / 1000)));
-
+  // 人類祖先（古代型人類）の集団から始まる。現生人類は、数十万年の途中（全体の 30〜55%）に原産地の近くで現れ、隣接する集団へ置き換わる・混血していく
+  const hg = mk(origin, 120, "archaic"); civ.species.archaic = { id: "archaic", name: "古代型人類", bornAt: start };
+  note("species_emerged", "古代型人類の集団が現れた", [{ entityId: "archaic", role: "species" }, { entityId: hg.id, role: "first_group" }], hg); stats.species.archaic = { at: start, cell: origin };
+  const modernAt = Math.floor(steps * (0.3 + 0.25 * (hashSeed(civ.wcde.seeds.lineage, "modern") % 1000) / 1000)); let modernDone = false; stats.assimilated = 0;
   let areaSum = 0; for (const c of landCells) areaSum += ce.areaKm2[c]; const res = clamp(Math.sqrt(POP.territoryKm2 * 1.5 / (areaSum / landCells.length)), 1, 6); stats.moveScale = Math.round(res * 100) / 100;
   const baseRate = POP.growthPerMonth * 12;
   let Kworld = 0; for (const c of landCells) Kworld += 0.04 * (0.3 + ce.fertility[c]) * ce.areaKm2[c]; // 採集狩猟だけで世界が支えられる人口の目安
+  civ.eco = initEco(world, cfg.laws, 0);
   let worldPop = 120, lastEpoch = -1, epochs = 0; const cultRel = new Map(); stats.epochs = [];
   for (let step = 0; step < steps; step++) {
     const mi = start + Math.round(step * stepMonths); civ.monthIndex = mi; civ.date = fromMonthIndex(mi);
     const frac = step / steps, ice = glacialAt(frac, years, phase0, vol); if (ice > stats.glacialMax) stats.glacialMax = ice;
     const rng = (ctxRng = rngOf(hashSeed(seed, "step", step)));
-    for (const sp of others) if (emergeAt.get(sp.id) === step) { // 他種族の出現: 生息環境の、空いた肥沃な陸（標本から最良）
-      let best = -1, bc = -1; for (let k = 0; k < 400; k++) { const c = landCells[Math.floor(rng() * landCells.length)]; if (occ.has(c)) continue; const s = score(c, sp); if (s > best) { best = s; bc = c; } }
-      if (bc >= 0 && envFit(sp, ce.biome[bc]) >= 1) { const g = mk(bc, 90, sp.id); civ.species[sp.id] = { id: sp.id, name: sp.ja, bornAt: mi }; stats.species[sp.id] = { at: mi, cell: bc }; note("species_emerged", `${sp.ja}が現れた`, [{ entityId: sp.id, role: "species" }, { entityId: g.id, role: "first_group" }], g); }
+    if (!modernDone && step >= modernAt) { // 現生人類の出現: 古代型人類の集団のうち、原産地に最も近い・人口の多いものから
+      const cand = order.map((i) => civ.groups[i]).filter((g) => g && g.speciesId === "archaic").sort((a, b) => b.pop - a.pop || (a.id < b.id ? -1 : 1))[0];
+      if (cand) { modernDone = true; cand.speciesId = "human"; for (const c of cand.cohorts) c.speciesId = "human"; civ.species.human = { id: "human", name: "人間", bornAt: mi }; stats.species.human = { at: mi, cell: cand.cell }; note("species_emerged", "現生人類が現れた", [{ entityId: "human", role: "species" }, { entityId: cand.id, role: "first_group" }], cand); }
+    }
+    if (modernDone) for (const id of order) { // 置き換え・混血: 現生人類の集団に隣接する古代型人類は、ステップごとに一定の確率で現生人類へ。孤立していてもごくまれに
+      const g = civ.groups[id]; if (!g || g.speciesId !== "archaic") continue; const nearModern = neighborsOf(g).some((o) => civ.groups[o]?.speciesId === "human"), u = (hashSeed(seed, "assim", step, id) % 10000) / 10000;
+      if (u < (nearModern ? 0.3 : 0.01)) { g.speciesId = "human"; for (const c of g.cohorts) c.speciesId = "human"; stats.assimilated++; }
     }
     spread(mi, rng);
     let total = 0, n = 0;
     for (let oi = 0; oi < order.length; oi++) {
       const id = order[oi], g = civ.groups[id]; if (!g) continue; n++;
       const sp = speciesIn(g.speciesId), fit = envFit(sp, ce.biome[g.cell]);
-      const K = Math.max(0.5, groupCapacity(world, g, occ) * fit * iceMult(ce.lat[g.cell], ice) * (g.capMult ?? 1));
+      const K = Math.max(0.5, groupCapacity(world, g, occ) * fit * iceMult(ce.lat[g.cell], ice) * (g.capMult ?? 1) * ecoMult(world, civ, g));
       const r = baseRate * sp.growth * (civ.options.growthScale ?? 1) * (0.85 + 0.3 * rng()), N0 = Math.max(1, g.pop);
       g.pop = K / (1 + (K / N0 - 1) * Math.exp(-r * (stepMonths / 12)));
       g.pressure = g.pop / K; total += g.pop;
       if (g.pop < 5) { subOcc(g); delete civ.groups[id]; stats.extinct++; n--; continue; }
       g.settledMonths = g.subsistence === "forage" || g.subsistence === "pastoral" ? 0 : g.settledMonths + stepMonths;
-      // 技術: 進捗は世界人口（Kremer 型）に比例して加速。小さな集団は人口が足りない技術を持てない（available が見る）
+      // 技術: 月次と同じ発生率（emergenceRate）を、経過年数で積分する。小さな集団は人口が足りない技術を持てない。乱数は (集団, 技術, ステップ) から決まる
       if ((step + (oi % LEARN_EVERY)) % LEARN_EVERY === 0) {
-        const acc = (0.6 + 0.4 * Math.log10(Math.max(10, g.pop)) / 3) * sp.techRate * INNOVATION * stepMonths * LEARN_EVERY * Math.min(1.5, worldPop / POP_REF) * shapeAt(frac);
         if (!g.tech.cand) refreshCand(g);
+        const dt = (stepMonths / 12) * LEARN_EVERY, env = { accel: accel(civ, worldPop) * sp.techRate * preBoost(frac), contact: neighborsOf(g).length, rivals: 0 };
         for (const key of [...g.tech.cand]) {
-          const t = TECH[key]; if (t.cost > TECH_CEILING || !available(world, g, t)) continue;
-          const u = (hashSeed(g.id, key) % 1000) / 1000, p = (g.tech.prog[key] ?? 0) + acc, need = t.cost * (PRE_COST[key] ?? 2.5) * (1 + 4 * u * u); // 集団ごとの運（独立の発見は少数の中心で起こり、あとは伝播する）
-          if (p < need) { g.tech.prog[key] = p; continue; }
-          learn(g, key, mi, true);
+          const t = TECH[key]; if (!isPrehistoricTech(t)) continue; const rate = emergenceRate(world, civ, g, t, env);
+          if (rate <= 0 || u01(civ, "pretech", step, g.id, key) >= pEmerge(rate, dt)) continue;
+          learn(g, key, mi);
         }
       }
       // 生業の転換（環境に合うときだけ。農耕は肥沃か水辺、牧畜は草原・サバンナ・寒冷地、漁撈は海辺）
@@ -153,9 +154,9 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
       else if (g.subsistence === "forage") { const b = ce.biome[g.cell]; if (g.knowledge.herding >= 1 && (b === BIOMES.GRASSLAND || b === BIOMES.SAVANNA || b === BIOMES.COLD_DESERT || b === BIOMES.TUNDRA)) g.subsistence = "pastoral"; else if (g.knowledge.seafaring >= 1 && ce.coastDist[g.cell] <= 1 && rng() < 0.4) g.subsistence = "fishing"; }
 
       // 分派: 人口圧が高く、行き先があれば。行き先が無ければしばらく探さない（探索は高価）
-      if (g.pressure > POP.budPressure && g.pop >= POP.minBudPop * 2 && (g.noTargetUntil ?? -1) <= step) {
+      if (g.pressure > POP.budPressure && g.pop >= POP.minBudPop * 1.25 && (g.noTargetUntil ?? -1) <= step) {
         stats.budSearches++; // まず近く（陸伝いの隣の領域）を探す。無ければ、航海を知る海辺の集団だけが遠く（海の向こう）を探す。探索は高価なので、行き先が無ければしばらく探さない
-        const pick = (ts) => ts.find((x) => envFit(sp, ce.biome[x.cell]) >= 1) ?? (sp.id === "human" ? ts[0] : null);
+        const pick = (ts) => ts.find((x) => envFit(sp, ce.biome[x.cell]) >= 1) ?? ts[0];
         let t = pick(targetsFor(world, g, occ, res, 6, Math.max(1 / res, LOCAL_SCALE))); if (!t && g.knowledge.seafaring >= 1 && ce.coastDist[g.cell] <= 1) { stats.farSearches++; t = pick(targetsFor(world, g, occ, res, 6, 1)); }
         if (!t) g.noTargetUntil = step + 6 + (hashSeed(id) % 6);
         else {
@@ -169,7 +170,7 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
       // 宗教の発生（象徴的な行動が現れる後半から。大きな集団で）
       { const co = g.cohorts[0]; if (!co.religionId && frac > 0.15 && g.pop > 300) { const known = cultRel.get(co.cultureId); if (known) co.religionId = known; else if (rng() < 0.01) { co.religionId = createReligion(civ, ids, rng); cultRel.set(co.cultureId, co.religionId); } } else if (co.religionId && !cultRel.has(co.cultureId)) cultRel.set(co.cultureId, co.religionId); }
     }
-    worldPop = total;
+    worldPop = total; stepEco(world, civ, order.map((i) => civ.groups[i]).filter(Boolean), stepMonths / 12, { ice, laws: cfg.laws });
     if (n > stats.peakGroups) stats.peakGroups = n;
     // 時代ごとの要約イベント（個々の分派・発見を全て記録するのではなく、集計を事実として残す）
     const ep = Math.floor(frac * EPOCHS); if (ep !== lastEpoch) { lastEpoch = ep; epochs++; { const sub = {}; for (const id of order) { const g = civ.groups[id]; if (g) sub[g.subsistence] = (sub[g.subsistence] ?? 0) + 1; } stats.epochs.push({ ep, groups: n, pop: Math.round(worldPop), x: Math.round(worldPop / Kworld * 100) / 100, ice: Math.round(ice * 100) / 100, sub }); } note("prehistory_epoch", `先史 第${epochs}期の概況（集団 ${n}・人口 約${Math.round(worldPop)}）`, [], null).effects.push({ targetId: "world", property: "prehistory.pop", before: null, after: Math.round(worldPop) }); }

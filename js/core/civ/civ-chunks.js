@@ -20,7 +20,7 @@ function periodChunks(civ, name, list, mi) {
 }
 /** 文明状態 → { チャンク名: bytes } */
 export function encodeCivChunks(civ) {
-  const { events, decisions, history, ...core } = civ; core.chunked = { events: events.length, decisions: decisions.length, history: !!history };
+  const { events, decisions = [], history, ...core } = civ; core.chunked = { events: events.length, decisions: decisions.length, history: !!history };
   const out = { "civ.state": enc.encode(JSON.stringify(core)), ...periodChunks(civ, "events", events, evMi), ...periodChunks(civ, "decisions", decisions, (d) => evMi(d)) };
   if (history) { const h = encodeHistory(history); out["civ.history.index"] = h.index; out["civ.history.data"] = h.data; }
   return out;
@@ -31,8 +31,8 @@ export function decodeCivChunks(get, names) {
   if (core.version > CIV_STATE_VERSION) throw new Error(`新しすぎる文明状態の版です（${core.version}）`);
   if (core.chunked) {
     const load = (name) => names.filter((n) => n.startsWith(`${PREFIX}${name}.`)).sort((a, b) => keyNum(a.split(".").pop()) - keyNum(b.split(".").pop())).flatMap((n) => JSON.parse(dec.decode(get(n))));
-    core.events = load("events"); core.decisions = load("decisions");
-    if (core.events.length !== core.chunked.events || core.decisions.length !== core.chunked.decisions) throw new Error(`履歴チャンクの件数が合いません（イベント ${core.events.length}/${core.chunked.events}・判断 ${core.decisions.length}/${core.chunked.decisions}）`);
+    core.events = load("events"); core.decisions = load("decisions"); if (!core.chunked.decisions) delete core.decisions; // v6.1.0: 判断の記録は保存しない
+    if (core.events.length !== core.chunked.events || (core.decisions?.length ?? 0) !== core.chunked.decisions) throw new Error(`履歴チャンクの件数が合いません（イベント ${core.events.length}/${core.chunked.events}・判断 ${core.decisions.length}/${core.chunked.decisions}）`);
     if (core.chunked.history) { const i = get("civ.history.index"), d = get("civ.history.data"); if (!i || !d) throw new Error("月次履歴のチャンクが見つかりません"); core.history = decodeHistory(i, d); }
     delete core.chunked;
   }

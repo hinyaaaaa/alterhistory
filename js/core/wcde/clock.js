@@ -5,6 +5,7 @@
 //   ・同じ月の途中状態は外へ出さない: ニュースの判定は tick の確定後だけ。重大ニュースが出た月で必ず止まる（その先へ進めない）。
 //   ・ニュースは UI 向けの投影で、正本ではない。キュー・確認済み ID・停止前の速度・走査位置だけを保存し、画面の一覧は事実イベントから都度作る。
 //   ・時間を早送りする管理命令（time.advance）は、ニュースを判定せず走査位置だけを進める（早送りで飛ばした出来事で、後から全画面が出ない）。
+import { inLiveRange, findRecord } from "../civ/archive.js";
 import { checkpointFull, restoreInto } from "./contract.js";
 
 export const SPEEDS = Object.freeze([{ id: 0, label: "停止", mps: 0 }, { id: 1, label: "1か月/秒", mps: 1 }, { id: 2, label: "3か月/秒", mps: 3 }, { id: 3, label: "1年/秒", mps: 12 }, { id: 4, label: "5年/秒", mps: 60 }]);
@@ -75,6 +76,6 @@ export function newsFeed(civ, { limit = 40, minLevel = "major", before = null } 
 export function checkClock(civ) {
   const errs = [], T = civ.wcde.time, N = civ.wcde.news; if (!T && !N) return errs;
   if (T) { if (!SPEEDS.some((s) => s.id === T.speed)) errs.push("時間の速度が不正"); if (T.hold && !(N?.queue.length)) errs.push("停止中なのに確認待ちのニュースがない（時間が止まったままになる）"); if (!T.hold && N?.queue.length) errs.push("確認待ちのニュースがあるのに時間が止まっていない"); if (T.hold && T.resumeSpeed != null && !SPEEDS.some((s) => s.id === T.resumeSpeed)) errs.push("復帰時の速度が不正"); }
-  if (N) { const seen = new Set(); for (const q of N.queue) { if (seen.has(q.id)) errs.push(`ニュース ${q.id} が重複`); seen.add(q.id); if (!civ.events.some((e) => e.eventId === q.eventId)) errs.push(`ニュース ${q.id} の元の事実イベントがない`); if (N.acked.includes(q.eventId)) errs.push(`確認済みのニュース ${q.id} がキューにある`); } if (N.scanned > civ.events.length || !Number.isInteger(N.scanned) || N.scanned < 0) errs.push("ニュースの走査位置が不正"); }
+  if (N) { const seen = new Set(); for (const q of N.queue) { if (seen.has(q.id)) errs.push(`ニュース ${q.id} が重複`); seen.add(q.id); if (!civ.events.some((e) => e.eventId === q.eventId) && (inLiveRange(civ, q.eventId) || !findRecord(civ, q.eventId))) errs.push(`ニュース ${q.id} の元の事実イベントがない`); if (N.acked.includes(q.eventId)) errs.push(`確認済みのニュース ${q.id} がキューにある`); } if (N.scanned > civ.events.length || !Number.isInteger(N.scanned) || N.scanned < 0) errs.push("ニュースの走査位置が不正"); }
   return errs;
 }

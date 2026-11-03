@@ -7,6 +7,7 @@ import { applyDisplayEdit } from "./calendar.js";
 import { clockRun, ackNews, setSpeed, skipNews, timeOf } from "./clock.js";
 import { createIntervention, cancelIntervention, planIntervention } from "./intervention.js";
 import { negotiatePeace } from "./negotiation.js";
+import { planTechEdit, techEdit, techEditReset, techGrant } from "./techedit.js";
 
 const ALL = ["prehistory", "founding", "running"];
 let registered = false;
@@ -38,6 +39,10 @@ export function registerCommands() {
   defineCommand("creator.rename", { authorities: [A.CREATOR], phases: ["founding", "running"], apply: (w, c) => creatorRename(w, c) });
   // 創造主の介入（計算値への一時的な補正。AI・プレイヤーは呼べない）
   defineCommand("creator.intervene", { authorities: [A.CREATOR], validate: (w, c) => { const p = planIntervention(w, c); return p.ok ? null : p; }, apply: (w, c) => createIntervention(w, c) });
+  defineCommand("tech.preview", { authorities: [A.CREATOR], mutates: false, phases: ALL, apply: (w, c) => planTechEdit(w, c) });               // 影響の確認だけ（何も変えない）
+  defineCommand("creator.techEdit", { authorities: [A.CREATOR], apply: (w, c) => techEdit(w, c) });                                  // 技術ツリーの前提・効果・解禁を重ね書き
+  defineCommand("creator.techEditReset", { authorities: [A.CREATOR], apply: (w, c) => techEditReset(w, c) });
+  defineCommand("creator.techGrant", { authorities: [A.CREATOR], apply: (w, c) => techGrant(w, c) });                               // 集団・国家への付与／剥奪
   defineCommand("creator.cancelIntervention", { authorities: [A.CREATOR], apply: (w, c) => cancelIntervention(w, c) });
   // 暦の表示設定（時代区分の名前・表示形式。日付・境界は変えない）
   defineCommand("calendar.edit", { authorities: [A.ADMIN, A.CREATOR], phases: ALL, apply: (w, c) => { const r = applyDisplayEdit(w.civ.wcde.config.calendar, c.edit ?? {}); if (r.errors.length) return { ok: false, error: r.errors.join(" / ") }; w.civ.wcde.config.calendar = r.calendar; return { ok: true }; } });

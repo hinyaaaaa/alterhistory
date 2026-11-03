@@ -3,7 +3,9 @@ import { h, lb, stat, bar, btn, table, pct, n0, r2, face, donut, hemi, colorOf, 
 import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
 import { FILLS, OVERLAYS } from "./map.js";
 import { techTree, doctrineTree } from "./trees.js";
-import { TECHS, TECH, available } from "../../core/civ/tech.js";
+import { TECHS, TECH, LANES, COND, available } from "../../core/civ/tech.js";
+import { formatDate } from "../../core/wcde/calendar.js";
+import { actionGate } from "../../core/civ/actions.js";
 import { taxMult } from "../../core/civ/techfx.js";
 import { DOCTRINES, canAdopt, UNIT_KINDS } from "../../core/wcde/domains/military.js";
 import { FIELDS, effective, nominalOf } from "../../core/wcde/domains/effective.js";
@@ -12,7 +14,7 @@ import { predictWar } from "../../core/wcde/warlab.js";
 import { evaluateTreaty, proposalsOf } from "../../core/wcde/negotiation.js";
 import { TREATY } from "../../core/civ/diplomacy.js";
 import { formatWorldDate } from "../../core/wcde/world.js";
-import { statesAt } from "../../core/civ/history.js";
+import { pastView } from "../../core/civ/archive.js";
 const civ = () => S.w.civ, date = (mi) => formatWorldDate(S.w, mi);
 export const link = (id) => (civ().states[id] ? h("a", { class: "lk", href: "#", onclick: (e) => { e.preventDefault(); S.hooks.select(id); } }, stateName(id)) : String(id));
 const note = (t) => h("p", { class: "n" }, t), why = (t) => h("p", { class: "n err", id: "why" }, t);
@@ -28,7 +30,7 @@ export function pGeo() {
 
 /* ---------- 国家: 一覧（成立が新しい順）と詳細 ---------- */
 export function pNations() {
-  const c = civ(), pv = S.w.viewPast, all = pv != null ? statesAt(c, pv, { aliveOnly: true }).map((x) => ({ ...(c.states[x.id] ?? {}), ...x, name: x.name ?? c.states[x.id]?.name ?? x.id, alive: true })) : Object.values(c.states).filter((s) => (S.showDead ? true : s.alive)), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "国家"), pv != null ? h("p", { class: "n err" }, `過去（${date(pv)}）の国家を、月次の履歴から表示しています（読み取り専用）。`) : null);
+  const c = civ(), pv = S.w.viewPast, all = pv != null ? pastView(c, pv).states.map((x) => ({ id: x.id, name: x.name ?? "（名前の資料が失われた国家）", polity: x.polity, formedAt: x.formedAt ?? -Infinity, alive: true, partial: x.partial })) : Object.values(c.states).filter((s) => (S.showDead ? true : s.alive)), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "国家"), pv != null ? h("p", { class: "n err" }, `過去（${date(pv)}）の国家を、残っている歴史資料から再構成して表示しています（読み取り専用）。資料が失われた部分は不明で、何も無かったという意味ではありません。`) : null);
   if (pv == null && S.sel && c.states[S.sel]) box.append(stateDetail(c.states[S.sel]));
   box.append(lb("国家一覧", "新しい順"), h("div", { class: "rowb" }, h("label", {}, h("input", { type: "checkbox", id: "show-dead", checked: !!S.showDead, onchange: (e) => { S.showDead = e.target.checked; S.hooks.panel(); } }), " 滅亡した国家も表示")), note(`${list.length} 件。クリックで詳細を開きます（クリックだけでは担当は変わりません）。`));
   box.append(vlist(list, 26, (s) => h("div", { class: "vrow" + (S.sel === s.id ? " on" : ""), onclick: () => S.hooks.select(s.id) }, h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", { style: "color:var(--dim)" }, ` ${s.alive ? "人口 " + n0(s.pop) : "滅亡"}・成立 ${date(s.formedAt).split("月")[0]}月`))));
@@ -88,12 +90,43 @@ function tDiplomacy(st, mine) {
     lb("条約を提案する（講和を除く）", "PROPOSE"), h("div", { class: "rowb" }, sel, type), h("div", { class: "rowb" }, btn("提案する", () => act({ type: "state.act", stateId: st.id, action: "sign_treaty", target: sel.value, opt: type.value }), "p", { id: "propose", disabled: !mine, title: mine ? "" : "担当国のみ" })), out, note("条約は、相手国の評価（受諾・拒否・別条件）と、直前の条件の再検証を経て成立します。"),
     lb("交渉の記録", "NEGOTIATIONS"), ...hist.map((p) => h("div", { class: "row" }, h("span", { class: "g" }, `${p.kind === "peace" ? "講和" : TREATY[p.type]?.ja} ${stateName(p.from)}→${stateName(p.to)}`, h("br"), h("small", {}, date(p.at))), h("small", {}, { accepted: "成立", rejected: "拒否", countered: "別条件", failed_recheck: "不成立" }[p.status]))));
 }
-function techStatus(st) { const groups = Object.values(civ().groups).filter((g) => g.stateId === st.id), known = new Set(groups.flatMap((g) => Object.keys(g.tech?.known ?? {}))); return (t) => (st.techAdopted?.[t.key] != null ? "adopted" : t.prereq.every((p) => st.techAdopted?.[p] != null) && known.has(t.key) ? "available" : known.has(t.key) ? "known" : "locked"); }
-function tTech(st, mine) {
-  const status = techStatus(st), sel = TECH[S.tech] ?? null, { svg, COL } = techTree({ techs: TECHS, status, selected: S.tech, onPick: (t) => { S.tech = t.key; S.hooks.panel(); } }), s = sel && status(sel), lab = { adopted: "採用済み", available: "採用できる", known: "発見済み（前提が未採用で、まだ使えない）", locked: "未発見" };
-  return h("div", {}, note(`実データの技術 ${TECHS.length} 件を、系統ごとに四方位へ、階層が外へ広がる形で表示します。ドラッグで移動、ホイールで拡大縮小。`), svg, h("div", { class: "rowb" }, btn("全体を表示", () => { svg.setAttribute("viewBox", "0 0 1000 1000"); }), btn("中心へ戻る", () => { svg.setAttribute("viewBox", "270 270 460 460"); })), h("div", { class: "lg" }, ...Object.entries({ adopted: "採用済み", available: "採用できる", known: "発見済み・未採用", locked: "未発見" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px solid ${COL[k][0]}` }), t))),
-    sel ? h("div", { class: "dt" }, h("b", {}, sel.name), ` （${sel.field}・階層 ${sel.tier}）`, h("br"), `状態: ${lab[s]}`, h("br"), `前提: ${sel.prereq.length ? sel.prereq.map((p) => TECH[p]?.name ?? p).join("・") : "なし"}・必要人口 ${n0(sel.minPop)}・採用費用 ${sel.tier * 15}`, h("div", { class: "rowb" }, btn("採用する", () => act({ type: "state.act", stateId: st.id, action: "adopt_tech", opt: sel.key }), "p", { id: "adopt-tech", disabled: !mine || s !== "available", title: mine ? (s === "available" ? "" : "今は採用できません") : "担当国のみ" }))) : note("ノードを選ぶと、前提・状態・採用の可否が表示されます。"));
+// ---- 技術タブ（v6.1.0 M3）。状態は 5 つ: 制度化（国が採用）／採用できる（国内の 3 割以上が知っている）／保有（一部の集団だけが知る）／失われた／未発見
+function techStatus(st) {
+  const c = civ(), groups = Object.values(c.groups).filter((g) => g.stateId === st.id), total = groups.reduce((a, g) => a + g.pop, 0) || 1, have = {}, lostHere = new Set();
+  for (const g of groups) { for (const k in g.tech?.known ?? {}) have[k] = (have[k] ?? 0) + g.pop; for (const k in g.tech?.lost ?? {}) lostHere.add(k); }
+  const cov = (k) => (have[k] ?? 0) / total, f = (t) => (st.techAdopted?.[t.key] != null ? "adopted" : cov(t.key) >= 0.3 ? "available" : cov(t.key) > 0 ? "known" : lostHere.has(t.key) ? "lost" : "locked");
+  f.cov = cov; return f;
 }
+const CAP_JA = { "polity:chiefdom": "首長制へ", "polity:kingdom": "王国へ", "polity:republic": "共和政へ", "polity:empire": "帝国へ", "action:found_city": "都市を建設できる", "action:build_fortification": "要塞を整備できる", "action:covert_op": "秘密工作", "action:impose_sanctions": "経済制裁", "action:nuclear_program": "核計画", "treaty:nonaggression": "不可侵条約", "treaty:alliance": "同盟", "treaty:trade": "交易条約", "unit:ranged": "弓・投射兵", "unit:cavalry": "騎兵", "unit:navy": "水軍", "unit:garrison": "守備兵", "unit:firearms": "銃兵", "unit:armor": "機甲", "unit:air": "航空", "econ:coinage": "貨幣経済", "econ:credit": "信用・金融", "subsist:agriculture": "農耕", "subsist:pastoral": "牧畜", "subsist:fishing": "漁撈", "move:sea": "海を渡る", "move:ocean": "外洋航海", "trade:land_long": "陸の遠距離交易", "trade:sea_long": "海の遠距離交易", "trade:rail": "鉄道輸送", "admin:records": "記録", "admin:officials": "官職", "admin:courier": "公の通信網", "admin:land_survey": "土地の測量", "war:far": "遠征の補給", "war:naval": "海戦", "pop:cold": "寒冷地に住める", "pop:steppe": "草原で生きる", "storage:pottery": "貯蔵", "policy:tax_high": "高い税率", "policy:parliament": "議会制" };
+const FX_JA = { cap: "収容力", tax: "税収", trade: "交易", ind: "産業力", off: "攻撃", def: "防御", health: "衛生", learn: "学習・伝播" };
+let TECH_LANE = null, TECH_Q = "", TECH_FULL = false;
+function tTech(st, mine) {
+  const c = civ(), status = techStatus(st), sel = TECH[S.tech] ?? null, q = TECH_Q.trim(), hit = q ? new Set(TECHS.filter((t) => t.name.includes(q) || t.key.includes(q) || t.field.includes(q)).map((t) => t.key)) : null;
+  const tree = techTree({ techs: TECHS, status, selected: S.tech, lane: TECH_LANE, hit, onPick: (t) => { S.tech = t.key; S.hooks.panel(); } }), { svg, COL, SYM } = tree, s = sel && status(sel);
+  const lab = { adopted: "制度化済み（この国が採用）", available: "採用できる（国内の人口の 3 割以上が知っている）", known: "保有（一部の集団だけが知る。国としてはまだ採用できない）", lost: "失われた（かつて知っていたが、今は誰も知らない）", locked: "未発見" };
+  const laneBtns = [btn("すべて", () => { TECH_LANE = null; S.hooks.panel(); }, TECH_LANE ? "" : "p"), ...LANES.map((l) => btn(l.ja.slice(0, 5), () => { TECH_LANE = l.id; S.hooks.panel(); }, TECH_LANE === l.id ? "p" : ""))];
+  const search = h("input", { type: "search", placeholder: "技術名・分野で探す", value: TECH_Q, style: "width:100%", oninput: (e) => { TECH_Q = e.target.value; clearTimeout(search._t); search._t = setTimeout(() => { S.hooks.panel(); document.querySelector("#tech-q")?.focus(); }, 250); }, id: "tech-q" });
+  let detail = note("ノードを選ぶと、前提・成立の条件・解禁されること・効果・世界での広がりが出ます。");
+  if (sel) {
+    const gs = Object.values(c.groups).filter((g) => g.stateId === st.id), cov = Math.round(status.cov(sel.key) * 100), w = c.techWorld[sel.key], deps = TECHS.filter((t) => t.prereq.includes(sel.key)), gate = actionGate(c, st, "adopt_tech");
+    const needs = sel.prereq.map((p) => { const t = TECH[p]; return `${st.techAdopted?.[p] != null ? "■" : status.cov(p) > 0 ? "◇" : "○"} ${t?.name ?? p}`; }).join("　");
+    const unl = sel.caps.map((x) => CAP_JA[x] ?? x), fx = Object.entries(sel.fx).map(([k, v]) => `${FX_JA[k] ?? k} +${Math.round(v * 100)}%`);
+    detail = h("div", { class: "dt" }, h("b", {}, sel.name), `　${sel.field}`, h("br"), `${SYM[s]} ${lab[s]}`, h("br"), `国内の普及 ${cov}%（採用には 30% 以上）`, h("br"), `前提: ${needs || "なし"}`, h("br"),
+      sel.minPop || sel.settled || sel.condKey ? `成立の条件: ${[sel.minPop ? `集団の規模 ${n0(sel.minPop)} 人以上` : null, sel.settled ? "定住" : null, sel.condKey ? COND_JA(sel.condKey) : null].filter(Boolean).join("・")}` : "成立の条件: 特になし", h("br"),
+      sel.why ? `背景: ${sel.why}` : "", sel.why ? h("br") : "", unl.length ? `解禁: ${unl.join("・")}` : "", unl.length ? h("br") : "", fx.length ? `効果: ${fx.join("・")}` : "", fx.length ? h("br") : "", `説明: ${sel.desc}`, h("br"),
+      w ? `世界: ${w.first != null ? formatDate(civ().wcde.config.calendar, w.first) + "に初出" : ""}・独立の発見 ${w.independent ?? 0} 回・伝播 ${w.spread ?? 0} 件${Object.keys(w.byChannel ?? {}).length ? "（" + Object.entries(w.byChannel).map(([k, v]) => `${{ contact: "接触", trade: "交易", teaching: "教育", conquest: "併合" }[k] ?? k} ${v}`).join("・") + "）" : ""}` : "世界: まだ誰も発見していない", h("br"),
+      deps.length ? `この技術を前提とする: ${deps.map((t) => t.name).join("・")}` : "後続の技術はない", h("br"),
+      h("div", { class: "rowb" }, btn("制度化する", () => act({ type: "state.act", stateId: st.id, action: "adopt_tech", opt: sel.key }), "p", { id: "adopt-tech", disabled: !mine || s !== "available" || !gate.ok, title: mine ? (s === "available" ? "" : "今は採用できません") : "担当国のみ" })), `制度化の費用 ${sel.tier * 15}`);
+  }
+  // 拡大表示: 画面いっぱいに広げ、右に詳細を出す（パネルの外＝body に置く。パネルを描き直しても、拡大の状態は保つ）
+  document.querySelectorAll(".techwrap.full").forEach((e) => e.remove());
+  const wrap = h("div", { class: "techwrap" + (TECH_FULL ? " full" : "") }), big = btn(TECH_FULL ? "閉じる" : "拡大表示", () => { TECH_FULL = !TECH_FULL; S.hooks.panel(); });
+  wrap.append(svg, h("div", { class: "rowb" }, big, btn("全体", tree.fit), btn("左端", tree.left), btn("最前線", tree.frontier)), detail);
+  if (TECH_FULL) { document.body.append(wrap); tree.frontier(); }
+  return h("div", {}, note(`技術 ${TECHS.length} 件。左から右へ時代が進み、行は分野。研究点はなく、集団の規模・既存の知識・環境・交流から自然に発生し、国が採用して制度にします。ドラッグで移動、ホイールで拡大縮小。`), search, h("div", { class: "rowb", style: "flex-wrap:wrap" }, ...laneBtns), TECH_FULL ? note("拡大表示中です（画面いっぱい）。右の「閉じる」で戻れます。") : wrap,
+    h("div", { class: "lg" }, ...Object.entries({ adopted: "制度化", available: "採用できる", known: "保有", lost: "失われた", locked: "未発見" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "locked" ? "dashed" : "solid"} ${COL[k][0]}` }), `${SYM[k]} ${t}`))));
+}
+const COND_JA = (k) => COND[k]?.ja ?? k;
 function tDoctrine(st, mine) {
   const M = st.military, taken = M?.doctrine?.taken ?? {}, status = (d) => (taken[d.id] != null ? "taken" : canAdopt(st, d.id).ok ? "available" : "blocked"), sel = DOCTRINES.find((d) => d.id === S.doc) ?? null, { svg, COL } = doctrineTree({ list: DOCTRINES, status, selected: S.doc, onPick: (d) => { S.doc = d.id; S.hooks.panel(); } });
   return h("div", {}, note(`軍事ドクトリン ${DOCTRINES.length} 件（共通 ${DOCTRINES.filter((d) => !d.polity).length}・政体固有 ${DOCTRINES.filter((d) => d.polity).length}）。取得は軍事能力・戦争研究所の予測・実戦に影響します。`), svg, h("div", { class: "lg" }, ...Object.entries({ taken: "取得済み", available: "取得できる", blocked: "取得できない" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px solid ${COL[k][0]}` }), t))),

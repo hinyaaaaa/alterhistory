@@ -7,6 +7,9 @@ import { dominant } from "./cohorts.js";
 import { neighborGroups, byState, spatialOf } from "./spatial.js";
 import { reachable, addProposal } from "./population.js";
 import { taxMult } from "./techfx.js";
+import { stateCan, groupCaps, POLITY_CAP } from "./tech.js";
+/** 建国時の政体は、成立する集団が知っている技術（解禁 polity:*）で選べるものだけ。足りなければ部族 */
+export const gatedPolity = (civ, cap, p) => (!POLITY_CAP[p] || groupCaps(civ, cap).has(POLITY_CAP[p]) ? p : "tribal");
 import { hashSeed } from "./civ-state.js";
 import { recentEventsFor, asCauses } from "./graph.js";
 import { speciesOf, lifeScale } from "./species.js";
@@ -20,13 +23,13 @@ export function formState(ctx, { via, groupIds, predecessor = null, player = fal
   const { world, civ, ids, rng } = ctx, gs = groupIds.map((i) => civ.groups[i]).filter(Boolean);
   if (!gs.length) return null;
   const cap = gs.reduce((a, b) => (b.pop > a.pop ? b : a)), id = ids.next("state"), h = hashSeed(id);
-  const st = { id, name: name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, nameLang: name ? null : (ctx.nameLangOf?.(cap) ?? null), /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */ alive: true, player, dissolvedAt: null, predecessor, polity: polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal"), stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
+  const st = { id, name: name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, nameLang: name ? null : (ctx.nameLangOf?.(cap) ?? null), /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */ alive: true, player, dissolvedAt: null, predecessor, polity: gatedPolity(civ, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")), stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
     policy: { tax: 0.1, mobilization: 0, assimilation: 0, tolerance: 0.5, autonomy: 0 }, techAdopted: {}, strategy: null, campaign: null, defense: 0, boostUntil: -1, sanctions: {}, relations: {}, warIds: [], leader: { name: ctx.nameGen?.person(civ, cap, rng) ?? makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false }, lastCrisis: -999,
     personality: { security: 0.6 + (h % 100) / 125, prosperity: 0.6 + ((h >> 7) % 100) / 125, expansion: 0.6 + ((h >> 14) % 100) / 125, stability: 0.6 + ((h >> 21) % 100) / 125, culture: 0.6 + ((h >> 4) % 100) / 125, tech: 0.6 + ((h >> 11) % 100) / 125, prestige: 0.6 + ((h >> 18) % 100) / 125 } };
   civ.states[id] = st; for (const g of gs) g.stateId = id; if (gs.some((g) => g.player)) st.player = true;
   const causes = []; if (cause) causes.push({ targetId: cause, relation: "caused_by", basis: "plausible" }); if (threat) causes.push({ targetId: threat, relation: "reaction_to", basis: "strong" });
   if (predecessor) causes.push({ targetId: predecessor, relation: "succeeded_by", basis: "direct" });
-  const ev = makeEvent(civ, ids, { kind: "state_formed", title: `${st.name}が成立（${VIA[via].ja}）`, participants: [{ entityId: id, role: "state" }, ...gs.map((g) => ({ entityId: g.id, role: g.id === cap.id ? "capital_group" : "member" }))], location: { cell: cap.cell }, causes, provenance: player ? "player" : "simulation" });
+  const ev = makeEvent(civ, ids, { kind: "state_formed", title: `${st.name}が成立（${VIA[via].ja}）`, participants: [{ entityId: id, role: "state" }, ...gs.map((g) => ({ entityId: g.id, role: g.id === cap.id ? "capital_group" : "member" }))], location: { cell: cap.cell }, causes, facts: { stateId: id, name: st.name, polity: st.polity, capitalCell: cap.cell, cells: gs.slice(0, 24).map((g) => g.cell), nGroups: gs.length }, provenance: player ? "player" : "simulation" });
   st.formedEvent = ev.eventId; return st;
 }
 
@@ -49,7 +52,7 @@ export function evaluateFormation(ctx, seed) {
 const dissolve = (ctx, st, why) => {
   const { civ, ids } = ctx; st.alive = false; st.dissolvedAt = civ.monthIndex; for (const gid in civ.groups) if (civ.groups[gid].stateId === st.id) civ.groups[gid].stateId = null;
   for (const wid of [...st.warIds]) ctx.endWarHook?.(ctx, civ.wars[wid], "state_dissolved");
-  makeEvent(civ, ids, { kind: "state_dissolved", title: `${st.name}が${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, causes: [...(st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : []), ...asCauses(recentEventsFor(civ, [st.id], ["war_ended"], 24, 1), "contributed_to", "plausible")] });
+  makeEvent(civ, ids, { kind: "state_dissolved", title: `${st.name}が${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, facts: { stateId: st.id }, causes: [...(st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : []), ...asCauses(recentEventsFor(civ, [st.id], ["war_ended"], 24, 1), "contributed_to", "plausible")] });
 };
 export const aliveStates = (civ) => Object.values(civ.states).filter((s) => s.alive);
 
@@ -64,7 +67,7 @@ export function stepStates(ctx) {
     let pop = 0, tens = 0, settle = 0, big = gs[0], mar = 0; for (const g of gs) { pop += g.pop; mar += g.pop * speciesOf(g.speciesId, civ).martial; if (g.settlementId) settle++; if (g.pop > big.pop) big = g; let t = 0; for (const c of g.cohorts) if (c.tension > t) t = c.tension; tens += t * g.pop; }
     st.pop = pop; st.martial = pop ? Math.round((mar / pop) * 1000) / 1000 : 1; st.settlements = settle; if (!civ.groups[st.capitalGroupId] || civ.groups[st.capitalGroupId].stateId !== id) st.capitalGroupId = big.id;
     const cap = civ.groups[st.capitalGroupId]; let far = 0, mx = 0; const dists = []; for (const g of gs) { const d = distKm(world, cap.cell, g.cell); dists.push([d, g]); if (d > mx) mx = d; }
-    const adm = st.techAdopted.bureaucracy != null ? 0.6 : st.techAdopted.administration != null ? 0.35 : 0;
+    const adm = stateCan(civ, st, "polity:empire") ? 0.6 : stateCan(civ, st, "polity:kingdom") ? 0.35 : 0;
     const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15000) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - (st.policy.mobilization * 0.3) + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + ({ chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity]);
     const before = st.stability; st.stability = Math.max(0, Math.min(1, st.stability + (target - st.stability) * 0.3));
     st.treasury += pop * st.policy.tax * 0.0012 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi).length * 0.1)); st.army = pop * (0.005 + 0.12 * st.policy.mobilization) * (0.5 + st.stability);
@@ -85,7 +88,7 @@ export function stepStates(ctx) {
     if (g.pop < 300 || (g.subsistence === "forage")) continue;
     if (!g.player) {
       const ns = [...neighborGroups(ctx, g)].map((o) => civ.groups[o]).filter((o) => o?.stateId && civ.states[o.stateId].alive), best = ns.reduce((a, o) => (!a || civ.states[o.stateId].pop > civ.states[a.stateId].pop ? o : a), null);
-      if (best && civ.states[best.stateId].pop >= g.pop * 2 && rng() < 0.4) { g.stateId = best.stateId; makeEvent(civ, ids, { kind: "group_joined_state", title: `${civ.states[best.stateId].name}に加わった`, participants: [{ entityId: g.id, role: "group" }, { entityId: best.stateId, role: "state" }], location: { cell: g.cell } }); continue; }
+      if (best && civ.states[best.stateId].pop >= g.pop * 2 && rng() < 0.4) { g.stateId = best.stateId; makeEvent(civ, ids, { kind: "group_joined_state", title: `${civ.states[best.stateId].name}に加わった`, participants: [{ entityId: g.id, role: "group" }, { entityId: best.stateId, role: "state" }], location: { cell: g.cell }, facts: { stateId: best.stateId, cell: g.cell } }); continue; }
     }
     const f = evaluateFormation(ctx, g); if (!f) continue;
     if (g.player) addProposal(civ, ids, g, "form_state", f); else formState(ctx, f);

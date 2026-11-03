@@ -2,3 +2,4 @@
 // 本体（core/world/worldgen.js）と一致していることは tests/v500-civ-m0-m1.test.mjs が検査する。
 export const LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
 export const BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });
+export const RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 }); // 資源のビット（core/world/worldgen.js の RES と一致）
