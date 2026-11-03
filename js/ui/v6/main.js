@@ -3,7 +3,6 @@
 //   ・UI は WorldState を直接変えない。成功した Command の結果を、読み取りモデルへ反映するだけ。
 //   ・パネルの開閉・切替で、地図の位置・拡大・選択・検索条件をリセットしない。
 import { createNewWorld, formatWorldDate } from "../../core/wcde/world.js";
-import { listCandidates } from "../../core/wcde/founding.js";
 import { SPEEDS, timeOf, newsOf, newsFeed, isRunning } from "../../core/wcde/clock.js";
 import { h, btn, polityJa, n0, pct, colorOf, face, sv } from "./common.js";
 import { TECH } from "../../core/civ/tech.js";
@@ -24,7 +23,11 @@ function setup() {
   root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "ALTERHISTORY v6"), h("h1", {}, "世界を作る"), h("p", { class: "n" }, "約50万年の先史から、国家が生まれる時代へ。"), h("label", {}, "世界の種 ", seed), h("label", {}, "解像度 ", cells), h("div", { class: "rowb" }, btn("世界を生成", go, "p", { id: "gen" }), fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); })), msg));
 }
 function founding() {
-  const c = listCandidates(S.w), civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
+  const civ = S.w.civ,
+  c = civ.wcde.candidates ?? [],
+  pre = civ.wcde.prehistory ?? {},
+  ce = S.w.world.cell,
+  ja = new Proxy({}, { get: (_, k) => polityJa(k) });
   const msg = h("p", { class: "n" }, c.length ? "国家になる候補です。担当する国を選ぶか、世界に任せて見守ります。先史の経過は読み取り専用で、ここから変えることはできません。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
   const yrsAgo = (m) => Math.round(((civ.wcde.foundedAt ?? civ.monthIndex) - m) / 12);
   const fmtYears = (y) => (y >= 10000 ? `約 ${Math.round(y / 1000) / 10} 万年前` : `約 ${n0(y)} 年前`);
