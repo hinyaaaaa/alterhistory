@@ -4,6 +4,7 @@ import { S, run, act, creator, stateName, aliveStates, controlled } from "./stor
 import { lineageTree } from "./trees.js";
 import { link, warlabView } from "./views-a.js";
 import { predictWar } from "../../core/wcde/warlab.js";
+import { placeName, POSTURES, CAMPAIGN_KINDS, postureOf } from "../../core/wcde/warfare.js";
 import { proposalsOf } from "../../core/wcde/negotiation.js";
 import { TREATY, strength } from "../../core/civ/diplomacy.js";
 import { interventionsOf } from "../../core/wcde/intervention.js";
@@ -12,11 +13,27 @@ import { formatWorldDate } from "../../core/wcde/world.js";
 import { iterRecords, coverage, findRecord, causesOfRecord } from "../../core/civ/archive.js";
 import { packSave, packSaveGz, unpackSaveAny, SAVE_SCHEMA } from "../../core/wcde/savefile.js";
 import { checkWcdeIntegrity } from "../../core/wcde/integrity.js";
-import { timeOf, SPEEDS } from "../../core/wcde/clock.js";
+import { timeOf, SPEEDS, newsSettings, DEFAULT_NEWS_SETTINGS } from "../../core/wcde/clock.js";
 import { exportObsidianZip } from "../../io/obsidian.js";
 import { APP_VERSION_FOR_SAVE } from "../../core/wcde/save-meta.js";
 const civ = () => S.w.civ, date = (mi) => formatWorldDate(S.w, mi), note = (t) => h("p", { class: "n" }, t), head = (code, ja) => [h("div", { class: "code" }, code), h("h2", {}, ja)];
 const OUT = { aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: "講和", state_dissolved: "国家の消滅" };
+
+/** 戦況（v6.1.0 M6）: 戦域・部隊・作戦・直近の会戦。担当国家が参戦していれば、方針（攻勢／均衡／守勢）・投入割合・重点の戦域を指示できる（個々の作戦は AI が同じ経路で立てて実行する） */
+function warOps(x, mine, side) {
+  const c = civ(), o = x.ops; if (!o) return null; const ctx = S.w.sim.ctx;
+  if (x.status !== "active" || o.ended) return h("div", {}, lb("主な戦い", "BATTLES"), ...(o.battles?.length ? o.battles.map((b) => h("div", { class: "ev" }, h("time", {}, date(b.at)), `${b.name}（${stateName(b.winner)}が制した）`)) : [note("歴史に残る大きな戦いはなかった")]), x.summary ? note(`戦闘 ${x.summary.battles} 回（包囲 ${x.summary.sieges}・海戦 ${x.summary.naval}・上陸 ${x.summary.landings}）・戦死 約 ${n0(x.summary.dead)} 人`) : null);
+  const th = Object.values(o.theaters), fs = Object.values(o.forces).sort((a, b) => (a.id < b.id ? -1 : 1)), cs = Object.values(o.campaigns).filter((k) => k.phase === "active"), bs = o.battles.slice(-6).reverse(), kindJa = { field: "会戦", siege: "包囲", naval: "海戦", landing: "上陸戦" };
+  const out = h("div", {}, lb("戦況", "FRONTS"), table(["戦域", "種類", "交戦"], th.map((t) => [t.name, t.kind === "sea" ? `海域（制海 ${t.control > 0.2 ? stateName(x.aggressor) : t.control < -0.2 ? stateName(x.defender) : "拮抗"}）` : "陸", `${stateName(t.a)} 対 ${stateName(t.d)}`])));
+  out.append(lb("部隊", "FORCES"), table(["国", "種類", "規模", "士気", "補給"], fs.map((f) => [stateName(f.stateId), f.kind === "fleet" ? "艦隊" : "野戦軍", n0(f.size), pct(f.morale), pct(f.supply)])));
+  out.append(lb("進行中の作戦", "CAMPAIGNS"), cs.length ? table(["国", "作戦", "目標", "進み"], cs.map((k) => [stateName(k.stateId), CAMPAIGN_KINDS[k.kind] ?? k.kind, k.targetGroupId && c.groups[k.targetGroupId] ? placeName(ctx, c.groups[k.targetGroupId]) : (o.theaters[k.theaterId]?.name ?? "—"), k.kind === "defense" || k.kind === "naval_control" || k.kind === "blockade" ? "—" : pct(Math.min(1, k.progress))])) : note("進行中の作戦はありません"));
+  out.append(lb("直近の戦い", "BATTLES"), ...(bs.length ? bs.map((b) => h("div", { class: "ev" }, h("time", {}, date(b.at)), `${b.name}（${kindJa[b.kind] ?? b.kind}・${stateName(b.winner)}が制した）`)) : [note("まだ大きな戦闘は起きていません")]));
+  if (side && mine) {
+    const d = o.direction[mine] ?? {}, cur = d.posture ?? postureOf(ctx, x, c.states[mine]), post = h("select", { id: "war-posture" }, ...Object.entries(POSTURES).map(([k, ja]) => h("option", { value: k, selected: k === cur }, ja))), com = h("input", { id: "war-commit", type: "range", min: 0.3, max: 1, step: 0.05, value: d.commit ?? 0.75, style: "width:120px" }), foc = h("select", { id: "war-focus" }, h("option", { value: "" }, "重点の戦域: 自動"), ...th.map((t) => h("option", { value: t.id, selected: d.focus === t.id }, t.name)));
+    out.append(lb("方針の指示", "DIRECTION"), h("div", { class: "rowb" }, post, foc), h("div", { class: "rowb" }, h("small", {}, "投入割合"), com), h("div", { class: "rowb" }, btn("方針を伝える", () => act({ type: "war.direct", stateId: mine, warId: x.id, posture: post.value, commit: Number(com.value), focus: foc.value || null }), "p", { id: "war-direct" })), note("個々の作戦（どこを攻め、どこを守るか）は、AI の国家と同じ仕組みで立案・実行されます。プレイヤーは方針だけを指示します。"));
+  }
+  return out;
+}
 
 /* ---------- 戦争: 開戦が新しい順。事実の経過と、予測は分けて表示 ---------- */
 export function pWar() {
@@ -30,8 +47,9 @@ function warDetail(x) {
   const kind = h("select", { id: "peace-kind" }, h("option", { value: "white" }, "白紙講和"), h("option", { value: "reparations" }, "賠償つき")), amt = h("input", { id: "peace-amt", type: "number", placeholder: "賠償額", style: "width:90px" });
   return h("div", { class: "rs" }, h("div", { class: "card br" }, h("h3", {}, `${stateName(x.aggressor)} 対 ${stateName(x.defender)}`), h("div", { class: "sub" }, `${x.status === "active" ? "進行中" : "終結（" + (OUT[x.outcome] ?? x.outcome) + "）"}・開戦 ${date(x.startedAt)}${x.endedAt != null ? "・終戦 " + date(x.endedAt) : ""}・戦況 ${x.score > 0 ? "攻撃側が優勢" : x.score < 0 ? "防御側が優勢" : "拮抗"}（${r2(x.score)}）・占領 ${x.occupied.length} 区画`)),
     lb("主要経過（事実）", "FACTS"), ...(ev.length ? ev.map((e) => h("div", { class: "ev" }, h("time", {}, `${e.date.year}年${e.date.month}月`), e.title)) : [note("記録された出来事はまだありません")]),
-    lb("講和", "PEACE"), ...(peace.length ? peace.map((p) => h("div", { class: "row" }, h("span", { class: "g" }, `${stateName(p.from)}の申し入れ（${p.terms.kind === "reparations" ? "賠償 " + n0(p.terms.paid ?? p.terms.amount) : "白紙講和"}）`, h("br"), h("small", {}, date(p.at))), h("small", {}, { accepted: "成立", rejected: "拒否", failed_recheck: "不成立" }[p.status]))) : [note(x.status === "active" ? "まだ申し入れはありません" : "講和の記録はありません")]),
-    x.status === "active" ? h("div", {}, h("div", { class: "rowb" }, kind, amt), h("div", { class: "rowb" }, btn("講和を申し入れる", () => { const st = [...x.sides.a, ...x.sides.d].includes(mine) ? mine : null; act({ type: "diplomacy.peace", stateId: st, warId: x.id, terms: { kind: kind.value, amount: Number(amt.value) || 0 } }); }, "p", { id: "peace-go", disabled: !side, title: side ? "" : "担当国が参戦している戦争のみ" })), note("講和は、相手の戦況・疲労・国庫・長期化の評価を経て、受諾されたときだけ戦争が終わります。")) : null,
+    warOps(x, mine, side),
+    lb("占領", "OCCUPATION"), note(x.status === "active" ? `占領されている区画 ${x.occupied.length}（終戦のとき、勝った側・「占領地の割譲」の講和では、占領した国のものになります。白紙講和・引き分けでは返されます）` : "終戦済み"), lb("講和", "PEACE"), ...(peace.length ? peace.map((p) => h("div", { class: "row" }, h("span", { class: "g" }, `${stateName(p.from)}の申し入れ（${p.terms.kind === "reparations" ? "賠償 " + n0(p.terms.paid ?? p.terms.amount) : p.terms.kind === "cession" ? "占領地の割譲" : "白紙講和"}${p.separate ? "・単独講和" : ""}）`, h("br"), h("small", {}, date(p.at))), h("small", {}, { accepted: "成立", rejected: "拒否", failed_recheck: "不成立" }[p.status]))) : [note(x.status === "active" ? "まだ申し入れはありません" : "講和の記録はありません")]),
+    x.status === "active" ? h("div", {}, h("div", { class: "rowb" }, kind, amt), h("div", { class: "rowb" }, btn("講和を申し入れる", () => { const st = [...x.sides.a, ...x.sides.d].includes(mine) ? mine : null; act({ type: "diplomacy.peace", stateId: st, warId: x.id, terms: { kind: kind.value, amount: Number(amt.value) || 0 } }); }, "p", { id: "peace-go", disabled: !side, title: side ? "" : "担当国が参戦している戦争のみ" })), note("講和は、相手の戦力・占領・首都の陥落・疲労・国庫・長期化の評価を経て、受諾されたときだけ成立します。主たる交戦国の講和は戦争全体を終え、同盟側の参戦国の講和は、その国だけが戦争から抜けます（単独講和）。評価の中身は記録に残りません。")) : null,
     lb("戦争研究所（予測。事実とは別）", "WAR LAB"), (() => { const p = x.status === "active" ? predictWar(c, x.aggressor, x.defender, S.w.sim.ctx) : null; return p ? warlabView(p) : note("終結した戦争の予測はありません"); })());
 }
 
@@ -71,7 +89,7 @@ export function pChron() {
   box.append(h("div", { class: "rowb" }, F.type === "events" ? ks : null, tx, y0, y1), ...(F.entity ? [h("div", { class: "rowb" }, `絞り込み: ${stateName(F.entity)}`, btn("解除", () => { F.entity = ""; S.hooks.panel(); }))] : []));
   const inRange = (d) => (F.from === "" || d.year >= +F.from) && (F.to === "" || d.year <= +F.to), has = (s) => !F.text || String(s).includes(F.text); let rows = [], render;
   if (F.type === "events") { const all = [...iterRecords(c, { kinds: F.kind ? [F.kind] : null })]; for (let i = all.length - 1; i >= 0 && rows.length < 20000; i--) { const e = all[i]; if ((F.kind && e.kind !== F.kind) || !has(e.title) || !inRange(e.date) || (F.entity && !e.participants.some((p) => p.entityId === F.entity))) continue; rows.push(e); } render = (e) => h("div", { class: "vrow", onclick: () => showEvent(e) }, h("small", { style: "color:var(--dim)" }, `${e.date.year}年${e.date.month}月 `), e.title); }
-  else if (F.type === "creator") { const ivs = interventionsOf(c).map((r) => ({ at: r.startMonth, t: `介入: ${stateName(r.targetId)} の${FIELDS[r.field]?.ja ?? r.field} → ${r2(r.target)}（${{ active: "有効", converged: "収束", superseded: "置き換え", cancelled: "取り消し", target_gone: "対象消滅" }[r.status]}）${r.reason ? "・" + r.reason : ""}` })), eds = (c.wcde.edits ?? []).map((e) => ({ at: e.at, t: `直接編集: ${e.targetId} の ${e.property}（${String(e.before).slice(0, 16)} → ${String(e.after).slice(0, 16)}）` })); rows = [...ivs, ...eds].filter((r) => has(r.t)).sort((a, b) => b.at - a.at); render = (r) => h("div", { class: "vrow" }, h("small", { style: "color:var(--purple)" }, `${date(r.at)} `), r.t); }
+  else if (F.type === "creator") { const ivs = interventionsOf(c).map((r) => ({ at: r.startMonth, t: `介入: ${stateName(r.targetId)} の${FIELDS[r.field]?.ja ?? r.field}${r.otherId ? "（→" + stateName(r.otherId) + "）" : ""} → ${r2(r.target)}（${{ active: "有効", converged: "収束", superseded: "置き換え", cancelled: "取り消し", target_gone: "対象消滅" }[r.status]}）${r.reason ? "・" + r.reason : ""}` })), eds = (c.wcde.edits ?? []).map((e) => ({ at: e.at, t: `直接編集: ${e.targetId} の ${e.property}（${String(e.before).slice(0, 16)} → ${String(e.after).slice(0, 16)}）` })); const cats = (c.wcde.catastrophes ?? []).map((r) => ({ at: r.at, t: `災厄「${r.name}」（${r.scope === "world" ? "世界規模" : "地域規模"}・指定 ${Math.round(r.mortality * 100)}%・実際 ${Math.round(r.result.share * 100)}%・約 ${n0(r.result.dead)} 人）${r.reason ? "・" + r.reason : ""}` })); rows = [...ivs, ...eds, ...cats].filter((r) => has(r.t)).sort((a, b) => b.at - a.at); render = (r) => h("div", { class: "vrow" }, h("small", { style: "color:var(--purple)" }, `${date(r.at)} `), r.t); }
   else { for (let i = c.interpretations.length - 1; i >= 0 && rows.length < 20000; i--) { const r = c.interpretations[i]; if ((F.entity && r.ownerId !== F.entity) || !has(stateName(r.ownerId) + r.stance)) continue; rows.push(r); } render = (r) => { const ev = c.events.find((e) => e.eventId === r.eventId); return h("div", { class: "vrow" }, h("small", { style: "color:var(--dim)" }, `${date(r.since)} `), `${stateName(r.ownerId)}の認識「${r.stance}」: ${ev?.title ?? r.eventId}`); }; }
   box.append(note(`${rows.length.toLocaleString("ja-JP")} 件（新しい順。見える範囲だけ描画）。古い時代ほど資料は失われます。記録が無いことは、何も起きなかった証拠ではありません。`), covBar(c), vlist(rows, 26, render), h("div", { id: "evdetail", class: "dt" }, "項目を選ぶと、原因・結果・関係する実体を表示します。"));
   return box;
@@ -115,6 +133,23 @@ export function pSearch() {
   return h("div", {}, ...head("SEARCH", "検索"), inp, note(q ? `${res.length}${res.length >= 400 ? "+" : ""} 件（名前が変わっても、安定した ID でたどれます）` : "語を入力して Enter。"), vlist(res, 26, (r) => h("div", { class: "vrow", onclick: r[2] }, h("small", { style: "color:var(--dim);width:42px;flex:none" }, r[0]), r[1])));
 }
 
+
+/** 創造主の災厄（世界規模・地域規模）。名前・理由は任意。人口の最大 95% まで。起きた結果は戻らない（介入の台帳に記録され、世界の事実は「大災厄」の出来事として別に残る） */
+function catastropheBox() {
+  const c = civ(), nm = h("input", { id: "cat-name", placeholder: "災厄の名前（任意）", style: "width:100%" }), why = h("input", { id: "cat-why", placeholder: "理由の注釈（任意・原因を説明しなくてよい）", style: "width:100%" });
+  const scope = h("select", { id: "cat-scope" }, h("option", { value: "world" }, "世界規模"), h("option", { value: "region" }, "地域規模（国の首都を中心に）")), at = h("select", { id: "cat-at", style: "display:none" }, ...aliveStates().sort((a, b) => b.pop - a.pop).slice(0, 80).map((s) => h("option", { value: s.id }, s.name)));
+  const rad = h("input", { id: "cat-radius", type: "number", value: 1500, min: 100, max: 20000, style: "width:80px;display:none" }), mor = h("input", { id: "cat-mort", type: "number", value: 30, min: 1, max: 95, step: 1, style: "width:70px" }), rec = h("input", { id: "cat-rec", type: "number", value: 60, min: 6, max: 480, style: "width:70px" }), ok = h("input", { type: "checkbox", id: "cat-ok" });
+  scope.addEventListener("change", () => { const r = scope.value === "region"; at.style.display = rad.style.display = r ? "" : "none"; });
+  const go = () => { if (!ok.checked) { S.notice = "取り消せない操作です。確認の欄にチェックしてください"; S.hooks.render(); return; } const cell = scope.value === "region" ? c.groups[c.states[at.value]?.capitalGroupId]?.cell : null; creator({ type: "creator.catastrophe", name: nm.value, reason: why.value, scope: scope.value, center: cell ?? null, radiusKm: Number(rad.value), mortality: Number(mor.value) / 100, recoveryMonths: Number(rec.value) }); };
+  const log = (c.wcde.catastrophes ?? []).slice(-4).reverse();
+  return h("div", {}, lb("創造主の災厄", "CATASTROPHE"), note("世界規模または地域規模の大きな災厄を起こします。人口・軍・安定・文化の緊張・収容力へすぐ反映され、生産・財政・交易・軍事は通常の計算で伝わります。発生前へは戻りません。抽象的な創造主の介入として扱い、現実の災害や手段の再現ではありません。"), nm, why, h("div", { class: "rowb" }, scope, at), h("div", { class: "rowb" }, h("small", {}, "半径(km)"), rad, h("small", {}, "人口の損失 %（最大 95）"), mor, h("small", {}, "回復の目安(月)"), rec), h("div", { class: "rowb" }, h("label", {}, ok, " 取り消せないことを理解した"), btn("災厄を起こす", go, "p", { id: "cat-go" })), ...log.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `「${r.name}」${r.scope === "world" ? "世界規模" : "地域規模"}`, h("br"), h("small", {}, `${date(r.at)}・実際の損失 ${Math.round(r.result.share * 100)}%（約 ${n0(r.result.dead)} 人）`)))));
+}
+/** 重大ニュースの基準（調整可能）。重大＝時間が止まり、中央で確認するまで進まない。主要＝右のニュース欄に出る */
+function newsBox() {
+  const s = newsSettings(civ()), cs = h("input", { id: "news-crit", type: "number", value: s.criticalScore, style: "width:70px" }), ms = h("input", { id: "news-major", type: "number", value: s.majorScore, style: "width:70px" }), mx = h("input", { id: "news-max", type: "number", value: s.maxPerScan, min: 1, max: 20, style: "width:60px" });
+  return h("div", {}, lb("ニュースの基準", "NEWS"), note(`重大ニュースだけが時間を止めます（既定: 重大 ${DEFAULT_NEWS_SETTINGS.criticalScore} 点以上・主要 ${DEFAULT_NEWS_SETTINGS.majorScore} 点以上）。点は、出来事の種類と国の規模（世界の平均的な国に対する人口の割合）から決まります。頻発して操作を妨げるときは重大の点を上げ、見落とすときは下げてください。早送りで飛ばした期間のニュースは、後から再生されません。`), h("div", { class: "rowb" }, h("small", {}, "重大"), cs, h("small", {}, "主要"), ms, h("small", {}, "同時に止める上限"), mx), h("div", { class: "rowb" }, btn("基準を変更", () => { run({ type: "news.configure", criticalScore: Number(cs.value), majorScore: Number(ms.value), maxPerScan: Number(mx.value) }); S.hooks.render(); }, "", { id: "news-set" }), btn("既定に戻す", () => { run({ type: "news.configure", reset: true }); S.hooks.render(); }, "", { id: "news-reset" })));
+}
+
 /* ---------- 世界設定・出力・バージョン ---------- */
 export function pSettings() {
   const c = civ(), cf = c.wcde.config, T = timeOf(c), errs = checkWcdeIntegrity(S.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
@@ -125,7 +160,7 @@ export function pSettings() {
   const past = h("input", { id: "past-year", type: "number", placeholder: "年", style: "width:90px" });
   return h("div", {}, ...head("SETTINGS", "世界設定・出力"), table(["項目", "値"], [["世界の種", cf.worldSeed], ["解像度（セル）", S.w.world.mesh.cellCount], ["種族", (cf.species ?? []).map((s) => s.name ?? s.id ?? s).join("・") || "—"], ["先史の長さ", `${n0(cf.prehistory?.years ?? 0)} 年`], ["現在", formatWorldDate(S.w)], ["暦の起点名", cal.epochName], ["時代区分", (cal.eras ?? []).map((e) => e.name).join(" → ")]]),
     lb("暦の表示名（表示用のみ）", "CALENDAR"), h("div", { class: "rowb" }, en, btn("変更", () => { const r = run({ type: "calendar.edit", edit: { epochName: en.value } }); S.hooks.render(); })), note("生成後に変えられるのは表示用の名称・区分だけです。過去の日付・発生順・客観的事実は変わりません。"),
-    lb("保存・読み込み・出力", "SAVE / EXPORT"), h("div", { class: "rowb" }, btn("保存ファイルを書き出す", save, "p", { id: "save" }), fileLoader(), btn("Obsidian 用 Markdown ZIP", obs, "", { id: "obs" })), msg, ...S.fileWarn.map((x) => h("p", { class: "warn" }, x)),
+    newsBox(), catastropheBox(), lb("保存・読み込み・出力", "SAVE / EXPORT"), h("div", { class: "rowb" }, btn("保存ファイルを書き出す", save, "p", { id: "save" }), fileLoader(), btn("Obsidian 用 Markdown ZIP", obs, "", { id: "obs" })), msg, ...S.fileWarn.map((x) => h("p", { class: "warn" }, x)),
     lb("バージョン情報", "VERSION"), table(["項目", "値"], [["アプリの版", APP_VERSION_FOR_SAVE], ["保存形式の版（アプリの版とは別）", SAVE_SCHEMA], ["整合性の検査", errs.length ? `${errs.length} 件の問題` : "問題なし"], ["時間の速度", SPEEDS.find((s) => s.id === T.speed)?.label]]),
     lb("過去の閲覧", "PAST VIEW"), note("過去の国家の状態を読み取り専用で見ます。閲覧中は、世界を変える操作と時間進行が止まります。"), h("div", { class: "rowb" }, past, btn("その年を見る", () => { const y = Number(past.value); if (Number.isFinite(y)) { run({ type: "view.past", month: Math.max(0, Math.min(c.monthIndex, c.monthIndex - (c.date.year - y) * 12)) }); S.hooks.render(); } }), btn("現在へ戻る", () => { run({ type: "view.past", month: null }); S.hooks.render(); })));
 }

@@ -117,18 +117,18 @@
 ### 国内政治（`politics`）
 - 担当: wcde/domains/politics／位置: `politics`／頻度: quarterly（every 3）
 - 処理: `stepPolitics`
-- 所有（正本）: `states.*.politics`
-- 読む: economy, war_diplomacy, religion, tech／書き換える（所有しない）: `states.*.stability`
-- 残す結果（emits）: regime_change
-- 不変条件: 支持・正統性は 0〜1 / 政変は結果として記録される（原因の推測は残さない）
+- 所有（正本）: `states.*.politics`, `wcde.ideas`
+- 読む: economy, war_diplomacy, religion, tech, military／書き換える（所有しない）: `states.*.stability`
+- 残す結果（emits）: regime_change, ideology_emerged
+- 不変条件: 支持・正統性は 0〜1 / 貴族・軍・民衆は常にあり、ほかの勢力は社会構造・技術・経済・宗教・政体が整うときに成立する（固定 5 枠のコピーにしない） / 思想は条件から自然に生まれ、接触・交易・同盟で広がる。禁止はできず、世界で最初に広まった国だけが記録に残る / 政変は結果として記録される（原因の推測は残さない）
 
 ### 軍事組織（`military`）
-- 担当: wcde/domains/military／位置: `military`／頻度: quarterly（every 3）
+- 担当: wcde/domains/military・wcde/domains/doctrine／位置: `military`／頻度: quarterly（every 3）
 - 処理: `stepMilitary`
 - 所有（正本）: `states.*.military`, `states.*.milBonus`, `states.*.milDef`
 - 読む: economy, tech, politics／書き換える（所有しない）: なし
 - 残す結果（emits）: doctrine_adopted
-- 不変条件: ドクトリンの前提（技術・政体）を満たす / 攻撃の増分は上限 +25%、防御は +40%
+- 不変条件: ドクトリンの前提（技術・系統の前段・財政）を満たす。取得に研究点・研究キューは使わない / 共通 5 系統＋国家固有 3 系統。効果は全体の上限（攻撃 +25%・防御 +40% など）と、系統ごとの寄与の上限で抑える / 固有の系統の入れ替わりで休眠したノードは効かない（取得の記録は残る）
 
 ### 国家AI（計画と実行）（`ai`）
 - 担当: civ/ai・civ/actions・wcde/domains/actions／位置: `ai_plan`／頻度: quarterly（every 1）
@@ -139,12 +139,12 @@
 - 不変条件: 判断の理由・候補・観測・採点は保存しない（結果だけが歴史資料になる） / プレイヤー国家は AI が動かさない / AI とプレイヤーは同じ行動レジストリ・同じ検証を通る
 
 ### 戦争・外交（`war_diplomacy`）
-- 担当: civ/diplomacy／位置: `conflict`／頻度: monthly（every 1）
+- 担当: civ/diplomacy・wcde/warfare／位置: `conflict`／頻度: monthly（every 1）
 - 処理: `stepWars`
-- 所有（正本）: `wars`, `treaties`, `activeWarIds`, `activeTreatyIds`, `proposals`, `states.*.relations`, `states.*.sanctions`, `states.*.warIds`
-- 読む: military, economy, tech／書き換える（所有しない）: なし
-- 残す結果（emits）: war_declared, war_ended, treaty_signed, treaty_ended, diplomacy_failed
-- 不変条件: 戦争参照は進行中のものだけ / 同じ命令検証を AI とプレイヤーが通る
+- 所有（正本）: `wars`, `treaties`, `activeWarIds`, `activeTreatyIds`, `proposals`, `states.*.relations`, `states.*.sanctions`, `states.*.warIds`, `states.*.warLoss`, `states.*.blockade`
+- 読む: military, economy, tech, politics／書き換える（所有しない）: `states.*.army`, `groups.*.pop`
+- 残す結果（emits）: war_declared, war_ended, war_epilogue, battle_fought, territory_occupied, treaty_signed, treaty_ended, diplomacy_failed
+- 不変条件: 戦争参照は進行中のものだけ / 同じ命令検証を AI とプレイヤーが通る / 戦争は War / Theater / Force / Campaign / Battle を、戦争の記録（wars.*.ops）の中の一つの正本として持つ（別々に複製しない） / 戦力の定義は戦争研究所と実戦で共通（wcde/power.js） / 終結した戦争に部隊・作戦・戦域は残らない（要約と代表的な戦いだけ） / 戦闘の乱数は (historySeed, 月, 戦争, 作戦) から導く（他の領域の乱数を動かさない）
 
 ### 国家（`states`）
 - 担当: civ/states／位置: `conflict`／頻度: quarterly（every 3）

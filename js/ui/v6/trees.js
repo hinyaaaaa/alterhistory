@@ -7,8 +7,8 @@ import { STAGES, TREE } from "../../core/civ/techtree.js";
 const NODESTAGE = Object.fromEntries(TREE.map((t) => [t.id, t.stage])); // 列の見出し: その列のノードの「宣言した時代」の中央値
 
 /** SVG にパン・ズームを付ける（viewBox を操作） */
-export function panZoom(svg, W, H) {
-  let vb = { x: 0, y: 0, w: W, h: H }; const apply = () => svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); apply(); let drag = null, moved = false;
+export function panZoom(svg, W, H, { onChange = null } = {}) {
+  let vb = { x: 0, y: 0, w: W, h: H }; const apply = () => { svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`); onChange?.({ ...vb }); }; apply(); let drag = null, moved = false;
   svg.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, vx: vb.x, vy: vb.y }; moved = false; });
   svg.addEventListener("pointermove", (e) => { if (!drag) return; const r = svg.getBoundingClientRect(), dx = ((e.clientX - drag.x) * vb.w) / r.width, dy = ((e.clientY - drag.y) * vb.h) / r.height; if (Math.abs(dx) + Math.abs(dy) > 3) moved = true; vb.x = drag.vx - dx; vb.y = drag.vy - dy; apply(); });
   const up = () => { drag = null; }; svg.addEventListener("pointerup", up); svg.addEventListener("pointerleave", up);
@@ -32,7 +32,7 @@ export function lineageTree(items, { selected, onPick, label = (x) => x.name, co
 /** 技術ツリー（v6.1.0 M3）: 分野レーン（縦）× 時代の列（左→右）の規則的なグリッド。前提から後続へ、直交する線で結ぶ。
  *  位置は (lane, col, slot) から決まり、状態では動かない。状態は色だけでなく、枠線の種類・記号でも区別する（色覚に依らない）。
  *  status(t): adopted=制度化 / available=採用できる / known=保有（まだ採用できない） / lost=失われた / locked=未発見 */
-export function techTree({ techs, status, onPick, selected, lane = null, hit = null }) {
+export function techTree({ techs, status, onPick, selected, lane = null, hit = null, vb0 = null, onView = null }) {
   const g = layoutGrid(), NW = 128, NH = 24, CW = 196, RH = 34, X0 = 120, Y0 = 34, W = X0 + g.cols * CW + 20, H = Y0 + g.totalRows * RH + 20, byKey = new Map(techs.map((t) => [t.key, t]));
   const svg = sv("svg", { class: "tree techgrid", viewBox: `0 0 ${W} ${H}`, style: "height:460px;touch-action:none" }), P = (t) => ({ x: X0 + g.pos[t.key].col * CW, y: Y0 + g.pos[t.key].row * RH });
   const COL = { adopted: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], known: ["#a58bd0", "#201a2e"], lost: ["#c97a6f", "#2a1614"], locked: ["#4a515c", "#14161a"] }, SYM = { adopted: "■", available: "◆", known: "◇", lost: "✕", locked: "○" };
@@ -45,23 +45,39 @@ export function techTree({ techs, status, onPick, selected, lane = null, hit = n
   const ek = new Map();
   for (const t of techs) { const q = P(t); t.prereq.forEach((pk, i) => { const pt = byKey.get(pk); if (!pt) return; const a = P(pt), dim = (lane && t.lane !== lane && pt.lane !== lane) || status(t) === "locked", lane2 = ek.get(t.col) ?? 0; ek.set(t.col, lane2 + 1); const bx = q.x - 26 + ((i * 7) % 20) - 6, ay = a.y + NH / 2, by = q.y + NH / 2;
     svg.append(sv("path", { d: `M${a.x + NW} ${ay}H${bx}V${by}H${q.x}`, fill: "none", stroke: dim ? "#2b3038" : status(pt) === "locked" ? "#3a414b" : "#6fa8c9", "stroke-width": selected && (selected === t.key || selected === pk) ? 2.2 : 1, opacity: dim ? 0.5 : 0.85 })); }); }
-  const pz = panZoom(svg, W, H);
+  const pz = panZoom(svg, W, H, { onChange: onView });
   for (const t of techs) { const p = P(t), s = status(t), [stroke, fill] = COL[s], dim = (lane && t.lane !== lane) || (hit && !hit.has(t.key));
     svg.append(sv("g", { class: "tnode", opacity: dim ? 0.3 : 1, onclick: () => { if (!pz.moved) onPick(t); } }, sv("rect", { x: p.x, y: p.y, width: NW, height: NH, rx: 3, fill, stroke: selected === t.key ? "#fff" : stroke, "stroke-width": s === "adopted" ? 2.6 : selected === t.key ? 2.4 : 1.4, "stroke-dasharray": s === "locked" ? "4 3" : s === "lost" ? "2 2" : null }), sv("text", { x: p.x + 7, y: p.y + 16, "font-size": 12, fill: s === "locked" ? "#838995" : "#d9d6cc" }, `${SYM[s]} ${t.name}`.slice(0, 11)))); }
   const frontier = Math.max(0, ...techs.filter((t) => status(t) === "adopted" || status(t) === "known" || status(t) === "available").map((t) => g.pos[t.key].col));
   const view = (col, w = 640) => pz.set({ x: Math.max(0, X0 + col * CW - 160), y: 0, w, h: Math.min(H, (w * 460) / 380) });
-  view(Math.max(0, frontier - 3));
-  return { svg, COL, SYM, fit: () => pz.set({ x: 0, y: 0, w: W, h: H }), left: () => view(0), frontier: () => view(Math.max(0, frontier - 3)) };
+  if (vb0) pz.set(vb0); else view(Math.max(0, frontier - 3));
+  const focus = (key) => { const t = byKey.get(key); if (!t) return; const p = P(t), w = 560, h = Math.min(H, (w * 460) / 380); pz.set({ x: Math.max(0, p.x - w / 2 + NW / 2), y: Math.max(0, Math.min(H - h, p.y - h / 2)), w, h }); };
+  return { svg, COL, SYM, fit: () => pz.set({ x: 0, y: 0, w: W, h: H }), left: () => view(0), frontier: () => view(Math.max(0, frontier - 3)), focus };
 }
 
-/** ドクトリンの木: 階層を左から右へ。共通と政体固有を上下に分ける。前提の線を結ぶ */
-export function doctrineTree({ list, status, onPick, selected }) {
-  const groups = [list.filter((d) => !d.polity), list.filter((d) => d.polity)], tiers = Math.max(...list.map((d) => d.tier)), pos = new Map(), DX = 150, DY = 30; let yOff = 20;
-  for (const g of groups) { const cnt = new Map(); g.sort((a, b) => a.tier - b.tier || (a.id < b.id ? -1 : 1)).forEach((d) => { const i = cnt.get(d.tier) ?? 0; cnt.set(d.tier, i + 1); pos.set(d.id, { x: 20 + (d.tier - 1) * DX, y: yOff + i * DY }); }); yOff += Math.max(0, ...cnt.values()) * DY + 28; }
-  const W = 40 + tiers * DX, H = yOff, svg = sv("svg", { class: "tree", viewBox: `0 0 ${W} ${H}`, style: "height:" + Math.min(420, H) + "px" });
-  for (const d of list) for (const p of d.prereq) { const a = pos.get(p), b = pos.get(d.id); if (a && b) svg.append(sv("path", { d: `M${a.x + 124} ${a.y + 10}L${b.x} ${b.y + 10}`, stroke: "#4a515c", fill: "none" })); }
-  const pz = panZoom(svg, W, H), COL = { taken: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], blocked: ["#4a515c", "#14161a"] };
-  svg.append(sv("text", { x: 20, y: 12, "font-size": 11, fill: "#a1a6b0" }, "共通の系統")); if (groups[1].length) svg.append(sv("text", { x: 20, y: pos.get(groups[1][0].id).y - 8, "font-size": 11, fill: "#a58bd0" }, "政体固有の系統"));
-  for (const d of list) { const p = pos.get(d.id), s = status(d), [stroke, fill] = COL[s]; svg.append(sv("g", { class: "tnode", onclick: () => { if (!pz.moved) onPick(d); } }, sv("rect", { x: p.x, y: p.y, width: 124, height: 22, fill, stroke: selected === d.id ? "#fff" : stroke, "stroke-width": s === "taken" ? 2.4 : 1.2, "stroke-dasharray": s === "blocked" ? "4 3" : null }), sv("text", { x: p.x + 6, y: p.y + 15, "font-size": 11, fill: s === "blocked" ? "#838995" : "#d9d6cc" }, d.ja.slice(0, 9)))); }
-  return { svg, COL };
+/** ドクトリンの木（v6.1.0 M8）: 画面の上端に根（軍事ドクトリン）を置き、そこから枝が上から下へ垂れ下がる。
+ *  左の「共通 5 系統」と右の「国家固有 3 系統 ★」を、同じ寸法・同じ段の規則で整列する（国家ごとに固有の中身が変わっても配置のルールは同じ）。
+ *  線は直線と直角だけ。位置は (系統, 段) から決まり、状態・選択では動かない（ランダム・力学的配置は使わない）。
+ *  状態は色に加えて枠線と記号（■取得済み／◆取得できる／○条件が足りない）で区別する。 */
+export function doctrineTree({ nodes, branches, status, onPick, selected, vb0 = null, onView = null }) {
+  const CW = 136, NW = 124, NH = 28, RH = 46, GAP = 28, X0 = 14, ROOT_Y = 8, BUS_Y = 52, HEAD_Y = 66, HEAD_H = 22, Y1 = 108;
+  const common = branches.filter((b) => !b.special), special = branches.filter((b) => b.special), order = [...common, ...special], tiers = Math.max(1, ...nodes.map((d) => d.tier));
+  const colX = new Map(); order.forEach((b, i) => colX.set(b.id, X0 + i * CW + (i >= common.length ? GAP : 0)));
+  const W = X0 * 2 + order.length * CW + (special.length ? GAP : 0), H = Y1 + tiers * RH + 10, pos = new Map(), cx = (b) => colX.get(b.id) + NW / 2;
+  const svg = sv("svg", { class: "tree doctree", viewBox: `0 0 ${W} ${H}`, style: "height:" + Math.min(480, H + 20) + "px;touch-action:none" });
+  const midX = W / 2, line = (d, o = {}) => svg.append(sv("path", { d, fill: "none", stroke: "#4a515c", "stroke-width": 1.2, ...o }));
+  // 根 → 母線 → 各系統の見出し（直線と直角）
+  svg.append(sv("rect", { x: midX - 70, y: ROOT_Y, width: 140, height: 28, rx: 3, fill: "#1a1d23", stroke: "#d8b45a", "stroke-width": 1.8 }), sv("text", { x: midX, y: ROOT_Y + 19, "text-anchor": "middle", "font-size": 12, fill: "#d9d6cc" }, "◆ 軍事ドクトリン"));
+  if (order.length) { line(`M${midX} ${ROOT_Y + 28}V${BUS_Y}`); line(`M${cx(order[0])} ${BUS_Y}H${cx(order.at(-1))}`); }
+  const grp = (list, label, col) => { if (!list.length) return; const a = colX.get(list[0].id), b = colX.get(list.at(-1).id) + NW; svg.append(sv("rect", { x: a - 6, y: BUS_Y + 4, width: b - a + 12, height: H - BUS_Y - 8, fill: col, opacity: 0.07 }), sv("text", { x: a, y: BUS_Y - 4, "font-size": 10, fill: "#838995" }, label)); };
+  grp(common, "共通 5 系統", "#6fa8c9"); grp(special, "国家固有 3 系統 ★（政体・支持勢力・地形・戦争の経験で決まる）", "#a58bd0");
+  for (const b of order) { line(`M${cx(b)} ${BUS_Y}V${HEAD_Y}`); svg.append(sv("rect", { x: colX.get(b.id), y: HEAD_Y, width: NW, height: HEAD_H, rx: 3, fill: "#14161a", stroke: b.special ? "#a58bd0" : "#6a7280", "stroke-width": 1.2 }), sv("text", { x: cx(b), y: HEAD_Y + 15, "text-anchor": "middle", "font-size": 11, fill: b.special ? "#c9b6e8" : "#c8c5bb" }, (b.special ? "★ " : "") + b.ja.slice(0, 9))); line(`M${cx(b)} ${HEAD_Y + HEAD_H}V${Y1}`, { stroke: "#2f353e" }); }
+  for (const d of nodes) { const x = colX.get(d.branch); if (x != null) pos.set(d.id, { x, y: Y1 + (d.tier - 1) * RH }); }
+  // 前提の線: 同じ系統は真下へ、ほかの系統は「前提の下 → 横の通路 → 後続の上」の直角で結ぶ
+  for (const d of nodes) for (const p of d.prereq) { const a = pos.get(p), q = pos.get(d.id); if (!a || !q) continue; const ax = a.x + NW / 2, qx = q.x + NW / 2, my = q.y - 10 - ((d.tier + p.length) % 3) * 2; line(ax === qx ? `M${ax} ${a.y + NH}V${q.y}` : `M${ax} ${a.y + NH}V${my}H${qx}V${q.y}`, { stroke: "#5a626e" }); }
+  const pz = panZoom(svg, W, H, { onChange: onView }), COL = { taken: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], blocked: ["#4a515c", "#14161a"] }, SY = { taken: "■", available: "◆", blocked: "○" };
+  for (const d of nodes) { const p = pos.get(d.id); if (!p) continue; const s = status(d), [stroke, fill] = COL[s]; svg.append(sv("g", { class: "tnode", "data-doc": d.id, onclick: () => { if (!pz.moved) onPick(d); } }, sv("rect", { x: p.x, y: p.y, width: NW, height: NH, rx: 3, fill, stroke: selected === d.id ? "#fff" : stroke, "stroke-width": s === "taken" ? 2.6 : selected === d.id ? 2.4 : 1.4, "stroke-dasharray": s === "blocked" ? "4 3" : null }), sv("text", { x: p.x + 6, y: p.y + 18, "font-size": 11, fill: s === "blocked" ? "#838995" : "#d9d6cc" }, `${SY[s]} ${d.ja}`.slice(0, 11)))); }
+  if (vb0) pz.set(vb0);
+  const focus = (id) => { const p = pos.get(id); if (!p) return; const w = Math.min(W, 520), h = Math.min(H, (w * 3) / 4); pz.set({ x: Math.max(0, Math.min(W - w, p.x + NW / 2 - w / 2)), y: Math.max(0, Math.min(H - h, p.y - h / 3)), w, h }); };
+  return { svg, COL, SYM: SY, fit: () => pz.set({ x: 0, y: 0, w: W, h: H }), focus, pos };
 }

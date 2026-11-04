@@ -3,12 +3,14 @@
 //   ・UI は WorldState を直接変えない。成功した Command の結果を、読み取りモデルへ反映するだけ。
 //   ・パネルの開閉・切替で、地図の位置・拡大・選択・検索条件をリセットしない。
 import { createNewWorld, formatWorldDate } from "../../core/wcde/world.js";
+import { listCandidates } from "../../core/wcde/founding.js";
 import { SPEEDS, timeOf, newsOf, newsFeed, isRunning } from "../../core/wcde/clock.js";
 import { h, btn, polityJa, n0, pct, colorOf, face, sv } from "./common.js";
 import { TECH } from "../../core/civ/tech.js";
 import { ecoSummary } from "../../core/wcde/domains/ecosystem.js";
 import { S, run, act, stateName, aliveStates, controlled } from "./store.js";
 import { MapView } from "./map.js";
+import { initNotify } from "./notify.js";
 import { pGeo, pNations, link } from "./views-a.js";
 import { pWar, pDiplo, pEntity, pChron, pStats, pSearch, pSettings, fileLoader } from "./views-b.js";
 export { h };
@@ -23,11 +25,7 @@ function setup() {
   root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "ALTERHISTORY v6"), h("h1", {}, "世界を作る"), h("p", { class: "n" }, "約50万年の先史から、国家が生まれる時代へ。"), h("label", {}, "世界の種 ", seed), h("label", {}, "解像度 ", cells), h("div", { class: "rowb" }, btn("世界を生成", go, "p", { id: "gen" }), fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); })), msg));
 }
 function founding() {
-  const civ = S.w.civ,
-  c = civ.wcde.candidates ?? [],
-  pre = civ.wcde.prehistory ?? {},
-  ce = S.w.world.cell,
-  ja = new Proxy({}, { get: (_, k) => polityJa(k) });
+  const c = listCandidates(S.w), civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
   const msg = h("p", { class: "n" }, c.length ? "国家になる候補です。担当する国を選ぶか、世界に任せて見守ります。先史の経過は読み取り専用で、ここから変えることはできません。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
   const yrsAgo = (m) => Math.round(((civ.wcde.foundedAt ?? civ.monthIndex) - m) / 12);
   const fmtYears = (y) => (y >= 10000 ? `約 ${Math.round(y / 1000) / 10} 万年前` : `約 ${n0(y)} 年前`);
@@ -81,5 +79,10 @@ let liveN = 0;
 function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ)) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold") run({ type: "clock.setSpeed", speed: 0 }); live(); }
 /** 再生中の更新: 時計・ニュース・地図は毎回。左のパネルは、入力中でなければ 2 秒ごと（入力・選択・スクロールを壊さない） */
 function live() { if (!$("#hub")) return; renderRight(); renderNews(); S.map.draw(); const a = document.activeElement; if (++liveN % 8 === 0 && !(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) && ["nations", "war", "diplo", "stats"].includes(S.hub)) renderPanel(); if (S.notice) $("#hint").textContent = S.notice; }
-export function boot() { if (!document.getElementById("v6-root")) return; setup(); }
+/** 起動画面: 毎回表示。初期化が済んでいれば演出（約 0.9 秒）だけで世界生成の画面へ移る。動きを減らす設定では待たずに切り替える */
+function dismissSplash() {
+  const el = document.getElementById("splash"); if (!el) return; const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches, since = performance.now() - (window.__splashAt ?? 0), wait = reduce ? 0 : Math.max(0, 900 - since);
+  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), reduce ? 0 : 340); }, wait);
+}
+export function boot() { if (!document.getElementById("v6-root")) return; initNotify(); setup(); dismissSplash(); }
 if (typeof window !== "undefined") { window.__v6 = { S, run, act, render: () => S.hooks.render?.(), start }; if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot(); }

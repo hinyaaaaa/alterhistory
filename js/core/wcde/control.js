@@ -10,14 +10,17 @@ const fail = (error) => ({ ok: false, error });
 export const controlledState = (civ) => { const id = civ.wcde.control.stateId; return id ? civ.states[id] ?? null : null; };
 
 /** 国家を担当する（同時に1つ。別の国家を担当していたら、その担当を外して付け替える） */
+/** 担当が変わるとき: 戦争の方針（プレイヤーの高位の指示）と、国家の計画中の戦略を捨てる。戦争の作戦そのものは残る（AI が同じ経路で続ける） */
+function dropPlayerPlans(civ, st) { st.strategy = null; st.campaign = null; for (const id of civ.activeWarIds) { const o = civ.wars[id]?.ops; if (o?.direction) delete o.direction[st.id]; } }
 export function takeControl(w, stateId) {
   const { civ } = w, st = civ.states[stateId]; if (!st?.alive) return fail("その国家は存在しません");
-  for (const s of Object.values(civ.states)) if (s.player && s.id !== stateId) s.player = false;
-  st.player = true; civ.wcde.control.stateId = stateId; civ.wcde.control.since = civ.monthIndex; w.sim.ctx._byState = null;
+  // 担当の切替: 前の担当国家は AI に戻る（AI が自分の方針で再開できるよう、プレイヤーの戦争の方針・計画中の戦略は破棄する）。新しい担当国家の進行中の戦略もいったん捨てる
+  for (const s of Object.values(civ.states)) if (s.player && s.id !== stateId) { s.player = false; dropPlayerPlans(civ, s); }
+  dropPlayerPlans(civ, st); st.player = true; civ.wcde.control.stateId = stateId; civ.wcde.control.since = civ.monthIndex; w.sim.ctx._byState = null;
   return { ok: true, stateId };
 }
 export function releaseControl(w) {
-  const { civ } = w; for (const s of Object.values(civ.states)) s.player = false; civ.wcde.control.stateId = null; civ.wcde.control.since = null; return { ok: true };
+  const { civ } = w; for (const s of Object.values(civ.states)) { if (s.player) dropPlayerPlans(civ, s); s.player = false; } civ.wcde.control.stateId = null; civ.wcde.control.since = null; return { ok: true };
 }
 /** 担当国家が滅びたら、担当を外す（記録に残す）。tick の最後に呼ぶ */
 export function syncControl(civ) {
@@ -41,9 +44,9 @@ export const EDITABLE_STATE_FIELDS = Object.freeze(Object.keys(FIELDS));
 export function creatorEditState(w, { stateId, changes }) {
   const { civ } = w, st = civ.states[stateId]; if (!st?.alive) return fail("その国家は存在しません"); if (!changes || typeof changes !== "object" || !Object.keys(changes).length) return fail("変更がありません");
   const plan = []; for (const [k, raw] of Object.entries(changes)) { const f = FIELDS[k]; if (!f) return fail(`「${k}」は創造主の直接編集の対象ではありません（編集できる項目: ${EDITABLE_STATE_FIELDS.join("・")}）`); const v = f.check(raw); if (v == null) return fail(`「${k}」の値が不正です`); plan.push([k, f, v]); }
-  const done = []; for (const [k, f, v] of plan) { const before = f.get(st); f.set(st, v); if (k === "leader.name") st.leader.name = v; done.push({ targetId: stateId, property: k, before, after: v }); }
+  const done = []; for (const [k, f, v] of plan) { const before = f.get(st); f.set(st, v); if (k === "leader.name") { st.leader.name = v; st.leader.renamedByCreator = true; /* 別人への交代ではなく、同じ人物の名前の変更として人物の記録へ反映する（people.js） */ } done.push({ targetId: stateId, property: k, before, after: v }); }
   (civ.wcde.edits ??= []).push(...done.map((d) => ({ at: civ.monthIndex, authority: "creator_intervention", ...d }))); if (civ.wcde.edits.length > 2000) civ.wcde.edits.splice(0, civ.wcde.edits.length - 2000);
-  makeEvent(civ, w.sim.ctx.ids, { kind: "creator_edit", title: `創造主が${st.name}を直接編集した（${done.map((d) => d.property).join("・")}）`, participants: [{ entityId: stateId, role: "target" }], effects: done, provenance: "creator" });
+  // v6.1.0 M7: 創造主の直接編集は、介入の台帳（civ.wcde.edits）にだけ残す。世界の事実の出来事（civ.events）とは混ぜない
   w.sim.ctx._byState = null; return { ok: true, edited: done.map((d) => d.property) };
 }
 /** 文化・言語・宗教の名前の編集（定義の編集。歴史の事実は変えない） */

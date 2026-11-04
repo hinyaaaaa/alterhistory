@@ -22,7 +22,7 @@
   var ID_KINDS, ALPHA, check;
   var init_ids = __esm({
     "js/core/civ/ids.js"() {
-      ID_KINDS = Object.freeze(["state", "pop", "settle", "person", "event", "decision", "proposal", "tech", "culture", "lang", "religion", "species", "war", "treaty", "battle", "disaster", "work", "interp", "org", "house", "candidate", "unit", "intervention", "proposal"]);
+      ID_KINDS = Object.freeze(["state", "pop", "settle", "person", "event", "decision", "proposal", "tech", "culture", "lang", "religion", "species", "war", "treaty", "battle", "disaster", "work", "interp", "org", "house", "candidate", "unit", "intervention", "proposal", "catastrophe"]);
       ALPHA = "0123456789abcdefghijklmnopqrstuvwxyz";
       check = (kind, n2) => {
         let h2 = n2 * 2654435761 >>> 0;
@@ -255,6 +255,8 @@
         territory_occupied: P("war", 2),
         campaign_abandoned: P("war", 0, false),
         war_declared: P("war", 3),
+        war_epilogue: P("war", 2),
+        ideology_emerged: P("culture", 2),
         war_ended: P("war", 3),
         battle_fought: P("war", 2),
         peace: P("war", 3),
@@ -279,6 +281,7 @@
         settlement_founded: P("city", 1),
         settlement_stage: P("city", 1),
         disaster_struck: P("env", 2),
+        catastrophe: P("env", 3),
         disaster_ended: P("env", 0, false),
         climate_shift: P("env", 2),
         famine: P("env", 1),
@@ -2036,7 +2039,7 @@
       const before = st.stability;
       st.stability = Math.max(0, Math.min(1, st.stability + (target - st.stability) * 0.3));
       st.treasury += pop * st.policy.tax * 12e-4 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi2).length * 0.1));
-      st.army = pop * (5e-3 + 0.12 * st.policy.mobilization) * (0.5 + st.stability);
+      st.army = pop * (5e-3 + 0.12 * st.policy.mobilization) * (0.5 + st.stability) * (1 - (st.warLoss ?? 0));
       for (const k in st.sanctions) if (st.sanctions[k] <= mi2) delete st.sanctions[k];
       const ls = lifeScale(civ, st), age = mi2 - st.leader.bornAt;
       if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4e3 * ls))) {
@@ -2180,9 +2183,10 @@
         makeEvent(civ, ids2, { kind: "ally_joined", title: `${ally.name}\u304C${host.name}\u5074\u3067\u53C2\u6226\u3057\u305F`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: id, role: "war" }], location: null, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] });
       }
     }
+    ctx.warOps?.init(ctx, w);
     return w;
   }
-  function endWar(ctx, w, outcome) {
+  function endWar(ctx, w, outcome, terms = null) {
     const { civ, ids: ids2 } = ctx;
     if (w.status !== "active") return;
     w.status = "ended";
@@ -2193,8 +2197,13 @@
     for (const s of all) s.warIds = s.warIds.filter((i) => i !== w.id);
     const atk = civ.states[w.aggressor], def = civ.states[w.defender];
     const lead = outcome === "aggressor_victory" || outcome === "negotiated" && w.score > 0;
-    const gained = [];
-    if (lead && atk?.alive) for (const gid of w.occupied) {
+    const gained = [], moved = [];
+    const settled = ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null;
+    if (settled) for (const x of settled) {
+      gained.push(x.gid);
+      moved.push(x);
+    }
+    else if (lead && atk?.alive) for (const gid of w.occupied) {
       const g = civ.groups[gid];
       if (g && g.stateId === w.defender) {
         g.stateId = atk.id;
@@ -2207,7 +2216,11 @@
       if (s.campaign?.warId === w.id) s.campaign = null;
     }
     if (atk && def) adjustRel(atk, def, -10);
-    makeEvent(civ, ids2, { kind: "war_ended", title: `${atk?.name ?? "?"}\u3068${def?.name ?? "?"}\u306E\u6226\u4E89\u304C\u7D42\u308F\u3063\u305F\uFF08${{ aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", stalemate: "\u6C7A\u7740\u3064\u304B\u305A", negotiated: "\u8B1B\u548C", state_dissolved: "\u56FD\u5BB6\u306E\u6D88\u6EC5" }[outcome] ?? outcome}\uFF09`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => ({ targetId: gid, property: "stateId", before: w.defender, after: atk.id })), facts: { warId: w.id, outcome, stateId: gained.length ? atk?.id ?? null : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
+    makeEvent(civ, ids2, { kind: "war_ended", title: `${atk?.name ?? "?"}\u3068${def?.name ?? "?"}\u306E\u6226\u4E89\u304C\u7D42\u308F\u3063\u305F\uFF08${{ aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", stalemate: "\u6C7A\u7740\u3064\u304B\u305A", negotiated: terms?.kind === "cession" ? "\u8B1B\u548C\uFF08\u5360\u9818\u5730\u306E\u5272\u8B72\uFF09" : "\u8B1B\u548C", state_dissolved: "\u56FD\u5BB6\u306E\u6D88\u6EC5" }[outcome] ?? outcome}\uFF09`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => {
+      const m = moved.find((x) => x.gid === gid);
+      return { targetId: gid, property: "stateId", before: m?.from ?? w.defender, after: m?.to ?? atk.id };
+    }), facts: { warId: w.id, outcome, terms: terms?.kind ?? null, stateId: gained.length ? moved[0]?.to ?? atk?.id ?? null : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
+    ctx.warOps?.finalize(ctx, w, outcome);
   }
   function stepWars(ctx) {
     const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
@@ -2225,10 +2238,15 @@
       }
     }
     const groups = byState(ctx);
+    ctx.warOps?.monthly(ctx);
     for (const wid of [...civ.activeWarIds]) {
       const w = civ.wars[wid], A = w.sides.a.map((i) => civ.states[i]).filter((s) => s.alive), D2 = w.sides.d.map((i) => civ.states[i]).filter((s) => s.alive);
       if (!civ.states[w.aggressor].alive || !civ.states[w.defender].alive || !A.length || !D2.length) {
         endWar(ctx, w, "state_dissolved");
+        continue;
+      }
+      if (ctx.warOps) {
+        ctx.warOps.step(ctx, w);
         continue;
       }
       const sA = A.reduce((s, x) => s + strength(civ, x), 0), sD = D2.reduce((s, x) => s + strength(civ, x), 0);
@@ -2744,7 +2762,8 @@
     const my = strength(civ, st), nbs = nb.map((o) => ({ st: o, pop: o.pop, strength: strength(civ, o), rel: st.relations[o.id] ?? 0, atWar: atWarWith(civ, st, o), treaties: { na: !!treatyBetween(civ, st, o, "nonaggression"), al: !!treatyBetween(civ, st, o, "alliance"), tr: !!treatyBetween(civ, st, o, "trade") } }));
     const techs = Object.keys(st.techAdopted).length, lag = nbs.length ? clamp23((nbs.reduce((s, n2) => s + Object.keys(n2.st.techAdopted).length, 0) / nbs.length - techs) / 6) : 0;
     const myBase = st.pop * 5e-3 * (0.5 + st.stability) * (my / (st.army + 1e-9) || 1) * (1 + st.defense * 0.5), maxThreat = nbs.reduce((m, n2) => Math.max(m, n2.strength / (myBase + 1)), 0);
-    return { gs, nbs, pop: st.pop, my, tension: st.pop ? tens / st.pop : 0, treasuryNeed: clamp23(1 - st.treasury / (st.pop * 0.02 + 50)), techLag: lag, threat: clamp23((maxThreat - 0.8) / 2), atWar: st.warIds.length > 0, mi: civ.monthIndex };
+    const seaNbs = ctx.warOps ? ctx.warOps.seaTargets(ctx, st).map((o) => ({ st: o, pop: o.pop, strength: strength(civ, o), rel: st.relations[o.id] ?? 0, atWar: atWarWith(civ, st, o), sea: true, treaties: { na: !!treatyBetween(civ, st, o, "nonaggression"), al: !!treatyBetween(civ, st, o, "alliance"), tr: !!treatyBetween(civ, st, o, "trade") } })) : [];
+    return { gs, nbs, seaNbs, pop: st.pop, my, tension: st.pop ? tens / st.pop : 0, treasuryNeed: clamp23(1 - st.treasury / (st.pop * 0.02 + 50)), techLag: lag, threat: clamp23((maxThreat - 0.8) / 2), atWar: st.warIds.length > 0, mi: civ.monthIndex };
   }
   function runAction(ctx, st, def, c, { decisionId = null, provenance = "ai" } = {}) {
     const cc = { ...c, decisionId, provenance }, r = def.execute(ctx, st, cc), { civ, ids: ids2 } = ctx;
@@ -2934,7 +2953,7 @@
           candidates(ctx, st, e) {
             if (st.campaign) return [bad("plan_conquest", "\u5225\u306E\u8A08\u753B\u304C\u9032\u884C\u4E2D")];
             if (e.mi - (st.lastWarEnd ?? -999) < 180) return [bad("plan_conquest", "\u6226\u4E89\u306E\u75B2\u5F0A\u304B\u3089\u56DE\u5FA9\u3057\u3066\u3044\u306A\u3044")];
-            return e.nbs.filter((n2) => !n2.atWar && !n2.treaties.na && !n2.treaties.al).map((n2) => {
+            return [...e.nbs, ...e.seaNbs ?? []].filter((n2) => !n2.atWar && !n2.treaties.na && !n2.treaties.al).map((n2) => {
               const ratio = (e.my + 1) / (n2.strength + 1);
               const gr = grievance(ctx.civ, st, n2.st.id);
               return ratio >= 1.3 ? cand("plan_conquest", { expansion: clamp23((ratio - 1) / 2) - 0.1 * st.warIds.length + 0.35 * gr, prestige: 0.1 + 0.3 * gr, stability: -0.2, prosperity: -0.3 }, { target: n2.st.id, label: `${n2.st.name}\u306E\u5F81\u670D` }) : bad("plan_conquest", "\u6226\u529B\u304C\u8DB3\u308A\u306A\u3044", { target: n2.st.id });
@@ -2962,7 +2981,7 @@
             if (!t?.alive || t.id === st.id) return { ok: false, error: "\u76F8\u624B\u304C\u5B58\u5728\u3057\u306A\u3044" };
             if (atWarWith(ctx.civ, st, t)) return { ok: false, error: "\u3059\u3067\u306B\u4EA4\u6226\u4E2D" };
             if (treatyBetween(ctx.civ, st, t, "nonaggression") || treatyBetween(ctx.civ, st, t, "alliance")) return { ok: false, error: "\u6761\u7D04\u304C\u3042\u308B\u305F\u3081\u5BA3\u6226\u3067\u304D\u306A\u3044\uFF08\u5148\u306B\u7834\u68C4\u3059\u308B\uFF09" };
-            if (!neighborStates(ctx, st).includes(t.id)) return { ok: false, error: "\u96A3\u63A5\u3057\u3066\u3044\u306A\u3044" };
+            if (!(ctx.warOps ? ctx.warOps.canReach(ctx, st, t) : neighborStates(ctx, st).includes(t.id))) return { ok: false, error: ctx.warOps ? "\u9678\u3067\u63A5\u3057\u3066\u304A\u3089\u305A\u3001\u6D77\u304B\u3089\u3082\u5C4A\u304B\u306A\u3044" : "\u96A3\u63A5\u3057\u3066\u3044\u306A\u3044" };
             const w = declareWar(ctx, st, t, { decisionId: c.decisionId, provenance: c.provenance });
             if (st.campaign?.target === t.id) {
               st.campaign.stage = "war";
@@ -3040,6 +3059,7 @@
           label: "\u6761\u7D04\u306E\u7834\u68C4",
           enabled: true,
           candidates(ctx, st) {
+            if (st.player) return ctx.civ.activeTreatyIds.map((i) => ctx.civ.treaties[i]).filter((x) => x.active && (x.a === st.id || x.b === st.id)).map((x) => cand("break_treaty", { expansion: 0, prestige: -0.5 }, { target: x.id }));
             const camp = st.campaign;
             if (!camp || camp.stage !== "prepare") return [];
             const t = treatyBetween(ctx.civ, st, free(ctx, camp.target), "nonaggression");
@@ -16659,7 +16679,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var APP_VERSION = "6.0.0";
   var APP_VERSION_NAME = "\u4E16\u754C\u3068\u6587\u660E\u306E\u529B\u5B66";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "b3ef471dd1b5" : "dev";
+  var APP_BUILD_ID = true ? "6fdd933c1761" : "dev";
 
   // js/ui/icons.js
   var P3 = {
@@ -18547,7 +18567,8 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
 
   // js/ui/banner.js
   var AUTO_DISMISS_MS = 5e3;
-  function initBanner({ store, actions }) {
+  var LONG_ERROR = 120;
+  function initBanner({ store, actions, persistLongError = false }) {
     const banner = byId("banner");
     const body = byId("banner-body");
     const loading = byId("loading");
@@ -18588,7 +18609,7 @@ ${shown}${more}`;
       if (key3 !== lastKey) {
         lastKey = key3;
         clearTimeout(dismissTimer);
-        if (key3) dismissTimer = setTimeout(() => actions.dismissMessage(), AUTO_DISMISS_MS);
+        if (key3 && !(persistLongError && key3.startsWith("error:") && key3.length > LONG_ERROR)) dismissTimer = setTimeout(() => actions.dismissMessage(), AUTO_DISMISS_MS);
       }
     });
   }

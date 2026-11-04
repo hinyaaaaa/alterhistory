@@ -5,7 +5,7 @@
 //   ・介入中に実際に起きた結果（生産・投資・人口・損失・外交など）は世界の事実として残り、補正の減衰では巻き戻さない（補正は有効値にだけ効く）。
 //   ・同じ国・同じ項目への再介入は、前の介入を「置き換え済み」にして、新しい通常値から数え直す（補正の二重適用・自己増殖はしない）。
 //   ・介入は civ.wcde.interventions に記録し、歴史の事実（events）とは混ぜない。実行可能な不整合（産業力と技術の食い違いなど）は黙って直さない。NaN・Infinity・型の不一致・存在しない対象は拒否する。
-import { FIELDS, nominalOf } from "./domains/effective.js";
+import { FIELDS, nominalOf, adjKey } from "./domains/effective.js";
 
 export const MAX_REASON = 200;
 export const initInterventions = () => ({ records: [] });
@@ -20,29 +20,30 @@ export const residualAt = (rec, monthIndex) => rec.residual0 * Math.pow(0.5, Mat
 /** 有効な介入から、読み取り用の補正の表（civ.wcde.adjust）を作り直す。派生データで、正本は records */
 export function rebuildAdjust(civ) {
   const adj = (civ.wcde.adjust ??= {}); for (const k of Object.keys(adj)) delete adj[k];
-  for (const r of ledger(civ).records) if (r.status === "active") (adj[r.targetId] ??= {})[r.field] = { add: r.residual };
+  for (const r of ledger(civ).records) if (r.status === "active") (adj[r.targetId] ??= {})[adjKey(r.field, r.otherId)] = { add: r.residual };
 }
 
 /** 検証だけ（何も変えない）。{ ok, error } または { ok, plan } */
-export function planIntervention(w, { stateId, field, value, reason = "", halfLifeMonths = null }) {
+export function planIntervention(w, { stateId, field, value, reason = "", halfLifeMonths = null, otherId = null }) {
   const { civ } = w, fail = (error) => ({ ok: false, error }), f = FIELDS[field];
   if (!f) return fail(`「${field}」は介入できる項目ではありません（${Object.keys(FIELDS).join("・")}）`);
   const st = civ.states[stateId]; if (!st?.alive) return fail("その国家は存在しません");
+  if (f.pair) { if (!otherId || otherId === stateId || !civ.states[otherId]?.alive) return fail("関係値の介入には、相手の国家（存命）を指定してください"); } else if (otherId != null) return fail(`${f.ja}には相手の指定は不要です`);
   if (!fin(value)) return fail("値が数値ではありません（NaN・Infinity・型の不一致は介入できません）");
   if (value < f.min || value > f.max) return fail(`${f.ja}は ${f.min}〜${f.max} の範囲で指定してください`);
   if (typeof reason !== "string" || reason.length > MAX_REASON) return fail(`理由の注釈は ${MAX_REASON} 文字までの文字列です`);
   let half = f.half; if (halfLifeMonths != null) { if (!fin(halfLifeMonths) || halfLifeMonths < 1 || halfLifeMonths > 1200) return fail("減衰の半減期は 1〜1200 か月"); half = halfLifeMonths; }
-  const nominal = nominalOf(civ, st, field); if (!fin(nominal)) return fail(`${f.ja}はまだ算出されていません（次の月次処理のあとで介入できます）`);
+  const nominal = nominalOf(civ, st, field, otherId); if (!fin(nominal)) return fail(`${f.ja}はまだ算出されていません（次の月次処理のあとで介入できます）`);
   const residual0 = value - nominal; if (Math.abs(residual0) < f.eps) return fail(`指定値が通常計算値（${Math.round(nominal * 1000) / 1000}）とほぼ同じです`);
-  return { ok: true, plan: { st, f, nominal, residual0, half, reason: reason.trim() } };
+  return { ok: true, plan: { st, f, nominal, residual0, half, reason: reason.trim(), otherId: f.pair ? otherId : null } };
 }
 
 /** 介入を作る。同じ国・同じ項目の有効な介入は「置き換え済み」にする。{ ok, id, nominal, residual0 } */
 export function createIntervention(w, args, authority = "creator_intervention") {
   const p = planIntervention(w, args); if (!p.ok) return p;
-  const { civ } = w, { st, nominal, residual0, half, reason } = p.plan, L = ledger(civ), mi = civ.monthIndex, id = w.sim.ctx.ids.next("intervention");
-  let supersedes = null; for (const r of L.records) if (r.status === "active" && r.targetId === st.id && r.field === args.field) { r.status = "superseded"; r.endedAt = mi; r.supersededBy = id; supersedes = r.id; }
-  L.records.push({ id, targetId: st.id, field: args.field, nominalAtStart: nominal, target: args.value, residual0, residual: residual0, startMonth: mi, halfLife: half, mode: "add", status: "active", authority, reason, supersedes, endedAt: null, changes: [{ at: mi, target: args.value }] });
+  const { civ } = w, { st, nominal, residual0, half, reason, otherId } = p.plan, L = ledger(civ), mi = civ.monthIndex, id = w.sim.ctx.ids.next("intervention");
+  let supersedes = null; for (const r of L.records) if (r.status === "active" && r.targetId === st.id && r.field === args.field && (r.otherId ?? null) === (otherId ?? null)) { r.status = "superseded"; r.endedAt = mi; r.supersededBy = id; supersedes = r.id; }
+  L.records.push({ id, targetId: st.id, field: args.field, otherId: otherId ?? null, domain: FIELDS[args.field].domain ?? null, nominalAtStart: nominal, target: args.value, residual0, residual: residual0, startMonth: mi, halfLife: half, mode: "add", status: "active", authority, reason, supersedes, endedAt: null, changes: [{ at: mi, target: args.value }] });
   rebuildAdjust(civ); return { ok: true, id, nominal, residual0, supersedes };
 }
 
@@ -72,7 +73,7 @@ export function checkInterventions(civ) {
     for (const k of ["nominalAtStart", "target", "residual0", "residual", "halfLife"]) if (!fin(r[k])) errs.push(`介入 ${r.id}.${k} が有限でない`);
     if (!["active", "converged", "superseded", "cancelled", "target_gone"].includes(r.status)) errs.push(`介入 ${r.id} の状態 ${r.status} が不正`);
     if (!civ.states[r.targetId]) errs.push(`介入 ${r.id} の対象 ${r.targetId} が無い`);
-    if (r.status === "active") { const k = r.targetId + "|" + r.field; if (seen.has(k)) errs.push(`同じ項目に有効な介入が複数ある（${k}）`); seen.add(k); const a = civ.wcde.adjust?.[r.targetId]?.[r.field]; if (!a || Math.abs(a.add - r.residual) > 1e-9) errs.push(`介入 ${r.id} の補正の表が記録と一致しない`); }
+    if (r.status === "active") { const k = r.targetId + "|" + adjKey(r.field, r.otherId); if (seen.has(k)) errs.push(`同じ項目に有効な介入が複数ある（${k}）`); seen.add(k); const a = civ.wcde.adjust?.[r.targetId]?.[adjKey(r.field, r.otherId)]; if (!a || Math.abs(a.add - r.residual) > 1e-9) errs.push(`介入 ${r.id} の補正の表が記録と一致しない`); }
   }
   const adj = civ.wcde.adjust ?? {}; for (const sid of Object.keys(adj)) for (const f of Object.keys(adj[sid])) if (!seen.has(sid + "|" + f)) errs.push(`補正の表 ${sid}.${f} に対応する有効な介入が無い`);
   return errs;

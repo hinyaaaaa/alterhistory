@@ -1,9 +1,11 @@
 // v6: WCDE の不変条件（国家・人物・領域の整合）。tick の integrity フェーズ、保存前、テストから呼ぶ。違反を文字列の配列で返す。
 import { checkArchive } from "../civ/archive.js";
-import { DOCTRINE } from "./domains/military.js";
+import { nodeOf } from "./domains/doctrine.js";
+import { checkWars } from "./warfare.js";
 import { FACTIONS } from "./domains/politics.js";
 import { checkInterventions } from "./intervention.js";
 import { checkClock } from "./clock.js";
+import { checkCatastrophes } from "./catastrophe.js";
 
 const fin = (x) => typeof x === "number" && Number.isFinite(x);
 export function checkWcdeIntegrity(world, civ) {
@@ -22,14 +24,14 @@ export function checkWcdeIntegrity(world, civ) {
   for (const st of Object.values(civ.states)) {
     if (!st.alive) continue; const e = st.econ;
     if (e) for (const k of ["output", "industry", "perCapita", "foodBalance", "tradeIncome"]) if (e[k] !== undefined && !fin(e[k])) errs.push(`${st.id}.econ.${k} が有限でない`);
-    const P = st.politics; if (P) { for (const k of Object.keys(FACTIONS)) { const s = P.factions[k]?.support; if (!(s >= 0 && s <= 1)) errs.push(`${st.id} の${FACTIONS[k]}の支持が範囲外 ${s}`); } if (!(P.legitimacy >= 0 && P.legitimacy <= 1)) errs.push(`${st.id} の正統性が範囲外`); }
+    const P = st.politics; if (P) { for (const k of Object.keys(P.factions)) { const f = P.factions[k], s = f?.support; if (!FACTIONS[k]) errs.push(`${st.id} に未知の勢力 ${k}`); if (!(s >= 0 && s <= 1)) errs.push(`${st.id} の${FACTIONS[k] ?? k}の支持が範囲外 ${s}`); if (!(f.influence == null || (f.influence >= 0 && f.influence <= 1))) errs.push(`${st.id} の${FACTIONS[k] ?? k}の影響力が範囲外`); } for (const k of ["nobility", "military", "commoners"]) if (!P.factions[k]) errs.push(`${st.id} に常に在るはずの勢力 ${k} が無い`); for (const [k, v] of Object.entries(P.ideas ?? {})) if (!(v >= 0 && v <= 1)) errs.push(`${st.id} の思想 ${k} が範囲外`); if (!(P.legitimacy >= 0 && P.legitimacy <= 1)) errs.push(`${st.id} の正統性が範囲外`); }
     const M = st.military; if (M) {
-      for (const id of Object.keys(M.doctrine.taken)) { const d = DOCTRINE[id]; if (!d) errs.push(`${st.id} に未知のドクトリン ${id}`); else for (const p of d.prereq) if (M.doctrine.taken[p] == null) errs.push(`${st.id} のドクトリン ${id} の前提 ${p} が無い`); }
+      for (const id of Object.keys(M.doctrine.taken)) { const d = nodeOf(st, id); if (!d) { if (!id.startsWith("sp:")) errs.push(`${st.id} に未知のドクトリン ${id}`); /* 固有の系統が入れ替わった休眠ノードは、定義が国家に無くてもよい */ } else for (const p of d.prereq) if (M.doctrine.taken[p] == null) errs.push(`${st.id} のドクトリン ${id} の前提 ${p} が無い`); }
       if (!(st.milBonus >= -0.6 - 1e-9 && st.milBonus <= 0.6 + 1e-9)) errs.push(`${st.id} の milBonus が範囲外 ${st.milBonus}`); if (!(st.milDef >= 0 && st.milDef <= 0.4 + 1e-9)) errs.push(`${st.id} の milDef が範囲外`);
     }
     if (st.leaderFigureId) { const f = civ.figures?.[st.leaderFigureId]; if (!f) errs.push(`${st.id} の指導者の人物 ${st.leaderFigureId} が無い`); else if (f.diedAt != null) errs.push(`${st.id} の指導者の人物が没している`); }
   }
-  errs.push(...checkInterventions(civ)); errs.push(...checkClock(civ));
+  errs.push(...checkInterventions(civ)); errs.push(...checkCatastrophes(civ)); errs.push(...checkClock(civ)); errs.push(...checkWars(civ));
   // 人物・家系: 親は先に生まれている・子は対になる・没は生より後
   for (const f of Object.values(civ.figures ?? {})) {
     if (f.diedAt != null && f.diedAt < f.bornAt) errs.push(`人物 ${f.id} の没が生より前`);

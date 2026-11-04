@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="AH">
+  <!-- 仮シンボル（文字だけ）。差し替え用 -->
+  <rect width="64" height="64" rx="10" fill="#14161a"/>
+  <text x="32" y="43" text-anchor="middle" font-family="serif" font-size="30" fill="#d8b45a">AH</text>
+</svg>

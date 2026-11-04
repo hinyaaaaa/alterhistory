@@ -16,11 +16,13 @@ const newHouse = (ctx, st, founder) => { const { civ, ids } = ctx; const id = id
 
 /** 国家の現在の指導者に人物を結びつける。後継の手順（継承者の誕生・登位・簒奪）をここで事実として残す */
 export function stepPeople(ctx) {
-  const { civ, ids } = ctx, mi = civ.monthIndex; if (!civ.options.wcde) return; civ.figures ??= {}; civ.houses ??= {};
+  const { civ, ids } = ctx, mi = civ.monthIndex; if (!civ.options.wcde) return; civ.figures ??= {}; civ.houses ??= {}; compactFigures(ctx);
   for (const st of Object.values(civ.states)) {
     if (!st.alive) continue; const L = st.leader; let cur = st.leaderFigureId ? civ.figures[st.leaderFigureId] : null;
     const heirFig = st.heirFigureId ? civ.figures[st.heirFigureId] : null;
     // 指導者が代わった（名前・生年が合わない、または政変で退けられた）
+    // 創造主による指導者名の変更は、同じ人物の改名（家系・没年は変わらない）。人物の記録と国家の表示を一致させる
+    if (cur && L.renamedByCreator) { if (cur.name !== L.name) { cur.history.push({ at: mi, kind: "renamed_by_creator", from: cur.name }); cur.name = L.name; } delete L.renamedByCreator; }
     if (cur && (cur.name !== L.name || cur.bornAt !== L.bornAt || L.deposed)) {
       const succeeded = heirFig && heirFig.diedAt == null && L.heirTaken !== false && !L.deposed && cur.diedAt == null;
       cur.diedAt = mi; cur.history.push({ at: mi, kind: L.deposed ? "deposed" : "left_office" });
@@ -66,4 +68,10 @@ export function stepCities(ctx) {
     if (s.name || s.stage === "village") continue; const g = civ.groups[s.groupId]; const lang = languageOfGroup(g); if (!lang) continue;
     s.name = nameFor(civ, ctx.rng, lang, "place") ?? null;
   }
+}
+
+/** 人物の履歴の整理（結果記録の方針）: 没して 60 年以上たった人物は、細かい履歴（任官・離任など）を最初と最後の 2 件に縮める。系譜（親子・家・没年）は残す。年 1 回 */
+export function compactFigures(ctx) {
+  const { civ } = ctx, mi = civ.monthIndex; if (!civ.options.wcde || mi % 12 !== 5) return;
+  for (const f of Object.values(civ.figures ?? {})) if (f.diedAt != null && mi - f.diedAt > 720 && f.history.length > 2 && !f.compacted) { f.history = [f.history[0], f.history[f.history.length - 1]]; f.compacted = true; }
 }

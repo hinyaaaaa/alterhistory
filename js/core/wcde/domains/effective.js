@@ -15,17 +15,22 @@ export const FIELDS = Object.freeze({
   readiness:   { ja: "練度・即応",       mode: "add", min: 0, max: 1,   half: 12, eps: 0.002, nominal: (c, s) => s.military?.readiness },
   legitimacy:  { ja: "正統性",           mode: "add", min: 0, max: 1,   half: 24, eps: 0.002, nominal: (c, s) => s.politics?.legitimacy },
   fatigue:     { ja: "疲労度",           mode: "add", min: 0, max: 1,   half: 12, eps: 0.002, nominal: (c, s) => s.politics?.fatigue },
+  // v6.1.0 M7: 複数ドメインへの拡張（国家・人口・外交）。domain は領域の台帳の ID
+  stability:   { ja: "安定度",           mode: "add", min: 0, max: 1,   half: 18, eps: 0.002, domain: "states",     nominal: (c, s) => s.stability },
+  popCapacity: { ja: "人口の収容力（倍率）", mode: "add", min: 0.2, max: 3, half: 24, eps: 0.002, domain: "population", nominal: () => 1 },
+  relation:    { ja: "関係値（この国から相手への）", mode: "add", min: -100, max: 100, half: 18, eps: 0.5, domain: "war_diplomacy", pair: true, nominal: (c, s, o) => s.relations?.[o] ?? 0 },
 });
 export const FIELD_KEYS = Object.freeze(Object.keys(FIELDS));
-export const nominalOf = (civ, st, key) => { const f = FIELDS[key]; return f ? f.nominal(civ, st) : undefined; };
+export const adjKey = (field, other = null) => (other ? `${field}|${other}` : field);
+export const nominalOf = (civ, st, key, other = null) => { const f = FIELDS[key]; return f ? f.nominal(civ, st, other) : undefined; };
 
 /** 有効値。介入が無ければ通常値のまま（v5 / 介入なしの世界の数値を変えない） */
-export function effective(civ, st, key) {
-  const f = FIELDS[key]; if (!f) return 0; const base = f.nominal(civ, st); if (base === undefined || base === null) return 0;
+export function effective(civ, st, key, other = null) {
+  const f = FIELDS[key]; if (!f) return 0; const base = f.nominal(civ, st, other); if (base === undefined || base === null) return 0;
   const A = civ.wcde?.adjust?.[st.id]; let b = base, touched = false;
   // 一人あたり産業力は、産業力（総量）への介入に比例して動く（産業力 → 装備・軍事充足の連鎖。自身にも介入があれば、その補正を足す）
   if (key === "perCapita" && A?.industry) { const ni = st.econ?.industry; if (ni > 0) { b = base * (effective(civ, st, "industry") / ni); touched = true; } }
-  const adj = A?.[key]; if (adj == null && !touched) return base; const v = b * (1 + (adj?.mul ?? 0)) + (adj?.add ?? 0); /* mul は M3 から続く倍率の入口（介入レコードは add だけを作る） */ return v < f.min ? f.min : v > f.max ? f.max : v;
+  const adj = A?.[adjKey(key, f.pair ? other : null)]; if (adj == null && !touched) return base; const v = b * (1 + (adj?.mul ?? 0)) + (adj?.add ?? 0); /* mul は M3 から続く倍率の入口（介入レコードは add だけを作る） */ return v < f.min ? f.min : v > f.max ? f.max : v;
 }
-export const hasAdjust = (civ, stId, key) => civ.wcde?.adjust?.[stId]?.[key] != null;
+export const hasAdjust = (civ, stId, key, other = null) => civ.wcde?.adjust?.[stId]?.[adjKey(key, other)] != null;
 export { get as _get };

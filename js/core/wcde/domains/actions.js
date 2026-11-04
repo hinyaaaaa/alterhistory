@@ -2,7 +2,9 @@
 //   候補の採点・判断記録・結果イベントは、v5 の行動と同じ仕組み（直接 WorldState を書き換える AI の経路は無い）。
 //   WCDE の世界（civ.options.wcde）でだけ候補を出す。
 import { registerAction } from "../../civ/actions.js";
-import { DOCTRINES, DOCTRINE, canAdopt, adoptDoctrine } from "./military.js";
+import { byState } from "../../civ/spatial.js";
+import { nodesOf, canAdopt, adoptDoctrine } from "./military.js";
+import { CAP } from "./doctrine.js";
 import { FACTIONS, recomputeLegitimacy } from "./politics.js";
 
 const r3 = (x) => Math.round(x * 1000) / 1000, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -17,7 +19,8 @@ export function registerWcdeActions() {
   registerAction({ key: "adopt_doctrine", domain: "military", label: "ドクトリンの取得", enabled: true,
     candidates(ctx, st, e) {
       if (!ctx.civ.options.wcde) return []; const out = [];
-      for (const d of DOCTRINES) { const c = canAdopt(st, d.id); if (!c.ok) continue; out.push(cand("adopt_doctrine", { security: 0.15 + 2.2 * d.def + 0.8 * d.off + (st.warIds.length ? 0.2 : 0), expansion: 3 * d.off - d.cost / 2000 }, { opt: d.id, label: `${d.ja}を取り入れる` })); }
+      const coastal = (byState(ctx).get(st.id) ?? []).some((g) => ctx.world.cell.coastDist[g.cell] <= 1), at = st.warIds.length > 0, f = (d) => d.fx; // 候補の評価は結果の値だけで決める（理由・採点は保存しない）
+      for (const d of nodesOf(st)) { const c = canAdopt(st, d.id); if (!c.ok) continue; const x = f(d), sec = 0.15 + 2.2 * (x.def ?? 0) + 0.8 * (x.off ?? 0) + (at ? 0.2 : 0) + 1.2 * (x.attr ?? 0) + 0.8 * (x.coh ?? 0) + (coastal ? 1.5 * (x.naval ?? 0) : -0.5 * (x.naval ?? 0)) + 0.6 * (x.logi ?? 0); out.push(cand("adopt_doctrine", { security: sec, expansion: 3 * (x.off ?? 0) + 1.2 * (x.siege ?? 0) + 0.8 * (x.landing ?? 0) - d.cost / 2000 }, { opt: d.id, label: `${d.ja}を取り入れる` })); }
       return out.sort((a, b) => (b.factors.security + b.factors.expansion) - (a.factors.security + a.factors.expansion) || (a.opt < b.opt ? -1 : 1)).slice(0, 3);
     },
     execute(ctx, st, c) { const r = adoptDoctrine(ctx, st, c.opt, { provenance: c.provenance ?? "ai", decisionId: c.decisionId ?? null }); return r.ok ? { ok: true, silent: true, effects: [] } : { ok: false, error: r.reason }; } });

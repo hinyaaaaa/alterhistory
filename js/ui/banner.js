@@ -2,9 +2,9 @@
 // 通知（エラー・警告・お知らせ全て）は表示から一定時間で自動的に消える。
 import { byId } from "./dom.js";
 
-const AUTO_DISMISS_MS = 5000;
+const AUTO_DISMISS_MS = 5000, LONG_ERROR = 120;
 
-export function initBanner({ store, actions }) {
+export function initBanner({ store, actions, persistLongError = false }) {
   const banner = byId("banner");
   const body = byId("banner-body");
   const loading = byId("loading");
@@ -44,7 +44,8 @@ export function initBanner({ store, actions }) {
     if (key !== lastKey) {
       lastKey = key;
       clearTimeout(dismissTimer);
-      if (key) dismissTimer = setTimeout(() => actions.dismissMessage(), AUTO_DISMISS_MS);
+      // 長いエラー（確認が要る失敗）は、閉じるまで画面内に残す（persistLongError）
+      if (key && !(persistLongError && key.startsWith("error:") && key.length > LONG_ERROR)) dismissTimer = setTimeout(() => actions.dismissMessage(), AUTO_DISMISS_MS);
     }
   });
 }

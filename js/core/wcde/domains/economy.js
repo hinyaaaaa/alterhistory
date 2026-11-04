@@ -5,6 +5,7 @@ import { byState } from "../../civ/spatial.js";
 import { neighborStates, atWarWith, treatyBetween } from "../../civ/diplomacy.js";
 import { makeEvent } from "../../civ/events.js";
 import { effective } from "./effective.js";
+import { taxMult } from "../../civ/techfx.js";
 
 const SUBS = { forage: 0.5, fishing: 0.85, pastoral: 0.8, agriculture: 1.0 }, STAGE = { village: 1, town: 1.4, city: 2 };
 // v6.1.0 M3: 技術の経済効果は技術ツリーの fx から導く（産業 ind・収容 cap・交易 trade）。旧来の技術別の表は廃止
@@ -23,7 +24,8 @@ export function computeProduction(ctx, st, groups) {
   for (const g of groups) {
     const stage = g.settlementId ? STAGE[civ.settlements[g.settlementId]?.stage] ?? 1 : 1;
     let fert = 0; const cells = g.cells ?? [g.cell]; for (const c of cells) fert += ce.fertility[c]; fert /= cells.length;
-    const out = g.pop * (SUBS[g.subsistence] ?? 0.5) * stage * (0.7 + 0.6 * fert) * techMult * invest;
+    const nat = (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (g.capUntil > civ.monthIndex ? g.capMult ?? 1 : 1); // 自然条件（生態系・災害）: 生産は土地の状態に従う（技術では完全には打ち消せない）
+    const out = g.pop * (SUBS[g.subsistence] ?? 0.5) * stage * (0.7 + 0.6 * fert) * techMult * invest * (0.4 + 0.6 * nat);
     pop += g.pop; output += out; foodNum += Math.min(1.3, 1 / Math.max(0.5, g.pressure ?? 1)) * g.pop; foodDen += g.pop;
   }
   return { pop, output, foodBalance: foodDen ? foodNum / foodDen : 1 };
@@ -44,7 +46,7 @@ export function stepEconomy(ctx) {
       const b = civ.states[bid], key = a.id < b.id ? a.id + "|" + b.id : b.id + "|" + a.id; if (done.has(key)) { a.econ.trade[bid] = b.econ?.trade?.[a.id] ?? 0; continue; } done.add(key);
       const war = atWarWith(civ, a, b), sanc = (a.sanctions[b.id] ?? 0) > mi || (b.sanctions[a.id] ?? 0) > mi;
       const treaty = !!treatyBetween(civ, a, b, "trade");
-      const open = war || sanc ? 0 : 1 + (treaty ? 1 : 0) + 1.2 * Math.min(fxSum(civ, a, "trade"), fxSum(civ, b, "trade"));
+      const blockaded = (a.blockade ?? 0) > mi || (b.blockade ?? 0) > mi, open = war || sanc ? 0 : blockaded ? 0.3 : 1 + (treaty ? 1 : 0) + 1.2 * Math.min(fxSum(civ, a, "trade"), fxSum(civ, b, "trade"));
       const v = open ? TRADE_K * Math.sqrt(Math.max(0, effective(civ, a, "industry") * effective(civ, b, "industry"))) * open : 0;
       a.econ.trade[bid] = v; b.econ.trade ??= {}; b.econ.trade[a.id] = v; gain.set(a.id, gain.get(a.id) + v); gain.set(b.id, gain.get(b.id) + v);
       const was = a.econ.routes[bid]; // 経路の開設・途絶（事実として残すのは、依存が大きいもの）
@@ -57,6 +59,10 @@ export function stepEconomy(ctx) {
     const e = st.econ, inc = gain.get(st.id) ?? 0; e.tradeIncome = inc; st.treasury += effective(civ, st, "tradeIncome"); // 財政には有効値（通常値＋介入補正）が入る
     // 経済から技術へ: 交易・記録・行政のある国は、学びが速い（上限 +30%）。食料が足りなければ安定が下がる
     e.techBoost = Math.min(0.3, 0.05 * Math.log1p(effective(civ, st, "tradeIncome") * 4) + (adopted(st, "record_keeping") ? 0.04 : 0) + (adopted(st, "writing") ? 0.06 : 0) + (adopted(st, "administration") ? 0.05 : 0));
-    if (e.foodBalance < 0.8) st.stability = Math.max(0, st.stability - (0.8 - e.foodBalance) * 0.05);
+    // 財政の内訳（歳入: 税・交易／歳出: 軍の維持費）。軍の維持費は兵力・装備・戦争の有無から決まり、長い戦争は財政を圧迫する（国庫が尽きると軍事能力・正統性に効く）
+    const tax = st.pop * st.policy.tax * 0.0012 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1), upkeep = st.army * 0.0006 * (1 + 0.6 * (st.military?.equipLevel ?? 0.3)) * (st.warIds.length ? 1.5 : 1); st.treasury -= upkeep;
+    e.fiscal = { tax: Math.round(tax * 100) / 100, trade: Math.round(effective(civ, st, "tradeIncome") * 100) / 100, upkeep: Math.round(upkeep * 100) / 100 };
+    // 食料が足りなければ安定が下がる。同盟国がいれば、その支援で和らぐ（供給・条約が経済に効く）
+    if (e.foodBalance < 0.8) { const al = civ.activeTreatyIds.filter((i) => { const t = civ.treaties[i]; return t.type === "alliance" && (t.a === st.id || t.b === st.id); }).length; st.stability = Math.max(0, st.stability - (0.8 - e.foodBalance) * 0.05 * (1 - Math.min(0.6, 0.3 * al))); }
   }
 }

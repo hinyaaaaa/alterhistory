@@ -607,3 +607,8 @@ CI（`.github/workflows/ci.yml`）が `npm ci` → `npm test` → `npm run build
 - **計測**: 描画の速さは、命令を並べた時間（js）と塗り終わりまでの時間を分けて測る（Canvas 2D は塗りを後でまとめて行う）。`alterhistory.perf()`／`createRenderProfile({ sync: true })`。外挿（標本の線形倍）で見積もらない（二乗のものが隠れる）。
 - **dist**: `npm run build` を忘れると `tests/build-integrity.test.mjs` が落ちる。公開物の確認は `dist/build-info.json` の SHA-256 と、アプリ内のビルド識別子（「このアプリについて」／`alterhistory.build`）。
 - **未確定**: Edge 実機の GPU 描画での塗り終わり（既定キャンバス対 CPU キャンバス）。`alterhistory.perf()` の結果で、タイルのキャンバスを CPU 描画にするか決める。
+
+
+## v6.1.0 M8 時点（6.1.0-m8）
+- M7（外交・介入・災厄・ニュース）と M8（UI）を実装済み。詳細・M9 で更新が要るテストは docs/V6_1_M7_M8_IMPLEMENTATION.md。
+- 次は M9（テスト・性能・版の統一・仕上げ）。

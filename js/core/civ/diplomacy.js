@@ -41,25 +41,30 @@ export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = nu
     if (t.type !== "alliance" || (t.a !== host.id && t.b !== host.id)) continue; const ally = civ.states[t.a === host.id ? t.b : t.a]; if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;
     if (rng() < 0.6) { w.sides[side].push(ally.id); ally.warIds.push(id); adjustRel(ally, foe, -25); makeEvent(civ, ids, { kind: "ally_joined", title: `${ally.name}が${host.name}側で参戦した`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: id, role: "war" }], location: null, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] }); }
   }
+  ctx.warOps?.init(ctx, w); // v6.1.0 M6: WCDE の世界では、戦域・部隊・作戦を持つ戦争の記録にする
   return w;
 }
-export function endWar(ctx, w, outcome) {
+export function endWar(ctx, w, outcome, terms = null) {
   const { civ, ids } = ctx; if (w.status !== "active") return; w.status = "ended"; w.outcome = outcome; w.endedAt = civ.monthIndex; civ.activeWarIds = civ.activeWarIds.filter((i) => i !== w.id);
   const all = [...w.sides.a, ...w.sides.d].map((i) => civ.states[i]); for (const s of all) s.warIds = s.warIds.filter((i) => i !== w.id);
   const atk = civ.states[w.aggressor], def = civ.states[w.defender]; const lead = outcome === "aggressor_victory" || (outcome === "negotiated" && w.score > 0);
-  const gained = []; if (lead && atk?.alive) for (const gid of w.occupied) { const g = civ.groups[gid]; if (g && g.stateId === w.defender) { g.stateId = atk.id; gained.push(gid); } }
+  const gained = [], moved = []; const settled = ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null; // v6.1.0 M7: WCDE の世界では、占領した国家ごとに領土を移す
+  if (settled) for (const x of settled) { gained.push(x.gid); moved.push(x); } else if (lead && atk?.alive) for (const gid of w.occupied) { const g = civ.groups[gid]; if (g && g.stateId === w.defender) { g.stateId = atk.id; gained.push(gid); } }
   for (const s of all) { s.lastWarEnd = civ.monthIndex; s.stability = Math.max(0, s.stability - 0.04); if (s.campaign?.warId === w.id) s.campaign = null; }
   if (atk && def) adjustRel(atk, def, -10);
-  makeEvent(civ, ids, { kind: "war_ended", title: `${atk?.name ?? "?"}と${def?.name ?? "?"}の戦争が終わった（${{ aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: "講和", state_dissolved: "国家の消滅" }[outcome] ?? outcome}）`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => ({ targetId: gid, property: "stateId", before: w.defender, after: atk.id })), facts: { warId: w.id, outcome, stateId: gained.length ? atk?.id ?? null : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
+  makeEvent(civ, ids, { kind: "war_ended", title: `${atk?.name ?? "?"}と${def?.name ?? "?"}の戦争が終わった（${{ aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: terms?.kind === "cession" ? "講和（占領地の割譲）" : "講和", state_dissolved: "国家の消滅" }[outcome] ?? outcome}）`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => { const m = moved.find((x) => x.gid === gid); return { targetId: gid, property: "stateId", before: m?.from ?? w.defender, after: m?.to ?? atk.id }; }), facts: { warId: w.id, outcome, terms: terms?.kind ?? null, stateId: gained.length ? (moved[0]?.to ?? atk?.id ?? null) : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
+  ctx.warOps?.finalize(ctx, w, outcome); // 作戦・部隊・戦域を片付け、代表的な戦いだけを資料に残す（領土の移転のあと）
 }
+
 /** 月次（conflict フェーズ）: 条約の期限・戦況・占領・講和。国家が滅びた戦争は終える */
 export function stepWars(ctx) {
   const { world, civ, ids, rng } = ctx, mi = civ.monthIndex;
   if (mi % 12 === 0) { for (const i of [...civ.activeTreatyIds]) { const t = civ.treaties[i]; if (t.expiresAt <= mi || !civ.states[t.a]?.alive || !civ.states[t.b]?.alive) endTreaty(ctx, t, "期限を迎えた"); } for (const id in civ.states) { const s = civ.states[id]; if (s.alive) for (const k in s.relations) { s.relations[k] = Math.round(s.relations[k] * 0.9 * 10) / 10; if (Math.abs(s.relations[k]) < 1) delete s.relations[k]; } } }
-  const groups = byState(ctx);
+  const groups = byState(ctx); ctx.warOps?.monthly(ctx);
   for (const wid of [...civ.activeWarIds]) {
     const w = civ.wars[wid], A = w.sides.a.map((i) => civ.states[i]).filter((s) => s.alive), D = w.sides.d.map((i) => civ.states[i]).filter((s) => s.alive);
     if (!civ.states[w.aggressor].alive || !civ.states[w.defender].alive || !A.length || !D.length) { endWar(ctx, w, "state_dissolved"); continue; }
+    if (ctx.warOps) { ctx.warOps.step(ctx, w); continue; } // v6.1.0 M6: 作戦・会戦の戦争モデル（WCDE の世界）。v5 の世界は下の簡易モデル
     const sA = A.reduce((s, x) => s + strength(civ, x), 0), sD = D.reduce((s, x) => s + strength(civ, x), 0);
     w.score = Math.max(-100, Math.min(100, w.score + ((sA - sD) / (sA + sD + 1)) * 6 + (rng() - 0.5) * 3));
     const lossA = 0.0025 * (sD / (sA + sD + 1)), lossD = 0.0025 * (sA / (sA + sD + 1)); let dead = 0;

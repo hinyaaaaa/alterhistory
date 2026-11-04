@@ -21,49 +21,40 @@ const shareOf = (ctx, st) => {
   if (w.firearms) { delete w.ranged; } const tot = Object.values(w).reduce((a, b) => a + b, 0); for (const k in w) w[k] /= tot; return w;
 };
 
-/** ドクトリン。共通 20（技術・前提の連鎖）と、政体固有 10。effect: off=攻撃倍率の増分, def=防御の増分 */
-const D = (id, ja, tier, prereq, tech, cost, off, def, polity = null) => ({ id, ja, tier, prereq, tech, cost, off, def, polity });
-export const DOCTRINES = Object.freeze([
-  D("levy_drill", "徴集兵の訓練", 1, [], [], 20, 0.03, 0.02), D("shield_wall", "盾の壁", 1, [], [], 25, 0, 0.06), D("skirmish", "散兵戦", 1, [], [], 25, 0.04, 0),
-  D("ranged_volley", "斉射", 2, ["skirmish"], ["bronze_weapons"], 50, 0.05, 0), D("spear_phalanx", "密集槍陣", 2, ["shield_wall"], ["bronze_weapons"], 55, 0.04, 0.05),
-  D("scout_screen", "斥候網", 1, [], [], 20, 0.02, 0.02), D("fortified_camp", "野営築城", 2, ["shield_wall"], ["fortification"], 60, 0, 0.08),
-  D("mounted_charge", "騎兵突撃", 2, ["skirmish"], ["horse_riding"], 70, 0.07, 0), D("horse_archery", "騎射", 3, ["mounted_charge", "ranged_volley"], ["horse_riding"], 100, 0.06, 0),
-  D("heavy_infantry", "重装歩兵", 3, ["spear_phalanx"], ["iron_weapons"], 110, 0.06, 0.04), D("siege_craft", "攻城術", 3, ["fortified_camp"], ["construction", "iron_weapons"], 120, 0.05, 0),
-  D("combined_arms", "諸兵科連合", 4, ["heavy_infantry", "mounted_charge"], [], 180, 0.07, 0.03), D("supply_train", "補給線の整備", 2, ["scout_screen"], ["construction"], 70, 0.03, 0.03),
-  D("naval_marines", "海兵", 3, ["scout_screen"], ["shipbuilding"], 110, 0.05, 0.02), D("coast_defense", "沿岸防衛", 3, ["fortified_camp"], ["shipbuilding"], 100, 0, 0.07),
-  D("standing_army", "常備軍", 4, ["levy_drill", "supply_train"], ["administration"], 200, 0.06, 0.04), D("officer_corps", "将校団", 4, ["standing_army"], ["writing"], 220, 0.05, 0.03),
-  D("gun_line", "線形戦列", 5, ["combined_arms"], ["gunpowder"], 300, 0.09, 0.03), D("bastion_forts", "稜堡式築城", 5, ["siege_craft", "supply_train"], ["gunpowder"], 320, 0, 0.1), D("general_staff", "参謀組織", 5, ["officer_corps"], ["mathematics"], 350, 0.06, 0.04),
-  // 政体固有
-  D("raid_tactics", "襲撃戦術", 1, [], [], 25, 0.05, 0, "tribal"), D("warband_bond", "戦士団の絆", 2, ["raid_tactics"], [], 45, 0.05, 0.02, "tribal"),
-  D("sworn_retinue", "誓約の近侍", 2, [], [], 50, 0.04, 0.03, "chiefdom"), D("holy_war", "聖戦の教え", 2, [], [], 60, 0.07, 0, "theocracy"), D("temple_guard", "神殿守護", 3, ["holy_war"], ["construction"], 90, 0.02, 0.08, "theocracy"),
-  D("feudal_levy", "封建軍役", 2, [], [], 55, 0.05, 0.03, "kingdom"), D("knight_order", "騎士団", 3, ["feudal_levy"], ["horse_riding"], 120, 0.08, 0.02, "kingdom"),
-  D("legion_system", "軍団制", 3, [], ["iron_weapons"], 130, 0.07, 0.05, "empire"), D("citizen_militia", "市民皆兵", 2, [], [], 55, 0.02, 0.07, "republic"), D("naval_league", "海上同盟", 3, [], ["shipbuilding"], 110, 0.05, 0.05, "republic"),
-]);
-export const DOCTRINE = Object.freeze(Object.fromEntries(DOCTRINES.map((d) => [d.id, d])));
-export const OFF_CAP = 0.25, DEF_CAP = 0.4;
+// v6.1.0 M6: ドクトリンは doctrine.js（共通 5 系統 × 5 段 ＋ 国家固有 3 系統）。ここは取得の検証・適用・軍事能力の更新だけを持つ
+import { COMMON_NODES, COMMON_BY_ID, CAP, FX_KEYS, nodeOf, nodesOf, branchesOf, doctrineFx, doctrineInfo, chooseSpecial } from "./doctrine.js";
+export const DOCTRINES = COMMON_NODES;     // 互換: 共通ノードの一覧（国家固有のノードは国家ごとに st.military.special にある。nodesOf(st) で全体）
+export const DOCTRINE = COMMON_BY_ID;
+export const OFF_CAP = CAP.off, DEF_CAP = CAP.def;
+export { nodesOf, nodeOf, branchesOf, doctrineFx };
 
-export const initMilitary = () => ({ units: [], equipLevel: 0.3, readiness: 0.5, doctrine: { taken: {} }, shares: null });
-/** 取れるか。理由つき */
+export const initMilitary = () => ({ units: [], equipLevel: 0.3, readiness: 0.5, doctrine: { taken: {} }, shares: null, special: [], fx: Object.fromEntries(FX_KEYS.map((k) => [k, 0])), exp: { won: 0, lost: 0, defended: 0, sieges: 0, sea: 0, wars: 0 } });
+/** 取れるか。理由つき（UI の表示条件と AI の候補・命令の検証は、この同じ関数を通る） */
 export function canAdopt(st, id) {
-  const d = DOCTRINE[id]; if (!d) return { ok: false, reason: "そのドクトリンはありません" }; const M = st.military; if (M?.doctrine.taken[id] != null) return { ok: false, reason: "すでに取得済み" };
-  if (d.polity && d.polity !== st.polity) return { ok: false, reason: `${d.ja}は政体「${d.polity}」固有` };
-  for (const p of d.prereq) if (M?.doctrine.taken[p] == null) return { ok: false, reason: `前提のドクトリン「${DOCTRINE[p].ja}」が未取得` };
+  const d = nodeOf(st, id); if (!d) return { ok: false, reason: "そのドクトリンはありません" }; const M = st.military;
+  if (M?.doctrine.taken[id] != null) return { ok: false, reason: "すでに取得済み" };
+  if (d.special && !(M?.special ?? []).some((b) => `sp:${b.key}` === d.branch)) return { ok: false, reason: `${d.ja}は、今のこの国の固有の系統ではない` };
+  for (const p of d.prereq) if (M?.doctrine.taken[p] == null) return { ok: false, reason: `前提のドクトリン「${nodeOf(st, p)?.ja ?? p}」が未取得` };
   for (const t of d.tech) if (!has(st, t)) return { ok: false, reason: `技術「${t}」が必要` };
   if (st.treasury < d.cost) return { ok: false, reason: `財政が足りない（${d.cost}）` };
   return { ok: true };
 }
 export function adoptDoctrine(ctx, st, id, { provenance = "simulation", decisionId = null } = {}) {
-  const c = canAdopt(st, id); if (!c.ok) return c; const { civ, ids } = ctx, d = DOCTRINE[id]; const M = (st.military ??= initMilitary());
+  const c = canAdopt(st, id); if (!c.ok) return c; const { civ, ids } = ctx, d = nodeOf(st, id); const M = (st.military ??= initMilitary());
   st.treasury -= d.cost; M.doctrine.taken[id] = civ.monthIndex;
   const ev = makeEvent(civ, ids, { kind: "doctrine_adopted", title: `${st.name}が「${d.ja}」を取り入れた`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "military.doctrine", before: null, after: id }], provenance, decisionId });
   recompute(ctx, st); return { ok: true, eventId: ev?.eventId ?? null };
 }
-const activeDoctrines = (st) => Object.keys(st.military?.doctrine.taken ?? {}).map((i) => DOCTRINE[i]).filter((d) => d && (!d.polity || d.polity === st.polity));
+/** 固有の系統の見直し（年 1 回）。得点の高い 3 本。系統が変わると、前の系統のノードは休眠する（取得の記録は残る） */
+export function refreshSpecial(ctx, st) {
+  const M = st.military, next = chooseSpecial(doctrineInfo(ctx, st), M.special); const same = M.special.length === 3 && next.every((b, i) => M.special.some((o) => o.key === b.key));
+  if (!same) M.special = next;
+}
 function recompute(ctx, st) {
   const M = st.military, ind = effective(ctx.civ, st, "perCapita"), wTech = (has(st, "bronze_weapons") ? 0.08 : 0) + (has(st, "iron_weapons") ? 0.12 : 0) + (has(st, "steel") ? 0.05 : 0) + (has(st, "gunpowder") ? 0.1 : 0);
   M.equipLevel = clamp(0.15 + 0.35 * clamp(ind / 1.6) + wTech + (st.treasury > 0 ? 0.1 : -0.1) + 0.1 * (st.econ?.investment ?? 0), 0, 1);
-  M.readiness = clamp(0.5 * st.stability + 0.3 * (st.treasury >= 0 ? 1 : 0) + 0.2 * (1 - (st.politics ? effective(ctx.civ, st, "fatigue") : 0)), 0, 1);
-  const ds = activeDoctrines(st), off = clamp(ds.reduce((s, d) => s + d.off, 0), 0, OFF_CAP), def = clamp(ds.reduce((s, d) => s + d.def, 0), 0, DEF_CAP);
+  M.readiness = clamp(0.5 * effective(ctx.civ, st, "stability") + 0.3 * (st.treasury >= 0 ? 1 : 0) + 0.2 * (1 - (st.politics ? effective(ctx.civ, st, "fatigue") : 0)), 0, 1);
+  const fx = doctrineFx(st), off = fx.off, def = fx.def; M.fx = fx;
   const eqE = effective(ctx.civ, st, "equipLevel"), rdE = effective(ctx.civ, st, "readiness"); // 介入があれば有効値（通常値＋補正）で軍事能力を決める
   st.milBonus = Math.round(clamp(0.35 * (eqE - 0.3) + 0.15 * (rdE - 0.5) + off, -0.6, 0.6) * 1000) / 1000; st.milDef = Math.round(def * 1000) / 1000;
 }
@@ -71,7 +62,7 @@ function recompute(ctx, st) {
 export function stepMilitary(ctx) {
   const { civ, ids } = ctx, mi = civ.monthIndex; if (!civ.options.wcde || mi % 3 !== 0) return;
   for (const st of Object.values(civ.states)) {
-    if (!st.alive) continue; const M = (st.military ??= initMilitary()); recompute(ctx, st);
+    if (!st.alive) continue; const M = (st.military ??= initMilitary()); if (!M.special?.length || mi % 12 === 0) refreshSpecial(ctx, st); recompute(ctx, st);
     const shares = M.shares && Object.keys(M.shares).every((k) => UNIT_KINDS[k]?.need(st, ctx)) ? M.shares : shareOf(ctx, st); if (M.shares && shares !== M.shares) M.shares = null; // 使えなくなった編制は自動の配分へ戻る
     const old = new Map(M.units.map((u) => [u.kind, u])), next = [];
     for (const [k, sh] of Object.entries(shares)) {
