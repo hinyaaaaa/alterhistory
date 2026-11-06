@@ -4,7 +4,22 @@ export const h = (tag, props = {}, ...kids) => { const el = document.createEleme
 export const sv = (tag, props = {}, ...kids) => { const el = document.createElementNS(SVG, tag); for (const [k, v] of Object.entries(props ?? {})) { if (k.startsWith("on")) el.addEventListener(k.slice(2), v); else if (v != null && v !== false) el.setAttribute(k, v); } for (const c of kids.flat(3)) if (c != null && c !== false) el.append(c.nodeType ? c : document.createTextNode(String(c))); return el; };
 export const pct = (x) => Math.round(x * 100) + "%", n0 = (x) => Math.round(x).toLocaleString("ja-JP"), r2 = (x) => Math.round(x * 100) / 100;
 export const hash = (s) => { let x = 2166136261; for (const ch of String(s)) x = Math.imul(x ^ ch.charCodeAt(0), 16777619); return x >>> 0; };
-export const colorOf = (id, l = 56) => `hsl(${hash(id) % 360} 48% ${l}%)`;
+/* 色の割り当て: 国家・文化・言語・宗教に、見分けやすい色を 1 つずつ。隣り合うものは色相・明るさが離れた色を選び、一度決めた色は変えない。
+   登録の無い id（過去の閲覧で出てくる資料の失われた国家など）は、従来どおり id から決まる色にする。 */
+export const PALETTE = [[6, 64, 62], [176, 46, 48], [46, 78, 60], [268, 44, 66], [100, 42, 52], [212, 58, 62], [330, 52, 64], [28, 70, 58], [148, 40, 46], [240, 44, 70], [62, 56, 52], [290, 36, 60], [190, 52, 56], [14, 42, 48], [130, 34, 62], [52, 62, 70], [224, 40, 50], [350, 54, 54], [82, 50, 62], [258, 38, 56], [36, 46, 66], [168, 36, 62], [306, 44, 70], [200, 44, 40]];
+const REG = new Map(), USE = new Array(PALETTE.length).fill(0);
+const pdist = (a, b) => { const A = PALETTE[a], B = PALETTE[b], dh = Math.abs(A[0] - B[0]), h = Math.min(dh, 360 - dh) / 180; return h + (0.6 * Math.abs(A[2] - B[2])) / 30 + (0.3 * Math.abs(A[1] - B[1])) / 40; };
+export const hasColor = (id) => REG.has(id);
+export function resetColors() { REG.clear(); USE.fill(0); }
+/** ids: 新しく色が要るかもしれない id（安定した順）／ adj: id → 隣り合う id の集合 */
+export function assignColors(ids, adj) {
+  for (const id of ids) {
+    if (REG.has(id)) continue; const near = [...(adj.get(id) ?? [])].map((n) => REG.get(n)).filter((x) => x != null); let best = 0, bs = -1e9;
+    for (let i = 0; i < PALETTE.length; i++) { const sep = near.length ? Math.min(...near.map((j) => pdist(i, j))) : 9, sc = Math.min(sep, 1.2) * 10 - USE[i] * 1.5; if (sc > bs + 1e-9) { bs = sc; best = i; } }
+    REG.set(id, best); USE[best]++;
+  }
+}
+export const colorOf = (id, l) => { const i = REG.get(id); if (i != null) { const p = PALETTE[i]; return `hsl(${p[0]} ${p[1]}% ${l ?? p[2]}%)`; } return `hsl(${hash(id) % 360} 48% ${l ?? 56}%)`; };
 export const POLITY_JA = { tribal: "部族連合", chiefdom: "首長制", city_state: "都市国家", kingdom: "王国", empire: "帝国", republic: "共和制", theocracy: "神権制", federation: "連邦制", confederation: "連合" };
 export const polityJa = (p) => POLITY_JA[p] ?? p ?? "—";
 export const lb = (ja, en) => h("div", { class: "lb" }, ja, en ? h("em", {}, en) : null);

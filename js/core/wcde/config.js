@@ -6,10 +6,11 @@ import { normalizeCalendar } from "./calendar.js";
 import { BIOMES } from "../civ/world-consts.js";
 import { hashSeed } from "../civ/civ-state.js";
 
-export const WCDE_VERSION = "6.1.0-dev";
+export const WCDE_VERSION = "6.1.0";
 export const CONFIG_SCHEMA = 2; // v6.1.0: 魔法・独自種族の設定を廃止。自然法則に生態系の項目を追加
 export const DEFAULT_LAWS = Object.freeze({ disasterRate: 1, climateVolatility: 1, fertilityScale: 1, faunaRichness: 1, ecoResilience: 1 });
 export const PREHISTORY_YEARS = 500000;
+export const NEOLITHIC_YEARS = 10000; // 既定: 年 0（歴史の始まり）の約 9,500 年前に新石器が始まりうる（史実の「肥沃な三日月地帯の農耕の始まり」と第一王朝のあいだの長さ）
 /** 計算・描画の解像度（セル数）。世界のスケール・自然法則・時間の意味は変えない（国家の規模を自動的に小さくしない） */
 export const RESOLUTION = Object.freeze({ standard: 3000, extra: 6000, max: 20000, choices: Object.freeze([3000, 6000]) });
 
@@ -29,7 +30,8 @@ export function normalizeWorldConfig(input = {}) {
   const laws = { disasterRate: num(errors, "laws.disasterRate", i.laws?.disasterRate, DEFAULT_LAWS.disasterRate, 0, 3), climateVolatility: num(errors, "laws.climateVolatility", i.laws?.climateVolatility, DEFAULT_LAWS.climateVolatility, 0, 3), fertilityScale: num(errors, "laws.fertilityScale", i.laws?.fertilityScale, DEFAULT_LAWS.fertilityScale, 0.3, 2), faunaRichness: num(errors, "laws.faunaRichness", i.laws?.faunaRichness, DEFAULT_LAWS.faunaRichness, 0.2, 2), ecoResilience: num(errors, "laws.ecoResilience", i.laws?.ecoResilience, DEFAULT_LAWS.ecoResilience, 0.3, 2) };
   const cal = normalizeCalendar(i.calendar); errors.push(...cal.errors);
   const prehistoryYears = num(errors, "prehistory.years", i.prehistory?.years, PREHISTORY_YEARS, 20000, 2000000);
-  const config = { schema: CONFIG_SCHEMA, name, worldSeed: sp.spec.worldSeed, spec: sp.spec, laws, calendar: cal.calendar, prehistory: { years: prehistoryYears }, detail: i.detail === "light" || i.detail === "fine" ? i.detail : "standard" };
+  const neolithicYears = num(errors, "prehistory.neolithicYears", i.prehistory?.neolithicYears, NEOLITHIC_YEARS, 1000, 60000); // 先史の終わりから数えて、農耕などが現れうる最も早い時期
+  const config = { schema: CONFIG_SCHEMA, name, worldSeed: sp.spec.worldSeed, spec: sp.spec, laws, calendar: cal.calendar, prehistory: { years: prehistoryYears, neolithicYears }, detail: i.detail === "light" || i.detail === "fine" ? i.detail : "standard" };
   return { config, errors };
 }
 

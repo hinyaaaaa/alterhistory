@@ -15,7 +15,7 @@ import { needsStartGroup, visibleGroups } from "../js/app/group-actions.js";
 globalThis.requestAnimationFrame ??= (f) => setTimeout(f, 0); // 画面のない環境の代用
 let failed = 0;
 const acheck = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };
-const spec = (seed, n = 3000) => ({ worldSeed: seed, resolution: { targetCells: n } });
+const spec = (seed, n = 3000) => ({ worldSeed: seed, landFraction: 0.5, resolution: { targetCells: n } }); // v5 の地図編集の検証は、陸が多い世界（当時の既定 50%）で行う
 const W = generateWorld(spec("v500-a"));
 
 console.log("=== 世界 → 地図 ===");

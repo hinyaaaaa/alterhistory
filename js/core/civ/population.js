@@ -36,6 +36,9 @@ export function stepCost(world, c, seafaring) {
 
 /** 生業ごとに集団が使う面積（km²）。解像度（セルの大きさ）に依存しない */
 export const budgetKm2 = (subsistence) => (subsistence === "agriculture" ? POP.agriTerritoryKm2 : POP.territoryKm2);
+// v6.1.0 M9: 粗い世界では1セルが領域の予算より広い。1セルに1集団しか置けないため、集団は「そのセルの人々全体」を表す（セル面積の COVER 割まで使う）。解像度で世界人口が変わらないようにする
+export const COVER = 0.2;
+export const cellBudgetKm2 = (world, c, subsistence) => Math.max(budgetKm2(subsistence), world.cell.areaKm2[c] * COVER);
 /** セル1つの人口密度（人/km²）。生業と知識で変わる。 */
 export function cellDensity(world, c, subsistence, knowledge) {
   const cell = world.cell; if (cell.landWater[c] !== LAND_WATER.LAND) return 0;
@@ -48,7 +51,7 @@ export function cellDensity(world, c, subsistence, knowledge) {
   }
 }
 /** セル1つを単独で領域にしたときの収容力（人）。移住先の採点に使う */
-export const cellCapacity = (world, c, subsistence, knowledge) => cellDensity(world, c, subsistence, knowledge) * Math.min(world.cell.areaKm2[c], budgetKm2(subsistence));
+export const cellCapacity = (world, c, subsistence, knowledge) => cellDensity(world, c, subsistence, knowledge) * Math.min(world.cell.areaKm2[c], cellBudgetKm2(world, c, subsistence));
 /** 集団の領域: 自セルから、隣接する陸セルを足して面積が territoryKm2 に届くまで（粗い世界では自セルだけ、細かい世界では数セル） */
 export function territoryOf(world, c) {
   const m = world.mesh, out = [c]; let area = world.cell.areaKm2[c];
@@ -58,7 +61,7 @@ export function territoryOf(world, c) {
 const ensureCells = (world, g) => g.cells ?? (g.cells = territoryOf(world, g.cell));
 function occupancy(world, civ) { const occ = new Map(); for (const id in civ.groups) for (const c of ensureCells(world, civ.groups[id])) occ.set(c, (occ.get(c) ?? 0) + 1); return occ; }
 export function groupCapacity(world, g, occ) { // 領域のセルを、面積予算が尽きるまで密度×面積で積算（ほかの集団と重なるセルは按分）
-  let k = 0, left = budgetKm2(g.subsistence); const tm = densityMult(g);
+  let k = 0, left = cellBudgetKm2(world, g.cell, g.subsistence); const tm = densityMult(g);
   for (const c of ensureCells(world, g)) { if (left <= 0) break; const a = Math.min(world.cell.areaKm2[c], left); k += cellDensity(world, c, g.subsistence, g.knowledge) * a / (occ.get(c) ?? 1); left -= a; }
   return k;
 }

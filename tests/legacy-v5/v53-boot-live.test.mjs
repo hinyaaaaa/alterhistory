@@ -1,19 +1,19 @@
 // v5.3 UI を、実際の本体部品（store / civ / history-actions / timeActions）につないで起動し、操作が本体へ届くかを確かめる。
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { worldToMap } from "../js/core/world-bridge.js";
-import { createStore } from "../js/core/store.js";
-import { createCivActions } from "../js/app/civ-actions.js";
-import { createTimeActions } from "../js/app/time-actions.js";
-import { createHistoryActions } from "../js/app/history-actions.js";
-import { createGroupActions } from "../js/app/group-actions.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { worldToMap } from "../../js/core/world-bridge.js";
+import { createStore } from "../../js/core/store.js";
+import { createCivActions } from "../../js/app/civ-actions.js";
+import { createTimeActions } from "../../js/app/time-actions.js";
+import { createHistoryActions } from "../../js/app/history-actions.js";
+import { createGroupActions } from "../../js/app/group-actions.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
 
 const dom = new JSDOM('<!doctype html><body><div id="v53-root"></div><div id="stage"><canvas id="map-canvas"></canvas></div></body>', { pretendToBeVisual: true });
 for (const k of ["window", "document", "HTMLElement", "HTMLButtonElement", "Element", "Node", "Event", "MouseEvent", "KeyboardEvent"]) globalThis[k] = dom.window[k];
 globalThis.requestAnimationFrame = (f) => setTimeout(f, 0);
-const { bootV53 } = await import("../js/ui/v53/boot-live.js");
+const { bootV53 } = await import("../../js/ui/v53/boot-live.js");
 let failed = 0; const check = async (l, fn) => { try { await fn(); console.log(`  OK   ${l}`); } catch (e) { failed++; console.log(`  FAIL ${l}: ${String(e.stack ?? e.message).split("\n").slice(0, 3).join(" | ")}`); } };
 const $ = (s) => document.querySelector(s), $$ = (s) => [...document.querySelectorAll(s)], click = (el) => el.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })), tick = (ms = 5) => new Promise((r) => setTimeout(r, ms));
 

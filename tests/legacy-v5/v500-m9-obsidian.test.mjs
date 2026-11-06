@@ -1,13 +1,13 @@
 // V5-M9: Obsidian ZIP。1実体=1ノート・全イベント/全AI判断・リンク整合・詳細ログ・関係グラフ・地図・出力先の安全・再出力・範囲指定。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
-import { exportObsidianZip, obsidianFiles, validateVault, estimateVault, FOLDERS } from "../js/io/obsidian.js";
-import { cellRaster } from "../js/core/world/cell-raster.js";
-import { unzipFiles, zipFiles } from "../js/io/zip.js";
-import { TECHS } from "../js/core/civ/tech.js";
-import { stateAt } from "../js/core/civ/history.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
+import { exportObsidianZip, obsidianFiles, validateVault, estimateVault, FOLDERS } from "../../js/io/obsidian.js";
+import { cellRaster } from "../../js/core/world/cell-raster.js";
+import { unzipFiles, zipFiles } from "../../js/io/zip.js";
+import { TECHS } from "../../js/core/civ/tech.js";
+import { stateAt } from "../../js/core/civ/history.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

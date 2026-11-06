@@ -8,7 +8,7 @@
 import { inLiveRange, findRecord } from "../civ/archive.js";
 import { checkpointFull, restoreInto } from "./contract.js";
 
-export const SPEEDS = Object.freeze([{ id: 0, label: "停止", mps: 0 }, { id: 1, label: "1か月/秒", mps: 1 }, { id: 2, label: "3か月/秒", mps: 3 }, { id: 3, label: "1年/秒", mps: 12 }, { id: 4, label: "5年/秒", mps: 60 }]);
+export const SPEEDS = Object.freeze([{ id: 0, label: "停止", mps: 0 }, { id: 1, label: "月", mps: 1 }, { id: 2, label: "3月", mps: 3 }, { id: 3, label: "年", mps: 12 }, { id: 4, label: "5年", mps: 60 }]);
 export const DEFAULT_SPEED = 1, ACK_KEEP = 400, MAX_RUN = 240, COOLDOWN = 60; // 同じ種類・同じ国の重大ニュースは、60か月は繰り返さない（次は通常の「主要ニュース」に格下げ）
 export const timeOf = (civ) => (civ.wcde.time ??= { speed: DEFAULT_SPEED, hold: false, resumeSpeed: null });
 export const newsOf = (civ) => (civ.wcde.news ??= { queue: [], acked: [], scanned: civ.events.length });

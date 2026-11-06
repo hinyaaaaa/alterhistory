@@ -1,15 +1,15 @@
 // V5-M11: 気候と自然災害。災害→食料・人口→緊張・安定→AIの対応→記憶→後の政策、の因果と制約。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim, checkCivIntegrity } from "../js/core/civ/civ-sim.js";
-import { climateIndex, climateGrowth, disasterMemory, strikeDisaster, KIND_JA } from "../js/core/civ/disaster.js";
-import { formState } from "../js/core/civ/states.js";
-import { ACTION, observe } from "../js/core/civ/actions.js";
-import { getEvent, consequencesOf, neighborhood, checkGraph } from "../js/core/civ/graph.js";
-import { encodeCivChunks, decodeCivChunks } from "../js/core/civ/civ-chunks.js";
-import { stateAt } from "../js/core/civ/history.js";
-import { rngOf } from "../js/core/civ/civ-state.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim, checkCivIntegrity } from "../../js/core/civ/civ-sim.js";
+import { climateIndex, climateGrowth, disasterMemory, strikeDisaster, KIND_JA } from "../../js/core/civ/disaster.js";
+import { formState } from "../../js/core/civ/states.js";
+import { ACTION, observe } from "../../js/core/civ/actions.js";
+import { getEvent, consequencesOf, neighborhood, checkGraph } from "../../js/core/civ/graph.js";
+import { encodeCivChunks, decodeCivChunks } from "../../js/core/civ/civ-chunks.js";
+import { stateAt } from "../../js/core/civ/history.js";
+import { rngOf } from "../../js/core/civ/civ-state.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

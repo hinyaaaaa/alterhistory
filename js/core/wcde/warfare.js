@@ -257,7 +257,7 @@ export function checkWars(civ) {
   const errs = []; for (const wid of civ.activeWarIds) {
     const w = civ.wars[wid], ops = w?.ops; if (!ops || ops.ended) continue; const ids = new Set([...w.sides.a, ...w.sides.d]);
     for (const f of Object.values(ops.forces)) { if (!ids.has(f.stateId)) errs.push(`戦争 ${wid} の部隊 ${f.id} の国家が参戦していない`); if (!(f.size >= 0) || !Number.isFinite(f.size)) errs.push(`戦争 ${wid} の部隊 ${f.id} の規模が不正`); if (!(f.morale >= 0 && f.morale <= 1)) errs.push(`戦争 ${wid} の部隊 ${f.id} の士気が範囲外`); if (f.campaignId && !ops.campaigns[f.campaignId]) errs.push(`戦争 ${wid} の部隊 ${f.id} の作戦 ${f.campaignId} が無い`); }
-    for (const c of Object.values(ops.campaigns)) { if (!ops.forces[c.forceId]) errs.push(`戦争 ${wid} の作戦 ${c.id} の部隊が無い`); if (c.theaterId && !ops.theaters[c.theaterId]) errs.push(`戦争 ${wid} の作戦 ${c.id} の戦域が無い`); if (c.targetGroupId && !civ.groups[c.targetGroupId]) errs.push(`戦争 ${wid} の作戦 ${c.id} の目標の集団が無い`); }
+    for (const c of Object.values(ops.campaigns)) { if (!ops.forces[c.forceId]) errs.push(`戦争 ${wid} の作戦 ${c.id} の部隊が無い`); if (c.theaterId && !ops.theaters[c.theaterId]) errs.push(`戦争 ${wid} の作戦 ${c.id} の戦域が無い`); if (c.phase !== "done" /* 終わった作戦の目標は、のちに併合・消滅した集団でもよい（履歴として ID だけ残る） */ && c.targetGroupId && !civ.groups[c.targetGroupId]) errs.push(`戦争 ${wid} の作戦 ${c.id} の目標の集団が無い`); }
     for (const gid of Object.keys(ops.occ)) if (!w.occupied.includes(gid)) errs.push(`戦争 ${wid} の占領の記録 ${gid} が占領の一覧に無い`);
   }
   for (const w of Object.values(civ.wars)) if (w.status === "ended" && w.ops && (w.ops.forces || w.ops.campaigns || w.ops.theaters)) errs.push(`終結した戦争 ${w.id} に部隊・作戦・戦域が残っている`);

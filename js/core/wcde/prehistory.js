@@ -22,6 +22,11 @@ const LEARN_EVERY = 4;               // 技術の評価は数ステップに1回
 // 先史の技術の発生率の補正（調整値）。文化の累積（世代を超えた知識の蓄積）で、時間とともに発明の速さが増す。最後の 15% は、定住・農耕が広く現れるよう急に増える（世界が人の住める土地を持つかぎり、建国の候補が現れる）
 const preBoost = (f) => 0.6 + 6 * f ** 3 + 3000 * Math.max(0, f - 0.85) ** 2;
 const isPrehistoricTech = (t) => t.pre; // 先史の技術（原初〜新石器）。青銅以降は歴史の月次の中で
+// 新石器の幕開け（v6.1.0 M9）。農耕・牧畜・大規模な建築は、完新世の安定した気候が始まってから初めて現れる（氷期の間は、発明の条件がそろわない）。
+//   現れうるのは、先史の終わりから数えて NEOLITHIC_YEARS（既定 10,000 年。設定 prehistory.neolithicYears）より後だけ。先史の終わり＝歴史の始まり（年 0）は、
+//   「最初の国家が現れる頃」（史実なら古代エジプト第一王朝の頃）として較正する。農耕が先史の途中（数十万年前）に現れて、始まりの世界が停滞するのを防ぐ。
+const RIPEN_YEARS = 400, FAR_SCALES = [1, 2, 3.5];
+const gateYears = (neo) => ({ seafaring: 60000, pottery: 20000, agriculture: neo, pastoralism: neo - 500, construction: neo - 500 }); // 技術ごとに「年 0 から数えて何年前より後に現れうるか」（航海・土器は氷期の終わりに近い時期、農耕は完新世）
 const LOCAL_SCALE = 0.4; // 近くの探索の範囲（移動の予算に対する比）
 const SPREAD_P = 0.6, SPREAD_HOPS = 12; // 技術の伝播: 隣接する集団へ 1 ステップあたり最大 SPREAD_HOPS 跳び。1 跳びの確率 SPREAD_P（同じ文化なら +0.15）
 const EPOCHS = 20;                   // 要約イベント（時代ごとの集計）の数
@@ -112,7 +117,7 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
   note("species_emerged", "古代型人類の集団が現れた", [{ entityId: "archaic", role: "species" }, { entityId: hg.id, role: "first_group" }], hg); stats.species.archaic = { at: start, cell: origin };
   const modernAt = Math.floor(steps * (0.3 + 0.25 * (hashSeed(civ.wcde.seeds.lineage, "modern") % 1000) / 1000)); let modernDone = false; stats.assimilated = 0;
   let areaSum = 0; for (const c of landCells) areaSum += ce.areaKm2[c]; const res = clamp(Math.sqrt(POP.territoryKm2 * 1.5 / (areaSum / landCells.length)), 1, 6); stats.moveScale = Math.round(res * 100) / 100;
-  const baseRate = POP.growthPerMonth * 12;
+  const baseRate = POP.growthPerMonth * 12, gate = gateYears(cfg.prehistory.neolithicYears ?? 10000);
   let Kworld = 0; for (const c of landCells) Kworld += 0.04 * (0.3 + ce.fertility[c]) * ce.areaKm2[c]; // 採集狩猟だけで世界が支えられる人口の目安
   civ.eco = initEco(world, cfg.laws, 0);
   let worldPop = 120, lastEpoch = -1, epochs = 0; const cultRel = new Map(); stats.epochs = [];
@@ -144,7 +149,8 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
         if (!g.tech.cand) refreshCand(g);
         const dt = (stepMonths / 12) * LEARN_EVERY, env = { accel: accel(civ, worldPop) * sp.techRate * preBoost(frac), contact: neighborsOf(g).length, rivals: 0 };
         for (const key of [...g.tech.cand]) {
-          const t = TECH[key]; if (!isPrehistoricTech(t)) continue; const rate = emergenceRate(world, civ, g, t, env);
+          const t = TECH[key]; if (!isPrehistoricTech(t) || (gate[key] != null && mi < -gate[key] * 12)) continue; let rate = emergenceRate(world, civ, g, t, env);
+          if (gate[key] != null) rate *= 1 + (mi + gate[key] * 12) / 12 / RIPEN_YEARS; // 条件がそろってから年月が経つほど、各地で独立に発明されやすくなる（農耕は複数の地域で、ほぼ必ず現れる）
           if (rate <= 0 || u01(civ, "pretech", step, g.id, key) >= pEmerge(rate, dt)) continue;
           learn(g, key, mi);
         }
@@ -157,7 +163,7 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
       if (g.pressure > POP.budPressure && g.pop >= POP.minBudPop * 1.25 && (g.noTargetUntil ?? -1) <= step) {
         stats.budSearches++; // まず近く（陸伝いの隣の領域）を探す。無ければ、航海を知る海辺の集団だけが遠く（海の向こう）を探す。探索は高価なので、行き先が無ければしばらく探さない
         const pick = (ts) => ts.find((x) => envFit(sp, ce.biome[x.cell]) >= 1) ?? ts[0];
-        let t = pick(targetsFor(world, g, occ, res, 6, Math.max(1 / res, LOCAL_SCALE))); if (!t && g.knowledge.seafaring >= 1 && ce.coastDist[g.cell] <= 1) { stats.farSearches++; t = pick(targetsFor(world, g, occ, res, 6, 1)); }
+        let t = pick(targetsFor(world, g, occ, res, 6, Math.max(1 / res, LOCAL_SCALE))); if (!t && g.knowledge.seafaring >= 1 && ce.coastDist[g.cell] <= 1) { stats.farSearches++; for (const sc of FAR_SCALES) { t = pick(targetsFor(world, g, occ, res, 6, sc)); if (t) break; } } // 海を渡る航海は、近い陸が空いていなければ、より遠くの陸を探す（人類は 1 万年あまりでほぼ全ての大陸に広がった）
         if (!t) g.noTargetUntil = step + 6 + (hashSeed(id) % 6);
         else {
           const moved = Math.round(g.pop * POP.budShare); g.pop -= moved; const child = spawnGroup(civ, ids, g, t.cell, moved); child.cells = territoryOf(world, t.cell); child.gen = (g.gen ?? 0) + 1; child.settledMonths = 0; child.stateId = null; order.push(child.id); addOcc(child);

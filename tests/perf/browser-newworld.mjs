@@ -7,7 +7,7 @@ import { root } from "../e2e/lib.mjs";
 const cells = Number(process.argv[2] ?? 250000), seed = process.argv[3] ?? "t1";
 const { browser, page, problems } = await launch();
 page.on("console", (m) => { if (m.type() === "log" && m.text().startsWith("[T]")) console.log(m.text()); });
-await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.bringToFront();
+await page.goto(pathToFileURL(path.join(root, "v5.html")).href); await page.bringToFront();
 await page.waitForFunction(() => !!globalThis.alterhistory, null, { timeout: 30000 });
 const res = await page.evaluate(async ({ cells, seed }) => {
   const { store, actions } = globalThis.alterhistory, marks = [], t0 = performance.now(); let last = null;

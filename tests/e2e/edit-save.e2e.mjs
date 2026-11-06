@@ -11,7 +11,7 @@ async function freshPage(file) {
   browser = fresh.browser; ctx = fresh.ctx; page = fresh.page;
   page.on("dialog", (d) => d.accept());
   page.on("pageerror", (e) => problems.push(`例外: ${e.message}`));
-  await page.goto(pathToFileURL(path.join(root, "index.html")).href, { waitUntil: "domcontentloaded" }); await page.bringToFront();
+  await page.goto(pathToFileURL(path.join(root, "v5.html")).href, { waitUntil: "domcontentloaded" }); await page.bringToFront();
   await page.setInputFiles("#file-input", file);
   await page.waitForFunction(() => /セル/.test(document.getElementById("status-map")?.textContent ?? ""), null, { timeout: 30000, polling: 100 });
 }

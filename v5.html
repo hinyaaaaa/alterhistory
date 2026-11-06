@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ALTERHISTORY</title>
+  <!-- 文字：画面は Noto Sans JP、地図は Shippori Mincho（明朝）。読み込めない環境では端末の游ゴシック／游明朝などに切り替わる -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&family=Shippori+Mincho:wght@500;700;800&display=swap">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/shell.css">
+  <link rel="stylesheet" href="css/world.css">
+  <!-- v5.3 UI（ドック方式）。画面の骨格は js/ui/v53/。文字は Zen Old Mincho / Zen Kaku Gothic New -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Old+Mincho:wght@500;700;900&display=swap">
+  <link rel="stylesheet" href="css/v53.css">
+</head>
+<body>
+<!-- v5.3 UI の置き場。js/main.js が #stage（地図）をここへ移して、左レール・右ドック・時間軸を組み立てる -->
+<div id="v53-root"></div>
+<div id="app">
+  <!-- 左ハブ（js/ui/hub.js が中身を作る）。ファイル・地図・各ウィンドウの入口は、すべてここに集める -->
+  <nav id="hub" class="hub" aria-label="メニュー"></nav>
+
+  <!-- 上部中央のフローティング時計。常時表示するのは年月と再生だけ -->
+  <div id="clock" class="clock" role="toolbar" aria-label="時間">
+    <button id="btn-time-toggle" class="time-btn" title="時間の進行を開始/停止 (Space)"></button>
+    <button id="world-date" class="world-date-sm" type="button" title="クリックすると年月を直接指定できます／時代の名前を設定できます">1年 1月</button>
+    <span class="sep" aria-hidden="true"></span>
+    <button id="btn-time-step" class="time-btn" title="1ヶ月だけ進める">+1ヶ月</button>
+    <select id="sel-time-speed" class="time-speed-sm" title="1年がどれくらいの実時間で進むか">
+      <option value="20000">1年=20秒</option>
+      <option value="60000">1年=1分</option>
+      <option value="120000" selected>1年=2分</option>
+      <option value="300000">1年=5分</option>
+    </select>
+  </div>
+
+  <!-- 右上: 新聞風イベント／右下: 進行中の戦争（js/ui/news.js・war-status.js） -->
+  <div id="news" class="news" aria-live="polite"></div>
+  <div id="war-status" class="wars" hidden></div>
+
+  <main>
+    <aside id="sidebar" aria-label="詳細">
+      <div id="editor-panel" hidden></div>
+    </aside>
+
+    <section id="stage" aria-label="地図">
+      <canvas id="map-canvas" tabindex="0" aria-label="地図の表示領域"></canvas>
+      <!-- 凡例の項目を押したとき、その境界線を赤く光らせるための透明な層（地図の描画とは別。クリックは通す） -->
+      <canvas id="highlight-canvas" aria-hidden="true"></canvas>
+      <div id="empty-state">
+        <h1>世界を作って、歴史を始めましょう</h1>
+        <p>地図を作り、初期集団を選ぶと、国家が成立して歴史が動き出します。<br>
+           保存した世界（<code>.ahmap</code>）は、この画面にドラッグ＆ドロップするか、下のボタンから開けます。</p>
+        <ol class="empty-steps">
+          <li><b>地図を作る</b> — 大陸・気候・川・資源を持つ球面の世界を生成します</li>
+          <li><b>初期集団を選ぶ</b> — 歴史を始める人口集団を、候補から選びます</li>
+          <li><b>歴史が進む</b> — 上の時計の再生ボタンで月ごとに時間が進み、国家・外交・戦争が動きます</li>
+          <li><b>保存する</b> — ハブの「保存」でいつでも続きから再開できます</li>
+        </ol>
+        <div class="empty-actions"><button id="btn-new-world-empty" class="primary large">世界を作る</button> <button id="btn-open-empty" class="large">ファイルを開く</button></div>
+      </div>
+      <div id="loading" hidden><span id="loading-text">読み込み中…</span></div>
+      <div id="banner" role="alert" hidden>
+        <div id="banner-body"></div>
+        <button id="banner-close" aria-label="閉じる">×</button>
+      </div>
+      <!-- 右のパネル（地図編集）を × で小さくしたあと、元の場所（右端）に出る展開ボタン -->
+      <div id="panel-tabs" class="panel-tabs" hidden>
+        <button id="tab-edit-panel" class="panel-tab" title="地図編集を開く" aria-label="地図編集を開く" hidden><svg class="ico ico-edit" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
+      </div>
+      <div id="drop-hint" hidden>ここにドロップして開く</div>
+
+    </section>
+
+    <!-- 右側スライドパネル：地図編集モード。ボタンを押した時だけ表示。 -->
+    <aside id="edit-panel" class="edit-panel" aria-label="地図編集" hidden>
+      <div class="editor-header">
+        <h3>地図編集</h3>
+        <button id="edit-panel-close" class="editor-close" aria-label="閉じる">×</button>
+      </div>
+      <div class="edit-panel-body">
+        <div class="layers-section">
+          <span class="layers-section-title">ツール</span>
+          <div class="edit-tool-grid" role="group" aria-label="編集ツール">
+            <button data-tool="select" class="tool-btn active" title="選択(V) — クリックして中身を見る・編集する"><span class="tool-icon"><svg class="ico ico-select" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 4l12 7-5 1.5L11 18z"/></svg></span><span class="tool-label">選択</span></button>
+            <button data-tool="paint:biome" class="tool-btn" title="気候帯・地形を塗る(6)"><span class="tool-icon" data-ico="terrain"></span><span class="tool-label">気候帯</span></button>
+            <button data-tool="paint:height" class="tool-btn" title="標高を調整する(7)"><span class="tool-icon" data-ico="terrain"></span><span class="tool-label">標高</span></button>
+            <button data-tool="add:marker" class="tool-btn" title="マーカーを置く(8)"><span class="tool-icon"><svg class="ico ico-pin" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s6-5.5 6-11a6 6 0 0 0-12 0c0 5.5 6 11 6 11z"/><circle cx="12" cy="10" r="2"/></svg></span><span class="tool-label">目印</span></button>
+          </div>
+          <div id="tool-target-group" hidden>
+            <label class="field-label">対象
+              <select id="tool-target"></select>
+            </label>
+          </div>
+          <div id="tool-radius-group" hidden>
+            <label class="field-label">ブラシの大きさ
+              <input type="range" id="tool-radius" min="10" max="200" value="40">
+            </label>
+          </div>
+          <span id="tool-hint" class="tool-hint"></span>
+        </div>
+
+        <p class="tool-hint layers-note">表示の切り替え（色分け・川・道路・地名など）は、左のハブの「レイヤー」から行えます。</p>
+      </div>
+    </aside>
+  </main>
+
+  <footer class="map-corner">
+    <span id="status-map"></span>
+    <span id="status-hover"></span>
+    <span id="status-zoom"></span>
+  </footer>
+
+  <input type="file" id="file-input" accept=".ahmap" hidden>
+
+  <!-- 軍事・外交・属州の各パネルの中身が実際に入る場所。国家タブ（editor-panel.js）が
+       サブタブを開いたときに、ここから該当パネルの要素を取り出して差し込む。
+       この div 自体は隠さない。中の各 .tab-panel が個別に hidden で表示/非表示を切り替える
+       （どのサブタブにも属していない間は各 .tab-panel 自身に hidden がついている）。 -->
+  <div id="panel-mounts" hidden>
+    <div id="tab-wars" class="tab-panel"></div>
+  </div>
+
+</div>
+
+<!-- ビルド済みのアプリ本体（js/ の ES Modules を1つにまとめたもの）。file:// で直接開ける -->
+<script src="dist/app.js"></script>
+</body>
+</html>

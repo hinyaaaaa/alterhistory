@@ -3,12 +3,12 @@ import { JSDOM } from "jsdom";
 const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true });
 for (const k of ["window", "document", "HTMLElement", "Element", "Node", "Event", "CustomEvent"]) globalThis[k] = k === "window" ? dom.window : dom.window[k];
 globalThis.requestAnimationFrame = (f) => setTimeout(f, 0);
-const { generateWorld } = await import("../js/core/world/worldgen.js");
-const { worldToMap } = await import("../js/core/world-bridge.js");
-const { createStore } = await import("../js/core/store.js");
-const { createCivActions } = await import("../js/app/civ-actions.js");
-const { createCivSim } = await import("../js/core/civ/civ-sim.js");
-const { initCivWindow } = await import("../js/ui/civ-window.js");
+const { generateWorld } = await import("../../js/core/world/worldgen.js");
+const { worldToMap } = await import("../../js/core/world-bridge.js");
+const { createStore } = await import("../../js/core/store.js");
+const { createCivActions } = await import("../../js/app/civ-actions.js");
+const { createCivSim } = await import("../../js/core/civ/civ-sim.js");
+const { initCivWindow } = await import("../../js/ui/civ-window.js");
 let failed = 0; const check = (l, ok, x = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${l}${x ? "  " + x : ""}`); if (!ok) failed++; };
 
 const m = worldToMap(generateWorld({ worldSeed: "civ-win", resolution: { targetCells: 5000 } })); m.worldTime = { year: 0, month: 1 };
@@ -30,7 +30,7 @@ check("100年後も描画できる（集団が増えたらページ送りの欄�
 const q = reg.body.querySelector("input[type=search]"); q.value = "農耕"; q.dispatchEvent(new dom.window.Event("change"));
 check("絞り込みが効く（該当なしでも壊れない）", /件/.test(txt()));
 // --- 国家（V5-M2〜M5） ---
-const { formState } = await import("../js/core/civ/states.js");
+const { formState } = await import("../../js/core/civ/states.js");
 const sim = createCivSim(m.world, m.civ); const g0 = Object.values(m.civ.groups).find((g) => !g.player); const ns = formState(sim.ctx, { via: "agri_union", groupIds: [g0.id] }); ns.pop = 5000; sim.advanceMonths(120); reg.onOpen();
 check("国家の一覧が出る（名前・政体・形成の経路・人口・安定）", /国家（\d+）/.test(txt()) && txt().includes(ns.name) && /農耕集落の統合/.test(txt()));
 [...reg.body.querySelectorAll(".ent-row")].find((r) => r.textContent.includes(ns.name)).click();

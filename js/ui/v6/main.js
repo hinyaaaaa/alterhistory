@@ -26,23 +26,23 @@ function setup() {
 }
 function founding() {
   const c = listCandidates(S.w), civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
-  const msg = h("p", { class: "n" }, c.length ? "国家になる候補です。担当する国を選ぶか、世界に任せて見守ります。先史の経過は読み取り専用で、ここから変えることはできません。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
+  const msg = h("p", { class: "n" }, c.length ? "国を選んで担当するか、世界に任せて見守ります。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
   const yrsAgo = (m) => Math.round(((civ.wcde.foundedAt ?? civ.monthIndex) - m) / 12);
   const fmtYears = (y) => (y >= 10000 ? `約 ${Math.round(y / 1000) / 10} 万年前` : `約 ${n0(y)} 年前`);
   // 先史の観察: 系統の移行・技術の出現・人口の推移（読み取り専用）
   const techTl = Object.entries(pre.firstTech ?? {}).sort((x, y) => x[1] - y[1]).map(([k, m]) => `${fmtYears(yrsAgo(m))}　${TECH[k]?.name ?? k}`);
   const ep = pre.epochs ?? [], mx = Math.max(1, ...ep.map((e) => Math.log10(Math.max(10, e.pop)))), spark = sv("svg", { viewBox: "0 0 300 60", style: "width:100%;height:60px" }, sv("polyline", { points: ep.map((e, i) => `${(i / Math.max(1, ep.length - 1)) * 300},${58 - (Math.log10(Math.max(10, e.pop)) / mx) * 54}`).join(" "), fill: "none", stroke: "#6fa8c9", "stroke-width": 1.6 }), sv("polyline", { points: ep.map((e, i) => `${(i / Math.max(1, ep.length - 1)) * 300},${58 - (e.ice ?? 0) * 54}`).join(" "), fill: "none", stroke: "#c97a6f", "stroke-width": 1, "stroke-dasharray": "3 3" }));
   const eco = ecoSummary(S.w.world, civ), sp = pre.species ?? {};
-  const obs = h("div", { class: "dt" }, h("b", {}, "先史の観察（読み取り専用）"), h("br"),
+  const obs = h("details", { class: "dt" }, h("summary", {}, "先史の観察（読み取り専用）"),
     sp.archaic ? `古代型人類の集団が現れる: ${fmtYears(yrsAgo(sp.archaic.at))}` : "", h("br"), sp.human ? `現生人類が現れる: ${fmtYears(yrsAgo(sp.human.at))}（置き換わり・混血: ${n0(pre.assimilated ?? 0)} 集団）` : "", h("br"),
     `集団 ${n0(pre.groups ?? Object.keys(civ.groups).length)}・人口 ${n0(Math.round(Object.values(civ.groups).reduce((a, g) => a + g.pop, 0)))}・定住 ${n0(pre.settlements ?? 0)}・氷期の最大 ${Math.round((pre.glacialMax ?? 0) * 100)}%・海を渡った ${n0(pre.seaCrossings ?? 0)} 回`, h("br"),
     eco ? `生態系: 植物 ${Math.round(eco.flora * 100)}%・動物 ${Math.round(eco.fauna * 100)}%・荒廃した土地 ${Math.round(eco.degraded * 100)}%` : "", h("br"), "人口（青・対数）と氷期（赤の破線）の推移", spark, h("b", {}, "技術の出現"), h("br"), ...techTl.flatMap((t) => [t, h("br")]));
   for (const x of c.slice(0, 20)) {
     const cu = civ.cultures[x.cultureId]?.name, lg = civ.languages[x.languageId]?.name, rl = civ.religions[x.religionId]?.name, lat = Math.round((ce.lat[x.cell] * 180) / Math.PI);
     const sel = x.polityOptions.length > 1 ? h("select", { class: "pol" }, ...x.polityOptions.map((p) => h("option", { value: p }, ja[p] ?? p))) : null;
-    list.append(h("div", { class: "row" }, h("span", { class: "g" }, h("b", {}, x.viaJa), h("br"), h("small", {}, `人口 ${n0(x.pop)}・集団 ${x.groupIds.length}・${lat >= 0 ? "北緯" : "南緯"} ${Math.abs(lat)}°`), h("br"), h("small", {}, [cu && `文化 ${cu}`, lg && `言語 ${lg}`, rl && `宗教 ${rl}`].filter(Boolean).join("・") || "文化・言語・宗教は成立後に定まる"), h("br"), h("small", {}, `選べる政体: ${x.polityOptions.map((p) => ja[p] ?? p).join("・")}（技術から導く）`)), sel, btn("担当して建国", () => { const r = act({ type: "founding.found", candidateId: x.id, polity: sel?.value ?? null }); r.ok ? start() : (msg.textContent = S.notice); })));
+    list.append(h("div", { class: "row" }, h("span", { class: "g" }, h("b", {}, x.viaJa), h("br"), h("small", {}, `人口 ${n0(x.pop)}・集団 ${x.groupIds.length}・${lat >= 0 ? "北緯" : "南緯"} ${Math.abs(lat)}°`), h("br"), h("small", {}, [cu && `文化 ${cu}`, lg && `言語 ${lg}`, rl && `宗教 ${rl}`].filter(Boolean).join("・") || "文化・言語・宗教は成立後に定まる")), sel, btn("担当して建国", () => { const r = act({ type: "founding.found", candidateId: x.id, polity: sel?.value ?? null }); r.ok ? start() : (msg.textContent = S.notice); })));
   }
-  root().replaceChildren(h("div", { class: "center", style: "max-width:760px" }, h("div", { class: "code" }, "FOUNDING"), h("h1", {}, "建国"), msg, obs, list, btn("世界に任せて始める（担当国なし）", () => { run({ type: "founding.delegate" }); start(); }, "", { id: "delegate" })));
+  root().replaceChildren(h("div", { class: "center", style: "max-width:760px" }, h("div", { class: "code" }, "FOUNDING"), h("h1", {}, "建国"), msg, btn("世界に任せて始める（担当国なし）", () => { run({ type: "founding.delegate" }); start(); }, "", { id: "delegate" }), list, obs)); // 操作を先頭に。先史の観察は折りたたみ
 }
 
 /* ---------- 画面の骨格（モックと同じ構成） ---------- */
@@ -54,8 +54,8 @@ function shell() {
 }
 function render() { if (!$("#hub")) return; renderHub(); renderPanel(); renderRight(); renderNews(); S.map.sel = S.sel; S.map.draw(); renderLegend(); const w = S.w; $("#hint").textContent = w.viewPast != null ? "過去を閲覧中。世界を変える操作と時間進行は止まっています。" + (S.notice ? " " + S.notice : "") : S.notice || "ドラッグで移動・ホイールで拡大縮小・クリックで国家を選択"; $("#hint").style.color = S.notice || w.viewPast != null ? "var(--yellow)" : ""; }
 function renderHub() { $("#hub").replaceChildren(...HUB.map(([k, ja, code]) => h("button", { class: S.hub === k ? "on" : "", "data-hub": k, onclick: () => { S.hub = S.hub === k ? null : k; render(); setTimeout(() => S.map?.draw(), 220); } }, ja, h("small", {}, code)))); }
-function renderPanel() { const p = $("#panel"); if (!S.hub) { p.classList.remove("open"); return; } p.classList.add("open"); const keep = $("#pin").scrollTop; $("#pin").replaceChildren(PANELS[S.hub]()); $("#pin").scrollTop = keep; }
-function renderLegend() { const M = S.map; if (!M) return; const L = M.legend(M.fillLayer); $("#leg").replaceChildren(h("b", {}, "凡例 "), ...L.slice(0, 6).map((x) => h("span", { style: "margin-right:10px" }, x.c ? h("i", { style: `display:inline-block;width:10px;height:10px;background:${x.c};margin-right:4px` }) : "", x.t))); $("#leg").style.display = L.length ? "block" : "none"; }
+function renderPanel() { const p = $("#panel"); if (!S.hub) { p.classList.remove("open"); return; } p.classList.add("open"); const wide = S.hub === "nations" && (S.tab === "tech" || S.tab === "doctrine") && S.sel; /* 技術ツリー・ドクトリンは大きく見せる */ p.style.setProperty("--pw", wide ? "min(760px, 62vw)" : ""); const keep = $("#pin").scrollTop; $("#pin").replaceChildren(PANELS[S.hub]()); $("#pin").scrollTop = keep; }
+function renderLegend() { const M = S.map; if (!M) return; const L = M.legend(M.legendKey()); $("#leg").replaceChildren(h("b", {}, "凡例 "), ...L.slice(0, 6).map((x) => h("span", { style: "margin-right:10px" }, x.c ? h("i", { style: `display:inline-block;width:10px;height:10px;background:${x.c};margin-right:4px` }) : "", x.t))); $("#leg").style.display = L.length ? "block" : "none"; }
 function select(id) { S.sel = id; S.hub = "nations"; if (!S.tab) S.tab = "politics"; render(); $("#callout").classList.remove("on"); }
 function focusCell(cell) { const M = S.map, g = M.geo, W = M.cv.width, H = M.cv.height, [x, y] = M.proj(g.cen[cell * 2], g.cen[cell * 2 + 1], W, H); M.view.k = 4; M.view.x = W / 2 - x * 4; M.view.y = H / 2 - y * 4; M.clamp(); M.draw(); }
 /** 地図上の選択: コールアウトが基本の情報提示。詳細パネルや他領域への入口も置く */
@@ -68,7 +68,7 @@ function callout(p) {
 /* ---------- 右: ニュースと時間のみ ---------- */
 function renderRight() {
   const w = S.w, T = timeOf(w.civ), feed = newsFeed(w.civ, { limit: 30, minLevel: "major" }), cs = controlled();
-  $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "n" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）"), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); render(); } }, s.label))), h("div", { class: "n", id: "runstate" }, T.hold ? "重大ニュースの確認待ち（OKで再開）" : T.speed ? "進行中" : "停止中"));
+  $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "n" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）"), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); render(); } }, s.label))), h("div", { class: "n", id: "runstate" }, T.hold ? "ニュースの確認待ち" : T.speed ? "進行中（1秒あたり）" : "停止中"));
   $("#feed").replaceChildren(...feed.map((n) => h("div", { class: "ev" + (n.level === "critical" ? " y" : "") }, h("time", {}, `${n.date.year}年${n.date.month}月`), n.title, " ", ...n.entityIds.filter((i) => w.civ.states[i]).slice(0, 2).map((i) => [link(i), " "]))));
 }
 function renderNews() {

@@ -1,18 +1,18 @@
 // V5-M8: 種族（非人間の国家・種族差）と魔法（希少な先天的素質・組織・差別・制度・制約・反動）。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim, checkCivIntegrity } from "../js/core/civ/civ-sim.js";
-import { SPECIES, speciesOf, lifeScale } from "../js/core/civ/species.js";
-import { ABILITIES, INSTITUTIONS, CAPS, supplyOf, magicMil } from "../js/core/civ/magic.js";
-import { formState } from "../js/core/civ/states.js";
-import { composition } from "../js/core/civ/cohorts.js";
-import { milMult } from "../js/core/civ/techfx.js";
-import { stateAt } from "../js/core/civ/history.js";
-import { encodeCivChunks, decodeCivChunks } from "../js/core/civ/civ-chunks.js";
-import { byState } from "../js/core/civ/spatial.js";
-import { getEvent, checkGraph } from "../js/core/civ/graph.js";
-import { ACTION, observe } from "../js/core/civ/actions.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim, checkCivIntegrity } from "../../js/core/civ/civ-sim.js";
+import { SPECIES, speciesOf, lifeScale } from "../../js/core/civ/species.js";
+import { ABILITIES, INSTITUTIONS, CAPS, supplyOf, magicMil } from "../../js/core/civ/magic.js";
+import { formState } from "../../js/core/civ/states.js";
+import { composition } from "../../js/core/civ/cohorts.js";
+import { milMult } from "../../js/core/civ/techfx.js";
+import { stateAt } from "../../js/core/civ/history.js";
+import { encodeCivChunks, decodeCivChunks } from "../../js/core/civ/civ-chunks.js";
+import { byState } from "../../js/core/civ/spatial.js";
+import { getEvent, checkGraph } from "../../js/core/civ/graph.js";
+import { ACTION, observe } from "../../js/core/civ/actions.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

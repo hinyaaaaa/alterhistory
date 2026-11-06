@@ -1,4 +1,4 @@
-// v5.3.0: 本体の index.html（dist/app.js）に組み込んだ v5.3 UI を実ブラウザで確かめる。
+// v5.3.0: 本体の v5.html（dist/app.js）に組み込んだ v5.3 UI を実ブラウザで確かめる。
 //   世界を開く → 開始フロー（初期集団→自動進行→国家成立）→ 歴史を進める → 一覧・詳細・時間軸・過去の閲覧・従来画面への橋渡し。
 //   使い方: npm run build && node tests/e2e/v53-live.e2e.mjs
 import { writeFileSync } from "node:fs";

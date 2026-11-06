@@ -23,7 +23,7 @@ await check("予測は純粋: 世界を変えず、同じ入力から同じ値�
   const w = fresh(), [a, b] = pair(w), snap = serializeWorld(w), p1 = predictWar(w.civ, a.id, b.id), p2 = predictWar(w.civ, a.id, b.id, ctxOf(w)), p3 = predictWar(w.civ, a.id, b.id, ctxOf(w)); assert.deepEqual(p1, p2); assert.strictEqual(p2, p3); assert.equal(serializeWorld(w), snap);
 });
 await check("攻撃側が強いほど勝率が上がり、非対称（a→b と b→a は別物）。介入で産業力を落とすと予測も変わる", () => {
-  const w = fresh(), [a, b] = pair(w); const pab = predictWar(w.civ, a.id, b.id), pba = predictWar(w.civ, b.id, a.id); assert.ok(pab.ratio > 0 && Math.abs(pab.ratio * pba.ratio - 1) < 0.02);
+  const w = fresh(), [a, b] = pair(w); const pab = predictWar(w.civ, a.id, b.id), pba = predictWar(w.civ, b.id, a.id); assert.ok(pab.ratio > 0 && pba.ratio > 0 && pab.ratio !== pba.ratio, "攻める側と守る側で入力が違うので、a→b と b→a の戦力比は同じ逆数にならない（v6.1.0）");
   const strong = pab.ratio >= 1 ? a : b; assert.ok(predictWar(w.civ, strong.id, (strong === a ? b : a).id).pAWin >= predictWar(w.civ, (strong === a ? b : a).id, strong.id).pAWin);
   assert.ok(dispatch(w, { type: "creator.intervene", authority: A.CREATOR, stateId: a.id, field: "readiness", value: 0.05 }).ok); dispatch(w, { type: "time.advance", authority: A.ADMIN, months: 3 });
   const after = predictWar(w.civ, a.id, b.id); assert.ok(after.inputs.a.readiness < pab.inputs.a.readiness, "有効値（介入込み）を読む");
@@ -37,7 +37,7 @@ await check("評価は決定的で要因を持ち、評価だけでは何も変�
 });
 await check("関係が良ければ受諾されて条約が結ばれ、記録に残る。悪ければ拒否され、拒否も記録される（条約は結ばれない）", () => {
   const w = fresh(), [a, b] = pair(w), c = ctxOf(w); b.relations[a.id] = 60; for (const t of w.civ.activeTreatyIds.map((i) => w.civ.treaties[i])) t.active = false; w.civ.activeTreatyIds = []; for (const s of [a, b]) s.warIds = [];
-  const ok = negotiateTreaty(c, a, b, "trade"); assert.ok(ok.ok, JSON.stringify(ok)); assert.ok(treatyBetween(w.civ, a, b, "trade")); const rec = proposalsOf(w.civ).at(-1); assert.equal(rec.status, "accepted"); assert.equal(rec.kind, "treaty"); assert.ok(factorsOf(w.civ, rec).length && factorsOf(w.civ, rec)[0].ja);
+  const ok = negotiateTreaty(c, a, b, "trade"); assert.ok(ok.ok, JSON.stringify(ok)); assert.ok(treatyBetween(w.civ, a, b, "trade")); const rec = proposalsOf(w.civ).at(-1); assert.equal(rec.status, "accepted"); assert.equal(rec.kind, "treaty"); assert.deepEqual(factorsOf(w.civ, rec), [], "v6.1.0: 要因は台帳に保存しない（必要なときに evaluate で再計算する）"); assert.ok(evaluateTreaty(w.civ, a, b, "trade").factors.length >= 1);
   b.relations[a.id] = -60; const no = negotiateTreaty(c, a, b, "nonaggression"); assert.equal(no.ok, false); assert.equal(no.diplomacyFailure, true); assert.ok(!treatyBetween(w.civ, a, b, "nonaggression")); assert.equal(proposalsOf(w.civ).at(-1).status, "rejected"); assert.deepEqual(checkWcdeIntegrity(w.world, w.civ), []);
 });
 await check("同盟は断られても、不可侵なら受け入れる場合は別条件を示す（counter）", () => {

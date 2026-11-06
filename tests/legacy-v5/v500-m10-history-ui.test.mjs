@@ -1,20 +1,20 @@
 // V5-M10: 歴史ビューア。問い合わせ（一覧・カーソル・検索・戦争ファミリー・過去の月）と、画面（仮想スクロール・選択の連動・過去の閲覧・Ctrl+K）。
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { worldToMap } from "../js/core/world-bridge.js";
-import { createStore } from "../js/core/store.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
-import { createCivActions } from "../js/app/civ-actions.js";
-import { createTimeActions } from "../js/app/time-actions.js";
-import { createHistoryActions } from "../js/app/history-actions.js";
-import { statesAt, stateAt } from "../js/core/civ/history.js";
-import { eventsOfEntity, evMonth } from "../js/core/civ/graph.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { worldToMap } from "../../js/core/world-bridge.js";
+import { createStore } from "../../js/core/store.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
+import { createCivActions } from "../../js/app/civ-actions.js";
+import { createTimeActions } from "../../js/app/time-actions.js";
+import { createHistoryActions } from "../../js/app/history-actions.js";
+import { statesAt, stateAt } from "../../js/core/civ/history.js";
+import { eventsOfEntity, evMonth } from "../../js/core/civ/graph.js";
 
 const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true }); for (const k of ["window", "document", "HTMLElement", "Element", "Node", "Event", "KeyboardEvent", "MouseEvent"]) globalThis[k] = dom.window[k]; globalThis.requestAnimationFrame = (f) => setTimeout(f, 0);
 let ctxPaints = 0; dom.window.HTMLCanvasElement.prototype.getContext = () => ({ createImageData: (w, h) => ({ data: new Uint8ClampedArray(w * h * 4) }), putImageData: () => { ctxPaints++; } });
-const { createVirtualList } = await import("../js/ui/virtual-list.js"); const { initHistoryWindow } = await import("../js/ui/history-window.js");
+const { createVirtualList } = await import("../../js/ui/virtual-list.js"); const { initHistoryWindow } = await import("../../js/ui/history-window.js");
 let failed = 0; const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } }; const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const m = worldToMap(generateWorld({ worldSeed: "civ-m1", resolution: { targetCells: 6000 } })); m.worldTime = { year: 0, month: 1 }; m.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
@@ -78,7 +78,7 @@ await check("国家を選ぶと、詳細・地図の強調・出来事の絞り�
 });
 await check("詳細の名前から別の国家・戦争・出来事へ辿れる（リンク）", async () => { const b = $$("[data-role=detail] .hv-link"); assert.ok(b.length >= 1); const before = JSON.stringify(hv.state.sel); b[0].click(); await sleep(10); assert.notEqual(JSON.stringify(hv.state.sel), before); });
 await check("地図をクリックすると、その領域の国家が選ばれる", async () => {
-  const t = history.territory(), sid = t.states[0].id, cells = history.stateCells(sid), { cellRaster } = await import("../js/core/world/cell-raster.js"), cr = cellRaster(m.world, 480, 240); let px = -1; for (let i = 0; i < cr.length; i++) if (cells.includes(cr[i])) { px = i; break; } assert.ok(px >= 0);
+  const t = history.territory(), sid = t.states[0].id, cells = history.stateCells(sid), { cellRaster } = await import("../../js/core/world/cell-raster.js"), cr = cellRaster(m.world, 480, 240); let px = -1; for (let i = 0; i < cr.length; i++) if (cells.includes(cr[i])) { px = i; break; } assert.ok(px >= 0);
   const cv = $(".hv-map"); cv.getBoundingClientRect = () => ({ left: 0, top: 0, width: 480, height: 240 }); cv.dispatchEvent(new dom.window.MouseEvent("click", { clientX: px % 480 + 0.5, clientY: Math.floor(px / 480) + 0.5, bubbles: true })); await sleep(10); assert.equal(hv.state.sel.id, sid);
 });
 await check("過去の月へ動かすと、『過去の閲覧』の表示・現在へ戻る・読み取り専用になり、戻すと元へ", async () => {

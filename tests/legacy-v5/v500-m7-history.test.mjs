@@ -1,11 +1,11 @@
 // V5-M7: 全国家の月次状態の保存と、任意の月への復元。イベント・判断記録の期間チャンク。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createCivState, encodeCiv, decodeCiv } from "../js/core/civ/civ-state.js";
-import { createCivSim, checkCivIntegrity } from "../js/core/civ/civ-sim.js";
-import { stateAt, statesAt, groupsAt, ownerMapAt, compositionAt, checkHistory, historyStats, extractState } from "../js/core/civ/history.js";
-import { encodeCivChunks, decodeCivChunks, PERIOD_MONTHS } from "../js/core/civ/civ-chunks.js";
-import { territoryOf } from "../js/core/civ/population.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createCivState, encodeCiv, decodeCiv } from "../../js/core/civ/civ-state.js";
+import { createCivSim, checkCivIntegrity } from "../../js/core/civ/civ-sim.js";
+import { stateAt, statesAt, groupsAt, ownerMapAt, compositionAt, checkHistory, historyStats, extractState } from "../../js/core/civ/history.js";
+import { encodeCivChunks, decodeCivChunks, PERIOD_MONTHS } from "../../js/core/civ/civ-chunks.js";
+import { territoryOf } from "../../js/core/civ/population.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

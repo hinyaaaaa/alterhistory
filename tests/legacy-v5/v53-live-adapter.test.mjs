@@ -1,21 +1,21 @@
 // v5.3 UI: 実アダプター（本体の store / civ / history-actions に接続）。実際の文明を 400 年進め、契約・一覧・詳細・通知・開始フロー・出力が成り立つか。
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { worldToMap } from "../js/core/world-bridge.js";
-import { createStore } from "../js/core/store.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
-import { createCivActions } from "../js/app/civ-actions.js";
-import { createTimeActions } from "../js/app/time-actions.js";
-import { createHistoryActions } from "../js/app/history-actions.js";
-import { validateAdapter } from "../js/ui/v53/adapters/contract.js";
-import { verifyParts } from "../js/ui/v53/export/obsidian-split.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { worldToMap } from "../../js/core/world-bridge.js";
+import { createStore } from "../../js/core/store.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
+import { createCivActions } from "../../js/app/civ-actions.js";
+import { createTimeActions } from "../../js/app/time-actions.js";
+import { createHistoryActions } from "../../js/app/history-actions.js";
+import { validateAdapter } from "../../js/ui/v53/adapters/contract.js";
+import { verifyParts } from "../../js/ui/v53/export/obsidian-split.js";
 
 const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true });
 for (const k of ["window", "document", "HTMLElement", "Element", "Node", "Event"]) globalThis[k] = dom.window[k];
 globalThis.requestAnimationFrame = (f) => setTimeout(f, 0);
-const { createLiveAdapter } = await import("../js/ui/v53/adapters/live-adapter.js");
+const { createLiveAdapter } = await import("../../js/ui/v53/adapters/live-adapter.js");
 let failed = 0; const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.stack ?? e.message).split("\n").slice(0, 3).join(" | ")}`); } };
 
 const m = worldToMap(generateWorld({ worldSeed: "civ-m1", resolution: { targetCells: 6000 } })); m.worldTime = { year: 0, month: 1 }; m.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };
@@ -84,9 +84,9 @@ await check("出力: Chronicle が文明史（国家・戦争・出来事・AI�
   const r = await A.exports.chronicle(); const t = await r.blob.text(); assert.match(r.name, /\.chronicle\.md$/); assert.match(t, /# 文明史/); assert.match(t, /## 国家/); assert.match(t, /## 戦争/); assert.match(t, /## 出来事/); assert.match(t, /## AI判断/);
   const s = Object.values(civ.states)[0]; assert.ok(t.includes(s.name)); assert.ok(t.includes(civ.events[0].eventId)); assert.ok(t.includes(civ.decisions[0].decisionId));
 });
-await check("出力: .ahmap は保存でき、読み込み直せる（往復）", async () => { const { loadMapBytes } = await import("../js/io/ahmap-file.js"); const r = await A.exports.ahmap(); assert.match(r.name, /\.ahmap$/); const back = await loadMapBytes(new Uint8Array(await r.blob.arrayBuffer())); const bm = back.map ?? back; assert.equal((bm.civ ?? back.civ).events.length, civ.events.length); });
+await check("出力: .ahmap は保存でき、読み込み直せる（往復）", async () => { const { loadMapBytes } = await import("../../js/io/ahmap-file.js"); const r = await A.exports.ahmap(); assert.match(r.name, /\.ahmap$/); const back = await loadMapBytes(new Uint8Array(await r.blob.arrayBuffer())); const bm = back.map ?? back; assert.equal((bm.civ ?? back.civ).events.length, civ.events.length); });
 await check("出力: Obsidian は小さい上限で複数の ZIP に分割され、欠落・重複がなく、全ファイルが元の出力と一致する", async () => {
-  const { obsidianFiles } = await import("../js/io/obsidian.js"); const { cellRaster } = await import("../js/core/world/cell-raster.js"); const { unzipFiles } = await import("../js/io/zip.js");
+  const { obsidianFiles } = await import("../../js/io/obsidian.js"); const { cellRaster } = await import("../../js/core/world/cell-raster.js"); const { unzipFiles } = await import("../../js/io/zip.js");
   const parts = []; const all = new Map();
   for await (const p of A.exports.obsidian({ maxPartBytes: 1.5 * 1024 * 1024, maxPartFiles: 400 })) { const { bytes, ...sum } = p; parts.push(sum); for (const [path, data] of await unzipFiles(bytes)) { assert.ok(!all.has(path), `重複 ${path}`); all.set(path, data); } }
   assert.ok(parts.length >= 2, `分割されること（${parts.length}）`); assert.deepEqual(verifyParts(parts), []);

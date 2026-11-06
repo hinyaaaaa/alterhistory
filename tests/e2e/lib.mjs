@@ -1,4 +1,4 @@
-// 実ブラウザ（Chromium）で index.html を動かすための共通部品。
+// 実ブラウザ（Chromium）で v5.html を動かすための共通部品。
 //   使い方: node tests/e2e/xxx.e2e.mjs   （事前に npm run build。Chromium は @sparticuz/chromium が同梱）
 //   画面は /tmp/e2e-shots/ に保存する。コンソールエラーとページ内例外は集めて、最後に失敗として数える。
 import { createRequire } from "node:module";
@@ -56,7 +56,7 @@ export async function makeWorldFile(seed = 11, cells = 1500) {
 }
 
 export async function openApp(page, { seed = 11, cells = 1500, states = 4 } = {}) {
-  await page.goto(pathToFileURL(path.join(root, "index.html")).href);
+  await page.goto(pathToFileURL(path.join(root, "v5.html")).href);
   await page.bringToFront();
   await page.setInputFiles("#file-input", await makeWorldFile(seed, cells));
   await page.waitForFunction(() => /セル/.test(document.getElementById("status-map")?.textContent ?? ""), null, { timeout: 30000, polling: 100 });

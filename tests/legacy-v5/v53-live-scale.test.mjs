@@ -2,21 +2,21 @@
 //   実際の文明を 300 年進めたものを土台に、出来事・国家・戦争を水増しする（時間の閾値は CPU を取り合う開発環境のもの。緩めない）。
 import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { worldToMap } from "../js/core/world-bridge.js";
-import { createStore } from "../js/core/store.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
-import { createCivActions } from "../js/app/civ-actions.js";
-import { createTimeActions } from "../js/app/time-actions.js";
-import { createHistoryActions } from "../js/app/history-actions.js";
-import { validateAdapter } from "../js/ui/v53/adapters/contract.js";
-import { verifyParts } from "../js/ui/v53/export/obsidian-split.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { worldToMap } from "../../js/core/world-bridge.js";
+import { createStore } from "../../js/core/store.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
+import { createCivActions } from "../../js/app/civ-actions.js";
+import { createTimeActions } from "../../js/app/time-actions.js";
+import { createHistoryActions } from "../../js/app/history-actions.js";
+import { validateAdapter } from "../../js/ui/v53/adapters/contract.js";
+import { verifyParts } from "../../js/ui/v53/export/obsidian-split.js";
 
 const dom = new JSDOM("<!doctype html><body></body>", { pretendToBeVisual: true });
 for (const k of ["window", "document", "HTMLElement", "Element", "Node", "Event"]) globalThis[k] = dom.window[k];
 globalThis.requestAnimationFrame = (f) => setTimeout(f, 0);
-const { createLiveAdapter } = await import("../js/ui/v53/adapters/live-adapter.js");
+const { createLiveAdapter } = await import("../../js/ui/v53/adapters/live-adapter.js");
 let failed = 0; const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.stack ?? e.message).split("\n").slice(0, 3).join(" | ")}`); } };
 
 const m = worldToMap(generateWorld({ worldSeed: "civ-m1", resolution: { targetCells: 6000 } })); m.worldTime = { year: 0, month: 1 }; m.ext = { app: "ALTERHISTORY", format: 1, savedAt: "", lineCount: 0, data: {} };

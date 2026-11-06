@@ -13,7 +13,7 @@ import path from "node:path";
 
 const CELLS = Number(process.argv[2] ?? 250000), OUT = process.argv[3] ?? null, REPEATS = Number(process.env.REPEATS ?? 3);
 const { browser, page, problems } = await launch({ width: 1280, height: 853 });
-await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.bringToFront();
+await page.goto(pathToFileURL(path.join(root, "v5.html")).href); await page.bringToFront();
 await page.waitForFunction(() => !!globalThis.alterhistory, null, { timeout: 30000 });
 const res = await page.evaluate(async ({ cells, repeats }) => {
   const { store, actions, renderer, viewport } = globalThis.alterhistory;

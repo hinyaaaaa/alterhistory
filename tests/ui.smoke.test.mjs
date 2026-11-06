@@ -1,4 +1,4 @@
-// UI 統合テスト（jsdom）。実際の index.html とビルド済み dist/app.js を動かす。
+// UI 統合テスト（jsdom）。実際の v5.html とビルド済み dist/app.js を動かす。
 //
 // 限界: jsdom はレイアウトも Canvas 描画も行わない。ここで確認できるのは
 //   「配線が正しく、例外を出さず、状態と表示が期待通りに変わること」まで。
@@ -42,7 +42,7 @@ function fakeCtx() {
   });
 }
 
-const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
+const dom = await JSDOM.fromFile(path.join(root, "v5.html"), {
   runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
   beforeParse(window) {
     window.devicePixelRatio = 1.5; // 高DPI経路も通す

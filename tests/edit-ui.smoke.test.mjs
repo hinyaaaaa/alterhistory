@@ -1,4 +1,4 @@
-// 編集UIの統合テスト（jsdom）。実際の index.html とビルド済み dist/app.js を動かす。
+// 編集UIの統合テスト（jsdom）。実際の v5.html とビルド済み dist/app.js を動かす。
 import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import { readFileSync } from "node:fs";
@@ -20,7 +20,7 @@ function fakeCtx() {
   });
 }
 
-const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
+const dom = await JSDOM.fromFile(path.join(root, "v5.html"), {
   runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
   beforeParse(window) {
     window.devicePixelRatio = 1;

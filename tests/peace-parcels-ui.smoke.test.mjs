@@ -1,5 +1,5 @@
 // 講和の区画（自動生成・赤い強調・依存・傀儡国家の新設）の統合テスト（jsdom）。
-// 実際の index.html とビルド済み dist/app.js（npm run build 後）を動かす。
+// 実際の v5.html とビルド済み dist/app.js（npm run build 後）を動かす。
 import { loadLegacyInto } from "./helpers/load-legacy.mjs";
 import { JSDOM } from "jsdom";
 import path from "node:path";
@@ -20,7 +20,7 @@ function fakeCtx() {
     set(_, k, v) { props[k] = v; return true; },
   });
 }
-const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
+const dom = await JSDOM.fromFile(path.join(root, "v5.html"), {
   runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
   beforeParse(window) {
     window.devicePixelRatio = 1;

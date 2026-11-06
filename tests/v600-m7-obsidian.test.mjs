@@ -16,7 +16,7 @@ dispatch(w, { type: "clock.run", authority: A.ADMIN, months: 2 }); makeEvent(w.c
 const files = []; for await (const f of obsidianFiles(w.world, w.civ, "試験世界")) files.push(f);
 const by = (re) => files.filter((f) => re.test(f.path));
 await check("介入の記録・直接編集の記録が、世界の事実の出来事とは別のフォルダのノートとして出る", () => { const n = by(/創造主の介入\/介入の記録\.md$/); assert.equal(n.length, 1); assert.ok(/出力試験/.test(n[0].data) && /taxRevenue/.test(n[0].data) && /事実.*ではありません/.test(n[0].data)); assert.equal(by(/創造主の介入\/直接編集の記録\.md$/).length, 1); assert.ok(!/創造主の介入/.test(by(/出来事\//)[0]?.path ?? "")); });
-await check("外交交渉の記録が 100 年ごとのノートで出る（拒否も含む・要因つき）", () => { const n = by(/外交交渉\/.*交渉記録\.md$/); assert.ok(n.length >= 1); const all = n.map((x) => x.data).join("\n"); assert.ok(/成立/.test(all) || /拒否/.test(all)); assert.ok(/・/.test(all) || /関係/.test(all), "要因"); });
+await check("外交交渉の記録が 100 年ごとのノートで出る（拒否も含む。要因は保存しない）", () => { const n = by(/外交交渉\/.*交渉記録\.md$/); assert.ok(n.length >= 1); const all = n.map((x) => x.data).join("\n"); assert.ok(/成立/.test(all) || /拒否/.test(all)); assert.ok(/成立|拒否/.test(all)); /* v6.1.0: 要因は台帳に保存しないので、ノートには結果だけが出る */ });
 await check("重大ニュースの状況（未確認・確認済み）が出て、元の出来事へリンクする", () => { const n = by(/ニュース\/重大ニュースの状況\.md$/); assert.equal(n.length, 1); assert.ok(/未確認（確認待ち）/.test(n[0].data) && /大国の滅亡/.test(n[0].data)); });
 await check("全体のリンク切れが 0（新しいノートが参照を壊さない）。README に新しい種類の件数が出る", () => { const v = validateVault(files, "試験世界"); assert.equal(v.unresolved?.length ?? v.broken?.length ?? 0, 0, JSON.stringify(v).slice(0, 300)); const rd = by(/README\.md$/)[0].data; assert.ok(/創造主の介入の記録/.test(rd) && /外交交渉の記録/.test(rd) && /重大ニュース/.test(rd)); });
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功"); process.exit(failed ? 1 : 0);

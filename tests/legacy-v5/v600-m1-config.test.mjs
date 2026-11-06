@@ -1,10 +1,10 @@
 // v6.0.0 M1: 世界生成設定（WorldConfig）・暦・独自種族・魔法の有無・乱数の分離・決定性。
 import assert from "node:assert/strict";
-import { normalizeWorldConfig, derivedSeeds, speciesDefsOf } from "../js/core/wcde/config.js";
-import { normalizeCalendar, formatDate, eraOf, applyDisplayEdit } from "../js/core/wcde/calendar.js";
-import { createNewWorld } from "../js/core/wcde/world.js";
-import { speciesOf } from "../js/core/civ/species.js";
-import { checkWcdeIntegrity } from "../js/core/wcde/integrity.js";
+import { normalizeWorldConfig, derivedSeeds, speciesDefsOf } from "../../js/core/wcde/config.js";
+import { normalizeCalendar, formatDate, eraOf, applyDisplayEdit } from "../../js/core/wcde/calendar.js";
+import { createNewWorld } from "../../js/core/wcde/world.js";
+import { speciesOf } from "../../js/core/civ/species.js";
+import { checkWcdeIntegrity } from "../../js/core/wcde/integrity.js";
 import fs from "node:fs"; import path from "node:path"; import { fileURLToPath } from "node:url";
 
 let failed = 0;

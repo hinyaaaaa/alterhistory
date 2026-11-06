@@ -1809,7 +1809,8 @@
     worldSeed: "",
     planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
     resolution: Object.freeze({ targetCells: 25e4 }),
-    landFraction: 0.5,
+    landFraction: 0.3,
+    // v6.1.0: 0.5 → 0.3（地球の陸地率は約 29%）。海を渡る拡散を直したので、地球並みでも人類は全大陸に広がる
     continentCountTarget: 6,
     islandMode: "many",
     plateCount: 14,
@@ -2632,10 +2633,11 @@
   // js/core/wcde/config.js
   init_world_consts();
   init_civ_state();
-  var WCDE_VERSION = "6.1.0-dev";
+  var WCDE_VERSION = "6.1.0";
   var CONFIG_SCHEMA = 2;
   var DEFAULT_LAWS = Object.freeze({ disasterRate: 1, climateVolatility: 1, fertilityScale: 1, faunaRichness: 1, ecoResilience: 1 });
   var PREHISTORY_YEARS = 5e5;
+  var NEOLITHIC_YEARS = 1e4;
   var RESOLUTION = Object.freeze({ standard: 3e3, extra: 6e3, max: 2e4, choices: Object.freeze([3e3, 6e3]) });
   var isObj2 = (v) => v && typeof v === "object" && !Array.isArray(v);
   var num = (errors, name, v, def, lo, hi) => {
@@ -2658,7 +2660,8 @@
     const cal = normalizeCalendar(i.calendar);
     errors.push(...cal.errors);
     const prehistoryYears = num(errors, "prehistory.years", i.prehistory?.years, PREHISTORY_YEARS, 2e4, 2e6);
-    const config = { schema: CONFIG_SCHEMA, name, worldSeed: sp.spec.worldSeed, spec: sp.spec, laws, calendar: cal.calendar, prehistory: { years: prehistoryYears }, detail: i.detail === "light" || i.detail === "fine" ? i.detail : "standard" };
+    const neolithicYears = num(errors, "prehistory.neolithicYears", i.prehistory?.neolithicYears, NEOLITHIC_YEARS, 1e3, 6e4);
+    const config = { schema: CONFIG_SCHEMA, name, worldSeed: sp.spec.worldSeed, spec: sp.spec, laws, calendar: cal.calendar, prehistory: { years: prehistoryYears, neolithicYears }, detail: i.detail === "light" || i.detail === "fine" ? i.detail : "standard" };
     return { config, errors };
   }
   function derivedSeeds(config) {
@@ -2763,6 +2766,8 @@
     return k;
   }
   var budgetKm2 = (subsistence) => subsistence === "agriculture" ? POP.agriTerritoryKm2 : POP.territoryKm2;
+  var COVER = 0.2;
+  var cellBudgetKm2 = (world, c, subsistence) => Math.max(budgetKm2(subsistence), world.cell.areaKm2[c] * COVER);
   function cellDensity(world, c, subsistence, knowledge) {
     const cell = world.cell;
     if (cell.landWater[c] !== LAND_WATER2.LAND) return 0;
@@ -2778,7 +2783,7 @@
         return forage;
     }
   }
-  var cellCapacity = (world, c, subsistence, knowledge) => cellDensity(world, c, subsistence, knowledge) * Math.min(world.cell.areaKm2[c], budgetKm2(subsistence));
+  var cellCapacity = (world, c, subsistence, knowledge) => cellDensity(world, c, subsistence, knowledge) * Math.min(world.cell.areaKm2[c], cellBudgetKm2(world, c, subsistence));
   function territoryOf(world, c) {
     const m = world.mesh, out = [c];
     let area = world.cell.areaKm2[c];
@@ -2798,7 +2803,7 @@
     return occ;
   }
   function groupCapacity(world, g, occ) {
-    let k = 0, left = budgetKm2(g.subsistence);
+    let k = 0, left = cellBudgetKm2(world, g.cell, g.subsistence);
     const tm = densityMult(g);
     for (const c of ensureCells(world, g)) {
       if (left <= 0) break;
@@ -3111,6 +3116,9 @@
   var LEARN_EVERY = 4;
   var preBoost = (f) => 0.6 + 6 * f ** 3 + 3e3 * Math.max(0, f - 0.85) ** 2;
   var isPrehistoricTech = (t) => t.pre;
+  var RIPEN_YEARS = 400;
+  var FAR_SCALES = [1, 2, 3.5];
+  var gateYears = (neo) => ({ seafaring: 6e4, pottery: 2e4, agriculture: neo, pastoralism: neo - 500, construction: neo - 500 });
   var LOCAL_SCALE = 0.4;
   var SPREAD_P = 0.6;
   var SPREAD_HOPS = 12;
@@ -3277,7 +3285,7 @@
     for (const c of landCells) areaSum += ce.areaKm2[c];
     const res = clamp3(Math.sqrt(POP.territoryKm2 * 1.5 / (areaSum / landCells.length)), 1, 6);
     stats.moveScale = Math.round(res * 100) / 100;
-    const baseRate = POP.growthPerMonth * 12;
+    const baseRate = POP.growthPerMonth * 12, gate = gateYears(cfg.prehistory.neolithicYears ?? 1e4);
     let Kworld = 0;
     for (const c of landCells) Kworld += 0.04 * (0.3 + ce.fertility[c]) * ce.areaKm2[c];
     civ3.eco = initEco(world, cfg.laws, 0);
@@ -3337,8 +3345,9 @@
           const dt = stepMonths / 12 * LEARN_EVERY, env = { accel: accel(civ3, worldPop) * sp.techRate * preBoost(frac), contact: neighborsOf(g).length, rivals: 0 };
           for (const key of [...g.tech.cand]) {
             const t = TECH[key];
-            if (!isPrehistoricTech(t)) continue;
-            const rate = emergenceRate(world, civ3, g, t, env);
+            if (!isPrehistoricTech(t) || gate[key] != null && mi < -gate[key] * 12) continue;
+            let rate = emergenceRate(world, civ3, g, t, env);
+            if (gate[key] != null) rate *= 1 + (mi + gate[key] * 12) / 12 / RIPEN_YEARS;
             if (rate <= 0 || u01(civ3, "pretech", step, g.id, key) >= pEmerge(rate, dt)) continue;
             learn2(g, key, mi);
           }
@@ -3355,7 +3364,10 @@
           let t = pick2(targetsFor(world, g, occ, res, 6, Math.max(1 / res, LOCAL_SCALE)));
           if (!t && g.knowledge.seafaring >= 1 && ce.coastDist[g.cell] <= 1) {
             stats.farSearches++;
-            t = pick2(targetsFor(world, g, occ, res, 6, 1));
+            for (const sc of FAR_SCALES) {
+              t = pick2(targetsFor(world, g, occ, res, 6, sc));
+              if (t) break;
+            }
           }
           if (!t) g.noTargetUntil = step + 6 + hashSeed(id) % 6;
           else {
@@ -6697,7 +6709,7 @@
       for (const c of Object.values(ops.campaigns)) {
         if (!ops.forces[c.forceId]) errs.push(`\u6226\u4E89 ${wid} \u306E\u4F5C\u6226 ${c.id} \u306E\u90E8\u968A\u304C\u7121\u3044`);
         if (c.theaterId && !ops.theaters[c.theaterId]) errs.push(`\u6226\u4E89 ${wid} \u306E\u4F5C\u6226 ${c.id} \u306E\u6226\u57DF\u304C\u7121\u3044`);
-        if (c.targetGroupId && !civ3.groups[c.targetGroupId]) errs.push(`\u6226\u4E89 ${wid} \u306E\u4F5C\u6226 ${c.id} \u306E\u76EE\u6A19\u306E\u96C6\u56E3\u304C\u7121\u3044`);
+        if (c.phase !== "done" && c.targetGroupId && !civ3.groups[c.targetGroupId]) errs.push(`\u6226\u4E89 ${wid} \u306E\u4F5C\u6226 ${c.id} \u306E\u76EE\u6A19\u306E\u96C6\u56E3\u304C\u7121\u3044`);
       }
       for (const gid of Object.keys(ops.occ)) if (!w.occupied.includes(gid)) errs.push(`\u6226\u4E89 ${wid} \u306E\u5360\u9818\u306E\u8A18\u9332 ${gid} \u304C\u5360\u9818\u306E\u4E00\u89A7\u306B\u7121\u3044`);
     }
@@ -6853,7 +6865,7 @@
 
   // js/core/wcde/clock.js
   init_archive();
-  var SPEEDS = Object.freeze([{ id: 0, label: "\u505C\u6B62", mps: 0 }, { id: 1, label: "1\u304B\u6708/\u79D2", mps: 1 }, { id: 2, label: "3\u304B\u6708/\u79D2", mps: 3 }, { id: 3, label: "1\u5E74/\u79D2", mps: 12 }, { id: 4, label: "5\u5E74/\u79D2", mps: 60 }]);
+  var SPEEDS = Object.freeze([{ id: 0, label: "\u505C\u6B62", mps: 0 }, { id: 1, label: "\u6708", mps: 1 }, { id: 2, label: "3\u6708", mps: 3 }, { id: 3, label: "\u5E74", mps: 12 }, { id: 4, label: "5\u5E74", mps: 60 }]);
   var DEFAULT_SPEED = 1;
   var ACK_KEEP = 400;
   var MAX_RUN = 240;
@@ -8002,7 +8014,42 @@
     for (const ch of String(s)) x = Math.imul(x ^ ch.charCodeAt(0), 16777619);
     return x >>> 0;
   };
-  var colorOf = (id, l = 56) => `hsl(${hash(id) % 360} 48% ${l}%)`;
+  var PALETTE = [[6, 64, 62], [176, 46, 48], [46, 78, 60], [268, 44, 66], [100, 42, 52], [212, 58, 62], [330, 52, 64], [28, 70, 58], [148, 40, 46], [240, 44, 70], [62, 56, 52], [290, 36, 60], [190, 52, 56], [14, 42, 48], [130, 34, 62], [52, 62, 70], [224, 40, 50], [350, 54, 54], [82, 50, 62], [258, 38, 56], [36, 46, 66], [168, 36, 62], [306, 44, 70], [200, 44, 40]];
+  var REG = /* @__PURE__ */ new Map();
+  var USE = new Array(PALETTE.length).fill(0);
+  var pdist = (a, b) => {
+    const A2 = PALETTE[a], B = PALETTE[b], dh = Math.abs(A2[0] - B[0]), h2 = Math.min(dh, 360 - dh) / 180;
+    return h2 + 0.6 * Math.abs(A2[2] - B[2]) / 30 + 0.3 * Math.abs(A2[1] - B[1]) / 40;
+  };
+  var hasColor = (id) => REG.has(id);
+  function resetColors() {
+    REG.clear();
+    USE.fill(0);
+  }
+  function assignColors(ids, adj) {
+    for (const id of ids) {
+      if (REG.has(id)) continue;
+      const near = [...adj.get(id) ?? []].map((n2) => REG.get(n2)).filter((x) => x != null);
+      let best = 0, bs = -1e9;
+      for (let i = 0; i < PALETTE.length; i++) {
+        const sep = near.length ? Math.min(...near.map((j) => pdist(i, j))) : 9, sc = Math.min(sep, 1.2) * 10 - USE[i] * 1.5;
+        if (sc > bs + 1e-9) {
+          bs = sc;
+          best = i;
+        }
+      }
+      REG.set(id, best);
+      USE[best]++;
+    }
+  }
+  var colorOf = (id, l) => {
+    const i = REG.get(id);
+    if (i != null) {
+      const p = PALETTE[i];
+      return `hsl(${p[0]} ${p[1]}% ${l ?? p[2]}%)`;
+    }
+    return `hsl(${hash(id) % 360} 48% ${l ?? 56}%)`;
+  };
   var POLITY_JA = { tribal: "\u90E8\u65CF\u9023\u5408", chiefdom: "\u9996\u9577\u5236", city_state: "\u90FD\u5E02\u56FD\u5BB6", kingdom: "\u738B\u56FD", empire: "\u5E1D\u56FD", republic: "\u5171\u548C\u5236", theocracy: "\u795E\u6A29\u5236", federation: "\u9023\u90A6\u5236", confederation: "\u9023\u5408" };
   var polityJa = (p) => POLITY_JA[p] ?? p ?? "\u2014";
   var lb = (ja, en) => h("div", { class: "lb" }, ja, en ? h("em", {}, en) : null);
@@ -8197,50 +8244,423 @@ ${shown}${more}`;
 
   // js/ui/v6/map.js
   init_archive();
+
+  // js/ui/v6/terrain.js
   var TAU2 = Math.PI * 2;
-  var FILLS = [["none", "\u5730\u5F62\u306E\u307F"], ["nation", "\u56FD\u5BB6"], ["culture", "\u6587\u5316"], ["language", "\u8A00\u8A9E"], ["religion", "\u5B97\u6559"], ["population", "\u4EBA\u53E3"], ["climate", "\u6C17\u5019\uFF08\u6C17\u6E29\uFF09"]];
-  var OVERLAYS = [["borders", "\u56FD\u5883\u7DDA"], ["war", "\u6226\u4E89"], ["rivers", "\u6CB3\u5DDD"], ["trade", "\u4EA4\u6613\u8DEF"], ["fronts", "\u6226\u7DDA\u30FB\u5360\u9818"], ["cities", "\u90FD\u5E02"]];
-  function buildGeometry(world) {
-    const m = world.mesh, N2 = m.cellCount, polys = new Array(N2), cen = new Float32Array(N2 * 2);
-    for (let c = 0; c < N2; c++) {
-      const a = m.cellVertexOffsets[c], b = m.cellVertexOffsets[c + 1], pts = [];
-      let lo = 9, hi = -9;
-      for (let k = a; k < b; k++) {
-        const v = m.cellVertexIds[k] * 3, x2 = m.vertexXYZ[v], y2 = m.vertexXYZ[v + 1], z2 = m.vertexXYZ[v + 2], lon = Math.atan2(y2, x2), lat = Math.asin(Math.max(-1, Math.min(1, z2)));
-        pts.push([lon, lat, m.cellVertexIds[k]]);
-        if (lon < lo) lo = lon;
-        if (lon > hi) hi = lon;
+  var clamp16 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var hex = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
+  var css = (c) => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
+  function ramp(stops) {
+    const S3 = stops.map(([t, c]) => [t, hex(c)]);
+    return (t) => {
+      if (!(t > S3[0][0])) return css(S3[0][1]);
+      for (let i = 1; i < S3.length; i++) if (t <= S3[i][0]) {
+        const [t02, a] = S3[i - 1], [t1, b] = S3[i], f = (t - t02) / (t1 - t02 || 1);
+        return css([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]);
       }
-      if (hi - lo > Math.PI) {
-        for (const p of pts) if (p[0] < 0) p[0] += TAU2;
-      }
-      polys[c] = pts;
-      const x = m.centerXYZ[c * 3], y = m.centerXYZ[c * 3 + 1], z = m.centerXYZ[c * 3 + 2];
-      cen[c * 2] = Math.atan2(y, x);
-      cen[c * 2 + 1] = Math.asin(Math.max(-1, Math.min(1, z)));
-    }
-    return { polys, cen, N: N2 };
+      return css(S3[S3.length - 1][1]);
+    };
   }
+  var RAMPS = {
+    // 陸の標高（m）: 低地の緑 → 黄 → 茶 → 灰 → 雪
+    land: ramp([[0, "#5a9a52"], [120, "#78a853"], [400, "#a9b95e"], [800, "#d3c46f"], [1400, "#cba867"], [2200, "#a98260"], [3300, "#8d7d72"], [4600, "#c7c4c0"], [6500, "#f7f6f3"]]),
+    // 水深（m, 正の値）: 浅い青緑 → 深い藍
+    sea: ramp([[0, "#6fbfd0"], [150, "#58a5c4"], [800, "#3f82b0"], [2200, "#2c5f93"], [4200, "#204878"], [6200, "#173560"]]),
+    temp: ramp([[-30, "#6a4aa6"], [-15, "#4f7fcf"], [-3, "#86c9ea"], [7, "#93d6b0"], [15, "#d8e68e"], [22, "#f4d06c"], [28, "#ef9a4d"], [35, "#d4503d"]]),
+    precip: ramp([[0, "#f4e8b8"], [250, "#e6d68c"], [700, "#a6d19b"], [1500, "#52a9a6"], [2500, "#3b82b8"], [4e3, "#2c509c"]]),
+    pop: ramp([[0, "#fff1bf"], [0.22, "#ffd878"], [0.5, "#f7a84c"], [0.78, "#e2653b"], [1, "#a22f3b"]])
+  };
+  var BIOME_COLORS = ["#3f82b0", "#e9f2f5", "#aebb9f", "#4f7f5a", "#62ab5c", "#bcd67f", "#ebd291", "#c9c3a3", "#d6c670", "#8fc352", "#2f9c56", "#aaa69f", "#4ea594", "#5aa9c6"];
+  var BIOME_JA = ["\u6D77", "\u6C37\u96EA", "\u30C4\u30F3\u30C9\u30E9", "\u30BF\u30A4\u30AC", "\u6E29\u5E2F\u6797", "\u8349\u539F", "\u71B1\u5E2F\u7802\u6F20", "\u5BD2\u51B7\u7802\u6F20", "\u30B5\u30D0\u30F3\u30CA", "\u71B1\u5E2F\u5B63\u7BC0\u6797", "\u71B1\u5E2F\u96E8\u6797", "\u9AD8\u5C71", "\u6E7F\u5730", "\u6E56"];
+  var LAND_BASE = "#c9c3a6";
+  var LAKE_COLOR = "#5aa9c6";
+  function hash01(a, b = 0, c = 0) {
+    let h2 = Math.imul(a ^ 2654435769, 2246822507) ^ Math.imul(b + 2135587861 | 0, 3266489909) ^ Math.imul(c + 374761393 | 0, 668265263);
+    h2 ^= h2 >>> 15;
+    h2 = Math.imul(h2, 739982445);
+    h2 ^= h2 >>> 12;
+    h2 = Math.imul(h2, 695872825);
+    h2 ^= h2 >>> 15;
+    return (h2 >>> 0) / 4294967296;
+  }
+  var LEVELS = 3;
+  var JITTER = 0.17;
+  var FRACT = 0.24;
+  var Geo = class {
+    constructor(mesh) {
+      this.mesh = mesh;
+      const N2 = mesh.cellCount, T3 = mesh.vertexXYZ.length / 3;
+      this.N = N2;
+      this.T = T3;
+      const X = mesh.vertexXYZ, vlon = new Float32Array(T3), vlat = new Float32Array(T3);
+      for (let v = 0; v < T3; v++) {
+        vlon[v] = Math.atan2(X[3 * v + 1], X[3 * v]);
+        vlat[v] = Math.asin(clamp16(X[3 * v + 2], -1, 1));
+      }
+      this.vlon = vlon;
+      this.vlat = vlat;
+      const C = mesh.centerXYZ, cen = new Float32Array(N2 * 2);
+      for (let c = 0; c < N2; c++) {
+        cen[2 * c] = Math.atan2(C[3 * c + 1], C[3 * c]);
+        cen[2 * c + 1] = Math.asin(clamp16(C[3 * c + 2], -1, 1));
+      }
+      this.cen = cen;
+      this.W = 0;
+      this.H = 0;
+      const off = mesh.neighborOffsets, nb = mesh.neighborIds, vo = mesh.cellVertexOffsets, vi = mesh.cellVertexIds, sv2 = new Int32Array(2 * nb.length).fill(-1);
+      for (let c = 0; c < N2; c++) for (let k = off[c]; k < off[c + 1]; k++) {
+        const n2 = nb[k];
+        let f = 0;
+        for (let a = vo[c]; a < vo[c + 1] && f < 2; a++) {
+          const v = vi[a];
+          for (let b = vo[n2]; b < vo[n2 + 1]; b++) if (vi[b] === v) {
+            sv2[2 * k + f++] = v;
+            break;
+          }
+        }
+      }
+      this.slotVerts = sv2;
+    }
+    /** 幅 W（高さは W/2）の画面に合わせて、頂点の位置と辺・区画の形を作り直す */
+    build(W, H) {
+      if (this.W === W && this.H === H) return;
+      this.W = W;
+      this.H = H;
+      this.ec = /* @__PURE__ */ new Map();
+      this.cp = null;
+      this.land = null;
+      const T3 = this.T, VX = new Float32Array(T3), VY = new Float32Array(T3), cellPx = Math.sqrt(W * H / this.N);
+      for (let v = 0; v < T3; v++) {
+        const a = hash01(v, 1) * TAU2, r = JITTER * cellPx * (0.4 + 0.6 * hash01(v, 2));
+        VX[v] = (this.vlon[v] + Math.PI) / TAU2 * W + Math.cos(a) * r;
+        VY[v] = (Math.PI / 2 - this.vlat[v]) / Math.PI * H + Math.sin(a) * r;
+      }
+      this.VX = VX;
+      this.VY = VY;
+      this.cellPx = cellPx;
+    }
+    proj(lon, lat) {
+      return [(lon + Math.PI) / TAU2 * this.W, (Math.PI / 2 - lat) / Math.PI * this.H];
+    }
+    /** 辺 a→b の折れ線 [x0,y0,x1,y1,…]。x は a の位置を基準に、b を ±W だけずらしてつなげたもの */
+    edge(a, b) {
+      const lo = a < b ? a : b, hi = a < b ? b : a, key = lo * this.T + hi;
+      let p = this.ec.get(key);
+      if (!p) {
+        p = this._mk(lo, hi);
+        this.ec.set(key, p);
+      }
+      if (a === lo) return p;
+      const n2 = p.length / 2, q2 = new Float32Array(p.length);
+      for (let i = 0; i < n2; i++) {
+        q2[2 * i] = p[2 * (n2 - 1 - i)];
+        q2[2 * i + 1] = p[2 * (n2 - 1 - i) + 1];
+      }
+      return q2;
+    }
+    _mk(lo, hi) {
+      const W = this.W, n2 = 1 << LEVELS, pts = new Float32Array((n2 + 1) * 2), x1 = this.VX[lo], y1 = this.VY[lo];
+      let x2 = this.VX[hi];
+      const y2 = this.VY[hi];
+      x2 += W * Math.round((x1 - x2) / W);
+      pts[0] = x1;
+      pts[1] = y1;
+      pts[2 * n2] = x2;
+      pts[2 * n2 + 1] = y2;
+      const sub2 = (i0, i1, lvl, node) => {
+        if (lvl === LEVELS) return;
+        const im = i0 + i1 >> 1, ax = pts[2 * i0], ay = pts[2 * i0 + 1], bx = pts[2 * i1], by = pts[2 * i1 + 1], dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1, r = (hash01(lo, hi, node) - 0.5) * 2 * FRACT * len;
+        pts[2 * im] = (ax + bx) / 2 - dy / len * r;
+        pts[2 * im + 1] = (ay + by) / 2 + dx / len * r;
+        sub2(i0, im, lvl + 1, node * 2);
+        sub2(im, i1, lvl + 1, node * 2 + 1);
+      };
+      sub2(0, n2, 0, 1);
+      return pts;
+    }
+    /** 折れ線 pts（x,y の並び）を path に加える。画面の左右端をまたぐものは ±W の写しも加える。close=true で閉じる */
+    addPoly(path, pts, close) {
+      const W = this.W, n2 = pts.length / 2;
+      let lo = 1e9, hi = -1e9;
+      for (let i = 0; i < n2; i++) {
+        const x = pts[2 * i];
+        if (x < lo) lo = x;
+        if (x > hi) hi = x;
+      }
+      for (const dx of [0, W, -W]) {
+        if (hi + dx < 0 || lo + dx > W) continue;
+        path.moveTo(pts[0] + dx, pts[1]);
+        for (let i = 1; i < n2; i++) path.lineTo(pts[2 * i] + dx, pts[2 * i + 1]);
+        if (close) path.closePath();
+      }
+    }
+    /** 区画 c の輪郭（共有する辺を使うので、隣と必ず一致する）。極を囲む区画は、画面の上端・下端まで伸ばして閉じる */
+    ring(c) {
+      const m = this.mesh, vo = m.cellVertexOffsets, vi = m.cellVertexIds, a0 = vo[c], cnt = vo[c + 1] - a0, W = this.W, H = this.H, out = [];
+      let lastX = 0, lastY = 0, firstX = 0, latSum = 0;
+      for (let i = 0; i < cnt; i++) {
+        const va = vi[a0 + i], vb = vi[a0 + (i + 1) % cnt], e = this.edge(va, vb), n2 = e.length / 2;
+        latSum += this.vlat[va];
+        const shift = i === 0 ? 0 : Math.round((lastX - e[0]) / W) * W;
+        for (let j = i === 0 ? 0 : 1; j < n2; j++) out.push(e[2 * j] + shift, e[2 * j + 1]);
+        lastX = e[2 * (n2 - 1)] + shift;
+        lastY = e[2 * (n2 - 1) + 1];
+        if (i === 0) firstX = e[0];
+      }
+      const wraps = Math.round((lastX - firstX) / W);
+      if (wraps !== 0) {
+        const yEdge = latSum > 0 ? -2 : H + 2;
+        out.push(lastX, yEdge, firstX, yEdge);
+      }
+      return out;
+    }
+    /** 全区画の Path2D（初回に作り、W が変わるまで使い回す）と、陸（海でない区画）をまとめた Path2D */
+    paths(isSea) {
+      if (this.cp && this.cpSea === isSea) return this.cp;
+      const N2 = this.N, cp = new Array(N2), land = new Path2D();
+      for (let c = 0; c < N2; c++) {
+        const p = new Path2D(), pts = this.ring(c);
+        this.addPoly(p, pts, true);
+        cp[c] = p;
+        if (!isSea[c]) this.addPoly(land, pts, true);
+      }
+      this.cp = cp;
+      this.cpSea = isSea;
+      this.land = land;
+      return cp;
+    }
+    /** 隣接スロット k の辺を path に加える（c 側から見た向き） */
+    addSlot(path, k) {
+      const v = this.slotVerts;
+      if (v[2 * k] < 0 || v[2 * k + 1] < 0) return;
+      this.addPoly(path, this.edge(v[2 * k], v[2 * k + 1]), false);
+    }
+    /** 条件 pred(c, n) を満たす隣接ペア（c の側から見る）の境界線を 1 つの Path2D にまとめる。cells: 見る区画（省略で全部） */
+    edgesWhere(pred, cells) {
+      const m = this.mesh, off = m.neighborOffsets, nb = m.neighborIds, p = new Path2D(), it = cells ?? { [Symbol.iterator]: function* () {
+        for (let c = 0; c < m.cellCount; c++) yield c;
+      } };
+      for (const c of it) for (let k = off[c]; k < off[c + 1]; k++) if (pred(c, nb[k])) this.addSlot(p, k);
+      return p;
+    }
+  };
+  function hillshade(geo, elevation, isSea) {
+    const m = geo.mesh, N2 = geo.N, off = m.neighborOffsets, nb = m.neighborIds, cen = geo.cen, sh = new Float32Array(N2), spacing = Math.sqrt(4 * Math.PI / N2);
+    const Lx = -0.52, Ly = 0.52, Lz = 0.68;
+    for (let c = 0; c < N2; c++) {
+      if (isSea[c]) continue;
+      const e = elevation[c], cl = Math.cos(cen[2 * c + 1]);
+      let sxx = 0, sxy = 0, syy = 0, sxz = 0, syz = 0;
+      for (let k = off[c]; k < off[c + 1]; k++) {
+        const j = nb[k];
+        let dl = cen[2 * j] - cen[2 * c];
+        if (dl > Math.PI) dl -= TAU2;
+        else if (dl < -Math.PI) dl += TAU2;
+        const dx = dl * cl / spacing, dy = (cen[2 * j + 1] - cen[2 * c + 1]) / spacing, dz = ((isSea[j] ? Math.min(0, elevation[j]) * 0.3 : elevation[j]) - e) / 1e3;
+        sxx += dx * dx;
+        sxy += dx * dy;
+        syy += dy * dy;
+        sxz += dx * dz;
+        syz += dy * dz;
+      }
+      const det = sxx * syy - sxy * sxy || 1, gx = (sxz * syy - syz * sxy) / det, gy = (syz * sxx - sxz * sxy) / det, nx = -gx * 1.25, ny = -gy * 1.25, len = Math.hypot(nx, ny, 1);
+      sh[c] = clamp16((nx * Lx + ny * Ly + Lz) / len - Lz, -1, 1);
+    }
+    const out = new Float32Array(N2);
+    for (let c = 0; c < N2; c++) {
+      if (isSea[c]) continue;
+      let s = sh[c] * 2, n2 = 2;
+      for (let k = off[c]; k < off[c + 1]; k++) if (!isSea[nb[k]]) {
+        s += sh[nb[k]];
+        n2++;
+      }
+      out[c] = s / n2;
+    }
+    return out;
+  }
+  function reliefMarks(geo, cell, isSea) {
+    const { elevation, landWater } = cell, N2 = geo.N, marks = [], cp = geo.cellPx;
+    for (let c = 0; c < N2; c++) {
+      if (isSea[c] || landWater[c] === 2) continue;
+      const e = elevation[c];
+      if (e < 700) continue;
+      const [px, py] = geo.proj(geo.cen[2 * c], geo.cen[2 * c + 1]), jx = (hash01(c, 7) - 0.5) * cp * 0.45, jy = (hash01(c, 8) - 0.5) * cp * 0.35;
+      if (e >= 2200) marks.push([px + jx, py + jy, 1, cp * (0.5 + 0.28 * clamp16((e - 2200) / 3200, 0, 1))]);
+      else marks.push([px + jx, py + jy, 0, cp * (0.3 + 0.16 * clamp16((e - 700) / 1500, 0, 1))]);
+    }
+    return marks.sort((a, b) => a[1] - b[1]);
+  }
+  function drawMarks(ctx, marks, k) {
+    const s = 1 / Math.pow(k, 0.3);
+    ctx.lineJoin = "round";
+    for (const [x, y, kind, size] of marks) {
+      const w = size * s;
+      if (kind === 1) {
+        const h2 = w * 0.95;
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.55, y + h2 * 0.4);
+        ctx.lineTo(x - w * 0.02, y - h2 * 0.6);
+        ctx.lineTo(x + w * 0.1, y + h2 * 0.4);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(255,252,240,.62)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.02, y - h2 * 0.6);
+        ctx.lineTo(x + w * 0.58, y + h2 * 0.4);
+        ctx.lineTo(x + w * 0.1, y + h2 * 0.4);
+        ctx.closePath();
+        ctx.fillStyle = "rgba(40,34,30,.5)";
+        ctx.fill();
+      } else {
+        ctx.beginPath();
+        ctx.moveTo(x - w * 0.5, y + w * 0.22);
+        ctx.quadraticCurveTo(x, y - w * 0.46, x + w * 0.5, y + w * 0.22);
+        ctx.lineWidth = Math.max(0.5, w * 0.12);
+        ctx.strokeStyle = "rgba(70,56,40,.55)";
+        ctx.stroke();
+      }
+    }
+  }
+  function riverPaths(geo, cell, isSea) {
+    const { riverTo, riverFlow, river, landWater } = cell;
+    if (!riverTo) return [];
+    const N2 = geo.N, W = geo.W, buckets = [new Path2D(), new Path2D(), new Path2D()], cen = geo.cen, fl = [];
+    for (let c = 0; c < N2; c++) if (riverTo[c] >= 0 && landWater[c] === 1 && (river?.[c] > 0 || riverFlow?.[c] > 0)) fl.push(riverFlow?.[c] ?? 0);
+    fl.sort((a, b) => a - b);
+    const q2 = (p) => fl[Math.floor(fl.length * p)] ?? 0, t1 = q2(0.55), t2 = q2(0.88);
+    for (let c = 0; c < N2; c++) {
+      const to = riverTo[c];
+      if (to < 0 || landWater[c] !== 1 || !(river?.[c] > 0 || riverFlow?.[c] > 0)) continue;
+      const f = riverFlow?.[c] ?? 0, b = f >= t2 ? 2 : f >= t1 ? 1 : 0, [x1, y1] = geo.proj(cen[2 * c], cen[2 * c + 1]);
+      let [x2, y2] = geo.proj(cen[2 * to], cen[2 * to + 1]);
+      x2 += W * Math.round((x1 - x2) / W);
+      if (isSea[to]) {
+        x2 = (x1 + x2) / 2;
+        y2 = (y1 + y2) / 2;
+      }
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, r = (hash01(c, to, 3) - 0.5) * 0.7 * len, cx = mx - dy / len * r, cy = my + dx / len * r;
+      for (const o of [0, W, -W]) {
+        if (Math.max(x1, x2) + o < 0 || Math.min(x1, x2) + o > W) continue;
+        buckets[b].moveTo(x1 + o, y1);
+        buckets[b].quadraticCurveTo(cx + o, cy, x2 + o, y2);
+      }
+    }
+    return buckets;
+  }
+  function textureTile(createCanvas, size = 96) {
+    const cv = createCanvas(size, size), ctx = cv.getContext("2d");
+    if (!ctx) return null;
+    const img = ctx.createImageData(size, size), d = img.data;
+    for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+      const v = hash01(x, y, 11) * 0.6 + hash01(x >> 2, y >> 2, 12) * 0.4, i = 4 * (y * size + x), dark = v < 0.5;
+      d[i] = dark ? 40 : 255;
+      d[i + 1] = dark ? 34 : 250;
+      d[i + 2] = dark ? 28 : 240;
+      d[i + 3] = Math.round(Math.abs(v - 0.5) * 70);
+    }
+    ctx.putImageData(img, 0, 0);
+    return cv;
+  }
+
+  // js/ui/v6/map.js
+  var TAU3 = Math.PI * 2;
+  var LAYERS = [
+    ["heightmap", "\u6A19\u9AD8", "ground"],
+    ["biomes", "\u30D0\u30A4\u30AA\u30FC\u30E0", "ground"],
+    ["temperature", "\u6C17\u6E29", "ground"],
+    ["precipitation", "\u964D\u6C34", "ground"],
+    ["population", "\u4EBA\u53E3", "social"],
+    ["religions", "\u5B97\u6559", "social"],
+    ["cultures", "\u6587\u5316", "social"],
+    ["languages", "\u8A00\u8A9E", "social"],
+    ["states", "\u56FD\u5BB6", "social"],
+    ["relief", "\u9670\u5F71\u30FB\u5C71\u5CB3", "mark"],
+    ["rivers", "\u6CB3\u5DDD", "line"],
+    ["borders", "\u56FD\u5883\u7DDA", "line"],
+    ["routes", "\u4EA4\u6613\u8DEF", "line"],
+    ["war", "\u6226\u4E89\uFF08\u4EA4\u6226\u56FD\u306E\u7E01\uFF09", "line"],
+    ["fronts", "\u6226\u7DDA\u30FB\u5360\u9818", "line"],
+    ["cities", "\u90FD\u5E02", "mark"],
+    ["labels", "\u56FD\u540D", "mark"],
+    ["grid", "\u7D4C\u7DEF\u7DDA", "line"],
+    ["cells", "\u533A\u753B\u7DDA", "line"]
+  ];
+  var GROUPS = [["ground", "\u5730\u5F62\u30FB\u6C17\u5019", "GROUND"], ["social", "\u793E\u4F1A", "SOCIETY"], ["mark", "\u8A18\u53F7\u30FB\u6587\u5B57", "MARK"], ["line", "\u7DDA", "LINE"]];
+  var FILL_IDS = LAYERS.filter(([, , g]) => g === "ground" || g === "social").map(([id]) => id);
+  var PRESETS = [
+    ["politic", "\u653F\u6CBB", ["states", "relief", "rivers", "borders", "cities", "labels"]],
+    ["culture", "\u6587\u5316", ["cultures", "relief", "rivers", "borders", "cities"]],
+    ["language", "\u8A00\u8A9E", ["languages", "relief", "rivers", "borders", "cities"]],
+    ["religion", "\u5B97\u6559", ["religions", "relief", "rivers", "borders", "cities"]],
+    ["biome", "\u30D0\u30A4\u30AA\u30FC\u30E0", ["biomes", "relief", "rivers"]],
+    ["height", "\u6A19\u9AD8", ["heightmap", "relief", "rivers"]],
+    ["climate", "\u6C17\u6E29", ["temperature", "relief", "rivers"]],
+    ["rain", "\u964D\u6C34", ["precipitation", "rivers"]],
+    ["economy", "\u4EBA\u53E3\u30FB\u4EA4\u6613", ["population", "relief", "rivers", "routes", "cities"]],
+    ["military", "\u8ECD\u4E8B", ["states", "relief", "borders", "war", "fronts", "cities"]],
+    ["land", "\u9678\u5730\u306E\u307F", ["relief"]]
+  ];
+  var DEFAULT_ALPHA = { heightmap: 1, biomes: 1, temperature: 0.8, precipitation: 0.8, population: 0.85, religions: 0.66, cultures: 0.66, languages: 0.66, states: 0.66 };
+  var SEA_DEEP = RAMPS.sea(5200);
+  var mkCanvas = (w, h2) => {
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h2;
+    return c;
+  };
   var dominant3 = (g, key) => g.cohorts?.reduce?.((b, x) => x.share > b.share ? x : b, { share: -1 })?.[key] ?? null;
+  var idOf = { states: (g) => g.stateId ?? null, cultures: (g) => dominant3(g, "cultureId"), languages: (g) => dominant3(g, "languageId"), religions: (g) => dominant3(g, "religionId") };
   var MapView = class {
     constructor(canvas, w) {
       this.cv = canvas;
       this.w = w;
-      this.geo = buildGeometry(w.world);
-      this.fillLayer = "nation";
-      this.overlays = /* @__PURE__ */ new Set(["borders", "cities"]);
+      this.geo = new Geo(w.world.mesh);
+      this.layers = new Set(PRESETS[0][2]);
+      this.alpha = { ...DEFAULT_ALPHA };
+      this.preset = "politic";
       this.onPick = null;
       this.sel = null;
-      this.base = null;
       this.view = { x: 0, y: 0, k: 1 };
       this._own = null;
       this._ownAt = -1;
+      this._idc = {};
+      this.gc = null;
+      this.rc = null;
+      this.frame = null;
+      this.frameView = null;
+      this.T = null;
+      this.wKey = 0;
+      resetColors();
       canvas.addEventListener("click", (e) => {
         if (!this.moved) this.click(e);
       });
       this.pan();
       if (typeof ResizeObserver !== "undefined" && canvas.parentElement) new ResizeObserver(() => this.draw()).observe(canvas.parentElement);
     }
+    /* ---------- レイヤーの操作 ---------- */
+    isOn(id) {
+      return this.layers.has(id);
+    }
+    toggle(id) {
+      this.layers.has(id) ? this.layers.delete(id) : this.layers.add(id);
+      this.preset = this.presetOf();
+    }
+    setPreset(id) {
+      const p = PRESETS.find((x) => x[0] === id);
+      if (!p) return;
+      this.layers = new Set(p[2]);
+      this.preset = id;
+    }
+    presetOf() {
+      for (const [id, , ls] of PRESETS) if (ls.length === this.layers.size && ls.every((l) => this.layers.has(l))) return id;
+      return null;
+    }
+    /** 凡例に出す層: 塗りのうち、いちばん上にあるもの（なければ陸地の凡例） */
+    legendKey() {
+      for (let i = FILL_IDS.length - 1; i >= 0; i--) if (this.layers.has(FILL_IDS[i])) return FILL_IDS[i];
+      return "land";
+    }
+    /* ---------- 操作（ドラッグ・ズーム）: 動かす間は画像を動かすだけ。止まったら描き直す ---------- */
     pan() {
       const cv = this.cv;
       let drag = null;
@@ -8257,7 +8677,7 @@ ${shown}${more}`;
           this.view.x = drag.vx + dx;
           this.view.y = drag.vy + dy;
           this.clamp();
-          this.draw();
+          this.interact();
         }
       });
       const up = () => {
@@ -8268,12 +8688,12 @@ ${shown}${more}`;
       cv.addEventListener("pointerleave", up);
       cv.addEventListener("wheel", (e) => {
         e.preventDefault();
-        const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k0 = this.view.k, k1 = Math.max(1, Math.min(12, k0 * (e.deltaY < 0 ? 1.2 : 1 / 1.2)));
+        const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k0 = this.view.k, k1 = clamp16(k0 * (e.deltaY < 0 ? 1.2 : 1 / 1.2), 1, 16);
         this.view.x = mx - (mx - this.view.x) / k0 * k1;
         this.view.y = my - (my - this.view.y) / k0 * k1;
         this.view.k = k1;
         this.clamp();
-        this.draw();
+        this.interact();
       }, { passive: false });
     }
     clamp() {
@@ -8281,283 +8701,553 @@ ${shown}${more}`;
       v.x = Math.min(0, Math.max(W - W * v.k, v.x));
       v.y = Math.min(0, Math.max(H - H * v.k, v.y));
     }
+    interact() {
+      if (!this.fastDraw()) {
+        this.draw();
+        return;
+      }
+      clearTimeout(this._it);
+      this._it = setTimeout(() => this.draw(), 110);
+    }
+    fastDraw() {
+      const ctx = this.cv.getContext("2d");
+      if (!ctx || !this.frame || !this.frameView) return false;
+      const v = this.view, f = this.frameView, r = v.k / f.k, W = this.cv.width, H = this.cv.height;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.fillStyle = SEA_DEEP;
+      ctx.fillRect(0, 0, W, H);
+      ctx.setTransform(r, 0, 0, r, v.x - f.x * r, v.y - f.y * r);
+      ctx.drawImage(this.frame, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      return true;
+    }
     size() {
       const host = this.cv.parentElement, W = Math.max(480, Math.floor(host?.clientWidth || this.cv.getBoundingClientRect().width || 900)), H = Math.floor(W / 2);
       if (this.cv.width !== W || this.cv.height !== H) {
         this.cv.width = W;
         this.cv.height = H;
-        this.base = null;
         this.clamp();
       }
       return [W, H];
     }
     proj(lon, lat, W, H) {
-      return [(lon + Math.PI) / TAU2 * W, (Math.PI / 2 - lat) / Math.PI * H];
+      return [(lon + Math.PI) / TAU3 * W, (Math.PI / 2 - lat) / Math.PI * H];
     }
-    path(ctx, c, W, H, dx = 0) {
-      const p = this.geo.polys[c];
-      ctx.beginPath();
-      for (let i = 0; i < p.length; i++) {
-        const [x, y] = this.proj(p[i][0], p[i][1], W, H);
-        i ? ctx.lineTo(x + dx, y) : ctx.moveTo(x + dx, y);
+    /* ---------- 世界の地形から 1 回だけ作るもの ---------- */
+    terr() {
+      if (this.T) return this.T;
+      const ce = this.w.world.cell, N2 = this.geo.N, m = this.geo.mesh, off = m.neighborOffsets, nb = m.neighborIds, isSea = new Uint8Array(N2), el = ce.elevation;
+      for (let c = 0; c < N2; c++) isSea[c] = ce.landWater[c] === 0 || el[c] <= 0 ? 1 : 0;
+      const smooth2 = (want) => {
+        const o = new Float32Array(N2);
+        for (let c = 0; c < N2; c++) {
+          if (!!isSea[c] !== want) continue;
+          let s = el[c] * 2, n2 = 2;
+          for (let k = off[c]; k < off[c + 1]; k++) if (!!isSea[nb[k]] === want) {
+            s += el[nb[k]];
+            n2++;
+          }
+          o[c] = s / n2;
+        }
+        return o;
+      };
+      let seaS = smooth2(true);
+      for (let i = 0; i < 3; i++) {
+        const prev = seaS;
+        seaS = new Float32Array(N2);
+        for (let c = 0; c < N2; c++) {
+          if (!isSea[c]) continue;
+          let s = prev[c] * 2, n2 = 2;
+          for (let k = off[c]; k < off[c + 1]; k++) if (isSea[nb[k]]) {
+            s += prev[nb[k]];
+            n2++;
+          }
+          seaS[c] = s / n2;
+        }
       }
-      ctx.closePath();
+      this.T = { isSea, elS: smooth2(false), seaS, shade: hillshade(this.geo, el, isSea), col: {} };
+      return this.T;
     }
-    fill(ctx, c, col, W, H) {
-      ctx.fillStyle = col;
-      this.path(ctx, c, W, H);
-      ctx.fill();
-      if (this.geo.polys[c].some((q2) => q2[0] > Math.PI)) {
-        this.path(ctx, c, W, H, -W);
-        ctx.fill();
+    /** 画面の幅が変わったときだけ、形状まわりのキャッシュを作り直す */
+    ensureGeo(W, H) {
+      const T3 = this.terr();
+      if (this.wKey === W) return;
+      this.wKey = W;
+      this.geo.build(W, H);
+      this.cp = this.geo.paths(T3.isSea);
+      T3.marks = reliefMarks(this.geo, this.w.world.cell, T3.isSea);
+      const ce = this.w.world.cell, g = this.geo;
+      T3.coast = g.edgesWhere((c, n2) => !T3.isSea[c] && T3.isSea[n2]);
+      T3.lakeEdge = g.edgesWhere((c, n2) => ce.landWater[c] !== 2 && !T3.isSea[c] && ce.landWater[n2] === 2);
+      T3.cellsP = null;
+      T3.rivers = riverPaths(g, ce, T3.isSea);
+      T3.grid = null;
+      this.gc = this.rc = this.frame = null;
+      this._labelsAt = -1;
+      T3.tex = null;
+      try {
+        const t = textureTile(mkCanvas);
+        T3.tex = t && this.cv.getContext("2d")?.createPattern(t, "repeat");
+      } catch {
+        T3.tex = null;
       }
     }
-    terrain(W, H) {
-      const cv = document.createElement("canvas");
-      cv.width = W;
-      cv.height = H;
-      const ctx = cv.getContext("2d");
-      if (!ctx) return null;
-      const ce = this.w.world.cell;
-      let emax = 1e-6;
-      for (let c = 0; c < this.geo.N; c++) if (ce.elevation[c] > emax) emax = ce.elevation[c];
-      ctx.fillStyle = "#0f1114";
-      ctx.fillRect(0, 0, W, H);
-      for (let c = 0; c < this.geo.N; c++) {
-        const land = ce.landWater[c] === 1 || ce.elevation[c] > 0, t = Math.max(0, Math.min(1, ce.elevation[c] / emax));
-        this.fill(ctx, c, land ? `hsl(${Math.round(105 - 75 * t)} 24% ${24 + Math.round(20 * t)}%)` : "hsl(210 38% 14%)", W, H);
+    cellColors(id) {
+      const T3 = this.T, ce = this.w.world.cell, N2 = this.geo.N;
+      if (T3.col[id]) return T3.col[id];
+      const a = new Array(N2).fill(null);
+      for (let c = 0; c < N2; c++) {
+        if (T3.isSea[c]) continue;
+        if (ce.landWater[c] === 2) {
+          a[c] = LAKE_COLOR;
+          continue;
+        }
+        if (id === "heightmap") a[c] = RAMPS.land(T3.elS[c]);
+        else if (id === "biomes") a[c] = BIOME_COLORS[ce.biome[c]] ?? LAND_BASE;
+        else if (id === "temperature") a[c] = RAMPS.temp(ce.temp[c]);
+        else if (id === "precipitation") a[c] = RAMPS.precip(ce.precip[c]);
       }
-      return cv;
+      return T3.col[id] = a;
     }
+    /* ---------- 所有・色 ---------- */
     owner() {
       const civ3 = this.w.civ, pv = this.w.viewPast, key = pv ?? civ3.monthIndex;
       if (this._own && this._ownAt === key) return this._own;
       const o = /* @__PURE__ */ new Map();
       if (pv != null) {
         for (const [cell, stateId] of pastView(civ3, pv).owner) o.set(cell, { cell, cells: [cell], stateId, pop: 1, cohorts: [] });
-        this._own = o;
-        this._ownAt = key;
-        return o;
-      }
-      for (const g of Object.values(civ3.groups)) {
+      } else for (const g of Object.values(civ3.groups)) {
         const cells = g.cells?.length ? g.cells : [g.cell];
         for (const c of cells) o.set(c, g);
       }
       this._own = o;
       this._ownAt = key;
+      this._idc = {};
+      this._labelsAt = -1;
+      this.assign(o);
       return o;
     }
-    fillColor(g, maxPop) {
-      const civ3 = this.w.civ, L = this.fillLayer;
-      if (L === "nation") return g.stateId ? colorOf(g.stateId) : null;
-      if (L === "culture") {
-        const id = dominant3(g, "cultureId");
-        return id ? colorOf(id) : null;
+    /** id（国家・文化・言語・宗教）の色を、隣り合うものが似ないように割り当てる（決めた色は変えない） */
+    assign(own) {
+      const civ3 = this.w.civ, tabs = { states: civ3.states, cultures: civ3.cultures, languages: civ3.languages, religions: civ3.religions }, nb = this.geo.mesh;
+      for (const [type, tab] of Object.entries(tabs)) {
+        const ids = Object.keys(tab ?? {}).filter((i) => !hasColor(i));
+        if (!ids.length) continue;
+        const adj = /* @__PURE__ */ new Map(), f = idOf[type], off = nb.neighborOffsets, ni = nb.neighborIds;
+        for (const [c, g] of own) {
+          const a = f(g);
+          if (!a) continue;
+          for (let k = off[c]; k < off[c + 1]; k++) {
+            const o = own.get(ni[k]), b = o && f(o);
+            if (b && b !== a) {
+              let s = adj.get(a);
+              if (!s) adj.set(a, s = /* @__PURE__ */ new Set());
+              s.add(b);
+            }
+          }
+        }
+        assignColors(ids, adj);
       }
-      if (L === "language") {
-        const id = dominant3(g, "languageId");
-        return id ? colorOf(id, 52) : null;
-      }
-      if (L === "religion") {
-        const id = dominant3(g, "religionId");
-        return id ? colorOf(id, 60) : null;
-      }
-      if (L === "population") {
-        const t = Math.min(1, Math.log1p(g.pop) / Math.log1p(maxPop));
-        return `hsl(${Math.round(210 - 190 * t)} 55% ${28 + Math.round(26 * t)}%)`;
-      }
-      return null;
     }
-    /** 凡例: 選んだ層の実データから（上位のみ） */
-    legend(key) {
-      const civ3 = this.w.civ, own = this.owner(), cnt = /* @__PURE__ */ new Map(), add = (id, n2) => id && cnt.set(id, (cnt.get(id) ?? 0) + n2);
-      if (key === "nation") for (const g of own.values()) add(g.stateId, 1);
-      else if (key === "culture") for (const g of own.values()) add(dominant3(g, "cultureId"), 1);
-      else if (key === "language") for (const g of own.values()) add(dominant3(g, "languageId"), 1);
-      else if (key === "religion") for (const g of own.values()) add(dominant3(g, "religionId"), 1);
-      if (["nation", "culture", "language", "religion"].includes(key)) {
-        const tab = { nation: civ3.states, culture: civ3.cultures, language: civ3.languages, religion: civ3.religions }[key];
-        return [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n2]) => ({ c: colorOf(id, key === "language" ? 52 : key === "religion" ? 60 : 56), t: `${tab[id]?.name ?? id}\uFF08${n2} \u533A\u753B\uFF09` }));
+    idColor(type, g, maxDen) {
+      if (type === "population") {
+        const n2 = g.cells?.length || 1, d = g.pop / n2, t = clamp16(Math.log1p(d) / Math.log1p(maxDen), 0, 1);
+        return RAMPS.pop(t);
       }
-      if (key === "population") return [{ c: "hsl(210 55% 30%)", t: "\u5C11\u306A\u3044" }, { c: "hsl(115 55% 42%)", t: "\u4E2D\u7A0B\u5EA6" }, { c: "hsl(20 55% 54%)", t: "\u591A\u3044\uFF08\u5BFE\u6570\u306E\u968E\u8ABF\uFF09" }];
-      if (key === "borders") return [{ line: "#e8e2d0", t: "\u56FD\u5883\uFF08\u5B9F\u7DDA\uFF09" }];
-      if (key === "war") return [{ dash: "#d0605a", t: "\u4EA4\u6226\u56FD\u306E\u7E01\u53D6\u308A\uFF08\u8D64\u306E\u7834\u7DDA\uFF09" }];
-      if (key === "cities") return [{ dot: "#f2d27a", t: "\u90FD\u5E02\u30FB\u96C6\u843D\uFF08\u70B9\uFF09" }];
-      if (key === "none") return [{ c: "hsl(105 24% 24%)", t: "\u4F4E\u5730" }, { c: "hsl(30 24% 44%)", t: "\u9AD8\u5730" }, { c: "hsl(210 38% 14%)", t: "\u6D77" }];
-      if (key === "climate") return [{ c: "hsl(220 60% 45%)", t: "\u5BD2\u51B7" }, { c: "hsl(120 50% 40%)", t: "\u6E29\u6696" }, { c: "hsl(10 65% 50%)", t: "\u9AD8\u6E29" }];
-      return [];
+      const id = idOf[type](g);
+      return id ? colorOf(id) : null;
+    }
+    /* ---------- 描画 ---------- */
+    /** layerPass: alpha が 1 未満の層は、別の紙に不透明で塗ってから重ねる（区画の継ぎ目が濃く出ないように） */
+    pass(target, W, H, alpha, paint) {
+      const v = this.view;
+      if (alpha >= 0.995) {
+        target.lineWidth = 0.9 / v.k;
+        paint(target);
+        return;
+      }
+      this.tmp ?? (this.tmp = mkCanvas(W, H));
+      if (this.tmp.width !== W || this.tmp.height !== H) {
+        this.tmp.width = W;
+        this.tmp.height = H;
+      }
+      const t = this.tmp.getContext("2d");
+      t.setTransform(1, 0, 0, 1, 0, 0);
+      t.clearRect(0, 0, W, H);
+      t.setTransform(v.k, 0, 0, v.k, v.x, v.y);
+      t.lineJoin = "round";
+      t.lineWidth = 0.9 / v.k;
+      paint(t);
+      target.save();
+      target.setTransform(1, 0, 0, 1, 0, 0);
+      target.globalAlpha = alpha;
+      target.drawImage(this.tmp, 0, 0);
+      target.restore();
+    }
+    paintCells(g, cells, colorAt) {
+      const cp = this.cp;
+      for (const c of cells) {
+        const col = colorAt(c);
+        if (!col) continue;
+        g.fillStyle = col;
+        g.strokeStyle = col;
+        g.fill(cp[c]);
+        g.stroke(cp[c]);
+      }
+    }
+    /** 地形・気候（静的）: 海の深さ・海岸・陸・標高/バイオーム/気温/降水 */
+    renderGround(g, W, H) {
+      const T3 = this.T, geo = this.geo, v = this.view, cp = this.cp, N2 = geo.N, cpx = geo.cellPx, seaIds = [], landIds = [];
+      for (let c = 0; c < N2; c++) (T3.isSea[c] ? seaIds : landIds).push(c);
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalAlpha = 1;
+      g.fillStyle = SEA_DEEP;
+      g.fillRect(0, 0, W, H);
+      g.setTransform(v.k, 0, 0, v.k, v.x, v.y);
+      g.lineJoin = "round";
+      g.lineWidth = 0.9 / v.k;
+      if (!T3.seaCol) T3.seaCol = Array.from({ length: N2 }, (_, c) => T3.isSea[c] ? RAMPS.sea(-T3.seaS[c]) : null);
+      this.paintCells(g, seaIds, (c) => T3.seaCol[c]);
+      g.lineCap = "round";
+      for (const [w, a] of [[0.95, 0.09], [0.6, 0.12], [0.3, 0.17]]) {
+        g.lineWidth = cpx * w;
+        g.strokeStyle = `rgba(200,238,246,${a})`;
+        g.stroke(T3.coast);
+      }
+      g.lineWidth = 0.9 / v.k;
+      g.fillStyle = LAND_BASE;
+      g.fill(geo.land);
+      for (const id of ["heightmap", "biomes", "temperature", "precipitation"]) if (this.layers.has(id)) {
+        const col = this.cellColors(id);
+        this.pass(g, W, H, this.alpha[id], (t) => this.paintCells(t, landIds, (c) => col[c]));
+      }
+      if (!T3.lakes) {
+        const ce = this.w.world.cell;
+        T3.lakes = landIds.filter((c) => ce.landWater[c] === 2);
+      }
+      this.paintCells(g, T3.lakes, () => LAKE_COLOR);
+      g.strokeStyle = "rgba(24,38,52,.7)";
+      g.lineWidth = Math.max(0.5, 1.1 / Math.sqrt(v.k));
+      g.stroke(T3.coast);
+      g.strokeStyle = "rgba(24,38,52,.45)";
+      g.stroke(T3.lakeEdge);
+    }
+    /** 陰影・山岳・紙の模様（静的）。透明な紙に描き、塗りの上に重ねる */
+    renderRelief(g, W, H) {
+      const T3 = this.T, v = this.view, cp = this.cp, N2 = this.geo.N;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.clearRect(0, 0, W, H);
+      g.setTransform(v.k, 0, 0, v.k, v.x, v.y);
+      for (let c = 0; c < N2; c++) {
+        if (T3.isSea[c]) continue;
+        const s = T3.shade[c];
+        if (s < -0.035) g.fillStyle = `rgba(22,18,40,${Math.min(0.28, -s * 0.8).toFixed(3)})`;
+        else if (s > 0.035) g.fillStyle = `rgba(255,252,240,${Math.min(0.2, s * 0.65).toFixed(3)})`;
+        else continue;
+        g.fill(cp[c]);
+      }
+      if (T3.tex) {
+        g.globalAlpha = 0.55;
+        g.fillStyle = T3.tex;
+        g.fill(this.geo.land);
+        g.globalAlpha = 1;
+      }
+      drawMarks(g, T3.marks, v.k);
+    }
+    cached(slot, key, W, H, fn) {
+      const c = this[slot];
+      if (c && c.key === key) return c.cv;
+      const cv = c?.cv && c.cv.width === W && c.cv.height === H ? c.cv : mkCanvas(W, H), g = cv.getContext("2d");
+      fn(g, W, H);
+      this[slot] = { key, cv };
+      return cv;
     }
     draw() {
       const ctx = this.cv.getContext("2d");
       if (!ctx) return;
       const [W, H] = this.size();
-      this.base ?? (this.base = this.terrain(W, H));
-      const v = this.view;
+      this.ensureGeo(W, H);
+      const T3 = this.T, geo = this.geo, v = this.view, civ3 = this.w.civ, own = this.owner(), cell = this.w.world.cell;
+      const vk = `${W}|${v.k.toFixed(4)}|${v.x.toFixed(1)}|${v.y.toFixed(1)}`, gsig = vk + FILL_IDS.slice(0, 4).map((i) => this.layers.has(i) ? i + this.alpha[i] : "").join(",");
       ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
       ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(this.cached("gc", gsig, W, H, (g) => this.renderGround(g, W, H)), 0, 0);
       ctx.setTransform(v.k, 0, 0, v.k, v.x, v.y);
-      if (this.base) ctx.drawImage(this.base, 0, 0);
-      const civ3 = this.w.civ, own = this.owner(), ce = this.w.world.cell;
-      let maxPop = 1;
-      for (const g of own.values()) if (g.pop > maxPop) maxPop = g.pop;
-      if (this.fillLayer === "climate") {
-        let lo = 1e9, hi = -1e9;
-        for (let c = 0; c < this.geo.N; c++) {
-          const t = ce.temp[c];
-          if (t < lo) lo = t;
-          if (t > hi) hi = t;
-        }
-        ctx.globalAlpha = 0.6;
-        for (let c = 0; c < this.geo.N; c++) if (ce.landWater[c] === 1 || ce.elevation[c] > 0) {
-          const t = (ce.temp[c] - lo) / (hi - lo || 1);
-          this.fill(ctx, c, `hsl(${Math.round(220 - 220 * t)} 55% 45%)`, W, H);
-        }
-        ctx.globalAlpha = 1;
-      } else if (this.fillLayer !== "none") {
-        ctx.globalAlpha = 0.8;
-        for (const [c, g] of own) {
-          const col = this.fillColor(g, maxPop);
-          if (col) this.fill(ctx, c, col, W, H);
-        }
-        ctx.globalAlpha = 1;
-      }
-      const warring = /* @__PURE__ */ new Set();
-      for (const id of civ3.activeWarIds) {
-        const x = civ3.wars[id];
-        for (const s of [...x.sides.a, ...x.sides.d]) warring.add(s);
-      }
-      const nb = this.w.world.mesh;
       ctx.lineJoin = "round";
-      if (this.overlays.has("borders") || this.overlays.has("war")) {
-        ctx.strokeStyle = "#e8e2d0";
-        ctx.lineWidth = 1.4 / v.k;
-        const edge = (c, n2) => {
-          const a = this.geo.polys[c], b = new Set(this.geo.polys[n2].map((p) => p[2])), sh = a.filter((p) => b.has(p[2]));
-          if (sh.length < 2) return;
-          const [x1, y1] = this.proj(sh[0][0], sh[0][1], W, H), [x2, y2] = this.proj(sh[1][0], sh[1][1], W, H);
-          if (Math.abs(x1 - x2) > W / 2) return;
-          ctx.beginPath();
-          ctx.moveTo(x1, y1);
-          ctx.lineTo(x2, y2);
-          ctx.stroke();
-        };
-        if (this.overlays.has("borders")) for (const [c, g] of own) for (let k = nb.neighborOffsets[c]; k < nb.neighborOffsets[c + 1]; k++) {
-          const n2 = nb.neighborIds[k], o = own.get(n2);
-          if (g.stateId && (!o || o.stateId !== g.stateId) && c < n2 + 1e9) edge(c, n2);
-        }
-        if (this.overlays.has("war")) {
-          ctx.strokeStyle = "#d0605a";
-          ctx.lineWidth = 2.2 / v.k;
-          ctx.setLineDash([5 / v.k, 3 / v.k]);
-          for (const [c, g] of own) if (g.stateId && warring.has(g.stateId)) for (let k = nb.neighborOffsets[c]; k < nb.neighborOffsets[c + 1]; k++) {
-            const n2 = nb.neighborIds[k], o = own.get(n2);
-            if (!o || o.stateId !== g.stateId) edge(c, n2);
-          }
-          ctx.setLineDash([]);
-        }
+      let maxDen = 1;
+      if (this.layers.has("population")) for (const g of own.values()) {
+        const d = g.pop / (g.cells?.length || 1);
+        if (d > maxDen) maxDen = d;
       }
-      {
-        const cell = this.w.world.cell, cen = this.geo.cen, ln = (a, b, c) => {
-          const [x1, y1] = this.proj(cen[a * 2], cen[a * 2 + 1], W, H), [x2, y2] = this.proj(cen[b * 2], cen[b * 2 + 1], W, H);
-          if (Math.abs(x1 - x2) > W / 2) return;
-          c.moveTo(x1, y1);
-          c.lineTo(x2, y2);
-        };
-        if (this.overlays.has("rivers") && cell?.riverTo) {
-          ctx.strokeStyle = "#5fa0d8";
-          ctx.lineCap = "round";
-          for (let c = 0; c < cell.riverTo.length; c++) {
-            const to = cell.riverTo[c];
-            if (to < 0 || !(cell.river?.[c] > 0 || cell.riverFlow?.[c] > 0)) continue;
-            const f = cell.riverFlow?.[c] ?? 1;
-            if (f < 3 && v.k < 3) continue;
-            ctx.lineWidth = Math.min(3.2, 0.6 + Math.log2(1 + f) * 0.28) / Math.sqrt(v.k);
+      for (const [id, , grp] of LAYERS) if (grp === "social" && this.layers.has(id)) this.pass(ctx, W, H, this.alpha[id], (t) => {
+        const cp = this.cp;
+        for (const [c, g] of own) {
+          if (cell.landWater[c] === 2) continue;
+          const col = this.idColor(id, g, maxDen);
+          if (!col) continue;
+          t.fillStyle = col;
+          t.strokeStyle = col;
+          t.fill(cp[c]);
+          t.stroke(cp[c]);
+        }
+      });
+      if (this.layers.has("relief")) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.drawImage(this.cached("rc", vk, W, H, (g) => this.renderRelief(g, W, H)), 0, 0);
+      }
+      ctx.setTransform(v.k, 0, 0, v.k, v.x, v.y);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      this.lines(ctx, own, W, H);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      this.frame ?? (this.frame = mkCanvas(W, H));
+      if (this.frame.width !== W || this.frame.height !== H) {
+        this.frame.width = W;
+        this.frame.height = H;
+      }
+      const fx3 = this.frame.getContext("2d");
+      fx3.setTransform(1, 0, 0, 1, 0, 0);
+      fx3.clearRect(0, 0, W, H);
+      fx3.drawImage(this.cv, 0, 0);
+      this.frameView = { x: v.x, y: v.y, k: v.k };
+      void civ3;
+      void geo;
+    }
+    /** 線・記号・文字（月ごとに変わるものを含む。毎回描く） */
+    lines(ctx, own, W, H) {
+      const T3 = this.T, geo = this.geo, v = this.view, civ3 = this.w.civ, L = this.layers, k = v.k, sk = Math.sqrt(k), cen = geo.cen, ln = (a, b, p) => {
+        const [x1, y1] = geo.proj(cen[2 * a], cen[2 * a + 1]);
+        let [x2, y2] = geo.proj(cen[2 * b], cen[2 * b + 1]);
+        x2 += W * Math.round((x1 - x2) / W);
+        p.moveTo(x1, y1);
+        p.lineTo(x2, y2);
+      };
+      if (L.has("grid")) {
+        if (!T3.grid) {
+          const p = new Path2D();
+          for (let lo = -150; lo <= 180; lo += 30) {
+            const [x] = geo.proj(lo * Math.PI / 180, 0);
+            p.moveTo(x, 0);
+            p.lineTo(x, H);
+          }
+          for (let la = -60; la <= 60; la += 30) {
+            const [, y] = geo.proj(0, la * Math.PI / 180);
+            p.moveTo(0, y);
+            p.lineTo(W, y);
+          }
+          T3.grid = p;
+        }
+        ctx.strokeStyle = "rgba(255,255,255,.22)";
+        ctx.lineWidth = 0.8 / k;
+        ctx.setLineDash([4 / k, 4 / k]);
+        ctx.stroke(T3.grid);
+        ctx.setLineDash([]);
+      }
+      if (L.has("cells")) {
+        T3.cellsP ?? (T3.cellsP = geo.edgesWhere((c, n2) => c < n2));
+        ctx.strokeStyle = "rgba(20,24,30,.28)";
+        ctx.lineWidth = 0.6 / k;
+        ctx.stroke(T3.cellsP);
+      }
+      if (L.has("rivers") && T3.rivers.length) {
+        ctx.strokeStyle = "#4f97d4";
+        [[0, 0.5, 3], [1, 0.75, 1.4], [2, 1.15, 0]].forEach(([b, w, kmin]) => {
+          if (k < kmin) return;
+          ctx.lineWidth = w * geo.cellPx * 0.11 / Math.pow(k, 0.55);
+          ctx.globalAlpha = 0.95;
+          ctx.stroke(T3.rivers[b]);
+        });
+        ctx.globalAlpha = 1;
+      }
+      const stateOf = (c) => own.get(c)?.stateId ?? null;
+      if (L.has("borders")) {
+        const p = geo.edgesWhere((c, n2) => {
+          const a = stateOf(c), b = stateOf(n2);
+          return a && a !== b && !T3.isSea[n2] && (b ? c < n2 : true);
+        }, own.keys());
+        ctx.strokeStyle = "rgba(24,22,30,.45)";
+        ctx.lineWidth = 3.2 / sk;
+        ctx.stroke(p);
+        ctx.strokeStyle = "#f6f1e2";
+        ctx.lineWidth = 1.5 / sk;
+        ctx.stroke(p);
+      }
+      if (L.has("war")) {
+        const warring = /* @__PURE__ */ new Set();
+        for (const id of civ3.activeWarIds) {
+          const x = civ3.wars[id];
+          for (const s of [...x.sides.a, ...x.sides.d]) warring.add(s);
+        }
+        const p = geo.edgesWhere((c, n2) => {
+          const a = stateOf(c);
+          return a && warring.has(a) && stateOf(n2) !== a && !T3.isSea[n2];
+        }, own.keys());
+        ctx.strokeStyle = "#e0463c";
+        ctx.lineWidth = 2.4 / sk;
+        ctx.setLineDash([5 / sk, 3 / sk]);
+        ctx.stroke(p);
+        ctx.setLineDash([]);
+      }
+      if (L.has("routes")) {
+        ctx.strokeStyle = "#e8b64a";
+        ctx.globalAlpha = 0.85;
+        ctx.setLineDash([6 / sk, 4 / sk]);
+        const seen = /* @__PURE__ */ new Set();
+        for (const s of Object.values(civ3.states)) {
+          if (!s.alive) continue;
+          const a = civ3.groups[s.capitalGroupId];
+          for (const [oid, amt] of Object.entries(s.econ?.trade ?? {})) {
+            const o = civ3.states[oid], key = s.id < oid ? s.id + oid : oid + s.id;
+            if (!o?.alive || !(amt > 0) || seen.has(key)) continue;
+            seen.add(key);
+            const b = civ3.groups[o.capitalGroupId];
+            if (!a || !b) continue;
+            ctx.lineWidth = Math.min(3, 0.8 + amt * 0.02) / sk;
+            const p = new Path2D();
+            ln(a.cell, b.cell, p);
+            ctx.stroke(p);
+          }
+        }
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+      }
+      if (L.has("fronts")) {
+        ctx.strokeStyle = "#e0463c";
+        for (const wid of civ3.activeWarIds ?? []) {
+          const wr = civ3.wars[wid];
+          for (const gid of wr?.occupied ?? []) {
+            const g = civ3.groups[gid];
+            if (!g) continue;
+            const [x, y] = geo.proj(cen[2 * g.cell], cen[2 * g.cell + 1]), r = 3.4 / sk;
+            ctx.lineWidth = 1.6 / sk;
             ctx.beginPath();
-            ln(c, to, ctx);
+            ctx.moveTo(x - r, y - r);
+            ctx.lineTo(x + r, y + r);
+            ctx.moveTo(x + r, y - r);
+            ctx.lineTo(x - r, y + r);
             ctx.stroke();
           }
-        }
-        if (this.overlays.has("trade")) {
-          ctx.strokeStyle = "#d8b45a";
-          ctx.globalAlpha = 0.8;
-          ctx.setLineDash([6 / v.k, 4 / v.k]);
-          const seen = /* @__PURE__ */ new Set();
-          for (const s of Object.values(civ3.states)) {
-            if (!s.alive) continue;
-            const a = civ3.groups[s.capitalGroupId];
-            for (const [oid, amt] of Object.entries(s.econ?.trade ?? {})) {
-              const o = civ3.states[oid], k = s.id < oid ? s.id + oid : oid + s.id;
-              if (!o?.alive || !(amt > 0) || seen.has(k)) continue;
-              seen.add(k);
-              const b = civ3.groups[o.capitalGroupId];
-              if (!a || !b) continue;
-              ctx.lineWidth = Math.min(3, 0.8 + amt * 0.02) / Math.sqrt(v.k);
-              ctx.beginPath();
-              ln(a.cell, b.cell, ctx);
-              ctx.stroke();
-            }
+          ctx.setLineDash([3 / sk, 3 / sk]);
+          ctx.lineWidth = 1.4 / sk;
+          for (const f of Object.values(wr?.ops?.forces ?? {})) {
+            const tg = f.target, g = civ3.groups[f.groupId ?? f.at];
+            if (tg == null || !g || typeof tg !== "number") continue;
+            const p = new Path2D();
+            ln(g.cell, tg, p);
+            ctx.stroke(p);
           }
           ctx.setLineDash([]);
-          ctx.globalAlpha = 1;
-        }
-        if (this.overlays.has("fronts")) {
-          ctx.strokeStyle = "#e0463c";
-          ctx.fillStyle = "#e0463c";
-          for (const wid of civ3.activeWarIds ?? []) {
-            const wr = civ3.wars[wid];
-            for (const gid of wr?.occupied ?? []) {
-              const g = civ3.groups[gid];
-              if (!g) continue;
-              const [x, y] = this.proj(cen[g.cell * 2], cen[g.cell * 2 + 1], W, H), r = 3.4 / Math.sqrt(v.k);
-              ctx.lineWidth = 1.6 / v.k;
-              ctx.beginPath();
-              ctx.moveTo(x - r, y - r);
-              ctx.lineTo(x + r, y + r);
-              ctx.moveTo(x + r, y - r);
-              ctx.lineTo(x - r, y + r);
-              ctx.stroke();
-            }
-            ctx.setLineDash([3 / v.k, 3 / v.k]);
-            ctx.lineWidth = 1.4 / v.k;
-            for (const f of Object.values(wr?.ops?.forces ?? {})) {
-              const tg = f.target != null ? f.target : null, g = civ3.groups[f.groupId ?? f.at];
-              if (tg == null || !g || typeof tg !== "number") continue;
-              ctx.beginPath();
-              ln(g.cell, tg, ctx);
-              ctx.stroke();
-            }
-            ctx.setLineDash([]);
-          }
         }
       }
-      if (this.overlays.has("cities")) {
-        ctx.fillStyle = "#f2d27a";
-        ctx.strokeStyle = "#14161a";
-        ctx.lineWidth = 1 / v.k;
+      if (L.has("cities")) {
+        ctx.lineWidth = 1.2 / sk;
         for (const s of Object.values(civ3.settlements)) {
           if (s.pop < 800) continue;
-          const [x, y] = this.proj(this.geo.cen[s.cell * 2], this.geo.cen[s.cell * 2 + 1], W, H);
+          const [x, y] = geo.proj(cen[2 * s.cell], cen[2 * s.cell + 1]), big = s.stage === "city", r = (big ? 3.4 : 2.1) / sk;
           ctx.beginPath();
-          ctx.arc(x, y, (s.stage === "city" ? 3.2 : 2) / Math.sqrt(v.k), 0, TAU2);
+          ctx.arc(x, y, r, 0, TAU3);
+          ctx.fillStyle = "#fff4cf";
           ctx.fill();
+          ctx.strokeStyle = "#2a2018";
           ctx.stroke();
+          if (big) {
+            ctx.beginPath();
+            ctx.arc(x, y, r * 0.38, 0, TAU3);
+            ctx.fillStyle = "#2a2018";
+            ctx.fill();
+          }
         }
       }
       if (this.sel) {
-        ctx.strokeStyle = "#d8b45a";
-        ctx.lineWidth = 2 / v.k;
-        for (const [c, g] of own) if (g.stateId === this.sel) {
-          this.path(ctx, c, W, H);
-          ctx.stroke();
+        const p = geo.edgesWhere((c, n2) => stateOf(n2) !== this.sel, [...own].filter(([, g]) => g.stateId === this.sel).map(([c]) => c));
+        ctx.strokeStyle = "rgba(20,16,8,.6)";
+        ctx.lineWidth = 4.2 / sk;
+        ctx.stroke(p);
+        ctx.strokeStyle = "#f0c14d";
+        ctx.lineWidth = 2.4 / sk;
+        ctx.stroke(p);
+      }
+      if (L.has("labels")) this.drawLabels(ctx, own, W);
+    }
+    drawLabels(ctx, own, W) {
+      const geo = this.geo, civ3 = this.w.civ, k = this.view.k;
+      if (this._labelsAt !== this._ownAt || this._labelsW !== W) {
+        const m = /* @__PURE__ */ new Map();
+        for (const [c, g] of own) {
+          const id = g.stateId;
+          if (!id) continue;
+          const [x, y] = geo.proj(geo.cen[2 * c], geo.cen[2 * c + 1]);
+          let e = m.get(id);
+          if (!e) m.set(id, e = { x0: x, sx: 0, sy: 0, n: 0 });
+          let dx = x - e.x0;
+          dx -= W * Math.round(dx / W);
+          e.sx += dx;
+          e.sy += y;
+          e.n++;
+        }
+        this._labels = [...m].map(([id, e]) => ({ id, x: e.x0 + e.sx / e.n, y: e.sy / e.n, n: e.n })).sort((a, b) => b.n - a.n);
+        this._labelsAt = this._ownAt;
+        this._labelsW = W;
+      }
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.lineJoin = "round";
+      let shown = 0;
+      for (const e of this._labels) {
+        const name = civ3.states[e.id]?.name;
+        if (!name || e.n < 2 && k < 3 || shown > 90) continue;
+        shown++;
+        const fs = clamp16(8 + 2.6 * Math.sqrt(e.n), 9, 28) / Math.pow(k, 0.55);
+        ctx.font = `600 ${fs}px "Shippori Mincho","Noto Serif JP","Yu Mincho",serif`;
+        ctx.lineWidth = fs * 0.24;
+        ctx.strokeStyle = "rgba(16,18,24,.78)";
+        ctx.fillStyle = "#f7f2e4";
+        for (const o of [0, W, -W]) {
+          if (e.x + o < -40 || e.x + o > W + 40) continue;
+          ctx.strokeText(name, e.x + o, e.y);
+          ctx.fillText(name, e.x + o, e.y);
         }
       }
     }
+    /* ---------- 凡例: 選んだ層の実データから ---------- */
+    legend(key) {
+      const civ3 = this.w.civ, own = this.owner(), ce = this.w.world.cell;
+      if (idOf[key]) {
+        const cnt = /* @__PURE__ */ new Map();
+        for (const g of own.values()) {
+          const a = idOf[key](g);
+          if (a) cnt.set(a, (cnt.get(a) ?? 0) + 1);
+        }
+        const tab = { states: civ3.states, cultures: civ3.cultures, languages: civ3.languages, religions: civ3.religions }[key];
+        return [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n2]) => ({ c: colorOf(id), t: `${tab[id]?.name ?? id} ${n2}` }));
+      }
+      if (key === "heightmap") return [{ c: RAMPS.land(60), t: "\u4F4E\u5730" }, { c: RAMPS.land(800), t: "\u53F0\u5730\u30FB\u4E18\u9675" }, { c: RAMPS.land(2200), t: "\u5C71\u5730" }, { c: RAMPS.land(4600), t: "\u9AD8\u5C71" }, { c: RAMPS.land(6400), t: "\u96EA" }, { c: RAMPS.sea(100), t: "\u6D45\u3044\u6D77" }, { c: RAMPS.sea(3500), t: "\u6DF1\u3044\u6D77" }];
+      if (key === "biomes") {
+        const n2 = new Array(14).fill(0);
+        for (let c = 0; c < this.geo.N; c++) if (ce.landWater[c] !== 0) n2[ce.biome[c]]++;
+        return n2.map((v, i) => [i, v]).filter(([i, v]) => i > 0 && v > 0).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([i]) => ({ c: BIOME_COLORS[i], t: BIOME_JA[i] }));
+      }
+      if (key === "temperature") return [-20, 0, 10, 20, 30].map((t) => ({ c: RAMPS.temp(t), t: `${t}\u2103` }));
+      if (key === "precipitation") return [0, 300, 900, 1800, 3e3].map((t) => ({ c: RAMPS.precip(t), t: `${t} mm` }));
+      if (key === "population") return [0.05, 0.35, 0.65, 0.95].map((t, i) => ({ c: RAMPS.pop(t), t: ["\u5C11\u306A\u3044", "\u3084\u3084\u5C11\u306A\u3044", "\u3084\u3084\u591A\u3044", "\u591A\u3044\uFF08\u5BFE\u6570\u306E\u968E\u8ABF\uFF09"][i] }));
+      if (key === "relief") return [{ c: "rgba(255,252,240,.8)", t: "\u5149\u304C\u5F53\u305F\u308B\u659C\u9762\uFF08\u5317\u897F\u304C\u5149\u6E90\uFF09" }, { c: "rgba(22,18,40,.6)", t: "\u5F71\u306B\u306A\u308B\u659C\u9762" }];
+      if (key === "borders") return [{ line: "#f6f1e2", t: "\u56FD\u5883\uFF08\u5B9F\u7DDA\uFF09" }];
+      if (key === "war") return [{ dash: "#e0463c", t: "\u4EA4\u6226\u56FD\u306E\u7E01\u53D6\u308A\uFF08\u8D64\u306E\u7834\u7DDA\uFF09" }];
+      if (key === "cities") return [{ dot: "#fff4cf", t: "\u90FD\u5E02\u30FB\u96C6\u843D\uFF08\u70B9\uFF09" }];
+      if (key === "rivers") return [{ line: "#4f97d4", t: "\u6CB3\u5DDD\uFF08\u592A\u3055\u306F\u6D41\u91CF\uFF09" }];
+      if (key === "routes") return [{ dash: "#e8b64a", t: "\u4EA4\u6613\u8DEF\uFF08\u70B9\u7DDA\uFF09" }];
+      if (key === "fronts") return [{ dash: "#e0463c", t: "\u6226\u7DDA\u30FB\u5360\u9818\uFF08\xD7\u5370\uFF09" }];
+      if (key === "land") return [{ c: LAND_BASE, t: "\u9678" }, { c: RAMPS.sea(100), t: "\u6D45\u3044\u6D77" }, { c: RAMPS.sea(3500), t: "\u6DF1\u3044\u6D77" }, { c: LAKE_COLOR, t: "\u6E56" }];
+      return [];
+    }
     click(e) {
-      const r = this.cv.getBoundingClientRect(), v = this.view, x = ((e.clientX - r.left) * (this.cv.width / r.width) - v.x) / v.k, y = ((e.clientY - r.top) * (this.cv.height / r.height) - v.y) / v.k, W = this.cv.width, H = this.cv.height, lon = x / W * TAU2 - Math.PI, lat = Math.PI / 2 - y / H * Math.PI;
+      const r = this.cv.getBoundingClientRect(), v = this.view, x = ((e.clientX - r.left) * (this.cv.width / r.width) - v.x) / v.k, y = ((e.clientY - r.top) * (this.cv.height / r.height) - v.y) / v.k, W = this.cv.width, H = this.cv.height, lon = x / W * TAU3 - Math.PI, lat = Math.PI / 2 - y / H * Math.PI;
       let best = -1, bd = 9;
       for (let c = 0; c < this.geo.N; c++) {
         let dl = Math.abs(this.geo.cen[c * 2] - lon);
-        if (dl > Math.PI) dl = TAU2 - dl;
+        if (dl > Math.PI) dl = TAU3 - dl;
         const d = dl * Math.cos(lat) + Math.abs(this.geo.cen[c * 2 + 1] - lat);
         if (d < bd) {
           bd = d;
@@ -8773,28 +9463,33 @@ ${shown}${more}`;
   var note = (t) => h("p", { class: "n" }, t);
   var why = (t) => h("p", { class: "n err", id: "why" }, t);
   function pGeo() {
-    const M = S2.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "\u5730\u7406"), note("\u5857\u308A\u306F 1 \u3064\u3001\u91CD\u306D\u306F\u8907\u6570\u3092\u540C\u6642\u306B\u8868\u793A\u3067\u304D\u307E\u3059\u3002\u9805\u76EE\u540D\u3092\u30AF\u30EA\u30C3\u30AF\u3059\u308B\u3068\u51E1\u4F8B\u304C\u958B\u304D\u307E\u3059\u3002\u5730\u56F3\u306F\u30C9\u30E9\u30C3\u30B0\u3067\u79FB\u52D5\u3001\u30DB\u30A4\u30FC\u30EB\u3067\u62E1\u5927\u7E2E\u5C0F\u3002"), lb("\u5857\u308A", "FILL"));
+    const M = S2.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "\u5730\u7406"), note("\u5404\u30EC\u30A4\u30E4\u30FC\u3092\u81EA\u7531\u306B\u91CD\u306D\u3089\u308C\u307E\u3059\u3002\u3088\u304F\u4F7F\u3046\u7D44\u307F\u5408\u308F\u305B\u306F\u30D7\u30EA\u30BB\u30C3\u30C8\u304B\u3089\u3002\u9805\u76EE\u540D\u3092\u30AF\u30EA\u30C3\u30AF\u3059\u308B\u3068\u51E1\u4F8B\u3001\u5857\u308A\u306E\u5C64\u306F\u4E0D\u900F\u660E\u5EA6\u3082\u5909\u3048\u3089\u308C\u307E\u3059\u3002"), lb("\u30D7\u30EA\u30BB\u30C3\u30C8", "PRESET"));
+    const done2 = () => {
+      S2.hooks.mapOnly();
+      S2.hooks.panel();
+    };
+    box.append(h("div", { class: "chips" }, ...PRESETS.map(([id, ja]) => h("b", { class: M.preset === id ? "on" : "", "data-preset": id, onclick: () => {
+      M.setPreset(id);
+      done2();
+    } }, ja))));
     const legend = (key) => S2.layerOpen === key ? h("div", { class: "lg", style: "flex-direction:column;gap:3px;margin:2px 0 8px 22px" }, ...M.legend(key).map((x) => h("span", {}, x.c ? h("i", { style: `background:${x.c}` }) : x.dot ? h("i", { style: `background:${x.dot};border-radius:50%` }) : h("i", { style: `border-top:2px ${x.dash ? "dashed" : "solid"} ${x.dash ?? x.line};height:0` }), x.t))) : null;
-    for (const [k, ja] of FILLS) {
-      box.append(h("div", {}, h("div", { class: "layrow" }, h("input", { type: "radio", name: "fill", id: "fill-" + k, checked: M.fillLayer === k, onchange: () => {
-        M.fillLayer = k;
-        S2.hooks.mapOnly();
-      } }), h("span", { class: "g", onclick: () => {
-        S2.layerOpen = S2.layerOpen === k ? null : k;
-        S2.hooks.panel();
-      } }, ja)), legend(k)));
+    for (const [gid, ja, en] of GROUPS) {
+      box.append(lb(ja, en));
+      for (const [id, name] of LAYERS.filter((l) => l[2] === gid).reverse()) {
+        const fill = FILL_IDS.includes(id), on = M.isOn(id);
+        box.append(h("div", {}, h("div", { class: "layrow" }, h("input", { type: "checkbox", id: "ly-" + id, checked: on, onchange: () => {
+          M.toggle(id);
+          done2();
+        } }), h("span", { class: "g", onclick: () => {
+          S2.layerOpen = S2.layerOpen === id ? null : id;
+          S2.hooks.panel();
+        } }, name), fill && on ? h("input", { type: "range", class: "opa", min: 20, max: 100, value: Math.round(M.alpha[id] * 100), title: "\u4E0D\u900F\u660E\u5EA6", oninput: (e) => {
+          M.alpha[id] = e.target.value / 100;
+          M.interact();
+        } }) : null), legend(id)));
+      }
     }
-    box.append(lb("\u91CD\u306D", "OVERLAY"));
-    for (const [k, ja] of OVERLAYS) {
-      box.append(h("div", {}, h("div", { class: "layrow" }, h("input", { type: "checkbox", id: "ov-" + k, checked: M.overlays.has(k), onchange: (e) => {
-        e.target.checked ? M.overlays.add(k) : M.overlays.delete(k);
-        S2.hooks.mapOnly();
-      } }), h("span", { class: "g", onclick: () => {
-        S2.layerOpen = S2.layerOpen === k ? null : k;
-        S2.hooks.panel();
-      } }, ja)), legend(k)));
-    }
-    return box.append(note("\u751F\u6210\u5F8C\u306E\u5730\u5F62\u30FB\u6C17\u5019\u30FB\u8CC7\u6E90\u3092\u624B\u3067\u7DE8\u96C6\u3059\u308B\u6A5F\u80FD\u306F\u8A2D\u3051\u3066\u3044\u307E\u305B\u3093\u3002"), h("div", { class: "rowb" }, btn("\u8868\u793A\u3092\u521D\u671F\u4F4D\u7F6E\u3078", () => {
+    return box.append(note("\u5730\u5F62\u30FB\u6C17\u5019\u30FB\u8CC7\u6E90\u3092\u751F\u6210\u5F8C\u306B\u624B\u3067\u7DE8\u96C6\u3059\u308B\u6A5F\u80FD\u306F\u8A2D\u3051\u3066\u3044\u307E\u305B\u3093\u3002"), h("div", { class: "rowb" }, btn("\u8868\u793A\u3092\u521D\u671F\u4F4D\u7F6E\u3078", () => {
       M.view = { x: 0, y: 0, k: 1 };
       M.draw();
     }))) || box;
@@ -8833,8 +9528,9 @@ ${shown}${more}`;
   var factionRows = (st2) => Object.entries(st2.politics?.factions ?? {});
   function tPolitics(st2, mine) {
     const c = civ(), P2 = st2.politics, L = st2.leader, leg = P2 ? effective(c, st2, "legitimacy") : 0, fat = P2 ? effective(c, st2, "fatigue") : 0;
-    const finBtn = stat("\u8CA1\u653F\uFF08\u8A73\u7D30\u3092\u958B\u304F\uFF09", n0(st2.treasury));
+    const finBtn = stat("\u8CA1\u653F \u25B8", n0(st2.treasury));
     finBtn.id = "fin-open";
+    finBtn.title = "\u30AF\u30EA\u30C3\u30AF\u3067\u8CA1\u653F\u306E\u8A73\u7D30";
     finBtn.style.cursor = "pointer";
     finBtn.addEventListener("click", () => {
       S2.fin = !S2.fin;
@@ -8846,9 +9542,9 @@ ${shown}${more}`;
     const rl = h("div", { class: "rowb" }, btn("\u7D99\u627F\u8005\u3092\u6307\u540D", () => act({ type: "state.act", stateId: st2.id, action: "designate_heir" }), "", { disabled: !mine || !!L?.heir, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" }));
     const nm = h("input", { id: "leader-name", placeholder: "\u70BA\u653F\u8005\u306E\u540D\u524D\uFF08\u5275\u9020\u4E3B\u306E\u7DE8\u96C6\uFF09", value: L?.name ?? "" });
     rl.append(nm, btn("\u5225\u306E\u5BB6\u7CFB\u306E\u70BA\u653F\u8005\u306B\u4EA4\u4EE3\u3055\u305B\u308B\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.editState", stateId: st2.id, changes: { "leader.name": nm.value } }), "", { id: "leader-replace" }));
-    out.append(rl, note("\u540D\u524D\u3092\u5165\u529B\u3057\u3066\u4EA4\u4EE3\u3055\u305B\u308B\u3068\u3001\u4E16\u754C\u306F\u300C\u5225\u306E\u5BB6\u7CFB\u306E\u65B0\u3057\u3044\u70BA\u653F\u8005\u3078\u306E\u4EA4\u4EE3\u300D\u3068\u3057\u3066\u51E6\u7406\u3057\u3001\u524D\u306E\u70BA\u653F\u8005\u306F\u9000\u4F4D\u3001\u300C\u738B\u671D\u306E\u4EA4\u4EE3\u300D\u306E\u51FA\u6765\u4E8B\u304C\u8D77\u304D\u307E\u3059\uFF08\u7D99\u627F\u8005\u306E\u6307\u540D\u30FB\u7D99\u627F\u306B\u3088\u308B\u4EA4\u4EE3\u306F\u3001\u51FA\u6765\u4E8B\u3068\u3057\u3066\u81EA\u7136\u306B\u8D77\u304D\u307E\u3059\uFF09\u3002"));
+    out.append(rl, note("\u540D\u524D\u3092\u5165\u308C\u3066\u4EA4\u4EE3\u3055\u305B\u308B\u3068\u3001\u300C\u738B\u671D\u306E\u4EA4\u4EE3\u300D\u3068\u3057\u3066\u8A18\u9332\u3055\u308C\u3001\u524D\u306E\u70BA\u653F\u8005\u306F\u9000\u4F4D\u3057\u307E\u3059\u3002"));
     const sn = h("input", { id: "state-name", value: st2.name }), pol = h("select", { id: "polity-sel" }, ...Object.entries(POLITY_JA).map(([k, ja]) => h("option", { value: k, selected: k === st2.polity }, ja)));
-    out.append(lb("\u540D\u79F0\u30FB\u653F\u4F53", "IDENTITY"), h("div", { class: "rowb" }, sn, btn("\u56FD\u540D\u3092\u5909\u66F4", () => creator({ type: "creator.editState", stateId: st2.id, changes: { name: sn.value } }))), h("div", { class: "rowb" }, pol, btn("\u653F\u4F53\u3092\u5909\u66F4\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.editState", stateId: st2.id, changes: { polity: pol.value } })), btn("\u653F\u4F53\u5909\u66F4\uFF08\u884C\u52D5\uFF09", () => act({ type: "state.act", stateId: st2.id, action: "change_polity", opt: pol.value }), "", { disabled: !mine })), note("\u540D\u79F0\u306E\u5909\u66F4\u306F\u8868\u793A\u540D\u3060\u3051\u3092\u5909\u3048\u307E\u3059\u3002\u56FD\u5BB6\u306E\u5206\u88C2\u30FB\u7D99\u627F\u306A\u3069\u306E\u5B9F\u4F53\u306E\u5909\u66F4\u3068\u306F\u5225\u3067\u3059\u3002"));
+    out.append(lb("\u540D\u79F0\u30FB\u653F\u4F53", "IDENTITY"), h("div", { class: "rowb" }, sn, btn("\u56FD\u540D\u3092\u5909\u66F4", () => creator({ type: "creator.editState", stateId: st2.id, changes: { name: sn.value } }))), h("div", { class: "rowb" }, pol, btn("\u653F\u4F53\u3092\u5909\u66F4\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.editState", stateId: st2.id, changes: { polity: pol.value } })), btn("\u653F\u4F53\u5909\u66F4\uFF08\u884C\u52D5\uFF09", () => act({ type: "state.act", stateId: st2.id, action: "change_polity", opt: pol.value }), "", { disabled: !mine })), note("\u540D\u79F0\u306E\u5909\u66F4\u306F\u8868\u793A\u540D\u3060\u3051\u3067\u3059\u3002"));
     if (P2) {
       const rows = factionRows(st2);
       out.append(lb("\u652F\u6301\u52E2\u529B", "FACTIONS"), ...rows.map(([k, v]) => h("div", { class: "fr" }, h("div", { class: "t" }, h("span", {}, FACTION_JA[k] ?? k), h("span", {}, `\u652F\u6301 ${pct(v.support)}\u30FB\u5F71\u97FF\u529B ${pct(v.influence)}`)), h("div", { class: "bar" }, h("i", { style: `width:${v.support * 100}%;background:${FACTION_COL[k] ?? "#6fa8c9"}` })))), P2.assembly ? h("div", {}, h("small", {}, "\u8B70\u4F1A\uFF08\u8B70\u5E2D\u306F\u5F71\u97FF\u529B\u306B\u6BD4\u4F8B\uFF09"), hemi(rows.map(([k, v]) => [k, v.influence]), rows.map(([k]) => FACTION_COL[k] ?? "#6fa8c9"))) : note("\u3053\u306E\u653F\u4F53\u306B\u306F\u8B70\u4F1A\u304C\u3042\u308A\u307E\u305B\u3093\u3002"));
@@ -8953,7 +9649,7 @@ ${shown}${more}`;
       h("div", { class: "rowb" }, btn("\u63D0\u6848\u3059\u308B", () => act({ type: "state.act", stateId: st2.id, action: "sign_treaty", target: sel.value, opt: type.value }), "p", { id: "propose", disabled: !mine, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" })),
       out,
       h("div", { class: "rowb" }, btn("\u5236\u88C1\u3092\u79D1\u3059", () => act({ type: "state.act", stateId: st2.id, action: "impose_sanctions", target: sel.value }), "", { id: "sanction", disabled: !mine }), btn("\u548C\u89E3\u306E\u4F7F\u7BC0", () => act({ type: "state.act", stateId: st2.id, action: "reconcile", target: sel.value }), "", { id: "reconcile", disabled: !mine })),
-      note("\u6761\u7D04\u306F\u3001\u76F8\u624B\u56FD\u306E\u8A55\u4FA1\uFF08\u53D7\u8AFE\u30FB\u62D2\u5426\u30FB\u5225\u6761\u4EF6\uFF09\u3068\u3001\u76F4\u524D\u306E\u6761\u4EF6\u306E\u518D\u691C\u8A3C\u3092\u7D4C\u3066\u6210\u7ACB\u3057\u307E\u3059\u3002\u76F8\u624B\u306E\u8A55\u4FA1\u306E\u4E2D\u8EAB\uFF08\u70B9\u6570\u30FB\u7406\u7531\uFF09\u306F\u8A18\u9332\u306B\u6B8B\u308A\u307E\u305B\u3093\u3002\u5236\u88C1\u30FB\u548C\u89E3\u306F\u6761\u4EF6\u3092\u6E80\u305F\u3055\u306A\u3044\u3068\u3001\u7406\u7531\u3064\u304D\u3067\u65AD\u3089\u308C\u307E\u3059\u3002"),
+      note("\u6761\u7D04\u306F\u3001\u76F8\u624B\u56FD\u304C\u53D7\u3051\u5165\u308C\u305F\u3068\u304D\u3060\u3051\u6210\u7ACB\u3057\u307E\u3059\u3002\u6761\u4EF6\u3092\u6E80\u305F\u3055\u306A\u3044\u63D0\u6848\u306F\u3001\u7406\u7531\u3064\u304D\u3067\u65AD\u3089\u308C\u307E\u3059\u3002"),
       lb("\u4EA4\u6E09\u306E\u8A18\u9332", "NEGOTIATIONS"),
       ...hist.map((p) => h("div", { class: "row" }, h("span", { class: "g" }, `${p.kind === "peace" ? "\u8B1B\u548C" : TREATY[p.type]?.ja} ${stateName(p.from)}\u2192${stateName(p.to)}`, h("br"), h("small", {}, date(p.at))), h("small", {}, { accepted: "\u6210\u7ACB", rejected: "\u62D2\u5426", countered: "\u5225\u6761\u4EF6", failed_recheck: "\u4E0D\u6210\u7ACB" }[p.status])))
     );
@@ -9050,7 +9746,7 @@ ${shown}${more}`;
     return h(
       "div",
       {},
-      note(`\u6280\u8853 ${TECHS.length} \u4EF6\u3002\u5DE6\u304B\u3089\u53F3\u3078\u6642\u4EE3\u304C\u9032\u307F\u3001\u884C\u306F\u5206\u91CE\u3002\u7814\u7A76\u70B9\u306F\u306A\u304F\u3001\u96C6\u56E3\u306E\u898F\u6A21\u30FB\u65E2\u5B58\u306E\u77E5\u8B58\u30FB\u74B0\u5883\u30FB\u4EA4\u6D41\u304B\u3089\u81EA\u7136\u306B\u767A\u751F\u3057\u3001\u56FD\u304C\u63A1\u7528\u3057\u3066\u5236\u5EA6\u306B\u3057\u307E\u3059\u3002\u30C9\u30E9\u30C3\u30B0\u3067\u79FB\u52D5\u3001\u30DB\u30A4\u30FC\u30EB\u3067\u62E1\u5927\u7E2E\u5C0F\u3002`),
+      note(`\u6280\u8853 ${TECHS.length} \u4EF6\u3002\u5DE6\u304B\u3089\u53F3\u3078\u6642\u4EE3\u304C\u9032\u307F\u3001\u884C\u306F\u5206\u91CE\u3002\u30C9\u30E9\u30C3\u30B0\u3067\u79FB\u52D5\u3001\u30DB\u30A4\u30FC\u30EB\u3067\u62E1\u5927\u7E2E\u5C0F\u3002`),
       search,
       h("div", { class: "rowb", style: "flex-wrap:wrap" }, ...laneBtns),
       TECH_FULL ? note("\u62E1\u5927\u8868\u793A\u4E2D\u3067\u3059\uFF08\u753B\u9762\u3044\u3063\u3071\u3044\uFF09\u3002\u53F3\u306E\u300C\u9589\u3058\u308B\u300D\u3067\u623B\u308C\u307E\u3059\u3002") : wrap,
@@ -9070,7 +9766,7 @@ ${shown}${more}`;
     return h(
       "div",
       {},
-      note(`\u8ECD\u4E8B\u30C9\u30AF\u30C8\u30EA\u30F3 ${nodes2.length} \u4EF6\uFF08\u5171\u901A\u306E 5 \u7CFB\u7D71 \xD7 5 \u6BB5\u30FB\u3053\u306E\u56FD\u5BB6\u56FA\u6709\u306E 3 \u7CFB\u7D71 \u2605\uFF09\u3002\u56FA\u6709\u306E\u7CFB\u7D71\u306F\u3001\u653F\u4F53\u30FB\u652F\u6301\u52E2\u529B\u30FB\u5730\u5F62\u30FB\u6226\u4E89\u306E\u7D4C\u9A13\u304B\u3089\u6C7A\u307E\u308A\u3001\u5E74\u306B\u4E00\u5EA6\u898B\u76F4\u3055\u308C\u307E\u3059\u3002\u53D6\u5F97\u306F\u6226\u4E89\u306E\u7D50\u679C\uFF08\u88DC\u7D66\u30FB\u640D\u8017\u30FB\u4F1A\u6226\u30FB\u5305\u56F2\u30FB\u6D77\u6226\uFF09\u306B\u52B9\u304D\u307E\u3059\u3002`),
+      note(`\u30C9\u30AF\u30C8\u30EA\u30F3 ${nodes2.length} \u4EF6\u3002\u5171\u901A 5 \u7CFB\u7D71\u3068\u3001\u3053\u306E\u56FD\u56FA\u6709\u306E 3 \u7CFB\u7D71 \u2605\uFF08\u5E74 1 \u56DE\u898B\u76F4\u3057\uFF09\u3002\u53D6\u5F97\u306F\u6226\u4E89\u306E\u7D50\u679C\u306B\u52B9\u304D\u307E\u3059\u3002`),
       h("div", { class: "dt" }, `\u3044\u307E\u306E\u52B9\u679C: ${now}`),
       h("div", { class: "docwrap" }, svg, h("div", { class: "rowb" }, btn("\u5168\u4F53", dt.fit, "", { id: "doc-fit" }), btn("\u9078\u3093\u3060\u65B9\u91DD\u3078", () => S2.doc && dt.focus(S2.doc), "", { id: "doc-goto", disabled: !S2.doc }))),
       h("div", { class: "lg" }, ...Object.entries({ taken: "\u25A0 \u53D6\u5F97\u6E08\u307F", available: "\u25C6 \u53D6\u5F97\u3067\u304D\u308B", blocked: "\u25CB \u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\uFF08\u70B9\u7DDA\uFF09" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "blocked" ? "dashed" : "solid"} ${COL[k][0]}` }), t))),
@@ -9085,12 +9781,12 @@ ${shown}${more}`;
   init_archive();
 
   // js/core/wcde/save-meta.js
-  var APP_VERSION_FOR_SAVE = "6.0.0";
+  var APP_VERSION_FOR_SAVE = "6.1.0";
 
   // js/core/wcde/savefile.js
   var SAVE_FORMAT = "alterhistory-save";
-  var SAVE_SCHEMA = 1;
-  var MIN_SCHEMA = 1;
+  var SAVE_SCHEMA = 2;
+  var MIN_SCHEMA = 2;
   function checksum(text) {
     let h1 = 3735928559, h2 = 1103547991;
     for (let i = 0; i < text.length; i++) {
@@ -9104,7 +9800,7 @@ ${shown}${more}`;
   }
   var fin4 = (x) => typeof x === "number" && Number.isFinite(x);
   function packSave(w, { appVersion = APP_VERSION_FOR_SAVE, name = null } = {}) {
-    const { civ: civ3 } = w, civText = JSON.stringify(civ3), meta = { name: name ?? civ3.wcde.config.name ?? null, monthIndex: civ3.monthIndex, date: { ...civ3.date }, states: Object.values(civ3.states).filter((s) => s.alive).length, events: civ3.events.length, cells: w.world.mesh?.cellCount ?? null, worldSeed: civ3.wcde.config.worldSeed };
+    const { civ: civ3 } = w, civText = JSON.stringify(civ3), meta = { name: name ?? civ3.wcde.config.name ?? null, monthIndex: civ3.monthIndex, date: { ...civ3.date }, states: Object.values(civ3.states).filter((s) => s.alive).length, events: civ3.events.length, records: civ3.archive?.total ?? 0, cells: w.world.mesh?.cellCount ?? null, worldSeed: civ3.wcde.config.worldSeed };
     const head2 = JSON.stringify({ format: SAVE_FORMAT, schema: SAVE_SCHEMA, appVersion, wcdeVersion: WCDE_VERSION, meta, checksum: checksum(civText), civBytes: civText.length });
     const text = head2.slice(0, -1) + ',"civ":' + civText + "}";
     return { text, bytes: text.length, meta };
@@ -9119,10 +9815,11 @@ ${shown}${more}`;
       return refuse("\u30D5\u30A1\u30A4\u30EB\u304C\u58CA\u308C\u3066\u3044\u307E\u3059\uFF08JSON \u3068\u3057\u3066\u8AAD\u3081\u307E\u305B\u3093\uFF09: " + String(e.message).slice(0, 120));
     }
     if (!d || typeof d !== "object" || Array.isArray(d)) return refuse("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u306E\u5F62\u5F0F\u3067\u306F\u3042\u308A\u307E\u305B\u3093");
-    if (d.format !== SAVE_FORMAT) return refuse(d.format === "alterhistory-wcde" ? "\u3053\u308C\u306F\u958B\u767A\u4E2D\u306E\u65E7\u5F62\u5F0F\uFF08alterhistory-wcde\uFF09\u3067\u3059\u3002v6.0.0 \u306E\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044" : "AlterHistory \u306E\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08\u65E7 .ahmap\u30FB\u4ED6\u30A2\u30D7\u30EA\u306E\u5730\u56F3\u306F\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\uFF09");
+    if (d.format !== SAVE_FORMAT && (d.ahmap != null || d.format === "ahmap" || d.format === "alterhistory-map" || d.map != null || d.pack != null || d.info?.version != null || d.settings != null)) return refuse("v5 \u4EE5\u524D\u306E\u5730\u56F3\u30C7\u30FC\u30BF\uFF08.ahmap\uFF09\u3084 Azgaar \u306E\u5730\u56F3\u306F\u3001v6.1.0 \u3067\u306F\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3002\u65B0\u3057\u3044\u4E16\u754C\u3092\u4F5C\u3063\u3066\u304F\u3060\u3055\u3044\uFF08\u5143\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u524A\u9664\u3055\u308C\u307E\u305B\u3093\uFF09");
+    if (d.format !== SAVE_FORMAT) return refuse(d.format === "alterhistory-wcde" ? "\u3053\u308C\u306F\u958B\u767A\u4E2D\u306E\u65E7\u5F62\u5F0F\uFF08alterhistory-wcde\uFF09\u3067\u3059\u3002v6.1.0 \u306E\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044" : "AlterHistory \u306E\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08\u65E7 .ahmap\u30FB\u4ED6\u30A2\u30D7\u30EA\u306E\u5730\u56F3\u306F\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\uFF09");
     if (!Number.isInteger(d.schema)) return refuse("\u4FDD\u5B58\u5F62\u5F0F\u306E\u7248\u304C\u3042\u308A\u307E\u305B\u3093");
     if (d.schema > SAVE_SCHEMA) return refuse(`\u3053\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u65B0\u3057\u3044\u4FDD\u5B58\u5F62\u5F0F\uFF08\u7248 ${d.schema}\uFF09\u3067\u3059\u3002\u30A2\u30D7\u30EA\u3092\u66F4\u65B0\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u3053\u306E\u30A2\u30D7\u30EA\u306F\u7248 ${SAVE_SCHEMA} \u307E\u3067\uFF09`);
-    if (d.schema < MIN_SCHEMA) return refuse(`\u53E4\u3059\u304E\u308B\u4FDD\u5B58\u5F62\u5F0F\uFF08\u7248 ${d.schema}\uFF09\u3067\u3059`);
+    if (d.schema < MIN_SCHEMA) return refuse(d.schema === 1 ? "v6.0.0 \u306E\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\uFF08schema 1\uFF09\u306F\u3001v6.1.0 \u3067\u306F\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\u3002\u65B0\u3057\u3044\u4E16\u754C\u3092\u4F5C\u3063\u3066\u304F\u3060\u3055\u3044\uFF08\u5143\u306E\u30D5\u30A1\u30A4\u30EB\u306F\u524A\u9664\u3055\u308C\u307E\u305B\u3093\uFF09" : `\u53E4\u3059\u304E\u308B\u4FDD\u5B58\u5F62\u5F0F\uFF08\u7248 ${d.schema}\uFF09\u3067\u3059`);
     const civ3 = d.civ;
     if (!civ3 || typeof civ3 !== "object") return refuse("\u4E16\u754C\u306E\u72B6\u614B\uFF08civ\uFF09\u304C\u3042\u308A\u307E\u305B\u3093");
     const sum = checksum(JSON.stringify(civ3));
@@ -9130,6 +9827,7 @@ ${shown}${more}`;
       if (!allowChecksumMismatch) return refuse("\u30C1\u30A7\u30C3\u30AF\u30B5\u30E0\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\uFF08\u4FDD\u5B58\u5F8C\u306B\u5185\u5BB9\u304C\u5909\u308F\u3063\u305F\u304B\u3001\u30D5\u30A1\u30A4\u30EB\u304C\u58CA\u308C\u3066\u3044\u307E\u3059\uFF09\u3002\u8AAD\u307F\u8FBC\u307F\u3092\u4E2D\u6B62\u3057\u307E\u3057\u305F");
       warnings.push("\u30C1\u30A7\u30C3\u30AF\u30B5\u30E0\u304C\u4E00\u81F4\u3057\u307E\u305B\u3093\u3067\u3057\u305F\u304C\u3001\u5229\u7528\u8005\u306E\u6307\u793A\u3067\u3001\u691C\u8A3C\u3092\u901A\u308B\u5834\u5408\u306B\u9650\u3063\u3066\u8AAD\u307F\u8FBC\u307F\u307E\u3057\u305F");
     }
+    if (civ3.decisions != null && (!Array.isArray(civ3.decisions) || civ3.decisions.length)) return refuse("AI \u306E\u5224\u65AD\u8A18\u9332\u3092\u542B\u3080\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u306F\u3001v6.1.0 \u3067\u306F\u8AAD\u307F\u8FBC\u3081\u307E\u305B\u3093\uFF08\u5224\u65AD\u306F\u4FDD\u5B58\u3057\u306A\u3044\u4ED5\u69D8\u3067\u3059\uFF09");
     const need = [["monthIndex", fin4], ["date", (x) => x && typeof x === "object"], ["states", (x) => x && typeof x === "object" && !Array.isArray(x)], ["groups", (x) => x && typeof x === "object"], ["events", Array.isArray], ["wcde", (x) => x && typeof x === "object"], ["seq", (x) => x && typeof x === "object"], ["options", (x) => x && typeof x === "object"]];
     for (const [k, ok2] of need) if (!ok2(civ3[k])) return refuse(`\u5FC5\u9808\u9805\u76EE\u300C${k}\u300D\u304C\u306A\u3044\u304B\u3001\u578B\u304C\u9055\u3044\u307E\u3059`);
     if (!Number.isInteger(civ3.monthIndex) || civ3.monthIndex < 0) return refuse("\u6708\u306E\u756A\u53F7\uFF08monthIndex\uFF09\u304C\u4E0D\u6B63\u3067\u3059");
@@ -9878,7 +10576,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       x.status === "active" ? h("div", {}, h("div", { class: "rowb" }, kind, amt), h("div", { class: "rowb" }, btn("\u8B1B\u548C\u3092\u7533\u3057\u5165\u308C\u308B", () => {
         const st2 = [...x.sides.a, ...x.sides.d].includes(mine) ? mine : null;
         act({ type: "diplomacy.peace", stateId: st2, warId: x.id, terms: { kind: kind.value, amount: Number(amt.value) || 0 } });
-      }, "p", { id: "peace-go", disabled: !side, title: side ? "" : "\u62C5\u5F53\u56FD\u304C\u53C2\u6226\u3057\u3066\u3044\u308B\u6226\u4E89\u306E\u307F" })), note2("\u8B1B\u548C\u306F\u3001\u76F8\u624B\u306E\u6226\u529B\u30FB\u5360\u9818\u30FB\u9996\u90FD\u306E\u9665\u843D\u30FB\u75B2\u52B4\u30FB\u56FD\u5EAB\u30FB\u9577\u671F\u5316\u306E\u8A55\u4FA1\u3092\u7D4C\u3066\u3001\u53D7\u8AFE\u3055\u308C\u305F\u3068\u304D\u3060\u3051\u6210\u7ACB\u3057\u307E\u3059\u3002\u4E3B\u305F\u308B\u4EA4\u6226\u56FD\u306E\u8B1B\u548C\u306F\u6226\u4E89\u5168\u4F53\u3092\u7D42\u3048\u3001\u540C\u76DF\u5074\u306E\u53C2\u6226\u56FD\u306E\u8B1B\u548C\u306F\u3001\u305D\u306E\u56FD\u3060\u3051\u304C\u6226\u4E89\u304B\u3089\u629C\u3051\u307E\u3059\uFF08\u5358\u72EC\u8B1B\u548C\uFF09\u3002\u8A55\u4FA1\u306E\u4E2D\u8EAB\u306F\u8A18\u9332\u306B\u6B8B\u308A\u307E\u305B\u3093\u3002")) : null,
+      }, "p", { id: "peace-go", disabled: !side, title: side ? "" : "\u62C5\u5F53\u56FD\u304C\u53C2\u6226\u3057\u3066\u3044\u308B\u6226\u4E89\u306E\u307F" })), note2("\u8B1B\u548C\u306F\u3001\u76F8\u624B\u304C\u53D7\u3051\u5165\u308C\u305F\u3068\u304D\u3060\u3051\u6210\u7ACB\u3057\u307E\u3059\u3002\u4E3B\u305F\u308B\u4EA4\u6226\u56FD\u306E\u8B1B\u548C\u306F\u6226\u4E89\u3092\u7D42\u3048\u3001\u540C\u76DF\u5074\u306E\u8B1B\u548C\u306F\u305D\u306E\u56FD\u3060\u3051\u304C\u629C\u3051\u307E\u3059\u3002")) : null,
       lb("\u6226\u4E89\u7814\u7A76\u6240\uFF08\u4E88\u6E2C\u3002\u4E8B\u5B9F\u3068\u306F\u5225\uFF09", "WAR LAB"),
       (() => {
         const p = x.status === "active" ? predictWar(c, x.aggressor, x.defender, S2.w.sim.ctx) : null;
@@ -9985,7 +10683,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
         return h("div", { class: "vrow" }, h("small", { style: "color:var(--dim)" }, `${date2(r.since)} `), `${stateName(r.ownerId)}\u306E\u8A8D\u8B58\u300C${r.stance}\u300D: ${ev?.title ?? r.eventId}`);
       };
     }
-    box.append(note2(`${rows.length.toLocaleString("ja-JP")} \u4EF6\uFF08\u65B0\u3057\u3044\u9806\u3002\u898B\u3048\u308B\u7BC4\u56F2\u3060\u3051\u63CF\u753B\uFF09\u3002\u53E4\u3044\u6642\u4EE3\u307B\u3069\u8CC7\u6599\u306F\u5931\u308F\u308C\u307E\u3059\u3002\u8A18\u9332\u304C\u7121\u3044\u3053\u3068\u306F\u3001\u4F55\u3082\u8D77\u304D\u306A\u304B\u3063\u305F\u8A3C\u62E0\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002`), covBar(c), vlist(rows, 26, render2), h("div", { id: "evdetail", class: "dt" }, "\u9805\u76EE\u3092\u9078\u3076\u3068\u3001\u539F\u56E0\u30FB\u7D50\u679C\u30FB\u95A2\u4FC2\u3059\u308B\u5B9F\u4F53\u3092\u8868\u793A\u3057\u307E\u3059\u3002"));
+    box.append(note2(`${rows.length.toLocaleString("ja-JP")} \u4EF6\uFF08\u65B0\u3057\u3044\u9806\uFF09\u3002\u53E4\u3044\u6642\u4EE3\u307B\u3069\u8CC7\u6599\u306F\u5931\u308F\u308C\u307E\u3059\u3002`), covBar(c), vlist(rows, 26, render2), h("div", { id: "evdetail", class: "dt" }, "\u9805\u76EE\u3092\u9078\u3076\u3068\u3001\u539F\u56E0\u30FB\u7D50\u679C\u30FB\u95A2\u4FC2\u3059\u308B\u5B9F\u4F53\u3092\u8868\u793A\u3057\u307E\u3059\u3002"));
     return box;
   }
   function covBar(c) {
@@ -10092,11 +10790,11 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       creator({ type: "creator.catastrophe", name: nm.value, reason: why2.value, scope: scope.value, center: cell ?? null, radiusKm: Number(rad.value), mortality: Number(mor.value) / 100, recoveryMonths: Number(rec.value) });
     };
     const log3 = (c.wcde.catastrophes ?? []).slice(-4).reverse();
-    return h("div", {}, lb("\u5275\u9020\u4E3B\u306E\u707D\u5384", "CATASTROPHE"), note2("\u4E16\u754C\u898F\u6A21\u307E\u305F\u306F\u5730\u57DF\u898F\u6A21\u306E\u5927\u304D\u306A\u707D\u5384\u3092\u8D77\u3053\u3057\u307E\u3059\u3002\u4EBA\u53E3\u30FB\u8ECD\u30FB\u5B89\u5B9A\u30FB\u6587\u5316\u306E\u7DCA\u5F35\u30FB\u53CE\u5BB9\u529B\u3078\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u751F\u7523\u30FB\u8CA1\u653F\u30FB\u4EA4\u6613\u30FB\u8ECD\u4E8B\u306F\u901A\u5E38\u306E\u8A08\u7B97\u3067\u4F1D\u308F\u308A\u307E\u3059\u3002\u767A\u751F\u524D\u3078\u306F\u623B\u308A\u307E\u305B\u3093\u3002\u62BD\u8C61\u7684\u306A\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u3068\u3057\u3066\u6271\u3044\u3001\u73FE\u5B9F\u306E\u707D\u5BB3\u3084\u624B\u6BB5\u306E\u518D\u73FE\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002"), nm, why2, h("div", { class: "rowb" }, scope, at2), h("div", { class: "rowb" }, h("small", {}, "\u534A\u5F84(km)"), rad, h("small", {}, "\u4EBA\u53E3\u306E\u640D\u5931 %\uFF08\u6700\u5927 95\uFF09"), mor, h("small", {}, "\u56DE\u5FA9\u306E\u76EE\u5B89(\u6708)"), rec), h("div", { class: "rowb" }, h("label", {}, ok2, " \u53D6\u308A\u6D88\u305B\u306A\u3044\u3053\u3068\u3092\u7406\u89E3\u3057\u305F"), btn("\u707D\u5384\u3092\u8D77\u3053\u3059", go, "p", { id: "cat-go" })), ...log3.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `\u300C${r.name}\u300D${r.scope === "world" ? "\u4E16\u754C\u898F\u6A21" : "\u5730\u57DF\u898F\u6A21"}`, h("br"), h("small", {}, `${date2(r.at)}\u30FB\u5B9F\u969B\u306E\u640D\u5931 ${Math.round(r.result.share * 100)}%\uFF08\u7D04 ${n0(r.result.dead)} \u4EBA\uFF09`)))));
+    return h("div", {}, lb("\u5275\u9020\u4E3B\u306E\u707D\u5384", "CATASTROPHE"), note2("\u5927\u304D\u306A\u707D\u5384\u3092\u8D77\u3053\u3057\u307E\u3059\u3002\u4EBA\u53E3\u30FB\u8ECD\u30FB\u5B89\u5B9A\u306B\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u767A\u751F\u524D\u3078\u306F\u623B\u308A\u307E\u305B\u3093\u3002"), nm, why2, h("div", { class: "rowb" }, scope, at2), h("div", { class: "rowb" }, h("small", {}, "\u534A\u5F84(km)"), rad, h("small", {}, "\u4EBA\u53E3\u306E\u640D\u5931 %\uFF08\u6700\u5927 95\uFF09"), mor, h("small", {}, "\u56DE\u5FA9\u306E\u76EE\u5B89(\u6708)"), rec), h("div", { class: "rowb" }, h("label", {}, ok2, " \u53D6\u308A\u6D88\u305B\u306A\u3044\u3053\u3068\u3092\u7406\u89E3\u3057\u305F"), btn("\u707D\u5384\u3092\u8D77\u3053\u3059", go, "p", { id: "cat-go" })), ...log3.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `\u300C${r.name}\u300D${r.scope === "world" ? "\u4E16\u754C\u898F\u6A21" : "\u5730\u57DF\u898F\u6A21"}`, h("br"), h("small", {}, `${date2(r.at)}\u30FB\u5B9F\u969B\u306E\u640D\u5931 ${Math.round(r.result.share * 100)}%\uFF08\u7D04 ${n0(r.result.dead)} \u4EBA\uFF09`)))));
   }
   function newsBox() {
     const s = newsSettings(civ2()), cs = h("input", { id: "news-crit", type: "number", value: s.criticalScore, style: "width:70px" }), ms = h("input", { id: "news-major", type: "number", value: s.majorScore, style: "width:70px" }), mx = h("input", { id: "news-max", type: "number", value: s.maxPerScan, min: 1, max: 20, style: "width:60px" });
-    return h("div", {}, lb("\u30CB\u30E5\u30FC\u30B9\u306E\u57FA\u6E96", "NEWS"), note2(`\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u3060\u3051\u304C\u6642\u9593\u3092\u6B62\u3081\u307E\u3059\uFF08\u65E2\u5B9A: \u91CD\u5927 ${DEFAULT_NEWS_SETTINGS.criticalScore} \u70B9\u4EE5\u4E0A\u30FB\u4E3B\u8981 ${DEFAULT_NEWS_SETTINGS.majorScore} \u70B9\u4EE5\u4E0A\uFF09\u3002\u70B9\u306F\u3001\u51FA\u6765\u4E8B\u306E\u7A2E\u985E\u3068\u56FD\u306E\u898F\u6A21\uFF08\u4E16\u754C\u306E\u5E73\u5747\u7684\u306A\u56FD\u306B\u5BFE\u3059\u308B\u4EBA\u53E3\u306E\u5272\u5408\uFF09\u304B\u3089\u6C7A\u307E\u308A\u307E\u3059\u3002\u983B\u767A\u3057\u3066\u64CD\u4F5C\u3092\u59A8\u3052\u308B\u3068\u304D\u306F\u91CD\u5927\u306E\u70B9\u3092\u4E0A\u3052\u3001\u898B\u843D\u3068\u3059\u3068\u304D\u306F\u4E0B\u3052\u3066\u304F\u3060\u3055\u3044\u3002\u65E9\u9001\u308A\u3067\u98DB\u3070\u3057\u305F\u671F\u9593\u306E\u30CB\u30E5\u30FC\u30B9\u306F\u3001\u5F8C\u304B\u3089\u518D\u751F\u3055\u308C\u307E\u305B\u3093\u3002`), h("div", { class: "rowb" }, h("small", {}, "\u91CD\u5927"), cs, h("small", {}, "\u4E3B\u8981"), ms, h("small", {}, "\u540C\u6642\u306B\u6B62\u3081\u308B\u4E0A\u9650"), mx), h("div", { class: "rowb" }, btn("\u57FA\u6E96\u3092\u5909\u66F4", () => {
+    return h("div", {}, lb("\u30CB\u30E5\u30FC\u30B9\u306E\u57FA\u6E96", "NEWS"), note2(`\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u3060\u3051\u304C\u6642\u9593\u3092\u6B62\u3081\u307E\u3059\uFF08\u65E2\u5B9A: \u91CD\u5927 ${DEFAULT_NEWS_SETTINGS.criticalScore} \u70B9\u4EE5\u4E0A\u30FB\u4E3B\u8981 ${DEFAULT_NEWS_SETTINGS.majorScore} \u70B9\u4EE5\u4E0A\uFF09\u3002\u6B62\u307E\u308A\u3059\u304E\u308B\u3068\u304D\u306F\u91CD\u5927\u306E\u70B9\u3092\u4E0A\u3052\u3066\u304F\u3060\u3055\u3044\u3002`), h("div", { class: "rowb" }, h("small", {}, "\u91CD\u5927"), cs, h("small", {}, "\u4E3B\u8981"), ms, h("small", {}, "\u540C\u6642\u306B\u6B62\u3081\u308B\u4E0A\u9650"), mx), h("div", { class: "rowb" }, btn("\u57FA\u6E96\u3092\u5909\u66F4", () => {
       run({ type: "news.configure", criticalScore: Number(cs.value), majorScore: Number(ms.value), maxPerScan: Number(mx.value) });
       S2.hooks.render();
     }, "", { id: "news-set" }), btn("\u65E2\u5B9A\u306B\u623B\u3059", () => {
@@ -10204,17 +10902,16 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   }
   function founding() {
     const c = listCandidates(S2.w), civ3 = S2.w.civ, pre2 = civ3.wcde.prehistory ?? {}, ce = S2.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
-    const msg = h("p", { class: "n" }, c.length ? "\u56FD\u5BB6\u306B\u306A\u308B\u5019\u88DC\u3067\u3059\u3002\u62C5\u5F53\u3059\u308B\u56FD\u3092\u9078\u3076\u304B\u3001\u4E16\u754C\u306B\u4EFB\u305B\u3066\u898B\u5B88\u308A\u307E\u3059\u3002\u5148\u53F2\u306E\u7D4C\u904E\u306F\u8AAD\u307F\u53D6\u308A\u5C02\u7528\u3067\u3001\u3053\u3053\u304B\u3089\u5909\u3048\u308B\u3053\u3068\u306F\u3067\u304D\u307E\u305B\u3093\u3002" : "\u307E\u3060\u56FD\u5BB6\u306E\u5019\u88DC\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E16\u754C\u306B\u4EFB\u305B\u3066\u9032\u3081\u307E\u3059\u3002"), list = h("div", {});
+    const msg = h("p", { class: "n" }, c.length ? "\u56FD\u3092\u9078\u3093\u3067\u62C5\u5F53\u3059\u308B\u304B\u3001\u4E16\u754C\u306B\u4EFB\u305B\u3066\u898B\u5B88\u308A\u307E\u3059\u3002" : "\u307E\u3060\u56FD\u5BB6\u306E\u5019\u88DC\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u4E16\u754C\u306B\u4EFB\u305B\u3066\u9032\u3081\u307E\u3059\u3002"), list = h("div", {});
     const yrsAgo = (m) => Math.round(((civ3.wcde.foundedAt ?? civ3.monthIndex) - m) / 12);
     const fmtYears = (y) => y >= 1e4 ? `\u7D04 ${Math.round(y / 1e3) / 10} \u4E07\u5E74\u524D` : `\u7D04 ${n0(y)} \u5E74\u524D`;
     const techTl = Object.entries(pre2.firstTech ?? {}).sort((x, y) => x[1] - y[1]).map(([k, m]) => `${fmtYears(yrsAgo(m))}\u3000${TECH[k]?.name ?? k}`);
     const ep = pre2.epochs ?? [], mx = Math.max(1, ...ep.map((e) => Math.log10(Math.max(10, e.pop)))), spark = sv("svg", { viewBox: "0 0 300 60", style: "width:100%;height:60px" }, sv("polyline", { points: ep.map((e, i) => `${i / Math.max(1, ep.length - 1) * 300},${58 - Math.log10(Math.max(10, e.pop)) / mx * 54}`).join(" "), fill: "none", stroke: "#6fa8c9", "stroke-width": 1.6 }), sv("polyline", { points: ep.map((e, i) => `${i / Math.max(1, ep.length - 1) * 300},${58 - (e.ice ?? 0) * 54}`).join(" "), fill: "none", stroke: "#c97a6f", "stroke-width": 1, "stroke-dasharray": "3 3" }));
     const eco = ecoSummary(S2.w.world, civ3), sp = pre2.species ?? {};
     const obs = h(
-      "div",
+      "details",
       { class: "dt" },
-      h("b", {}, "\u5148\u53F2\u306E\u89B3\u5BDF\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09"),
-      h("br"),
+      h("summary", {}, "\u5148\u53F2\u306E\u89B3\u5BDF\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09"),
       sp.archaic ? `\u53E4\u4EE3\u578B\u4EBA\u985E\u306E\u96C6\u56E3\u304C\u73FE\u308C\u308B: ${fmtYears(yrsAgo(sp.archaic.at))}` : "",
       h("br"),
       sp.human ? `\u73FE\u751F\u4EBA\u985E\u304C\u73FE\u308C\u308B: ${fmtYears(yrsAgo(sp.human.at))}\uFF08\u7F6E\u304D\u63DB\u308F\u308A\u30FB\u6DF7\u8840: ${n0(pre2.assimilated ?? 0)} \u96C6\u56E3\uFF09` : "",
@@ -10232,15 +10929,15 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     for (const x of c.slice(0, 20)) {
       const cu = civ3.cultures[x.cultureId]?.name, lg = civ3.languages[x.languageId]?.name, rl = civ3.religions[x.religionId]?.name, lat = Math.round(ce.lat[x.cell] * 180 / Math.PI);
       const sel = x.polityOptions.length > 1 ? h("select", { class: "pol" }, ...x.polityOptions.map((p) => h("option", { value: p }, ja[p] ?? p))) : null;
-      list.append(h("div", { class: "row" }, h("span", { class: "g" }, h("b", {}, x.viaJa), h("br"), h("small", {}, `\u4EBA\u53E3 ${n0(x.pop)}\u30FB\u96C6\u56E3 ${x.groupIds.length}\u30FB${lat >= 0 ? "\u5317\u7DEF" : "\u5357\u7DEF"} ${Math.abs(lat)}\xB0`), h("br"), h("small", {}, [cu && `\u6587\u5316 ${cu}`, lg && `\u8A00\u8A9E ${lg}`, rl && `\u5B97\u6559 ${rl}`].filter(Boolean).join("\u30FB") || "\u6587\u5316\u30FB\u8A00\u8A9E\u30FB\u5B97\u6559\u306F\u6210\u7ACB\u5F8C\u306B\u5B9A\u307E\u308B"), h("br"), h("small", {}, `\u9078\u3079\u308B\u653F\u4F53: ${x.polityOptions.map((p) => ja[p] ?? p).join("\u30FB")}\uFF08\u6280\u8853\u304B\u3089\u5C0E\u304F\uFF09`)), sel, btn("\u62C5\u5F53\u3057\u3066\u5EFA\u56FD", () => {
+      list.append(h("div", { class: "row" }, h("span", { class: "g" }, h("b", {}, x.viaJa), h("br"), h("small", {}, `\u4EBA\u53E3 ${n0(x.pop)}\u30FB\u96C6\u56E3 ${x.groupIds.length}\u30FB${lat >= 0 ? "\u5317\u7DEF" : "\u5357\u7DEF"} ${Math.abs(lat)}\xB0`), h("br"), h("small", {}, [cu && `\u6587\u5316 ${cu}`, lg && `\u8A00\u8A9E ${lg}`, rl && `\u5B97\u6559 ${rl}`].filter(Boolean).join("\u30FB") || "\u6587\u5316\u30FB\u8A00\u8A9E\u30FB\u5B97\u6559\u306F\u6210\u7ACB\u5F8C\u306B\u5B9A\u307E\u308B")), sel, btn("\u62C5\u5F53\u3057\u3066\u5EFA\u56FD", () => {
         const r = act({ type: "founding.found", candidateId: x.id, polity: sel?.value ?? null });
         r.ok ? start() : msg.textContent = S2.notice;
       })));
     }
-    root().replaceChildren(h("div", { class: "center", style: "max-width:760px" }, h("div", { class: "code" }, "FOUNDING"), h("h1", {}, "\u5EFA\u56FD"), msg, obs, list, btn("\u4E16\u754C\u306B\u4EFB\u305B\u3066\u59CB\u3081\u308B\uFF08\u62C5\u5F53\u56FD\u306A\u3057\uFF09", () => {
+    root().replaceChildren(h("div", { class: "center", style: "max-width:760px" }, h("div", { class: "code" }, "FOUNDING"), h("h1", {}, "\u5EFA\u56FD"), msg, btn("\u4E16\u754C\u306B\u4EFB\u305B\u3066\u59CB\u3081\u308B\uFF08\u62C5\u5F53\u56FD\u306A\u3057\uFF09", () => {
       run({ type: "founding.delegate" });
       start();
-    }, "", { id: "delegate" })));
+    }, "", { id: "delegate" }), list, obs));
   }
   function start() {
     S2.hub = null;
@@ -10297,6 +10994,8 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       return;
     }
     p.classList.add("open");
+    const wide = S2.hub === "nations" && (S2.tab === "tech" || S2.tab === "doctrine") && S2.sel;
+    p.style.setProperty("--pw", wide ? "min(760px, 62vw)" : "");
     const keep = $("#pin").scrollTop;
     $("#pin").replaceChildren(PANELS[S2.hub]());
     $("#pin").scrollTop = keep;
@@ -10304,7 +11003,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   function renderLegend() {
     const M = S2.map;
     if (!M) return;
-    const L = M.legend(M.fillLayer);
+    const L = M.legend(M.legendKey());
     $("#leg").replaceChildren(h("b", {}, "\u51E1\u4F8B "), ...L.slice(0, 6).map((x) => h("span", { style: "margin-right:10px" }, x.c ? h("i", { style: `display:inline-block;width:10px;height:10px;background:${x.c};margin-right:4px` }) : "", x.t)));
     $("#leg").style.display = L.length ? "block" : "none";
   }
@@ -10346,10 +11045,10 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   }
   function renderRight() {
     const w = S2.w, T3 = timeOf(w.civ), feed = newsFeed(w.civ, { limit: 30, minLevel: "major" }), cs = controlled();
-    $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "n" }, cs ? `\u62C5\u5F53: ${stateName(cs)}` : "\u62C5\u5F53\u56FD\u306A\u3057\uFF08\u898B\u5B88\u308A\uFF09"), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T3.hold ? T3.resumeSpeed : T3.speed) === s.id ? "on" : "", "data-speed": s.id, onclick: () => {
+    $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "n" }, cs ? `\u62C5\u5F53: ${stateName(cs)}` : "\u62C5\u5F53\u56FD\u306A\u3057\uFF08\u898B\u5B88\u308A\uFF09"), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T3.hold ? T3.resumeSpeed : T3.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} \u304B\u6708\uFF0F\u79D2` : "\u505C\u6B62", onclick: () => {
       run({ type: "clock.setSpeed", speed: s.id });
       render();
-    } }, s.label))), h("div", { class: "n", id: "runstate" }, T3.hold ? "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061\uFF08OK\u3067\u518D\u958B\uFF09" : T3.speed ? "\u9032\u884C\u4E2D" : "\u505C\u6B62\u4E2D"));
+    } }, s.label))), h("div", { class: "n", id: "runstate" }, T3.hold ? "\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061" : T3.speed ? "\u9032\u884C\u4E2D\uFF081\u79D2\u3042\u305F\u308A\uFF09" : "\u505C\u6B62\u4E2D"));
     $("#feed").replaceChildren(...feed.map((n2) => h("div", { class: "ev" + (n2.level === "critical" ? " y" : "") }, h("time", {}, `${n2.date.year}\u5E74${n2.date.month}\u6708`), n2.title, " ", ...n2.entityIds.filter((i) => w.civ.states[i]).slice(0, 2).map((i) => [link(i), " "]))));
   }
   function renderNews() {

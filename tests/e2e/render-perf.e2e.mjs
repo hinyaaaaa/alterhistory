@@ -12,7 +12,7 @@ let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"} ${label}${extra ? "  " + extra : ""}`); if (!ok) failed++; };
 
 const { browser, page, problems } = await launch({ width: 1280, height: 853 });
-await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.bringToFront();
+await page.goto(pathToFileURL(path.join(root, "v5.html")).href); await page.bringToFront();
 await page.waitForFunction(() => !!globalThis.alterhistory, null, { timeout: 30000 });
 const r = await page.evaluate(async ({ cells }) => {
   const { store, actions, renderer } = globalThis.alterhistory;

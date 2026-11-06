@@ -1,18 +1,18 @@
 // v5.0.0 V5-M2（国家形成・文化）/ M3（技術）/ M4（コホート）/ M5（国家AI・判断記録・戦争・外交）。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createCivState, encodeCiv, decodeCiv, migrateCiv } from "../js/core/civ/civ-state.js";
-import { createCivSim, checkCivIntegrity } from "../js/core/civ/civ-sim.js";
-import { parseId } from "../js/core/civ/ids.js";
-import { TECHS, TECH } from "../js/core/civ/tech.js";
-import { VIA, formState, evaluateFormation } from "../js/core/civ/states.js";
-import { ACTIONS, ACTION, observe, findCandidate } from "../js/core/civ/actions.js";
-import { composition, addCohort, dominant } from "../js/core/civ/cohorts.js";
-import { declareWar, signTreaty, treatyBetween } from "../js/core/civ/diplomacy.js";
-import { spawnGroup, reachable } from "../js/core/civ/population.js";
-import { runAction } from "../js/core/civ/actions.js";
-import { stepAIApply, expandDecision } from "../js/core/civ/ai.js";
-import { RELATIONS, BASES } from "../js/core/civ/events.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createCivState, encodeCiv, decodeCiv, migrateCiv } from "../../js/core/civ/civ-state.js";
+import { createCivSim, checkCivIntegrity } from "../../js/core/civ/civ-sim.js";
+import { parseId } from "../../js/core/civ/ids.js";
+import { TECHS, TECH } from "../../js/core/civ/tech.js";
+import { VIA, formState, evaluateFormation } from "../../js/core/civ/states.js";
+import { ACTIONS, ACTION, observe, findCandidate } from "../../js/core/civ/actions.js";
+import { composition, addCohort, dominant } from "../../js/core/civ/cohorts.js";
+import { declareWar, signTreaty, treatyBetween } from "../../js/core/civ/diplomacy.js";
+import { spawnGroup, reachable } from "../../js/core/civ/population.js";
+import { runAction } from "../../js/core/civ/actions.js";
+import { stepAIApply, expandDecision } from "../../js/core/civ/ai.js";
+import { RELATIONS, BASES } from "../../js/core/civ/events.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

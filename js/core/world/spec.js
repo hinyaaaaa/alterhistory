@@ -10,7 +10,7 @@ export const DEFAULT_WORLD_SPEC = Object.freeze({
   worldSeed: "",
   planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
   resolution: Object.freeze({ targetCells: 250000 }),
-  landFraction: 0.5,
+  landFraction: 0.3, // v6.1.0: 0.5 → 0.3（地球の陸地率は約 29%）。海を渡る拡散を直したので、地球並みでも人類は全大陸に広がる
   continentCountTarget: 6,
   islandMode: "many",
   plateCount: 14,

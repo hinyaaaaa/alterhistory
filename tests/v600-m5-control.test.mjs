@@ -5,7 +5,6 @@ import { dispatch, safeAdvance, defineCommand, COMMANDS, AUTHORITY as A } from "
 import { EDITABLE_STATE_FIELDS } from "../js/core/wcde/control.js";
 import { checkWcdeIntegrity } from "../js/core/wcde/integrity.js";
 import { ACTION, runAction } from "../js/core/civ/actions.js";
-import { expandDecision } from "../js/core/civ/ai.js";
 import { DOCTRINES } from "../js/core/wcde/domains/military.js";
 
 let failed = 0;
@@ -13,6 +12,8 @@ const check = async (name, fn) => { try { await fn(); console.log("  OK  ", name
 const R = createNewWorld({ worldSeed: "e2e-1", spec: { resolution: { targetCells: 6000 } }, magic: { enabled: true } }); const w0 = R.w;
 dispatch(w0, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispatch(w0, { type: "time.advance", authority: A.ADMIN, months: 300 }).ok);
 const BASE = serializeWorld(w0); const fresh = () => deserializeWorld(BASE); const alive = (w) => Object.values(w.civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop);
+// v6.1.0: AI の判断は保存しない。AI の行動は、provenance が "ai" の出来事（結果）として残る
+const mk = (w) => w.civ.date.year * 12 + w.civ.date.month, actorOf = (e) => e.participants.find((p) => p.role === "actor")?.entityId ?? null, aiActs = (w, since) => w.civ.events.filter((e) => e.provenance === "ai" && e.date.year * 12 + e.date.month > since);
 const adm = (w, n) => { const r = dispatch(w, { type: "time.advance", authority: A.ADMIN, months: n }); assert.ok(r.ok, r.error); };
 
 console.log("=== 権限の表 ===");
@@ -37,12 +38,12 @@ await check("担当国家以外・担当が無いときの、プレイヤー命�
   dispatch(w2, { type: "view.past", authority: A.ADMIN, month: w2.civ.monthIndex - 5 }); assert.equal(w2.civ.wcde.control.stateId, null, "過去の閲覧は担当を変えない");
 });
 await check("担当していない国家（全て）は AI が動かす。担当国家は AI の計画の対象にならない", () => {
-  const w = fresh(), mine = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: mine.id }); const n0 = w.civ.decisions.length; adm(w, 36);
-  const ds = w.civ.decisions.slice(n0).map((d) => expandDecision(w.civ, d)); assert.ok(ds.length > 0); assert.ok(ds.every((d) => d.actorId !== mine.id), "担当国家に AI の判断がある"); assert.ok(new Set(ds.map((d) => d.actorId)).size > 3, "ほかの国家は AI が動く");
+  const w = fresh(), mine = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: mine.id }); const m0 = mk(w); adm(w, 30);
+  const ds = aiActs(w, m0).map((e) => ({ actorId: actorOf(e) })).filter((d) => d.actorId); assert.ok(ds.length > 0); assert.ok(ds.every((d) => d.actorId !== mine.id), "担当国家に AI の判断がある"); assert.ok(new Set(ds.map((d) => d.actorId)).size > 3, "ほかの国家は AI が動く");
 });
 await check("担当を外す（創造主モード）と、全国家が AI で動く。担当国家が滅びたら自動で外れる", () => {
-  const w = fresh(), s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); assert.ok(dispatch(w, { type: "control.release", authority: A.ADMIN }).ok); assert.equal(alive(w).filter((x) => x.player).length, 0); const n0 = w.civ.decisions.length; adm(w, 24);
-  assert.ok(w.civ.decisions.slice(n0).some((d) => d.actorId === s.id), "元の担当国家も AI が動かす");
+  const w = fresh(), s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); assert.ok(dispatch(w, { type: "control.release", authority: A.ADMIN }).ok); assert.equal(alive(w).filter((x) => x.player).length, 0); const actors = new Set(); for (let i = 0; i < 6; i++) { const m0 = mk(w); adm(w, 12); for (const e of aiActs(w, m0)) { const a = actorOf(e); if (a) actors.add(a); } } /* AI の行動は大きな出来事だけが記録に残る。特定の 1 国が 6 年のうちに必ず何かを記録するとは限らないので、「全国家が AI の対象」を、担当がいないこと＋複数の国家が AI で動くことで確かめる */
+  assert.ok(actors.size >= 3, "担当がいなくても、複数の国家が AI で動く"); assert.equal(alive(w).filter((x) => x.player).length, 0); assert.equal(w.civ.wcde.control.stateId, null);
   const t = alive(w)[alive(w).length - 1]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: t.id }); t.alive = false; adm(w, 1); assert.equal(w.civ.wcde.control.stateId, null); assert.ok(w.civ.wcde.log.some((e) => e.type === "control.lost"));
 });
 
@@ -52,13 +53,12 @@ await check("同じ行動（増税）を、プレイヤー命令と AI の経路
   const ra = dispatch(a, { type: "state.act", authority: A.PLAYER, stateId: id, action: "set_tax", opt: "down" }); assert.ok(ra.ok, ra.error);
   const sb = b.civ.states[id]; const rb = runAction(b.sim.ctx, sb, ACTION.set_tax, { key: "set_tax", opt: "down", target: null, factors: {} }, { provenance: "ai" }); assert.ok(rb.ok);
   assert.deepEqual(a.civ.states[id].policy, sb.policy); assert.equal(a.civ.states[id].treasury, sb.treasury);
-  const ea = a.civ.events.at(-1), eb = b.civ.events.at(-1); assert.equal(ea.kind, eb.kind); assert.equal(ea.provenance, "player"); assert.equal(eb.provenance, "ai"); assert.deepEqual(ea.effects, eb.effects);
+  assert.deepEqual(ra.result.eventIds.length, rb.eventIds.length); // 増税のような日常の行動は、どちらの経路でも出来事にならない（同じ扱い）
 });
-await check("新しい領域の行動（ドクトリン・産業投資・勢力への配慮）も、同じ行動レジストリを通り、AI の判断記録に残る", () => {
+await check("新しい領域の行動（ドクトリン・産業投資・勢力への配慮）も、同じ行動レジストリを通り、AI の行動は、結果の出来事（provenance ai）に残る", () => {
   for (const k of ["adopt_doctrine", "invest_industry", "appease_faction"]) assert.ok(ACTION[k] && ACTION[k].enabled, k);
-  const w = fresh(); adm(w, 120); const keys = new Set(); for (const d of w.civ.decisions) { const e = expandDecision(w.civ, d); keys.add(e.chosen?.key ?? e.type); for (const c of e.candidates) keys.add(c.key); }
-  assert.ok(keys.has("adopt_doctrine") && keys.has("invest_industry") && keys.has("appease_faction"), [...keys].join());
-  assert.ok(alive(w).some((s) => Object.keys(s.military.doctrine.taken).length > 0), "AI が実際にドクトリンを取っている"); assert.ok(w.civ.decisions.some((d) => expandDecision(w.civ, d).type === "invest_industry" || expandDecision(w.civ, d).chosen?.key === "invest_industry") || alive(w).some((s) => s.econ.investment > 0));
+  const w = fresh(); adm(w, 120);
+  assert.ok(alive(w).some((s) => Object.keys(s.military.doctrine.taken).length > 0), "AI が実際にドクトリンを取っている"); assert.ok(alive(w).some((s) => s.econ.investment > 0), "AI が実際に産業へ投資している");
 });
 await check("プレイヤーはドクトリンの取得を命令できる。前提不足は拒否され、状態は変わらない", () => {
   const w = fresh(), s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); s.treasury = 1e5; s.polity = "kingdom"; s.military.doctrine.taken = {};
@@ -67,9 +67,10 @@ await check("プレイヤーはドクトリンの取得を命令できる。前�
 });
 
 console.log("=== 創造主の直接編集 ===");
-await check("創造主は、担当の有無に関わらず、どの国家も直接編集できる。変更前後が記録に残り、事件の出所は creator", () => {
+await check("創造主は、担当の有無に関わらず、どの国家も直接編集できる。変更前後が介入の台帳に残り、出来事とは混ざらない", () => {
   const w = fresh(), s = alive(w)[1]; const old = s.name, n = w.civ.events.length; const r = dispatch(w, { type: "creator.editState", authority: A.CREATOR, stateId: s.id, changes: { name: "新生国", "policy.tax": 0.2, treasury: 777 } }); assert.ok(r.ok, r.error);
-  assert.equal(s.name, "新生国"); assert.equal(s.policy.tax, 0.2); assert.equal(s.treasury, 777); const ev = w.civ.events.at(-1); assert.equal(ev.kind, "creator_edit"); assert.equal(ev.provenance, "creator"); assert.ok(ev.effects.some((e) => e.property === "name" && e.before === old && e.after === "新生国")); assert.equal(w.civ.events.length, n + 1);
+  assert.equal(s.name, "新生国"); assert.equal(s.policy.tax, 0.2); assert.equal(s.treasury, 777); // v6.1.0 M7: 創造主の編集は介入の台帳（wcde.edits）にだけ残し、世界の事実の出来事（events）とは混ぜない
+  assert.ok(!w.civ.events.slice(n).some((e) => e.kind === "creator_edit"), "創造主の編集が出来事に混ざっている"); assert.ok(w.civ.wcde.edits.some((e) => e.property === "name" && e.before === old && e.after === "新生国" && e.authority === "creator_intervention"));
   assert.ok(w.civ.wcde.edits.some((e) => e.property === "treasury" && e.after === 777)); assert.deepEqual(checkWcdeIntegrity(w.world, w.civ), []);
 });
 await check("創造主の編集は、検証に通らないものが 1 つでもあれば、全体を適用しない。計算で決まる値（産業力・軍事能力など）は直接変えられない", () => {
@@ -105,10 +106,10 @@ await check("過去の閲覧中は、世界を変える命令を実行できな�
 });
 await check("保存→読み込み→同じ命令列で、同じ未来になる（担当・創造主の編集・時間を含む決定性）", () => {
   const run = (w) => { const s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); dispatch(w, { type: "state.act", authority: A.PLAYER, stateId: s.id, action: "set_tax", opt: "down", commandId: "c1" }); dispatch(w, { type: "creator.editState", authority: A.CREATOR, stateId: alive(w)[2].id, changes: { treasury: 500 } }); adm(w, 48); return w; };
-  const a = run(fresh()), b = run(deserializeWorld(serializeWorld(fresh()))); assert.deepEqual(a.civ.states, b.civ.states); assert.deepEqual(a.civ.events, b.civ.events); assert.deepEqual(a.civ.decisions.length, b.civ.decisions.length);
+  const a = run(fresh()), b = run(deserializeWorld(serializeWorld(fresh()))); assert.deepEqual(a.civ.states, b.civ.states); assert.deepEqual(a.civ.events, b.civ.events); assert.equal(a.civ.events.length, b.civ.events.length);
 });
 await check("AI は WorldState を直接書き換えない: AI の行動は、判断記録（Decision）に結びついた事件として残る", () => {
-  const w = fresh(); const n = w.civ.events.length; adm(w, 36); const ai = w.civ.events.slice(n).filter((e) => e.provenance === "ai"); assert.ok(ai.length > 0); assert.ok(ai.every((e) => e.decisionId != null), "AI の事件は判断記録を持つ");
+  const w = fresh(); let ai = []; for (let i = 0; i < 10; i++) { const m0 = mk(w); adm(w, 12); ai.push(...aiActs(w, m0)); } assert.ok(ai.length > 0, "AI の行動が出来事として残る"); assert.ok(ai.every((e) => e.decisionId == null), "AI の判断（decisionId）は保存しない（v6.1.0）");
 });
 await check("WCDE の不変条件を、この時点で全て満たす", () => { const w = fresh(); adm(w, 60); assert.deepEqual(checkWcdeIntegrity(w.world, w.civ), []); });
 

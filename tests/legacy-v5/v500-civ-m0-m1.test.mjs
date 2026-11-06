@@ -1,14 +1,14 @@
 // v5.0.0 V5-M0（月次tick・不変ID）と V5-M1（人口集団・集落・生業・移住）。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createIdGen, parseId } from "../js/core/civ/ids.js";
-import { PHASE_KEYS, createTicker, monthIndex, fromMonthIndex } from "../js/core/civ/tick.js";
-import { createCivState, encodeCiv, decodeCiv } from "../js/core/civ/civ-state.js";
-import { createCivSim, checkCivIntegrity } from "../js/core/civ/civ-sim.js";
-import { reachable, stepCost, POP } from "../js/core/civ/population.js";
-import { makeEvent } from "../js/core/civ/events.js";
-import * as consts from "../js/core/civ/world-consts.js";
-import * as wg from "../js/core/world/worldgen.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createIdGen, parseId } from "../../js/core/civ/ids.js";
+import { PHASE_KEYS, createTicker, monthIndex, fromMonthIndex } from "../../js/core/civ/tick.js";
+import { createCivState, encodeCiv, decodeCiv } from "../../js/core/civ/civ-state.js";
+import { createCivSim, checkCivIntegrity } from "../../js/core/civ/civ-sim.js";
+import { reachable, stepCost, POP } from "../../js/core/civ/population.js";
+import { makeEvent } from "../../js/core/civ/events.js";
+import * as consts from "../../js/core/civ/world-consts.js";
+import * as wg from "../../js/core/world/worldgen.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

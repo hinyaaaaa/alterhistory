@@ -10,7 +10,7 @@ const CELLS = 8000, SEEDS = Array.from({ length: 12 }, (_, i) => `t${i}`);
 const gen = (seed, extra = {}) => generateWorld({ worldSeed: seed, resolution: { targetCells: CELLS }, ...extra });
 
 console.log("=== WorldSpec ===");
-check("既定値が補われる。標準は 250,000 セル・陸地 50%・大陸 6", () => { const { spec, errors } = normalizeWorldSpec({ worldSeed: "x" }); assert.deepEqual(errors, []); assert.equal(spec.resolution.targetCells, 250000); assert.equal(spec.landFraction, 0.5); assert.equal(spec.continentCountTarget, 6); assert.equal(spec.planet.radiusKm, 6371); });
+check("既定値が補われる。標準は 25 万セル（世界生成の単体）・陸地 30%・大陸 6", () => { const { spec, errors } = normalizeWorldSpec({ worldSeed: "x" }); assert.deepEqual(errors, []); assert.equal(spec.resolution.targetCells, 250000); assert.equal(spec.landFraction, 0.3); assert.equal(spec.continentCountTarget, 6); assert.equal(spec.planet.radiusKm, 6371); });
 check("シードが空・範囲外・不明な値はエラー（黙って直さない）", () => {
   assert.ok(normalizeWorldSpec({}).errors.some((e) => e.includes("worldSeed")));
   assert.ok(normalizeWorldSpec({ worldSeed: "x", landFraction: 2 }).errors.length > 0);
@@ -32,11 +32,11 @@ check("Math.random や時刻に依存しない（生成中に呼ばれない）"
   try { gen("determinism"); } finally { Math.random = orig; Date.now = od; }
   assert.equal(used, 0);
 });
-check("解像度を変えても、同じシードで 大陸の配置は似る（陸地率は常に目標）", () => { const hi = gen("determinism", { resolution: { targetCells: 20000 } }); assert.ok(Math.abs(hi.stats.landFraction - 0.5) < 0.01); });
+check("解像度を変えても、同じシードで 大陸の配置は似る（陸地率は常に目標）", () => { const hi = gen("determinism", { resolution: { targetCells: 20000 } }); assert.ok(Math.abs(hi.stats.landFraction - 0.3) < 0.01); });
 
 console.log("=== 陸地率・大陸・島 ===");
 const worlds = SEEDS.map((s) => gen(s));
-check("陸地率が目標（50%）の ±1% に入る（12 シード）", () => { for (const w of worlds) assert.ok(Math.abs(w.stats.landFraction - 0.5) < 0.01, `${w.spec.worldSeed}: ${w.stats.landFraction}`); });
+check("陸地率が目標（30%）の ±1% に入る（12 シード）", () => { for (const w of worlds) assert.ok(Math.abs(w.stats.landFraction - 0.3) < 0.01, `${w.spec.worldSeed}: ${w.stats.landFraction}`); });
 check("陸地率の目標を変えると追従する（30% / 70%）", () => { for (const lf of [0.3, 0.7]) { const w = gen("lf", { landFraction: lf }); assert.ok(Math.abs(w.stats.landFraction - lf) < 0.01, String(w.stats.landFraction)); } });
 check("大陸級の陸塊は、12 シード中 10 以上で 4〜8 個（概ね 6）", () => { const ok = worlds.filter((w) => w.stats.continentCount >= 4 && w.stats.continentCount <= 8).length; assert.ok(ok >= 10, `${ok}/12`); });
 check("島・群島が多数ある（全シードで 15 以上）", () => { for (const w of worlds) assert.ok(w.stats.islandCount >= 15, `${w.spec.worldSeed}: ${w.stats.islandCount}`); });
@@ -84,7 +84,7 @@ check("v4 は歴史を走らせない: 集団は生成直後の記録だけ（�
 
 console.log("=== 統計検証・再生成・キャンセル・進捗 ===");
 check("generateWorldChecked: 許容帯に入る世界を返し、破棄したシードと理由を隠さず返す", () => { const r = generateWorldChecked({ worldSeed: "checked", resolution: { targetCells: CELLS } }); assert.deepEqual(statsProblems(r.world.stats, r.world.spec), []); assert.ok(Array.isArray(r.rejected)); for (const x of r.rejected) { assert.ok(x.seed && x.reasons.length > 0); } assert.equal(r.attempts, r.rejected.length + 1); });
-check("許容帯に入らない設定では、例外で理由を示す（黙って受け入れない）", () => assert.throws(() => generateWorldChecked({ worldSeed: "x", resolution: { targetCells: CELLS }, continentCountTarget: 12 }, {}, 2), /許容帯/));
+check("許容帯に入らない設定では、例外で理由を示す（黙って受け入れない）", () => assert.throws(() => generateWorldChecked({ worldSeed: "x", resolution: { targetCells: CELLS }, landFraction: 0.85 }, {}, 2), /許容帯/)); // 陸地 85% では、大陸は 1 つにまとまり、許容帯（大陸 4〜8）に入らない
 check("キャンセル: AbortSignal で中断できる", () => { const ac = new AbortController(); ac.abort(); assert.throws(() => generateWorld({ worldSeed: "x", resolution: { targetCells: CELLS } }, { signal: ac.signal }), /キャンセル/); });
 check("進捗: 段階の名前・開始と終了が通知される", () => { const ev = []; gen("prog"); generateWorld({ worldSeed: "prog", resolution: { targetCells: CELLS } }, { onProgress: (e) => ev.push(e) }); const names = [...new Set(ev.map((e) => e.stage))]; for (const s of ["G1_mesh", "G2_plates", "G3_elevation", "G4_climate", "G5_rivers", "G6_soil", "G7_groups", "G8_stats"]) assert.ok(names.includes(s), s); assert.ok(ev.some((e) => e.fraction === 1 && e.ms >= 0)); });
 check("段階ごとの所要時間が記録される", () => { for (const k of ["G1_mesh", "G2_plates", "G5_rivers", "total"]) assert.ok(Number.isFinite(A.timings[k]), k); });
@@ -94,7 +94,7 @@ console.log("=== 標準規模（約 250,000 セル）===");
 {
   const t = performance.now(), w = generateWorld({ worldSeed: "standard-world-1" }), ms = performance.now() - t;
   console.log(`  情報  249,642 セルの生成: ${ms.toFixed(0)} ms（この端末。Surface Go 4 ではないので、60 秒目標の判定には使えない）  段階: ${JSON.stringify(w.timings)}`);
-  check("標準の世界は 249,642 セルで、陸地率は 50% ±1%", () => { assert.equal(w.mesh.cellCount, 249642); assert.ok(Math.abs(w.stats.landFraction - 0.5) < 0.01); });
+  check("標準の世界は 249,642 セルで、陸地率は 30% ±1%", () => { assert.equal(w.mesh.cellCount, 249642); assert.ok(Math.abs(w.stats.landFraction - 0.3) < 0.01); });
   check("標準の世界が検査に通る", () => assert.deepEqual(validateWorld(w), []));
   check("標準の世界の再生成でハッシュが一致する（決定性）", () => assert.equal(generateWorld({ worldSeed: "standard-world-1" }).hash, w.hash));
   check("標準の世界の大陸級の陸塊は 3〜9 個、島は 40 以上、河川・湖がある", () => { assert.ok(w.stats.continentCount >= 3 && w.stats.continentCount <= 9, String(w.stats.continentCount)); assert.ok(w.stats.islandCount >= 40, String(w.stats.islandCount)); assert.ok(w.stats.riverCells > 1000 && w.stats.lakeCells > 100); });

@@ -1,11 +1,11 @@
 // V5-M6: 因果グラフ（双方向索引・根拠・ユーザー編集）・判断記録・失敗した外交・歴史認識と表現物（事実との分離）。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createCivState, encodeCiv, decodeCiv } from "../js/core/civ/civ-state.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
-import { graphIndex, getEvent, causesOf, consequencesOf, eventsOfEntity, decisionsOfActor, neighborhood, renameEvent, editCause, checkGraph } from "../js/core/civ/graph.js";
-import { stepInterpretation, grievance, interpretationsOf, STANCE } from "../js/core/civ/interpret.js";
-import { expandDecision } from "../js/core/civ/ai.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createCivState, encodeCiv, decodeCiv } from "../../js/core/civ/civ-state.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
+import { graphIndex, getEvent, causesOf, consequencesOf, eventsOfEntity, decisionsOfActor, neighborhood, renameEvent, editCause, checkGraph } from "../../js/core/civ/graph.js";
+import { stepInterpretation, grievance, interpretationsOf, STANCE } from "../../js/core/civ/interpret.js";
+import { expandDecision } from "../../js/core/civ/ai.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

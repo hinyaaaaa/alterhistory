@@ -2,12 +2,12 @@
 import assert from "node:assert/strict";
 import v8 from "node:v8";
 import vm from "node:vm";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { worldToMap } from "../js/core/world-bridge.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
-import { encodeCivChunks } from "../js/core/civ/civ-chunks.js";
-import { saveMapBytes, loadMapBytes } from "../js/io/ahmap-file.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { worldToMap } from "../../js/core/world-bridge.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
+import { encodeCivChunks } from "../../js/core/civ/civ-chunks.js";
+import { saveMapBytes, loadMapBytes } from "../../js/io/ahmap-file.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

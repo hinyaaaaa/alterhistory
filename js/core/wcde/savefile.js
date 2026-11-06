@@ -14,7 +14,7 @@ import { rebuildAdjust } from "./intervention.js";
 import { timeOf, newsOf } from "./clock.js";
 import { APP_VERSION_FOR_SAVE } from "./save-meta.js";
 
-export const SAVE_FORMAT = "alterhistory-save", SAVE_SCHEMA = 1, MIN_SCHEMA = 1;
+export const SAVE_FORMAT = "alterhistory-save", SAVE_SCHEMA = 2, MIN_SCHEMA = 2; // v6.1.0: schema 2（資料アーカイブ・統合技術ツリー・判断を保存しない世界）。v6.0.0 の schema 1 は読まない
 export const backupLabel = (name) => `【自動バックアップ】${name}`; // 復旧用。正式な保存ファイルと取り違えない
 /** 64 ビット相当の高速な検証値（cyrb53 の変種）。改ざん対策ではなく、破損の検出用 */
 export function checksum(text) {
@@ -26,7 +26,7 @@ const fin = (x) => typeof x === "number" && Number.isFinite(x);
 
 /** 保存データを作る。{ text, bytes, meta }。civ を JSON にし、その文字列のチェックサムを添える */
 export function packSave(w, { appVersion = APP_VERSION_FOR_SAVE, name = null } = {}) {
-  const { civ } = w, civText = JSON.stringify(civ), meta = { name: name ?? civ.wcde.config.name ?? null, monthIndex: civ.monthIndex, date: { ...civ.date }, states: Object.values(civ.states).filter((s) => s.alive).length, events: civ.events.length, cells: w.world.mesh?.cellCount ?? null, worldSeed: civ.wcde.config.worldSeed };
+  const { civ } = w, civText = JSON.stringify(civ), meta = { name: name ?? civ.wcde.config.name ?? null, monthIndex: civ.monthIndex, date: { ...civ.date }, states: Object.values(civ.states).filter((s) => s.alive).length, events: civ.events.length, records: civ.archive?.total ?? 0, cells: w.world.mesh?.cellCount ?? null, worldSeed: civ.wcde.config.worldSeed };
   const head = JSON.stringify({ format: SAVE_FORMAT, schema: SAVE_SCHEMA, appVersion, wcdeVersion: WCDE_VERSION, meta, checksum: checksum(civText), civBytes: civText.length });
   const text = head.slice(0, -1) + ',"civ":' + civText + "}"; return { text, bytes: text.length, meta };
 }
@@ -37,15 +37,18 @@ export function unpackSave(text, { generate = defaultGenerate, allowChecksumMism
   if (typeof text !== "string" || !text.length) return refuse("ファイルが空、または文字列ではありません");
   let d; try { d = JSON.parse(text); } catch (e) { return refuse("ファイルが壊れています（JSON として読めません）: " + String(e.message).slice(0, 120)); }
   if (!d || typeof d !== "object" || Array.isArray(d)) return refuse("保存ファイルの形式ではありません");
-  if (d.format !== SAVE_FORMAT) return refuse(d.format === "alterhistory-wcde" ? "これは開発中の旧形式（alterhistory-wcde）です。v6.0.0 の保存ファイルを選んでください" : "AlterHistory の保存ファイルではありません（旧 .ahmap・他アプリの地図は読み込めません）");
+  // 旧世代のデータは移行も互換読み込みもしない（仕様 §14）。理由を伝えて拒否する。元のファイルは削除・変更しない
+  if (d.format !== SAVE_FORMAT && (d.ahmap != null || d.format === "ahmap" || d.format === "alterhistory-map" || d.map != null || d.pack != null || d.info?.version != null || d.settings != null)) return refuse("v5 以前の地図データ（.ahmap）や Azgaar の地図は、v6.1.0 では読み込めません。新しい世界を作ってください（元のファイルは削除されません）");
+  if (d.format !== SAVE_FORMAT) return refuse(d.format === "alterhistory-wcde" ? "これは開発中の旧形式（alterhistory-wcde）です。v6.1.0 の保存ファイルを選んでください" : "AlterHistory の保存ファイルではありません（旧 .ahmap・他アプリの地図は読み込めません）");
   if (!Number.isInteger(d.schema)) return refuse("保存形式の版がありません");
   if (d.schema > SAVE_SCHEMA) return refuse(`このファイルは新しい保存形式（版 ${d.schema}）です。アプリを更新してください（このアプリは版 ${SAVE_SCHEMA} まで）`);
-  if (d.schema < MIN_SCHEMA) return refuse(`古すぎる保存形式（版 ${d.schema}）です`);
+  if (d.schema < MIN_SCHEMA) return refuse(d.schema === 1 ? "v6.0.0 の保存ファイル（schema 1）は、v6.1.0 では読み込めません。新しい世界を作ってください（元のファイルは削除されません）" : `古すぎる保存形式（版 ${d.schema}）です`);
   const civ = d.civ; if (!civ || typeof civ !== "object") return refuse("世界の状態（civ）がありません");
   // チェックサム: civ 部分の文字列を、書いたときと同じ形で作り直して比べる（JSON は同じ値から同じ文字列になる）
   const sum = checksum(JSON.stringify(civ));
   if (d.checksum !== sum) { if (!allowChecksumMismatch) return refuse("チェックサムが一致しません（保存後に内容が変わったか、ファイルが壊れています）。読み込みを中止しました"); warnings.push("チェックサムが一致しませんでしたが、利用者の指示で、検証を通る場合に限って読み込みました"); }
   // 必須項目・値域・配列の構造
+  if (civ.decisions != null && (!Array.isArray(civ.decisions) || civ.decisions.length)) return refuse("AI の判断記録を含む保存ファイルは、v6.1.0 では読み込めません（判断は保存しない仕様です）");
   const need = [["monthIndex", fin], ["date", (x) => x && typeof x === "object"], ["states", (x) => x && typeof x === "object" && !Array.isArray(x)], ["groups", (x) => x && typeof x === "object"], ["events", Array.isArray], ["wcde", (x) => x && typeof x === "object"], ["seq", (x) => x && typeof x === "object"], ["options", (x) => x && typeof x === "object"]];
   for (const [k, ok] of need) if (!ok(civ[k])) return refuse(`必須項目「${k}」がないか、型が違います`);
   if (!Number.isInteger(civ.monthIndex) || civ.monthIndex < 0) return refuse("月の番号（monthIndex）が不正です");

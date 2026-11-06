@@ -1,11 +1,11 @@
 // v5.2: 履歴の遅延読み込み（読み取り専用）。必要な期間だけ読み、全件を読んだ場合と同じ結果になること。月次復元・往復の検査。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim } from "../js/core/civ/civ-sim.js";
-import { encodeCivChunks, decodeCivChunks, PERIOD_MONTHS } from "../js/core/civ/civ-chunks.js";
-import { openCivChunks, historyView } from "../js/core/civ/civ-lazy.js";
-import { stateAt, groupsAt, compositionAt, checkHistory } from "../js/core/civ/history.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim } from "../../js/core/civ/civ-sim.js";
+import { encodeCivChunks, decodeCivChunks, PERIOD_MONTHS } from "../../js/core/civ/civ-chunks.js";
+import { openCivChunks, historyView } from "../../js/core/civ/civ-lazy.js";
+import { stateAt, groupsAt, compositionAt, checkHistory } from "../../js/core/civ/history.js";
 
 let failed = 0;
 const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };

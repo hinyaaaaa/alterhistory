@@ -1,4 +1,4 @@
-// v5.3 UI を実ブラウザ（Chromium）で確かめる。模擬世界に単体でつなぐ（本体の index.html には触れない）。
+// v5.3 UI を実ブラウザ（Chromium）で確かめる。模擬世界に単体でつなぐ（本体の v5.html には触れない）。
 //   使い方: node tests/e2e/v53-ui.e2e.mjs    画面は /tmp/e2e-shots/v53-*.png
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -9,8 +9,8 @@ import { launch, root, SHOTS } from "./lib.mjs";
 const out = "/tmp/v53-e2e"; mkdirSync(out, { recursive: true });
 await build({ entryPoints: [path.join(root, "js/ui/v53/preview.js")], bundle: true, format: "iife", outfile: path.join(out, "preview.js"), logLevel: "silent" });
 const html = `<!doctype html><html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="${pathToFileURL(path.join(root, "css/v53.css")).href}"><style>html,body{height:100%;margin:0;background:#0d1214}</style></head><body><div id="v53-root" style="height:100%"></div><script src="./preview.js"></script></body></html>`;
-writeFileSync(path.join(out, "index.html"), html);
-const URL_ = (q = "") => pathToFileURL(path.join(out, "index.html")).href + q;
+writeFileSync(path.join(out, "v5.html"), html);
+const URL_ = (q = "") => pathToFileURL(path.join(out, "v5.html")).href + q;
 
 let failed = 0; const check = (l, ok, extra = "") => { if (!ok) failed++; console.log(`  ${ok ? "OK  " : "FAIL"} ${l}${extra ? ` — ${extra}` : ""}`); };
 const { browser, page, problems } = await launch({ width: 1280, height: 853 });

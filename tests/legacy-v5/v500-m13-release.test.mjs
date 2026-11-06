@@ -1,18 +1,18 @@
 // V5-M13: v5.0.0 リリース基準。個々の機能ではなく『連鎖』が動くこと。データ破損・リンク切れ・プレイヤーの自動操作が無いこと。
 import assert from "node:assert/strict";
-import { generateWorld } from "../js/core/world/worldgen.js";
-import { worldToMap } from "../js/core/world-bridge.js";
-import { createCivState } from "../js/core/civ/civ-state.js";
-import { createCivSim, checkCivIntegrity } from "../js/core/civ/civ-sim.js";
-import { checkGraph, getEvent, consequencesOf, causesOf, renameEvent, evMonth } from "../js/core/civ/graph.js";
-import { checkHistory, stateAt, groupsAt } from "../js/core/civ/history.js";
-import { exportObsidianZip, validateVault } from "../js/io/obsidian.js";
-import { cellRaster } from "../js/core/world/cell-raster.js";
-import { unzipFiles } from "../js/io/zip.js";
-import { saveMapBytes, loadMapBytes } from "../js/io/ahmap-file.js";
-import { composition } from "../js/core/civ/cohorts.js";
-import { expandDecision } from "../js/core/civ/ai.js";
-import { APP_VERSION } from "../js/version.js";
+import { generateWorld } from "../../js/core/world/worldgen.js";
+import { worldToMap } from "../../js/core/world-bridge.js";
+import { createCivState } from "../../js/core/civ/civ-state.js";
+import { createCivSim, checkCivIntegrity } from "../../js/core/civ/civ-sim.js";
+import { checkGraph, getEvent, consequencesOf, causesOf, renameEvent, evMonth } from "../../js/core/civ/graph.js";
+import { checkHistory, stateAt, groupsAt } from "../../js/core/civ/history.js";
+import { exportObsidianZip, validateVault } from "../../js/io/obsidian.js";
+import { cellRaster } from "../../js/core/world/cell-raster.js";
+import { unzipFiles } from "../../js/io/zip.js";
+import { saveMapBytes, loadMapBytes } from "../../js/io/ahmap-file.js";
+import { composition } from "../../js/core/civ/cohorts.js";
+import { expandDecision } from "../../js/core/civ/ai.js";
+import { APP_VERSION } from "../../js/version.js";
 
 let failed = 0; const check = async (label, fn) => { try { await fn(); console.log(`  OK   ${label}`); } catch (e) { failed++; console.log(`  FAIL ${label}: ${String(e.message).split("\n")[0]}`); } };
 const W = generateWorld({ worldSeed: "civ-m1", resolution: { targetCells: 6000 } });
@@ -59,7 +59,7 @@ await check("【Obsidian】全ノートの内部リンクが解決し、出力�
   for (const f of ["地図/地形.png", "関係グラフ/国家の系譜.md", "README.md", "manifest.json"]) assert.ok(z.has(`リリース検査/${f}`), f); assert.ok([...z.keys()].some((p) => p.includes("詳細ログ/国家月次状態/")));
 });
 await check("壊れた文明チャンクがあっても世界は開く（警告つき）。チャンクの欠落を黙って受け入れない", async () => {
-  const map = worldToMap(W); map.civ = civ; map.worldTime = { ...civ.date }; const bytes = await saveMapBytes(map, "壊れ"); const { readAhmap2 } = await import("../js/core/world/ahmap2.js").catch(() => ({})); assert.ok(bytes.length > 1000);
+  const map = worldToMap(W); map.civ = civ; map.worldTime = { ...civ.date }; const bytes = await saveMapBytes(map, "壊れ"); const { readAhmap2 } = await import("../../js/core/world/ahmap2.js").catch(() => ({})); assert.ok(bytes.length > 1000);
   const dm = Array.from(bytes); const idx = new TextDecoder("latin1").decode(bytes).indexOf("civ.events.p0000"); assert.ok(idx > 0, "期間チャンク名が見つからない"); // チャンク名の1文字を壊す（索引と本体が合わなくなる）
   const broken = new Uint8Array(bytes); broken[idx + 5] = broken[idx + 5] ^ 0x20; let opened = null, err = null; try { opened = await loadMapBytes(broken); } catch (e) { err = e; } assert.ok(opened || err); if (opened) { const m = opened.map ?? opened; assert.ok(m.world, "世界が開けていない"); }
 });

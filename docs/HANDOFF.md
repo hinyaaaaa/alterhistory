@@ -1,3 +1,20 @@
+# v6.1.1: 地図レイヤー（Azgaar 方式）・描画・地形生成（最新）
+
+`docs/V6_1_MAP_LAYERS.md` を参照。`MapView` の旧 API（`fillLayer`/`overlays`）は廃止。
+
+---
+
+# v6.1.0 M9 引き継ぎ（最新）
+
+- 入口は `index.html`（v6 の画面。`dist/v6.js`）。v5 の画面は `v5.html`。`v6.html` は廃止。
+- 保存形式は schema 2。v6.0.0・v5・Azgaar 由来・AI の判断を含むデータは理由つきで拒否。
+- 開始時代・規模の較正は `docs/V6_1_CALIBRATION.md`、テストの変更は `docs/V6_1_TEST_REPORT.md`。
+- `npm test`: 126 スイート中 125 合格（`v53-scale-index` の p95 が環境により揺らぐ。単独では合格・不合格が混在。閾値は緩めていない）。`npm run test:e2e`（v6）は合格。
+- 未完了: 建国後 700 年を超える速さ・性能の測定（`tests/long/v6-long.mjs`）。技術の順序（水車・風車が早い）。建国候補の数（40〜80）。実機確認。
+- 既定の陸地率は 30%。海渡りの探索は 1 → 2 → 3.5 倍に広げる（`prehistory.js` の `FAR_SCALES`）。
+
+---
+
 # 引き継ぎ書（次チャットへの指示）
 
 このファイルは「次に何をすべきか」に特化する。設計の全体像は `ARCHITECTURE.md`、

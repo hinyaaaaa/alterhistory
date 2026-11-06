@@ -11,7 +11,7 @@ const check = (label, ok, extra = "") => { console.log(`  ${ok ? "OK  " : "FAIL"
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(cond, ms = 8000, label = "") { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (cond()) return true; await sleep(20); } console.log(`  (待機タイムアウト: ${label})`); return false; }
 function fakeCtx() { const props = {}; return new Proxy({}, { get(_, k) { if (k in props) return props[k]; if (k === "measureText") return (t) => ({ width: String(t).length * 8 }); return () => {}; }, set(_, k, v) { props[k] = v; return true; } }); }
-const dom = await JSDOM.fromFile(path.join(root, "index.html"), {
+const dom = await JSDOM.fromFile(path.join(root, "v5.html"), {
   runScripts: "dangerously", resources: "usable", pretendToBeVisual: true,
   beforeParse(window) {
     window.devicePixelRatio = 1; window.ResizeObserver = class { observe() {} disconnect() {} };

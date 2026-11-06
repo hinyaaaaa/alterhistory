@@ -35,6 +35,14 @@ await check("自動バックアップは正式な保存ファイルと取り違�
 
 console.log("=== 破損・不正の拒否（元のデータは変えない・空の世界に置き換えない） ===");
 const refused = (t, re, o) => { const r = load(t, o); assert.equal(r.ok, false); assert.ok(r.errors.length && !r.w, "世界を返さない（空の世界へ置き換えない）"); if (re) assert.ok(re.test(r.errors.join("|")), r.errors.join("|")); return r; };
+await check("v6.1.0（schema 2）: v6.0.0（schema 1）・v5 の .ahmap・Azgaar 由来・AI の判断を含む保存は、理由つきで拒否する。元の文字列は変えない", () => {
+  assert.equal(SAVE_SCHEMA, 2);
+  refused(tamper((d) => { d.schema = 1; }), /v6\.0\.0.*schema 1.*読み込めません/);
+  refused(JSON.stringify({ ahmap: 1, map: {}, settings: {} }), /\.ahmap.*Azgaar.*読み込めません/);
+  refused(JSON.stringify({ info: { version: "1.80" }, settings: {}, pack: {} }), /Azgaar/);
+  refused(tamper((d) => { d.civ.decisions = [{ id: 1 }]; d.checksum = checksum(JSON.stringify(d.civ)); }), /判断/);
+  const before = TEXT; unpackSave(TEXT); assert.equal(TEXT, before);
+});
 await check("空・JSON でない・途中で切れたファイル・別形式・旧形式・新しすぎる版を、理由つきで拒否する", () => {
   refused("", /空/); refused("{not json", /JSON/); refused(TEXT.slice(0, TEXT.length >> 1), /JSON/); refused("[]", /形式/); refused(JSON.stringify({ format: "x" }), /保存ファイルではありません/); refused(JSON.stringify({ format: "alterhistory-wcde", civ: {} }), /旧形式/);
   refused(tamper((d) => { d.schema = SAVE_SCHEMA + 1; }), /新しい保存形式/); refused(tamper((d) => { d.schema = "1"; }), /版/); refused(tamper((d) => { delete d.civ; }), /civ/);
