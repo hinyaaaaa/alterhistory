@@ -1,22 +1,21 @@
 // AlterHistory v6 UI。モック（alterhistory-v6-ui-mock.html）の意匠と構成（左ハブ・開閉パネル・地図・コールアウト・右のニュースと時間）に、実データと実コマンドを接続したもの。
-//   ・左: ハブ 11 項目（地理・国家・戦争・外交・文化・言語・宗教・年表・統計・検索・世界設定）／中央: 地図／右: ニュースと時間のみ。
+//   ・左: ハブ（地理・国家・戦争・外交・文化・言語・宗教・統計・創造主・世界設定）／中央: 地図（上部中央に時計）。ニュースはコールアウトとトーストで出す（v6.3.0 で右のニュース欄・年表・検索・凡例を廃止）。
 //   ・UI は WorldState を直接変えない。成功した Command の結果を、読み取りモデルへ反映するだけ。
 //   ・パネルの開閉・切替で、地図の位置・拡大・選択・検索条件をリセットしない。
 import { createNewWorld, formatWorldDate } from "../../core/wcde/world.js";
-import { listCandidates } from "../../core/wcde/founding.js";
 import { SPEEDS, timeOf, newsOf, newsFeed, isRunning } from "../../core/wcde/clock.js";
 import { h, btn, polityJa, n0, pct, colorOf, face, sv } from "./common.js";
 import { TECH } from "../../core/civ/tech.js";
 import { ecoSummary } from "../../core/wcde/domains/ecosystem.js";
 import { S, run, act, stateName, aliveStates, controlled } from "./store.js";
 import { MapView } from "./map.js";
-import { initNotify } from "./notify.js";
+import { initNotify, notify } from "./notify.js";
 import { pGeo, pNations, link } from "./views-a.js";
-import { pWar, pDiplo, pEntity, pChron, pStats, pSearch, pSettings, fileLoader } from "./views-b.js";
+import { pWar, pDiplo, pEntity, pStats, pSettings, pCreator, fileLoader } from "./views-b.js";
 export { h };
 const $ = (s) => document.querySelector(s), root = () => $("#v6-root");
-const HUB = [["geo", "地理", "GEO"], ["nations", "国家", "NATION"], ["war", "戦争", "WAR"], ["diplo", "外交", "DIPLO"], ["culture", "文化", "CULT"], ["language", "言語", "LANG"], ["religion", "宗教", "RELIG"], ["chron", "年表", "CHRON"], ["stats", "統計", "STATS"], ["search", "検索", "FIND"], ["settings", "世界設定", "CONFIG"]];
-const PANELS = { geo: pGeo, nations: pNations, war: pWar, diplo: pDiplo, culture: () => pEntity("culture"), language: () => pEntity("language"), religion: () => pEntity("religion"), chron: pChron, stats: pStats, search: pSearch, settings: pSettings };
+const HUB = [["geo", "地理", "GEO"], ["nations", "国家", "NATION"], ["war", "戦争", "WAR"], ["diplo", "外交", "DIPLO"], ["culture", "文化", "CULT"], ["language", "言語", "LANG"], ["religion", "宗教", "RELIG"], ["stats", "統計", "STATS"], ["creator", "創造主", "CREATOR"], ["settings", "世界設定", "CONFIG"]];
+const PANELS = { geo: pGeo, nations: pNations, war: pWar, diplo: pDiplo, culture: () => pEntity("culture"), language: () => pEntity("language"), religion: () => pEntity("religion"), stats: pStats, creator: pCreator, settings: pSettings };
 
 /* ---------- 起動: 世界の設定 → 生成 → 建国 ---------- */
 function setup() {
@@ -25,7 +24,7 @@ function setup() {
   root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "ALTERHISTORY v6"), h("h1", {}, "世界を作る"), h("p", { class: "n" }, "約50万年の先史から、国家が生まれる時代へ。"), h("label", {}, "世界の種 ", seed), h("label", {}, "解像度 ", cells), h("div", { class: "rowb" }, btn("世界を生成", go, "p", { id: "gen" }), fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); })), msg));
 }
 function founding() {
-  const c = listCandidates(S.w), civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
+  const c = run({ type: "founding.refresh" }).candidates ?? S.w.civ.wcde.candidates ?? [], civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
   const msg = h("p", { class: "n" }, c.length ? "国を選んで担当するか、世界に任せて見守ります。" : "まだ国家の候補がありません。世界に任せて進めます。"), list = h("div", {});
   const yrsAgo = (m) => Math.round(((civ.wcde.foundedAt ?? civ.monthIndex) - m) / 12);
   const fmtYears = (y) => (y >= 10000 ? `約 ${Math.round(y / 1000) / 10} 万年前` : `約 ${n0(y)} 年前`);
@@ -46,16 +45,15 @@ function founding() {
 }
 
 /* ---------- 画面の骨格（モックと同じ構成） ---------- */
-function start() { S.hub = null; S.sel = controlled() ?? null; S.hooks = { render, panel: renderPanel, mapOnly: () => { S.map.draw(); renderLegend(); }, select, focusCell, loaded: (w, warn) => { S.w = w; S.fileWarn = warn; start(); } }; shell(); render(); clearInterval(S.timer); S.timer = setInterval(tick, 250); }
+function start() { S.newsSeen = null; S.hub = null; S.sel = controlled() ?? null; S.hooks = { render, panel: renderPanel, mapOnly: () => { S.map.draw(); }, select, focusCell, loaded: (w, warn) => { S.w = w; S.fileWarn = warn; start(); } }; shell(); render(); clearInterval(S.timer); S.timer = setInterval(tick, 250); }
 function shell() {
   const cv = h("canvas", { id: "map", "aria-label": "世界地図" });
-  root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("button", { id: "prefresh", title: "世界が進んだので、このページの内容は古くなっています", onclick: () => renderPanel() }, "↻ 最新の状態に更新"), h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "hint" }, "ドラッグで移動・ホイールで拡大縮小・クリックで国家を選択"), h("div", { id: "leg" }), h("div", { id: "callout" }), h("div", { id: "pops" })), h("aside", { id: "right", class: "open" }, h("div", { id: "rin" }, h("div", { id: "clock" }), h("h2", {}, "ニュース"), h("div", { id: "feed" })))), h("div", { id: "newsmodal", hidden: true }));
-  S.map = new MapView(cv, S.w); S.map.sel = S.sel; S.map.onPick = callout; requestAnimationFrame(() => { S.map.draw(); renderLegend(); }); window.addEventListener("resize", () => S.map?.draw());
+  root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("button", { id: "prefresh", title: "世界が進んだので、このページの内容は古くなっています", onclick: () => renderPanel() }, "↻ 最新の状態に更新"), h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "clock" }), h("div", { id: "callout" }), h("div", { id: "newscall" }), h("div", { id: "pops" }))), h("div", { id: "newsmodal", hidden: true }));
+  S.map = new MapView(cv, S.w); S.map.sel = S.sel; S.map.onPick = callout; requestAnimationFrame(() => { S.map.draw(); }); window.addEventListener("resize", () => S.map?.draw());
 }
-function render() { if (!$("#hub")) return; renderHub(); renderPanel(); renderRight(); renderNews(); S.map.sel = S.sel; S.map.draw(); renderLegend(); const w = S.w; $("#hint").textContent = w.viewPast != null ? "過去を閲覧中。世界を変える操作と時間進行は止まっています。" + (S.notice ? " " + S.notice : "") : S.notice || "ドラッグで移動・ホイールで拡大縮小・クリックで国家を選択"; $("#hint").style.color = S.notice || w.viewPast != null ? "var(--yellow)" : ""; }
+function render() { if (!$("#hub")) return; renderHub(); renderPanel(); renderRight(); renderNews(); S.map.sel = S.sel; S.map.draw(); }
 function renderHub() { $("#hub").replaceChildren(...HUB.map(([k, ja, code]) => h("button", { class: S.hub === k ? "on" : "", "data-hub": k, onclick: () => { S.hub = S.hub === k ? null : k; render(); setTimeout(() => S.map?.draw(), 220); } }, ja, h("small", {}, code)))); }
 function renderPanel() { const p = $("#panel"); S.paintedMonth = S.w?.civ.monthIndex ?? null; $("#prefresh")?.classList.remove("stale"); if (!S.hub) { p.classList.remove("open"); return; } p.classList.add("open"); const wide = S.hub === "nations" && (S.tab === "tech" || S.tab === "doctrine") && S.sel; /* 技術ツリー・ドクトリンは大きく見せる */ p.style.setProperty("--pw", wide ? "min(760px, 62vw)" : ""); const keep = $("#pin").scrollTop; $("#pin").replaceChildren(PANELS[S.hub]()); $("#pin").scrollTop = keep; }
-function renderLegend() { const M = S.map; if (!M) return; const L = M.legend(M.legendKey()); $("#leg").replaceChildren(h("b", {}, "凡例 "), ...L.slice(0, 6).map((x) => h("span", { style: "margin-right:10px" }, x.c ? h("i", { style: `display:inline-block;width:10px;height:10px;background:${x.c};margin-right:4px` }) : "", x.t))); $("#leg").style.display = L.length ? "block" : "none"; }
 function select(id) { S.sel = id; S.hub = "nations"; if (!S.tab) S.tab = "politics"; render(); $("#callout").classList.remove("on"); }
 function focusCell(cell) { const M = S.map, g = M.geo, W = M.cv.width, H = M.cv.height, [x, y] = M.proj(g.cen[cell * 2], g.cen[cell * 2 + 1], W, H); M.view.k = 4; M.view.x = W / 2 - x * 4; M.view.y = H / 2 - y * 4; M.clamp(); M.draw(); }
 /** 地図上の選択: コールアウトが基本の情報提示。詳細パネルや他領域への入口も置く */
@@ -67,9 +65,22 @@ function callout(p) {
 
 /* ---------- 右: ニュースと時間のみ ---------- */
 function renderRight() {
-  const w = S.w, T = timeOf(w.civ), feed = newsFeed(w.civ, { limit: 30, minLevel: "major" }), cs = controlled();
-  $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "n" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）"), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); renderRight(); } }, s.label))), h("div", { class: "n", id: "runstate" }, T.hold ? "ニュースの確認待ち" : T.speed ? "進行中（1秒あたり）" : "停止中"));
-  $("#feed").replaceChildren(...feed.map((n) => h("div", { class: "ev" + (n.level === "critical" ? " y" : "") }, h("time", {}, `${n.date.year}年${n.date.month}月`), n.title, " ", ...n.entityIds.filter((i) => w.civ.states[i]).slice(0, 2).map((i) => [link(i), " "]))));
+  const w = S.w, T = timeOf(w.civ), cs = controlled();
+  $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); renderRight(); } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）", T.hold ? "・ニュースの確認待ち" : T.speed ? "" : "・停止中"));
+  announce();
+}
+/** v6.3.0: 右のニュース欄は廃止。重大でない大きな出来事は、地図のコールアウトとトースト通知で知らせる（重大ニュースは中央の確認画面） */
+function announce() {
+  const c = S.w.civ, key = (n) => n.eventId ?? n.id, feed = newsFeed(c, { limit: 16, minLevel: "major" });
+  if (!S.newsSeen) { S.newsSeen = new Set(feed.map(key)); return; }
+  const fresh = feed.filter((n) => n.level !== "critical" && !S.newsSeen.has(key(n))).reverse(); feed.forEach((n) => S.newsSeen.add(key(n)));
+  if (!fresh.length) return; const shown = fresh.slice(-3);
+  for (const n of shown) notify("ok", `${n.date.year}年${n.date.month}月　${n.title}`);
+  const last = shown[shown.length - 1], sid = (last.entityIds ?? []).find((i) => c.states[i]), g = sid ? c.groups[c.states[sid].capitalGroupId] : null, el = $("#newscall"), M = S.map;
+  if (!g || !el || !M) return;
+  const [x, y] = M.proj(M.geo.cen[g.cell * 2], M.geo.cen[g.cell * 2 + 1], M.cv.width, M.cv.height), r = M.cv.clientWidth / (M.cv.width || 1), px = (x * M.view.k + M.view.x) * r, py = (y * M.view.k + M.view.y) * r;
+  el.replaceChildren(h("b", {}, c.states[sid].name), h("div", {}, last.title)); el.style.left = Math.min(Math.max(8, px + 12), M.cv.clientWidth - 260) + "px"; el.style.top = Math.min(Math.max(48, py + 12), M.cv.clientHeight - 80) + "px"; el.classList.add("on");
+  clearTimeout(S.newsT); S.newsT = setTimeout(() => el.classList.remove("on"), 6000);
 }
 function renderNews() {
   const m = $("#newsmodal"), q = newsOf(S.w.civ).queue; if (!q.length) { m.hidden = true; m.replaceChildren(); return; } const n = q[0];
@@ -78,7 +89,7 @@ function renderNews() {
 function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ)) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold") run({ type: "clock.setSpeed", speed: 0 }); live(); }
 /** 再生中の更新: 時計・ニュース・地図だけを毎回更新する。左のパネルは勝手に描き直さない（読んでいる最中・入力中・スクロール中の内容が変わらないように）。
  *  世界が進んでパネルの内容が古くなったときは、パネルの右上に「最新の状態に更新」を出し、押したときだけ描き直す */
-function live() { if (!$("#hub")) return; renderRight(); renderNews(); S.map.draw(); if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale"); if (S.notice) $("#hint").textContent = S.notice; }
+function live() { if (!$("#hub")) return; renderRight(); renderNews(); S.map.draw(); if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");}
 /** 起動画面: 毎回表示。初期化が済んでいれば演出（約 0.9 秒）だけで世界生成の画面へ移る。動きを減らす設定では待たずに切り替える */
 function dismissSplash() {
   const el = document.getElementById("splash"); if (!el) return; const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches, since = performance.now() - (window.__splashAt ?? 0), wait = reduce ? 0 : Math.max(0, 900 - since);

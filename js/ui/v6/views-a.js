@@ -1,7 +1,7 @@
 // v6 UI: 地理・国家（一覧と 5 タブの詳細）。すべて Query で読み、Command で変える。
 import { h, lb, stat, bar, btn, table, pct, n0, r2, face, donut, hemi, colorOf, polityJa, POLITY_JA, FACTION_JA, FACTION_COL, vlist } from "./common.js";
 import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
-import { LAYERS, GROUPS, PRESETS, FILL_IDS } from "./map.js";
+import { LAYERS, GROUPS, FILL_IDS } from "./map.js";
 import { techTree, doctrineTree } from "./trees.js";
 import { TECHS, TECH, LANES, COND, available } from "../../core/civ/tech.js";
 import { formatDate } from "../../core/wcde/calendar.js";
@@ -25,15 +25,13 @@ const note = (t) => h("p", { class: "n" }, t), why = (t) => h("p", { class: "n e
 
 /* ---------- 地理: レイヤー（Azgaar 方式。各層を独立に ON/OFF。上の層ほど手前。プリセットで一括切替） ---------- */
 export function pGeo() {
-  const M = S.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "地理"), note("各レイヤーを自由に重ねられます。よく使う組み合わせはプリセットから。項目名をクリックすると凡例、塗りの層は不透明度も変えられます。"), lb("プリセット", "PRESET"));
+  const M = S.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "地理"), note("各レイヤーを自由に重ねられます。塗りの層は不透明度も変えられます。"));
   const done = () => { S.hooks.mapOnly(); S.hooks.panel(); };
-  box.append(h("div", { class: "chips" }, ...PRESETS.map(([id, ja]) => h("b", { class: M.preset === id ? "on" : "", "data-preset": id, onclick: () => { M.setPreset(id); done(); } }, ja))));
-  const legend = (key) => S.layerOpen === key ? h("div", { class: "lg", style: "flex-direction:column;gap:3px;margin:2px 0 8px 22px" }, ...M.legend(key).map((x) => h("span", {}, x.c ? h("i", { style: `background:${x.c}` }) : x.dot ? h("i", { style: `background:${x.dot};border-radius:50%` }) : h("i", { style: `border-top:2px ${x.dash ? "dashed" : "solid"} ${x.dash ?? x.line};height:0` }), x.t))) : null;
   for (const [gid, ja, en] of GROUPS) {
     box.append(lb(ja, en));
     for (const [id, name] of LAYERS.filter((l) => l[2] === gid).reverse()) { // 上の層（手前）を先に
       const fill = FILL_IDS.includes(id), on = M.isOn(id);
-      box.append(h("div", {}, h("div", { class: "layrow" }, h("input", { type: "checkbox", id: "ly-" + id, checked: on, onchange: () => { M.toggle(id); done(); } }), h("span", { class: "g", onclick: () => { S.layerOpen = S.layerOpen === id ? null : id; S.hooks.panel(); } }, name), fill && on ? h("input", { type: "range", class: "opa", min: 20, max: 100, value: Math.round(M.alpha[id] * 100), title: "不透明度", oninput: (e) => { M.alpha[id] = e.target.value / 100; M.interact(); } }) : null), legend(id)));
+      box.append(h("div", {}, h("div", { class: "layrow" }, h("input", { type: "checkbox", id: "ly-" + id, checked: on, onchange: () => { M.toggle(id); done(); } }), h("span", { class: "g" }, name), fill && on ? h("input", { type: "range", class: "opa", min: 20, max: 100, value: Math.round(M.alpha[id] * 100), title: "不透明度", oninput: (e) => { M.alpha[id] = e.target.value / 100; M.interact(); } }) : null)));
     }
   }
   return box.append(note("地形・気候・資源を生成後に手で編集する機能は設けていません。"), h("div", { class: "rowb" }, btn("表示を初期位置へ", () => { M.view = { x: 0, y: 0, k: 1 }; M.draw(); }))) || box;

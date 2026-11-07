@@ -61,7 +61,7 @@ export class MapView {
     const ctx = this.cv.getContext("2d"); if (!ctx || !this.frame || !this.frameView) return false; const v = this.view, f = this.frameView, r = v.k / f.k, W = this.cv.width, H = this.cv.height;
     ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = SEA_DEEP; ctx.fillRect(0, 0, W, H); ctx.setTransform(r, 0, 0, r, v.x - f.x * r, v.y - f.y * r); ctx.drawImage(this.frame, 0, 0); ctx.setTransform(1, 0, 0, 1, 0, 0); return true;
   }
-  size() { const host = this.cv.parentElement, W = Math.max(480, Math.floor(host?.clientWidth || this.cv.getBoundingClientRect().width || 900)), H = Math.floor(W / 2); if (this.cv.width !== W || this.cv.height !== H) { this.cv.width = W; this.cv.height = H; this.clamp(); } return [W, H]; }
+  size() { const host = this.cv.parentElement, W = Math.max(480, Math.floor(host?.clientWidth || this.cv.getBoundingClientRect().width || 900)), H = Math.max(300, Math.floor(host?.clientHeight || W / 2)); /* v6.3.1: 上下の黒帯をなくすため、地図を画面の高さいっぱいに引き伸ばす（球面の等距円筒図。ズームの下限は 1 のまま） */ if (this.cv.width !== W || this.cv.height !== H) { this.cv.width = W; this.cv.height = H; this.clamp(); } return [W, H]; }
   proj(lon, lat, W, H) { return [((lon + Math.PI) / TAU) * W, ((Math.PI / 2 - lat) / Math.PI) * H]; }
 
   /* ---------- 世界の地形から 1 回だけ作るもの ---------- */

@@ -8,7 +8,7 @@ import { makeEvent } from "../civ/events.js";
 import { hashSeed } from "../civ/civ-state.js";
 import { distKm } from "../civ/states.js";
 
-export const MAX_MORTALITY = 0.95, MIN_MORTALITY = 0.01, NAME_MAX = 40, REASON_MAX = 200;
+export const MAX_MORTALITY = 1, MIN_MORTALITY = 0.01, NAME_MAX = 40, REASON_MAX = 200;
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x), r3 = (x) => Math.round(x * 1000) / 1000, fin = (x) => typeof x === "number" && Number.isFinite(x);
 export const catastrophesOf = (civ) => (civ.wcde.catastrophes ??= []);
 const U = (civ, ...p) => hashSeed(civ.historySeed, "catastrophe", ...p) / 4294967296;
@@ -20,7 +20,7 @@ export function planCatastrophe(w, { name = "", reason = "", scope = "world", ce
   if (typeof reason !== "string" || reason.length > REASON_MAX) return fail(`理由の注釈は ${REASON_MAX} 文字までの文字列です`);
   if (scope !== "world" && scope !== "region") return fail("範囲は world（世界規模）か region（地域規模）");
   if (!fin(mortality) || mortality < MIN_MORTALITY || mortality > MAX_MORTALITY) return fail(`人口の損失の割合は ${MIN_MORTALITY * 100}〜${MAX_MORTALITY * 100}% で指定してください`);
-  if (!fin(recoveryMonths) || recoveryMonths < 6 || recoveryMonths > 480) return fail("回復までの目安は 6〜480 か月");
+  if (!fin(recoveryMonths) || recoveryMonths < 1) return fail("回復までの目安は 1 か月以上にしてください");
   let cell = null, radius = null;
   if (scope === "region") { cell = center; if (!Number.isInteger(cell) || cell < 0 || cell >= world.mesh.cellCount) return fail("地域規模の災厄には、中心の区画（0〜区画数−1 の整数）が必要です"); radius = radiusKm ?? 1500; if (!fin(radius) || radius < 100 || radius > 20000) return fail("半径は 100〜20000 km"); }
   return { ok: true, plan: { name: name.trim(), reason: reason.trim(), scope, cell, radius, mortality: r3(mortality), recoveryMonths: Math.round(recoveryMonths) } };

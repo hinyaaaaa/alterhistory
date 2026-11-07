@@ -16738,10 +16738,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "6.2.0";
-  var APP_VERSION_NAME = "\u4E16\u754C\u3068\u6587\u660E\u306E\u529B\u5B66 II";
+  var APP_VERSION = "6.3.1";
+  var APP_VERSION_NAME = "\u9AA8\u683C\u306E\u518D\u69CB\u7BC9";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "93a11808f599" : "dev";
+  var APP_BUILD_ID = true ? "6087db59dab0" : "dev";
 
   // js/ui/icons.js
   var P3 = {
