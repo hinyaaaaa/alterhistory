@@ -3474,6 +3474,80 @@
   // js/core/civ/states.js
   init_events();
   init_culture();
+
+  // js/core/wcde/domains/naming.js
+  init_civ_state();
+  var KN = ["", "\u4E00", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D", "\u4E03", "\u516B", "\u4E5D"];
+  var kanjiNum = (n2) => n2 < 10 ? KN[n2] : n2 < 20 ? "\u5341" + KN[n2 % 10] : n2 < 100 ? KN[Math.floor(n2 / 10)] + "\u5341" + KN[n2 % 10] : String(n2);
+  var FORMS = ["\u90E8\u65CF\u9023\u5408", "\u6559\u56E3\u56FD", "\u5E02\u56FD", "\u9996\u9577\u56FD", "\u5171\u548C\u56FD", "\u795E\u8056\u56FD", "\u738B\u56FD", "\u5E1D\u56FD", "\u9023\u5408", "\u540C\u76DF", "\u90E8\u65CF", "\u56FD"];
+  function stateForm(polity, via = null) {
+    switch (polity) {
+      case "kingdom":
+        return "\u738B\u56FD";
+      case "empire":
+        return "\u5E1D\u56FD";
+      case "republic":
+        return "\u5171\u548C\u56FD";
+      case "theocracy":
+        return "\u795E\u8056\u56FD";
+      case "chiefdom":
+        return via === "city_state" ? "\u5E02\u56FD" : "\u9996\u9577\u56FD";
+      default:
+        return via === "nomad_confederation" ? "\u90E8\u65CF\u9023\u5408" : via === "agri_union" ? "\u9023\u5408" : via === "defense_league" ? "\u540C\u76DF" : "\u90E8\u65CF";
+    }
+  }
+  function baseOfState(st2) {
+    if (st2.nameBase) return st2.nameBase;
+    const n2 = String(st2.name ?? "");
+    for (const f of FORMS) if (n2.length > f.length && n2.endsWith(f)) return n2.slice(0, -f.length);
+    return n2;
+  }
+  var composeStateName = (base, polity, via) => base + stateForm(polity, via);
+  function retitle(st2, polity) {
+    if (!st2.nameBase && !FORMS.some((f) => String(st2.name).endsWith(f))) return null;
+    const base = baseOfState(st2), next = composeStateName(base, polity, st2.via);
+    return next !== st2.name ? { base, name: next } : null;
+  }
+  var REGNAL = /* @__PURE__ */ new Set(["chiefdom", "kingdom", "empire", "theocracy"]);
+  var stripOrd = (n2) => String(n2).replace(/[0-9０-９]+世$/, "");
+  var baseOfLeader = stripOrd;
+  function leaderName(st2, fresh, rnd) {
+    const raw = stripOrd(fresh);
+    if (!REGNAL.has(st2.polity)) return raw;
+    const reg = st2.regnal ?? (st2.regnal = {}), keys = Object.keys(reg);
+    const base = keys.length && rnd() < 0.4 ? keys[Math.floor(rnd() * keys.length)] : raw;
+    reg[base] = (reg[base] ?? 0) + 1;
+    return `${base}${reg[base]}\u4E16`;
+  }
+  var leaderRng = (civ3, st2, ...p) => rngOf(hashSeed(civ3.historySeed, "leader", st2.id, civ3.monthIndex, ...p));
+  var DYN2 = { kingdom: "\u738B\u671D", empire: "\u738B\u671D", chiefdom: "\u9996\u9577\u5BB6", theocracy: "\u6559\u7D71", republic: "\u653F\u6A29" };
+  var dynastyName = (polity, n2, founder = "") => polity === "tribal" ? `${stripOrd(founder)}\u6C0F` : `\u7B2C${kanjiNum(n2)}${DYN2[polity] ?? "\u653F\u6A29"}`;
+  function warNameFor(ctx, w, placeOf) {
+    const { civ: civ3 } = ctx, A2 = civ3.states[w.aggressor], D2 = civ3.states[w.defender];
+    if (!A2 || !D2) return null;
+    const a = baseOfState(A2), d = baseOfState(D2), r = rngOf(hashSeed(civ3.historySeed, "warname", w.id));
+    const pats = [`${a}\u30FB${d}\u6226\u4E89`, `${d}\u5F81\u8A0E\u6226\u4E89`, `${d}\u6226\u4E89`];
+    const p = placeOf?.();
+    if (p) pats.push(`${p}\u6226\u4E89`);
+    const base = pats[Math.floor(r() * pats.length)];
+    const n2 = Object.values(civ3.wars).filter((x) => x.id !== w.id && x.name && x.startedAt >= w.startedAt - 1200 && (x.aggressor === w.aggressor && x.defender === w.defender || x.aggressor === w.defender && x.defender === w.aggressor)).length;
+    let name = n2 ? `\u7B2C${kanjiNum(n2 + 1)}\u6B21${base}` : base, k = n2;
+    while (Object.values(civ3.wars).some((x) => x.id !== w.id && x.name === name)) name = `\u7B2C${kanjiNum(++k + 1)}\u6B21${base}`;
+    return name;
+  }
+  function siteDescriptors(f) {
+    const out = [];
+    if (f.river) out.push("\u6CB3\u7554", "\u6E21\u6CB3");
+    if (f.mountain) out.push("\u5CE0", "\u5C71\u9E93");
+    if (f.coast) out.push("\u6E7E", "\u6D77\u5CB8");
+    if (f.forest) out.push("\u68EE");
+    if (f.wet) out.push("\u6CBC\u6CA2");
+    if (f.dry) out.push("\u8352\u91CE");
+    if (f.plain) out.push("\u5E73\u539F", "\u91CE");
+    return out.length ? out : ["\u91CE"];
+  }
+
+  // js/core/civ/states.js
   init_cohorts();
   init_spatial();
   init_tech();
@@ -3495,9 +3569,11 @@
     const { world, civ: civ3, ids, rng } = ctx, gs = groupIds.map((i) => civ3.groups[i]).filter(Boolean);
     if (!gs.length) return null;
     const cap = gs.reduce((a, b) => b.pop > a.pop ? b : a), id = ids.next("state"), h2 = hashSeed(id);
+    const pol = gatedPolity(civ3, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")), np = name ? null : ctx.nameGen?.stateParts?.(civ3, cap, via, rng, pol) ?? null;
     const st2 = {
       id,
-      name: name ?? ctx.nameGen?.state(civ3, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix,
+      name: name ?? np?.name ?? ctx.nameGen?.state(civ3, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix,
+      nameBase: np?.base ?? null,
       via,
       formedAt: civ3.monthIndex,
       capitalGroupId: cap.id,
@@ -3507,7 +3583,7 @@
       player,
       dissolvedAt: null,
       predecessor,
-      polity: gatedPolity(civ3, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")),
+      polity: pol,
       stability: 0.7,
       pop: 0,
       settlements: 0,
@@ -3526,6 +3602,7 @@
       lastCrisis: -999,
       personality: { security: 0.6 + h2 % 100 / 125, prosperity: 0.6 + (h2 >> 7) % 100 / 125, expansion: 0.6 + (h2 >> 14) % 100 / 125, stability: 0.6 + (h2 >> 21) % 100 / 125, culture: 0.6 + (h2 >> 4) % 100 / 125, tech: 0.6 + (h2 >> 11) % 100 / 125, prestige: 0.6 + (h2 >> 18) % 100 / 125 }
     };
+    st2.leader.name = leaderName(st2, st2.leader.name, leaderRng(civ3, st2, "found"));
     civ3.states[id] = st2;
     for (const g of gs) g.stateId = id;
     if (gs.some((g) => g.player)) st2.player = true;
@@ -3622,7 +3699,7 @@
       if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4e3 * ls))) {
         const heir = st2.leader.heir;
         st2.interpDirty = true;
-        st2.leader = { name: ctx.nameGen?.person(civ3, civ3.groups[st2.capitalGroupId], rng) ?? makeNameJa(rng), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
+        st2.leader = { name: leaderName(st2, ctx.nameGen?.person(civ3, civ3.groups[st2.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ3, st2, "succ")), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
         st2.stability = Math.max(0, st2.stability - (heir ? 0.03 : 0.12));
         makeEvent(civ3, ids, { kind: "leader_succession", title: `${st2.name}\u306E\u6307\u5C0E\u8005\u304C\u4EE3\u308F\u3063\u305F${heir ? "\uFF08\u7D99\u627F\u8005\u304C\u6C7A\u307E\u3063\u3066\u3044\u305F\uFF09" : "\uFF08\u7D99\u627F\u306E\u6DF7\u4E71\uFF09"}`, participants: [{ entityId: st2.id, role: "state" }], location: { cell: cap.cell } });
       }
@@ -3776,7 +3853,24 @@
   }
   var languageOfGroup = (g) => g?.cohorts?.length ? g.cohorts.reduce((b, c) => c.share > b.share ? c : b).languageId : null;
   var nameLangOf = (g) => languageOfGroup(g);
+  function landSuffix(civ3, langId) {
+    const L = civ3.languages[langId];
+    if (!L) return "";
+    const h2 = hashSeed(L.id, "landsfx");
+    if (h2 % 100 < 60) {
+      const phon = ensureProfile(civ3, L.id);
+      return phon ? word(rngOf(h2), phon, 1 + (h2 >>> 8) % 2, 0.7) : "";
+    }
+    return L.parent && civ3.languages[L.parent] ? landSuffix(civ3, L.parent) : "";
+  }
   var nameGen = {
+    /** 国号と語根。語根は言語の音から（＋系統の語尾）、称号は政体から（王国・帝国・共和国…） */
+    stateParts: (civ3, cap, via, rng, polity = "tribal") => {
+      const l = languageOfGroup(cap);
+      if (!l) return null;
+      const base = nameFor(civ3, rng, l, "state") + landSuffix(civ3, l);
+      return { base, name: composeStateName(base, polity, via) };
+    },
     state: (civ3, cap, via, rng) => {
       const l = languageOfGroup(cap);
       return l ? nameFor(civ3, rng, l, "state") + VIA[via].suffix : null;
@@ -4585,7 +4679,13 @@
         eff(ef, st2, "polity", st2.polity, c.opt);
         st2.polity = c.opt;
         st2.interpDirty = true;
-        return { ok: true, facts: { stateId: st2.id, polity: c.opt }, effects: ef, title: `\u653F\u4F53\u3092${POLITY[c.opt]}\u3078` };
+        const rt = retitle(st2, c.opt);
+        if (rt) {
+          eff(ef, st2, "name", st2.name, rt.name);
+          st2.name = rt.name;
+          st2.nameBase = rt.base;
+        }
+        return { ok: true, facts: { stateId: st2.id, polity: c.opt, ...rt ? { name: rt.name } : {} }, effects: ef, title: `\u653F\u4F53\u3092${POLITY[c.opt]}\u3078${rt ? `\uFF08\u56FD\u53F7\u306F${rt.name}\uFF09` : ""}` };
       }
     },
     {
@@ -5668,7 +5768,7 @@
     return 0;
   }
   function stepIdeas(ctx, st2, wts, trade) {
-    const { civ: civ3, ids } = ctx, P2 = st2.politics, W = civ3.wcde, inf = {};
+    const { civ: civ3, ids } = ctx, P2 = st2.politics, W2 = civ3.wcde, inf = {};
     for (const k in P2.factions) inf[k] = wts[k] ?? 0;
     const ideas = P2.ideas ?? (P2.ideas = {}), accept = 0.5 + 0.5 * (st2.policy.tolerance ?? 0.5);
     const contacts = [.../* @__PURE__ */ new Set([...ctx.world?.mesh ? neighborStates(ctx, st2) : [], ...Object.keys(st2.econ?.trade ?? {})])].map((i) => civ3.states[i]).filter((o) => o?.alive && o.politics), ally = new Set(civ3.activeTreatyIds.map((i) => civ3.treaties[i]).filter((t) => t.type === "alliance" && (t.a === st2.id || t.b === st2.id)).map((t) => t.a === st2.id ? t.b : t.a));
@@ -5681,7 +5781,7 @@
       nv = clamp8(nv);
       if (nv < 0.03) delete ideas[id];
       else ideas[id] = Math.round(nv * 1e3) / 1e3;
-      const reg = W.ideas ?? (W.ideas = {});
+      const reg = W2.ideas ?? (W2.ideas = {});
       if (nv >= 0.35 && !reg[id]) {
         reg[id] = { at: civ3.monthIndex, stateId: st2.id };
         makeEvent(civ3, ids, { kind: "ideology_emerged", title: `${st2.name}\u3067\u300C${IDEAS[id].ja}\u300D\u304C\u5E83\u307E\u308A\u59CB\u3081\u305F`, participants: [{ entityId: st2.id, role: "state" }], facts: { idea: id, ja: IDEAS[id].ja, stateId: st2.id }, provenance: "simulation" });
@@ -5765,8 +5865,13 @@
     if (who === "commoners" && f.nobility) f.nobility.support = clamp8(f.nobility.support - 0.15);
     if (who === "military") f.military.support = clamp8(f.military.support + 0.1);
     const how = who === "commoners" ? before !== to ? "\u6C11\u8846\u306E\u8702\u8D77\u3067\u653F\u4F53\u304C\u5909\u308F\u3063\u305F" : "\u6C11\u8846\u306E\u8702\u8D77\u3067\u653F\u6A29\u304C\u5012\u308C\u305F" : before !== to ? "\u8ECD\u304C\u653F\u6A29\u3092\u63E1\u308A\u653F\u4F53\u304C\u5909\u308F\u3063\u305F" : "\u8ECD\u306B\u3088\u308B\u5BAE\u5EF7\u306E\u653F\u5909";
-    makeEvent(civ3, ids, { kind: "regime_change", title: `${st2.name}\u3067\u653F\u5909\u304C\u8D77\u304D\u305F\uFF08${how}\uFF09`, participants: [{ entityId: st2.id, role: "state" }], effects: [{ targetId: st2.id, property: "polity", before, after: to }, { targetId: st2.id, property: "stability", before: null, after: Math.round(st2.stability * 100) / 100 }], causes, facts: { stateId: st2.id, polity: to, name: st2.name, by: who }, provenance: "simulation" });
-    st2.leader = { name: ctx.nameGen?.person(civ3, civ3.groups[st2.capitalGroupId], ctx.rng) ?? `${st2.name}\u306E\u65B0\u6307\u5C0E\u8005`, bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ3, { capitalGroupId: st2.capitalGroupId })), heir: false, deposed: true, origin: who };
+    const oldName = st2.name, rt = before !== to ? retitle(st2, to) : null;
+    if (rt) {
+      st2.name = rt.name;
+      st2.nameBase = rt.base;
+    }
+    makeEvent(civ3, ids, { kind: "regime_change", title: `${oldName}\u3067\u653F\u5909\u304C\u8D77\u304D\u305F\uFF08${how}\uFF09${rt ? `\u3002\u56FD\u53F7\u306F${rt.name}\u3068\u6539\u307E\u3063\u305F` : ""}`, participants: [{ entityId: st2.id, role: "state" }], effects: [{ targetId: st2.id, property: "polity", before, after: to }, ...rt ? [{ targetId: st2.id, property: "name", before: oldName, after: rt.name }] : [], { targetId: st2.id, property: "stability", before: null, after: Math.round(st2.stability * 100) / 100 }], causes, facts: { stateId: st2.id, polity: to, name: st2.name, by: who }, provenance: "simulation" });
+    st2.leader = { name: leaderName(st2, ctx.nameGen?.person(civ3, civ3.groups[st2.capitalGroupId], ctx.rng) ?? `${st2.name}\u306E\u65B0\u6307\u5C0E\u8005`, leaderRng(civ3, st2, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ3, { capitalGroupId: st2.capitalGroupId })), heir: false, deposed: true, origin: who };
   }
 
   // js/core/wcde/domains/military.js
@@ -6013,7 +6118,7 @@
   var newHouse = (ctx, st2, founder) => {
     const { civ: civ3, ids } = ctx;
     const id = ids.next("house");
-    (civ3.houses ?? (civ3.houses = {}))[id] = { id, name: `${founder.name}\u5BB6`, foundedAt: civ3.monthIndex, stateId: st2.id, founderId: founder.id };
+    (civ3.houses ?? (civ3.houses = {}))[id] = { id, name: dynastyName(st2.polity, Object.values(civ3.houses).filter((x) => x.stateId === st2.id).length + 1, founder.name), foundedAt: civ3.monthIndex, stateId: st2.id, founderId: founder.id };
     return id;
   };
   function stepPeople(ctx) {
@@ -6039,6 +6144,7 @@
         cur.diedAt = mi;
         cur.history.push({ at: mi, kind: L.deposed ? "deposed" : "left_office" });
         if (heirFig && heirFig.diedAt == null && !L.deposed) {
+          heirFig.name = leaderName(st2, heirFig.name, leaderRng(civ3, st2, "enthrone"));
           L.name = heirFig.name;
           L.bornAt = heirFig.bornAt;
           cur = heirFig;
@@ -6056,7 +6162,7 @@
         nf.houseId = newHouse(ctx, st2, nf);
         st2.leaderFigureId = nf.id;
         st2.heirFigureId = null;
-        const ev = makeEvent(civ3, ids, { kind: "dynasty_changed", title: `${st2.name}\u3067\u738B\u671D\uFF08\u5BB6\u7CFB\uFF09\u304C\u4EE3\u308F\u3063\u305F\uFF08${old.name}\u5BB6\u304B\u3089${nf.name}\u5BB6\u3078\uFF09`, participants: [{ entityId: st2.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], effects: [{ targetId: st2.id, property: "leader.houseId", before: old.houseId, after: nf.houseId }], provenance: "simulation" });
+        const ev = makeEvent(civ3, ids, { kind: "dynasty_changed", title: `${st2.name}\u3067${civ3.houses[nf.houseId]?.name ?? "\u65B0\u738B\u671D"}\u304C\u6210\u7ACB\u3057\u305F\uFF08${civ3.houses[old.houseId]?.name ?? "\u5148\u306E\u738B\u671D"}\u306E${old.name}\u304C\u9000\u3044\u305F\uFF09`, participants: [{ entityId: st2.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], effects: [{ targetId: st2.id, property: "leader.houseId", before: old.houseId, after: nf.houseId }], provenance: "simulation" });
         continue;
       }
       if (!cur) {
@@ -6067,7 +6173,8 @@
       }
       if (L.heir && !st2.heirFigureId && cur.diedAt == null) {
         const grp = civ3.groups[st2.capitalGroupId], lang = languageOfGroup(grp), r = ctx.rng, ageGap = Math.max(AGE_MIN, 20 * 12 + Math.floor(r() * 120)), born = Math.min(mi - 12, cur.bornAt + ageGap);
-        const child = createFigure(ctx, st2, { name: (lang && civ3.languages[lang] ? nameFor(civ3, r, lang, "person") : null) ?? `${L.name}\u306E\u5B50`, bornAt: born, houseId: cur.houseId, parents: [cur.id], role: "heir" });
+        const fresh = (lang && civ3.languages[lang] ? nameFor(civ3, r, lang, "person") : null) ?? `${baseOfLeader(L.name)}\u306E\u5B50`, kin = leaderRng(civ3, st2, "heirname"), anc = kin() < 0.35 ? baseOfLeader(L.name) : fresh;
+        const child = createFigure(ctx, st2, { name: anc, bornAt: born, houseId: cur.houseId, parents: [cur.id], role: "heir" });
         cur.children.push(child.id);
         st2.heirFigureId = child.id;
         makeEvent(civ3, ids, { kind: "heir_named", title: `${st2.name}\u306E${cur.name}\u304C\u7D99\u627F\u8005${child.name}\u3092\u5B9A\u3081\u305F`, participants: [{ entityId: st2.id, role: "state" }, { entityId: cur.id, role: "parent" }, { entityId: child.id, role: "heir" }], provenance: "simulation" });
@@ -6243,10 +6350,30 @@
     if (!lang || !civ3.languages?.[lang]) return "\u540D\u3082\u306A\u304D\u5730";
     return nameFor(civ3, rngOf(hashSeed(civ3.historySeed, "place", g.id)), lang, "place") ?? "\u540D\u3082\u306A\u304D\u5730";
   }
-  var KANJI = ["", "", "\u4E8C", "\u4E09", "\u56DB", "\u4E94", "\u516D", "\u4E03", "\u516B", "\u4E5D"];
+  function siteFeatures(ctx, g) {
+    const ce = ctx.world.cell, c = g.cell, b = ce.biome[c];
+    return { river: !!ce.river[c], mountain: (ce.mountain?.[c] ?? 0) > 0 || b === BIOMES2.ALPINE, coast: ce.coastDist[c] <= 1, forest: b === BIOMES2.TEMPERATE_FOREST || b === BIOMES2.RAINFOREST || b === BIOMES2.TAIGA, wet: b === BIOMES2.WETLAND, dry: b === BIOMES2.HOT_DESERT || b === BIOMES2.COLD_DESERT, plain: b === BIOMES2.GRASSLAND || b === BIOMES2.SAVANNA };
+  }
   function battleName(ctx, w, kind, g) {
-    const { civ: civ3 } = ctx, p = placeName(ctx, g), base = { field: `${p}\u306E\u6226\u3044`, siege: `${p}\u5305\u56F2\u6226`, naval: `${p}\u6C96\u6D77\u6226`, landing: `${p}\u4E0A\u9678\u6226` }[kind] ?? `${p}\u306E\u6226\u3044`, n2 = w.ops.names[base] = (w.ops.names[base] ?? 0) + 1;
-    return n2 === 1 ? base : n2 <= 3 ? `\u7B2C${KANJI[n2]}\u6B21${base}` : `${civ3.date.year}\u5E74\u306E${base}`;
+    const { civ: civ3 } = ctx, p = placeName(ctx, g), used = civ3.battleNames ?? (civ3.battleNames = {}), ds = siteDescriptors(siteFeatures(ctx, g));
+    const cands = kind === "siege" ? [`${p}\u5305\u56F2\u6226`, `${p}\u653B\u57CE\u6226`, `${p}\u306E\u9665\u843D`] : kind === "naval" ? [`${p}\u6C96\u6D77\u6226`, `${p}\u6E7E\u306E\u6D77\u6226`, `${p}\u6D77\u5CE1\u306E\u6226\u3044`] : kind === "landing" ? [`${p}\u4E0A\u9678\u6226`, `${p}\u4E0A\u9678\u4F5C\u6226`] : [`${p}\u306E\u6226\u3044`, ...ds.map((d) => `${p}${d}\u306E\u6226\u3044`), `${p}\u4F1A\u6226`];
+    const r = U(civ3, w.id, civ3.monthIndex, g.id, kind, "bn"), start2 = cands.length > 1 && r >= 0.6 ? 1 + Math.floor((r - 0.6) / 0.4 * (cands.length - 1)) : 0;
+    for (let i = 0; i < cands.length; i++) {
+      const nm = cands[(start2 + i) % cands.length];
+      if (!used[nm]) {
+        used[nm] = 1;
+        return nm;
+      }
+    }
+    const base = cands[0], n2 = used[base] = (used[base] ?? 1) + 1;
+    return n2 <= 3 ? `\u7B2C${kanjiNum(n2)}\u6B21${base}` : `${civ3.date.year}\u5E74\u306E${base}`;
+  }
+  function fieldSite(ctx, w, camp, g) {
+    const { civ: civ3 } = ctx, ops = w.ops, recent = ops.sites ?? (ops.sites = []), cs = [g, ...[...neighborGroups(ctx, g)].map((o) => civ3.groups[o]).filter(Boolean)].sort((x, y) => x.id < y.id ? -1 : 1);
+    const fresh = cs.filter((x) => !recent.includes(x.cell)), pool = fresh.length ? fresh : cs, site = pool[Math.floor(U(civ3, w.id, civ3.monthIndex, camp.id, "site") * pool.length)];
+    recent.push(site.cell);
+    if (recent.length > 8) recent.shift();
+    return site;
   }
   var terrainBonus = (world, cell) => {
     const ce = world.cell, b = ce.biome[cell];
@@ -6257,6 +6384,10 @@
     w.ops = initOps();
     syncForces(ctx, w);
     ensureTheaters(ctx, w);
+    w.name ?? (w.name = warNameFor(ctx, w, () => {
+      const g = ctx.civ.groups[ctx.civ.states[w.defender]?.capitalGroupId], p = g ? placeName(ctx, g) : null;
+      return p && p !== "\u540D\u3082\u306A\u304D\u5730" ? p : null;
+    }));
   }
   var capCell = (civ3, st2) => civ3.groups[st2.capitalGroupId]?.cell ?? null;
   var commitOf = (w, st2) => clamp12(w.ops.direction[st2.id]?.commit ?? 0.75, 0.3, 1);
@@ -6589,7 +6720,7 @@
       return;
     }
     if (Dn && U(civ3, w.id, mi, camp.id, "eng") < (camp.kind === "siege" ? 0.25 : 0.45)) {
-      const r = fight(ctx, w, { kind: "field", A: F, D: Dn, camp, g });
+      const r = fight(ctx, w, { kind: "field", A: F, D: Dn, camp, g: fieldSite(ctx, w, camp, g) });
       camp.progress = clamp12(camp.progress + (r.win === "A" ? 0.3 : -0.25), 0, 1.2);
       if (r.win !== "A" && F.morale < 0.2) {
         camp.phase = "done";
@@ -6882,84 +7013,81 @@
     const t = timeOf(civ3);
     return !t.hold && t.speed > 0;
   };
-  var CRITICAL_SCORE = 85;
   var MAJOR_SCORE = 40;
-  var MAX_CRITICAL_PER_SCAN = 3;
-  var DEFAULT_NEWS_SETTINGS = Object.freeze({ criticalScore: CRITICAL_SCORE, majorScore: MAJOR_SCORE, sizeK: 15, maxPerScan: MAX_CRITICAL_PER_SCAN, kinds: {} });
-  var newsSettings = (civ3) => ({ ...DEFAULT_NEWS_SETTINGS, ...civ3.wcde.news?.settings ?? {}, kinds: { ...civ3.wcde.news?.settings?.kinds ?? {} } });
-  function configureNews(w, c = {}) {
-    const N2 = newsOf(w.civ), cur = newsSettings(w.civ), s = { ...cur }, fail4 = (error) => ({ ok: false, error }), num2 = (v, lo, hi) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
-    if (c.reset) {
-      delete N2.settings;
-      return { ok: true, settings: newsSettings(w.civ) };
-    }
-    if (c.criticalScore != null) {
-      if (!num2(c.criticalScore, 20, 300)) return fail4("\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u95BE\u5024\u306F 20\u301C300");
-      s.criticalScore = Math.round(c.criticalScore);
-    }
-    if (c.majorScore != null) {
-      if (!num2(c.majorScore, 0, 300)) return fail4("\u4E3B\u8981\u30CB\u30E5\u30FC\u30B9\u306E\u95BE\u5024\u306F 0\u301C300");
-      s.majorScore = Math.round(c.majorScore);
-    }
-    if (c.sizeK != null) {
-      if (!num2(c.sizeK, 0, 60)) return fail4("\u898F\u6A21\u306E\u52A0\u70B9\u306F 0\u301C60");
-      s.sizeK = c.sizeK;
-    }
-    if (c.maxPerScan != null) {
-      if (!num2(c.maxPerScan, 1, 20) || !Number.isInteger(c.maxPerScan)) return fail4("\u540C\u6642\u306B\u6B62\u3081\u308B\u4EF6\u6570\u306F 1\u301C20 \u306E\u6574\u6570");
-      s.maxPerScan = c.maxPerScan;
-    }
-    if (c.kinds) for (const [k, v] of Object.entries(c.kinds)) {
-      if (!(k in KIND) && k !== "catastrophe") return fail4(`\u300C${k}\u300D\u306F\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u5BFE\u8C61\u306E\u7A2E\u985E\u3067\u306F\u3042\u308A\u307E\u305B\u3093`);
-      if (v === null) delete s.kinds[k];
-      else if (!num2(v, 0, 300)) return fail4("\u7A2E\u985E\u3054\u3068\u306E\u57FA\u790E\u70B9\u306F 0\u301C300");
-      else s.kinds[k] = v;
-    }
-    if (s.majorScore > s.criticalScore) return fail4("\u4E3B\u8981\u30CB\u30E5\u30FC\u30B9\u306E\u95BE\u5024\u306F\u3001\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u95BE\u5024\u4EE5\u4E0B\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
-    N2.settings = s;
-    return { ok: true, settings: s };
+  var OWN_CRITICAL = /* @__PURE__ */ new Set(["state_dissolved", "war_declared", "war_ended", "ally_joined", "conquest", "regime_change", "state_formed"]);
+  var WORLD_WAR = Object.freeze({ minStates: 6, minPerSide: 2, minPopShare: 0.35 });
+  var SAME_KIND_COOLDOWN_EXEMPT = /* @__PURE__ */ new Set(["state_dissolved", "war_declared", "war_ended", "ally_joined"]);
+  function ownIds(civ3) {
+    const out = /* @__PURE__ */ new Set(), id = civ3.wcde.control?.stateId;
+    if (id) out.add(id);
+    const log3 = civ3.wcde.log ?? [];
+    for (let i = log3.length - 1; i >= 0 && log3[i].at >= civ3.monthIndex - 2; i--) if (log3[i].type === "control.lost" && log3[i].stateId) out.add(log3[i].stateId);
+    return out;
   }
+  function isWorldWar(civ3, war) {
+    if (!war) return false;
+    const alive = (ids) => ids.filter((i) => civ3.states[i]?.alive), a = alive(war.sides.a), d = alive(war.sides.d);
+    if (a.length < WORLD_WAR.minPerSide || d.length < WORLD_WAR.minPerSide || a.length + d.length < WORLD_WAR.minStates) return false;
+    let total = 0, inWar = 0;
+    for (const s of Object.values(civ3.states)) if (s.alive) total += s.pop;
+    for (const i of [...a, ...d]) inWar += civ3.states[i].pop;
+    return total > 0 && inWar / total >= WORLD_WAR.minPopShare;
+  }
+  var warIdOf = (ev) => ev.facts?.warId ?? ev.participants.find((p) => p.role === "war")?.entityId ?? null;
+  var worldWarTitle = (civ3, war) => {
+    const n2 = (x) => civ3.states[x]?.name ?? "?";
+    return `\u4E16\u754C\u5927\u6226: ${n2(war.aggressor)}\u3068${n2(war.defender)}\u306E\u6226\u4E89\u306B ${war.sides.a.length + war.sides.d.length} \u304B\u56FD\u304C\u53C2\u6226\u3057\u305F`;
+  };
   function newsContext(civ3) {
     const alive = Object.values(civ3.states).filter((s) => s.alive), total = alive.reduce((a, s) => a + s.pop, 0) || 1, n2 = Math.max(1, alive.length), rel = {};
     for (const s of Object.values(civ3.states)) rel[s.id] = s.pop / total * n2;
-    return { rel };
+    return { rel, own: ownIds(civ3) };
   }
   var KIND = { state_dissolved: 40, war_declared: 25, war_ended: 30, regime_change: 25, conquest: 35, state_formed: 20, religion_founded: 25, religion_schism: 20, famine: 15, disaster_struck: 15, climate_shift: 20, dynasty_changed: 15, culture_diverged: 10, language_diverged: 10, tech_lost: 20 };
+  var SIZE_K = 15;
   function classifyEvent(civ3, ev, cx = newsContext(civ3)) {
-    const set = newsSettings(civ3), SIZE = set.sizeK, lv = (score2) => ({ level: score2 >= set.criticalScore ? "critical" : score2 >= set.majorScore ? "major" : "normal", score: score2 });
-    if (ev.kind === "catastrophe") {
-      const m = ev.facts?.mortality ?? 0, ov = set.kinds.catastrophe;
-      if (ov === 0) return { level: "normal", score: 0 };
-      return lv(Math.round((ov ?? 70) + 40 * m + (ev.facts?.scope === "world" ? 20 : 0)));
+    const lv = (score2, extra = {}) => ({ level: score2 >= MAJOR_SCORE ? "major" : "normal", score: score2, ...extra });
+    {
+      const wid = ev.kind === "war_declared" ? warIdOf(ev) : null, war = wid ? civ3.wars[wid] : null;
+      if (war && civ3.wcde.news?.worldWars?.[wid] === ev.eventId) return { level: "critical", score: 200, title: worldWarTitle(civ3, war), reason: "world_war" };
     }
-    const base = set.kinds[ev.kind] ?? KIND[ev.kind];
-    if (base == null || base === 0) return { level: "normal", score: 0 };
+    if (ev.kind === "catastrophe") {
+      const m = ev.facts?.mortality ?? 0;
+      return lv(Math.round(70 + 40 * m + (ev.facts?.scope === "world" ? 20 : 0)));
+    }
+    const own = cx.own?.size && OWN_CRITICAL.has(ev.kind) && ev.participants.some((p) => cx.own.has(p.entityId));
+    const base = KIND[ev.kind];
+    if (base == null || base === 0) return own ? { level: "critical", score: 100, reason: "own" } : { level: "normal", score: 0 };
     const ids = ev.participants.map((p) => p.entityId).filter((i) => civ3.states[i]), sum = ids.reduce((a, i) => a + (cx.rel[i] ?? 0), 0), big = Math.max(0, ...ids.map((i) => cx.rel[i] ?? 0));
-    let score = base + SIZE * Math.log2(1 + sum);
-    if (ev.kind === "regime_change" || ev.kind === "dynasty_changed") score = base + SIZE * Math.log2(1 + big);
+    let score = base + SIZE_K * Math.log2(1 + sum);
+    if (ev.kind === "regime_change" || ev.kind === "dynasty_changed") score = base + SIZE_K * Math.log2(1 + big);
     if (ev.kind === "culture_diverged" || ev.kind === "language_diverged" || ev.kind === "famine" || ev.kind === "disaster_struck") score = Math.min(score, 69);
     score = Math.round(score);
+    if (own) return { level: "critical", score: Math.max(score, 100), reason: "own" };
     return lv(score);
   }
-  var newsItem = (civ3, ev, c) => ({ id: "news_" + ev.eventId, eventId: ev.eventId, date: ev.date, kind: ev.kind, title: ev.title, level: c.level, score: c.score, entityIds: [...new Set(ev.participants.map((p) => p.entityId))] });
+  var newsItem = (civ3, ev, c) => ({ id: "news_" + ev.eventId, eventId: ev.eventId, date: ev.date, kind: ev.kind, title: c.title ?? ev.title, level: c.level, score: c.score, entityIds: [...new Set(ev.participants.map((p) => p.entityId))] });
   function scanNews(civ3) {
     const N2 = newsOf(civ3), T3 = timeOf(civ3);
     if (N2.scanned > civ3.events.length) N2.scanned = civ3.events.length;
+    delete N2.settings;
     const cx = newsContext(civ3), fresh = [];
     for (let i = N2.scanned; i < civ3.events.length; i++) {
-      const ev = civ3.events[i], c = classifyEvent(civ3, ev, cx);
-      if (c.level === "critical") {
-        const keys = ev.participants.filter((p) => civ3.states[p.entityId]).map((p) => ev.kind + "|" + p.entityId), mi = civ3.monthIndex, last = N2.lastCrit ?? (N2.lastCrit = {});
-        if (keys.some((k) => last[k] != null && mi - last[k] < COOLDOWN)) {
-          c.level = "major";
-        } else for (const k of keys) last[k] = mi;
+      const ev = civ3.events[i];
+      if (ev.kind === "war_declared") {
+        const wid = warIdOf(ev), war = wid ? civ3.wars[wid] : null, ww = N2.worldWars ?? (N2.worldWars = {});
+        if (war && !ww[wid] && isWorldWar(civ3, war)) ww[wid] = ev.eventId;
+      }
+      const c = classifyEvent(civ3, ev, cx);
+      if (c.level === "critical" && c.reason === "own" && !SAME_KIND_COOLDOWN_EXEMPT.has(ev.kind)) {
+        const keys = ev.participants.filter((p) => cx.own.has(p.entityId)).map((p) => ev.kind + "|" + p.entityId), mi = civ3.monthIndex, last = N2.lastCrit ?? (N2.lastCrit = {});
+        if (keys.some((k) => last[k] != null && mi - last[k] < COOLDOWN)) c.level = "major";
+        else for (const k of keys) last[k] = mi;
       }
       if (c.level === "critical" && !N2.acked.includes(ev.eventId) && !N2.queue.some((q2) => q2.eventId === ev.eventId)) fresh.push(newsItem(civ3, ev, c));
     }
     N2.scanned = civ3.events.length;
     fresh.sort((a, b) => b.score - a.score || (a.eventId < b.eventId ? -1 : 1));
-    const cap = newsSettings(civ3).maxPerScan;
-    if (fresh.length > cap) fresh.length = cap;
     N2.queue.push(...fresh);
     if (N2.queue.length && !T3.hold) {
       T3.hold = true;
@@ -7031,10 +7159,6 @@
     return out;
   }
   function checkClock(civ3) {
-    {
-      const st2 = civ3.wcde.news?.settings;
-      if (st2 && !(st2.majorScore <= st2.criticalScore)) return ["\u30CB\u30E5\u30FC\u30B9\u306E\u57FA\u6E96\u304C\u4E0D\u6B63\uFF08\u4E3B\u8981\u306E\u95BE\u5024\u304C\u91CD\u5927\u3088\u308A\u5927\u304D\u3044\uFF09"];
-    }
     const errs = [], T3 = civ3.wcde.time, N2 = civ3.wcde.news;
     if (!T3 && !N2) return errs;
     if (T3) {
@@ -7154,12 +7278,12 @@
   // js/core/wcde/integrity.js
   var fin3 = (x) => typeof x === "number" && Number.isFinite(x);
   function checkWcdeIntegrity(world, civ3) {
-    const errs = [], W = civ3.wcde;
+    const errs = [], W2 = civ3.wcde;
     if (!civ3.options?.wcde) return errs;
     if (civ3.monthIndex % 12 === 0) errs.push(...checkArchive(civ3));
     const players = Object.values(civ3.states).filter((s) => s.alive && s.player);
     if (players.length > 1) errs.push(`\u62C5\u5F53\u56FD\u5BB6\u304C\u8907\u6570\u3042\u308B\uFF08${players.map((s) => s.id).join(",")}\uFF09`);
-    const cs = W?.control?.stateId ?? null;
+    const cs = W2?.control?.stateId ?? null;
     if (cs && !(civ3.states[cs]?.alive && civ3.states[cs].player)) errs.push(`\u62C5\u5F53\u56FD\u5BB6 ${cs} \u304C\u5B58\u5728\u3057\u306A\u3044\u30FB\u62C5\u5F53\u306E\u5370\u304C\u7121\u3044`);
     if (!cs && players.length) errs.push("\u62C5\u5F53\u304C\u7121\u3044\u306E\u306B\u3001\u62C5\u5F53\u306E\u5370\u304C\u4ED8\u3044\u305F\u56FD\u5BB6\u304C\u3042\u308B");
     if (civ3.player?.groupId != null) errs.push("WCDE \u306E\u4E16\u754C\u3067\u306F\u3001\u62C5\u5F53\u306F\u96C6\u56E3\u3067\u306F\u306A\u304F\u56FD\u5BB6\uFF08civ.player.groupId \u306F\u7A7A\uFF09");
@@ -7268,6 +7392,7 @@
   var FIELDS2 = {
     name: { get: (s) => s.name, set: (s, v) => {
       s.name = v;
+      s.nameBase = null;
     }, check: (v) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 30 ? v.trim() : null },
     polity: { get: (s) => s.polity, set: (s, v) => {
       s.polity = v;
@@ -7656,7 +7781,7 @@
     if (L.length > LOG_MAX) L.splice(0, L.length - LOG_MAX);
   }
   function dispatch(w, cmd) {
-    const { civ: civ3 } = w, W = civ3.wcde, spec = COMMANDS[cmd?.type];
+    const { civ: civ3 } = w, W2 = civ3.wcde, spec = COMMANDS[cmd?.type];
     const fail4 = (error, code = "rejected") => {
       log(civ3, { at: civ3.monthIndex, type: cmd?.type, authority: cmd?.authority, ok: false, error, code });
       return { ok: false, error, code };
@@ -7664,11 +7789,11 @@
     if (!spec) return fail4(`\u672A\u77E5\u306E\u547D\u4EE4: ${cmd?.type}`, "unknown");
     if (!Object.values(AUTHORITY).includes(cmd.authority)) return fail4(`\u672A\u77E5\u306E\u6A29\u9650: ${cmd.authority}`, "authority");
     if (!spec.authorities.includes(cmd.authority)) return fail4(`\u3053\u306E\u547D\u4EE4\u306F ${cmd.authority} \u3067\u306F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\uFF08\u8A31\u53EF: ${spec.authorities.join("\u30FB")}\uFF09`, "authority");
-    if (cmd.commandId != null && W.cmdIds.includes(cmd.commandId)) return { ok: true, duplicate: true };
+    if (cmd.commandId != null && W2.cmdIds.includes(cmd.commandId)) return { ok: true, duplicate: true };
     if (spec.mutates && w.viewPast != null) return fail4("\u904E\u53BB\u306E\u95B2\u89A7\u4E2D\u306F\u3001\u4E16\u754C\u3092\u5909\u3048\u308B\u547D\u4EE4\u3092\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\uFF08\u73FE\u5728\u3078\u623B\u3057\u3066\u304F\u3060\u3055\u3044\uFF09", "past_view");
-    if (!spec.phases.includes(W.phase)) return fail4(`\u3053\u306E\u547D\u4EE4\u306F\u6BB5\u968E\u300C${spec.phases.join("\u30FB")}\u300D\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059\uFF08\u73FE\u5728: ${W.phase}\uFF09`, "phase");
+    if (!spec.phases.includes(W2.phase)) return fail4(`\u3053\u306E\u547D\u4EE4\u306F\u6BB5\u968E\u300C${spec.phases.join("\u30FB")}\u300D\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059\uFF08\u73FE\u5728: ${W2.phase}\uFF09`, "phase");
     if (spec.control && cmd.authority === A.PLAYER) {
-      const cs = W.control.stateId;
+      const cs = W2.control.stateId;
       if (!cs) return fail4("\u62C5\u5F53\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u56FD\u5BB6\u3092\u62C5\u5F53\u3057\u3066\u304B\u3089\u547D\u4EE4\u3057\u3066\u304F\u3060\u3055\u3044\uFF09", "no_control");
       if (cmd.stateId == null) cmd = { ...cmd, stateId: cs };
       if (cmd.stateId !== cs) return fail4("\u62C5\u5F53\u56FD\u5BB6\u4EE5\u5916\u306B\u306F\u547D\u4EE4\u3067\u304D\u307E\u305B\u3093", "not_controlled");
@@ -7686,8 +7811,8 @@
     }
     if (!r || r.ok === false) return fail4(r?.error ?? "\u5931\u6557", "rejected");
     if (cmd.commandId != null) {
-      W.cmdIds.push(cmd.commandId);
-      if (W.cmdIds.length > ID_MAX) W.cmdIds.splice(0, W.cmdIds.length - ID_MAX);
+      W2.cmdIds.push(cmd.commandId);
+      if (W2.cmdIds.length > ID_MAX) W2.cmdIds.splice(0, W2.cmdIds.length - ID_MAX);
     }
     log(civ3, { at: civ3.monthIndex, type: cmd.type, authority: cmd.authority, ok: true, commandId: cmd.commandId ?? null });
     return { ok: true, result: r.result ?? r };
@@ -7904,7 +8029,6 @@
       const r = clockRun(w, c.months);
       return r.ok ? r : { ...r, ok: false };
     } });
-    defineCommand("news.configure", { authorities: [AUTHORITY.ADMIN, AUTHORITY.CREATOR], mutates: false, phases: ALL, apply: (w, c) => configureNews(w, c) });
     defineCommand("clock.setSpeed", { authorities: [AUTHORITY.ADMIN], mutates: false, phases: ALL, apply: (w, c) => setSpeed(w, c) });
     defineCommand("news.ack", { authorities: [AUTHORITY.ADMIN], mutates: false, phases: ALL, apply: (w, c) => ackNews(w, c) });
     defineCommand("view.past", { authorities: [AUTHORITY.ADMIN], mutates: false, phases: ALL, validate: (w, c) => c.month == null || Number.isInteger(c.month) && c.month <= w.civ.monthIndex ? null : { ok: false, error: "month \u306F\u73FE\u5728\u4EE5\u524D\u306E\u6574\u6570\u3001\u307E\u305F\u306F null\uFF08\u73FE\u5728\u3078\u623B\u308B\uFF09" }, apply: (w, c) => {
@@ -8211,7 +8335,7 @@ ${shown}${more}`;
 
   // js/ui/v6/store.js
   var S2 = { w: null, hub: null, sel: null, tab: "politics", map: null, timer: null, notice: "", q: "", tl: { type: "events", kind: "", text: "", entity: "", from: "", to: "" }, fileWarn: [], layerOpen: null, war: null, entity: { culture: null, language: null, religion: null }, tech: null, doc: null, fin: false, hooks: {} };
-  var LABEL = { "state.act": "\u56FD\u5BB6\u306E\u884C\u52D5", "state.reorganize": "\u7DE8\u5236\u306E\u5909\u66F4", "state.adoptDoctrine": "\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u53D6\u5F97", "diplomacy.peace": "\u8B1B\u548C\u306E\u7533\u3057\u5165\u308C", "war.direct": "\u6226\u4E89\u306E\u65B9\u91DD\u306E\u6307\u793A", "creator.intervene": "\u4ECB\u5165", "creator.catastrophe": "\u707D\u5384", "creator.editState": "\u56FD\u5BB6\u306E\u7DE8\u96C6", "creator.rename": "\u540D\u524D\u306E\u7DE8\u96C6", "creator.cancelIntervention": "\u4ECB\u5165\u306E\u53D6\u308A\u6D88\u3057", "control.take": "\u56FD\u5BB6\u306E\u62C5\u5F53", "control.release": "\u62C5\u5F53\u306E\u89E3\u9664", "news.configure": "\u30CB\u30E5\u30FC\u30B9\u306E\u57FA\u6E96\u306E\u5909\u66F4", "calendar.edit": "\u66A6\u306E\u8868\u793A\u540D\u306E\u5909\u66F4", "creator.techGrant": "\u6280\u8853\u306E\u4ED8\u4E0E" };
+  var LABEL = { "state.act": "\u56FD\u5BB6\u306E\u884C\u52D5", "state.reorganize": "\u7DE8\u5236\u306E\u5909\u66F4", "state.adoptDoctrine": "\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u53D6\u5F97", "diplomacy.peace": "\u8B1B\u548C\u306E\u7533\u3057\u5165\u308C", "war.direct": "\u6226\u4E89\u306E\u65B9\u91DD\u306E\u6307\u793A", "creator.intervene": "\u4ECB\u5165", "creator.catastrophe": "\u707D\u5384", "creator.editState": "\u56FD\u5BB6\u306E\u7DE8\u96C6", "creator.rename": "\u540D\u524D\u306E\u7DE8\u96C6", "creator.cancelIntervention": "\u4ECB\u5165\u306E\u53D6\u308A\u6D88\u3057", "control.take": "\u56FD\u5BB6\u306E\u62C5\u5F53", "control.release": "\u62C5\u5F53\u306E\u89E3\u9664", "calendar.edit": "\u66A6\u306E\u8868\u793A\u540D\u306E\u5909\u66F4", "creator.techGrant": "\u6280\u8853\u306E\u4ED8\u4E0E" };
   var tell = (c, r, quiet) => {
     const n2 = LABEL[c.type] ?? c.type;
     if (!r.ok) notify("error", `${n2}\u306B\u5931\u6557: ${r.error ?? "\u4E0D\u660E\u306A\u30A8\u30E9\u30FC"}`);
@@ -8322,17 +8446,17 @@ ${shown}${more}`;
       this.slotVerts = sv2;
     }
     /** 幅 W（高さは W/2）の画面に合わせて、頂点の位置と辺・区画の形を作り直す */
-    build(W, H) {
-      if (this.W === W && this.H === H) return;
-      this.W = W;
+    build(W2, H) {
+      if (this.W === W2 && this.H === H) return;
+      this.W = W2;
       this.H = H;
       this.ec = /* @__PURE__ */ new Map();
       this.cp = null;
       this.land = null;
-      const T3 = this.T, VX = new Float32Array(T3), VY = new Float32Array(T3), cellPx = Math.sqrt(W * H / this.N);
+      const T3 = this.T, VX = new Float32Array(T3), VY = new Float32Array(T3), cellPx = Math.sqrt(W2 * H / this.N);
       for (let v = 0; v < T3; v++) {
         const a = hash01(v, 1) * TAU2, r = JITTER * cellPx * (0.4 + 0.6 * hash01(v, 2));
-        VX[v] = (this.vlon[v] + Math.PI) / TAU2 * W + Math.cos(a) * r;
+        VX[v] = (this.vlon[v] + Math.PI) / TAU2 * W2 + Math.cos(a) * r;
         VY[v] = (Math.PI / 2 - this.vlat[v]) / Math.PI * H + Math.sin(a) * r;
       }
       this.VX = VX;
@@ -8359,10 +8483,10 @@ ${shown}${more}`;
       return q2;
     }
     _mk(lo, hi) {
-      const W = this.W, n2 = 1 << LEVELS, pts = new Float32Array((n2 + 1) * 2), x1 = this.VX[lo], y1 = this.VY[lo];
+      const W2 = this.W, n2 = 1 << LEVELS, pts = new Float32Array((n2 + 1) * 2), x1 = this.VX[lo], y1 = this.VY[lo];
       let x2 = this.VX[hi];
       const y2 = this.VY[hi];
-      x2 += W * Math.round((x1 - x2) / W);
+      x2 += W2 * Math.round((x1 - x2) / W2);
       pts[0] = x1;
       pts[1] = y1;
       pts[2 * n2] = x2;
@@ -8380,15 +8504,15 @@ ${shown}${more}`;
     }
     /** 折れ線 pts（x,y の並び）を path に加える。画面の左右端をまたぐものは ±W の写しも加える。close=true で閉じる */
     addPoly(path, pts, close) {
-      const W = this.W, n2 = pts.length / 2;
+      const W2 = this.W, n2 = pts.length / 2;
       let lo = 1e9, hi = -1e9;
       for (let i = 0; i < n2; i++) {
         const x = pts[2 * i];
         if (x < lo) lo = x;
         if (x > hi) hi = x;
       }
-      for (const dx of [0, W, -W]) {
-        if (hi + dx < 0 || lo + dx > W) continue;
+      for (const dx of [0, W2, -W2]) {
+        if (hi + dx < 0 || lo + dx > W2) continue;
         path.moveTo(pts[0] + dx, pts[1]);
         for (let i = 1; i < n2; i++) path.lineTo(pts[2 * i] + dx, pts[2 * i + 1]);
         if (close) path.closePath();
@@ -8396,18 +8520,18 @@ ${shown}${more}`;
     }
     /** 区画 c の輪郭（共有する辺を使うので、隣と必ず一致する）。極を囲む区画は、画面の上端・下端まで伸ばして閉じる */
     ring(c) {
-      const m = this.mesh, vo = m.cellVertexOffsets, vi = m.cellVertexIds, a0 = vo[c], cnt = vo[c + 1] - a0, W = this.W, H = this.H, out = [];
+      const m = this.mesh, vo = m.cellVertexOffsets, vi = m.cellVertexIds, a0 = vo[c], cnt = vo[c + 1] - a0, W2 = this.W, H = this.H, out = [];
       let lastX = 0, lastY = 0, firstX = 0, latSum = 0;
       for (let i = 0; i < cnt; i++) {
         const va = vi[a0 + i], vb = vi[a0 + (i + 1) % cnt], e = this.edge(va, vb), n2 = e.length / 2;
         latSum += this.vlat[va];
-        const shift = i === 0 ? 0 : Math.round((lastX - e[0]) / W) * W;
+        const shift = i === 0 ? 0 : Math.round((lastX - e[0]) / W2) * W2;
         for (let j = i === 0 ? 0 : 1; j < n2; j++) out.push(e[2 * j] + shift, e[2 * j + 1]);
         lastX = e[2 * (n2 - 1)] + shift;
         lastY = e[2 * (n2 - 1) + 1];
         if (i === 0) firstX = e[0];
       }
-      const wraps = Math.round((lastX - firstX) / W);
+      const wraps = Math.round((lastX - firstX) / W2);
       if (wraps !== 0) {
         const yEdge = latSum > 0 ? -2 : H + 2;
         out.push(lastX, yEdge, firstX, yEdge);
@@ -8524,7 +8648,7 @@ ${shown}${more}`;
   function riverPaths(geo, cell, isSea) {
     const { riverTo, riverFlow, river, landWater } = cell;
     if (!riverTo) return [];
-    const N2 = geo.N, W = geo.W, buckets = [new Path2D(), new Path2D(), new Path2D()], cen = geo.cen, fl = [];
+    const N2 = geo.N, W2 = geo.W, buckets = [new Path2D(), new Path2D(), new Path2D()], cen = geo.cen, fl = [];
     for (let c = 0; c < N2; c++) if (riverTo[c] >= 0 && landWater[c] === 1 && (river?.[c] > 0 || riverFlow?.[c] > 0)) fl.push(riverFlow?.[c] ?? 0);
     fl.sort((a, b) => a - b);
     const q2 = (p) => fl[Math.floor(fl.length * p)] ?? 0, t1 = q2(0.55), t2 = q2(0.88);
@@ -8533,14 +8657,14 @@ ${shown}${more}`;
       if (to < 0 || landWater[c] !== 1 || !(river?.[c] > 0 || riverFlow?.[c] > 0)) continue;
       const f = riverFlow?.[c] ?? 0, b = f >= t2 ? 2 : f >= t1 ? 1 : 0, [x1, y1] = geo.proj(cen[2 * c], cen[2 * c + 1]);
       let [x2, y2] = geo.proj(cen[2 * to], cen[2 * to + 1]);
-      x2 += W * Math.round((x1 - x2) / W);
+      x2 += W2 * Math.round((x1 - x2) / W2);
       if (isSea[to]) {
         x2 = (x1 + x2) / 2;
         y2 = (y1 + y2) / 2;
       }
       const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, dx = x2 - x1, dy = y2 - y1, len = Math.hypot(dx, dy) || 1, r = (hash01(c, to, 3) - 0.5) * 0.7 * len, cx = mx - dy / len * r, cy = my + dx / len * r;
-      for (const o of [0, W, -W]) {
-        if (Math.max(x1, x2) + o < 0 || Math.min(x1, x2) + o > W) continue;
+      for (const o of [0, W2, -W2]) {
+        if (Math.max(x1, x2) + o < 0 || Math.min(x1, x2) + o > W2) continue;
         buckets[b].moveTo(x1 + o, y1);
         buckets[b].quadraticCurveTo(cx + o, cy, x2 + o, y2);
       }
@@ -8697,8 +8821,8 @@ ${shown}${more}`;
       }, { passive: false });
     }
     clamp() {
-      const v = this.view, W = this.cv.width, H = this.cv.height;
-      v.x = Math.min(0, Math.max(W - W * v.k, v.x));
+      const v = this.view, W2 = this.cv.width, H = this.cv.height;
+      v.x = Math.min(0, Math.max(W2 - W2 * v.k, v.x));
       v.y = Math.min(0, Math.max(H - H * v.k, v.y));
     }
     interact() {
@@ -8712,26 +8836,26 @@ ${shown}${more}`;
     fastDraw() {
       const ctx = this.cv.getContext("2d");
       if (!ctx || !this.frame || !this.frameView) return false;
-      const v = this.view, f = this.frameView, r = v.k / f.k, W = this.cv.width, H = this.cv.height;
+      const v = this.view, f = this.frameView, r = v.k / f.k, W2 = this.cv.width, H = this.cv.height;
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.fillStyle = SEA_DEEP;
-      ctx.fillRect(0, 0, W, H);
+      ctx.fillRect(0, 0, W2, H);
       ctx.setTransform(r, 0, 0, r, v.x - f.x * r, v.y - f.y * r);
       ctx.drawImage(this.frame, 0, 0);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       return true;
     }
     size() {
-      const host = this.cv.parentElement, W = Math.max(480, Math.floor(host?.clientWidth || this.cv.getBoundingClientRect().width || 900)), H = Math.floor(W / 2);
-      if (this.cv.width !== W || this.cv.height !== H) {
-        this.cv.width = W;
+      const host = this.cv.parentElement, W2 = Math.max(480, Math.floor(host?.clientWidth || this.cv.getBoundingClientRect().width || 900)), H = Math.floor(W2 / 2);
+      if (this.cv.width !== W2 || this.cv.height !== H) {
+        this.cv.width = W2;
         this.cv.height = H;
         this.clamp();
       }
-      return [W, H];
+      return [W2, H];
     }
-    proj(lon, lat, W, H) {
-      return [(lon + Math.PI) / TAU3 * W, (Math.PI / 2 - lat) / Math.PI * H];
+    proj(lon, lat, W2, H) {
+      return [(lon + Math.PI) / TAU3 * W2, (Math.PI / 2 - lat) / Math.PI * H];
     }
     /* ---------- 世界の地形から 1 回だけ作るもの ---------- */
     terr() {
@@ -8769,11 +8893,11 @@ ${shown}${more}`;
       return this.T;
     }
     /** 画面の幅が変わったときだけ、形状まわりのキャッシュを作り直す */
-    ensureGeo(W, H) {
+    ensureGeo(W2, H) {
       const T3 = this.terr();
-      if (this.wKey === W) return;
-      this.wKey = W;
-      this.geo.build(W, H);
+      if (this.wKey === W2) return;
+      this.wKey = W2;
+      this.geo.build(W2, H);
       this.cp = this.geo.paths(T3.isSea);
       T3.marks = reliefMarks(this.geo, this.w.world.cell, T3.isSea);
       const ce = this.w.world.cell, g = this.geo;
@@ -8859,21 +8983,21 @@ ${shown}${more}`;
     }
     /* ---------- 描画 ---------- */
     /** layerPass: alpha が 1 未満の層は、別の紙に不透明で塗ってから重ねる（区画の継ぎ目が濃く出ないように） */
-    pass(target, W, H, alpha, paint) {
+    pass(target, W2, H, alpha, paint) {
       const v = this.view;
       if (alpha >= 0.995) {
         target.lineWidth = 0.9 / v.k;
         paint(target);
         return;
       }
-      this.tmp ?? (this.tmp = mkCanvas(W, H));
-      if (this.tmp.width !== W || this.tmp.height !== H) {
-        this.tmp.width = W;
+      this.tmp ?? (this.tmp = mkCanvas(W2, H));
+      if (this.tmp.width !== W2 || this.tmp.height !== H) {
+        this.tmp.width = W2;
         this.tmp.height = H;
       }
       const t = this.tmp.getContext("2d");
       t.setTransform(1, 0, 0, 1, 0, 0);
-      t.clearRect(0, 0, W, H);
+      t.clearRect(0, 0, W2, H);
       t.setTransform(v.k, 0, 0, v.k, v.x, v.y);
       t.lineJoin = "round";
       t.lineWidth = 0.9 / v.k;
@@ -8896,13 +9020,13 @@ ${shown}${more}`;
       }
     }
     /** 地形・気候（静的）: 海の深さ・海岸・陸・標高/バイオーム/気温/降水 */
-    renderGround(g, W, H) {
+    renderGround(g, W2, H) {
       const T3 = this.T, geo = this.geo, v = this.view, cp = this.cp, N2 = geo.N, cpx = geo.cellPx, seaIds = [], landIds = [];
       for (let c = 0; c < N2; c++) (T3.isSea[c] ? seaIds : landIds).push(c);
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.globalAlpha = 1;
       g.fillStyle = SEA_DEEP;
-      g.fillRect(0, 0, W, H);
+      g.fillRect(0, 0, W2, H);
       g.setTransform(v.k, 0, 0, v.k, v.x, v.y);
       g.lineJoin = "round";
       g.lineWidth = 0.9 / v.k;
@@ -8919,7 +9043,7 @@ ${shown}${more}`;
       g.fill(geo.land);
       for (const id of ["heightmap", "biomes", "temperature", "precipitation"]) if (this.layers.has(id)) {
         const col = this.cellColors(id);
-        this.pass(g, W, H, this.alpha[id], (t) => this.paintCells(t, landIds, (c) => col[c]));
+        this.pass(g, W2, H, this.alpha[id], (t) => this.paintCells(t, landIds, (c) => col[c]));
       }
       if (!T3.lakes) {
         const ce = this.w.world.cell;
@@ -8933,10 +9057,10 @@ ${shown}${more}`;
       g.stroke(T3.lakeEdge);
     }
     /** 陰影・山岳・紙の模様（静的）。透明な紙に描き、塗りの上に重ねる */
-    renderRelief(g, W, H) {
+    renderRelief(g, W2, H) {
       const T3 = this.T, v = this.view, cp = this.cp, N2 = this.geo.N;
       g.setTransform(1, 0, 0, 1, 0, 0);
-      g.clearRect(0, 0, W, H);
+      g.clearRect(0, 0, W2, H);
       g.setTransform(v.k, 0, 0, v.k, v.x, v.y);
       for (let c = 0; c < N2; c++) {
         if (T3.isSea[c]) continue;
@@ -8954,25 +9078,25 @@ ${shown}${more}`;
       }
       drawMarks(g, T3.marks, v.k);
     }
-    cached(slot, key, W, H, fn) {
+    cached(slot, key, W2, H, fn) {
       const c = this[slot];
       if (c && c.key === key) return c.cv;
-      const cv = c?.cv && c.cv.width === W && c.cv.height === H ? c.cv : mkCanvas(W, H), g = cv.getContext("2d");
-      fn(g, W, H);
+      const cv = c?.cv && c.cv.width === W2 && c.cv.height === H ? c.cv : mkCanvas(W2, H), g = cv.getContext("2d");
+      fn(g, W2, H);
       this[slot] = { key, cv };
       return cv;
     }
     draw() {
       const ctx = this.cv.getContext("2d");
       if (!ctx) return;
-      const [W, H] = this.size();
-      this.ensureGeo(W, H);
+      const [W2, H] = this.size();
+      this.ensureGeo(W2, H);
       const T3 = this.T, geo = this.geo, v = this.view, civ3 = this.w.civ, own = this.owner(), cell = this.w.world.cell;
-      const vk = `${W}|${v.k.toFixed(4)}|${v.x.toFixed(1)}|${v.y.toFixed(1)}`, gsig = vk + FILL_IDS.slice(0, 4).map((i) => this.layers.has(i) ? i + this.alpha[i] : "").join(",");
+      const vk = `${W2}|${v.k.toFixed(4)}|${v.x.toFixed(1)}|${v.y.toFixed(1)}`, gsig = vk + FILL_IDS.slice(0, 4).map((i) => this.layers.has(i) ? i + this.alpha[i] : "").join(",");
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
-      ctx.clearRect(0, 0, W, H);
-      ctx.drawImage(this.cached("gc", gsig, W, H, (g) => this.renderGround(g, W, H)), 0, 0);
+      ctx.clearRect(0, 0, W2, H);
+      ctx.drawImage(this.cached("gc", gsig, W2, H, (g) => this.renderGround(g, W2, H)), 0, 0);
       ctx.setTransform(v.k, 0, 0, v.k, v.x, v.y);
       ctx.lineJoin = "round";
       let maxDen = 1;
@@ -8980,7 +9104,7 @@ ${shown}${more}`;
         const d = g.pop / (g.cells?.length || 1);
         if (d > maxDen) maxDen = d;
       }
-      for (const [id, , grp] of LAYERS) if (grp === "social" && this.layers.has(id)) this.pass(ctx, W, H, this.alpha[id], (t) => {
+      for (const [id, , grp] of LAYERS) if (grp === "social" && this.layers.has(id)) this.pass(ctx, W2, H, this.alpha[id], (t) => {
         const cp = this.cp;
         for (const [c, g] of own) {
           if (cell.landWater[c] === 2) continue;
@@ -8994,33 +9118,33 @@ ${shown}${more}`;
       });
       if (this.layers.has("relief")) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.drawImage(this.cached("rc", vk, W, H, (g) => this.renderRelief(g, W, H)), 0, 0);
+        ctx.drawImage(this.cached("rc", vk, W2, H, (g) => this.renderRelief(g, W2, H)), 0, 0);
       }
       ctx.setTransform(v.k, 0, 0, v.k, v.x, v.y);
       ctx.lineJoin = "round";
       ctx.lineCap = "round";
-      this.lines(ctx, own, W, H);
+      this.lines(ctx, own, W2, H);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.globalAlpha = 1;
-      this.frame ?? (this.frame = mkCanvas(W, H));
-      if (this.frame.width !== W || this.frame.height !== H) {
-        this.frame.width = W;
+      this.frame ?? (this.frame = mkCanvas(W2, H));
+      if (this.frame.width !== W2 || this.frame.height !== H) {
+        this.frame.width = W2;
         this.frame.height = H;
       }
       const fx3 = this.frame.getContext("2d");
       fx3.setTransform(1, 0, 0, 1, 0, 0);
-      fx3.clearRect(0, 0, W, H);
+      fx3.clearRect(0, 0, W2, H);
       fx3.drawImage(this.cv, 0, 0);
       this.frameView = { x: v.x, y: v.y, k: v.k };
       void civ3;
       void geo;
     }
     /** 線・記号・文字（月ごとに変わるものを含む。毎回描く） */
-    lines(ctx, own, W, H) {
+    lines(ctx, own, W2, H) {
       const T3 = this.T, geo = this.geo, v = this.view, civ3 = this.w.civ, L = this.layers, k = v.k, sk = Math.sqrt(k), cen = geo.cen, ln = (a, b, p) => {
         const [x1, y1] = geo.proj(cen[2 * a], cen[2 * a + 1]);
         let [x2, y2] = geo.proj(cen[2 * b], cen[2 * b + 1]);
-        x2 += W * Math.round((x1 - x2) / W);
+        x2 += W2 * Math.round((x1 - x2) / W2);
         p.moveTo(x1, y1);
         p.lineTo(x2, y2);
       };
@@ -9035,7 +9159,7 @@ ${shown}${more}`;
           for (let la = -60; la <= 60; la += 30) {
             const [, y] = geo.proj(0, la * Math.PI / 180);
             p.moveTo(0, y);
-            p.lineTo(W, y);
+            p.lineTo(W2, y);
           }
           T3.grid = p;
         }
@@ -9169,11 +9293,11 @@ ${shown}${more}`;
         ctx.lineWidth = 2.4 / sk;
         ctx.stroke(p);
       }
-      if (L.has("labels")) this.drawLabels(ctx, own, W);
+      if (L.has("labels")) this.drawLabels(ctx, own, W2);
     }
-    drawLabels(ctx, own, W) {
+    drawLabels(ctx, own, W2) {
       const geo = this.geo, civ3 = this.w.civ, k = this.view.k;
-      if (this._labelsAt !== this._ownAt || this._labelsW !== W) {
+      if (this._labelsAt !== this._ownAt || this._labelsW !== W2) {
         const m = /* @__PURE__ */ new Map();
         for (const [c, g] of own) {
           const id = g.stateId;
@@ -9182,14 +9306,14 @@ ${shown}${more}`;
           let e = m.get(id);
           if (!e) m.set(id, e = { x0: x, sx: 0, sy: 0, n: 0 });
           let dx = x - e.x0;
-          dx -= W * Math.round(dx / W);
+          dx -= W2 * Math.round(dx / W2);
           e.sx += dx;
           e.sy += y;
           e.n++;
         }
         this._labels = [...m].map(([id, e]) => ({ id, x: e.x0 + e.sx / e.n, y: e.sy / e.n, n: e.n })).sort((a, b) => b.n - a.n);
         this._labelsAt = this._ownAt;
-        this._labelsW = W;
+        this._labelsW = W2;
       }
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
@@ -9204,8 +9328,8 @@ ${shown}${more}`;
         ctx.lineWidth = fs * 0.24;
         ctx.strokeStyle = "rgba(16,18,24,.78)";
         ctx.fillStyle = "#f7f2e4";
-        for (const o of [0, W, -W]) {
-          if (e.x + o < -40 || e.x + o > W + 40) continue;
+        for (const o of [0, W2, -W2]) {
+          if (e.x + o < -40 || e.x + o > W2 + 40) continue;
           ctx.strokeText(name, e.x + o, e.y);
           ctx.fillText(name, e.x + o, e.y);
         }
@@ -9243,7 +9367,7 @@ ${shown}${more}`;
       return [];
     }
     click(e) {
-      const r = this.cv.getBoundingClientRect(), v = this.view, x = ((e.clientX - r.left) * (this.cv.width / r.width) - v.x) / v.k, y = ((e.clientY - r.top) * (this.cv.height / r.height) - v.y) / v.k, W = this.cv.width, H = this.cv.height, lon = x / W * TAU3 - Math.PI, lat = Math.PI / 2 - y / H * Math.PI;
+      const r = this.cv.getBoundingClientRect(), v = this.view, x = ((e.clientX - r.left) * (this.cv.width / r.width) - v.x) / v.k, y = ((e.clientY - r.top) * (this.cv.height / r.height) - v.y) / v.k, W2 = this.cv.width, H = this.cv.height, lon = x / W2 * TAU3 - Math.PI, lat = Math.PI / 2 - y / H * Math.PI;
       let best = -1, bd = 9;
       for (let c = 0; c < this.geo.N; c++) {
         let dl = Math.abs(this.geo.cen[c * 2] - lon);
@@ -9263,8 +9387,8 @@ ${shown}${more}`;
   init_tech();
   init_techtree();
   var NODESTAGE = Object.fromEntries(TREE.map((t) => [t.id, t.stage]));
-  function panZoom(svg, W, H, { onChange = null } = {}) {
-    let vb = { x: 0, y: 0, w: W, h: H };
+  function panZoom(svg, W2, H, { onChange = null } = {}) {
+    let vb = { x: 0, y: 0, w: W2, h: H };
     const apply = () => {
       svg.setAttribute("viewBox", `${vb.x} ${vb.y} ${vb.w} ${vb.h}`);
       onChange?.({ ...vb });
@@ -9298,7 +9422,7 @@ ${shown}${more}`;
       vb = { ...v };
       apply();
     }, reset: () => {
-      vb = { x: 0, y: 0, w: W, h: H };
+      vb = { x: 0, y: 0, w: W2, h: H };
       apply();
     }, get moved() {
       return moved;
@@ -9325,12 +9449,12 @@ ${shown}${more}`;
       pos.set(x.id, { d, y: (pos.get(c[0].id).y + pos.get(c.at(-1).id).y) / 2 });
     };
     for (const r of kids.get(null) ?? []) place(r, 0);
-    const DX = 150, DY = 26, maxD = Math.max(0, ...[...pos.values()].map((p) => p.d)), W = 40 + (maxD + 1) * DX, H = Math.max(120, 30 + row * DY), svg = sv("svg", { class: "tree", viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "xMinYMin meet", style: "height:" + Math.min(380, Math.max(160, H)) + "px" });
+    const DX = 150, DY = 26, maxD = Math.max(0, ...[...pos.values()].map((p) => p.d)), W2 = 40 + (maxD + 1) * DX, H = Math.max(120, 30 + row * DY), svg = sv("svg", { class: "tree", viewBox: `0 0 ${W2} ${H}`, preserveAspectRatio: "xMinYMin meet", style: "height:" + Math.min(380, Math.max(160, H)) + "px" });
     for (const x of items) {
       const p = pos.get(x.id), q2 = x.parent && pos.get(x.parent);
       if (p && q2) svg.append(sv("path", { d: `M${20 + q2.d * DX + 120} ${20 + q2.y * DY}C${20 + q2.d * DX + 135} ${20 + q2.y * DY} ${20 + p.d * DX - 15} ${20 + p.y * DY} ${20 + p.d * DX} ${20 + p.y * DY}`, fill: "none", stroke: "#4a515c", "stroke-width": 1.2 }));
     }
-    const pz = panZoom(svg, W, H);
+    const pz = panZoom(svg, W2, H);
     for (const x of items) {
       const p = pos.get(x.id);
       if (!p) continue;
@@ -9342,8 +9466,8 @@ ${shown}${more}`;
     return svg;
   }
   function techTree({ techs, status, onPick, selected, lane = null, hit = null, vb0 = null, onView = null }) {
-    const g = layoutGrid(), NW = 128, NH = 24, CW = 196, RH = 34, X0 = 120, Y0 = 34, W = X0 + g.cols * CW + 20, H = Y0 + g.totalRows * RH + 20, byKey = new Map(techs.map((t) => [t.key, t]));
-    const svg = sv("svg", { class: "tree techgrid", viewBox: `0 0 ${W} ${H}`, style: "height:460px;touch-action:none" }), P2 = (t) => ({ x: X0 + g.pos[t.key].col * CW, y: Y0 + g.pos[t.key].row * RH });
+    const g = layoutGrid(), NW = 128, NH = 24, CW = 196, RH = 34, X0 = 120, Y0 = 34, W2 = X0 + g.cols * CW + 20, H = Y0 + g.totalRows * RH + 20, byKey = new Map(techs.map((t) => [t.key, t]));
+    const svg = sv("svg", { class: "tree techgrid", viewBox: `0 0 ${W2} ${H}`, style: "height:460px;touch-action:none" }), P2 = (t) => ({ x: X0 + g.pos[t.key].col * CW, y: Y0 + g.pos[t.key].row * RH });
     const COL = { adopted: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], known: ["#a58bd0", "#201a2e"], lost: ["#c97a6f", "#2a1614"], locked: ["#4a515c", "#14161a"] }, SYM = { adopted: "\u25A0", available: "\u25C6", known: "\u25C7", lost: "\u2715", locked: "\u25CB" };
     const eraOfCol = (c) => {
       const st2 = techs.filter((t) => t.col === c).map((t) => t.tier);
@@ -9362,7 +9486,7 @@ ${shown}${more}`;
     }
     LANES.forEach((l, i) => {
       const y = Y0 + g.y0[l.id] * RH - 6, hgt = g.rows[l.id] * RH;
-      svg.append(sv("rect", { x: 0, y, width: W, height: hgt, fill: i % 2 ? "#15181d" : "#12151a", opacity: lane && lane !== l.id ? 0.4 : 1 }), sv("text", { x: 8, y: y + hgt / 2 + 4, "font-size": 12, fill: lane === l.id ? "#d8b45a" : "#a1a6b0" }, `${l.glyph} ${l.ja}`.slice(0, 9)));
+      svg.append(sv("rect", { x: 0, y, width: W2, height: hgt, fill: i % 2 ? "#15181d" : "#12151a", opacity: lane && lane !== l.id ? 0.4 : 1 }), sv("text", { x: 8, y: y + hgt / 2 + 4, "font-size": 12, fill: lane === l.id ? "#d8b45a" : "#a1a6b0" }, `${l.glyph} ${l.ja}`.slice(0, 9)));
     });
     const ek = /* @__PURE__ */ new Map();
     for (const t of techs) {
@@ -9376,7 +9500,7 @@ ${shown}${more}`;
         svg.append(sv("path", { d: `M${a.x + NW} ${ay}H${bx}V${by}H${q2.x}`, fill: "none", stroke: dim ? "#2b3038" : status(pt) === "locked" ? "#3a414b" : "#6fa8c9", "stroke-width": selected && (selected === t.key || selected === pk) ? 2.2 : 1, opacity: dim ? 0.5 : 0.85 }));
       });
     }
-    const pz = panZoom(svg, W, H, { onChange: onView });
+    const pz = panZoom(svg, W2, H, { onChange: onView });
     for (const t of techs) {
       const p = P2(t), s = status(t), [stroke, fill] = COL[s], dim = lane && t.lane !== lane || hit && !hit.has(t.key);
       svg.append(sv("g", { class: "tnode", opacity: dim ? 0.3 : 1, onclick: () => {
@@ -9393,16 +9517,16 @@ ${shown}${more}`;
       const p = P2(t), w = 560, h2 = Math.min(H, w * 460 / 380);
       pz.set({ x: Math.max(0, p.x - w / 2 + NW / 2), y: Math.max(0, Math.min(H - h2, p.y - h2 / 2)), w, h: h2 });
     };
-    return { svg, COL, SYM, fit: () => pz.set({ x: 0, y: 0, w: W, h: H }), left: () => view2(0), frontier: () => view2(Math.max(0, frontier - 3)), focus };
+    return { svg, COL, SYM, fit: () => pz.set({ x: 0, y: 0, w: W2, h: H }), left: () => view2(0), frontier: () => view2(Math.max(0, frontier - 3)), focus };
   }
   function doctrineTree({ nodes: nodes2, branches, status, onPick, selected, vb0 = null, onView = null }) {
     const CW = 136, NW = 124, NH = 28, RH = 46, GAP = 28, X0 = 14, ROOT_Y = 8, BUS_Y = 52, HEAD_Y = 66, HEAD_H = 22, Y1 = 108;
     const common = branches.filter((b) => !b.special), special = branches.filter((b) => b.special), order = [...common, ...special], tiers = Math.max(1, ...nodes2.map((d) => d.tier));
     const colX = /* @__PURE__ */ new Map();
     order.forEach((b, i) => colX.set(b.id, X0 + i * CW + (i >= common.length ? GAP : 0)));
-    const W = X0 * 2 + order.length * CW + (special.length ? GAP : 0), H = Y1 + tiers * RH + 10, pos = /* @__PURE__ */ new Map(), cx = (b) => colX.get(b.id) + NW / 2;
-    const svg = sv("svg", { class: "tree doctree", viewBox: `0 0 ${W} ${H}`, style: "height:" + Math.min(480, H + 20) + "px;touch-action:none" });
-    const midX = W / 2, line = (d, o = {}) => svg.append(sv("path", { d, fill: "none", stroke: "#4a515c", "stroke-width": 1.2, ...o }));
+    const W2 = X0 * 2 + order.length * CW + (special.length ? GAP : 0), H = Y1 + tiers * RH + 10, pos = /* @__PURE__ */ new Map(), cx = (b) => colX.get(b.id) + NW / 2;
+    const svg = sv("svg", { class: "tree doctree", viewBox: `0 0 ${W2} ${H}`, style: "height:" + Math.min(480, H + 20) + "px;touch-action:none" });
+    const midX = W2 / 2, line = (d, o = {}) => svg.append(sv("path", { d, fill: "none", stroke: "#4a515c", "stroke-width": 1.2, ...o }));
     svg.append(sv("rect", { x: midX - 70, y: ROOT_Y, width: 140, height: 28, rx: 3, fill: "#1a1d23", stroke: "#d8b45a", "stroke-width": 1.8 }), sv("text", { x: midX, y: ROOT_Y + 19, "text-anchor": "middle", "font-size": 12, fill: "#d9d6cc" }, "\u25C6 \u8ECD\u4E8B\u30C9\u30AF\u30C8\u30EA\u30F3"));
     if (order.length) {
       line(`M${midX} ${ROOT_Y + 28}V${BUS_Y}`);
@@ -9430,7 +9554,7 @@ ${shown}${more}`;
       const ax = a.x + NW / 2, qx = q2.x + NW / 2, my = q2.y - 10 - (d.tier + p.length) % 3 * 2;
       line(ax === qx ? `M${ax} ${a.y + NH}V${q2.y}` : `M${ax} ${a.y + NH}V${my}H${qx}V${q2.y}`, { stroke: "#5a626e" });
     }
-    const pz = panZoom(svg, W, H, { onChange: onView }), COL = { taken: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], blocked: ["#4a515c", "#14161a"] }, SY = { taken: "\u25A0", available: "\u25C6", blocked: "\u25CB" };
+    const pz = panZoom(svg, W2, H, { onChange: onView }), COL = { taken: ["#6fa8c9", "#0f2a3a"], available: ["#d8b45a", "#2a2412"], blocked: ["#4a515c", "#14161a"] }, SY = { taken: "\u25A0", available: "\u25C6", blocked: "\u25CB" };
     for (const d of nodes2) {
       const p = pos.get(d.id);
       if (!p) continue;
@@ -9443,10 +9567,10 @@ ${shown}${more}`;
     const focus = (id) => {
       const p = pos.get(id);
       if (!p) return;
-      const w = Math.min(W, 520), h2 = Math.min(H, w * 3 / 4);
-      pz.set({ x: Math.max(0, Math.min(W - w, p.x + NW / 2 - w / 2)), y: Math.max(0, Math.min(H - h2, p.y - h2 / 3)), w, h: h2 });
+      const w = Math.min(W2, 520), h2 = Math.min(H, w * 3 / 4);
+      pz.set({ x: Math.max(0, Math.min(W2 - w, p.x + NW / 2 - w / 2)), y: Math.max(0, Math.min(H - h2, p.y - h2 / 3)), w, h: h2 });
     };
-    return { svg, COL, SYM: SY, fit: () => pz.set({ x: 0, y: 0, w: W, h: H }), focus, pos };
+    return { svg, COL, SYM: SY, fit: () => pz.set({ x: 0, y: 0, w: W2, h: H }), focus, pos };
   }
 
   // js/ui/v6/views-a.js
@@ -9501,7 +9625,7 @@ ${shown}${more}`;
       S2.showDead = e.target.checked;
       S2.hooks.panel();
     } }), " \u6EC5\u4EA1\u3057\u305F\u56FD\u5BB6\u3082\u8868\u793A")), note(`${list.length} \u4EF6\u3002\u30AF\u30EA\u30C3\u30AF\u3067\u8A73\u7D30\u3092\u958B\u304D\u307E\u3059\uFF08\u30AF\u30EA\u30C3\u30AF\u3060\u3051\u3067\u306F\u62C5\u5F53\u306F\u5909\u308F\u308A\u307E\u305B\u3093\uFF09\u3002`));
-    box.append(vlist(list, 26, (s) => h("div", { class: "vrow" + (S2.sel === s.id ? " on" : ""), onclick: () => S2.hooks.select(s.id) }, h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", { style: "color:var(--dim)" }, ` ${s.alive ? "\u4EBA\u53E3 " + n0(s.pop) : "\u6EC5\u4EA1"}\u30FB\u6210\u7ACB ${date(s.formedAt).split("\u6708")[0]}\u6708`))));
+    box.append(vlist(list, 40, (s) => h("div", { class: "vrow full" + (S2.sel === s.id ? " on" : ""), onclick: () => S2.hooks.select(s.id) }, h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", { style: "color:var(--dim)" }, ` ${s.alive ? "\u4EBA\u53E3 " + n0(s.pop) : "\u6EC5\u4EA1"}\u30FB\u6210\u7ACB ${date(s.formedAt).split("\u6708")[0]}\u6708`))));
     return box;
   }
   function stateDetail(st2) {
@@ -9775,6 +9899,161 @@ ${shown}${more}`;
         return h("div", { class: "dt" }, h("b", {}, sel.ja), `\uFF08${br?.ja ?? ""}\u30FB\u6BB5\u968E ${sel.tier}${sel.special ? "\u30FB\u56FA\u6709" : "\u30FB\u5171\u901A"}\uFF09`, h("br"), `\u52B9\u679C: ${fxText(sel)}\u30FB\u8CBB\u7528 ${sel.cost}`, h("br"), `\u524D\u63D0: ${sel.prereq.length ? sel.prereq.map((p) => nodeOf(st2, p)?.ja ?? p).join("\u3001") : "\u306A\u3057"}${sel.tech.length ? "\u3000\u6280\u8853: " + sel.tech.map((t) => TECH[t]?.name ?? t).join("\u3001") : ""}`, h("br"), taken[sel.id] != null ? "\u53D6\u5F97\u6E08\u307F" : ca.ok ? "\u53D6\u5F97\u3067\u304D\u307E\u3059" : `\u53D6\u5F97\u3067\u304D\u306A\u3044\u7406\u7531: ${ca.reason}`, h("div", { class: "rowb" }, btn("\u53D6\u308A\u5165\u308C\u308B", () => act({ type: "state.adoptDoctrine", stateId: st2.id, doctrineId: sel.id }), "p", { id: "adopt-doc", disabled: !mine || !ca.ok, title: mine ? "" : "\u62C5\u5F53\u56FD\u5BB6\u306E\u307F" })));
       })() : note("\u6728\u306E\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u52B9\u679C\u3068\u524D\u63D0\u304C\u51FA\u307E\u3059\u3002")
     );
+  }
+
+  // js/ui/v6/alliance.js
+  var W = 392;
+  var PH = 24;
+  var GAPX = 8;
+  var ROWGAP = 30;
+  var TOP = 18;
+  var MAX_MEMBERS = 24;
+  var MAX_BLOCS = 12;
+  var textWidth = (s) => [...String(s)].reduce((a, ch) => a + (ch.charCodeAt(0) < 256 ? 7 : 12.5), 0);
+  function allianceBlocs(civ3) {
+    const adj = /* @__PURE__ */ new Map(), edges = [];
+    const link2 = (a, b) => {
+      (adj.get(a) ?? adj.set(a, /* @__PURE__ */ new Set()).get(a)).add(b);
+    };
+    for (const i of civ3.activeTreatyIds) {
+      const t = civ3.treaties[i];
+      if (!t || t.type !== "alliance" || !civ3.states[t.a]?.alive || !civ3.states[t.b]?.alive) continue;
+      edges.push([t.a, t.b]);
+      link2(t.a, t.b);
+      link2(t.b, t.a);
+    }
+    const seen = /* @__PURE__ */ new Set(), blocs = [];
+    for (const id of [...adj.keys()].sort()) {
+      if (seen.has(id)) continue;
+      const members2 = [], q2 = [id];
+      seen.add(id);
+      while (q2.length) {
+        const x = q2.shift();
+        members2.push(x);
+        for (const y of [...adj.get(x)].sort()) if (!seen.has(y)) {
+          seen.add(y);
+          q2.push(y);
+        }
+      }
+      const deg = (x) => adj.get(x).size, pop = (x) => civ3.states[x].pop;
+      members2.sort((a, b) => deg(b) - deg(a) || pop(b) - pop(a) || (a < b ? -1 : 1));
+      blocs.push({ members: members2, leader: members2[0], pop: members2.reduce((a, x) => a + pop(x), 0), edges: edges.filter(([a, b]) => members2.includes(a)), deg });
+    }
+    blocs.sort((a, b) => b.members.length - a.members.length || b.pop - a.pop);
+    const of = /* @__PURE__ */ new Map();
+    blocs.forEach((b, k) => b.members.forEach((m) => of.set(m, k)));
+    const hostile = blocs.map(() => /* @__PURE__ */ new Map());
+    for (const wid of civ3.activeWarIds) {
+      const w = civ3.wars[wid];
+      if (!w) continue;
+      const ka = new Set(w.sides.a.map((x) => of.get(x)).filter((k) => k != null)), kd = new Set(w.sides.d.map((x) => of.get(x)).filter((k) => k != null));
+      for (const a of ka) for (const d of kd) if (a !== d) {
+        hostile[a].set(d, (hostile[a].get(d) ?? 0) + 1);
+        hostile[d].set(a, (hostile[d].get(a) ?? 0) + 1);
+      }
+    }
+    blocs.forEach((b, k) => {
+      b.hostile = [...hostile[k].entries()].map(([o, n2]) => ({ bloc: o, wars: n2 }));
+    });
+    return blocs;
+  }
+  var blocName = (civ3, bloc) => `${civ3.states[bloc.leader].name}\u570F`;
+  function layoutBloc(civ3, bloc) {
+    var _a;
+    const shown = bloc.members.slice(0, MAX_MEMBERS), set = new Set(shown), adj = new Map(shown.map((m) => [m, /* @__PURE__ */ new Set()]));
+    for (const [a, b] of bloc.edges) if (set.has(a) && set.has(b)) {
+      adj.get(a).add(b);
+      adj.get(b).add(a);
+    }
+    const depth = /* @__PURE__ */ new Map([[bloc.leader, 0]]), q2 = [bloc.leader];
+    while (q2.length) {
+      const x = q2.shift();
+      for (const y of adj.get(x)) if (!depth.has(y)) {
+        depth.set(y, depth.get(x) + 1);
+        q2.push(y);
+      }
+    }
+    for (const m of shown) if (!depth.has(m)) depth.set(m, 1 + Math.max(...depth.values()));
+    const layers = [];
+    for (const m of shown) (layers[_a = depth.get(m)] ?? (layers[_a] = [])).push(m);
+    const wOf = (id) => Math.min(W - 8, 24 + textWidth(civ3.states[id].name) + (id === bloc.leader ? 14 : 0)), pos = /* @__PURE__ */ new Map();
+    let row = 0;
+    for (const layer of layers.filter(Boolean)) {
+      layer.sort((a, b) => bloc.deg(b) - bloc.deg(a) || civ3.states[b].pop - civ3.states[a].pop || (a < b ? -1 : 1));
+      const rows = [];
+      let cur = [], cw = 0;
+      for (const id of layer) {
+        const w = wOf(id);
+        if (cur.length && cw + GAPX + w > W - 8) {
+          rows.push(cur);
+          cur = [];
+          cw = 0;
+        }
+        cw += (cur.length ? GAPX : 0) + w;
+        cur.push(id);
+      }
+      if (cur.length) rows.push(cur);
+      for (const r of rows) {
+        const tot = r.reduce((a, id, i) => a + wOf(id) + (i ? GAPX : 0), 0);
+        let x = (W - tot) / 2;
+        for (const id of r) {
+          const w = wOf(id);
+          pos.set(id, { x, y: TOP + row * (PH + ROWGAP), w, row });
+          x += w + GAPX;
+        }
+        row++;
+      }
+    }
+    return { pos, rows: row, height: TOP + row * (PH + ROWGAP) - ROWGAP + 8, hidden: bloc.members.length - shown.length, shown: set };
+  }
+  function drawBloc(civ3, bloc, L, onPick) {
+    const g = sv("svg", { viewBox: `0 0 ${W} ${L.height}`, width: "100%", class: "gr bloc", role: "img", "aria-label": `${blocName(civ3, bloc)}\u306E\u540C\u76DF\u95A2\u4FC2` });
+    for (const [a, b] of bloc.edges) {
+      const pa = L.pos.get(a), pb = L.pos.get(b);
+      if (!pa || !pb) continue;
+      const ax = pa.x + pa.w / 2, bx = pb.x + pb.w / 2;
+      let d;
+      if (pa.row === pb.row) d = `M${ax} ${pa.y} C${ax} ${pa.y - 20} ${bx} ${pb.y - 20} ${bx} ${pb.y}`;
+      else {
+        const [u, l] = pa.row < pb.row ? [pa, pb] : [pb, pa], ux = u.x + u.w / 2, lx = l.x + l.w / 2, y1 = u.y + PH, y2 = l.y;
+        d = `M${ux} ${y1} C${ux} ${y1 + ROWGAP * 0.65} ${lx} ${y2 - ROWGAP * 0.65} ${lx} ${y2}`;
+      }
+      g.append(sv("path", { d, fill: "none", stroke: "#6fa8c9", "stroke-width": 1.7, "stroke-opacity": 0.85 }));
+    }
+    for (const id of L.shown) {
+      const p = L.pos.get(id), s = civ3.states[id], lead = id === bloc.leader, war = (s.warIds?.length ?? 0) > 0;
+      g.append(sv(
+        "g",
+        { class: "fn", onclick: () => onPick(id) },
+        sv("title", {}, `${s.name}${lead ? "\uFF08\u76DF\u4E3B\uFF09" : ""}\u30FB\u540C\u76DF ${bloc.deg(id)} \u304B\u56FD\u30FB\u4EBA\u53E3 ${n0(s.pop)}${war ? "\u30FB\u4EA4\u6226\u4E2D" : ""}`),
+        sv("rect", { x: p.x, y: p.y, width: p.w, height: PH, rx: 3, fill: "#161a1f", stroke: war ? "#d0605a" : colorOf(id), "stroke-width": lead ? 2.4 : 1.5, "stroke-dasharray": war ? "4 2" : null }),
+        sv("circle", { cx: p.x + 11, cy: p.y + PH / 2, r: 4.5, fill: colorOf(id) }),
+        sv("text", { x: p.x + 21, y: p.y + PH / 2 + 4.2, "font-size": 12, fill: "#d9d6cc" }, lead ? sv("tspan", { fill: "#d8b45a" }, "\u2605 ") : null, s.name)
+      ));
+    }
+    return g;
+  }
+  function allianceDiagram(civ3, onPick) {
+    const blocs = allianceBlocs(civ3), box = h("div", { class: "blocs" });
+    if (!blocs.length) {
+      box.append(h("p", { class: "n" }, "\u540C\u76DF\u306F\u3042\u308A\u307E\u305B\u3093"));
+      return box;
+    }
+    const members2 = blocs.reduce((a, b) => a + b.members.length, 0), clashes = blocs.reduce((a, b) => a + b.hostile.length, 0) / 2;
+    box.append(h("p", { class: "n" }, `\u540C\u76DF\u3067\u3064\u306A\u304C\u3063\u305F\u56FD\u3092 1 \u3064\u306E\u9663\u55B6\uFF08\u570F\uFF09\u3068\u3057\u3066\u307E\u3068\u3081\u3066\u3044\u307E\u3059\u3002\u9663\u55B6 ${blocs.length} \u3064\u30FB\u52A0\u76DF ${members2} \u304B\u56FD${clashes ? `\u30FB\u9663\u55B6\u3069\u3046\u3057\u306E\u5BFE\u7ACB ${clashes} \u7D44` : ""}\u3002\u4E0A\u306E\u6BB5\u307B\u3069\u76DF\u4E3B\uFF08\u2605\uFF09\u306B\u8FD1\u304F\u3001\u9752\u3044\u7DDA\u304C\u540C\u76DF\u3001\u8D64\u3044\u7834\u7DDA\u306E\u672D\u306F\u4EA4\u6226\u4E2D\u306E\u56FD\u3067\u3059\u3002`));
+    for (const bloc of blocs.slice(0, MAX_BLOCS)) {
+      const L = layoutBloc(civ3, bloc), foes = bloc.hostile.map((x) => `${blocName(civ3, blocs[x.bloc])}\uFF08${x.wars} \u4EF6\uFF09`);
+      box.append(h(
+        "div",
+        { class: "card bloc-card" },
+        h("div", { class: "bh" }, h("b", {}, blocName(civ3, bloc)), h("small", {}, ` ${bloc.members.length}\u304B\u56FD\u30FB\u4EBA\u53E3 ${n0(bloc.pop)}`)),
+        foes.length ? h("div", { class: "bw" }, `\u4EA4\u6226\u4E2D: ${foes.join("\u30FB")}`) : null,
+        drawBloc(civ3, bloc, L, onPick),
+        L.hidden > 0 ? h("small", { style: "color:var(--dim)" }, `\u307B\u304B ${L.hidden} \u304B\u56FD\uFF08\u540C\u76DF\u306E\u5C11\u306A\u3044\u56FD\u306F\u7701\u7565\uFF09`) : null
+      ));
+    }
+    if (blocs.length > MAX_BLOCS) box.append(h("p", { class: "n" }, `\u307B\u304B ${blocs.length - MAX_BLOCS} \u3064\u306E\u9663\u55B6\uFF08\u5C0F\u3055\u3044\u9806\u306B\u7701\u7565\uFF09`));
+    return box;
   }
 
   // js/ui/v6/views-b.js
@@ -10441,7 +10720,7 @@ ${es.map(([a, b]) => `  ${n2.get(a)} --> ${n2.get(b)}`).join("\n")}
 `;
   }
   async function mapImages(world, civ3, opts) {
-    const W = 1024, H = 512, c = world.cell, cellAt = opts.cellRaster(world, W, H);
+    const W2 = 1024, H = 512, c = world.cell, cellAt = opts.cellRaster(world, W2, H);
     const BC = [[20, 50, 110], [235, 240, 245], [160, 175, 150], [60, 105, 80], [60, 140, 70], [150, 180, 80], [225, 195, 120], [190, 180, 160], [190, 175, 80], [90, 150, 50], [20, 100, 40], [130, 120, 120], [80, 130, 120], [70, 130, 200]];
     const base = (ci) => {
       const b = c.biome[ci], e = c.elevation[ci];
@@ -10456,8 +10735,8 @@ ${es.map(([a, b]) => `  ${n2.get(a)} --> ${n2.get(b)}`).join("\n")}
       return col;
     };
     const files = [], render2 = async (name, ownerMap) => {
-      const px = new Uint8Array(W * H * 4);
-      for (let i = 0; i < W * H; i++) {
+      const px = new Uint8Array(W2 * H * 4);
+      for (let i = 0; i < W2 * H; i++) {
         const ci = cellAt[i];
         let col = base(ci);
         const o = ownerMap?.get(ci);
@@ -10470,7 +10749,7 @@ ${es.map(([a, b]) => `  ${n2.get(a)} --> ${n2.get(b)}`).join("\n")}
         px[4 * i + 2] = col[2];
         px[4 * i + 3] = 255;
       }
-      files.push({ name, png: await encodePng(px, W, H) });
+      files.push({ name, png: await encodePng(px, W2, H) });
     };
     await render2("\u5730\u5F62.png", null);
     if (civ3.history && Object.keys(civ3.history.states).length) {
@@ -10553,19 +10832,23 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     const c = civ2(), all = Object.values(c.wars).sort((a, b) => b.startedAt - a.startedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, ...head("WAR", "\u6226\u4E89"));
     const sel = c.wars[S2.war];
     if (sel) box.append(warDetail(sel));
-    box.append(lb("\u6226\u4E89\u4E00\u89A7", "\u65B0\u3057\u3044\u9806"), note2(`\u9032\u884C\u4E2D ${c.activeWarIds.length}\u30FB\u5168\u4F53 ${all.length} \u4EF6`), vlist(all, 28, (x) => h("div", { class: "vrow", onclick: () => {
+    box.append(lb("\u6226\u4E89\u4E00\u89A7", "\u65B0\u3057\u3044\u9806"), note2(`\u9032\u884C\u4E2D ${c.activeWarIds.length}\u30FB\u5168\u4F53 ${all.length} \u4EF6`), vlist(all, 40, (x) => h("div", { class: "vrow full", onclick: () => {
       S2.war = x.id;
       S2.hooks.panel();
-    } }, h("small", { style: "color:var(--dim)" }, x.status === "active" ? "\u9032\u884C\u4E2D " : "\u7D42\u7D50 "), `${stateName(x.aggressor)} \u5BFE ${stateName(x.defender)}`, h("small", { style: "color:var(--dim)" }, ` ${date2(x.startedAt).split("\u6708")[0]}\u6708\u301C`))));
+    } }, h("small", { style: "color:var(--dim)" }, x.status === "active" ? "\u9032\u884C\u4E2D " : "\u7D42\u7D50 "), warTitle(x), h("small", { style: "color:var(--dim)" }, ` ${date2(x.startedAt).split("\u6708")[0]}\u6708\u301C`))));
     return box;
   }
+  var warTitle = (x) => {
+    const s = `${stateName(x.aggressor)} \u5BFE ${stateName(x.defender)}`;
+    return x.name ? `${x.name}\uFF08${s}\uFF09` : s;
+  };
   function warDetail(x) {
     const c = civ2(), mine = controlled(), side = [...x.sides.a, ...x.sides.d].includes(mine), key = (e) => e.participants.some((p) => p.entityId === x.id), ev = c.events.filter((e) => key(e)).slice(-12), peace = proposalsOf(c).filter((p) => p.kind === "peace" && p.warId === x.id).slice(-4).reverse();
     const kind = h("select", { id: "peace-kind" }, h("option", { value: "white" }, "\u767D\u7D19\u8B1B\u548C"), h("option", { value: "reparations" }, "\u8CE0\u511F\u3064\u304D")), amt = h("input", { id: "peace-amt", type: "number", placeholder: "\u8CE0\u511F\u984D", style: "width:90px" });
     return h(
       "div",
       { class: "rs" },
-      h("div", { class: "card br" }, h("h3", {}, `${stateName(x.aggressor)} \u5BFE ${stateName(x.defender)}`), h("div", { class: "sub" }, `${x.status === "active" ? "\u9032\u884C\u4E2D" : "\u7D42\u7D50\uFF08" + (OUT[x.outcome] ?? x.outcome) + "\uFF09"}\u30FB\u958B\u6226 ${date2(x.startedAt)}${x.endedAt != null ? "\u30FB\u7D42\u6226 " + date2(x.endedAt) : ""}\u30FB\u6226\u6CC1 ${x.score > 0 ? "\u653B\u6483\u5074\u304C\u512A\u52E2" : x.score < 0 ? "\u9632\u5FA1\u5074\u304C\u512A\u52E2" : "\u62EE\u6297"}\uFF08${r23(x.score)}\uFF09\u30FB\u5360\u9818 ${x.occupied.length} \u533A\u753B`)),
+      h("div", { class: "card br" }, h("h3", {}, warTitle(x)), h("div", { class: "sub" }, `${x.status === "active" ? "\u9032\u884C\u4E2D" : "\u7D42\u7D50\uFF08" + (OUT[x.outcome] ?? x.outcome) + "\uFF09"}\u30FB\u958B\u6226 ${date2(x.startedAt)}${x.endedAt != null ? "\u30FB\u7D42\u6226 " + date2(x.endedAt) : ""}\u30FB\u6226\u6CC1 ${x.score > 0 ? "\u653B\u6483\u5074\u304C\u512A\u52E2" : x.score < 0 ? "\u9632\u5FA1\u5074\u304C\u512A\u52E2" : "\u62EE\u6297"}\uFF08${r23(x.score)}\uFF09\u30FB\u5360\u9818 ${x.occupied.length} \u533A\u753B`)),
       lb("\u4E3B\u8981\u7D4C\u904E\uFF08\u4E8B\u5B9F\uFF09", "FACTS"),
       ...ev.length ? ev.map((e) => h("div", { class: "ev" }, h("time", {}, `${e.date.year}\u5E74${e.date.month}\u6708`), e.title)) : [note2("\u8A18\u9332\u3055\u308C\u305F\u51FA\u6765\u4E8B\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093")],
       warOps(x, mine, side),
@@ -10593,21 +10876,14 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       return t.type === "alliance" && (t.a === a.id && t.b === b.id || t.a === b.id && t.b === a.id);
     });
     const relCol = (v) => v >= 40 ? "#6fa8c9" : v >= 10 ? "#9fbf8a" : v > -10 ? "#6a6f78" : v > -40 ? "#d8b45a" : "#d0605a";
-    const mx = h("table", { class: "mx" }, h("tr", {}, h("th", { class: "rh" }), ...top.map((s) => h("th", {}, s.name.slice(0, 3)))), ...top.map((a) => h("tr", {}, h("th", { class: "rh", onclick: () => S2.hooks.select(a.id) }, h("span", { class: "dot", style: `background:${colorOf(a.id)};display:inline-block` }), a.name.slice(0, 3)), ...top.map((b) => {
+    const mx = h("table", { class: "mx" }, h("tr", {}, h("th", { class: "rh" }), ...top.map((s) => h("th", { class: "colh", title: s.name }, s.name))), ...top.map((a) => h("tr", {}, h("th", { class: "rh", onclick: () => S2.hooks.select(a.id) }, h("span", { class: "dot", style: `background:${colorOf(a.id)};display:inline-block` }), a.name), ...top.map((b) => {
       if (a === b) return h("td", { class: "dg" }, "\u2014");
       const v = Math.round(a.relations[b.id] ?? 0), w = at2(a, b), al = ally(a, b);
       return h("td", { class: "rc" + (w ? " war" : ""), style: `background-color:${relCol(v)}33`, title: `${a.name}\u2192${b.name}: \u95A2\u4FC2 ${v}${w ? "\u30FB\u4EA4\u6226\u4E2D" : ""}${al ? "\u30FB\u540C\u76DF" : ""}` }, w ? "\u6226" : al ? "\u76DF" : v);
     }))));
-    const nodes2 = [...new Set(c.activeTreatyIds.map((i) => c.treaties[i]).filter((t) => t.type === "alliance").flatMap((t) => [t.a, t.b]))].filter((i) => c.states[i]?.alive).slice(0, 16), P2 = new Map(nodes2.map((id, i) => [id, [250 + 120 * Math.cos(Math.PI * 2 * i / nodes2.length - Math.PI / 2), 150 + 105 * Math.sin(Math.PI * 2 * i / nodes2.length - Math.PI / 2)]]));
-    const g = sv("svg", { viewBox: "0 0 500 310", width: "100%", class: "gr" });
-    for (const i of c.activeTreatyIds) {
-      const t = c.treaties[i];
-      if (t.type !== "alliance" || !P2.has(t.a) || !P2.has(t.b)) continue;
-      g.append(sv("line", { x1: P2.get(t.a)[0], y1: P2.get(t.a)[1], x2: P2.get(t.b)[0], y2: P2.get(t.b)[1], stroke: "#6fa8c9", "stroke-width": 3 }));
-    }
-    for (const [id, [x, y]] of P2) g.append(sv("g", { class: "fn", onclick: () => S2.hooks.select(id) }, sv("circle", { cx: x, cy: y, r: 14, fill: colorOf(id), stroke: "#14161a", "stroke-width": 2 }), sv("text", { x, y: y + 30, "text-anchor": "middle", "font-size": 11, fill: "#d9d6cc" }, stateName(id).slice(0, 5))));
+    const g = allianceDiagram(c, (id) => S2.hooks.select(id));
     const tr = c.activeTreatyIds.map((i) => c.treaties[i]).sort((a, b) => b.signedAt - a.signedAt), recent = proposalsOf(c).slice(-12).reverse();
-    return h("div", {}, ...head("DIPLOMACY", "\u4E16\u754C\u306E\u5916\u4EA4"), lb("\u95A2\u4FC2\u8868\uFF08\u4EBA\u53E3\u4E0A\u4F4D 10 \u304B\u56FD\uFF09", "RELATIONS"), note2("\u884C\u304C\u4E3B\u4F53\u3001\u5217\u304C\u76F8\u624B\u3002\u6570\u5024\u306F\u95A2\u4FC2\u5024\u3001\u300C\u6226\u300D\u306F\u4EA4\u6226\u4E2D\u3001\u300C\u76DF\u300D\u306F\u540C\u76DF\u3002\u8272\u306F\u95A2\u4FC2\u306E\u826F\u3057\u60AA\u3057\uFF08\u6570\u5024\u3068\u8A18\u53F7\u3082\u4F75\u8A18\uFF09\u3002"), mx, lb("\u540C\u76DF\u95A2\u4FC2", "ALLIANCES"), nodes2.length ? g : note2("\u540C\u76DF\u306F\u3042\u308A\u307E\u305B\u3093"), lb("\u7DE0\u7D50\u6E08\u307F\u306E\u6761\u7D04\uFF08\u65B0\u3057\u3044\u9806\uFF09", "TREATIES"), note2(`${tr.length} \u4EF6`), vlist(tr, 26, (t) => h("div", { class: "vrow" }, h("small", { style: "color:var(--dim)" }, `${date2(t.signedAt).split("\u6708")[0]}\u6708 `), `${TREATY[t.type]?.ja ?? t.type}: ${stateName(t.a)}\u30FB${stateName(t.b)}`)), lb("\u6700\u8FD1\u306E\u4EA4\u6E09", "NEGOTIATIONS"), ...recent.map((p) => h("div", { class: "row" }, h("span", { class: "g" }, `${p.kind === "peace" ? "\u8B1B\u548C" : TREATY[p.type]?.ja} ${stateName(p.from)}\u2192${stateName(p.to)}`), h("small", {}, { accepted: "\u6210\u7ACB", rejected: "\u62D2\u5426", countered: "\u5225\u6761\u4EF6", failed_recheck: "\u4E0D\u6210\u7ACB" }[p.status]))));
+    return h("div", {}, ...head("DIPLOMACY", "\u4E16\u754C\u306E\u5916\u4EA4"), lb("\u95A2\u4FC2\u8868\uFF08\u4EBA\u53E3\u4E0A\u4F4D 10 \u304B\u56FD\uFF09", "RELATIONS"), note2("\u884C\u304C\u4E3B\u4F53\u3001\u5217\u304C\u76F8\u624B\u3002\u6570\u5024\u306F\u95A2\u4FC2\u5024\u3001\u300C\u6226\u300D\u306F\u4EA4\u6226\u4E2D\u3001\u300C\u76DF\u300D\u306F\u540C\u76DF\u3002\u8272\u306F\u95A2\u4FC2\u306E\u826F\u3057\u60AA\u3057\uFF08\u6570\u5024\u3068\u8A18\u53F7\u3082\u4F75\u8A18\uFF09\u3002"), mx, lb("\u540C\u76DF\u95A2\u4FC2", "ALLIANCES"), g, lb("\u7DE0\u7D50\u6E08\u307F\u306E\u6761\u7D04\uFF08\u65B0\u3057\u3044\u9806\uFF09", "TREATIES"), note2(`${tr.length} \u4EF6`), vlist(tr, 40, (t) => h("div", { class: "vrow full" }, h("small", { style: "color:var(--dim);flex:none" }, `${date2(t.signedAt).split("\u6708")[0]}\u6708 `), h("span", {}, `${TREATY[t.type]?.ja ?? t.type}: ${stateName(t.a)}\u30FB${stateName(t.b)}`))), lb("\u6700\u8FD1\u306E\u4EA4\u6E09", "NEGOTIATIONS"), ...recent.map((p) => h("div", { class: "row" }, h("span", { class: "g" }, `${p.kind === "peace" ? "\u8B1B\u548C" : TREATY[p.type]?.ja} ${stateName(p.from)}\u2192${stateName(p.to)}`), h("small", {}, { accepted: "\u6210\u7ACB", rejected: "\u62D2\u5426", countered: "\u5225\u6761\u4EF6", failed_recheck: "\u4E0D\u6210\u7ACB" }[p.status]))));
   }
   var KINDS = { culture: ["cultures", "\u6587\u5316", "CULTURE"], language: ["languages", "\u8A00\u8A9E", "LANGUAGE"], religion: ["religions", "\u5B97\u6559", "RELIGION"] };
   function pEntity(kind) {
@@ -10744,7 +11020,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
         S2.hooks.render();
       });
     });
-    for (const w of Object.values(c.wars)) put2("\u6226\u4E89", w.id, `${stateName(w.aggressor)}\u5BFE${stateName(w.defender)}`, () => {
+    for (const w of Object.values(c.wars)) put2("\u6226\u4E89", w.id, warTitle(w), () => {
       S2.war = w.id;
       S2.hub = "war";
       S2.hooks.render();
@@ -10792,16 +11068,6 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     const log3 = (c.wcde.catastrophes ?? []).slice(-4).reverse();
     return h("div", {}, lb("\u5275\u9020\u4E3B\u306E\u707D\u5384", "CATASTROPHE"), note2("\u5927\u304D\u306A\u707D\u5384\u3092\u8D77\u3053\u3057\u307E\u3059\u3002\u4EBA\u53E3\u30FB\u8ECD\u30FB\u5B89\u5B9A\u306B\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u767A\u751F\u524D\u3078\u306F\u623B\u308A\u307E\u305B\u3093\u3002"), nm, why2, h("div", { class: "rowb" }, scope, at2), h("div", { class: "rowb" }, h("small", {}, "\u534A\u5F84(km)"), rad, h("small", {}, "\u4EBA\u53E3\u306E\u640D\u5931 %\uFF08\u6700\u5927 95\uFF09"), mor, h("small", {}, "\u56DE\u5FA9\u306E\u76EE\u5B89(\u6708)"), rec), h("div", { class: "rowb" }, h("label", {}, ok2, " \u53D6\u308A\u6D88\u305B\u306A\u3044\u3053\u3068\u3092\u7406\u89E3\u3057\u305F"), btn("\u707D\u5384\u3092\u8D77\u3053\u3059", go, "p", { id: "cat-go" })), ...log3.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `\u300C${r.name}\u300D${r.scope === "world" ? "\u4E16\u754C\u898F\u6A21" : "\u5730\u57DF\u898F\u6A21"}`, h("br"), h("small", {}, `${date2(r.at)}\u30FB\u5B9F\u969B\u306E\u640D\u5931 ${Math.round(r.result.share * 100)}%\uFF08\u7D04 ${n0(r.result.dead)} \u4EBA\uFF09`)))));
   }
-  function newsBox() {
-    const s = newsSettings(civ2()), cs = h("input", { id: "news-crit", type: "number", value: s.criticalScore, style: "width:70px" }), ms = h("input", { id: "news-major", type: "number", value: s.majorScore, style: "width:70px" }), mx = h("input", { id: "news-max", type: "number", value: s.maxPerScan, min: 1, max: 20, style: "width:60px" });
-    return h("div", {}, lb("\u30CB\u30E5\u30FC\u30B9\u306E\u57FA\u6E96", "NEWS"), note2(`\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u3060\u3051\u304C\u6642\u9593\u3092\u6B62\u3081\u307E\u3059\uFF08\u65E2\u5B9A: \u91CD\u5927 ${DEFAULT_NEWS_SETTINGS.criticalScore} \u70B9\u4EE5\u4E0A\u30FB\u4E3B\u8981 ${DEFAULT_NEWS_SETTINGS.majorScore} \u70B9\u4EE5\u4E0A\uFF09\u3002\u6B62\u307E\u308A\u3059\u304E\u308B\u3068\u304D\u306F\u91CD\u5927\u306E\u70B9\u3092\u4E0A\u3052\u3066\u304F\u3060\u3055\u3044\u3002`), h("div", { class: "rowb" }, h("small", {}, "\u91CD\u5927"), cs, h("small", {}, "\u4E3B\u8981"), ms, h("small", {}, "\u540C\u6642\u306B\u6B62\u3081\u308B\u4E0A\u9650"), mx), h("div", { class: "rowb" }, btn("\u57FA\u6E96\u3092\u5909\u66F4", () => {
-      run({ type: "news.configure", criticalScore: Number(cs.value), majorScore: Number(ms.value), maxPerScan: Number(mx.value) });
-      S2.hooks.render();
-    }, "", { id: "news-set" }), btn("\u65E2\u5B9A\u306B\u623B\u3059", () => {
-      run({ type: "news.configure", reset: true });
-      S2.hooks.render();
-    }, "", { id: "news-reset" })));
-  }
   function pSettings() {
     const c = civ2(), cf = c.wcde.config, T3 = timeOf(c), errs = checkWcdeIntegrity(S2.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
     const dl = (blob, name) => {
@@ -10839,7 +11105,8 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
         S2.hooks.render();
       })),
       note2("\u751F\u6210\u5F8C\u306B\u5909\u3048\u3089\u308C\u308B\u306E\u306F\u8868\u793A\u7528\u306E\u540D\u79F0\u30FB\u533A\u5206\u3060\u3051\u3067\u3059\u3002\u904E\u53BB\u306E\u65E5\u4ED8\u30FB\u767A\u751F\u9806\u30FB\u5BA2\u89B3\u7684\u4E8B\u5B9F\u306F\u5909\u308F\u308A\u307E\u305B\u3093\u3002"),
-      newsBox(),
+      lb("\u91CD\u5927\u30CB\u30E5\u30FC\u30B9", "NEWS"),
+      note2("\u6642\u9593\u304C\u6B62\u307E\u3063\u3066\u4E2D\u592E\u3067\u78BA\u8A8D\u3059\u308B\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306F\u3001\u81EA\u56FD\uFF08\u62C5\u5F53\u56FD\uFF09\u306B\u95A2\u3059\u308B\u91CD\u5927\u306A\u51FA\u6765\u4E8B\u3068\u3001\u4E16\u754C\u5927\u6226\u3060\u3051\u3067\u3059\u3002\u62C5\u5F53\u56FD\u304C\u306A\u3044\u3068\u304D\u306F\u4E16\u754C\u5927\u6226\u3060\u3051\u3067\u3059\u3002\u305D\u308C\u4EE5\u5916\u306F\u53F3\u306E\u30CB\u30E5\u30FC\u30B9\u6B04\u306B\u51FA\u307E\u3059\u3002"),
       catastropheBox(),
       lb("\u4FDD\u5B58\u30FB\u8AAD\u307F\u8FBC\u307F\u30FB\u51FA\u529B", "SAVE / EXPORT"),
       h("div", { class: "rowb" }, btn("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3059", save, "p", { id: "save" }), fileLoader(), btn("Obsidian \u7528 Markdown ZIP", obs, "", { id: "obs" })),
@@ -10957,7 +11224,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   }
   function shell() {
     const cv = h("canvas", { id: "map", "aria-label": "\u4E16\u754C\u5730\u56F3" });
-    root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "hint" }, "\u30C9\u30E9\u30C3\u30B0\u3067\u79FB\u52D5\u30FB\u30DB\u30A4\u30FC\u30EB\u3067\u62E1\u5927\u7E2E\u5C0F\u30FB\u30AF\u30EA\u30C3\u30AF\u3067\u56FD\u5BB6\u3092\u9078\u629E"), h("div", { id: "leg" }), h("div", { id: "callout" }), h("div", { id: "pops" })), h("aside", { id: "right", class: "open" }, h("div", { id: "rin" }, h("div", { id: "clock" }), h("h2", {}, "\u30CB\u30E5\u30FC\u30B9"), h("div", { id: "feed" })))), h("div", { id: "newsmodal", hidden: true }));
+    root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("button", { id: "prefresh", title: "\u4E16\u754C\u304C\u9032\u3093\u3060\u306E\u3067\u3001\u3053\u306E\u30DA\u30FC\u30B8\u306E\u5185\u5BB9\u306F\u53E4\u304F\u306A\u3063\u3066\u3044\u307E\u3059", onclick: () => renderPanel() }, "\u21BB \u6700\u65B0\u306E\u72B6\u614B\u306B\u66F4\u65B0"), h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "hint" }, "\u30C9\u30E9\u30C3\u30B0\u3067\u79FB\u52D5\u30FB\u30DB\u30A4\u30FC\u30EB\u3067\u62E1\u5927\u7E2E\u5C0F\u30FB\u30AF\u30EA\u30C3\u30AF\u3067\u56FD\u5BB6\u3092\u9078\u629E"), h("div", { id: "leg" }), h("div", { id: "callout" }), h("div", { id: "pops" })), h("aside", { id: "right", class: "open" }, h("div", { id: "rin" }, h("div", { id: "clock" }), h("h2", {}, "\u30CB\u30E5\u30FC\u30B9"), h("div", { id: "feed" })))), h("div", { id: "newsmodal", hidden: true }));
     S2.map = new MapView(cv, S2.w);
     S2.map.sel = S2.sel;
     S2.map.onPick = callout;
@@ -10989,6 +11256,8 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   }
   function renderPanel() {
     const p = $("#panel");
+    S2.paintedMonth = S2.w?.civ.monthIndex ?? null;
+    $("#prefresh")?.classList.remove("stale");
     if (!S2.hub) {
       p.classList.remove("open");
       return;
@@ -11015,9 +11284,9 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     $("#callout").classList.remove("on");
   }
   function focusCell(cell) {
-    const M = S2.map, g = M.geo, W = M.cv.width, H = M.cv.height, [x, y] = M.proj(g.cen[cell * 2], g.cen[cell * 2 + 1], W, H);
+    const M = S2.map, g = M.geo, W2 = M.cv.width, H = M.cv.height, [x, y] = M.proj(g.cen[cell * 2], g.cen[cell * 2 + 1], W2, H);
     M.view.k = 4;
-    M.view.x = W / 2 - x * 4;
+    M.view.x = W2 / 2 - x * 4;
     M.view.y = H / 2 - y * 4;
     M.clamp();
     M.draw();
@@ -11033,8 +11302,8 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       render();
     }, "p"))] : [h("h3", {}, p.settlement?.name ?? "\u672A\u6240\u5C5E\u306E\u5730"), h("div", { class: "sub" }, `\u533A\u753B ${p.cell}\u30FB\u6A19\u9AD8 ${Math.round(ce.elevation[p.cell] * 100) / 100}\u30FB\u6C17\u6E29 ${Math.round(ce.temp[p.cell])}`), p.settlement ? h("div", { class: "sub" }, `\u4EBA\u53E3 ${n0(p.settlement.pop)}`) : h("div", { class: "sub" }, "\u56FD\u5BB6\u306B\u5C5E\u3057\u3066\u3044\u307E\u305B\u3093")];
     c.replaceChildren(...body);
-    const W = $("#mapwrap").clientWidth;
-    c.style.left = Math.min(Math.max(8, p.x + 10), W - 280) + "px";
+    const W2 = $("#mapwrap").clientWidth;
+    c.style.left = Math.min(Math.max(8, p.x + 10), W2 - 280) + "px";
     c.style.top = Math.max(8, p.y + 10) + "px";
     c.classList.add("on");
     if (st2) {
@@ -11047,7 +11316,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     const w = S2.w, T3 = timeOf(w.civ), feed = newsFeed(w.civ, { limit: 30, minLevel: "major" }), cs = controlled();
     $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "n" }, cs ? `\u62C5\u5F53: ${stateName(cs)}` : "\u62C5\u5F53\u56FD\u306A\u3057\uFF08\u898B\u5B88\u308A\uFF09"), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T3.hold ? T3.resumeSpeed : T3.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} \u304B\u6708\uFF0F\u79D2` : "\u505C\u6B62", onclick: () => {
       run({ type: "clock.setSpeed", speed: s.id });
-      render();
+      renderRight();
     } }, s.label))), h("div", { class: "n", id: "runstate" }, T3.hold ? "\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061" : T3.speed ? "\u9032\u884C\u4E2D\uFF081\u79D2\u3042\u305F\u308A\uFF09" : "\u505C\u6B62\u4E2D"));
     $("#feed").replaceChildren(...feed.map((n2) => h("div", { class: "ev" + (n2.level === "critical" ? " y" : "") }, h("time", {}, `${n2.date.year}\u5E74${n2.date.month}\u6708`), n2.title, " ", ...n2.entityIds.filter((i) => w.civ.states[i]).slice(0, 2).map((i) => [link(i), " "]))));
   }
@@ -11062,10 +11331,11 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     m.hidden = false;
     m.replaceChildren(h("div", { class: "modalbox" }, h("div", { class: "code", style: "justify-content:center" }, `\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\uFF08\u6B8B\u308A ${q2.length} \u4EF6\uFF09`), h("div", { class: "n" }, `${n2.date.year}\u5E74${n2.date.month}\u6708`), h("h2", {}, n2.title), h("div", {}, ...n2.entityIds.filter((i) => S2.w.civ.states[i]).map((i) => [link(i), " "])), h("div", { class: "rowb", style: "justify-content:center;margin-top:16px" }, btn("OK", () => {
       run({ type: "news.ack", id: n2.id });
-      render();
+      renderRight();
+      renderNews();
+      S2.map.draw();
     }, "p", { id: "ack" }))));
   }
-  var liveN = 0;
   function tick() {
     const w = S2.w;
     if (!w || w.viewPast != null || !isRunning(w.civ)) return;
@@ -11078,8 +11348,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     renderRight();
     renderNews();
     S2.map.draw();
-    const a = document.activeElement;
-    if (++liveN % 8 === 0 && !(a && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) && ["nations", "war", "diplo", "stats"].includes(S2.hub)) renderPanel();
+    if (S2.hub && S2.w.civ.monthIndex !== S2.paintedMonth) $("#prefresh")?.classList.add("stale");
     if (S2.notice) $("#hint").textContent = S2.notice;
   }
   function dismissSplash() {

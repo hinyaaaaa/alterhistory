@@ -29,7 +29,7 @@ export function syncControl(civ) {
 
 /** 創造主の編集（直接設定できる項目だけ）。範囲・型を検証し、変更前後を記録する */
 const FIELDS = {
-  name: { get: (s) => s.name, set: (s, v) => { s.name = v; }, check: (v) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 30 ? v.trim() : null },
+  name: { get: (s) => s.name, set: (s, v) => { s.name = v; s.nameBase = null; /* 創造主が付けた名前は、政体が変わっても自動では改めない */ }, check: (v) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 30 ? v.trim() : null },
   polity: { get: (s) => s.polity, set: (s, v) => { s.polity = v; }, check: (v) => (v in POLITY ? v : null) },
   "policy.tax": { get: (s) => s.policy.tax, set: (s, v) => { s.policy.tax = v; }, check: (v) => (typeof v === "number" && v >= 0.02 && v <= 0.4 ? v : null) },
   "policy.mobilization": { get: (s) => s.policy.mobilization, set: (s, v) => { s.policy.mobilization = v; }, check: (v) => (typeof v === "number" && v >= 0 && v <= 1 ? v : null) },

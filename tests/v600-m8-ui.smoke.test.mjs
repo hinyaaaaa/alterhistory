@@ -49,6 +49,30 @@ await check("【戦争】開戦が新しい順の一覧・詳細・講和（専�
   hub("war"); await wait(60); const w = V().S.w, wars = Object.values(w.civ.wars).sort((a, b) => b.startedAt - a.startedAt); if (!wars.length) return; click($$(".vrow")[0]); assert.ok(/主要経過/.test(txt()) && /講和/.test(txt()) && /戦争研究所/.test(txt())); const act = wars.find((x) => x.status === "active"); if (act) { V().S.war = act.id; V().render(); assert.ok($("#peace-go"), "講和の申し入れ"); }
 });
 await check("【世界の外交】関係表・同盟グラフ・条約一覧（新しい順）", () => { hub("diplo"); assert.ok($(".mx") && /関係表/.test(txt()) && /同盟関係/.test(txt()) && /締結済みの条約/.test(txt())); assert.ok($$(".mx tr").length >= 3); });
+await check("【世界の外交】国名は省略せず全名で出す（関係表の列・行の見出し）。同盟がなければ「同盟はありません」", () => {
+  const top = Object.values(V().S.w.civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop).slice(0, 10).map((s) => s.name); hub("diplo");
+  assert.deepEqual($$(".mx th.colh").map((x) => x.textContent), top, "列の見出しは全名"); for (const n of top) assert.ok($$(".mx .rh").some((x) => x.textContent === n), n + " が行の見出しに全名で出る");
+  if (!Object.values(V().S.w.civ.treaties).some((x) => x.active && x.type === "alliance")) assert.ok(/同盟はありません/.test(txt()));
+});
+await check("【世界の外交】同盟の図は、同盟でつながる国を陣営（圏）にまとめ、盟主（★）を先頭に、国名を省略せずに描く。札を押すと国家の詳細が開く", () => {
+  const c = V().S.w.civ, st = Object.values(c.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop).slice(0, 6), ids = [];
+  const add = (a, b) => { const id = "treaty_ui" + ids.length; ids.push(id); c.treaties[id] = { id, type: "alliance", a: a.id, b: b.id, signedAt: c.monthIndex, expiresAt: c.monthIndex + 600, active: true }; c.activeTreatyIds.push(id); };
+  try {
+    add(st[0], st[1]); add(st[0], st[2]); add(st[3], st[4]); hub("diplo"); hub("diplo"); hub("diplo"); // 開閉を繰り返して描き直す
+    const cards = $$(".bloc-card"); assert.equal(cards.length, 2, "陣営は 2 つ（3 か国と 2 か国）"); assert.ok(/陣営 2 つ・加盟 5 か国/.test(txt()), txt().slice(0, 200));
+    const texts = $$(".bloc-card svg text").map((x) => x.textContent); for (const s of st.slice(0, 5)) assert.ok(texts.some((x) => x.replace("★ ", "") === s.name), s.name + " が全名で出る");
+    assert.ok(texts.includes("★ " + st[0].name), "盟主（同盟が最も多い国）に★"); assert.equal($$(".bloc-card svg path").length, 3, "同盟の線は 3 本"); assert.ok(!$$(".bloc-card svg text").some((x) => /…/.test(x.textContent)), "省略記号がない");
+    assert.ok(cards[0].querySelector(".bh").textContent.includes(st[0].name + "圏"), "陣営の名前は盟主の名前から");
+    click($$(".bloc-card .fn")[0]); assert.equal(V().S.hub, "nations"); assert.ok(V().S.sel);
+  } finally { for (const id of ids) { delete c.treaties[id]; c.activeTreatyIds = c.activeTreatyIds.filter((x) => x !== id); } hub("diplo"); }
+});
+await check("再生中、左のパネルを勝手に描き直さない（読んでいる最中・入力中の内容が変わらない）。世界が進んで古くなると「最新の状態に更新」が出て、押すと描き直す", async () => {
+  hub("nations"); await wait(60); if (V().S.hub !== "nations") hub("nations"); const pin = $("#pin"), mark = doc.createElement("i"); mark.id = "keep-mark"; pin.firstChild.append(mark); assert.ok(!$("#prefresh").classList.contains("stale"));
+  const mi = V().S.w.civ.monthIndex; V().run({ type: "clock.setSpeed", speed: 3 }); await wait(2600); /* 2 秒ごとの旧い自動更新の周期を超えて待つ */ V().run({ type: "clock.setSpeed", speed: 0 });
+  assert.ok(V().S.w.civ.monthIndex > mi, "世界は進んだ"); assert.ok($("#keep-mark"), "パネルは勝手に描き直されていない"); assert.ok($("#prefresh").classList.contains("stale"), "古くなったので更新ボタンが出る");
+  click($("#prefresh")); assert.ok(!$("#keep-mark"), "押すと描き直される"); assert.ok(!$("#prefresh").classList.contains("stale"), "更新したので消える");
+  V().S.w.civ.wcde.news.queue.length = 0; V().S.w.civ.wcde.time.hold = false;
+});
 await check("【文化・言語・宗教】樹形図・詳細・名前の編集（創造主の介入として記録）", () => {
   for (const k of ["culture", "language", "religion"]) { hub(k); assert.ok($("svg.tree") && $$(".tnode").length >= 1, k); click($$(".tnode")[0]); assert.ok($("#ent-rename"), k + " の詳細"); }
   hub("religion"); set($("#ent-name"), "試験の信仰"); click($("#ent-rename")); const id = V().S.entity.religion; assert.equal(V().S.w.civ.religions[id].name, "試験の信仰"); assert.ok((V().S.w.civ.wcde.edits ?? []).some((e) => e.targetId === id));
@@ -68,9 +92,9 @@ await check("【世界設定】生成設定・暦の表示名・保存/読み込
   const w = V().S.w, mi = w.civ.monthIndex; V().run({ type: "view.past", month: mi - 24 }); V().render(); assert.ok(/過去を閲覧中/.test($("#hint").textContent)); assert.equal(V().run({ type: "clock.run", months: 1 }).ok, false); hub("nations"); await wait(60); assert.ok(/過去（/.test(txt()), "過去の国家一覧"); assert.ok($$(".vrow").length > 0); assert.ok(V().S.map.owner().size > 0, "過去の領域を復元"); V().run({ type: "view.past", month: null }); V().render();
 });
 await check("重大ニュースで全画面が出て、OK まで時間が進まず、OK で停止前の速度へ自動復帰する", async () => {
-  const w = V().S.w; w.civ.wcde.news.queue.length = 0; w.civ.wcde.time.hold = false; V().run({ type: "clock.setSpeed", speed: 3 }); const big = Object.values(w.civ.states).filter((x) => x.alive).sort((a, b) => b.pop - a.pop).slice(0, 8).map((x) => ({ entityId: x.id, role: "state" }));
-  w.civ.events.push({ eventId: "event_ui_big", date: { ...w.civ.date }, kind: "state_dissolved", title: "（試験）大国が滅んだ", participants: big, location: null, causes: [], effects: [], decisionId: null, provenance: "simulation" }); w.civ.wcde.news.lastCrit = {}; w.civ.wcde.news.queue.length = 0; w.civ.wcde.time.hold = false; /* ここまでの経過で溜まった別のニュースが先頭に来ないよう、空にしてから確かめる */
-  V().run({ type: "clock.run", months: 1 }); V().render(); assert.equal($("#newsmodal").hidden, false); assert.ok($("#newsmodal").textContent.includes("大国が滅んだ")); const mi = w.civ.monthIndex, r = V().run({ type: "clock.run", months: 3 }); assert.equal(r.ok, false); assert.equal(w.civ.monthIndex, mi); V().S.notice = ""; click($("#ack")); assert.equal($("#newsmodal").hidden, true); assert.equal(w.civ.wcde.time.speed, 3); assert.equal(w.civ.wcde.time.hold, false);
+  const w = V().S.w; w.civ.wcde.news.queue.length = 0; w.civ.wcde.time.hold = false; V().run({ type: "clock.setSpeed", speed: 3 }); const mine = Object.values(w.civ.states).filter((x) => x.alive).sort((a, b) => b.pop - a.pop)[0]; assert.ok(V().run({ type: "control.take", stateId: mine.id }).ok); /* 重大ニュースは、自国（担当国）に関する重大な出来事と世界大戦だけ */ const big = [{ entityId: mine.id, role: "state" }];
+  w.civ.events.push({ eventId: "event_ui_big", date: { ...w.civ.date }, kind: "state_dissolved", title: "（試験）自国の大事件", participants: big, location: null, causes: [], effects: [], decisionId: null, provenance: "simulation" }); w.civ.wcde.news.lastCrit = {}; w.civ.wcde.news.queue.length = 0; w.civ.wcde.time.hold = false; /* ここまでの経過で溜まった別のニュースが先頭に来ないよう、空にしてから確かめる */
+  V().run({ type: "clock.run", months: 1 }); V().render(); assert.equal($("#newsmodal").hidden, false); assert.ok($("#newsmodal").textContent.includes("自国の大事件")); const mi = w.civ.monthIndex, r = V().run({ type: "clock.run", months: 3 }); assert.equal(r.ok, false); assert.equal(w.civ.monthIndex, mi); V().S.notice = ""; click($("#ack")); assert.equal($("#newsmodal").hidden, true); assert.equal(w.civ.wcde.time.speed, 3); assert.equal(w.civ.wcde.time.hold, false);
 });
 await check("画面の操作中に、未処理のエラーが出ていない", () => assert.deepEqual(errors, [], errors.join("\n")));
 V().S.timer && window.clearInterval(V().S.timer); window.close();

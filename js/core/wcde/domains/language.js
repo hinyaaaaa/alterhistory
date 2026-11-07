@@ -3,6 +3,7 @@
 //   同じ言語・同じ乱数列からは同じ名前（決定的）。名前の音節は、その言語の音節表に必ず収まる（検査できる）。
 import { hashSeed, rngOf } from "../../civ/civ-state.js";
 import { VIA } from "../../civ/states.js";
+import { composeStateName } from "./naming.js";
 
 // 子音ごとの仮名（ア行〜）。母音は a i u e o の順。w・y は使えない母音がある
 const KANA = Object.freeze({ "": "アイウエオ", k: "カキクケコ", g: "ガギグゲゴ", s: "サシスセソ", z: "ザジズゼゾ", t: "タチツテト", d: "ダヂヅデド", n: "ナニヌネノ", h: "ハヒフヘホ", b: "バビブベボ", p: "パピプペポ", m: "マミムメモ", r: "ラリルレロ", y: "ヤ・ユ・ヨ", w: "ワ····" });
@@ -62,7 +63,16 @@ export const languageOfGroup = (g) => g?.cohorts?.length ? g.cohorts.reduce((b, 
 
 /** formState・継承などが使う命名（言語に整合した国名・人名）。言語が無い集団は従来どおり */
 export const nameLangOf = (g) => languageOfGroup(g);
+/** 言語の国名の語尾（-ニア・-ラン のような）。6割の言語は固有の語尾を持ち、持たない言語は親言語の語尾を受け継ぐ（同じ系統でも枝ごとに分かれ、近縁の国は似た語尾になる） */
+function landSuffix(civ, langId) {
+  const L = civ.languages[langId]; if (!L) return "";
+  const h = hashSeed(L.id, "landsfx");
+  if (h % 100 < 60) { const phon = ensureProfile(civ, L.id); return phon ? word(rngOf(h), phon, 1 + ((h >>> 8) % 2), 0.7) : ""; }
+  return L.parent && civ.languages[L.parent] ? landSuffix(civ, L.parent) : "";
+}
 export const nameGen = {
+  /** 国号と語根。語根は言語の音から（＋系統の語尾）、称号は政体から（王国・帝国・共和国…） */
+  stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const base = nameFor(civ, rng, l, "state") + landSuffix(civ, l); return { base, name: composeStateName(base, polity, via) }; },
   state: (civ, cap, via, rng) => { const l = languageOfGroup(cap); return l ? nameFor(civ, rng, l, "state") + VIA[via].suffix : null; },
   person: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "person") : null; },
 };

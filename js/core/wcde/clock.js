@@ -1,4 +1,5 @@
 // v6 M8: ニュースと時間制御（状態機械）。仕様 §12。
+//   v6.1.2: 重大ニュース（時間を止めるもの）は「自国（担当国）に関する重大な出来事」と「世界大戦」だけ。基準の利用者設定（news.configure）は廃止。
 //   ・月次 tick を確定したあとに、その月の事実イベントから重大ニュースを判定し、キューへ入れる。キューがあれば世界時計を止める（hold）。
 //   ・hold 中は、OK（ack）が押されるまで、世界時計・国家 AI の月次行動・時間依存の更新を一切進めない（clock.run / time.advance は拒否）。
 //   ・全件を確認し終えたら、停止直前の進行速度へ自動で戻る。hold 中にユーザーが速度を変えたら、その選択が優先され、復帰時の速度になる（0 = 停止のままにする）。
@@ -14,48 +15,63 @@ export const timeOf = (civ) => (civ.wcde.time ??= { speed: DEFAULT_SPEED, hold: 
 export const newsOf = (civ) => (civ.wcde.news ??= { queue: [], acked: [], scanned: civ.events.length });
 export const isRunning = (civ) => { const t = timeOf(civ); return !t.hold && t.speed > 0; };
 
-/** 重大度の判定。世界の人口に対する国家の割合（規模）で決める。閾値は tests/v600-m8-news.test.mjs で実測して調整する */
-export const CRITICAL_SCORE = 85, MAJOR_SCORE = 40, MAX_CRITICAL_PER_SCAN = 3;
-/** 重大ニュースの基準（調整可能。保存される）。criticalScore・majorScore: 重大・主要の閾値／sizeK: 規模の加点の強さ／maxPerScan: 1 回の判定で止める件数の上限（超えた分は主要ニュースへ格下げ）／kinds: 種類ごとの基礎点の上書き（0 でその種類は重大・主要にしない） */
-export const DEFAULT_NEWS_SETTINGS = Object.freeze({ criticalScore: CRITICAL_SCORE, majorScore: MAJOR_SCORE, sizeK: 15, maxPerScan: MAX_CRITICAL_PER_SCAN, kinds: {} });
-export const newsSettings = (civ) => ({ ...DEFAULT_NEWS_SETTINGS, ...(civ.wcde.news?.settings ?? {}), kinds: { ...(civ.wcde.news?.settings?.kinds ?? {}) } });
-/** 基準の変更。範囲を検証し、保存する（世界の事実は変えない） */
-export function configureNews(w, c = {}) {
-  const N = newsOf(w.civ), cur = newsSettings(w.civ), s = { ...cur }, fail = (error) => ({ ok: false, error }), num = (v, lo, hi) => typeof v === "number" && Number.isFinite(v) && v >= lo && v <= hi;
-  if (c.reset) { delete N.settings; return { ok: true, settings: newsSettings(w.civ) }; }
-  if (c.criticalScore != null) { if (!num(c.criticalScore, 20, 300)) return fail("重大ニュースの閾値は 20〜300"); s.criticalScore = Math.round(c.criticalScore); }
-  if (c.majorScore != null) { if (!num(c.majorScore, 0, 300)) return fail("主要ニュースの閾値は 0〜300"); s.majorScore = Math.round(c.majorScore); }
-  if (c.sizeK != null) { if (!num(c.sizeK, 0, 60)) return fail("規模の加点は 0〜60"); s.sizeK = c.sizeK; }
-  if (c.maxPerScan != null) { if (!num(c.maxPerScan, 1, 20) || !Number.isInteger(c.maxPerScan)) return fail("同時に止める件数は 1〜20 の整数"); s.maxPerScan = c.maxPerScan; }
-  if (c.kinds) for (const [k, v] of Object.entries(c.kinds)) { if (!(k in KIND) && k !== "catastrophe") return fail(`「${k}」は重大ニュースの対象の種類ではありません`); if (v === null) delete s.kinds[k]; else if (!num(v, 0, 300)) return fail("種類ごとの基礎点は 0〜300"); else s.kinds[k] = v; }
-  if (s.majorScore > s.criticalScore) return fail("主要ニュースの閾値は、重大ニュースの閾値以下にしてください");
-  N.settings = s; return { ok: true, settings: s };
+/** 重大度の判定。重大ニュース（時間を止めて、中央で確認するまで進まないもの）は、次の 2 つだけ。利用者が基準を変えることはできない。
+ *   ① 自国（担当国）に関する重大な出来事: OWN_CRITICAL の種類で、担当国が当事者のもの
+ *   ② 世界大戦: 開戦時の参戦国が WORLD_WAR の条件を満たす戦争（1 つの戦争につき 1 回）
+ *  担当国がない（見守り）ときは ② だけ。それ以外の出来事は、規模の点（世界の人口に対する国家の割合）で「主要」（右のニュース欄に出る）か「通常」になる。 */
+export const MAJOR_SCORE = 40;
+export const OWN_CRITICAL = new Set(["state_dissolved", "war_declared", "war_ended", "ally_joined", "conquest", "regime_change", "state_formed"]);
+export const WORLD_WAR = Object.freeze({ minStates: 6, minPerSide: 2, minPopShare: 0.35 }); // 参戦国 6 か国以上・両陣営とも 2 か国以上・参戦国の人口が世界の 35% 以上
+const SAME_KIND_COOLDOWN_EXEMPT = new Set(["state_dissolved", "war_declared", "war_ended", "ally_joined"]); // 戦争と滅亡は、そのたびに必ず知らせる（ほかの種類は、同じ国で 60 か月は繰り返さない）
+/** 自国として扱う国家の ID: いま担当している国と、直近に失った担当国（担当が外れたあとでも、滅亡の月のニュースを自国のこととして扱うため） */
+export function ownIds(civ) {
+  const out = new Set(), id = civ.wcde.control?.stateId; if (id) out.add(id);
+  const log = civ.wcde.log ?? []; for (let i = log.length - 1; i >= 0 && log[i].at >= civ.monthIndex - 2; i--) if (log[i].type === "control.lost" && log[i].stateId) out.add(log[i].stateId);
+  return out;
 }
+/** 世界大戦の条件を満たすか（参戦国は、両陣営の生存している国） */
+export function isWorldWar(civ, war) {
+  if (!war) return false; const alive = (ids) => ids.filter((i) => civ.states[i]?.alive), a = alive(war.sides.a), d = alive(war.sides.d);
+  if (a.length < WORLD_WAR.minPerSide || d.length < WORLD_WAR.minPerSide || a.length + d.length < WORLD_WAR.minStates) return false;
+  let total = 0, inWar = 0; for (const s of Object.values(civ.states)) if (s.alive) total += s.pop; for (const i of [...a, ...d]) inWar += civ.states[i].pop;
+  return total > 0 && inWar / total >= WORLD_WAR.minPopShare;
+}
+const warIdOf = (ev) => ev.facts?.warId ?? ev.participants.find((p) => p.role === "war")?.entityId ?? null;
+const worldWarTitle = (civ, war) => { const n = (x) => civ.states[x]?.name ?? "?"; return `世界大戦: ${n(war.aggressor)}と${n(war.defender)}の戦争に ${war.sides.a.length + war.sides.d.length} か国が参戦した`; };
 export function newsContext(civ) {
   const alive = Object.values(civ.states).filter((s) => s.alive), total = alive.reduce((a, s) => a + s.pop, 0) || 1, n = Math.max(1, alive.length), rel = {};
   for (const s of Object.values(civ.states)) rel[s.id] = (s.pop / total) * n; // 相対規模: 1 = 平均的な国。国の数が増えても「大きな国かどうか」で判断する
-  return { rel };
+  return { rel, own: ownIds(civ) };
 }
 const KIND = { state_dissolved: 40, war_declared: 25, war_ended: 30, regime_change: 25, conquest: 35, state_formed: 20, religion_founded: 25, religion_schism: 20, famine: 15, disaster_struck: 15, climate_shift: 20, dynasty_changed: 15, culture_diverged: 10, language_diverged: 10, tech_lost: 20 };
 const SIZE_K = 15; // 規模の加点: SIZE_K × log2(1 + 相対規模)。相対規模 6（平均の6倍の国どうしの戦争）で +42
 export function classifyEvent(civ, ev, cx = newsContext(civ)) {
-  const set = newsSettings(civ), SIZE = set.sizeK, lv = (score) => ({ level: score >= set.criticalScore ? "critical" : score >= set.majorScore ? "major" : "normal", score });
-  if (ev.kind === "catastrophe") { const m = ev.facts?.mortality ?? 0, ov = set.kinds.catastrophe; if (ov === 0) return { level: "normal", score: 0 }; return lv(Math.round((ov ?? 70) + 40 * m + (ev.facts?.scope === "world" ? 20 : 0))); } // 創造主の災厄: 規模（損失の割合・世界規模か）で決める
-  const base = set.kinds[ev.kind] ?? KIND[ev.kind]; if (base == null || base === 0) return { level: "normal", score: 0 };
+  const lv = (score, extra = {}) => ({ level: score >= MAJOR_SCORE ? "major" : "normal", score, ...extra });
+  { const wid = ev.kind === "war_declared" ? warIdOf(ev) : null, war = wid ? civ.wars[wid] : null; if (war && civ.wcde.news?.worldWars?.[wid] === ev.eventId) return { level: "critical", score: 200, title: worldWarTitle(civ, war), reason: "world_war" }; } // 世界大戦（開戦時に記録したもの）
+  if (ev.kind === "catastrophe") { const m = ev.facts?.mortality ?? 0; return lv(Math.round(70 + 40 * m + (ev.facts?.scope === "world" ? 20 : 0))); } // 創造主の災厄: 規模（損失の割合・世界規模か）で決める。重大にはしない（自分で起こしたものなので）
+  const own = cx.own?.size && OWN_CRITICAL.has(ev.kind) && ev.participants.some((p) => cx.own.has(p.entityId)); // 自国に関する重大な出来事（点数表にない種類でも、自国のことなら重大）
+  const base = KIND[ev.kind]; if (base == null || base === 0) return own ? { level: "critical", score: 100, reason: "own" } : { level: "normal", score: 0 };
   const ids = ev.participants.map((p) => p.entityId).filter((i) => civ.states[i]), sum = ids.reduce((a, i) => a + (cx.rel[i] ?? 0), 0), big = Math.max(0, ...ids.map((i) => cx.rel[i] ?? 0));
-  let score = base + SIZE * Math.log2(1 + sum);
-  if (ev.kind === "regime_change" || ev.kind === "dynasty_changed") score = base + SIZE * Math.log2(1 + big); // 小国の政変では止めない
+  let score = base + SIZE_K * Math.log2(1 + sum);
+  if (ev.kind === "regime_change" || ev.kind === "dynasty_changed") score = base + SIZE_K * Math.log2(1 + big); // 小国の政変は規模が小さい
   if (ev.kind === "culture_diverged" || ev.kind === "language_diverged" || ev.kind === "famine" || ev.kind === "disaster_struck") score = Math.min(score, 69);
-  score = Math.round(score); return lv(score);
+  score = Math.round(score);
+  if (own) return { level: "critical", score: Math.max(score, 100), reason: "own" };
+  return lv(score);
 }
-export const newsItem = (civ, ev, c) => ({ id: "news_" + ev.eventId, eventId: ev.eventId, date: ev.date, kind: ev.kind, title: ev.title, level: c.level, score: c.score, entityIds: [...new Set(ev.participants.map((p) => p.entityId))] });
+export const newsItem = (civ, ev, c) => ({ id: "news_" + ev.eventId, eventId: ev.eventId, date: ev.date, kind: ev.kind, title: c.title ?? ev.title, level: c.level, score: c.score, entityIds: [...new Set(ev.participants.map((p) => p.entityId))] });
 
 /** 走査: 前回以降の事実イベントから重大ニュースを判定してキューへ入れる。入れた件数を返す */
 export function scanNews(civ) {
-  const N = newsOf(civ), T = timeOf(civ); if (N.scanned > civ.events.length) N.scanned = civ.events.length; const cx = newsContext(civ), fresh = [];
-  for (let i = N.scanned; i < civ.events.length; i++) { const ev = civ.events[i], c = classifyEvent(civ, ev, cx); if (c.level === "critical") { const keys = ev.participants.filter((p) => civ.states[p.entityId]).map((p) => ev.kind + "|" + p.entityId), mi = civ.monthIndex, last = (N.lastCrit ??= {}); if (keys.some((k) => last[k] != null && mi - last[k] < COOLDOWN)) { c.level = "major"; } else for (const k of keys) last[k] = mi; }
-    if (c.level === "critical" && !N.acked.includes(ev.eventId) && !N.queue.some((q) => q.eventId === ev.eventId)) fresh.push(newsItem(civ, ev, c)); }
-  N.scanned = civ.events.length; fresh.sort((a, b) => b.score - a.score || (a.eventId < b.eventId ? -1 : 1)); const cap = newsSettings(civ).maxPerScan; if (fresh.length > cap) fresh.length = cap; /* 同時に出た重大ニュースが多いときは、規模の大きいものから順に。残りは主要ニュースとして一覧に残る（操作を妨げない） */ N.queue.push(...fresh);
+  const N = newsOf(civ), T = timeOf(civ); if (N.scanned > civ.events.length) N.scanned = civ.events.length; delete N.settings; /* 旧版の「ニュースの基準」の設定は廃止（基準は固定） */ const cx = newsContext(civ), fresh = [];
+  for (let i = N.scanned; i < civ.events.length; i++) {
+    const ev = civ.events[i];
+    if (ev.kind === "war_declared") { const wid = warIdOf(ev), war = wid ? civ.wars[wid] : null, ww = (N.worldWars ??= {}); if (war && !ww[wid] && isWorldWar(civ, war)) ww[wid] = ev.eventId; } // 世界大戦: 開戦の時点で 1 度だけ判定して記録する（以後も同じ判定になる）
+    const c = classifyEvent(civ, ev, cx);
+    if (c.level === "critical" && c.reason === "own" && !SAME_KIND_COOLDOWN_EXEMPT.has(ev.kind)) { const keys = ev.participants.filter((p) => cx.own.has(p.entityId)).map((p) => ev.kind + "|" + p.entityId), mi = civ.monthIndex, last = (N.lastCrit ??= {}); if (keys.some((k) => last[k] != null && mi - last[k] < COOLDOWN)) c.level = "major"; else for (const k of keys) last[k] = mi; }
+    if (c.level === "critical" && !N.acked.includes(ev.eventId) && !N.queue.some((q) => q.eventId === ev.eventId)) fresh.push(newsItem(civ, ev, c));
+  }
+  N.scanned = civ.events.length; fresh.sort((a, b) => b.score - a.score || (a.eventId < b.eventId ? -1 : 1)); /* 同じ月に複数あるときは、世界大戦・規模の大きいものから順に。すべて確認するまで時間は進まない */ N.queue.push(...fresh);
   if (N.queue.length && !T.hold) { T.hold = true; T.resumeSpeed = T.speed; } return fresh.length;
 }
 export const skipNews = (civ) => { newsOf(civ).scanned = civ.events.length; };
@@ -91,7 +107,6 @@ export function newsFeed(civ, { limit = 40, minLevel = "major", before = null } 
   const cx = newsContext(civ), out = [], rank = { normal: 0, major: 1, critical: 2 }; for (let i = (before ?? civ.events.length) - 1; i >= 0 && out.length < limit; i--) { const ev = civ.events[i], c = classifyEvent(civ, ev, cx); if (rank[c.level] >= rank[minLevel]) out.push(newsItem(civ, ev, c)); } return out;
 }
 export function checkClock(civ) {
-  { const st = civ.wcde.news?.settings; if (st && (!(st.majorScore <= st.criticalScore))) return ["ニュースの基準が不正（主要の閾値が重大より大きい）"]; }
   const errs = [], T = civ.wcde.time, N = civ.wcde.news; if (!T && !N) return errs;
   if (T) { if (!SPEEDS.some((s) => s.id === T.speed)) errs.push("時間の速度が不正"); if (T.hold && !(N?.queue.length)) errs.push("停止中なのに確認待ちのニュースがない（時間が止まったままになる）"); if (!T.hold && N?.queue.length) errs.push("確認待ちのニュースがあるのに時間が止まっていない"); if (T.hold && T.resumeSpeed != null && !SPEEDS.some((s) => s.id === T.resumeSpeed)) errs.push("復帰時の速度が不正"); }
   if (N) { const seen = new Set(); for (const q of N.queue) { if (seen.has(q.id)) errs.push(`ニュース ${q.id} が重複`); seen.add(q.id); if (!civ.events.some((e) => e.eventId === q.eventId) && (inLiveRange(civ, q.eventId) || !findRecord(civ, q.eventId))) errs.push(`ニュース ${q.id} の元の事実イベントがない`); if (N.acked.includes(q.eventId)) errs.push(`確認済みのニュース ${q.id} がキューにある`); } if (N.scanned > civ.events.length || !Number.isInteger(N.scanned) || N.scanned < 0) errs.push("ニュースの走査位置が不正"); }

@@ -44,7 +44,7 @@ export function pNations() {
   const c = civ(), pv = S.w.viewPast, all = pv != null ? pastView(c, pv).states.map((x) => ({ id: x.id, name: x.name ?? "（名前の資料が失われた国家）", polity: x.polity, formedAt: x.formedAt ?? -Infinity, alive: true, partial: x.partial })) : Object.values(c.states).filter((s) => (S.showDead ? true : s.alive)), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "国家"), pv != null ? h("p", { class: "n err" }, `過去（${date(pv)}）の国家を、残っている歴史資料から再構成して表示しています（読み取り専用）。資料が失われた部分は不明で、何も無かったという意味ではありません。`) : null);
   if (pv == null && S.sel && c.states[S.sel]) box.append(stateDetail(c.states[S.sel]));
   box.append(lb("国家一覧", "新しい順"), h("div", { class: "rowb" }, h("label", {}, h("input", { type: "checkbox", id: "show-dead", checked: !!S.showDead, onchange: (e) => { S.showDead = e.target.checked; S.hooks.panel(); } }), " 滅亡した国家も表示")), note(`${list.length} 件。クリックで詳細を開きます（クリックだけでは担当は変わりません）。`));
-  box.append(vlist(list, 26, (s) => h("div", { class: "vrow" + (S.sel === s.id ? " on" : ""), onclick: () => S.hooks.select(s.id) }, h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", { style: "color:var(--dim)" }, ` ${s.alive ? "人口 " + n0(s.pop) : "滅亡"}・成立 ${date(s.formedAt).split("月")[0]}月`))));
+  box.append(vlist(list, 40, (s) => h("div", { class: "vrow full" + (S.sel === s.id ? " on" : ""), onclick: () => S.hooks.select(s.id) }, h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", { style: "color:var(--dim)" }, ` ${s.alive ? "人口 " + n0(s.pop) : "滅亡"}・成立 ${date(s.formedAt).split("月")[0]}月`))));
   return box;
 }
 function stateDetail(st) {

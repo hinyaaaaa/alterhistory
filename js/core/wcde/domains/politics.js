@@ -10,6 +10,7 @@ import { makeEvent } from "../../civ/events.js";
 import { hashSeed } from "../../civ/civ-state.js";
 import { lifeScale } from "../../civ/species.js";
 import { effective } from "./effective.js";
+import { retitle, leaderName, leaderRng } from "./naming.js";
 
 export const FACTIONS = Object.freeze({ nobility: "貴族・有力者", clergy: "聖職者", merchants: "商人", military: "軍", commoners: "民衆", bureaucrats: "官僚・書記", artisans: "職人・工房", clans: "遊牧氏族" });
 export const CORE_FACTIONS = Object.freeze(["nobility", "military", "commoners"]);
@@ -135,7 +136,8 @@ export function regimeChange(ctx, st) {
   for (const k of Object.keys(f)) f[k].support = clamp(f[k].support + 0.15);
   if (who === "commoners" && f.nobility) f.nobility.support = clamp(f.nobility.support - 0.15); if (who === "military") f.military.support = clamp(f.military.support + 0.1);
   const how = who === "commoners" ? (before !== to ? "民衆の蜂起で政体が変わった" : "民衆の蜂起で政権が倒れた") : before !== to ? "軍が政権を握り政体が変わった" : "軍による宮廷の政変";
-  makeEvent(civ, ids, { kind: "regime_change", title: `${st.name}で政変が起きた（${how}）`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, { targetId: st.id, property: "stability", before: null, after: Math.round(st.stability * 100) / 100 }], causes, facts: { stateId: st.id, polity: to, name: st.name, by: who }, provenance: "simulation" });
+  const oldName = st.name, rt = before !== to ? retitle(st, to) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; } // 政体が変わると、国号の称号も改まる（王国→帝国・共和国など）
+  makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}で政変が起きた（${how}）${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...(rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : []), { targetId: st.id, property: "stability", before: null, after: Math.round(st.stability * 100) / 100 }], causes, facts: { stateId: st.id, polity: to, name: st.name, by: who }, provenance: "simulation" });
   // 政変で指導者が代わる（新しい指導者は別の家系。出自の勢力を記録する。人物の記録は people.js が事実として残す）
-  st.leader = { name: ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: who };
+  st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: who };
 }

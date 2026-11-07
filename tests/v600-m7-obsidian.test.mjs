@@ -12,7 +12,7 @@ dispatch(w, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispat
 const top = Object.values(w.civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop);
 assert.ok(dispatch(w, { type: "creator.intervene", authority: A.CREATOR, stateId: top[0].id, field: "taxRevenue", value: 1.6, reason: "出力試験" }).ok);
 assert.ok(dispatch(w, { type: "creator.editState", authority: A.CREATOR, stateId: top[0].id, changes: { name: "試験の国" } }).ok);
-dispatch(w, { type: "clock.run", authority: A.ADMIN, months: 2 }); makeEvent(w.civ, w.sim.ctx.ids, { kind: "state_dissolved", title: "（試験）大国の滅亡", participants: top.slice(0, 6).map((x) => ({ entityId: x.id, role: "state" })) }); scanNews(w.civ);
+dispatch(w, { type: "clock.run", authority: A.ADMIN, months: 2 }); dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: top[0].id }); /* v6.1.2: 重大ニュースは自国の重大事と世界大戦だけ */ makeEvent(w.civ, w.sim.ctx.ids, { kind: "state_dissolved", title: "（試験）大国の滅亡", participants: top.slice(0, 6).map((x) => ({ entityId: x.id, role: "state" })) }); scanNews(w.civ);
 const files = []; for await (const f of obsidianFiles(w.world, w.civ, "試験世界")) files.push(f);
 const by = (re) => files.filter((f) => re.test(f.path));
 await check("介入の記録・直接編集の記録が、世界の事実の出来事とは別のフォルダのノートとして出る", () => { const n = by(/創造主の介入\/介入の記録\.md$/); assert.equal(n.length, 1); assert.ok(/出力試験/.test(n[0].data) && /taxRevenue/.test(n[0].data) && /事実.*ではありません/.test(n[0].data)); assert.equal(by(/創造主の介入\/直接編集の記録\.md$/).length, 1); assert.ok(!/創造主の介入/.test(by(/出来事\//)[0]?.path ?? "")); });

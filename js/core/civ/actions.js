@@ -6,6 +6,7 @@ import { TECH, adoptable, stateCan, gateReason, ACTION_CAP, TREATY_CAP, POLITY_C
 import { byState, neighborGroups } from "./spatial.js";
 import { foundSettlement } from "./population.js";
 import { POLITY } from "./states.js";
+import { retitle } from "../wcde/domains/naming.js";
 import { neighborStates, strength, treatyBetween, atWarWith, signTreaty, endTreaty, declareWar, endWar, adjustRel, TREATY } from "./diplomacy.js";
 import { dominant } from "./cohorts.js";
 import { grievance } from "./interpret.js";
@@ -43,7 +44,7 @@ export const ACTIONS = [
       if (p === "tribal") out.push(n >= 2000 && stateCan(ctx.civ, st, "polity:chiefdom") ? cand("change_polity", { stability: 0.3, prestige: 0.2 }, { opt: "chiefdom" }) : bad("change_polity", n < 2000 ? "人口が足りない" : gateReason(ctx.civ, st, "polity:chiefdom"), { opt: "chiefdom" }));
       if (p === "chiefdom" || p === "theocracy") { out.push(stateCan(ctx.civ, st, "polity:kingdom") && n >= 15000 ? cand("change_polity", { stability: 0.3, prestige: 0.4 }, { opt: "kingdom" }) : bad("change_polity", n < 15000 ? "人口が足りない" : gateReason(ctx.civ, st, "polity:kingdom"), { opt: "kingdom" })); if (p === "chiefdom") out.push(stateCan(ctx.civ, st, "polity:republic") && n >= 15000 && st.policy.tolerance > 0.5 ? cand("change_polity", { stability: 0.25, culture: 0.2 }, { opt: "republic" }) : bad("change_polity", gateReason(ctx.civ, st, "polity:republic") ?? "人口と寛容が足りない", { opt: "republic" })); }
       if (p === "kingdom") out.push(stateCan(ctx.civ, st, "polity:empire") && n >= 150000 ? cand("change_polity", { stability: 0.2, prestige: 0.6, expansion: 0.2 }, { opt: "empire" }) : bad("change_polity", n < 150000 ? "人口が足りない" : gateReason(ctx.civ, st, "polity:empire"), { opt: "empire" })); return out; },
-    execute(ctx, st, c) { const ok = POLITY[c.opt]; if (!ok) return { ok: false, error: "未知の政体" }; { const gr = gateReason(ctx.civ, st, POLITY_CAP[c.opt]); if (gr) return { ok: false, error: gr }; } const ef = []; eff(ef, st, "polity", st.polity, c.opt); st.polity = c.opt; st.interpDirty = true; return { ok: true, facts: { stateId: st.id, polity: c.opt }, effects: ef, title: `政体を${POLITY[c.opt]}へ` }; } },
+    execute(ctx, st, c) { const ok = POLITY[c.opt]; if (!ok) return { ok: false, error: "未知の政体" }; { const gr = gateReason(ctx.civ, st, POLITY_CAP[c.opt]); if (gr) return { ok: false, error: gr }; } const ef = []; eff(ef, st, "polity", st.polity, c.opt); st.polity = c.opt; st.interpDirty = true; const rt = retitle(st, c.opt); if (rt) { eff(ef, st, "name", st.name, rt.name); st.name = rt.name; st.nameBase = rt.base; } /* v6.2.0: 国号の称号も政体に合わせて改まる */ return { ok: true, facts: { stateId: st.id, polity: c.opt, ...(rt ? { name: rt.name } : {}) }, effects: ef, title: `政体を${POLITY[c.opt]}へ${rt ? `（国号は${rt.name}）` : ""}` }; } },
   { key: "designate_heir", domain: "leader", label: "継承者の指名", enabled: true,
     candidates(ctx, st) { return st.leader.heir ? [bad("designate_heir", "すでに指名済み")] : [cand("designate_heir", { stability: 0.35 })]; },
     execute(ctx, st) { if (st.leader.heir) return { ok: false, error: "すでに指名済み" }; st.leader.heir = true; return { ok: true, effects: [{ targetId: st.id, property: "leader.heir", before: false, after: true }] }; } },

@@ -1,3 +1,24 @@
+# v6.2.0: 史実らしい命名（最新。v6.1.2 に統合）
+
+`docs/CHANGELOG.md` の v6.2.0 を参照。要点:
+- 命名の中心は `core/wcde/domains/naming.js`（国号の称号・君主名〇〇n世・王朝名・戦争名・戦場名の地形語）。国号の語根と語尾は `language.js` の `nameGen.stateParts`。
+- 君主名は `leaderName`（`civ/states.js`・`politics.js` の政変・`people.js` の登位で付く）。王朝は `people.js` の `newHouse`（第n王朝。部族は〇〇氏）。
+- 戦争名は `warfare.js` の `initWar` で付く（`war.name`）。野戦の戦場は `fieldSite` で周囲へ散らす。戦闘名は `battleName`（`civ.battleNames` で重複を避ける）。
+- 政体が変わると `retitle` で国号の称号が改まる（政変・政体変更の行動）。創造主が付けた名前（`nameBase` なし）は改めない。
+- 課題: 政体が途中で世襲制に変わった国は、次の代替わりまで君主名が世数なし。文化・宗教・都市の命名は未着手。
+
+---
+
+# v6.1.2: ニュースと外交の見直し（最新）
+
+`docs/CHANGELOG.md` の v6.1.2 を参照。要点:
+- 左のパネルは再生中に自動で描き直さない（`main.js` の `live()`）。古くなったら右上の「↻ 最新の状態に更新」。
+- 重大ニュース（時間が止まる）は「自国の重大事」と「世界大戦」だけ（`core/wcde/clock.js` の `OWN_CRITICAL`・`WORLD_WAR`）。基準の設定（news.configure）は廃止。
+- 国名は省略しない。同盟の図は陣営（圏）ごと（`ui/v6/alliance.js`）。
+- 観察: 試験で 100 年以上回した世界では、同盟が 1 つも結ばれず、戦争はすべて 2 か国どうしだった。このままでは世界大戦は実際にはほぼ起きない（条件は `WORLD_WAR` で調整できる）。AI が同盟を結ぶ条件の見直しが次の課題。
+
+---
+
 # v6.1.1: 地図レイヤー（Azgaar 方式）・描画・地形生成（最新）
 
 `docs/V6_1_MAP_LAYERS.md` を参照。`MapView` の旧 API（`fillLayer`/`overlays`）は廃止。

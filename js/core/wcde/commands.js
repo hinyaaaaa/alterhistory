@@ -4,7 +4,7 @@ import { foundAsPlayer, delegateToWorld, refreshCandidates } from "./founding.js
 import { takeControl, releaseControl, creatorEditState, creatorRename } from "./control.js";
 import { reorganize, adoptDoctrine } from "./domains/military.js";
 import { applyDisplayEdit } from "./calendar.js";
-import { clockRun, ackNews, setSpeed, skipNews, timeOf, configureNews } from "./clock.js";
+import { clockRun, ackNews, setSpeed, skipNews, timeOf } from "./clock.js";
 import { createCatastrophe, planCatastrophe } from "./catastrophe.js";
 import { createIntervention, cancelIntervention, planIntervention } from "./intervention.js";
 import { negotiatePeace } from "./negotiation.js";
@@ -26,7 +26,6 @@ export function registerCommands() {
   defineCommand("time.advance", { authorities: [A.ADMIN], checkpoint: false, validate: (w, c) => (timeOf(w.civ).hold ? { ok: false, error: "重大ニュースの確認待ちです（OK を押すまで時間は進みません）" } : (Number.isInteger(c.months) && c.months >= 1 && c.months <= 120000 ? null : { ok: false, error: "months は 1〜120000 の整数" })), apply: (w, c) => { const r = safeAdvance(w, c.months); skipNews(w.civ); return r.ok ? { ok: true, ...r } : { ok: false, error: `${r.error}（${r.haltedAt.year}年${r.haltedAt.month}月で停止）`, ...r }; } });
   // 再生（UI の時間制御）。重大ニュースの月で止まり、OK まで進まない。速度は停止前の値へ自動で戻る
   defineCommand("clock.run", { authorities: [A.ADMIN], checkpoint: false, validate: (w, c) => (Number.isInteger(c.months) && c.months >= 1 && c.months <= 240 ? null : { ok: false, error: "months は 1〜240 の整数" }), apply: (w, c) => { const r = clockRun(w, c.months); return r.ok ? r : { ...r, ok: false }; } });
-  defineCommand("news.configure", { authorities: [A.ADMIN, A.CREATOR], mutates: false, phases: ALL, apply: (w, c) => configureNews(w, c) }); // 重大ニュースの基準（調整可能）
   defineCommand("clock.setSpeed", { authorities: [A.ADMIN], mutates: false, phases: ALL, apply: (w, c) => setSpeed(w, c) });
   defineCommand("news.ack", { authorities: [A.ADMIN], mutates: false, phases: ALL, apply: (w, c) => ackNews(w, c) });
   // 過去の閲覧（世界を変えない）

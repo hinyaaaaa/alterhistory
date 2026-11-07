@@ -1923,14 +1923,64 @@
     }
   });
 
+  // js/core/wcde/domains/naming.js
+  function stateForm(polity, via = null) {
+    switch (polity) {
+      case "kingdom":
+        return "\u738B\u56FD";
+      case "empire":
+        return "\u5E1D\u56FD";
+      case "republic":
+        return "\u5171\u548C\u56FD";
+      case "theocracy":
+        return "\u795E\u8056\u56FD";
+      case "chiefdom":
+        return via === "city_state" ? "\u5E02\u56FD" : "\u9996\u9577\u56FD";
+      default:
+        return via === "nomad_confederation" ? "\u90E8\u65CF\u9023\u5408" : via === "agri_union" ? "\u9023\u5408" : via === "defense_league" ? "\u540C\u76DF" : "\u90E8\u65CF";
+    }
+  }
+  function baseOfState(st) {
+    if (st.nameBase) return st.nameBase;
+    const n2 = String(st.name ?? "");
+    for (const f of FORMS) if (n2.length > f.length && n2.endsWith(f)) return n2.slice(0, -f.length);
+    return n2;
+  }
+  function retitle(st, polity) {
+    if (!st.nameBase && !FORMS.some((f) => String(st.name).endsWith(f))) return null;
+    const base = baseOfState(st), next = composeStateName(base, polity, st.via);
+    return next !== st.name ? { base, name: next } : null;
+  }
+  function leaderName(st, fresh2, rnd) {
+    const raw = stripOrd(fresh2);
+    if (!REGNAL.has(st.polity)) return raw;
+    const reg = st.regnal ?? (st.regnal = {}), keys = Object.keys(reg);
+    const base = keys.length && rnd() < 0.4 ? keys[Math.floor(rnd() * keys.length)] : raw;
+    reg[base] = (reg[base] ?? 0) + 1;
+    return `${base}${reg[base]}\u4E16`;
+  }
+  var FORMS, composeStateName, REGNAL, stripOrd, leaderRng;
+  var init_naming = __esm({
+    "js/core/wcde/domains/naming.js"() {
+      init_civ_state();
+      FORMS = ["\u90E8\u65CF\u9023\u5408", "\u6559\u56E3\u56FD", "\u5E02\u56FD", "\u9996\u9577\u56FD", "\u5171\u548C\u56FD", "\u795E\u8056\u56FD", "\u738B\u56FD", "\u5E1D\u56FD", "\u9023\u5408", "\u540C\u76DF", "\u90E8\u65CF", "\u56FD"];
+      composeStateName = (base, polity, via) => base + stateForm(polity, via);
+      REGNAL = /* @__PURE__ */ new Set(["chiefdom", "kingdom", "empire", "theocracy"]);
+      stripOrd = (n2) => String(n2).replace(/[0-9０-９]+世$/, "");
+      leaderRng = (civ, st, ...p) => rngOf(hashSeed(civ.historySeed, "leader", st.id, civ.monthIndex, ...p));
+    }
+  });
+
   // js/core/civ/states.js
   function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null, name = null, polity = null }) {
     const { world, civ, ids: ids2, rng } = ctx, gs = groupIds.map((i) => civ.groups[i]).filter(Boolean);
     if (!gs.length) return null;
     const cap = gs.reduce((a, b) => b.pop > a.pop ? b : a), id = ids2.next("state"), h2 = hashSeed(id);
+    const pol = gatedPolity(civ, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")), np = name ? null : ctx.nameGen?.stateParts?.(civ, cap, via, rng, pol) ?? null;
     const st = {
       id,
-      name: name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix,
+      name: name ?? np?.name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix,
+      nameBase: np?.base ?? null,
       via,
       formedAt: civ.monthIndex,
       capitalGroupId: cap.id,
@@ -1940,7 +1990,7 @@
       player,
       dissolvedAt: null,
       predecessor,
-      polity: gatedPolity(civ, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")),
+      polity: pol,
       stability: 0.7,
       pop: 0,
       settlements: 0,
@@ -1959,6 +2009,7 @@
       lastCrisis: -999,
       personality: { security: 0.6 + h2 % 100 / 125, prosperity: 0.6 + (h2 >> 7) % 100 / 125, expansion: 0.6 + (h2 >> 14) % 100 / 125, stability: 0.6 + (h2 >> 21) % 100 / 125, culture: 0.6 + (h2 >> 4) % 100 / 125, tech: 0.6 + (h2 >> 11) % 100 / 125, prestige: 0.6 + (h2 >> 18) % 100 / 125 }
     };
+    st.leader.name = leaderName(st, st.leader.name, leaderRng(civ, st, "found"));
     civ.states[id] = st;
     for (const g of gs) g.stateId = id;
     if (gs.some((g) => g.player)) st.player = true;
@@ -2047,7 +2098,7 @@
       if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4e3 * ls))) {
         const heir = st.leader.heir;
         st.interpDirty = true;
-        st.leader = { name: ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), bornAt: mi2 - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
+        st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi2 - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
         st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12));
         makeEvent(civ, ids2, { kind: "leader_succession", title: `${st.name}\u306E\u6307\u5C0E\u8005\u304C\u4EE3\u308F\u3063\u305F${heir ? "\uFF08\u7D99\u627F\u8005\u304C\u6C7A\u307E\u3063\u3066\u3044\u305F\uFF09" : "\uFF08\u7D99\u627F\u306E\u6DF7\u4E71\uFF09"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } });
       }
@@ -2096,6 +2147,7 @@
     "js/core/civ/states.js"() {
       init_events();
       init_culture();
+      init_naming();
       init_cohorts();
       init_spatial();
       init_population();
@@ -2795,6 +2847,7 @@
       init_spatial();
       init_population();
       init_states();
+      init_naming();
       init_diplomacy();
       init_cohorts();
       init_interpret();
@@ -2879,7 +2932,13 @@
             eff(ef, st, "polity", st.polity, c.opt);
             st.polity = c.opt;
             st.interpDirty = true;
-            return { ok: true, facts: { stateId: st.id, polity: c.opt }, effects: ef, title: `\u653F\u4F53\u3092${POLITY[c.opt]}\u3078` };
+            const rt = retitle(st, c.opt);
+            if (rt) {
+              eff(ef, st, "name", st.name, rt.name);
+              st.name = rt.name;
+              st.nameBase = rt.base;
+            }
+            return { ok: true, facts: { stateId: st.id, polity: c.opt, ...rt ? { name: rt.name } : {} }, effects: ef, title: `\u653F\u4F53\u3092${POLITY[c.opt]}\u3078${rt ? `\uFF08\u56FD\u53F7\u306F${rt.name}\uFF09` : ""}` };
           }
         },
         {
@@ -16679,10 +16738,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "6.1.1";
+  var APP_VERSION = "6.2.0";
   var APP_VERSION_NAME = "\u4E16\u754C\u3068\u6587\u660E\u306E\u529B\u5B66 II";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "64413e2141ea" : "dev";
+  var APP_BUILD_ID = true ? "93a11808f599" : "dev";
 
   // js/ui/icons.js
   var P3 = {
@@ -26261,7 +26320,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
   }
   function warName(civ, id) {
     const w = civ.wars[id];
-    return w ? `${civ.states[w.aggressor]?.name ?? "?"}\u5BFE${civ.states[w.defender]?.name ?? "?"}` : id;
+    return w?.name ? w.name : w ? `${civ.states[w.aggressor]?.name ?? "?"}\u5BFE${civ.states[w.defender]?.name ?? "?"}` : id;
   }
   function buildFamilies(civ) {
     const ws = Object.values(civ.wars).sort((a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : 1)), fams = [];

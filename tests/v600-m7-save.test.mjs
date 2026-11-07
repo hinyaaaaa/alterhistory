@@ -15,7 +15,7 @@ const top = Object.values(w.civ.states).filter((s) => s.alive).sort((a, b) => b.
 assert.ok(dispatch(w, { type: "creator.intervene", authority: A.CREATOR, stateId: top.id, field: "taxRevenue", value: 1.7, halfLifeMonths: 60, reason: "保存テスト" }).ok);
 dispatch(w, { type: "clock.setSpeed", authority: A.ADMIN, speed: 3 }); assert.ok(dispatch(w, { type: "clock.run", authority: A.ADMIN, months: 3 }).ok);
 // 未確認ニュースがある状態を確実に作る（大国どうしの滅亡という事実イベントを 1 件起こし、確定後の走査にかける）
-makeEvent(w.civ, w.sim.ctx.ids, { kind: "state_dissolved", title: "（試験）最大の国が滅んだ", participants: Object.values(w.civ.states).filter((x) => x.alive).sort((a, b) => b.pop - a.pop).slice(0, 6).map((x) => ({ entityId: x.id, role: "state" })) }); assert.ok(scanNews(w.civ) >= 1); assert.ok(timeOf(w.civ).hold);
+{ const big = Object.values(w.civ.states).filter((x) => x.alive).sort((a, b) => b.pop - a.pop).slice(0, 6); assert.ok(dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: big[0].id }).ok); /* v6.1.2: 重大ニュースは自国の重大事と世界大戦だけ */ makeEvent(w.civ, w.sim.ctx.ids, { kind: "state_dissolved", title: "（試験）最大の国が滅んだ", participants: big.map((x) => ({ entityId: x.id, role: "state" })) }); } assert.ok(scanNews(w.civ) >= 1); assert.ok(timeOf(w.civ).hold);
 const P = packSave(w), TEXT = P.text;
 const load = (t, o) => unpackSave(t, o);
 const tamper = (fn) => { const d = JSON.parse(TEXT); fn(d); return JSON.stringify(d); };

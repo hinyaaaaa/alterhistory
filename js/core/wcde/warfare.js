@@ -16,6 +16,7 @@ import { stateCan } from "../civ/tech.js";
 import { BIOMES } from "../civ/world-consts.js";
 import { effective } from "./domains/effective.js";
 import { nameFor, languageOfGroup } from "./domains/language.js";
+import { kanjiNum, siteDescriptors, warNameFor } from "./domains/naming.js";
 import { landPower, navalPower, navyShare, landShare, supplyAt } from "./power.js";
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x), r3 = (x) => Math.round(x * 1000) / 1000;
@@ -39,10 +40,25 @@ export function placeName(ctx, g) {
   const lang = languageOfGroup(g); if (!lang || !civ.languages?.[lang]) return "名もなき地";
   return nameFor(civ, rngOf(hashSeed(civ.historySeed, "place", g.id)), lang, "place") ?? "名もなき地";
 }
-const KANJI = ["", "", "二", "三", "四", "五", "六", "七", "八", "九"];
+/** 土地の地形（戦場名に添える呼び名の元） */
+function siteFeatures(ctx, g) {
+  const ce = ctx.world.cell, c = g.cell, b = ce.biome[c];
+  return { river: !!ce.river[c], mountain: (ce.mountain?.[c] ?? 0) > 0 || b === BIOMES.ALPINE, coast: ce.coastDist[c] <= 1, forest: b === BIOMES.TEMPERATE_FOREST || b === BIOMES.RAINFOREST || b === BIOMES.TAIGA, wet: b === BIOMES.WETLAND, dry: b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT, plain: b === BIOMES.GRASSLAND || b === BIOMES.SAVANNA };
+}
+/** v6.2.0: 戦闘名。ふつうは「〇〇の戦い」。同じ土地で再び戦うときは、地形の呼び名（〇〇河畔の戦い・〇〇峠の戦い）で区別する。それでも足りないときだけ「第二次」「第三次」 */
 function battleName(ctx, w, kind, g) {
-  const { civ } = ctx, p = placeName(ctx, g), base = { field: `${p}の戦い`, siege: `${p}包囲戦`, naval: `${p}沖海戦`, landing: `${p}上陸戦` }[kind] ?? `${p}の戦い`, n = (w.ops.names[base] = (w.ops.names[base] ?? 0) + 1);
-  return n === 1 ? base : n <= 3 ? `第${KANJI[n]}次${base}` : `${civ.date.year}年の${base}`;
+  const { civ } = ctx, p = placeName(ctx, g), used = (civ.battleNames ??= {}), ds = siteDescriptors(siteFeatures(ctx, g));
+  const cands = kind === "siege" ? [`${p}包囲戦`, `${p}攻城戦`, `${p}の陥落`] : kind === "naval" ? [`${p}沖海戦`, `${p}湾の海戦`, `${p}海峡の戦い`] : kind === "landing" ? [`${p}上陸戦`, `${p}上陸作戦`] : [`${p}の戦い`, ...ds.map((d) => `${p}${d}の戦い`), `${p}会戦`];
+  const r = U(civ, w.id, civ.monthIndex, g.id, kind, "bn"), start = cands.length > 1 && r >= 0.6 ? 1 + Math.floor(((r - 0.6) / 0.4) * (cands.length - 1)) : 0;
+  for (let i = 0; i < cands.length; i++) { const nm = cands[(start + i) % cands.length]; if (!used[nm]) { used[nm] = 1; return nm; } }
+  const base = cands[0], n = (used[base] = (used[base] ?? 1) + 1);
+  return n <= 3 ? `第${kanjiNum(n)}次${base}` : `${civ.date.year}年の${base}`;
+}
+/** v6.2.0: 野戦の戦場。目標の集落そのものでなく、周りの土地へ散らす（直近の戦場は避ける）。包囲・海戦・上陸は目標の場所のまま */
+function fieldSite(ctx, w, camp, g) {
+  const { civ } = ctx, ops = w.ops, recent = (ops.sites ??= []), cs = [g, ...[...neighborGroups(ctx, g)].map((o) => civ.groups[o]).filter(Boolean)].sort((x, y) => (x.id < y.id ? -1 : 1));
+  const fresh = cs.filter((x) => !recent.includes(x.cell)), pool = fresh.length ? fresh : cs, site = pool[Math.floor(U(civ, w.id, civ.monthIndex, camp.id, "site") * pool.length)];
+  recent.push(site.cell); if (recent.length > 8) recent.shift(); return site;
 }
 
 // ---- 地形・要塞
@@ -50,7 +66,10 @@ const terrainBonus = (world, cell) => { const ce = world.cell, b = ce.biome[cell
 const stageOf = (civ, g) => (g?.settlementId ? civ.settlements[g.settlementId]?.stage ?? "village" : null);
 
 // ---- 戦争の開始・部隊・戦域
-export function initWar(ctx, w) { w.ops = initOps(); syncForces(ctx, w); ensureTheaters(ctx, w); }
+export function initWar(ctx, w) {
+  w.ops = initOps(); syncForces(ctx, w); ensureTheaters(ctx, w);
+  w.name ??= warNameFor(ctx, w, () => { const g = ctx.civ.groups[ctx.civ.states[w.defender]?.capitalGroupId], p = g ? placeName(ctx, g) : null; return p && p !== "名もなき地" ? p : null; }); // v6.2.0: 戦争名（〇〇戦争・第二次〇〇戦争）
+}
 const capCell = (civ, st) => civ.groups[st.capitalGroupId]?.cell ?? null;
 const commitOf = (w, st) => clamp(w.ops.direction[st.id]?.commit ?? 0.75, 0.3, 1);
 
@@ -207,7 +226,7 @@ function advance(ctx, w, camp) {
   const Dn = defenderForce(ctx, w, foe, g.stateId), tst = civ.states[g.stateId], stage = stageOf(civ, g);
   const garrison = (g.pop * 0.02 + 20) * (1 + (tst?.defense ?? 0) * 2 + (tst?.milDef ?? 0)) * (stage === "city" ? 2 : stage === "town" ? 1.4 : 1);
   if (camp.kind === "landing") { const r = fight(ctx, w, { kind: "landing", A: F, D: Dn && Dn.stateId === g.stateId ? Dn : null, camp, g, garrison }); if (r.win === "A") { occupy(ctx, w, g, side, camp); ops.stats.landings++; camp.phase = "done"; camp.result = "success"; } else { camp.phase = "done"; camp.result = "failed"; } return; }
-  if (Dn && U(civ, w.id, mi, camp.id, "eng") < (camp.kind === "siege" ? 0.25 : 0.45)) { const r = fight(ctx, w, { kind: "field", A: F, D: Dn, camp, g }); camp.progress = clamp(camp.progress + (r.win === "A" ? 0.3 : -0.25), 0, 1.2); if (r.win !== "A" && F.morale < 0.2) { camp.phase = "done"; camp.result = "failed"; return; } }
+  if (Dn && U(civ, w.id, mi, camp.id, "eng") < (camp.kind === "siege" ? 0.25 : 0.45)) { const r = fight(ctx, w, { kind: "field", A: F, D: Dn, camp, g: fieldSite(ctx, w, camp, g) }); camp.progress = clamp(camp.progress + (r.win === "A" ? 0.3 : -0.25), 0, 1.2); if (r.win !== "A" && F.morale < 0.2) { camp.phase = "done"; camp.result = "failed"; return; } }
   else {
     const atkP = landPower(civ, st, F.size) * moraleF(F) * (0.5 + 0.5 * F.supply), ratio = atkP / (garrison * (1 + terrainBonus(world, g.cell)) + 1);
     const rate = camp.kind === "siege" ? clamp(0.035 * ratio * (1 + 2 * (fx(st).siege ?? 0)), 0.01, 0.22) : clamp(0.06 * ratio, 0.02, 0.3); camp.progress = clamp(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);

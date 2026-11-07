@@ -5,6 +5,7 @@
 import { hashSeed } from "../../civ/civ-state.js";
 import { makeEvent } from "../../civ/events.js";
 import { ensureProfile, nameFor, languageOfGroup } from "./language.js";
+import { leaderName, leaderRng, baseOfLeader, dynastyName } from "./naming.js";
 
 const AGE_MIN = 14 * 12;
 /** 人物を作る（civ.figures）。parents は既知の親の人物ID（なければ null＝未知） */
@@ -12,7 +13,7 @@ export function createFigure(ctx, st, { name, bornAt, houseId, parents = null, r
   const { civ, ids } = ctx, id = ids.next("person"), f = { id, name, bornAt, diedAt: null, role, stateId: st.id, houseId, parents, children: [], speciesId: civ.groups[st.capitalGroupId]?.speciesId ?? "human", history: [{ at: civ.monthIndex, kind: "appeared", stateId: st.id }] };
   (civ.figures ??= {})[id] = f; return f;
 }
-const newHouse = (ctx, st, founder) => { const { civ, ids } = ctx; const id = ids.next("house"); (civ.houses ??= {})[id] = { id, name: `${founder.name}家`, foundedAt: civ.monthIndex, stateId: st.id, founderId: founder.id }; return id; };
+const newHouse = (ctx, st, founder) => { const { civ, ids } = ctx; const id = ids.next("house"); (civ.houses ??= {})[id] = { id, name: dynastyName(st.polity, Object.values(civ.houses).filter((x) => x.stateId === st.id).length + 1, founder.name), foundedAt: civ.monthIndex, stateId: st.id, founderId: founder.id }; return id; };
 
 /** 国家の現在の指導者に人物を結びつける。後継の手順（継承者の誕生・登位・簒奪）をここで事実として残す */
 export function stepPeople(ctx) {
@@ -27,20 +28,21 @@ export function stepPeople(ctx) {
       const succeeded = heirFig && heirFig.diedAt == null && L.heirTaken !== false && !L.deposed && cur.diedAt == null;
       cur.diedAt = mi; cur.history.push({ at: mi, kind: L.deposed ? "deposed" : "left_office" });
       if (heirFig && heirFig.diedAt == null && !L.deposed) { // 継承者が登位する: 指導者の名前・生年を継承者に合わせる（実際に生まれていた人物）
-        L.name = heirFig.name; L.bornAt = heirFig.bornAt; cur = heirFig; st.leaderFigureId = heirFig.id; cur.history.push({ at: mi, kind: "enthroned", stateId: st.id }); st.heirFigureId = null; L.heir = false;
+        heirFig.name = leaderName(st, heirFig.name, leaderRng(civ, st, "enthrone")); L.name = heirFig.name; L.bornAt = heirFig.bornAt; cur = heirFig; st.leaderFigureId = heirFig.id; cur.history.push({ at: mi, kind: "enthroned", stateId: st.id }); st.heirFigureId = null; L.heir = false;
         makeEvent(civ, ids, { kind: "succession_by_heir", title: `${st.name}で、${cur.name}が父祖${civ.figures[cur.parents?.[0]]?.name ?? ""}の跡を継いだ`, participants: [{ entityId: st.id, role: "state" }, { entityId: cur.id, role: "successor" }, ...(cur.parents ? [{ entityId: cur.parents[0], role: "predecessor" }] : [])], provenance: "simulation" });
         continue;
       }
       const old = cur; cur = null; L.deposed = false; // 新しい指導者（別の家系）
       const nf = createFigure(ctx, st, { name: L.name, bornAt: L.bornAt, houseId: null }); nf.houseId = newHouse(ctx, st, nf); st.leaderFigureId = nf.id; st.heirFigureId = null;
-      const ev = makeEvent(civ, ids, { kind: "dynasty_changed", title: `${st.name}で王朝（家系）が代わった（${old.name}家から${nf.name}家へ）`, participants: [{ entityId: st.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], effects: [{ targetId: st.id, property: "leader.houseId", before: old.houseId, after: nf.houseId }], provenance: "simulation" });
+      const ev = makeEvent(civ, ids, { kind: "dynasty_changed", title: `${st.name}で${civ.houses[nf.houseId]?.name ?? "新王朝"}が成立した（${civ.houses[old.houseId]?.name ?? "先の王朝"}の${old.name}が退いた）`, participants: [{ entityId: st.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], effects: [{ targetId: st.id, property: "leader.houseId", before: old.houseId, after: nf.houseId }], provenance: "simulation" });
       continue;
     }
     if (!cur) { const f = createFigure(ctx, st, { name: L.name, bornAt: L.bornAt, houseId: null }); f.houseId = newHouse(ctx, st, f); st.leaderFigureId = f.id; cur = f; }
     // 継承者の指名（v5 の heir フラグ）: 指導者に実際の子が生まれる。出生は継承者として指名された時点の事実
     if (L.heir && !st.heirFigureId && cur.diedAt == null) {
       const grp = civ.groups[st.capitalGroupId], lang = languageOfGroup(grp), r = ctx.rng, ageGap = Math.max(AGE_MIN, 20 * 12 + Math.floor(r() * 120)), born = Math.min(mi - 12, cur.bornAt + ageGap);
-      const child = createFigure(ctx, st, { name: (lang && civ.languages[lang] ? nameFor(civ, r, lang, "person") : null) ?? `${L.name}の子`, bornAt: born, houseId: cur.houseId, parents: [cur.id], role: "heir" });
+      const fresh = (lang && civ.languages[lang] ? nameFor(civ, r, lang, "person") : null) ?? `${baseOfLeader(L.name)}の子`, kin = leaderRng(civ, st, "heirname"), anc = kin() < 0.35 ? baseOfLeader(L.name) : fresh;
+      const child = createFigure(ctx, st, { name: anc, bornAt: born, houseId: cur.houseId, parents: [cur.id], role: "heir" });
       cur.children.push(child.id); st.heirFigureId = child.id;
       makeEvent(civ, ids, { kind: "heir_named", title: `${st.name}の${cur.name}が継承者${child.name}を定めた`, participants: [{ entityId: st.id, role: "state" }, { entityId: cur.id, role: "parent" }, { entityId: child.id, role: "heir" }], provenance: "simulation" });
     }

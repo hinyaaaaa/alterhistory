@@ -72,7 +72,7 @@ export function createHistoryActions({ store, civActions }) {
   };
   return A;
 }
-function warName(civ, id) { const w = civ.wars[id]; return w ? `${civ.states[w.aggressor]?.name ?? "?"}対${civ.states[w.defender]?.name ?? "?"}` : id; }
+function warName(civ, id) { const w = civ.wars[id]; return w?.name ? w.name : w ? `${civ.states[w.aggressor]?.name ?? "?"}対${civ.states[w.defender]?.name ?? "?"}` : id; }
 function buildFamilies(civ) {
   const ws = Object.values(civ.wars).sort((a, b) => a.startedAt - b.startedAt || (a.id < b.id ? -1 : 1)), fams = [];
   for (const w of ws) { const ps = new Set([...w.sides.a, ...w.sides.d]); let f = fams.find((x) => w.startedAt - x.lastEnd <= WAR_FAMILY_GAP && [...ps].some((p) => x.states.has(p))); if (!f) fams.push((f = { states: new Set(), wars: [], lastEnd: -Infinity })); f.wars.push(w.id); for (const p of ps) f.states.add(p); f.lastEnd = Math.max(f.lastEnd, w.endedAt ?? civ.monthIndex); }
