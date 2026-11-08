@@ -82,101 +82,89 @@ function creatorBox(st) {
 function tMilitary(st, mine) {
   const c = civ(), M = st.military; if (!M) return note("軍事のデータがありません。");
   const foes = aliveStates()
-  .filter((x) => x.id !== st.id)
-  .sort((a, b) => b.pop - a.pop);
+    .filter((x) => x.id !== st.id)
+    .sort((a, b) => b.pop - a.pop);
 
-const search = h("input", {
-  type: "search",
-  id: "wl-target-search",
-  placeholder: "国名で検索（存続する全国家）",
-  style: "width:100%"
-});
+  const search = h("input", {
+    type: "search",
+    id: "wl-target-search",
+    placeholder: "国名で検索（存続する全国家）",
+    style: "width:100%"
+  });
 
-const sel = h("select", { id: "wl-target" });
-const out = h("div", { id: "wl-out" });
+  const sel = h("select", { id: "wl-target" });
+  const out = h("div", { id: "wl-out" });
 
-const show = () => {
-  if (!sel.value) {
-    out.replaceChildren(note("検索条件に一致する国家がありません。"));
-    return;
-  }
+  const show = () => {
+    if (!sel.value) {
+      out.replaceChildren(note("検索条件に一致する国家がありません。"));
+      return;
+    }
 
-  const p = predictWar(c, st.id, sel.value, S.w.sim.ctx);
-  out.replaceChildren(p ? warlabView(p) : "予測できません");
-};
+    const p = predictWar(c, st.id, sel.value, S.w.sim.ctx);
+    out.replaceChildren(p ? warlabView(p) : "予測できません");
+  };
 
-const filterTargets = () => {
-  const q = search.value.trim().toLocaleLowerCase();
-  const current = sel.value;
-
-  const matched = foes.filter((x) =>
-    String(x.name ?? "").toLocaleLowerCase().includes(q)
-  );
-
-  sel.replaceChildren(
-    ...matched.map((x) =>
-      h("option", { value: x.id }, x.name)
-    )
-  );
-
-  sel.disabled = !matched.length;
-
-  if (matched.length) {
-    sel.value = matched.some((x) => String(x.id) === current)
-      ? current
-      : String(matched[0].id);
-  } else {
-    sel.append(
-      h("option", {
-        value: "",
-        disabled: true,
-        selected: true
-      }, "該当する国家がありません")
+  const filterTargets = () => {
+    const q = search.value.trim().toLocaleLowerCase();
+    const current = sel.value;
+    const matched = foes.filter((x) =>
+      String(x.name ?? "").toLocaleLowerCase().includes(q)
     );
-  }
 
-  declareButton.disabled = !mine || !sel.value;
-};
+    sel.replaceChildren(
+      ...matched.map((x) => h("option", { value: x.id }, x.name))
+    );
+    sel.disabled = !matched.length;
 
-search.addEventListener("input", () => {
+    if (matched.length) {
+      sel.value = matched.some((x) => String(x.id) === current)
+        ? current
+        : String(matched[0].id);
+    } else {
+      sel.append(
+        h("option", {
+          value: "",
+          disabled: true,
+          selected: true
+        }, "該当する国家がありません")
+      );
+    }
+
+    declareButton.disabled = !mine || !sel.value;
+  };
+
+  search.addEventListener("input", () => {
+    filterTargets();
+    show();
+  });
+  sel.addEventListener("change", show);
+
+  const declareButton = btn(
+    "選んだ国へ宣戦する",
+    () => act({
+      type: "state.act",
+      stateId: st.id,
+      action: "declare_war",
+      target: sel.value
+    }),
+    "",
+    {
+      id: "declare",
+      disabled: !mine,
+      title: mine ? "" : "担当国のみ"
+    }
+  );
+
   filterTargets();
-  show();
-});
+  setTimeout(() => sel.isConnected && show(), 0);
 
-sel.addEventListener("change", show);
-
-const declareButton = btn(
-  "選んだ国へ宣戦する",
-  () => act({
-    type: "state.act",
-    stateId: st.id,
-    action: "declare_war",
-    target: sel.value
-  }),
-  "",
-  {
-    id: "declare",
-    disabled: !mine,
-    title: mine ? "" : "担当国のみ"
-  }
-);
-
-filterTargets();
-
-setTimeout(() => sel.isConnected && show(), 0);
   const shares = M.shares ?? {}, inputs = Object.entries(UNIT_KINDS).map(([k, u]) => [k, h("input", { type: "number", step: "0.05", min: 0, max: 1, value: r2(shares[k] ?? 0), style: "width:62px", "data-kind": k })]);
   return h("div", {}, h("div", { class: "st", style: "grid-template-columns:repeat(2,1fr)" }, stat("兵力", n0(st.army)), stat("軍事能力", (st.milBonus >= 0 ? "+" : "") + pct(st.milBonus)), stat("装備水準（有効値）", pct(effective(c, st, "equipLevel"))), stat("練度（有効値）", pct(effective(c, st, "readiness")))),
     lb("部隊", "UNITS"), table(["部隊", "規模", "装備", "練度"], M.units.map((u) => [u.name, n0(u.size), pct(u.equip), pct(u.readiness)])), note(`充足は産業力・装備条件から算出され、介入があれば有効値を使います（産業力 ${n0(effective(c, st, "industry"))}）。`),
     lb("編制", "ORGANIZATION"), h("div", { class: "rowb" }, ...inputs.map(([k, el]) => h("label", {}, UNIT_KINDS[k].ja + " ", el))), h("div", { class: "rowb" }, btn("編制を変更", () => { const s = {}; for (const [k, el] of inputs) s[k] = Number(el.value) || 0; const r = (mine ? act : creator)({ type: "state.reorganize", stateId: st.id, shares: s }); }, "", { id: "reorg" })), note("合計は 1。条件（技術・地理）と費用を満たさない編制は理由つきで拒否されます。担当国または創造主が変更できます。"),
-    lb("宣戦", "WAR"),
-h("div", { class: "rowb" },
-  declareButton,
-  !mine ? h("small", {
-    style: "color:var(--dim)"
-  }, "担当国のみ実行できます") : null
-),
-search,
-sel,
+    lb("宣戦", "WAR"), h("div", { class: "rowb" }, declareButton, !mine ? h("small", { style: "color:var(--dim)" }, "担当国のみ実行できます") : null), search, sel,
+    lb("戦争研究所（予測）", "WAR LAB"), note("この国が攻める場合の見通しです。確定した未来ではなく、世界の状態は変えません。"), out);
 }
 export function warlabView(p) { return h("div", {}, h("div", {}, `勝利 ${pct(p.pAWin)}（${pct(p.pAWinRange[0])}〜${pct(p.pAWinRange[1])}）・引き分け ${pct(p.pStalemate)}・敗北 ${pct(p.pBWin)}`), h("div", { class: "bar" }, h("i", { style: `width:${p.pAWin * 100}%;background:var(--blue)` }), h("i", { style: `width:${p.pStalemate * 100}%;background:#6a6f78` }), h("i", { style: `width:${p.pBWin * 100}%;background:var(--red)` })), h("div", { class: "n" }, `見込みの損耗: 自軍 ${pct(p.lossA)} / 相手 ${pct(p.lossB)}・長引く目安 ${p.months}か月・不確実性 ${pct(p.uncertainty)}`), table(["要因", stateName(p.aId), stateName(p.bId)], p.factors.map((x) => [x.ja, x.a, x.b]))); }
 
