@@ -17,12 +17,8 @@ export const LAYERS = [
 export const GROUPS = [["ground", "地形・気候", "GROUND"], ["social", "社会", "SOCIETY"], ["mark", "記号・文字", "MARK"], ["line", "線", "LINE"]];
 export const FILL_IDS = LAYERS.filter(([, , g]) => g === "ground" || g === "social").map(([id]) => id);
 /** プリセット: [id, 表示名, レイヤー] */
-export const PRESETS = [
-  ["politic", "政治", ["states", "relief", "rivers", "borders", "cities", "labels"]], ["culture", "文化", ["cultures", "relief", "rivers", "borders", "cities"]],
-  ["language", "言語", ["languages", "relief", "rivers", "borders", "cities"]], ["religion", "宗教", ["religions", "relief", "rivers", "borders", "cities"]],
-  ["biome", "バイオーム", ["biomes", "relief", "rivers"]], ["height", "標高", ["heightmap", "relief", "rivers"]], ["climate", "気温", ["temperature", "relief", "rivers"]], ["rain", "降水", ["precipitation", "rivers"]],
-  ["economy", "人口・交易", ["population", "relief", "rivers", "routes", "cities"]], ["military", "軍事", ["states", "relief", "borders", "war", "fronts", "cities"]], ["land", "陸地のみ", ["relief"]],
-];
+/** 初期に表示する層（v6.3.0 でプリセットは廃止。層は個別に切り替える） */
+export const DEFAULT_LAYERS = ["states", "relief", "rivers", "borders", "cities", "labels"];
 export const DEFAULT_ALPHA = { heightmap: 1, biomes: 1, temperature: 0.8, precipitation: 0.8, population: 0.85, religions: 0.66, cultures: 0.66, languages: 0.66, states: 0.66 };
 const SEA_DEEP = RAMPS.sea(5200), mkCanvas = (w, h) => { const c = document.createElement("canvas"); c.width = w; c.height = h; return c; };
 
@@ -34,18 +30,15 @@ const idOf = { states: (g) => g.stateId ?? null, cultures: (g) => dominant(g, "c
 
 export class MapView {
   constructor(canvas, w) {
-    this.cv = canvas; this.w = w; this.geo = new Geo(w.world.mesh); this.layers = new Set(PRESETS[0][2]); this.alpha = { ...DEFAULT_ALPHA }; this.preset = "politic"; this.onPick = null; this.sel = null;
+    this.cv = canvas; this.w = w; this.geo = new Geo(w.world.mesh); this.layers = new Set(DEFAULT_LAYERS); this.alpha = { ...DEFAULT_ALPHA }; this.onPick = null; this.sel = null;
     this.view = { x: 0, y: 0, k: 1 }; this._own = null; this._ownAt = -1; this._idc = {}; this.gc = null; this.rc = null; this.frame = null; this.frameView = null; this.T = null; this.wKey = 0; resetColors();
     canvas.addEventListener("click", (e) => { if (!this.moved) this.click(e); }); this.pan();
     if (typeof ResizeObserver !== "undefined" && canvas.parentElement) new ResizeObserver(() => this.draw()).observe(canvas.parentElement);
   }
   /* ---------- レイヤーの操作 ---------- */
   isOn(id) { return this.layers.has(id); }
-  toggle(id) { this.layers.has(id) ? this.layers.delete(id) : this.layers.add(id); this.preset = this.presetOf(); }
-  setPreset(id) { const p = PRESETS.find((x) => x[0] === id); if (!p) return; this.layers = new Set(p[2]); this.preset = id; }
-  presetOf() { for (const [id, , ls] of PRESETS) if (ls.length === this.layers.size && ls.every((l) => this.layers.has(l))) return id; return null; }
+  toggle(id) { this.layers.has(id) ? this.layers.delete(id) : this.layers.add(id); }
   /** 凡例に出す層: 塗りのうち、いちばん上にあるもの（なければ陸地の凡例） */
-  legendKey() { for (let i = FILL_IDS.length - 1; i >= 0; i--) if (this.layers.has(FILL_IDS[i])) return FILL_IDS[i]; return "land"; }
 
   /* ---------- 操作（ドラッグ・ズーム）: 動かす間は画像を動かすだけ。止まったら描き直す ---------- */
   pan() {
@@ -185,21 +178,6 @@ export class MapView {
     }
   }
 
-  /* ---------- 凡例: 選んだ層の実データから ---------- */
-  legend(key) {
-    const civ = this.w.civ, own = this.owner(), ce = this.w.world.cell;
-    if (idOf[key]) { const cnt = new Map(); for (const g of own.values()) { const a = idOf[key](g); if (a) cnt.set(a, (cnt.get(a) ?? 0) + 1); } const tab = { states: civ.states, cultures: civ.cultures, languages: civ.languages, religions: civ.religions }[key]; return [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n]) => ({ c: colorOf(id), t: `${tab[id]?.name ?? id} ${n}` })); }
-    if (key === "heightmap") return [{ c: RAMPS.land(60), t: "低地" }, { c: RAMPS.land(800), t: "台地・丘陵" }, { c: RAMPS.land(2200), t: "山地" }, { c: RAMPS.land(4600), t: "高山" }, { c: RAMPS.land(6400), t: "雪" }, { c: RAMPS.sea(100), t: "浅い海" }, { c: RAMPS.sea(3500), t: "深い海" }];
-    if (key === "biomes") { const n = new Array(14).fill(0); for (let c = 0; c < this.geo.N; c++) if (ce.landWater[c] !== 0) n[ce.biome[c]]++; return n.map((v, i) => [i, v]).filter(([i, v]) => i > 0 && v > 0).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([i]) => ({ c: BIOME_COLORS[i], t: BIOME_JA[i] })); }
-    if (key === "temperature") return [-20, 0, 10, 20, 30].map((t) => ({ c: RAMPS.temp(t), t: `${t}℃` }));
-    if (key === "precipitation") return [0, 300, 900, 1800, 3000].map((t) => ({ c: RAMPS.precip(t), t: `${t} mm` }));
-    if (key === "population") return [0.05, 0.35, 0.65, 0.95].map((t, i) => ({ c: RAMPS.pop(t), t: ["少ない", "やや少ない", "やや多い", "多い（対数の階調）"][i] }));
-    if (key === "relief") return [{ c: "rgba(255,252,240,.8)", t: "光が当たる斜面（北西が光源）" }, { c: "rgba(22,18,40,.6)", t: "影になる斜面" }];
-    if (key === "borders") return [{ line: "#f6f1e2", t: "国境（実線）" }]; if (key === "war") return [{ dash: "#e0463c", t: "交戦国の縁取り（赤の破線）" }]; if (key === "cities") return [{ dot: "#fff4cf", t: "都市・集落（点）" }];
-    if (key === "rivers") return [{ line: "#4f97d4", t: "河川（太さは流量）" }]; if (key === "routes") return [{ dash: "#e8b64a", t: "交易路（点線）" }]; if (key === "fronts") return [{ dash: "#e0463c", t: "戦線・占領（×印）" }];
-    if (key === "land") return [{ c: LAND_BASE, t: "陸" }, { c: RAMPS.sea(100), t: "浅い海" }, { c: RAMPS.sea(3500), t: "深い海" }, { c: LAKE_COLOR, t: "湖" }];
-    return [];
-  }
   click(e) {
     const r = this.cv.getBoundingClientRect(), v = this.view, x = (((e.clientX - r.left) * (this.cv.width / r.width)) - v.x) / v.k, y = (((e.clientY - r.top) * (this.cv.height / r.height)) - v.y) / v.k, W = this.cv.width, H = this.cv.height, lon = (x / W) * TAU - Math.PI, lat = Math.PI / 2 - (y / H) * Math.PI; let best = -1, bd = 9;
     for (let c = 0; c < this.geo.N; c++) { let dl = Math.abs(this.geo.cen[c * 2] - lon); if (dl > Math.PI) dl = TAU - dl; const d = dl * Math.cos(lat) + Math.abs(this.geo.cen[c * 2 + 1] - lat); if (d < bd) { bd = d; best = c; } }

@@ -3184,19 +3184,24 @@
       worldPop = total;
       stepEco(world, civ3, order.map((i) => civ3.groups[i]).filter(Boolean), stepMonths / 12, { ice, laws: cfg.laws });
       if (n2 > stats.peakGroups) stats.peakGroups = n2;
-      const ep = Math.floor(frac * EPOCHS);
-      if (ep !== lastEpoch) {
+      const ep = Math.floor(frac * EPOCHS), epEnd = step === steps - 1 || Math.floor((step + 1) / steps * EPOCHS) !== ep;
+      if (epEnd && ep !== lastEpoch) {
         lastEpoch = ep;
         epochs++;
+        let popEnd = 0, nEnd = 0;
         {
           const sub2 = {};
           for (const id of order) {
             const g = civ3.groups[id];
-            if (g) sub2[g.subsistence] = (sub2[g.subsistence] ?? 0) + 1;
+            if (g) {
+              sub2[g.subsistence] = (sub2[g.subsistence] ?? 0) + 1;
+              popEnd += g.pop;
+              nEnd++;
+            }
           }
-          stats.epochs.push({ ep, groups: n2, pop: Math.round(worldPop), x: Math.round(worldPop / Kworld * 100) / 100, ice: Math.round(ice * 100) / 100, sub: sub2 });
+          stats.epochs.push({ ep, groups: nEnd, pop: Math.round(popEnd), x: Math.round(popEnd / Kworld * 100) / 100, ice: Math.round(ice * 100) / 100, sub: sub2 });
         }
-        note3("prehistory_epoch", `\u5148\u53F2 \u7B2C${epochs}\u671F\u306E\u6982\u6CC1\uFF08\u96C6\u56E3 ${n2}\u30FB\u4EBA\u53E3 \u7D04${Math.round(worldPop)}\uFF09`, [], null).effects.push({ targetId: "world", property: "prehistory.pop", before: null, after: Math.round(worldPop) });
+        note3("prehistory_epoch", `\u5148\u53F2 \u7B2C${epochs}\u671F\u306E\u6982\u6CC1\uFF08\u7D42\u308F\u308A\u306E\u6642\u70B9\u3067 \u96C6\u56E3 ${nEnd}\u30FB\u4EBA\u53E3 \u7D04${Math.round(popEnd)}\uFF09`, [], null).effects.push({ targetId: "world", property: "prehistory.pop", before: null, after: Math.round(popEnd) });
       }
       if (onProgress && step % 20 === 0) onProgress(step, steps);
     }
@@ -8007,7 +8012,7 @@ ${shown}${more}`;
   }
 
   // js/ui/v6/store.js
-  var S2 = { w: null, hub: null, sel: null, tab: "politics", map: null, timer: null, notice: "", q: "", tl: { type: "events", kind: "", text: "", entity: "", from: "", to: "" }, fileWarn: [], layerOpen: null, war: null, entity: { culture: null, language: null, religion: null }, tech: null, doc: null, fin: false, hooks: {} };
+  var S2 = { w: null, hub: null, sel: null, tab: "politics", map: null, timer: null, notice: "", q: "", fileWarn: [], layerOpen: null, war: null, entity: { culture: null, language: null, religion: null }, tech: null, doc: null, fin: false, hooks: {} };
   var LABEL = { "state.act": "\u56FD\u5BB6\u306E\u884C\u52D5", "state.reorganize": "\u7DE8\u5236\u306E\u5909\u66F4", "state.adoptDoctrine": "\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u53D6\u5F97", "diplomacy.peace": "\u8B1B\u548C\u306E\u7533\u3057\u5165\u308C", "war.direct": "\u6226\u4E89\u306E\u65B9\u91DD\u306E\u6307\u793A", "creator.intervene": "\u4ECB\u5165", "creator.catastrophe": "\u707D\u5384", "creator.editState": "\u56FD\u5BB6\u306E\u7DE8\u96C6", "creator.rename": "\u540D\u524D\u306E\u7DE8\u96C6", "creator.cancelIntervention": "\u4ECB\u5165\u306E\u53D6\u308A\u6D88\u3057", "control.take": "\u56FD\u5BB6\u306E\u62C5\u5F53", "control.release": "\u62C5\u5F53\u306E\u89E3\u9664", "calendar.edit": "\u66A6\u306E\u8868\u793A\u540D\u306E\u5909\u66F4", "creator.techGrant": "\u6280\u8853\u306E\u4ED8\u4E0E" };
   var tell = (c, r, quiet) => {
     const n2 = LABEL[c.type] ?? c.type;
@@ -8065,7 +8070,6 @@ ${shown}${more}`;
     pop: ramp([[0, "#fff1bf"], [0.22, "#ffd878"], [0.5, "#f7a84c"], [0.78, "#e2653b"], [1, "#a22f3b"]])
   };
   var BIOME_COLORS = ["#3f82b0", "#e9f2f5", "#aebb9f", "#4f7f5a", "#62ab5c", "#bcd67f", "#ebd291", "#c9c3a3", "#d6c670", "#8fc352", "#2f9c56", "#aaa69f", "#4ea594", "#5aa9c6"];
-  var BIOME_JA = ["\u6D77", "\u6C37\u96EA", "\u30C4\u30F3\u30C9\u30E9", "\u30BF\u30A4\u30AC", "\u6E29\u5E2F\u6797", "\u8349\u539F", "\u71B1\u5E2F\u7802\u6F20", "\u5BD2\u51B7\u7802\u6F20", "\u30B5\u30D0\u30F3\u30CA", "\u71B1\u5E2F\u5B63\u7BC0\u6797", "\u71B1\u5E2F\u96E8\u6797", "\u9AD8\u5C71", "\u6E7F\u5730", "\u6E56"];
   var LAND_BASE = "#c9c3a6";
   var LAKE_COLOR = "#5aa9c6";
   function hash01(a, b = 0, c = 0) {
@@ -8381,19 +8385,7 @@ ${shown}${more}`;
   ];
   var GROUPS = [["ground", "\u5730\u5F62\u30FB\u6C17\u5019", "GROUND"], ["social", "\u793E\u4F1A", "SOCIETY"], ["mark", "\u8A18\u53F7\u30FB\u6587\u5B57", "MARK"], ["line", "\u7DDA", "LINE"]];
   var FILL_IDS = LAYERS.filter(([, , g]) => g === "ground" || g === "social").map(([id]) => id);
-  var PRESETS = [
-    ["politic", "\u653F\u6CBB", ["states", "relief", "rivers", "borders", "cities", "labels"]],
-    ["culture", "\u6587\u5316", ["cultures", "relief", "rivers", "borders", "cities"]],
-    ["language", "\u8A00\u8A9E", ["languages", "relief", "rivers", "borders", "cities"]],
-    ["religion", "\u5B97\u6559", ["religions", "relief", "rivers", "borders", "cities"]],
-    ["biome", "\u30D0\u30A4\u30AA\u30FC\u30E0", ["biomes", "relief", "rivers"]],
-    ["height", "\u6A19\u9AD8", ["heightmap", "relief", "rivers"]],
-    ["climate", "\u6C17\u6E29", ["temperature", "relief", "rivers"]],
-    ["rain", "\u964D\u6C34", ["precipitation", "rivers"]],
-    ["economy", "\u4EBA\u53E3\u30FB\u4EA4\u6613", ["population", "relief", "rivers", "routes", "cities"]],
-    ["military", "\u8ECD\u4E8B", ["states", "relief", "borders", "war", "fronts", "cities"]],
-    ["land", "\u9678\u5730\u306E\u307F", ["relief"]]
-  ];
+  var DEFAULT_LAYERS = ["states", "relief", "rivers", "borders", "cities", "labels"];
   var DEFAULT_ALPHA = { heightmap: 1, biomes: 1, temperature: 0.8, precipitation: 0.8, population: 0.85, religions: 0.66, cultures: 0.66, languages: 0.66, states: 0.66 };
   var SEA_DEEP = RAMPS.sea(5200);
   var mkCanvas = (w, h2) => {
@@ -8409,9 +8401,8 @@ ${shown}${more}`;
       this.cv = canvas;
       this.w = w;
       this.geo = new Geo(w.world.mesh);
-      this.layers = new Set(PRESETS[0][2]);
+      this.layers = new Set(DEFAULT_LAYERS);
       this.alpha = { ...DEFAULT_ALPHA };
-      this.preset = "politic";
       this.onPick = null;
       this.sel = null;
       this.view = { x: 0, y: 0, k: 1 };
@@ -8437,23 +8428,8 @@ ${shown}${more}`;
     }
     toggle(id) {
       this.layers.has(id) ? this.layers.delete(id) : this.layers.add(id);
-      this.preset = this.presetOf();
-    }
-    setPreset(id) {
-      const p = PRESETS.find((x) => x[0] === id);
-      if (!p) return;
-      this.layers = new Set(p[2]);
-      this.preset = id;
-    }
-    presetOf() {
-      for (const [id, , ls] of PRESETS) if (ls.length === this.layers.size && ls.every((l) => this.layers.has(l))) return id;
-      return null;
     }
     /** 凡例に出す層: 塗りのうち、いちばん上にあるもの（なければ陸地の凡例） */
-    legendKey() {
-      for (let i = FILL_IDS.length - 1; i >= 0; i--) if (this.layers.has(FILL_IDS[i])) return FILL_IDS[i];
-      return "land";
-    }
     /* ---------- 操作（ドラッグ・ズーム）: 動かす間は画像を動かすだけ。止まったら描き直す ---------- */
     pan() {
       const cv = this.cv;
@@ -9004,37 +8980,6 @@ ${shown}${more}`;
           ctx.fillText(name, e.x + o, e.y);
         }
       }
-    }
-    /* ---------- 凡例: 選んだ層の実データから ---------- */
-    legend(key) {
-      const civ3 = this.w.civ, own = this.owner(), ce = this.w.world.cell;
-      if (idOf[key]) {
-        const cnt = /* @__PURE__ */ new Map();
-        for (const g of own.values()) {
-          const a = idOf[key](g);
-          if (a) cnt.set(a, (cnt.get(a) ?? 0) + 1);
-        }
-        const tab = { states: civ3.states, cultures: civ3.cultures, languages: civ3.languages, religions: civ3.religions }[key];
-        return [...cnt].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([id, n2]) => ({ c: colorOf(id), t: `${tab[id]?.name ?? id} ${n2}` }));
-      }
-      if (key === "heightmap") return [{ c: RAMPS.land(60), t: "\u4F4E\u5730" }, { c: RAMPS.land(800), t: "\u53F0\u5730\u30FB\u4E18\u9675" }, { c: RAMPS.land(2200), t: "\u5C71\u5730" }, { c: RAMPS.land(4600), t: "\u9AD8\u5C71" }, { c: RAMPS.land(6400), t: "\u96EA" }, { c: RAMPS.sea(100), t: "\u6D45\u3044\u6D77" }, { c: RAMPS.sea(3500), t: "\u6DF1\u3044\u6D77" }];
-      if (key === "biomes") {
-        const n2 = new Array(14).fill(0);
-        for (let c = 0; c < this.geo.N; c++) if (ce.landWater[c] !== 0) n2[ce.biome[c]]++;
-        return n2.map((v, i) => [i, v]).filter(([i, v]) => i > 0 && v > 0).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([i]) => ({ c: BIOME_COLORS[i], t: BIOME_JA[i] }));
-      }
-      if (key === "temperature") return [-20, 0, 10, 20, 30].map((t) => ({ c: RAMPS.temp(t), t: `${t}\u2103` }));
-      if (key === "precipitation") return [0, 300, 900, 1800, 3e3].map((t) => ({ c: RAMPS.precip(t), t: `${t} mm` }));
-      if (key === "population") return [0.05, 0.35, 0.65, 0.95].map((t, i) => ({ c: RAMPS.pop(t), t: ["\u5C11\u306A\u3044", "\u3084\u3084\u5C11\u306A\u3044", "\u3084\u3084\u591A\u3044", "\u591A\u3044\uFF08\u5BFE\u6570\u306E\u968E\u8ABF\uFF09"][i] }));
-      if (key === "relief") return [{ c: "rgba(255,252,240,.8)", t: "\u5149\u304C\u5F53\u305F\u308B\u659C\u9762\uFF08\u5317\u897F\u304C\u5149\u6E90\uFF09" }, { c: "rgba(22,18,40,.6)", t: "\u5F71\u306B\u306A\u308B\u659C\u9762" }];
-      if (key === "borders") return [{ line: "#f6f1e2", t: "\u56FD\u5883\uFF08\u5B9F\u7DDA\uFF09" }];
-      if (key === "war") return [{ dash: "#e0463c", t: "\u4EA4\u6226\u56FD\u306E\u7E01\u53D6\u308A\uFF08\u8D64\u306E\u7834\u7DDA\uFF09" }];
-      if (key === "cities") return [{ dot: "#fff4cf", t: "\u90FD\u5E02\u30FB\u96C6\u843D\uFF08\u70B9\uFF09" }];
-      if (key === "rivers") return [{ line: "#4f97d4", t: "\u6CB3\u5DDD\uFF08\u592A\u3055\u306F\u6D41\u91CF\uFF09" }];
-      if (key === "routes") return [{ dash: "#e8b64a", t: "\u4EA4\u6613\u8DEF\uFF08\u70B9\u7DDA\uFF09" }];
-      if (key === "fronts") return [{ dash: "#e0463c", t: "\u6226\u7DDA\u30FB\u5360\u9818\uFF08\xD7\u5370\uFF09" }];
-      if (key === "land") return [{ c: LAND_BASE, t: "\u9678" }, { c: RAMPS.sea(100), t: "\u6D45\u3044\u6D77" }, { c: RAMPS.sea(3500), t: "\u6DF1\u3044\u6D77" }, { c: LAKE_COLOR, t: "\u6E56" }];
-      return [];
     }
     click(e) {
       const r = this.cv.getBoundingClientRect(), v = this.view, x = ((e.clientX - r.left) * (this.cv.width / r.width) - v.x) / v.k, y = ((e.clientY - r.top) * (this.cv.height / r.height) - v.y) / v.k, W2 = this.cv.width, H = this.cv.height, lon = x / W2 * TAU3 - Math.PI, lat = Math.PI / 2 - y / H * Math.PI;
@@ -9715,7 +9660,7 @@ ${shown}${more}`;
   }
 
   // js/core/wcde/save-meta.js
-  var APP_VERSION_FOR_SAVE = "6.3.1";
+  var APP_VERSION_FOR_SAVE = "6.3.2";
 
   // js/core/wcde/savefile.js
   var SAVE_FORMAT = "alterhistory-save";
@@ -9946,7 +9891,7 @@ ${shown}${more}`;
   // js/io/obsidian.js
   var evList = (civ3) => [...iterRecords(civ3)];
   var OBSIDIAN_VERSION = 1;
-  var FOLDERS = Object.freeze({ state: "\u56FD\u5BB6", person: "\u4EBA\u7269", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5/\u80FD\u529B", org: "\u9B54\u6CD5/\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269", chronicle: "\u5E74\u4EE3\u8A18", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", logState: "\u8A73\u7D30\u30ED\u30B0/\u56FD\u5BB6\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0/AI\u5224\u65AD", map: "\u5730\u56F3" });
+  var FOLDERS = Object.freeze({ timeline: "\u5E74\u8868", state: "\u56FD\u5BB6", person: "\u4EBA\u7269", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5/\u80FD\u529B", org: "\u9B54\u6CD5/\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269", chronicle: "\u5E74\u4EE3\u8A18", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", logState: "\u8A73\u7D30\u30ED\u30B0/\u56FD\u5BB6\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0/AI\u5224\u65AD", map: "\u5730\u56F3" });
   var mi2s = (mi) => `${Math.floor(mi / 12)}\u5E74${(mi % 12 + 12) % 12 + 1}\u6708`;
   var d2s = (d) => `${d.year}\u5E74${d.month}\u6708`;
   var d2mi = (d) => d.year * 12 + d.month - 1;
@@ -9977,10 +9922,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const P2 = /* @__PURE__ */ new Map(), add = (id, folder, name) => P2.set(id, `${folder}/${safe(name)}__${id}`);
     for (const s of Object.values(civ3.states)) add(s.id, FOLDERS.state, s.name);
     for (const p of Object.values(civ3.persons)) add(p.id, FOLDERS.person, p.name);
+    for (const f of Object.values(civ3.figures ?? {})) if (!P2.has(f.id)) add(f.id, FOLDERS.person, f.name);
     for (const w of Object.values(civ3.wars)) add(w.id, FOLDERS.war, `${civ3.states[w.aggressor]?.name ?? "?"}\u5BFE${civ3.states[w.defender]?.name ?? "?"}\u306E\u6226\u4E89`);
     for (const t of Object.values(civ3.treaties)) add(t.id, FOLDERS.treaty, `${civ3.states[t.a]?.name ?? "?"}\u3068${civ3.states[t.b]?.name ?? "?"}\u306E${TREATY_JA[t.type] ?? t.type}`);
     const lo = opts.fromMonth ?? -Infinity, hi = opts.toMonth ?? Infinity;
-    for (const e of evList(civ3)) {
+    if (opts.eventNotes !== false) for (const e of evList(civ3)) {
       const m = evMonth(e);
       if (m >= lo && m <= hi) add(e.eventId, e.kind === "battle_fought" ? FOLDERS.battle : FOLDERS.event, e.title);
     }
@@ -10023,7 +9969,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
   async function* obsidianFiles(world, civ3, worldName, opts = {}) {
     const root2 = safe(worldName || "\u4E16\u754C"), P2 = planPaths(world, civ3, opts), ix = graphIndex(civ3), stats = { files: 0, unresolved: 0, outOfScope: 0, missing: [] }, counts = {};
-    const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi) => mi >= from && mi <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false;
+    const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi) => mi >= from && mi <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false || opts.eventNotes === false;
     const link2 = (id, label) => {
       if (id === "world") return "\u4E16\u754C\u5168\u4F53";
       const p = P2.get(id);
@@ -10031,6 +9977,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         stats.outOfScope++;
         return String(label ?? id).replace(/[\]|\u0001\u0002]/g, " ");
       }
+      if (!p && /^(pop|settle)_/.test(String(id))) return label == null || label === id ? "\u6D88\u6EC5\u3057\u305F\u96C6\u56E3\u30FB\u96C6\u843D" : String(label);
       if (!p) {
         stats.unresolved++;
         if (stats.missing.length < 10) stats.missing.push(String(id));
@@ -10136,6 +10083,19 @@ ${civ3.interpretations.filter((x) => x.ownerId === s.id).slice(-30).map((x) => `
 ## \u95A2\u308F\u3063\u305F\u51FA\u6765\u4E8B
 ${(ix.byEntity.get(p.id) ?? []).map((i) => civ3.events[i]).slice(0, 50).map((e) => `- ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 `);
+    for (const f of Object.values(civ3.figures ?? {})) {
+      const house = civ3.houses?.[f.houseId], H = f.history ?? [], KIND2 = { appeared: "\u767B\u5834", left_office: "\u9000\u4F4D", deposed: "\u9000\u3051\u3089\u308C\u305F", renamed_by_creator: "\u5275\u9020\u4E3B\u306B\u3088\u308B\u6539\u540D" };
+      yield out("person", P2.get(f.id), fm({ id: f.id, type: "\u4EBA\u7269", name: f.name, \u56FD\u5BB6: f.stateId ?? null, \u5BB6\u7CFB: house?.name ?? null, \u5F79\u5272: f.role ?? null, \u751F: mi2s(f.bornAt), \u6CA1: f.diedAt == null ? null : mi2s(f.diedAt), tags: ["\u4EBA\u7269"] }) + `# ${f.name}
+
+- \u56FD\u5BB6: ${f.stateId ? L(f.stateId) : "\u306A\u3057"}\uFF0F\u5F79\u5272: ${f.role ?? "\u2014"}${house ? `\uFF0F\u5BB6\u7CFB: ${house.name}` : ""}
+- \u751F: ${mi2s(f.bornAt)}\uFF0F${f.diedAt == null ? "\u5B58\u547D" : `\u6CA1: ${mi2s(f.diedAt)}`}
+- \u89AA: ${f.parents?.length ? f.parents.map(L).join("\u3001") : "\u4E0D\u660E"}
+- \u5B50: ${(f.children ?? []).map(L).join("\u3001") || "\u306A\u3057"}
+
+## \u7D4C\u6B74
+${H.map((x) => `- ${mi2s(x.at)} ${KIND2[x.kind] ?? x.kind}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
+`);
+    }
     for (const a of Object.values(ABILITIES)) yield out("ability", P2.get(`ability:${a.id}`), fm({ id: a.id, type: "\u9B54\u6CD5\u306E\u80FD\u529B", name: a.ja, tags: ["\u9B54\u6CD5"] }) + `# ${a.ja}
 
 - \u4EE3\u511F: ${a.cost}
@@ -10171,7 +10131,7 @@ ${(ix.byEntity.get(w.id) ?? []).map((i) => civ3.events[i]).map((e) => `- ${d2s(e
 - \u5F53\u4E8B\u56FD: ${L(t.a)}\u3001${L(t.b)}
 - \u7DE0\u7D50: ${mi2s(t.signedAt)}\uFF0F${t.active ? `\u671F\u9650: ${mi2s(t.expiresAt)}` : `\u7D42\u4E86: ${mi2s(t.endedAt)}`}
 `);
-    for (const e of evList(civ3)) {
+    if (opts.eventNotes !== false) for (const e of evList(civ3)) {
       const m = evMonth(e);
       if (!inRange(m)) continue;
       const cons = consequencesOf(civ3, e.eventId);
@@ -10283,6 +10243,25 @@ ${w.text}
 
 ## \u4E8B\u5B9F\u3068\u306E\u5DEE
 ${table2(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [c.property, c.claimed, c.actual]))}`);
+    if (opts.eventNotes === false) {
+      const byDecade = /* @__PURE__ */ new Map();
+      for (const e of evList(civ3)) {
+        const m = evMonth(e);
+        if (!inRange(m)) continue;
+        const k = Math.floor(e.date.year / 10);
+        (byDecade.get(k) ?? byDecade.set(k, []).get(k)).push(e);
+      }
+      const KIND_LABEL = (e) => e.kind;
+      for (const [k, es] of [...byDecade].sort((a, b) => a[0] - b[0])) {
+        es.sort((a, b) => evMonth(a) - evMonth(b) || (a.eventId < b.eventId ? -1 : 1));
+        const y0 = k * 10, c0 = Math.floor(y0 / 100) * 100;
+        yield out("timeline", `${FOLDERS.timeline}/${c0}\u5E74\u4EE3/${y0}\u301C${y0 + 9}\u5E74`, fm({ type: "\u5E74\u8868", \u671F\u9593: `${y0}\u5E74\u301C${y0 + 9}\u5E74`, \u4EF6\u6570: es.length, tags: ["\u5E74\u8868"] }) + `# ${y0}\u301C${y0 + 9}\u5E74\u306E\u5E74\u8868
+
+\u5168\u3066\u306E\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u7701\u7565\u306A\u3057\uFF09\u3002
+
+` + es.map((e) => `- **${d2s(e.date)}** \u3014${KIND_LABEL(e)}\u3015 ${String(e.title ?? "").replace(/\n/g, " ")}${e.participants?.length ? `\uFF08${e.participants.map((p) => L(p.entityId)).join("\u3001")}\uFF09` : ""}${e.location?.cell != null ? ` @${cellLoc(e.location.cell).replace(/（.*$/, "")}` : ""}`).join("\n") + "\n");
+      }
+    }
     const byCentury = /* @__PURE__ */ new Map();
     for (const e of evList(civ3)) {
       if (!inRange(evMonth(e)) || ["tech_transferred", "demand_raised", "cohort_formed", "cohort_assimilated", "culture_contact", "settlement_stage", "settlement_founded", "state_action", "group_split", "language_diverged"].includes(e.kind)) continue;
@@ -10408,7 +10387,7 @@ ${es.map(([a, b]) => `  ${n2.get(a)} --> ${n2.get(b)}`).join("\n")}
     return files;
   }
   function readme(root2, world, civ3, counts, stats, opts) {
-    const ja = { creator: "\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u306E\u8A18\u9332", negotiation: "\u5916\u4EA4\u4EA4\u6E09\u306E\u8A18\u9332", news: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9", state: "\u56FD\u5BB6", person: "\u4EBA\u7269\uFF08\u9B54\u6CD5\u306E\u7D20\u8CEA\u8005\uFF09", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u4EBA\u53E3\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5\u306E\u80FD\u529B", org: "\u9B54\u6CD5\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269\uFF08\u5E74\u4EE3\u8A18\uFF09", chronicle: "\u5E74\u4EE3\u8A18\uFF08100\u5E74\u3054\u3068\uFF09", logState: "\u8A73\u7D30\u30ED\u30B0\u30FB\u56FD\u5BB6\u306E\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0\u30FBAI\u5224\u65AD\u306E\u4E00\u89A7", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", map: "\u5730\u56F3" };
+    const ja = { timeline: "\u5E74\u8868\uFF0810\u5E74\u3054\u3068\u30FB\u5168\u4EF6\uFF09", creator: "\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u306E\u8A18\u9332", negotiation: "\u5916\u4EA4\u4EA4\u6E09\u306E\u8A18\u9332", news: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9", state: "\u56FD\u5BB6", person: "\u4EBA\u7269\uFF08\u9B54\u6CD5\u306E\u7D20\u8CEA\u8005\uFF09", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u4EBA\u53E3\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5\u306E\u80FD\u529B", org: "\u9B54\u6CD5\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269\uFF08\u5E74\u4EE3\u8A18\uFF09", chronicle: "\u5E74\u4EE3\u8A18\uFF08100\u5E74\u3054\u3068\uFF09", logState: "\u8A73\u7D30\u30ED\u30B0\u30FB\u56FD\u5BB6\u306E\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0\u30FBAI\u5224\u65AD\u306E\u4E00\u89A7", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", map: "\u5730\u56F3" };
     return fm({ type: "README", tags: ["README"] }) + `# ${root2} \u2014 AlterHistory \u306E\u66F8\u304D\u51FA\u3057
 
 \u3053\u306E\u30D5\u30A9\u30EB\u30C0\u3092 Obsidian \u306E vault \u3068\u3057\u3066\u958B\u3044\u3066\u304F\u3060\u3055\u3044\uFF08\u89AA\u30D5\u30A9\u30EB\u30C0\u304B\u3089\u958B\u3044\u3066\u3082\u3001\u30EA\u30F3\u30AF\u306F\u89E3\u6C7A\u3057\u307E\u3059\uFF09\u3002
@@ -10431,32 +10410,93 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
 - \u81EA\u5206\u3067\u66F8\u304D\u8DB3\u3057\u305F\u30CE\u30FC\u30C8\u306F\u3001\u5225\u306E\u30D5\u30A9\u30EB\u30C0\u306B\u7F6E\u304F\u3068\u4E0A\u66F8\u304D\u3055\u308C\u307E\u305B\u3093\u3002
 `;
   }
-  async function sha256(bytes) {
-    const h2 = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
-    return [...h2].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+  // js/io/vault-writer.js
+  var LIGHT = Object.freeze({ eventNotes: false, decisionNotes: false, maps: false });
+  var PART_BYTES = 12 * 1024 * 1024;
+  var PART_FILES = 3e3;
+  var enc4 = new TextEncoder();
+  var rawOf = (d) => typeof d === "string" ? enc4.encode(d) : d;
+  var tick = () => new Promise((r) => setTimeout(r, 0));
+  function splitPath(path) {
+    const parts = String(path).split("/");
+    if (!parts.length || parts.some((p) => !p || p === "." || p === ".." || p.includes("\\"))) throw new Error(`\u66F8\u304D\u51FA\u305B\u306A\u3044\u30D1\u30B9: ${path}`);
+    return { dirs: parts.slice(0, -1), name: parts.at(-1) };
   }
-  async function exportObsidianZip(world, civ3, worldName, opts = {}) {
-    const root2 = safe(worldName || "\u4E16\u754C"), enc4 = new TextEncoder(), index = [];
-    let manifest = null;
-    async function* gen() {
-      for await (const f of obsidianFiles(world, civ3, worldName, opts)) {
-        if (f.kind === "manifest") {
-          manifest = JSON.parse(f.data);
-          continue;
-        }
-        const raw = typeof f.data === "string" ? enc4.encode(f.data) : f.data;
-        index.push([f.path.slice(root2.length + 1), raw.length, opts.hash === false ? null : await sha256(raw)]);
-        yield f;
+  async function writeToDirectory(dirHandle, files, { onProgress = null, yieldEvery = 50, signal = null } = {}) {
+    const cache = /* @__PURE__ */ new Map([["", dirHandle]]);
+    let n2 = 0, bytes = 0;
+    const dirOf = async (dirs) => {
+      let key = "", h2 = dirHandle;
+      for (const d of dirs) {
+        key += "/" + d;
+        if (!cache.has(key)) cache.set(key, await h2.getDirectoryHandle(d, { create: true }));
+        h2 = cache.get(key);
       }
-      manifest.files = index;
-      yield { path: `${root2}/manifest.json`, data: JSON.stringify(manifest, null, 1) };
+      return h2;
+    };
+    for await (const f of files) {
+      if (signal?.aborted) {
+        const e = new Error("\u4E2D\u65AD\u3057\u307E\u3057\u305F");
+        e.name = "AbortError";
+        throw e;
+      }
+      const { dirs, name } = splitPath(f.path), dir = await dirOf(dirs), fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable(), raw = rawOf(f.data);
+      await w.write(raw);
+      await w.close();
+      n2++;
+      bytes += raw.length;
+      if (n2 % yieldEvery === 0) {
+        onProgress?.({ files: n2, bytes });
+        await tick();
+      }
     }
-    const bytes = await zipFiles(gen(), { compress: opts.compress !== false, onProgress: opts.onProgress });
-    return { bytes, root: root2, counts: manifest.counts, files: index.length + 1, unresolvedLinks: manifest.unresolvedLinks };
+    onProgress?.({ files: n2, bytes });
+    return { files: n2, bytes };
+  }
+  async function* zipParts(files, { root: root2 = "\u4E16\u754C", maxBytes = PART_BYTES, maxFiles = PART_FILES, compress = true, onProgress = null, signal = null } = {}) {
+    let cur = [], curBytes = 0, index = 0, total = 0, totalBytes = 0;
+    const pad = (n2) => String(n2).padStart(3, "0");
+    const flush = async (final) => {
+      index++;
+      const bytes = await zipFiles(cur, { compress });
+      const part = { index, name: `${root2}_${pad(index)}.zip`, bytes, fileCount: cur.length, final };
+      cur = [];
+      curBytes = 0;
+      return part;
+    };
+    let held = null;
+    for await (const f of files) {
+      if (signal?.aborted) {
+        const e = new Error("\u4E2D\u65AD\u3057\u307E\u3057\u305F");
+        e.name = "AbortError";
+        throw e;
+      }
+      const raw = rawOf(f.data);
+      if (cur.length && (curBytes + raw.length > maxBytes || cur.length >= maxFiles)) {
+        if (held) yield held;
+        held = await flush(false);
+        await tick();
+      }
+      cur.push({ path: f.path, data: raw });
+      curBytes += raw.length;
+      total++;
+      totalBytes += raw.length;
+      if (total % 200 === 0) {
+        onProgress?.({ files: total, bytes: totalBytes, parts: index });
+        await tick();
+      }
+    }
+    if (held) yield held;
+    yield await flush(true);
+    onProgress?.({ files: total, bytes: totalBytes, parts: index });
+  }
+  function vaultFiles(world, civ3, name, opts = {}) {
+    return obsidianFiles(world, civ3, name, { ...LIGHT, ...opts });
   }
 
   // js/version.js
-  var APP_VERSION = "6.3.1";
+  var APP_VERSION = "6.3.2";
   var APP_VERSION_NAME = "\u9AA8\u683C\u306E\u518D\u69CB\u7BC9";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
@@ -10648,11 +10688,37 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       msg.textContent = `\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\uFF08\u5727\u7E2E ${(p.bytes.length / 1048576).toFixed(1)} MB\uFF0F\u5143 ${(p.rawBytes / 1048576).toFixed(1)} MB\uFF09`;
     };
     const obs = async () => {
-      msg.textContent = "Obsidian \u7528\u306E ZIP \u3092\u4F5C\u3063\u3066\u3044\u307E\u3059\u2026";
+      const nm = String(cf.name || cf.worldSeed), root2 = nm.replace(/[\\/:*?"<>|#^\[\]\n\r\t]/g, "_").trim().slice(0, 48) || "\u4E16\u754C", mb = (b) => (b / 1048576).toFixed(1);
+      let dir = null;
+      if (typeof window.showDirectoryPicker === "function") {
+        try {
+          dir = await window.showDirectoryPicker({ mode: "readwrite" });
+        } catch (e) {
+          if (e?.name === "AbortError") {
+            msg.textContent = "\u30D5\u30A9\u30EB\u30C0\u306E\u9078\u629E\u3092\u53D6\u308A\u6D88\u3057\u307E\u3057\u305F";
+            return;
+          }
+          dir = null;
+        }
+      }
+      const prog = (p) => {
+        msg.textContent = `\u66F8\u304D\u51FA\u3057\u4E2D\u2026 ${p.files} \u30D5\u30A1\u30A4\u30EB\uFF08${mb(p.bytes)} MB\uFF09`;
+      };
+      msg.textContent = dir ? "\u9078\u3093\u3060\u30D5\u30A9\u30EB\u30C0\u3078\u66F8\u304D\u51FA\u3057\u3066\u3044\u307E\u3059\u2026" : "\u8907\u6570\u306E ZIP \u306B\u5206\u3051\u3066\u4F5C\u3063\u3066\u3044\u307E\u3059\u2026";
       try {
-        const r = await exportObsidianZip(S2.w.world, c, cf.name || cf.worldSeed);
-        dl(new Blob([r.bytes], { type: "application/zip" }), `${r.root}.zip`);
-        msg.textContent = `ZIP \u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\uFF08${r.files} \u30D5\u30A1\u30A4\u30EB\uFF09`;
+        if (dir) {
+          const r = await writeToDirectory(dir, vaultFiles(S2.w.world, c, nm), { onProgress: prog });
+          msg.textContent = `\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F: ${r.files} \u30D5\u30A1\u30A4\u30EB\uFF08${mb(r.bytes)} MB\uFF09\u3002\u9078\u3093\u3060\u30D5\u30A9\u30EB\u30C0\u306E\u4E2D\u306E\u300C${root2}\u300D\u30D5\u30A9\u30EB\u30C0\u3092\u3001Obsidian \u306E vault \u3068\u3057\u3066\u958B\u3044\u3066\u304F\u3060\u3055\u3044`;
+        } else {
+          let n2 = 0;
+          for await (const part of zipParts(vaultFiles(S2.w.world, c, nm), { root: root2, onProgress: prog })) {
+            dl(new Blob([part.bytes], { type: "application/zip" }), part.name);
+            n2++;
+            msg.textContent = `${n2} \u500B\u76EE\u306E ZIP \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F\uFF08${part.fileCount} \u30D5\u30A1\u30A4\u30EB\uFF09\u2026`;
+            await new Promise((r) => setTimeout(r, 800));
+          }
+          msg.textContent = `${n2} \u500B\u306E ZIP \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F\u3002\u3059\u3079\u3066\u540C\u3058\u30D5\u30A9\u30EB\u30C0\u3078\u5C55\u958B\u3059\u308B\u3068\u30011 \u3064\u306E vault \u306B\u306A\u308A\u307E\u3059`;
+        }
       } catch (e) {
         msg.textContent = "\u66F8\u304D\u51FA\u305B\u307E\u305B\u3093\u3067\u3057\u305F: " + e.message;
       }
@@ -10669,7 +10735,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
         S2.hooks.render();
       })),
       lb("\u4FDD\u5B58\u30FB\u8AAD\u307F\u8FBC\u307F\u30FB\u51FA\u529B", "SAVE / EXPORT"),
-      h("div", { class: "rowb" }, btn("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3059", save, "p", { id: "save" }), fileLoader(), btn("Obsidian \u7528 Markdown ZIP", obs, "", { id: "obs" })),
+      h("div", { class: "rowb" }, btn("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3059", save, "p", { id: "save" }), fileLoader(), btn("Obsidian \u7528 Markdown \u3092\u66F8\u304D\u51FA\u3059", obs, "", { id: "obs" })),
       msg,
       ...S2.fileWarn.map((x) => h("p", { class: "warn" }, x)),
       lb("\u30D0\u30FC\u30B8\u30E7\u30F3\u60C5\u5831", "VERSION"),
@@ -10768,7 +10834,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     shell();
     render();
     clearInterval(S2.timer);
-    S2.timer = setInterval(tick, 250);
+    S2.timer = setInterval(tick2, 250);
   }
   function shell() {
     const cv = h("canvas", { id: "map", "aria-label": "\u4E16\u754C\u5730\u56F3" });
@@ -10893,7 +10959,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       S2.map.draw();
     }, "p", { id: "ack" }))));
   }
-  function tick() {
+  function tick2() {
     const w = S2.w;
     if (!w || w.viewPast != null || !isRunning(w.civ)) return;
     const T3 = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T3.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) });

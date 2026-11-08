@@ -15,7 +15,7 @@ import { iterRecords, coverage, findRecord, causesOfRecord } from "../../core/ci
 import { packSave, packSaveGz, unpackSaveAny, SAVE_SCHEMA } from "../../core/wcde/savefile.js";
 import { checkWcdeIntegrity } from "../../core/wcde/integrity.js";
 import { timeOf, SPEEDS } from "../../core/wcde/clock.js";
-import { exportObsidianZip } from "../../io/obsidian.js";
+import { vaultFiles, writeToDirectory, zipParts } from "../../io/vault-writer.js";
 import { APP_VERSION_LABEL } from "../../version.js";
 const civ = () => S.w.civ, date = (mi) => formatWorldDate(S.w, mi), note = (t) => h("p", { class: "n" }, t), head = (code, ja) => [h("div", { class: "code" }, code), h("h2", {}, ja)];
 const OUT = { aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: "講和", state_dissolved: "国家の消滅" };
@@ -84,24 +84,6 @@ function entityDetail(kind, x, use) {
   return h("div", { class: "dt rs" }, h("b", {}, x.name), table(["項目", "内容"], rows), h("div", { class: "rowb" }, nm, btn("名前を編集（創造主）", () => creator({ type: "creator.rename", kind, id: x.id, name: nm.value }), "", { id: "ent-rename" })), note("定義の編集は創造主の介入として記録され、過去の客観イベントは書き換えません。定義と、集団で実際に使われている状態は別です。"));
 }
 
-/* ---------- 年表: 事実イベント／AI の判断／創造主の介入／後世の認識を区別して閲覧 ---------- */
-export function pChron() {
-  const c = civ(), F = S.tl, types = [["events", "客観イベント"], ["creator", "創造主の介入"], ["interp", "後世の歴史認識"]], box = h("div", {}, ...head("CHRONICLE", "年表"), h("div", { class: "tabs" }, ...types.map(([k, ja]) => h("b", { class: F.type === k ? "on" : "", "data-ttype": k, onclick: () => { F.type = k; S.hooks.panel(); } }, ja))));
-  const kinds = [...new Set([...iterRecords(c, { from: c.monthIndex - 12 * 400 })].map((e) => e.kind))].sort(), ks = h("select", { id: "tl-kind", onchange: (e) => { F.kind = e.target.value; S.hooks.panel(); } }, h("option", { value: "" }, "すべての種別"), ...kinds.map((k) => h("option", { value: k, selected: F.kind === k }, k))), tx = h("input", { id: "tl-text", value: F.text, placeholder: "語で絞る", onchange: (e) => { F.text = e.target.value; S.hooks.panel(); } }), y0 = h("input", { id: "tl-from", type: "number", placeholder: "年から", value: F.from, style: "width:78px", onchange: (e) => { F.from = e.target.value; S.hooks.panel(); } }), y1 = h("input", { id: "tl-to", type: "number", placeholder: "年まで", value: F.to, style: "width:78px", onchange: (e) => { F.to = e.target.value; S.hooks.panel(); } });
-  box.append(h("div", { class: "rowb" }, F.type === "events" ? ks : null, tx, y0, y1), ...(F.entity ? [h("div", { class: "rowb" }, `絞り込み: ${stateName(F.entity)}`, btn("解除", () => { F.entity = ""; S.hooks.panel(); }))] : []));
-  const inRange = (d) => (F.from === "" || d.year >= +F.from) && (F.to === "" || d.year <= +F.to), has = (s) => !F.text || String(s).includes(F.text); let rows = [], render;
-  if (F.type === "events") { const all = [...iterRecords(c, { kinds: F.kind ? [F.kind] : null })]; for (let i = all.length - 1; i >= 0 && rows.length < 20000; i--) { const e = all[i]; if ((F.kind && e.kind !== F.kind) || !has(e.title) || !inRange(e.date) || (F.entity && !e.participants.some((p) => p.entityId === F.entity))) continue; rows.push(e); } render = (e) => h("div", { class: "vrow", onclick: () => showEvent(e) }, h("small", { style: "color:var(--dim)" }, `${e.date.year}年${e.date.month}月 `), e.title); }
-  else if (F.type === "creator") { const ivs = interventionsOf(c).map((r) => ({ at: r.startMonth, t: `介入: ${stateName(r.targetId)} の${FIELDS[r.field]?.ja ?? r.field}${r.otherId ? "（→" + stateName(r.otherId) + "）" : ""} → ${r2(r.target)}（${{ active: "有効", converged: "収束", superseded: "置き換え", cancelled: "取り消し", target_gone: "対象消滅" }[r.status]}）${r.reason ? "・" + r.reason : ""}` })), eds = (c.wcde.edits ?? []).map((e) => ({ at: e.at, t: `直接編集: ${e.targetId} の ${e.property}（${String(e.before).slice(0, 16)} → ${String(e.after).slice(0, 16)}）` })); const cats = (c.wcde.catastrophes ?? []).map((r) => ({ at: r.at, t: `災厄「${r.name}」（${r.scope === "world" ? "世界規模" : "地域規模"}・指定 ${Math.round(r.mortality * 100)}%・実際 ${Math.round(r.result.share * 100)}%・約 ${n0(r.result.dead)} 人）${r.reason ? "・" + r.reason : ""}` })); rows = [...ivs, ...eds, ...cats].filter((r) => has(r.t)).sort((a, b) => b.at - a.at); render = (r) => h("div", { class: "vrow" }, h("small", { style: "color:var(--purple)" }, `${date(r.at)} `), r.t); }
-  else { for (let i = c.interpretations.length - 1; i >= 0 && rows.length < 20000; i--) { const r = c.interpretations[i]; if ((F.entity && r.ownerId !== F.entity) || !has(stateName(r.ownerId) + r.stance)) continue; rows.push(r); } render = (r) => { const ev = c.events.find((e) => e.eventId === r.eventId); return h("div", { class: "vrow" }, h("small", { style: "color:var(--dim)" }, `${date(r.since)} `), `${stateName(r.ownerId)}の認識「${r.stance}」: ${ev?.title ?? r.eventId}`); }; }
-  box.append(note(`${rows.length.toLocaleString("ja-JP")} 件（新しい順）。古い時代ほど資料は失われます。`), covBar(c), vlist(rows, 26, render), h("div", { id: "evdetail", class: "dt" }, "項目を選ぶと、原因・結果・関係する実体を表示します。"));
-  return box;
-}
-/** 世紀ごとの資料の残存（残った件数／失われた件数）。特定の出来事は示さない */
-function covBar(c) {
-  const cv = coverage(c).filter((x) => x.kept + x.lost > 0), pre = cv.filter((x) => x.y0 < -10000), hist = cv.filter((x) => x.y0 >= -10000).slice(-8), sum = (a) => a.reduce((t, x) => [t[0] + x.kept, t[1] + x.lost], [0, 0]), fmt = (k, l) => `${k + l ? Math.round((100 * k) / (k + l)) : 100}%`;
-  const items = [...(pre.length ? [["先史", fmt(...sum(pre))]] : []), ...hist.map((x) => [`${x.y0}年〜`, fmt(x.kept, x.lost)])];
-  return h("div", { class: "n", id: "tl-cov" }, "残っている資料の割合（世紀ごと）: " + (items.map(([k, v]) => `${k} ${v}`).join("　") || "まだ整理された資料はありません"));
-}
 function showEvent(e) {
   const c = civ(), d = document.getElementById("evdetail"); if (!d) return; const MEDIA_JA = { trace: "遺跡・痕跡", oral: "口承", tablet: "刻まれた記録", paper: "紙の記録", print: "印刷物" };
   const ents = e.participants.filter((p) => c.states[p.entityId]).map((p) => [h("a", { class: "lk", href: "#", onclick: (ev) => { ev.preventDefault(); S.hooks.select(p.entityId); } }, stateName(p.entityId)), " "]).flat();
@@ -147,11 +129,21 @@ export function pSettings() {
   const c = civ(), cf = c.wcde.config, T = timeOf(c), errs = checkWcdeIntegrity(S.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
   const dl = (blob, name) => { const a = h("a", { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); };
   const save = async () => { msg.textContent = "圧縮して書き出しています…"; const p = await packSaveGz(S.w); dl(new Blob([p.bytes], { type: "application/gzip" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw`); msg.textContent = `保存ファイルを書き出しました（圧縮 ${(p.bytes.length / 1048576).toFixed(1)} MB／元 ${(p.rawBytes / 1048576).toFixed(1)} MB）`; };
-  const obs = async () => { msg.textContent = "Obsidian 用の ZIP を作っています…"; try { const r = await exportObsidianZip(S.w.world, c, cf.name || cf.worldSeed); dl(new Blob([r.bytes], { type: "application/zip" }), `${r.root}.zip`); msg.textContent = `ZIP を書き出しました（${r.files} ファイル）`; } catch (e) { msg.textContent = "書き出せませんでした: " + e.message; } };
+  // v6.3.2: 全体を 1 つの ZIP にせず、フォルダへ直接書く（Edge・Chrome）か、無理なら複数の ZIP に分ける。出来事は 10 年ごとの年表ファイルにまとめる
+  const obs = async () => {
+    const nm = String(cf.name || cf.worldSeed), root = nm.replace(/[\\/:*?"<>|#^\[\]\n\r\t]/g, "_").trim().slice(0, 48) || "世界", mb = (b) => (b / 1048576).toFixed(1);
+    let dir = null; if (typeof window.showDirectoryPicker === "function") { try { dir = await window.showDirectoryPicker({ mode: "readwrite" }); } catch (e) { if (e?.name === "AbortError") { msg.textContent = "フォルダの選択を取り消しました"; return; } dir = null; } }
+    const prog = (p) => { msg.textContent = `書き出し中… ${p.files} ファイル（${mb(p.bytes)} MB）`; };
+    msg.textContent = dir ? "選んだフォルダへ書き出しています…" : "複数の ZIP に分けて作っています…";
+    try {
+      if (dir) { const r = await writeToDirectory(dir, vaultFiles(S.w.world, c, nm), { onProgress: prog }); msg.textContent = `書き出しました: ${r.files} ファイル（${mb(r.bytes)} MB）。選んだフォルダの中の「${root}」フォルダを、Obsidian の vault として開いてください`; }
+      else { let n = 0; for await (const part of zipParts(vaultFiles(S.w.world, c, nm), { root, onProgress: prog })) { dl(new Blob([part.bytes], { type: "application/zip" }), part.name); n++; msg.textContent = `${n} 個目の ZIP を保存しました（${part.fileCount} ファイル）…`; await new Promise((r) => setTimeout(r, 800)); } msg.textContent = `${n} 個の ZIP を保存しました。すべて同じフォルダへ展開すると、1 つの vault になります`; }
+    } catch (e) { msg.textContent = "書き出せませんでした: " + e.message; }
+  };
   const en = h("input", { id: "epoch-name", value: cal.epochName ?? "", style: "width:120px" });
     return h("div", {}, ...head("SETTINGS", "世界設定・出力"), table(["項目", "値"], [["世界の種", cf.worldSeed], ["解像度（セル）", S.w.world.mesh.cellCount], ["種族", (cf.species ?? []).map((s) => s.name ?? s.id ?? s).join("・") || "—"], ["先史の長さ", `${n0(cf.prehistory?.years ?? 0)} 年`], ["現在", formatWorldDate(S.w)], ["暦の起点名", cal.epochName], ["時代区分", (cal.eras ?? []).map((e) => e.name).join(" → ")]]),
     lb("暦の表示名（表示用のみ）", "CALENDAR"), h("div", { class: "rowb" }, en, btn("変更", () => { const r = run({ type: "calendar.edit", edit: { epochName: en.value } }); S.hooks.render(); })), 
-    lb("保存・読み込み・出力", "SAVE / EXPORT"), h("div", { class: "rowb" }, btn("保存ファイルを書き出す", save, "p", { id: "save" }), fileLoader(), btn("Obsidian 用 Markdown ZIP", obs, "", { id: "obs" })), msg, ...S.fileWarn.map((x) => h("p", { class: "warn" }, x)),
+    lb("保存・読み込み・出力", "SAVE / EXPORT"), h("div", { class: "rowb" }, btn("保存ファイルを書き出す", save, "p", { id: "save" }), fileLoader(), btn("Obsidian 用 Markdown を書き出す", obs, "", { id: "obs" })), msg, ...S.fileWarn.map((x) => h("p", { class: "warn" }, x)),
     lb("バージョン情報", "VERSION"), table(["項目", "値"], [["アプリの版", APP_VERSION_LABEL], ["保存形式の版（アプリの版とは別）", SAVE_SCHEMA], ["整合性の検査", errs.length ? `${errs.length} 件の問題` : "問題なし"], ["時間の速度", SPEEDS.find((s) => s.id === T.speed)?.label]]));
 }
 export function fileLoader(done) {

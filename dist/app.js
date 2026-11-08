@@ -3647,10 +3647,11 @@
     const P4 = /* @__PURE__ */ new Map(), add2 = (id, folder, name) => P4.set(id, `${folder}/${safe(name)}__${id}`);
     for (const s of Object.values(civ.states)) add2(s.id, FOLDERS.state, s.name);
     for (const p of Object.values(civ.persons)) add2(p.id, FOLDERS.person, p.name);
+    for (const f of Object.values(civ.figures ?? {})) if (!P4.has(f.id)) add2(f.id, FOLDERS.person, f.name);
     for (const w of Object.values(civ.wars)) add2(w.id, FOLDERS.war, `${civ.states[w.aggressor]?.name ?? "?"}\u5BFE${civ.states[w.defender]?.name ?? "?"}\u306E\u6226\u4E89`);
     for (const t of Object.values(civ.treaties)) add2(t.id, FOLDERS.treaty, `${civ.states[t.a]?.name ?? "?"}\u3068${civ.states[t.b]?.name ?? "?"}\u306E${TREATY_JA[t.type] ?? t.type}`);
     const lo = opts.fromMonth ?? -Infinity, hi = opts.toMonth ?? Infinity;
-    for (const e of evList(civ)) {
+    if (opts.eventNotes !== false) for (const e of evList(civ)) {
       const m = evMonth(e);
       if (m >= lo && m <= hi) add2(e.eventId, e.kind === "battle_fought" ? FOLDERS.battle : FOLDERS.event, e.title);
     }
@@ -3689,7 +3690,7 @@
   }
   async function* obsidianFiles(world, civ, worldName, opts = {}) {
     const root = safe(worldName || "\u4E16\u754C"), P4 = planPaths(world, civ, opts), ix = graphIndex(civ), stats = { files: 0, unresolved: 0, outOfScope: 0, missing: [] }, counts = {};
-    const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi2) => mi2 >= from && mi2 <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false;
+    const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi2) => mi2 >= from && mi2 <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false || opts.eventNotes === false;
     const link2 = (id, label3) => {
       if (id === "world") return "\u4E16\u754C\u5168\u4F53";
       const p = P4.get(id);
@@ -3697,6 +3698,7 @@
         stats.outOfScope++;
         return String(label3 ?? id).replace(/[\]|\u0001\u0002]/g, " ");
       }
+      if (!p && /^(pop|settle)_/.test(String(id))) return label3 == null || label3 === id ? "\u6D88\u6EC5\u3057\u305F\u96C6\u56E3\u30FB\u96C6\u843D" : String(label3);
       if (!p) {
         stats.unresolved++;
         if (stats.missing.length < 10) stats.missing.push(String(id));
@@ -3802,6 +3804,19 @@ ${civ.interpretations.filter((x) => x.ownerId === s.id).slice(-30).map((x) => `-
 ## \u95A2\u308F\u3063\u305F\u51FA\u6765\u4E8B
 ${(ix.byEntity.get(p.id) ?? []).map((i) => civ.events[i]).slice(0, 50).map((e) => `- ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 `);
+    for (const f of Object.values(civ.figures ?? {})) {
+      const house = civ.houses?.[f.houseId], H = f.history ?? [], KIND = { appeared: "\u767B\u5834", left_office: "\u9000\u4F4D", deposed: "\u9000\u3051\u3089\u308C\u305F", renamed_by_creator: "\u5275\u9020\u4E3B\u306B\u3088\u308B\u6539\u540D" };
+      yield out("person", P4.get(f.id), fm({ id: f.id, type: "\u4EBA\u7269", name: f.name, \u56FD\u5BB6: f.stateId ?? null, \u5BB6\u7CFB: house?.name ?? null, \u5F79\u5272: f.role ?? null, \u751F: mi2s(f.bornAt), \u6CA1: f.diedAt == null ? null : mi2s(f.diedAt), tags: ["\u4EBA\u7269"] }) + `# ${f.name}
+
+- \u56FD\u5BB6: ${f.stateId ? L(f.stateId) : "\u306A\u3057"}\uFF0F\u5F79\u5272: ${f.role ?? "\u2014"}${house ? `\uFF0F\u5BB6\u7CFB: ${house.name}` : ""}
+- \u751F: ${mi2s(f.bornAt)}\uFF0F${f.diedAt == null ? "\u5B58\u547D" : `\u6CA1: ${mi2s(f.diedAt)}`}
+- \u89AA: ${f.parents?.length ? f.parents.map(L).join("\u3001") : "\u4E0D\u660E"}
+- \u5B50: ${(f.children ?? []).map(L).join("\u3001") || "\u306A\u3057"}
+
+## \u7D4C\u6B74
+${H.map((x) => `- ${mi2s(x.at)} ${KIND[x.kind] ?? x.kind}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
+`);
+    }
     for (const a of Object.values(ABILITIES)) yield out("ability", P4.get(`ability:${a.id}`), fm({ id: a.id, type: "\u9B54\u6CD5\u306E\u80FD\u529B", name: a.ja, tags: ["\u9B54\u6CD5"] }) + `# ${a.ja}
 
 - \u4EE3\u511F: ${a.cost}
@@ -3837,7 +3852,7 @@ ${(ix.byEntity.get(w.id) ?? []).map((i) => civ.events[i]).map((e) => `- ${d2s(e.
 - \u5F53\u4E8B\u56FD: ${L(t.a)}\u3001${L(t.b)}
 - \u7DE0\u7D50: ${mi2s(t.signedAt)}\uFF0F${t.active ? `\u671F\u9650: ${mi2s(t.expiresAt)}` : `\u7D42\u4E86: ${mi2s(t.endedAt)}`}
 `);
-    for (const e of evList(civ)) {
+    if (opts.eventNotes !== false) for (const e of evList(civ)) {
       const m = evMonth(e);
       if (!inRange(m)) continue;
       const cons = consequencesOf(civ, e.eventId);
@@ -3949,6 +3964,25 @@ ${w.text}
 
 ## \u4E8B\u5B9F\u3068\u306E\u5DEE
 ${table(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [c.property, c.claimed, c.actual]))}`);
+    if (opts.eventNotes === false) {
+      const byDecade = /* @__PURE__ */ new Map();
+      for (const e of evList(civ)) {
+        const m = evMonth(e);
+        if (!inRange(m)) continue;
+        const k = Math.floor(e.date.year / 10);
+        (byDecade.get(k) ?? byDecade.set(k, []).get(k)).push(e);
+      }
+      const KIND_LABEL6 = (e) => e.kind;
+      for (const [k, es] of [...byDecade].sort((a, b) => a[0] - b[0])) {
+        es.sort((a, b) => evMonth(a) - evMonth(b) || (a.eventId < b.eventId ? -1 : 1));
+        const y0 = k * 10, c0 = Math.floor(y0 / 100) * 100;
+        yield out("timeline", `${FOLDERS.timeline}/${c0}\u5E74\u4EE3/${y0}\u301C${y0 + 9}\u5E74`, fm({ type: "\u5E74\u8868", \u671F\u9593: `${y0}\u5E74\u301C${y0 + 9}\u5E74`, \u4EF6\u6570: es.length, tags: ["\u5E74\u8868"] }) + `# ${y0}\u301C${y0 + 9}\u5E74\u306E\u5E74\u8868
+
+\u5168\u3066\u306E\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u7701\u7565\u306A\u3057\uFF09\u3002
+
+` + es.map((e) => `- **${d2s(e.date)}** \u3014${KIND_LABEL6(e)}\u3015 ${String(e.title ?? "").replace(/\n/g, " ")}${e.participants?.length ? `\uFF08${e.participants.map((p) => L(p.entityId)).join("\u3001")}\uFF09` : ""}${e.location?.cell != null ? ` @${cellLoc(e.location.cell).replace(/（.*$/, "")}` : ""}`).join("\n") + "\n");
+      }
+    }
     const byCentury = /* @__PURE__ */ new Map();
     for (const e of evList(civ)) {
       if (!inRange(evMonth(e)) || ["tech_transferred", "demand_raised", "cohort_formed", "cohort_assimilated", "culture_contact", "settlement_stage", "settlement_founded", "state_action", "group_split", "language_diverged"].includes(e.kind)) continue;
@@ -4074,7 +4108,7 @@ ${es.map(([a, b]) => `  ${n2.get(a)} --> ${n2.get(b)}`).join("\n")}
     return files;
   }
   function readme(root, world, civ, counts, stats, opts) {
-    const ja = { creator: "\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u306E\u8A18\u9332", negotiation: "\u5916\u4EA4\u4EA4\u6E09\u306E\u8A18\u9332", news: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9", state: "\u56FD\u5BB6", person: "\u4EBA\u7269\uFF08\u9B54\u6CD5\u306E\u7D20\u8CEA\u8005\uFF09", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u4EBA\u53E3\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5\u306E\u80FD\u529B", org: "\u9B54\u6CD5\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269\uFF08\u5E74\u4EE3\u8A18\uFF09", chronicle: "\u5E74\u4EE3\u8A18\uFF08100\u5E74\u3054\u3068\uFF09", logState: "\u8A73\u7D30\u30ED\u30B0\u30FB\u56FD\u5BB6\u306E\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0\u30FBAI\u5224\u65AD\u306E\u4E00\u89A7", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", map: "\u5730\u56F3" };
+    const ja = { timeline: "\u5E74\u8868\uFF0810\u5E74\u3054\u3068\u30FB\u5168\u4EF6\uFF09", creator: "\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u306E\u8A18\u9332", negotiation: "\u5916\u4EA4\u4EA4\u6E09\u306E\u8A18\u9332", news: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9", state: "\u56FD\u5BB6", person: "\u4EBA\u7269\uFF08\u9B54\u6CD5\u306E\u7D20\u8CEA\u8005\uFF09", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u4EBA\u53E3\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5\u306E\u80FD\u529B", org: "\u9B54\u6CD5\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269\uFF08\u5E74\u4EE3\u8A18\uFF09", chronicle: "\u5E74\u4EE3\u8A18\uFF08100\u5E74\u3054\u3068\uFF09", logState: "\u8A73\u7D30\u30ED\u30B0\u30FB\u56FD\u5BB6\u306E\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0\u30FBAI\u5224\u65AD\u306E\u4E00\u89A7", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", map: "\u5730\u56F3" };
     return fm({ type: "README", tags: ["README"] }) + `# ${root} \u2014 AlterHistory \u306E\u66F8\u304D\u51FA\u3057
 
 \u3053\u306E\u30D5\u30A9\u30EB\u30C0\u3092 Obsidian \u306E vault \u3068\u3057\u3066\u958B\u3044\u3066\u304F\u3060\u3055\u3044\uFF08\u89AA\u30D5\u30A9\u30EB\u30C0\u304B\u3089\u958B\u3044\u3066\u3082\u3001\u30EA\u30F3\u30AF\u306F\u89E3\u6C7A\u3057\u307E\u3059\uFF09\u3002
@@ -4168,7 +4202,7 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
       init_world_consts();
       evList = (civ) => [...iterRecords(civ)];
       OBSIDIAN_VERSION = 1;
-      FOLDERS = Object.freeze({ state: "\u56FD\u5BB6", person: "\u4EBA\u7269", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5/\u80FD\u529B", org: "\u9B54\u6CD5/\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269", chronicle: "\u5E74\u4EE3\u8A18", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", logState: "\u8A73\u7D30\u30ED\u30B0/\u56FD\u5BB6\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0/AI\u5224\u65AD", map: "\u5730\u56F3" });
+      FOLDERS = Object.freeze({ timeline: "\u5E74\u8868", state: "\u56FD\u5BB6", person: "\u4EBA\u7269", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5/\u80FD\u529B", org: "\u9B54\u6CD5/\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269", chronicle: "\u5E74\u4EE3\u8A18", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", logState: "\u8A73\u7D30\u30ED\u30B0/\u56FD\u5BB6\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0/AI\u5224\u65AD", map: "\u5730\u56F3" });
       mi2s = (mi2) => `${Math.floor(mi2 / 12)}\u5E74${(mi2 % 12 + 12) % 12 + 1}\u6708`;
       d2s = (d) => `${d.year}\u5E74${d.month}\u6708`;
       d2mi = (d) => d.year * 12 + d.month - 1;
@@ -16738,10 +16772,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "6.3.1";
+  var APP_VERSION = "6.3.2";
   var APP_VERSION_NAME = "\u9AA8\u683C\u306E\u518D\u69CB\u7BC9";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "6087db59dab0" : "dev";
+  var APP_BUILD_ID = true ? "d7c2d4f84740" : "dev";
 
   // js/ui/icons.js
   var P3 = {
