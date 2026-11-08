@@ -2,7 +2,10 @@
 import { h, lb, stat, btn, table, pct, n0, r2, colorOf, polityJa, vlist, sv } from "./common.js";
 import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
 import { lineageTree } from "./trees.js";
-import { link, warlabView } from "./views-a.js";
+import { notify } from "./notify.js";
+import { link, warlabView, listRow, sectioned, clearHl } from "./views-a.js";
+import { openWizard } from "./wizard.js";
+const back = (label, on) => h("div", { class: "back", onclick: () => { clearHl(); on(); } }, "← " + label);
 import { allianceDiagram } from "./alliance.js";
 import { predictWar } from "../../core/wcde/warlab.js";
 import { placeName, POSTURES, CAMPAIGN_KINDS, postureOf } from "../../core/wcde/warfare.js";
@@ -38,9 +41,10 @@ function warOps(x, mine, side) {
 
 /* ---------- 戦争: 開戦が新しい順。事実の経過と、予測は分けて表示 ---------- */
 export function pWar() {
-  const c = civ(), all = Object.values(c.wars).sort((a, b) => b.startedAt - a.startedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, ...head("WAR", "戦争"));
-  const sel = c.wars[S.war]; if (sel) box.append(warDetail(sel));
-  box.append(lb("戦争一覧", "新しい順"), note(`進行中 ${c.activeWarIds.length}・全体 ${all.length} 件`), vlist(all, 40, (x) => h("div", { class: "vrow full", onclick: () => { S.war = x.id; S.hooks.panel(); } }, h("small", { style: "color:var(--dim)" }, x.status === "active" ? "進行中 " : "終結 "), warTitle(x), h("small", { style: "color:var(--dim)" }, ` ${date(x.startedAt).split("月")[0]}月〜`))));
+  const c = civ(), mine = controlled(), all = Object.values(c.wars).sort((a, b) => b.startedAt - a.startedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, ...head("WAR", "戦争"));
+  const sel = c.wars[S.war]; if (sel) { box.append(back("戦争一覧", () => { S.war = null; S.hooks.panel(); }), warDetail(sel)); return box; }
+  const inW = (x) => mine && [...x.sides.a, ...x.sides.d].includes(mine), act1 = all.filter((x) => x.status === "active");
+  box.append(note(`進行中 ${act1.length}・全体 ${all.length} 件`), sectioned([{ title: "あなたの国の戦争", rows: act1.filter(inW) }, { title: "進行中の戦争", rows: act1.filter((x) => !inW(x)) }, { title: "終結した戦争", rows: all.filter((x) => x.status !== "active"), fold: "endedWars" }], 34, (x) => listRow({ type: "war", id: x.id }, [h("span", { class: "g" }, warTitle(x)), h("small", {}, x.status === "active" ? `開戦 ${date(x.startedAt).split("月")[0]}月` : `${OUT[x.outcome] ?? x.outcome}`)], () => { S.war = x.id; S.hooks.panel(); }, inW(x) ? "mine" : x.status === "active" ? "" : "dead")));
   return box;
 }
 /** v6.2.0: 戦争名（〇〇戦争）があれば名前＋交戦国、旧データは「A 対 B」 */
@@ -70,10 +74,11 @@ export function pDiplo() {
 const KINDS = { culture: ["cultures", "文化", "CULTURE"], language: ["languages", "言語", "LANGUAGE"], religion: ["religions", "宗教", "RELIGION"] };
 export function pEntity(kind) {
   const [key, ja, code] = KINDS[kind], c = civ(), items = Object.values(c[key]), cur = c[key][S.entity[kind]], box = h("div", {}, ...head(code, ja));
-  const use = new Map(), idk = kind + "Id"; for (const g of Object.values(c.groups)) for (const co of g.cohorts ?? []) if (co[kind === "culture" ? "cultureId" : kind === "language" ? "languageId" : "religionId"]) { const id = co[kind === "culture" ? "cultureId" : kind === "language" ? "languageId" : "religionId"]; use.set(id, (use.get(id) ?? 0) + g.pop * co.share); }
-  box.append(note(`${items.length} 件。樹形図はドラッグで移動・ホイールで拡大縮小。ノードをクリックすると詳細を開きます。`), lineageTree(items, { selected: cur?.id, onPick: (x) => { S.entity[kind] = x.id; S.hooks.panel(); } }));
-  if (cur) box.append(entityDetail(kind, cur, use));
-  box.append(lb("人口の多い順", "BY POPULATION"), vlist([...items].sort((a, b) => (use.get(b.id) ?? 0) - (use.get(a.id) ?? 0)), 26, (x) => h("div", { class: "vrow", onclick: () => { S.entity[kind] = x.id; S.hooks.panel(); } }, h("span", { class: "sw", style: `background:${colorOf(x.id)}` }), x.name, h("small", { style: "color:var(--dim)" }, ` ${n0(use.get(x.id) ?? 0)}人`))));
+  const use = new Map(), fk = kind === "culture" ? "cultureId" : kind === "language" ? "languageId" : "religionId"; for (const g of Object.values(c.groups)) for (const co of g.cohorts ?? []) if (co[fk]) use.set(co[fk], (use.get(co[fk]) ?? 0) + g.pop * co.share);
+  if (cur) { box.append(back(`${ja}一覧`, () => { S.entity[kind] = null; S.hooks.panel(); }), note("系統図: ノードをクリックすると詳細を開きます。"), lineageTree(items, { selected: cur.id, onPick: (x) => { S.entity[kind] = x.id; S.hooks.panel(); } }), entityDetail(kind, cur, use)); return box; }
+  const mine = controlled(), ms = mine ? c.states[mine] : null, mset = new Set(); if (ms) for (const g of Object.values(c.groups)) if (g.stateId === ms.id) for (const co of g.cohorts ?? []) if (co[fk] && co.share >= 0.2) mset.add(co[fk]);
+  const type = { culture: "cultures", language: "languages", religion: "religions" }[kind], byPop = [...items].sort((a, b) => (use.get(b.id) ?? 0) - (use.get(a.id) ?? 0)), alive = byPop.filter((x) => (use.get(x.id) ?? 0) > 0.5);
+  box.append(note(`${items.length} 件（存続 ${alive.length}）`), sectioned([{ title: `あなたの国の${ja}`, rows: byPop.filter((x) => mset.has(x.id)) }, { title: `存続している${ja}`, rows: alive.filter((x) => !mset.has(x.id)) }, { title: `消滅した${ja}`, rows: byPop.filter((x) => (use.get(x.id) ?? 0) <= 0.5), fold: "dead_" + kind }], 34, (x) => listRow({ type, id: x.id }, [h("span", { class: "sw", style: `background:${colorOf(x.id)}` }), x.name, h("small", {}, (use.get(x.id) ?? 0) > 0.5 ? `人口 ${n0(use.get(x.id))}` : "消滅")], () => { S.entity[kind] = x.id; S.hooks.panel(); }, (mset.has(x.id) ? "mine " : "") + ((use.get(x.id) ?? 0) > 0.5 ? "" : "dead"))));
   return box;
 }
 function entityDetail(kind, x, use) {
@@ -110,6 +115,7 @@ export function pCreator() {
   const pick = h("select", { id: "cr-state" }, ...names.slice(0, 120).map((s) => h("option", { value: s.id }, s.name)));
   box.append(note("世界を見守る立場でできることを、ここにまとめています。"),
     lb("国家への介入・編集", "INTERVENE"), note("国家を選んで、詳細ページの「介入」「名前の編集」から行います。"), h("div", { class: "rowb" }, pick, btn("その国を開く", () => { if (pick.value) S.hooks.select(pick.value); })),
+    lb("国家をつくる", "CREATE A NATION"), note("国名・政体・役職・為政者・首都・技術を決めて、新しい国を世界に生みます（担当はしません）。"), h("div", { class: "rowb" }, btn("国家をつくる", () => openWizard({ mode: "creator", onDone: (r) => { S.sel = r.stateId; notify("ok", "新しい国が生まれました"); S.hooks.render(); } }), "p", { id: "cr-found" })),
     lb("国家を担当する", "TAKE CONTROL"), h("div", { class: "rowb" }, btn("この国を担当する", () => { if (pick.value) { run({ type: "control.take", stateId: pick.value }); S.sel = pick.value; S.hooks.render(); } })),
     catastropheBox());
   return box;

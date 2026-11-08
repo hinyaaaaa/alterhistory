@@ -14,16 +14,18 @@ export const gatedPolity = (civ, cap, p) => (!POLITY_CAP[p] || groupCaps(civ, ca
 import { hashSeed } from "./civ-state.js";
 import { recentEventsFor, asCauses } from "./graph.js";
 import { speciesOf, lifeScale } from "./species.js";
+import { OFFICE_STABILITY as officeStability, REGIMES as REG15, regimeOf as regimeOf15 } from "../wcde/regimes.js";
+const OFFICE_RULER = (st) => REG15[regimeOf15(st)].ruler;
 
 export const POLITY = Object.freeze({ tribal: "部族", chiefdom: "首長制", kingdom: "王国", empire: "帝国", republic: "共和制", theocracy: "神権制" });
 export const VIA = Object.freeze({ city_state: { ja: "都市国家", suffix: "市国" }, agri_union: { ja: "農耕集落の統合", suffix: "連合" }, nomad_confederation: { ja: "遊牧連合", suffix: "部族連合" }, religious_polity: { ja: "宗教共同体", suffix: "教団国" }, defense_league: { ja: "防衛連合", suffix: "同盟" }, secession: { ja: "分離", suffix: "国" } });
 const KM = 6371, CLUSTER_BUDGET = 8, CHECK_EVERY = 12;
 export const distKm = (w, a, b) => { const c = w.cell; const x = Math.sin(c.lat[a]) * Math.sin(c.lat[b]) + Math.cos(c.lat[a]) * Math.cos(c.lat[b]) * Math.cos(c.lon[a] - c.lon[b]); return Math.acos(Math.max(-1, Math.min(1, x))) * KM; };
 
-export function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null, name = null, polity = null }) {
+export function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null, name = null, polity = null, capitalGroupId = null }) {
   const { world, civ, ids, rng } = ctx, gs = groupIds.map((i) => civ.groups[i]).filter(Boolean);
   if (!gs.length) return null;
-  const cap = gs.reduce((a, b) => (b.pop > a.pop ? b : a)), id = ids.next("state"), h = hashSeed(id);
+  const cap = (capitalGroupId && gs.find((g) => g.id === capitalGroupId)) || gs.reduce((a, b) => (b.pop > a.pop ? b : a)), id = ids.next("state"), h = hashSeed(id);
   const pol = gatedPolity(civ, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")), np = name ? null : ctx.nameGen?.stateParts?.(civ, cap, via, rng, pol) ?? null;
   const st = { id, name: name ?? np?.name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix, nameBase: np?.base ?? null, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, nameLang: name ? null : (ctx.nameLangOf?.(cap) ?? null), /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */ alive: true, player, dissolvedAt: null, predecessor, polity: pol, stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
     policy: { tax: 0.1, mobilization: 0, assimilation: 0, tolerance: 0.5, autonomy: 0 }, techAdopted: {}, strategy: null, campaign: null, defense: 0, boostUntil: -1, sanctions: {}, relations: {}, warIds: [], leader: { name: ctx.nameGen?.person(civ, cap, rng) ?? makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false }, lastCrisis: -999,
@@ -71,12 +73,12 @@ export function stepStates(ctx) {
     st.pop = pop; st.martial = pop ? Math.round((mar / pop) * 1000) / 1000 : 1; st.settlements = settle; if (!civ.groups[st.capitalGroupId] || civ.groups[st.capitalGroupId].stateId !== id) st.capitalGroupId = big.id;
     const cap = civ.groups[st.capitalGroupId]; let far = 0, mx = 0; const dists = []; for (const g of gs) { const d = distKm(world, cap.cell, g.cell); dists.push([d, g]); if (d > mx) mx = d; }
     const adm = stateCan(civ, st, "polity:empire") ? 0.6 : stateCan(civ, st, "polity:kingdom") ? 0.35 : 0;
-    const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15000) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - (st.policy.mobilization * 0.3) + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + ({ chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity]);
+    const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15000) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - (st.policy.mobilization * 0.3) + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + ({ chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity]) + (st.offices?.length ? officeStability(st) : 0); /* v6.4.0: 役職の分野が揃うほど安定度が少し上がる（上限 +0.04） */
     const before = st.stability; st.stability = Math.max(0, Math.min(1, st.stability + (target - st.stability) * 0.3));
     st.treasury += pop * st.policy.tax * 0.0012 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi).length * 0.1)); st.army = pop * (0.005 + 0.12 * st.policy.mobilization) * (0.5 + st.stability) * (1 - (st.warLoss ?? 0));
     for (const k in st.sanctions) if (st.sanctions[k] <= mi) delete st.sanctions[k];
     // 指導者の継承
-    const ls = lifeScale(civ, st), age = mi - st.leader.bornAt; if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4000 * ls))) { const heir = st.leader.heir; st.interpDirty = true; st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false }; st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12)); makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); }
+    const ls = lifeScale(civ, st), age = mi - st.leader.bornAt; if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4000 * ls))) { const heir = st.leader.heir; st.interpDirty = true; st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, ...(st.leader.title ? { title: st.leader.title } : {}) }; if (st.offices) { const ro = st.offices.find((o) => o.id === OFFICE_RULER(st)); if (ro) ro.holder = { name: st.leader.name, look: null }; /* v6.4.0: 元首の役職の担当者は為政者と同じ人 */ } st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12)); makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); }
     if (st.stability < 0.08 && before < 0.2) { dissolve(ctx, st, "崩壊した"); continue; }
     if (st.stability < 0.3 && gs.length >= 3 && mi - st.lastCrisis > 60) { // 分離: 首都から遠い半分が独立
       dists.sort((a, b) => b[0] - a[0]); const part = dists.slice(0, Math.max(1, Math.floor(gs.length / 2))).map((x) => x[1]).filter((g) => !g.player || st.player === false);

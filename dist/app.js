@@ -297,6 +297,10 @@
         trade_cut: P("economy", 1),
         demand_raised: P("economy", 0, false),
         doctrine_adopted: P("military", 1),
+        state_constituted: P("state", 2),
+        uprising: P("state", 3),
+        uprising_crushed: P("state", 2),
+        office_reform: P("state", 1),
         state_action: P("state", 1),
         creator_edit: P("creator", 2),
         chronicle: P("other", 1),
@@ -1971,11 +1975,119 @@
     }
   });
 
+  // js/core/wcde/regimes.js
+  function officeFx(st) {
+    const o = st.offices;
+    if (!o?.length) return { stability: 0, domains: 0 };
+    const d = /* @__PURE__ */ new Set();
+    for (const x of o) {
+      const dom = OFFICES[x.id]?.[1];
+      if (dom && dom !== "ruler") d.add(dom);
+    }
+    return { stability: Math.min(0.04, d.size * 7e-3), domains: d.size };
+  }
+  var OFFICES, OFFICE_DOMAIN_JA, REGIMES2, REGIME_IDS, DEFAULT_REGIME, regimeOf2, OFFICE_STABILITY;
+  var init_regimes = __esm({
+    "js/core/wcde/regimes.js"() {
+      init_tech();
+      OFFICES = Object.freeze({
+        chief: ["\u65CF\u9577", "ruler"],
+        elder_council: ["\u9577\u8001\u4F1A\u8B70", "admin"],
+        shaman: ["\u546A\u8853\u5E2B", "faith"],
+        war_leader: ["\u6226\u58EB\u9577", "mil"],
+        hunt_master: ["\u72E9\u731F\u9577", "econ"],
+        chieftain: ["\u9996\u9577", "ruler"],
+        steward: ["\u5BB6\u653F\u9577", "admin"],
+        storyteller: ["\u8A9E\u308A\u90E8", "cult"],
+        tribute_collector: ["\u8CA2\u7D0D\u53D6\u7ACB\u5F79", "econ"],
+        high_priest: ["\u5927\u796D\u53F8", "ruler"],
+        temple_steward: ["\u795E\u6BBF\u7BA1\u7406\u5B98", "admin"],
+        oracle: ["\u795E\u8A17\u5B98", "faith"],
+        inquisitor: ["\u5BE9\u554F\u5B98", "law"],
+        temple_guard: ["\u795E\u6BBF\u5B88\u8B77\u9577", "mil"],
+        despot: ["\u5C02\u5236\u541B\u4E3B", "ruler"],
+        king: ["\u56FD\u738B", "ruler"],
+        vizier: ["\u5BB0\u76F8", "admin"],
+        chancellor: ["\u5927\u6CD5\u5B98", "law"],
+        marshal: ["\u5143\u5E25", "mil"],
+        treasurer: ["\u8CA1\u52D9\u9577\u5B98", "econ"],
+        chamberlain: ["\u4F8D\u5F93\u9577", "admin"],
+        court_historian: ["\u53F2\u5B98", "cult"],
+        royal_envoy: ["\u738B\u5BA4\u4F7F\u7BC0", "dipl"],
+        spymaster: ["\u5BC6\u5075\u982D", "intel"],
+        court_physician: ["\u4F8D\u533B", "cult"],
+        overlord: ["\u5B97\u4E3B\u738B", "ruler"],
+        duke: ["\u5927\u8AF8\u4FAF", "admin"],
+        constable: ["\u8ECD\u52D9\u9577\u5B98", "mil"],
+        bishop: ["\u53F8\u6559", "faith"],
+        emperor: ["\u7687\u5E1D", "ruler"],
+        governor: ["\u7DCF\u7763", "admin"],
+        censor: ["\u76E3\u5BDF\u5B98", "law"],
+        grand_secretary: ["\u5927\u66F8\u8A18\u5B98\u9577", "admin"],
+        legion_commander: ["\u8ECD\u56E3\u53F8\u4EE4\u5B98", "mil"],
+        consul: ["\u57F7\u653F\u5B98", "ruler"],
+        senate: ["\u5143\u8001\u9662\u8B70\u9577", "admin"],
+        tribune: ["\u8B77\u6C11\u5B98", "law"],
+        magistrate: ["\u53F8\u6CD5\u5B98", "law"],
+        general: ["\u5C06\u8ECD", "mil"],
+        trade_master: ["\u4EA4\u6613\u9577\u5B98", "econ"],
+        convener: ["\u6C11\u4F1A\u8B70\u9577", "ruler"],
+        strategos: ["\u5C06\u8ECD\u8077", "mil"],
+        archon: ["\u884C\u653F\u5B98", "admin"],
+        president: ["\u5927\u7D71\u9818", "ruler"],
+        prime_minister: ["\u7DCF\u7406\u5927\u81E3", "ruler"],
+        minister_finance: ["\u8CA1\u52D9\u5927\u81E3", "econ"],
+        minister_defense: ["\u56FD\u9632\u5927\u81E3", "mil"],
+        minister_interior: ["\u5185\u52D9\u5927\u81E3", "admin"],
+        minister_foreign: ["\u5916\u52D9\u5927\u81E3", "dipl"],
+        speaker: ["\u8B70\u9577", "admin"],
+        chief_justice: ["\u6700\u9AD8\u88C1\u5224\u6240\u9577\u5B98", "law"],
+        intel_director: ["\u60C5\u5831\u6A5F\u95A2\u9577\u5B98", "intel"],
+        minister_culture: ["\u6587\u5316\u5927\u81E3", "cult"],
+        figurehead: ["\u8C61\u5FB4\u306E\u541B\u4E3B", "ruler"],
+        party_secretary: ["\u515A\u66F8\u8A18\u9577", "ruler"],
+        politburo: ["\u653F\u6CBB\u5C40\u54E1", "admin"],
+        commissar: ["\u4EBA\u6C11\u59D4\u54E1", "mil"],
+        planner: ["\u8A08\u753B\u7D4C\u6E08\u5B98", "econ"],
+        prosecutor: ["\u691C\u5BDF\u7DCF\u9577", "law"],
+        propaganda: ["\u5BA3\u4F1D\u90E8\u9577", "cult"],
+        junta_chair: ["\u8ECD\u4E8B\u8A55\u8B70\u4F1A\u8B70\u9577", "ruler"],
+        security_chief: ["\u6CBB\u5B89\u9577\u5B98", "intel"],
+        admiral: ["\u63D0\u7763", "mil"],
+        federal_chair: ["\u9023\u90A6\u8B70\u9577", "ruler"],
+        federal_envoy: ["\u9023\u90A6\u4F7F\u7BC0", "dipl"],
+        federal_court: ["\u9023\u90A6\u88C1\u5224\u5B98", "law"]
+      });
+      OFFICE_DOMAIN_JA = Object.freeze({ ruler: "\u5143\u9996", admin: "\u884C\u653F", mil: "\u8ECD\u4E8B", econ: "\u7D4C\u6E08", faith: "\u4FE1\u4EF0", law: "\u53F8\u6CD5", cult: "\u6587\u5316", dipl: "\u5916\u4EA4", intel: "\u60C5\u5831" });
+      REGIMES2 = Object.freeze({
+        tribal: { ja: "\u90E8\u65CF\u5236", core: "tribal", needs: [], ruler: "chief", offices: ["chief", "elder_council", "shaman", "war_leader", "hunt_master"], heredity: false, blurb: "\u6C0F\u65CF\u306E\u9577\u8001\u3068\u6226\u58EB\u304C\u5408\u8B70\u3059\u308B\u3002" },
+        chiefdom: { ja: "\u9996\u9577\u5236", core: "chiefdom", needs: ["cap:polity:chiefdom"], ruler: "chieftain", offices: ["chieftain", "elder_council", "steward", "war_leader", "shaman", "storyteller", "tribute_collector"], heredity: true, blurb: "\u9996\u9577\u304C\u8CA2\u7D0D\u3092\u96C6\u3081\u3001\u4E00\u65CF\u3067\u5730\u4F4D\u3092\u7D99\u3050\u3002" },
+        theocracy: { ja: "\u795E\u6A29\u5236", core: "theocracy", needs: ["cap:polity:chiefdom"], ruler: "high_priest", offices: ["high_priest", "temple_steward", "oracle", "inquisitor", "temple_guard", "storyteller", "tribute_collector"], heredity: false, blurb: "\u795E\u306E\u540D\u306E\u3082\u3068\u306B\u796D\u53F8\u304C\u56FD\u3092\u6CBB\u3081\u308B\u3002" },
+        despotism: { ja: "\u5C02\u5236\u541B\u4E3B\u5236", core: "kingdom", needs: ["cap:polity:kingdom"], ruler: "despot", offices: ["despot", "vizier", "chancellor", "marshal", "treasurer", "chamberlain", "spymaster", "court_historian"], heredity: true, blurb: "\u541B\u4E3B\u306E\u610F\u5FD7\u304C\u305D\u306E\u307E\u307E\u6CD5\u3068\u306A\u308B\u3002" },
+        kingdom: { ja: "\u738B\u653F", core: "kingdom", needs: ["cap:polity:kingdom"], ruler: "king", offices: ["king", "vizier", "chancellor", "marshal", "treasurer", "chamberlain", "royal_envoy", "court_historian", "court_physician"], heredity: true, blurb: "\u56FD\u738B\u3068\u5BB0\u76F8\u304C\u5B98\u50DA\u3092\u7387\u3044\u308B\u3002" },
+        feudal: { ja: "\u5C01\u5EFA\u5236", core: "kingdom", needs: ["cap:polity:kingdom", "tech:fortification"], ruler: "overlord", offices: ["overlord", "duke", "constable", "bishop", "chancellor", "treasurer", "royal_envoy"], heredity: true, blurb: "\u8AF8\u4FAF\u304C\u571F\u5730\u3068\u8ECD\u5F79\u3067\u7D50\u3070\u308C\u308B\u3002" },
+        empire: { ja: "\u5E1D\u653F", core: "empire", needs: ["cap:polity:empire"], ruler: "emperor", offices: ["emperor", "grand_secretary", "governor", "censor", "legion_commander", "treasurer", "royal_envoy", "spymaster", "court_historian"], heredity: true, blurb: "\u7687\u5E1D\u306E\u3082\u3068\u3001\u7DCF\u7763\u304C\u8AF8\u5730\u57DF\u3092\u6CBB\u3081\u308B\u3002" },
+        oligarchic_republic: { ja: "\u8CB4\u65CF\u5171\u548C\u5236", core: "republic", needs: ["cap:polity:republic"], ruler: "consul", offices: ["consul", "senate", "tribune", "magistrate", "general", "trade_master", "treasurer"], heredity: false, blurb: "\u6709\u529B\u306A\u5BB6\u9580\u304C\u5143\u8001\u9662\u3067\u56FD\u3092\u52D5\u304B\u3059\u3002" },
+        direct_democracy: { ja: "\u76F4\u63A5\u6C11\u4E3B\u5236", core: "republic", needs: ["cap:polity:republic", "tech:alphabet"], ruler: "convener", offices: ["convener", "strategos", "archon", "magistrate", "trade_master", "royal_envoy"], heredity: false, blurb: "\u5E02\u6C11\u304C\u6C11\u4F1A\u3067\u76F4\u63A5\u306B\u6C7A\u3081\u308B\u3002" },
+        constitutional_monarchy: { ja: "\u7ACB\u61B2\u541B\u4E3B\u5236", core: "kingdom", needs: ["cap:polity:kingdom", "tech:parliament"], ruler: "figurehead", offices: ["figurehead", "prime_minister", "minister_finance", "minister_defense", "minister_interior", "minister_foreign", "speaker", "chief_justice"], heredity: true, blurb: "\u541B\u4E3B\u306F\u8C61\u5FB4\u3068\u306A\u308A\u3001\u8B70\u4F1A\u3068\u5185\u95A3\u304C\u653F\u6CBB\u3092\u884C\u3046\u3002" },
+        parliamentary: { ja: "\u8B70\u9662\u5185\u95A3\u5236", core: "republic", needs: ["tech:parliament"], ruler: "prime_minister", offices: ["prime_minister", "minister_finance", "minister_defense", "minister_interior", "minister_foreign", "speaker", "chief_justice", "minister_culture"], heredity: false, blurb: "\u8B70\u4F1A\u306E\u591A\u6570\u6D3E\u304C\u5185\u95A3\u3092\u7D44\u3080\u3002" },
+        presidential: { ja: "\u5927\u7D71\u9818\u5236", core: "republic", needs: ["tech:constitutionalism"], ruler: "president", offices: ["president", "minister_finance", "minister_defense", "minister_interior", "minister_foreign", "speaker", "chief_justice", "intel_director"], heredity: false, blurb: "\u56FD\u6C11\u304C\u9078\u3093\u3060\u5927\u7D71\u9818\u304C\u884C\u653F\u3092\u7387\u3044\u308B\u3002" },
+        socialist: { ja: "\u793E\u4F1A\u4E3B\u7FA9\u5171\u548C\u5236", core: "republic", needs: ["tech:industry", "tech:newspapers"], ruler: "party_secretary", offices: ["party_secretary", "politburo", "commissar", "planner", "prosecutor", "propaganda", "security_chief"], heredity: false, blurb: "\u4E00\u3064\u306E\u515A\u304C\u8A08\u753B\u7D4C\u6E08\u3068\u56FD\u5BB6\u3092\u5C0E\u304F\u3002" },
+        junta: { ja: "\u8ECD\u4E8B\u653F\u6A29", core: "republic", needs: ["tech:standing_army"], ruler: "junta_chair", offices: ["junta_chair", "general", "admiral", "security_chief", "minister_finance", "minister_interior"], heredity: false, blurb: "\u8ECD\u306E\u8A55\u8B70\u4F1A\u304C\u975E\u5E38\u306E\u6A29\u9650\u3067\u7D71\u6CBB\u3059\u308B\u3002" },
+        confederation: { ja: "\u9023\u90A6\u5236", core: "republic", needs: ["cap:polity:republic", "tech:diplomacy"], ruler: "federal_chair", offices: ["federal_chair", "federal_envoy", "federal_court", "minister_finance", "minister_defense", "speaker"], heredity: false, blurb: "\u81EA\u6CBB\u3059\u308B\u8AF8\u90A6\u304C\u5408\u8B70\u3067\u7D50\u3073\u3064\u304F\u3002" }
+      });
+      REGIME_IDS = Object.freeze(Object.keys(REGIMES2));
+      DEFAULT_REGIME = Object.freeze({ tribal: "tribal", chiefdom: "chiefdom", theocracy: "theocracy", kingdom: "kingdom", empire: "empire", republic: "oligarchic_republic" });
+      regimeOf2 = (st) => st.regime && REGIMES2[st.regime] && REGIMES2[st.regime].core === st.polity ? st.regime : DEFAULT_REGIME[st.polity] ?? "tribal";
+      OFFICE_STABILITY = (st) => officeFx(st).stability;
+    }
+  });
+
   // js/core/civ/states.js
-  function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null, name = null, polity = null }) {
+  function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null, name = null, polity = null, capitalGroupId = null }) {
     const { world, civ, ids: ids2, rng } = ctx, gs = groupIds.map((i) => civ.groups[i]).filter(Boolean);
     if (!gs.length) return null;
-    const cap = gs.reduce((a, b) => b.pop > a.pop ? b : a), id = ids2.next("state"), h2 = hashSeed(id);
+    const cap = capitalGroupId && gs.find((g) => g.id === capitalGroupId) || gs.reduce((a, b) => b.pop > a.pop ? b : a), id = ids2.next("state"), h2 = hashSeed(id);
     const pol = gatedPolity(civ, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")), np = name ? null : ctx.nameGen?.stateParts?.(civ, cap, via, rng, pol) ?? null;
     const st = {
       id,
@@ -2088,7 +2200,7 @@
         if (d > mx) mx = d;
       }
       const adm = stateCan(civ, st, "polity:empire") ? 0.6 : stateCan(civ, st, "polity:kingdom") ? 0.35 : 0;
-      const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15e3) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - st.policy.mobilization * 0.3 + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + { chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity];
+      const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15e3) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - st.policy.mobilization * 0.3 + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + { chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity] + (st.offices?.length ? OFFICE_STABILITY(st) : 0);
       const before = st.stability;
       st.stability = Math.max(0, Math.min(1, st.stability + (target - st.stability) * 0.3));
       st.treasury += pop * st.policy.tax * 12e-4 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi2).length * 0.1));
@@ -2098,7 +2210,11 @@
       if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4e3 * ls))) {
         const heir = st.leader.heir;
         st.interpDirty = true;
-        st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi2 - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false };
+        st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi2 - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, ...st.leader.title ? { title: st.leader.title } : {} };
+        if (st.offices) {
+          const ro = st.offices.find((o) => o.id === OFFICE_RULER(st));
+          if (ro) ro.holder = { name: st.leader.name, look: null };
+        }
         st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12));
         makeEvent(civ, ids2, { kind: "leader_succession", title: `${st.name}\u306E\u6307\u5C0E\u8005\u304C\u4EE3\u308F\u3063\u305F${heir ? "\uFF08\u7D99\u627F\u8005\u304C\u6C7A\u307E\u3063\u3066\u3044\u305F\uFF09" : "\uFF08\u7D99\u627F\u306E\u6DF7\u4E71\uFF09"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } });
       }
@@ -2142,7 +2258,7 @@
       else formState(ctx, f);
     }
   }
-  var gatedPolity, POLITY, VIA, KM, CLUSTER_BUDGET, CHECK_EVERY, distKm, dissolve;
+  var gatedPolity, OFFICE_RULER, POLITY, VIA, KM, CLUSTER_BUDGET, CHECK_EVERY, distKm, dissolve;
   var init_states = __esm({
     "js/core/civ/states.js"() {
       init_events();
@@ -2156,7 +2272,9 @@
       init_civ_state();
       init_graph();
       init_species();
+      init_regimes();
       gatedPolity = (civ, cap, p) => !POLITY_CAP[p] || groupCaps(civ, cap).has(POLITY_CAP[p]) ? p : "tribal";
+      OFFICE_RULER = (st) => REGIMES2[regimeOf2(st)].ruler;
       POLITY = Object.freeze({ tribal: "\u90E8\u65CF", chiefdom: "\u9996\u9577\u5236", kingdom: "\u738B\u56FD", empire: "\u5E1D\u56FD", republic: "\u5171\u548C\u5236", theocracy: "\u795E\u6A29\u5236" });
       VIA = Object.freeze({ city_state: { ja: "\u90FD\u5E02\u56FD\u5BB6", suffix: "\u5E02\u56FD" }, agri_union: { ja: "\u8FB2\u8015\u96C6\u843D\u306E\u7D71\u5408", suffix: "\u9023\u5408" }, nomad_confederation: { ja: "\u904A\u7267\u9023\u5408", suffix: "\u90E8\u65CF\u9023\u5408" }, religious_polity: { ja: "\u5B97\u6559\u5171\u540C\u4F53", suffix: "\u6559\u56E3\u56FD" }, defense_league: { ja: "\u9632\u885B\u9023\u5408", suffix: "\u540C\u76DF" }, secession: { ja: "\u5206\u96E2", suffix: "\u56FD" } });
       KM = 6371;
@@ -16772,10 +16890,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "6.3.2";
-  var APP_VERSION_NAME = "\u9AA8\u683C\u306E\u518D\u69CB\u7BC9";
+  var APP_VERSION = "6.4.0";
+  var APP_VERSION_NAME = "\u5EFA\u56FD\u3068\u4E00\u89A7\u3068\u53CD\u4E71";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "d7c2d4f84740" : "dev";
+  var APP_BUILD_ID = true ? "e6fbc578930f" : "dev";
 
   // js/ui/icons.js
   var P3 = {

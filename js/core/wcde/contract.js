@@ -30,7 +30,7 @@ export function createWcde(world, civ) {
 /** 命令の定義。phases: 実行できる段階。mutates: false なら過去閲覧中でも可。control: 担当国家が必要 */
 export const COMMANDS = {};
 /** 命令が属する領域（台帳の ID）。接頭辞で決める。台帳にない領域へ変更を書く命令は定義できない（M1 の契約テスト用） */
-const COMMAND_DOMAIN = { founding: "states", control: "states", time: "clock", clock: "clock", news: "integrity", view: "integrity", state: "states", diplomacy: "war_diplomacy", war: "war_diplomacy", creator: "interventions", calendar: "clock", tech: "tech" };
+const COMMAND_DOMAIN = { founding: "states", control: "states", time: "clock", clock: "clock", news: "integrity", view: "integrity", state: "states", uprising: "states", diplomacy: "war_diplomacy", war: "war_diplomacy", creator: "interventions", calendar: "clock", tech: "tech" };
 export const domainOfCommand = (type) => COMMAND_DOMAIN[String(type).split(".")[0]] ?? null;
 export function defineCommand(type, spec) { COMMANDS[type] = { mutates: true, phases: ["running"], control: false, checkpoint: true, domain: domainOfCommand(type), ...spec, type }; }
 /** 命令の一覧（権限・段階・領域・変更の有無）。文書・テスト・UI の突き合わせ用 */

@@ -30,7 +30,7 @@ const idOf = { states: (g) => g.stateId ?? null, cultures: (g) => dominant(g, "c
 
 export class MapView {
   constructor(canvas, w) {
-    this.cv = canvas; this.w = w; this.geo = new Geo(w.world.mesh); this.layers = new Set(DEFAULT_LAYERS); this.alpha = { ...DEFAULT_ALPHA }; this.onPick = null; this.sel = null;
+    this.cv = canvas; this.w = w; this.geo = new Geo(w.world.mesh); this.layers = new Set(DEFAULT_LAYERS); this.alpha = { ...DEFAULT_ALPHA }; this.onPick = null; this.sel = null; this.hl = null; this.pins = null;
     this.view = { x: 0, y: 0, k: 1 }; this._own = null; this._ownAt = -1; this._idc = {}; this.gc = null; this.rc = null; this.frame = null; this.frameView = null; this.T = null; this.wKey = 0; resetColors();
     canvas.addEventListener("click", (e) => { if (!this.moved) this.click(e); }); this.pan();
     if (typeof ResizeObserver !== "undefined" && canvas.parentElement) new ResizeObserver(() => this.draw()).observe(canvas.parentElement);
@@ -164,6 +164,11 @@ export class MapView {
     }
     if (L.has("cities")) { ctx.lineWidth = 1.2 / sk; for (const s of Object.values(civ.settlements)) { if (s.pop < 800) continue; const [x, y] = geo.proj(cen[2 * s.cell], cen[2 * s.cell + 1]), big = s.stage === "city", r = (big ? 3.4 : 2.1) / sk; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = "#fff4cf"; ctx.fill(); ctx.strokeStyle = "#2a2018"; ctx.stroke(); if (big) { ctx.beginPath(); ctx.arc(x, y, r * 0.38, 0, TAU); ctx.fillStyle = "#2a2018"; ctx.fill(); } } }
     if (this.sel) { const p = geo.edgesWhere((c, n) => stateOf(n) !== this.sel, [...own].filter(([, g]) => g.stateId === this.sel).map(([c]) => c)); ctx.strokeStyle = "rgba(20,16,8,.6)"; ctx.lineWidth = 4.2 / sk; ctx.stroke(p); ctx.strokeStyle = "#f0c14d"; ctx.lineWidth = 2.4 / sk; ctx.stroke(p); }
+    if (this.hl) { // v6.4.0: 一覧にカーソルを置いた国家・文化・言語・宗教・戦争を、地図で赤線強調する
+      const h = this.hl, inSet = h.type === "war" ? (() => { const x = civ.wars[h.id], ss = new Set(x ? [...x.sides.a, ...x.sides.d] : []); return (g) => ss.has(g.stateId); })() : (g) => idOf[h.type]?.(g) === h.id;
+      const mine = [...own].filter(([, g]) => inSet(g)).map(([c]) => c), set = new Set(mine); if (mine.length) { const p = geo.edgesWhere((c, n) => !set.has(n), mine); ctx.strokeStyle = "rgba(60,0,0,.65)"; ctx.lineWidth = 5 / sk; ctx.stroke(p); ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 2.8 / sk; ctx.stroke(p); }
+    }
+    if (this.pins) for (const pin of this.pins) { const [x, y] = geo.proj(cen[2 * pin.cell], cen[2 * pin.cell + 1]), r = (pin.big ? 7 : 4.2) / sk; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = pin.color ?? "#f0c14d"; ctx.globalAlpha = pin.big ? 1 : 0.85; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 1.4 / sk; ctx.strokeStyle = "#10141a"; ctx.stroke(); if (pin.big) { ctx.beginPath(); ctx.arc(x, y, r * 1.9, 0, TAU); ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 2 / sk; ctx.stroke(); } }
     if (L.has("labels")) this.drawLabels(ctx, own, W);
   }
   drawLabels(ctx, own, W) {

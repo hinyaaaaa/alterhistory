@@ -16,6 +16,10 @@ import { predictWar } from "../../core/wcde/warlab.js";
 import { evaluateTreaty, proposalsOf, treatyFeasible } from "../../core/wcde/negotiation.js";
 import { TREATY } from "../../core/civ/diplomacy.js";
 import { formatWorldDate } from "../../core/wcde/world.js";
+import { UPRISING_KINDS } from "../../core/wcde/uprising.js";
+import { openWizard } from "./wizard.js";
+import { notify } from "./notify.js";
+import { regimeJa, regimeOf, REGIMES, OFFICES, OFFICE_DOMAIN_JA, officeJa, defaultOffices, MIN_OFFICES, MAX_OFFICES } from "../../core/wcde/regimes.js";
 import { pastView } from "../../core/civ/archive.js";
 const DOMAIN_JA = { economy: "経済", military: "軍事", politics: "政治", states: "国家", population: "人口", war_diplomacy: "外交" };
 const TREATY_EFFECT = { nonaggression: "効果: 互いに宣戦できない。軍の支持がやや下がる。", alliance: "効果: 食料不足の安定低下を和らげ、貴族の支持が上がる。一方が戦うと、他方が参戦することがある。", trade: "効果: 隣接する国の間で交易が成立し、開放度に応じて産業・交易収入・商人の支持が上がる。封鎖・制裁中は成立しない。" };
@@ -37,18 +41,31 @@ export function pGeo() {
   return box.append(note("地形・気候・資源を生成後に手で編集する機能は設けていません。"), h("div", { class: "rowb" }, btn("表示を初期位置へ", () => { M.view = { x: 0, y: 0, k: 1 }; M.draw(); }))) || box;
 }
 
-/* ---------- 国家: 一覧（成立が新しい順）と詳細 ---------- */
+/* ---------- 一覧の共通部品（v6.4.0）: プレイヤー（担当）を最上位、存続中と滅亡を区別。カーソルを置くと地図で赤線強調 ---------- */
+/** 一覧の 1 行。hl: 地図で強調する対象 { type, id } */
+export function listRow(hl, kids, onclick, cls = "") {
+  return h("div", { class: "lrow " + cls, onmouseenter: () => { if (S.map && hl) { S.map.hl = hl; S.map.draw(); } }, onmouseleave: () => { if (S.map) { S.map.hl = null; S.map.draw(); } }, onclick }, ...kids);
+}
+/** セクション見出しつきの仮想一覧。sections: [{ title, rows: [...] , collapsed? }] */
+export function sectioned(sections, rowH, renderRow) {
+  const rows = []; for (const sec of sections) { if (!sec.rows.length) continue; rows.push({ hdr: `${sec.title}（${sec.rows.length}）` }); if (!sec.fold || !S.fold?.[sec.fold]) for (const r of sec.rows) rows.push(r); }
+  return vlist(rows, rowH, (r) => (r.hdr ? h("div", { class: "grp", style: "cursor:default" }, r.hdr) : renderRow(r)));
+}
+export const clearHl = () => { if (S.map) { S.map.hl = null; } };
+const back = (label, on) => h("div", { class: "back", onclick: () => { clearHl(); on(); } }, "← " + label);
+
+/* ---------- 国家: 一覧（担当国が最上位・存続中／滅亡）と詳細（一覧は詳細の下には出さない） ---------- */
 export function pNations() {
-  const c = civ(), pv = S.w.viewPast, all = pv != null ? pastView(c, pv).states.map((x) => ({ id: x.id, name: x.name ?? "（名前の資料が失われた国家）", polity: x.polity, formedAt: x.formedAt ?? -Infinity, alive: true, partial: x.partial })) : Object.values(c.states).filter((s) => (S.showDead ? true : s.alive)), list = all.sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "国家"), pv != null ? h("p", { class: "n err" }, `過去（${date(pv)}）の国家を、残っている歴史資料から再構成して表示しています（読み取り専用）。資料が失われた部分は不明で、何も無かったという意味ではありません。`) : null);
-  if (pv == null && S.sel && c.states[S.sel]) box.append(stateDetail(c.states[S.sel]));
-  box.append(lb("国家一覧", "新しい順"), h("div", { class: "rowb" }, h("label", {}, h("input", { type: "checkbox", id: "show-dead", checked: !!S.showDead, onchange: (e) => { S.showDead = e.target.checked; S.hooks.panel(); } }), " 滅亡した国家も表示")), note(`${list.length} 件。クリックで詳細を開きます（クリックだけでは担当は変わりません）。`));
-  box.append(vlist(list, 40, (s) => h("div", { class: "vrow full" + (S.sel === s.id ? " on" : ""), onclick: () => S.hooks.select(s.id) }, h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", { style: "color:var(--dim)" }, ` ${s.alive ? "人口 " + n0(s.pop) : "滅亡"}・成立 ${date(s.formedAt).split("月")[0]}月`))));
+  const c = civ(), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "国家"));
+  if (S.detail && S.sel && c.states[S.sel]) { box.append(back("国家一覧", () => { S.detail = false; S.hooks.panel(); }), stateDetail(c.states[S.sel])); return box; }
+  const mine = controlled(), all = Object.values(c.states).sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), me = all.filter((s) => s.id === mine), alive = all.filter((s) => s.alive && s.id !== mine), dead = all.filter((s) => !s.alive);
+  box.append(h("p", { class: "n" }, `存続中 ${alive.length + me.length}・滅亡 ${dead.length}`), sectioned([{ title: "あなたの国", rows: me }, { title: "存続中の国家", rows: alive }, { title: "滅亡した国家", rows: dead, fold: "deadStates" }], 34, (s) => listRow({ type: "states", id: s.id }, [h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", {}, s.alive ? `人口 ${n0(s.pop)}・${regimeJa(s)}` : `滅亡・成立 ${date(s.formedAt).split("月")[0]}月`)], () => S.hooks.select(s.id), (s.id === mine ? "mine " : "") + (s.alive ? "" : "dead"))));
   return box;
 }
 function stateDetail(st) {
   const c = civ(), mine = controlled() === st.id, tabs = [["politics", "内政"], ["military", "軍事"], ["diplomacy", "外交"], ["tech", "技術ツリー"], ["doctrine", "軍事ドクトリン"]];
   const body = { politics: tPolitics, military: tMilitary, diplomacy: tDiplomacy, tech: tTech, doctrine: tDoctrine }[S.tab](st, mine);
-  return h("div", { class: "rs" }, h("div", { class: "card br" }, h("h3", {}, h("span", { class: "sw", style: `background:${colorOf(st.id)}` }), st.name), h("div", { class: "sub" }, `${polityJa(st.polity)}${st.alive ? "" : "・滅亡"}・成立 ${date(st.formedAt)}`), h("div", { class: "rowb" }, mine ? btn("担当を解除する", () => { run({ type: "control.release" }); S.hooks.render(); }, "p", { id: "release" }) : btn("この国を担当する", () => { run({ type: "control.take", stateId: st.id }); S.hooks.render(); }, "p", { id: "take", disabled: !st.alive }), mine ? h("small", { style: "color:var(--purple)" }, "担当中（操作は担当国のみ）") : h("small", { style: "color:var(--dim)" }, "閲覧中（担当ではありません）"))),
+  return h("div", { class: "rs" }, h("div", { class: "card br" }, h("h3", {}, h("span", { class: "sw", style: `background:${colorOf(st.id)}` }), st.name), h("div", { class: "sub" }, `${regimeJa(st)}${st.alive ? "" : "・滅亡"}・成立 ${date(st.formedAt)}`), h("div", { class: "rowb" }, mine ? btn("担当を解除する", () => { run({ type: "control.release" }); S.hooks.render(); }, "p", { id: "release" }) : btn("この国を担当する", () => { run({ type: "control.take", stateId: st.id }); S.hooks.render(); }, "p", { id: "take", disabled: !st.alive }), mine ? h("small", { style: "color:var(--purple)" }, "担当中（操作は担当国のみ）") : h("small", { style: "color:var(--dim)" }, "閲覧中（担当ではありません）"))),
     h("div", { class: "tabs" }, ...tabs.map(([k, ja]) => h("b", { class: S.tab === k ? "on" : "", "data-tab": k, onclick: () => { S.tab = k; S.hooks.panel(); } }, ja))), S.notice ? why(S.notice) : null, body);
 }
 const factionRows = (st) => Object.entries(st.politics?.factions ?? {});
@@ -57,14 +74,36 @@ function tPolitics(st, mine) {
   const finBtn = stat("財政 ▸", n0(st.treasury)); finBtn.id = "fin-open"; finBtn.title = "クリックで財政の詳細"; finBtn.style.cursor = "pointer"; finBtn.addEventListener("click", () => { S.fin = !S.fin; S.hooks.panel(); });
   const out = h("div", {}, h("div", { class: "st", style: "grid-template-columns:repeat(3,1fr)" }, stat("人口", n0(st.pop)), finBtn, stat("安定度", pct(st.stability)), stat("疲労度", pct(fat)), stat("産業力", n0(effective(c, st, "industry"))), stat("正統性", pct(leg))));
   if (S.fin) out.append(finance(st, mine));
-  out.append(lb("為政者", "RULER"), h("div", { class: "row" }, face(L?.name ?? "—", st.id), h("span", { class: "g" }, h("b", {}, L?.name ?? "—"), h("br"), h("small", {}, `${polityJa(st.polity)}・${L?.heir ? "継承者を指名済み" : "継承者は未指名"}`))));
+  out.append(lb("為政者", "RULER"), h("div", { class: "row" }, face(L?.name ?? "—", st.id, L?.look ?? null), h("span", { class: "g" }, h("b", {}, (L?.title ? L.title + " " : "") + (L?.name ?? "—")), h("br"), h("small", {}, `${regimeJa(st)}・${L?.heir ? "継承者を指名済み" : "継承者は未指名"}`))));
   const rl = h("div", { class: "rowb" }, btn("継承者を指名", () => act({ type: "state.act", stateId: st.id, action: "designate_heir" }), "", { disabled: !mine || !!L?.heir, title: mine ? "" : "担当国のみ" }));
   const nm = h("input", { id: "leader-name", placeholder: "為政者の名前（創造主の編集）", value: L?.name ?? "" }); rl.append(nm, btn("別の家系の為政者に交代させる（創造主）", () => creator({ type: "creator.editState", stateId: st.id, changes: { "leader.name": nm.value } }), "", { id: "leader-replace" })); out.append(rl, note("名前を入れて交代させると、「王朝の交代」として記録され、前の為政者は退位します。"));
   const sn = h("input", { id: "state-name", value: st.name }), pol = h("select", { id: "polity-sel" }, ...Object.entries(POLITY_JA).map(([k, ja]) => h("option", { value: k, selected: k === st.polity }, ja)));
   out.append(lb("名称・政体", "IDENTITY"), h("div", { class: "rowb" }, sn, btn("国名を変更", () => creator({ type: "creator.editState", stateId: st.id, changes: { name: sn.value } }))), h("div", { class: "rowb" }, pol, btn("政体を変更（創造主）", () => creator({ type: "creator.editState", stateId: st.id, changes: { polity: pol.value } })), btn("政体変更（行動）", () => act({ type: "state.act", stateId: st.id, action: "change_polity", opt: pol.value }), "", { disabled: !mine })), note("名称の変更は表示名だけです。"));
   if (P) { const rows = factionRows(st); out.append(lb("支持勢力", "FACTIONS"), ...rows.map(([k, v]) => h("div", { class: "fr" }, h("div", { class: "t" }, h("span", {}, FACTION_JA[k] ?? k), h("span", {}, `支持 ${pct(v.support)}・影響力 ${pct(v.influence)}`)), h("div", { class: "bar" }, h("i", { style: `width:${v.support * 100}%;background:${FACTION_COL[k] ?? "#6fa8c9"}` })))), P.assembly ? h("div", {}, h("small", {}, "議会（議席は影響力に比例）"), hemi(rows.map(([k, v]) => [k, v.influence]), rows.map(([k]) => FACTION_COL[k] ?? "#6fa8c9"))) : note("この政体には議会がありません。")); }
   const ideas = ideasOf(st); if (ideas.length) out.append(lb("思想", "IDEAS"), table(["思想", "広がり"], ideas.slice(0, 6).map((x) => [x.ja, pct(x.v)])), note("思想は条件から自然に生まれ、接する国・交易・同盟を通じて広がります。禁止はできません。"));
-  out.append(creatorBox(st)); return out;
+  out.append(officesBox(st, mine)); if (mine && st.alive) out.append(uprisingBox(st)); out.append(creatorBox(st)); return out;
+}
+/* ---------- 官制・役職（v6.4.0）: 担当国（と創造主）は、いつでも組み替えられる ---------- */
+function officesBox(st, mine) {
+  const rg = regimeOf(st), R = REGIMES[rg], offs = st.offices ?? [], can = st.alive && (mine || !controlled()), box = h("div", {}, lb("官制・役職", "OFFICES"), note(`${R.ja}・元首は${officeJa(R.ruler)}`));
+  box.append(offs.length ? h("div", { class: "offs" }, ...offs.map((o) => h("div", { class: "off" }, face(o.holder.name, st.id, o.holder.look), h("div", {}, h("b", {}, officeJa(o.id)), h("small", {}, o.holder.name))))) : note("役職はまだ定められていません（標準の役職を置けます）。"));
+  if (!can) return box;
+  const cur = new Set(offs.length ? offs.map((o) => o.id) : defaultOffices(rg)), set = S.offEdit?.id === st.id ? S.offEdit.set : cur; S.offEdit = { id: st.id, set };
+  box.append(h("details", { class: "dt", id: "off-edit" }, h("summary", {}, "役職を組み替える（いつでも・費用なし）"), h("div", { class: "wchips" }, ...R.offices.map((id) => h("label", { class: "b", style: "display:flex;gap:4px;align-items:center" }, h("input", { type: "checkbox", "data-office": id, checked: set.has(id), disabled: id === R.ruler, onchange: (e) => { e.target.checked ? set.add(id) : set.delete(id); } }), `${officeJa(id)}（${OFFICE_DOMAIN_JA[OFFICES[id][1]]}）`))), btn("この役職に改める", () => { const list = R.offices.filter((x) => set.has(x)); if (list.length < MIN_OFFICES || list.length > MAX_OFFICES) { S.notice = `役職は ${MIN_OFFICES}〜${MAX_OFFICES} 件にしてください`; S.hooks.panel(); return; } if (mine) act({ type: "state.setOffices", offices: list }); else creator({ type: "state.setOffices", stateId: st.id, offices: list }); S.offEdit = null; S.hooks.render(); }, "p", { id: "off-apply" })));
+  return box;
+}
+/* ---------- 反乱・革命（v6.4.0）: 型を選び、中心地を地図で選ぶ。規模は WCDE が決める ---------- */
+function uprisingBox(st) {
+  const U = S.upr?.stateId === st.id ? S.upr : null, box = h("div", {}, lb("反乱・革命", "UPRISING"), note("自国の中で反乱を起こします。型を選び、中心地を地図から選びます（首都以外）。規模は世界が決めます。"));
+  const sel = h("select", { id: "upr-kind" }, ...Object.entries(UPRISING_KINDS).map(([k, K]) => h("option", { value: k, selected: U?.kind === k }, K.ja)));
+  box.append(h("div", { class: "rowb" }, sel, btn("中心地を地図から選ぶ", () => { S.upr = { stateId: st.id, kind: sel.value, picking: true }; S.map.pins = null; notify("ok", "地図で、反乱の中心地をクリックしてください"); S.hooks.panel(); }, "", { id: "upr-pick" })));
+  if (U?.picking) box.append(note("地図で、自国の領土のうち首都以外の場所をクリックしてください。"));
+  if (U?.plan) {
+    const p = U.plan, K = UPRISING_KINDS[p.kind], opt = K.state === "optional", st$ = K.state === "required" || (opt && U.asState);
+    box.append(h("div", { class: "card", id: "upr-plan" }, h("b", {}, K.ja), h("div", { class: "n" }, K.blurb), h("div", { class: "n" }, `規模: ${p.scaleLabel}（反乱側の人口 ${n0(p.rebelPop)}・国の ${Math.round(p.share * 100)}%）`), h("div", { class: "n" }, `見通し: ${p.oddsLabel}`), opt ? h("label", { class: "n" }, h("input", { type: "checkbox", id: "upr-state", checked: !!U.asState, onchange: (e) => { U.asState = e.target.checked; S.hooks.panel(); } }), " 独立した国をつくる") : null,
+      h("div", { class: "rowb" }, btn(st$ ? "国名・政体を決めて決行する" : "新しい体制を決めて決行する", () => openWizard({ mode: st$ ? "rebel" : "reform", rebel: st$ ? { stateId: st.id, kind: p.kind, cell: p.center.cell, plan: p } : null, reform: st$ ? null : { stateId: st.id, kind: p.kind, cell: p.center.cell }, onDone: (r) => { S.upr = null; if (S.map) S.map.pins = null; notify("ok", r.outcome === "new_state" ? "新しい国が独立を宣言し、戦争になりました" : r.outcome === "success" ? "革命が成功し、新しい体制になりました" : "反乱は鎮圧されました"); S.hooks.render(); } }), "p", { id: "upr-go" }), btn("取り消す", () => { S.upr = null; if (S.map) S.map.pins = null; S.map.draw(); S.hooks.panel(); }))));
+  }
+  return box;
 }
 function finance(st, mine) {
   const c = civ(), tax = st.pop * st.policy.tax * 0.0012 * taxMult(st), trade = effective(c, st, "tradeIncome"), cols = ["#d8b45a", "#6fa8c9"], items = [["税収（年の目安）", tax], ["交易収入（直近の期）", trade]];
@@ -81,89 +120,13 @@ function creatorBox(st) {
 
 function tMilitary(st, mine) {
   const c = civ(), M = st.military; if (!M) return note("軍事のデータがありません。");
-  const foes = aliveStates()
-    .filter((x) => x.id !== st.id)
-    .sort((a, b) => b.pop - a.pop);
-
-  const search = h("input", {
-    type: "search",
-    id: "wl-target-search",
-    placeholder: "国名で検索（存続する全国家）",
-    style: "width:100%"
-  });
-
-  const sel = h("select", { id: "wl-target" });
-  const out = h("div", { id: "wl-out" });
-
-  const show = () => {
-    if (!sel.value) {
-      out.replaceChildren(note("検索条件に一致する国家がありません。"));
-      return;
-    }
-
-    const p = predictWar(c, st.id, sel.value, S.w.sim.ctx);
-    out.replaceChildren(p ? warlabView(p) : "予測できません");
-  };
-
-  const filterTargets = () => {
-    const q = search.value.trim().toLocaleLowerCase();
-    const current = sel.value;
-    const matched = foes.filter((x) =>
-      String(x.name ?? "").toLocaleLowerCase().includes(q)
-    );
-
-    sel.replaceChildren(
-      ...matched.map((x) => h("option", { value: x.id }, x.name))
-    );
-    sel.disabled = !matched.length;
-
-    if (matched.length) {
-      sel.value = matched.some((x) => String(x.id) === current)
-        ? current
-        : String(matched[0].id);
-    } else {
-      sel.append(
-        h("option", {
-          value: "",
-          disabled: true,
-          selected: true
-        }, "該当する国家がありません")
-      );
-    }
-
-    declareButton.disabled = !mine || !sel.value;
-  };
-
-  search.addEventListener("input", () => {
-    filterTargets();
-    show();
-  });
-  sel.addEventListener("change", show);
-
-  const declareButton = btn(
-    "選んだ国へ宣戦する",
-    () => act({
-      type: "state.act",
-      stateId: st.id,
-      action: "declare_war",
-      target: sel.value
-    }),
-    "",
-    {
-      id: "declare",
-      disabled: !mine,
-      title: mine ? "" : "担当国のみ"
-    }
-  );
-
-  filterTargets();
-  setTimeout(() => sel.isConnected && show(), 0);
-
+  const foes = aliveStates().filter((x) => x.id !== st.id).sort((a, b) => b.pop - a.pop), sel = h("select", { id: "wl-target" }, ...foes.slice(0, 40).map((x) => h("option", { value: x.id }, x.name))), out = h("div", { id: "wl-out" });
+  const show = () => { const p = predictWar(c, st.id, sel.value, S.w.sim.ctx); out.replaceChildren(p ? warlabView(p) : "予測できません"); }; sel.addEventListener("change", show); setTimeout(() => sel.isConnected && show(), 0);
   const shares = M.shares ?? {}, inputs = Object.entries(UNIT_KINDS).map(([k, u]) => [k, h("input", { type: "number", step: "0.05", min: 0, max: 1, value: r2(shares[k] ?? 0), style: "width:62px", "data-kind": k })]);
   return h("div", {}, h("div", { class: "st", style: "grid-template-columns:repeat(2,1fr)" }, stat("兵力", n0(st.army)), stat("軍事能力", (st.milBonus >= 0 ? "+" : "") + pct(st.milBonus)), stat("装備水準（有効値）", pct(effective(c, st, "equipLevel"))), stat("練度（有効値）", pct(effective(c, st, "readiness")))),
     lb("部隊", "UNITS"), table(["部隊", "規模", "装備", "練度"], M.units.map((u) => [u.name, n0(u.size), pct(u.equip), pct(u.readiness)])), note(`充足は産業力・装備条件から算出され、介入があれば有効値を使います（産業力 ${n0(effective(c, st, "industry"))}）。`),
     lb("編制", "ORGANIZATION"), h("div", { class: "rowb" }, ...inputs.map(([k, el]) => h("label", {}, UNIT_KINDS[k].ja + " ", el))), h("div", { class: "rowb" }, btn("編制を変更", () => { const s = {}; for (const [k, el] of inputs) s[k] = Number(el.value) || 0; const r = (mine ? act : creator)({ type: "state.reorganize", stateId: st.id, shares: s }); }, "", { id: "reorg" })), note("合計は 1。条件（技術・地理）と費用を満たさない編制は理由つきで拒否されます。担当国または創造主が変更できます。"),
-    lb("宣戦", "WAR"), h("div", { class: "rowb" }, declareButton, !mine ? h("small", { style: "color:var(--dim)" }, "担当国のみ実行できます") : null), search, sel,
+    lb("宣戦", "WAR"), h("div", { class: "rowb" }, btn("選んだ国へ宣戦する", () => act({ type: "state.act", stateId: st.id, action: "declare_war", target: sel.value }), "", { id: "declare", disabled: !mine, title: mine ? "" : "担当国のみ" }), !mine ? h("small", { style: "color:var(--dim)" }, "担当国のみ実行できます") : null), sel,
     lb("戦争研究所（予測）", "WAR LAB"), note("この国が攻める場合の見通しです。確定した未来ではなく、世界の状態は変えません。"), out);
 }
 export function warlabView(p) { return h("div", {}, h("div", {}, `勝利 ${pct(p.pAWin)}（${pct(p.pAWinRange[0])}〜${pct(p.pAWinRange[1])}）・引き分け ${pct(p.pStalemate)}・敗北 ${pct(p.pBWin)}`), h("div", { class: "bar" }, h("i", { style: `width:${p.pAWin * 100}%;background:var(--blue)` }), h("i", { style: `width:${p.pStalemate * 100}%;background:#6a6f78` }), h("i", { style: `width:${p.pBWin * 100}%;background:var(--red)` })), h("div", { class: "n" }, `見込みの損耗: 自軍 ${pct(p.lossA)} / 相手 ${pct(p.lossB)}・長引く目安 ${p.months}か月・不確実性 ${pct(p.uncertainty)}`), table(["要因", stateName(p.aId), stateName(p.bId)], p.factors.map((x) => [x.ja, x.a, x.b]))); }

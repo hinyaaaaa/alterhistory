@@ -26,7 +26,7 @@ export const KIND_POLICY = Object.freeze({
   disaster_struck: P("env", 2), catastrophe: P("env", 3), disaster_ended: P("env", 0, false), climate_shift: P("env", 2), famine: P("env", 1), ecosystem_shift: P("env", 1),
   group_split: P("pop", 0, false), group_moved: P("pop", 0, false), group_extinct: P("pop", 1), subsistence_changed: P("pop", 0, false), sea_crossed: P("pop", 3), species_emerged: P("pop", 3), prehistory_epoch: P("pop", 2),
   trade_route_opened: P("economy", 1), trade_cut: P("economy", 1), demand_raised: P("economy", 0, false),
-  doctrine_adopted: P("military", 1), state_action: P("state", 1), creator_edit: P("creator", 2), chronicle: P("other", 1),
+  doctrine_adopted: P("military", 1), state_constituted: P("state", 2), uprising: P("state", 3), uprising_crushed: P("state", 2), office_reform: P("state", 1), state_action: P("state", 1), creator_edit: P("creator", 2), chronicle: P("other", 1),
   magic_backlash: P("other", 0, false), magic_power_struggle: P("other", 0, false), magic_org_founded: P("other", 0, false), magic_gifted_died: P("other", 0, false), magic_incident: P("other", 0, false), magic_discrimination: P("other", 0, false), magic_gifted_found: P("other", 0, false),
 });
 export const policyOf = (kind) => KIND_POLICY[kind] ?? P("other", 1);

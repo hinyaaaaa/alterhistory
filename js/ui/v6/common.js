@@ -28,8 +28,8 @@ export const bar = (v, col = "var(--blue)") => h("span", { class: "barv" }, h("i
 export const btn = (label, onclick, cls = "", props = {}) => h("button", { class: "b " + cls, onclick, ...props }, label);
 export const table = (head, rows, cls = "") => h("table", { class: "tb " + cls, style: "width:100%;border-collapse:collapse;font-size:12px" }, h("thead", {}, h("tr", {}, ...head.map((x) => h("th", { style: "text-align:left;font-weight:400;color:var(--dim);border-bottom:1px solid var(--line);padding:3px 4px" }, x)))), h("tbody", {}, ...rows.map((r) => h("tr", {}, ...r.map((c) => h("td", { style: "border-bottom:1px solid #262a31;padding:3px 4px" }, c))))));
 /** 為政者の顔: 名前・国の ID から決まる（実在データを変えない読み取り専用の肖像。モックの顔の描き方を踏襲） */
-export function face(name, stateId) {
-  const k = hash(name + stateId), sk = ["#e0b79a", "#c99a76", "#a87654", "#f0cfb5"][k % 4], hr = ["#2a2420", "#6b4a2f", "#9a9a9a", "#4a3020"][(k >> 3) % 4], st = (k >> 6) % 4, c = colorOf(stateId, 45);
+export function face(name, stateId, look = null) {
+  const k = look != null ? hash("look" + look) : hash(name + stateId), /* v6.4.0: 建国で選んだ顔（look）があれば、それで決める */ sk = ["#e0b79a", "#c99a76", "#a87654", "#f0cfb5"][k % 4], hr = ["#2a2420", "#6b4a2f", "#9a9a9a", "#4a3020"][(k >> 3) % 4], st = (k >> 6) % 4, c = colorOf(stateId, 45);
   let g = `<rect width="64" height="64" fill="#1b1f26"/><path d="M6 64Q8 46 32 44Q56 46 58 64Z" fill="${c}" fill-opacity=".8"/><rect x="28" y="38" width="8" height="8" fill="${sk}"/><ellipse cx="32" cy="27" rx="12" ry="14" fill="${sk}"/>`;
   if (st === 1) g += `<path d="M18 30Q14 10 32 10Q50 10 46 30L46 44L42 44L42 24Q32 14 22 24L22 44L18 44Z" fill="${hr}"/>`; else { g += `<path d="M19 26Q18 11 32 11Q46 11 45 26Q41 18 32 18Q23 18 19 26Z" fill="${hr}"/>`; if (st === 2) g += `<path d="M21 31Q32 48 43 31Q43 40 32 42Q21 40 21 31Z" fill="${hr}"/>`; if (st === 3) g += `<path d="M20 13L24 6L28 12L32 5L36 12L40 6L44 13Z" fill="#b59a74"/>`; }
   g += `<circle cx="27" cy="27" r="1.4" fill="#222"/><circle cx="37" cy="27" r="1.4" fill="#222"/><path d="M28 34Q32 36 36 34" stroke="#7a4a3a" fill="none"/>`;

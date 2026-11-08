@@ -1,6 +1,7 @@
 // v6 M0/M5: 命令の定義。どの権限で・どの段階で・何を変えられるか（権限の表）。すべて dispatch（contract.js）を通る。
 import { AUTHORITY as A, defineCommand, safeAdvance } from "./contract.js";
-import { foundAsPlayer, delegateToWorld, refreshCandidates } from "./founding.js";
+import { foundAsPlayer, foundAsCreator, delegateToWorld, refreshCandidates, foundingOptions } from "./founding.js";
+import { planUprising, startUprising, setOffices } from "./uprising.js";
 import { takeControl, releaseControl, creatorEditState, creatorRename } from "./control.js";
 import { reorganize, adoptDoctrine } from "./domains/military.js";
 import { applyDisplayEdit } from "./calendar.js";
@@ -18,7 +19,13 @@ export function registerCommands() {
   // 建国（段階: founding）
   defineCommand("founding.found", { authorities: [A.PLAYER], phases: ["founding"], apply: (w, c) => foundAsPlayer(w, c) });
   defineCommand("founding.delegate", { authorities: [A.ADMIN], phases: ["founding"], apply: (w) => delegateToWorld(w) });
+  defineCommand("founding.options", { authorities: [A.ADMIN], mutates: false, phases: ["founding", "running"], apply: (w, c) => foundingOptions(w, { regime: c.regime ?? null, capital: c.capital ?? null, techs: c.techs ?? [] }) }); // v6.4.0: 建国の各段階の選択肢（何も変えない）
+  defineCommand("creator.found", { authorities: [A.CREATOR], phases: ["running"], apply: (w, c) => foundAsCreator(w, c) }); // v6.4.0: 創造主が新しい国家を作る（担当しない。建国と同じ流れ）
   defineCommand("founding.refresh", { authorities: [A.ADMIN], phases: ["founding"], apply: (w) => ({ ok: true, candidates: refreshCandidates(w) }) });
+  // v6.4.0: 担当国内の反乱・革命、役職の組み替え
+  defineCommand("uprising.plan", { authorities: [A.PLAYER], control: true, mutates: false, apply: (w, c) => planUprising(w, c) });
+  defineCommand("uprising.start", { authorities: [A.PLAYER], control: true, apply: (w, c) => startUprising(w, c) });
+  defineCommand("state.setOffices", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => setOffices(w, c) });
   // 担当（段階: running）。表示する国家は UI の状態で、ここでは扱わない
   defineCommand("control.take", { authorities: [A.ADMIN], apply: (w, c) => takeControl(w, c.stateId) });
   defineCommand("control.release", { authorities: [A.ADMIN], apply: (w) => releaseControl(w) });

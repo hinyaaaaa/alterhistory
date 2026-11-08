@@ -200,6 +200,24 @@ details.dt{margin-top:14px}details.dt>summary{cursor:pointer;font-weight:700;pad
 #banner-body{white-space:pre-wrap;word-break:break-word}
 #banner-close{position:absolute;right:4px;top:2px;background:none;border:0;color:var(--dim);font-size:18px;cursor:pointer}
 #loading,#empty-state{display:none!important}
+
+/* v6.4.0: 建国ウィザード（全面表示）・一覧 */
+.wiz{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0)}
+.wizhead{padding:14px 22px 6px;border-bottom:1px solid var(--line)}.wizhead h1{margin:0 0 8px;font-weight:400;letter-spacing:.12em}
+.wsteps{display:flex;gap:6px;flex-wrap:wrap;font-size:12px;margin-bottom:8px}.wsteps span{padding:2px 10px;border:1px solid var(--line);color:var(--dim)}.wsteps .on{border-color:var(--yellow);color:var(--yellow)}.wsteps .done{color:var(--tx)}
+.wizbody{flex:1;overflow:auto;padding:14px 22px;max-width:980px;width:100%;margin:0 auto}.wizbody input{width:100%;max-width:520px;background:var(--bg3);color:var(--tx);border:1px solid var(--line);padding:8px 10px;font:inherit;font-size:16px}
+.wizfoot{display:flex;gap:8px;padding:10px 22px;border-top:1px solid var(--line);background:var(--bg2)}
+.wgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:8px;margin:8px 0}.wgrid.o{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+.wcard{text-align:left;background:var(--bg3);color:var(--tx);border:1px solid var(--line);padding:8px 10px;font:inherit;cursor:pointer;display:flex;flex-direction:column;gap:3px}.wcard:hover:not(:disabled){border-color:var(--yellow)}.wcard.on{border-color:var(--yellow);background:#2a2a22}.wcard.off{opacity:.45;cursor:not-allowed}.wcard small{color:var(--dim);font-size:11px}.wcard .why{color:var(--red)}.wcard b{font-weight:600}
+.wchips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}.wfaces{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px;margin:12px 0;max-width:620px}.wface{background:var(--bg3);border:2px solid var(--line);padding:2px;cursor:pointer}.wface.on{border-color:var(--yellow)}.wface svg{width:100%;height:auto;display:block}
+.wizmap{position:relative;height:min(46vh,420px);border:1px solid var(--line);background:#101216;margin:8px 0}.wizmap canvas{width:100%;height:100%;display:block;cursor:crosshair}.wcap{min-height:70px;padding:6px 0}
+.wsum{display:flex;gap:16px;align-items:flex-start}.wsum svg{width:96px;height:96px;border:1px solid var(--line)}.wsum h2{margin:0 0 4px;font-weight:600}
+.err{color:var(--red)}
+/* 一覧（国家・戦争・文化・言語・宗教） */
+.grp{font-size:11px;letter-spacing:.16em;color:var(--dim);margin:12px 0 4px;display:flex;align-items:center;gap:8px}.grp::after{content:"";flex:1;height:1px;background:var(--line)}
+.lrow{display:flex;align-items:center;gap:8px;padding:6px 6px;border-left:3px solid transparent;border-bottom:1px solid #262a31;cursor:pointer;font-size:13px}.lrow:hover{background:#20242b;border-left-color:#ff3b30}.lrow.mine{background:#232a22;border-left-color:var(--yellow)}.lrow.dead{opacity:.55}.lrow small{color:var(--dim);margin-left:auto;white-space:nowrap}
+.offs{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:6px}.off{display:flex;gap:6px;align-items:center;background:var(--bg3);border:1px solid var(--line);padding:3px 6px;font-size:12px}.off svg{width:30px;height:30px;flex:none}.off small{color:var(--dim);display:block;font-size:10px}
+
 </style>
 <style>
 #v6-root{
