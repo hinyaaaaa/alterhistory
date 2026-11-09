@@ -16916,7 +16916,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var APP_VERSION = "6.7.0";
   var APP_VERSION_NAME = "\u547D\u540D\u306E\u898B\u76F4\u3057";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "e360bcb75a98" : "dev";
+  var APP_BUILD_ID = true ? "3278c77bd474" : "dev";
 
   // js/ui/icons.js
   var P3 = {

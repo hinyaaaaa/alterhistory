@@ -10690,8 +10690,22 @@ ${shown}${more}`;
       }, "p", { id: "reorg" }))));
       setTimeout(paint, 0);
     }
-    const foes = aliveStates().filter((x) => x.id !== st2.id).sort((a, b) => b.pop - a.pop).slice(0, 40), sel = h("select", { id: "wl-target" }, ...foes.map((x) => h("option", { value: x.id }, x.name)));
-    out.append(lb("\u5BA3\u6226", "WAR"), h("div", { class: "rowb" }, sel, btn("\u5BA3\u6226\u3059\u308B", () => confirmWar(st2.id, sel.value, () => S2.hooks.render()), "", { id: "declare", disabled: !mine || !foes.length, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" })));
+    const c0 = S2.w.civ, foes = aliveStates().filter((x) => x.id !== st2.id && !atWarWith(c0, st2, x) && !treatyBetween(c0, st2, x, "alliance") && !treatyBetween(c0, st2, x, "nonaggression")).sort((a, b) => b.pop - a.pop);
+    const sel = h("select", { id: "wl-target", size: 7, class: "wlsel" }), cnt = h("small", { id: "wl-count" }), find = h("input", { id: "wl-search", type: "search", placeholder: "\u56FD\u540D\u3067\u691C\u7D22", autocomplete: "off" });
+    const fill = () => {
+      const q2 = find.value.trim(), keep = sel.value, list = q2 ? foes.filter((x) => x.name.includes(q2)) : foes;
+      sel.replaceChildren(...list.map((x) => h("option", { value: x.id }, x.name)));
+      if (list.some((x) => x.id === keep)) sel.value = keep;
+      else if (list.length) sel.value = list[0].id;
+      cnt.textContent = `\u5BA3\u6226\u3067\u304D\u308B\u56FD ${foes.length} \u56FD${q2 ? `\uFF08${list.length} \u56FD\u306B\u7D5E\u308A\u8FBC\u307F\uFF09` : ""}`;
+      goBtn.disabled = !mine || !list.length;
+    };
+    const goBtn = btn("\u5BA3\u6226\u3059\u308B", () => {
+      if (sel.value) confirmWar(st2.id, sel.value, () => S2.hooks.render());
+    }, "", { id: "declare", disabled: true, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" });
+    find.addEventListener("input", fill);
+    fill();
+    out.append(lb("\u5BA3\u6226", "WAR"), h("div", { class: "wlbox" }, find, sel, cnt, h("div", { class: "rowb" }, goBtn)));
     void r23;
     void colorOf;
     return out;

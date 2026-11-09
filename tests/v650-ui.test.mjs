@@ -51,7 +51,7 @@ await check("【編成の編集】配分を変えて決定すると、部隊の�
   const u = st.military.units; assert.equal(u.length, 1, "100% の 1 種だけになる"); assert.ok(before.length >= 1);
 });
 await check("【開戦の確認】宣戦の前に、数値でなく言葉の見通しが出る。やめれば開戦しない", async () => {
-  const n = w.civ.activeWarIds.length; click($("#declare")); await wait(20); assert.ok($("#warconfirm")); assert.ok($$("#warconfirm .wcrow").length >= 3); assert.ok(!/戦争研究所/.test($("#warconfirm").textContent)); assert.ok(!/\d+%/.test($("#warconfirm").textContent), "数値の予測は出さない");
+  const n = w.civ.activeWarIds.length; { const all = $$("#wl-target option").length, tot = +/(\d+) 国/.exec($("#wl-count").textContent)[1]; assert.equal(all, tot, "宣戦先は件数の上限なしで全て出る"); const first = $("#wl-target option").textContent; $("#wl-search").value = first; $("#wl-search").dispatchEvent(new window.Event("input")); const n1 = $$("#wl-target option").length; assert.ok(n1 >= 1 && n1 <= all && $$("#wl-target option").every((o) => o.textContent.includes(first)), "検索で絞り込める"); assert.ok(!$("#declare").disabled); $("#wl-search").value = "該当なしの名前"; $("#wl-search").dispatchEvent(new window.Event("input")); assert.equal($$("#wl-target option").length, 0); assert.ok($("#declare").disabled); $("#wl-search").value = ""; $("#wl-search").dispatchEvent(new window.Event("input")); assert.equal($$("#wl-target option").length, all); } click($("#declare")); await wait(20); assert.ok($("#warconfirm")); assert.ok($$("#warconfirm .wcrow").length >= 3); assert.ok(!/戦争研究所/.test($("#warconfirm").textContent)); assert.ok(!/\d+%/.test($("#warconfirm").textContent), "数値の予測は出さない");
   click($("#war-confirm-no")); await wait(10); assert.ok(!$("#warconfirm")); assert.equal(w.civ.activeWarIds.length, n);
 });
 await check("【技術・ドクトリン】画面に採用ボタンは無い（自動採用は v650-core で確認）", async () => {

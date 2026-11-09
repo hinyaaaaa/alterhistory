@@ -9,6 +9,7 @@ import { effective } from "../../core/wcde/domains/effective.js";
 import { ideasOf } from "../../core/wcde/domains/politics.js";
 import { UNIT_KINDS, formationsOf } from "../../core/wcde/domains/military.js";
 import { taxMult } from "../../core/civ/techfx.js";
+import { atWarWith, treatyBetween } from "../../core/civ/diplomacy.js";
 import { formatWorldDate } from "../../core/wcde/world.js";
 
 const civ = () => S.w.civ;
@@ -64,8 +65,13 @@ export function tMilitaryV(st, mine) {
     out.append(h("details", { class: "dt", id: "reorg-box" }, h("summary", {}, "編成を編集する"), ...rows, h("div", { class: "rowb" }, info, btn("均す", () => { const n = avail.length; avail.forEach(([k], i) => (val[k] = Math.floor(100 / n) + (i < 100 % n ? 1 : 0))); paint(); }), btn("この編成にする", () => { const s = {}; for (const k in val) s[k] = val[k] / 100; (mine ? act : creator)({ type: "state.reorganize", stateId: st.id, shares: s }); }, "p", { id: "reorg" }))));
     setTimeout(paint, 0);
   }
-  const foes = aliveStates().filter((x) => x.id !== st.id).sort((a, b) => b.pop - a.pop).slice(0, 40), sel = h("select", { id: "wl-target" }, ...foes.map((x) => h("option", { value: x.id }, x.name)));
-  out.append(lb("宣戦", "WAR"), h("div", { class: "rowb" }, sel, btn("宣戦する", () => confirmWar(st.id, sel.value, () => S.hooks.render()), "", { id: "declare", disabled: !mine || !foes.length, title: mine ? "" : "担当国のみ" })));
+  // 宣戦: 宣戦できる国をすべて（件数の上限なし）。名前で検索して絞り込める。交戦中・同盟国・不可侵条約のある国は出さない（外交ページと同じ条件）
+  const c0 = S.w.civ, foes = aliveStates().filter((x) => x.id !== st.id && !atWarWith(c0, st, x) && !treatyBetween(c0, st, x, "alliance") && !treatyBetween(c0, st, x, "nonaggression")).sort((a, b) => b.pop - a.pop);
+  const sel = h("select", { id: "wl-target", size: 7, class: "wlsel" }), cnt = h("small", { id: "wl-count" }), find = h("input", { id: "wl-search", type: "search", placeholder: "国名で検索", autocomplete: "off" });
+  const fill = () => { const q = find.value.trim(), keep = sel.value, list = q ? foes.filter((x) => x.name.includes(q)) : foes; sel.replaceChildren(...list.map((x) => h("option", { value: x.id }, x.name))); if (list.some((x) => x.id === keep)) sel.value = keep; else if (list.length) sel.value = list[0].id; cnt.textContent = `宣戦できる国 ${foes.length} 国${q ? `（${list.length} 国に絞り込み）` : ""}`; goBtn.disabled = !mine || !list.length; };
+  const goBtn = btn("宣戦する", () => { if (sel.value) confirmWar(st.id, sel.value, () => S.hooks.render()); }, "", { id: "declare", disabled: true, title: mine ? "" : "担当国のみ" });
+  find.addEventListener("input", fill); fill();
+  out.append(lb("宣戦", "WAR"), h("div", { class: "wlbox" }, find, sel, cnt, h("div", { class: "rowb" }, goBtn)));
   void r2; void colorOf; return out;
 }
 
