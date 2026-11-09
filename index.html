@@ -182,17 +182,36 @@ body.tm #pops{width:224px}
 .techwrap{display:flex;flex-direction:column;gap:6px}.techwrap.full{position:fixed;inset:8px 8px 8px 84px;z-index:60;background:#0f1216;border:1px solid #2b3038;border-radius:6px;padding:8px;display:grid;grid-template-columns:1fr 340px;grid-template-rows:auto 1fr;gap:8px}.techwrap.full svg{grid-row:1/3;grid-column:1;height:100%!important;min-height:0;width:100%}.techwrap.full .rowb{grid-column:2;grid-row:1}.techwrap.full .dt,.techwrap.full>.n{grid-column:2;grid-row:2;overflow:auto}.techgrid .tnode{cursor:pointer}.techgrid .tnode:hover rect{stroke:#fff}
 
 details.dt{margin-top:14px}details.dt>summary{cursor:pointer;font-weight:700;padding:8px 0;color:var(--tx)}details.dt>summary:hover{color:var(--yellow)}
-/* ---- 起動画面（毎回表示。仮ワードマークは assets/brand/ のファイルを差し替えると変わる） ---- */
-#splash{position:fixed;inset:0;z-index:100;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .32s ease}
+/* ---- 起動画面・スタート画面（v6.6.0。ロゴ・背景の絵・ロード画面。背景は SVG で描く） ---- */
+#splash{position:fixed;inset:0;z-index:100;background:#0b0d12;display:flex;align-items:center;justify-content:center;transition:opacity .4s ease;cursor:pointer}
 #splash.out{opacity:0;pointer-events:none}
-#splash .wm{position:relative;width:min(80vw,720px);overflow:hidden;animation:splash-in .7s ease both}
-#splash .wm img{display:block;width:100%;height:auto}
-#splash .wm::after{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 35%,rgba(216,180,90,.28) 50%,transparent 65%);transform:translateX(-120%);animation:splash-sweep 1s .15s ease-out forwards}
-#splash .tx{display:none;font-size:clamp(28px,7vw,64px);letter-spacing:.28em;color:var(--tx)}
-#splash .st{display:block;width:auto;padding:0;text-align:center;font-size:12px;letter-spacing:.2em;color:var(--dim);animation:splash-in .9s .2s ease both}
-@keyframes splash-in{from{opacity:0;letter-spacing:.06em}to{opacity:1}}
-@keyframes splash-sweep{to{transform:translateX(120%)}}
-@media (prefers-reduced-motion:reduce){#splash,#splash .wm,#splash .st{animation:none!important;transition:none!important}#splash .wm::after{display:none}}
+#splash .splbg{position:absolute;inset:0;opacity:.55;animation:kb 12s ease-out both}#splash .splbg svg,.slide svg{width:100%;height:100%;display:block}
+#splash .spl{position:relative;display:flex;flex-direction:column;align-items:center;gap:20px;width:min(86vw,720px);animation:splash-in 1.2s ease both}
+#splash .logo{width:100%}#splash .logo svg{width:100%;height:auto;filter:drop-shadow(0 4px 18px #000c)}
+.splbar{width:min(60vw,420px);height:3px;background:#ffffff22;overflow:hidden}.splbar i{display:block;height:100%;width:100%;background:var(--yellow);transform-origin:left center;animation:splbar linear forwards}
+.spltip{font-size:12px;letter-spacing:.2em;color:var(--dim)}
+@keyframes splbar{from{transform:scaleX(0)}to{transform:scaleX(1)}}@keyframes kb{from{transform:scale(1.08)}to{transform:scale(1)}}
+@keyframes splash-in{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.titlescreen{position:fixed;inset:0;background:#0b0d12;overflow:auto}
+.titlebg{position:fixed;inset:0}.titlebg.dim{filter:brightness(.6)}
+.slides .slide{position:absolute;inset:0;opacity:0;transition:opacity 1.6s ease}.slides .slide.on{opacity:1}
+.slidecap{position:absolute;right:14px;bottom:10px;font-size:11px;letter-spacing:.2em;color:#ffffff88}
+.vig{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 35%,#000a 100%);pointer-events:none}
+.titlebox{position:relative;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:34px;padding:24px}
+.titlebox .logo{width:min(86vw,640px)}.titlebox .logo svg{width:100%;height:auto;filter:drop-shadow(0 4px 20px #000c)}
+.menu{display:flex;flex-direction:column;gap:10px;align-items:stretch;min-width:260px}.menu .rowb,.menu span{display:flex;justify-content:stretch}
+.menu button.b{padding:12px 20px;font-size:16px;letter-spacing:.2em;background:#14161acc;width:100%}.menu button.b.p{border-color:var(--yellow);color:var(--yellow)}
+.ver{text-align:center;font-size:11px;letter-spacing:.2em;color:#ffffff77}
+.cfgbox{position:relative;max-width:560px;margin:5vh auto;padding:20px 24px 24px;background:#14161ae6;border:1px solid var(--line)}
+.cfgbox h1{margin:0 0 10px;font-weight:400;letter-spacing:.14em}.cfgbox .fld input,.cfgbox .fld select{font-size:14px;padding:6px 8px}
+.eraRow{display:flex;align-items:center;gap:6px;margin:4px 0;font-size:13px}.eraRow .ey{width:92px}.eraRow .en{flex:1}
+button.b.big{padding:8px 22px;font-size:15px}
+.loadbox{position:relative;min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;text-align:center}
+.loadbox .logo{width:84px}.lname{font-size:26px;letter-spacing:.16em}.lbar{width:min(70vw,460px);height:4px;background:#ffffff22;overflow:hidden}.lbar i{display:block;height:100%;width:0;background:var(--yellow);transition:width .25s}
+.lbar i.ind{width:35%;animation:ind 1.4s ease-in-out infinite}@keyframes ind{from{transform:translateX(-100%)}to{transform:translateX(300%)}}
+.lstat{font-size:13px;color:var(--tx);letter-spacing:.1em}.ltip{font-size:13px;color:var(--dim);max-width:460px;min-height:40px}
+#clock .wn{font-size:11px;letter-spacing:.2em;color:var(--dim)}#clock .era{font-size:12px;color:var(--yellow);letter-spacing:.14em}
+@media (prefers-reduced-motion:reduce){#splash,#splash .splbg,#splash .spl,.splbar i,.slides .slide{animation:none!important;transition:none!important}}
 /* ---- 通常通知（v5 の banner.js。画面上部の中央に一時表示。右側の通知欄は作らない） ---- */
 #banner{position:fixed;top:calc(96px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);z-index:60;max-width:min(560px,70vw);background:#2c1a1a;border:1px solid var(--red);color:var(--tx);padding:8px 34px 8px 12px;font-size:13px;line-height:1.5;box-shadow:0 4px 18px #0008}
 #banner.warn{background:#2c2616;border-color:var(--yellow)}
@@ -247,7 +266,54 @@ svg.bloc{display:block;margin-top:6px}svg.bloc text{font-family:inherit}
 /* パネルの自動更新はしない。世界が進んで内容が古くなったときだけ、押して更新する */
 #panel{position:relative}#prefresh{position:absolute;right:10px;top:10px;z-index:3;display:none;font:inherit;font-size:12px;background:#262b33;color:var(--yellow);border:1px solid var(--yellow);padding:2px 8px;cursor:pointer}#prefresh.stale{display:block}#prefresh:hover{background:#2f3540}
 </style>
+<style>
+/* v6.5.0: ビジュアル（旗・指標・グラフ・外交・戦争・統計・全面タブ） */
+#app{position:relative}
+#fulltab{position:absolute;left:78px;top:0;right:0;bottom:0;z-index:20;background:var(--bg);display:flex;flex-direction:column}
+#fulltab .fthead{display:flex;align-items:center;gap:14px;padding:8px 14px;border-bottom:1px solid var(--line);background:var(--bg2)}#fulltab .fthead b{font-size:18px;font-weight:600}
+#fulltab .ftbody{flex:1;overflow:auto;padding:14px 22px;max-width:1040px;width:100%;margin:0 auto;box-sizing:border-box}
+.fullmodal{position:fixed;inset:0;background:rgba(10,12,16,.74);display:flex;align-items:center;justify-content:center;z-index:60}
+.ico{flex:none;vertical-align:middle}.flag{display:block;flex:none;border-radius:2px}
+.hero{border:1px solid var(--line);background:linear-gradient(180deg,#1d2128,#171a20);padding:10px 12px;margin-bottom:8px}
+.hero .hrow{display:flex;gap:12px;align-items:center}.hero .hname{flex:1;min-width:0}.hero h3{margin:0;font-size:20px;font-weight:600;line-height:1.25}.hero .sub{font-size:12px;color:var(--dim)}
+.hero .hface{display:flex;flex-direction:column;align-items:center;text-align:center;font-size:11px;max-width:88px}.hero .hface b{font-size:12px;font-weight:600;line-height:1.25}.hero .hface small{color:var(--dim)}
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:6px 10px;margin-top:10px}.metric{display:flex;gap:6px;align-items:flex-start;color:var(--dim)}.metric .mt{display:flex;flex-direction:column;min-width:0;flex:1}.metric small{font-size:10px;color:var(--dim)}.metric b{font-size:14px;color:var(--tx);font-weight:600}
+.barv{display:inline-block;height:5px;background:#2a2f38;width:100%;position:relative;vertical-align:middle}.barv i{position:absolute;left:0;top:0;bottom:0}
+.rings{display:flex;justify-content:space-around;margin:6px 0}.ringbox{display:flex;flex-direction:column;align-items:center;font-size:11px;color:var(--dim)}
+.stackbar{display:flex;width:100%;background:#2a2f38;overflow:hidden}.stackbar i{display:block;height:100%}
+.facs .fac{display:grid;grid-template-columns:12px 64px 1fr 40px;gap:6px;align-items:center;font-size:12px;padding:2px 0}.facs .fac>i,.dotc{display:inline-block;width:10px;height:10px;margin-right:4px}.facs small{text-align:right;color:var(--dim)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}.chip{position:relative;border:1px solid var(--line);padding:1px 9px;font-size:12px;overflow:hidden}.chip i{position:absolute;left:0;bottom:0;height:2px;background:var(--blue)}
+.forms .uhead{display:grid;grid-template-columns:20px 1fr auto 56px 56px;gap:8px;align-items:center;margin-top:8px;font-size:13px}.forms .uhead small{color:var(--dim)}
+.fcards{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 0 28px}.fcard{border:1px solid;border-left-width:3px;background:#1a1d23;padding:2px 8px;display:flex;flex-direction:column;font-size:12px;min-width:92px}.fcard small{color:var(--dim)}
+.slrow{display:grid;grid-template-columns:20px 84px 1fr 40px;gap:8px;align-items:center;font-size:12px;padding:3px 0}.slrow input{width:100%}
+.flagrow{display:flex;flex-wrap:wrap;gap:8px}.fchip{display:flex;align-items:center;gap:6px;cursor:pointer;border:1px solid var(--line);padding:2px 8px 2px 3px;font-size:12px;background:#1a1d23}.fchip:hover{border-color:var(--yellow)}
+.piebox{display:flex;gap:12px;align-items:center;flex-wrap:wrap}.pie .slice{stroke:#161a1f;stroke-width:.6;cursor:pointer;transition:opacity .12s}.pie .slice.hot{opacity:.75;filter:brightness(1.25)}
+.pielg{flex:1;min-width:120px;font-size:12px}.lgrow{display:flex;gap:6px;align-items:center;padding:1px 0}.lgrow.pick{cursor:pointer}.lgrow i{width:10px;height:10px;flex:none}.lgrow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.lgrow small{color:var(--dim)}
+.hbars .hb{display:grid;grid-template-columns:16px 96px 1fr 62px;gap:6px;align-items:center;font-size:12px;padding:2px 0}.hbars .hb.pick{cursor:pointer}.hbars .hb.pick:hover{background:#20242b}.hbars .hb.mine .nm{color:var(--yellow)}.hbars .tr{height:10px;background:#242831;position:relative}.hbars .tr i{position:absolute;left:0;top:0;bottom:0}.hbars .vl{text-align:right;color:var(--dim)}.hbars .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.treemap .tm.pick{cursor:pointer}.treemap .tm:hover rect{filter:brightness(1.2)}
+.scard{border:1px solid var(--line);background:linear-gradient(180deg,#1b1f26,#161a1f);padding:10px 12px;margin-bottom:10px}.scard .sct{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}.scard .sct b{font-size:15px;letter-spacing:.06em}.scard .sct small{color:var(--dim)}
+.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:8px 0 10px}.kpi{border-left:2px solid var(--yellow);background:#1b1f26;padding:6px 10px;display:grid;grid-template-columns:20px 1fr;column-gap:8px}.kpi small{color:var(--dim);font-size:11px}.kpi b{grid-column:2;font-size:18px;font-weight:600}
+.timeband{position:relative;background:#242831;width:100%}.timeband i{position:absolute;top:0;bottom:0}
+.drow{display:flex;align-items:center;gap:8px;padding:4px 6px;border-bottom:1px solid #262a31;cursor:pointer;font-size:13px}.drow:hover{background:#20242b}.drow.static{cursor:default}.drow.static:hover{background:none}.drow.dead{opacity:.55}.drow .nm{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.drow small{color:var(--dim)}
+.tag{display:inline-flex;padding:0 4px;border:1px solid}.tag.war{color:var(--red)}.tag.ally{color:var(--blue)}
+.relbar{position:relative;display:inline-block;width:78px;height:6px;background:linear-gradient(90deg,#d0605a55,#6a6f7855 50%,#6fa8c955);flex:none}.relbar i{position:absolute;top:-3px;width:4px;height:12px;margin-left:-2px}.relbar.big{width:120px}
+.pairhd,.vsrow{display:flex;align-items:center;gap:10px}.vsrow{justify-content:space-between;margin:8px 0}.vsrow .side{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:12px;text-align:center;flex:1}.vsrow .mid{display:flex;flex-direction:column;align-items:center;gap:4px}
+.acts{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin:10px 0}.act .abtn{width:100%;display:flex;gap:8px;align-items:center;justify-content:center;padding:10px 6px;font-size:13px}.act.off .abtn{opacity:.4}.act small{display:block;color:var(--dim);font-size:11px;text-align:center;margin-top:2px}
+.kv{display:grid;grid-template-columns:70px 1fr;gap:6px 10px;margin-top:10px}.peace h3{margin:6px 0 0}
+.nested .nrow{display:flex;align-items:center;gap:8px;padding:4px 6px;font-size:13px;cursor:pointer;border-left:3px solid transparent}.nested .nrow:hover{background:#20242b;border-left-color:var(--red)}.nested .nrow.sel{border-left-color:var(--yellow)}.nested .nrow.dead{opacity:.5}.nested .nrow .nm{flex:1}.nested .nrow small{color:var(--dim)}
+.ntree>summary{list-style:none;display:flex;align-items:center;cursor:pointer}.ntree>summary::-webkit-details-marker{display:none}.ntree>summary .nrow{flex:1}.ntree>summary .cnt{color:var(--dim);margin-right:6px}.ntree>summary::before{content:"▸";color:var(--dim);width:12px}.ntree[open]>summary::before{content:"▾"}
+.tree.mini{margin:6px 0}
+.wardetail .whead h2{margin:0;font-size:24px;font-weight:500;letter-spacing:.05em}.wgrid{display:grid;grid-template-columns:120px 1fr 120px;gap:12px;margin:12px 0 6px}
+.wside{display:flex;flex-direction:column;gap:6px;font-size:12px}.wside .flags{display:flex;flex-wrap:wrap;gap:4px}.wside.a{border-top:3px solid #6fa8c9}.wside.d{border-top:3px solid #d0605a}.wside .wm{display:flex;align-items:center;gap:6px}.wside .sz{font-size:16px}.wside small{color:var(--dim)}
+.minimap{border:1px solid var(--line);display:block}.tug{position:relative;display:flex;height:12px;margin:8px 0 2px;background:#242831}.tug .a{background:#6fa8c9}.tug .d{background:#d0605a}.tug b{position:absolute;top:-3px;width:3px;height:18px;background:#fff;margin-left:-1px}.tug.sm{width:150px;height:8px;margin:0}.tugl{display:flex;justify-content:space-between;color:var(--dim)}
+.pwr{display:flex;height:8px;margin:6px 0}.pwr .a{background:#6fa8c9}.pwr .d{background:#d0605a}
+.front{display:flex;align-items:center;gap:10px;font-size:13px;padding:2px 0}.front .nm{flex:1}
+.flow .fl{display:grid;grid-template-columns:44px 82px 1fr;gap:8px;align-items:baseline;border-left:3px solid;padding:3px 8px;margin:3px 0;background:#181b21;font-size:13px}.flow .ft{font-size:11px}.flow time{color:var(--dim);font-size:12px}
+.wcbox{min-width:360px}.wcbox .vs{display:flex;justify-content:space-around;align-items:center;margin:12px 0}.wcbox .side{display:flex;flex-direction:column;align-items:center;gap:6px}.wcrows{display:grid;gap:5px;margin:10px 0}.wcrow{display:flex;justify-content:space-between;border-left:3px solid #6a6f78;background:#181b21;padding:4px 10px}.wcrow.good{border-color:#9fbf8a}.wcrow.bad{border-color:#d0605a}.wcrow small{color:var(--dim)}
+.kcards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px;margin-bottom:10px}.kcard{border:1px solid var(--line);background:#1a1d23;padding:10px;cursor:pointer;display:flex;flex-direction:column;gap:4px}.kcard.on{border-color:var(--yellow)}.kcard small{color:var(--dim)}.pcols{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:6px 0}.pcols small{display:block;color:var(--dim)}
+.cbox summary{cursor:pointer}
+</style>
 </head><body><div id="v6-root"></div>
 <div id="banner" role="status" aria-live="polite" hidden><span id="banner-body"></span><button id="banner-close" aria-label="閉じる">×</button></div><div id="loading" hidden><span id="loading-text"></span></div><div id="empty-state" hidden></div>
-<div id="splash" aria-label="ALTERHISTORY を起動しています"><div class="wm"><img src="assets/brand/alterhistory-wordmark.svg" alt="ALTERHISTORY" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><div class="tx" aria-hidden="true">ALTERHISTORY</div></div><div class="st">世界を、作る。</div></div>
+<div id="splash" aria-label="ALTERHISTORY を起動しています"><div class="spl"><div class="logo" style="font-size:44px;letter-spacing:.2em;color:#e8e2d0;text-align:center">ALTERHISTORY</div></div></div>
 <script>window.__splashAt=performance.now();</script><script src="dist/v6.js"></script></body></html>

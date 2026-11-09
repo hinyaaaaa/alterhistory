@@ -7,7 +7,7 @@ import { TREATY, treatyBetween, atWarWith, signTreaty, endWar, strength } from "
 import { grievance } from "../civ/interpret.js";
 import { effective } from "./domains/effective.js";
 import { totalPower } from "./power.js";
-import { leaveWar, warSide } from "./warfare.js";
+import { leaveWar, warSide, placeName } from "./warfare.js";
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 const r2 = (x) => Math.round(x * 100) / 100;
@@ -100,6 +100,8 @@ export function negotiatePeace(ctx, proposer, war, c = {}) {
   if (!ev.accept) { record(ctx, { ...base, status: "rejected" }); return failure("講和は受け入れられなかった", { targetId: war.id }); }
   if (war.status !== "active") { record(ctx, { ...base, status: "failed_recheck" }); return failure("条件が変わり、講和できなかった", { targetId: war.id }); }
   if (terms.kind === "reparations") { const ahead = war.score >= 0 ? "a" : "d", payerSide = ahead === "a" ? "d" : "a", payer = civ.states[payerSide === mySide ? proposer.id : otherId], getter = civ.states[payer.id === proposer.id ? otherId : proposer.id]; const amt = Math.min(terms.amount, Math.max(0, payer.treasury)); payer.treasury -= amt; getter.treasury += amt; base.terms = { ...terms, paid: Math.round(amt) }; }
+  { /* v6.5.0: 講和条約の名前は、史実のように地名から付く（負けた側の首都の地名。単独講和は「単独講和条約」） */
+    const loser = civ.states[war.score >= 0 ? war.defender : war.aggressor], cap = civ.groups[loser?.capitalGroupId] ?? civ.groups[proposer.capitalGroupId]; base.name = `${cap ? placeName(ctx, cap) : "名もなき地"}${principal ? "条約" : "単独講和条約"}`; }
   if (!principal) { leaveWar(ctx, war, proposer); proposer.lastWarEnd = civ.monthIndex; record(ctx, { ...base, status: "accepted" }); return { ok: true, effects: [], silent: true, targetId: war.id, separate: true }; }
   endWar(ctx, war, "negotiated", terms); record(ctx, { ...base, status: "accepted" }); return { ok: true, effects: [], silent: true, targetId: war.id };
 }

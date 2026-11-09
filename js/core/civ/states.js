@@ -18,7 +18,7 @@ import { OFFICE_STABILITY as officeStability, REGIMES as REG15, regimeOf as regi
 const OFFICE_RULER = (st) => REG15[regimeOf15(st)].ruler;
 
 export const POLITY = Object.freeze({ tribal: "部族", chiefdom: "首長制", kingdom: "王国", empire: "帝国", republic: "共和制", theocracy: "神権制" });
-export const VIA = Object.freeze({ city_state: { ja: "都市国家", suffix: "市国" }, agri_union: { ja: "農耕集落の統合", suffix: "連合" }, nomad_confederation: { ja: "遊牧連合", suffix: "部族連合" }, religious_polity: { ja: "宗教共同体", suffix: "教団国" }, defense_league: { ja: "防衛連合", suffix: "同盟" }, secession: { ja: "分離", suffix: "国" } });
+export const VIA = Object.freeze({ city_state: { ja: "都市国家", suffix: "公国" }, agri_union: { ja: "農耕集落の統合", suffix: "連邦" }, nomad_confederation: { ja: "遊牧連合", suffix: "汗国" }, religious_polity: { ja: "宗教共同体", suffix: "教国" }, defense_league: { ja: "防衛連合", suffix: "連盟" }, secession: { ja: "分離", suffix: "公国" } });
 const KM = 6371, CLUSTER_BUDGET = 8, CHECK_EVERY = 12;
 export const distKm = (w, a, b) => { const c = w.cell; const x = Math.sin(c.lat[a]) * Math.sin(c.lat[b]) + Math.cos(c.lat[a]) * Math.cos(c.lat[b]) * Math.cos(c.lon[a] - c.lon[b]); return Math.acos(Math.max(-1, Math.min(1, x))) * KM; };
 

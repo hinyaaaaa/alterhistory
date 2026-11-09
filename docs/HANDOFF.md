@@ -1,3 +1,10 @@
+# v6.5.0（最新）: ページのビジュアル化
+
+- 実装の中身は docs/CHANGELOG.md の v6.5.0。新規ファイル: `js/ui/v6/{visual,nation,diplo,war,stats,warconfirm}.js`、`trees.js` に `nestedLineage`・`miniLineage`。
+- 核の変更: `power.js` の `armsMult`（編成→戦力）、`military.js` の `unitName`・`formationsOf`、`negotiation.js` の講和条約名（`proposals[].name`）、`civ/ai.js` の担当国の自動採用（`AUTO_KEYS`＝adopt_tech・adopt_doctrine）。
+- 全面タブ: `S.full = { key, title, build, onClose }` を `renderPanel` の終わりで `renderFull()` が描く。戦争詳細（`pWar`）と反乱の作成（`S.upr.open`）が使う。
+- 未着手・次: v6.6.0（世界名・時代区分・ゲーム風スタート画面）。国家ページの「創造主の編集」は v6.4 の創造主ハブと重複しているので、v6.10 の UX 検証で整理する。実機（Surface Go 4）での見え方は未確認（ヘッドレスのみ）。
+
 # v6.4.0（最新）
 
 v6.4.0 で建国フロー（ウィザード・政体15種・役職）・反乱・革命・ハブの一覧化・創造主の「国家をつくる」を済ませた。次は v6.5.0（国家ページのビジュアル化・軍の編成・外交・戦争ページ・統計・樹形図）。v6.3.2 では Obsidian 出力（フォルダ直書き／複数ZIP・年表ファイル）・先史の人口記録・死んだコードを済ませた。次は v6.4.0（建国フロー全面作り直し・ハブの一覧化・反乱・創造主ハブ）。詳細は `docs/CHANGELOG.md`。

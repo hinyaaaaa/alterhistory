@@ -14,6 +14,24 @@ export const UNIT_KINDS = Object.freeze({
   infantry: { ja: "歩兵", need: () => true }, ranged: { ja: "弓・投射兵", need: (st, ctx) => can(ctx, st, "unit:ranged") }, cavalry: { ja: "騎兵", need: (st, ctx) => can(ctx, st, "unit:cavalry") },
   navy: { ja: "水軍", need: (st, ctx) => can(ctx, st, "unit:navy") && coastal(ctx, st) }, garrison: { ja: "守備兵", need: (st, ctx) => can(ctx, st, "unit:garrison") }, firearms: { ja: "銃兵", need: (st, ctx) => can(ctx, st, "unit:firearms") },
 });
+/** v6.5.0: 部隊の名前。技術（武器・火薬・海戦術）とドクトリン（攻め・守りの傾き）から決まる（編成を変えても、技術が進むと名前が改まる） */
+const TERMS = {
+  infantry: [["gunpowder", "線列歩兵団"], ["steel", "精鋭歩兵団"], ["iron_weapons", "重装歩兵団"], ["bronze_weapons", "槍兵団"], [null, "戦士団"]],
+  ranged: [["steel", "弩兵団"], ["bronze_weapons", "弓兵団"], [null, "投射兵団"]],
+  cavalry: [["gunpowder", "胸甲騎兵団"], ["iron_weapons", "重騎兵団"], [null, "騎馬隊"]],
+  navy: [["gunpowder", "大艦隊"], ["war:naval", "艦隊"], [null, "舟軍"]],
+  garrison: [["fortification", "城塞守備軍"], [null, "守備隊"]],
+  firearms: [["steel", "近衛銃兵団"], [null, "銃兵団"]],
+};
+export function unitTerm(st, kind) { for (const [k, t] of TERMS[kind] ?? []) if (k == null || has(st, k) || (k === "war:naval" && st.techAdopted?.naval_warfare != null)) return t; return UNIT_KINDS[kind]?.ja ?? kind; }
+export function unitName(st, kind) {
+  const fx = st.military?.fx ?? {}, tag = (fx.off ?? 0) >= 0.06 && (fx.off ?? 0) >= (fx.def ?? 0) ? "突撃" : (fx.def ?? 0) >= 0.08 ? "堅陣" : ""; return `${tag}${unitTerm(st, kind)}`;
+}
+/** 部隊を「第 n ○○」の編成に分けて表示するための分割（規模に応じて 1〜6 個。読み取り専用・状態は持たない） */
+export function formationsOf(st, u) {
+  const per = has(st, "gunpowder") ? 6000 : has(st, "iron_weapons") ? 3000 : 1200, n = Math.max(1, Math.min(6, Math.round(u.size / per))), term = unitName(st, u.kind), ORD = ["第一", "第二", "第三", "第四", "第五", "第六"];
+  return Array.from({ length: n }, (_, i) => ({ name: n === 1 ? term : `${ORD[i]}${term}`, size: Math.round((u.size / n) * 10) / 10 }));
+}
 const coastal = (ctx, st) => (byState(ctx).get(st.id) ?? []).some((g) => ctx.world.cell.coastDist[g.cell] <= 1);
 const shareOf = (ctx, st) => {
   const gs = byState(ctx).get(st.id) ?? [], pastoral = gs.length ? gs.filter((g) => g.subsistence === "pastoral").length / gs.length : 0, w = {};
@@ -66,7 +84,8 @@ export function stepMilitary(ctx) {
     const shares = M.shares && Object.keys(M.shares).every((k) => UNIT_KINDS[k]?.need(st, ctx)) ? M.shares : shareOf(ctx, st); if (M.shares && shares !== M.shares) M.shares = null; // 使えなくなった編制は自動の配分へ戻る
     const old = new Map(M.units.map((u) => [u.kind, u])), next = [];
     for (const [k, sh] of Object.entries(shares)) {
-      const u = old.get(k) ?? { id: ids.next("unit"), kind: k, name: `${st.name}の${UNIT_KINDS[k].ja}`, since: mi };
+      const u = old.get(k) ?? { id: ids.next("unit"), kind: k, name: unitName(st, k), since: mi };
+      u.name = unitName(st, k); /* v6.5.0: 技術・ドクトリンに合わせて名前が改まる */
       u.size = Math.round(st.army * sh * 10) / 10; u.equip = Math.round(clamp(effective(ctx.civ, st, "equipLevel") + (k === "firearms" ? 0.1 : k === "cavalry" ? 0.03 : 0)) * 100) / 100; u.readiness = Math.round(effective(ctx.civ, st, "readiness") * 100) / 100; next.push(u);
     }
     M.units = next; M.armyBasis = st.army; // 部隊は、この時点の総兵力の配分（兵力はその後の月で変わる）

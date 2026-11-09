@@ -992,10 +992,66 @@
     }
   });
 
+  // js/core/wcde/domains/naming.js
+  function stateForm(polity, via = null, base = "") {
+    switch (polity) {
+      case "kingdom":
+        return byBase(base, ["\u738B\u56FD", "\u738B\u56FD", "\u738B\u56FD", "\u671D"]);
+      case "empire":
+        return byBase(base, ["\u5E1D\u56FD", "\u5E1D\u56FD", "\u5E1D\u56FD", "\u671D"]);
+      case "republic":
+        return "\u5171\u548C\u56FD";
+      case "federation":
+        return "\u9023\u90A6";
+      case "theocracy":
+        return via === "religious_polity" ? "\u6559\u56FD" : byBase(base, ["\u795E\u8056\u738B\u56FD", "\u6559\u56FD"]);
+      case "chiefdom":
+        return via === "city_state" ? byBase(base, ["\u516C\u56FD", "\u738B\u56FD"]) : byBase(base, ["\u516C\u56FD", "\u4FAF\u56FD", "\u738B\u56FD"]);
+      default:
+        return via === "nomad_confederation" ? "\u6C57\u56FD" : via === "agri_union" ? byBase(base, ["\u738B\u56FD", "\u9023\u90A6"]) : via === "defense_league" ? "\u9023\u76DF" : byBase(base, ["\u738B\u56FD", "\u516C\u56FD"]);
+    }
+  }
+  function baseOfState(st) {
+    if (st.nameBase) return st.nameBase;
+    const n2 = String(st.name ?? "");
+    for (const f of FORMS) if (n2.length > f.length && n2.endsWith(f)) return n2.slice(0, -f.length);
+    return n2;
+  }
+  function retitle(st, polity) {
+    if (!st.nameBase && !FORMS.some((f) => String(st.name).endsWith(f))) return null;
+    const base = baseOfState(st), next = composeStateName(base, polity, st.via);
+    return next !== st.name ? { base, name: next } : null;
+  }
+  function leaderName(st, fresh2, rnd) {
+    const raw = stripOrd(fresh2);
+    if (!REGNAL.has(st.polity)) return raw;
+    const reg = st.regnal ?? (st.regnal = {}), keys = Object.keys(reg);
+    const base = keys.length && rnd() < 0.4 ? keys[Math.floor(rnd() * keys.length)] : raw;
+    reg[base] = (reg[base] ?? 0) + 1;
+    return `${base}${reg[base]}\u4E16`;
+  }
+  function religionRoot(name) {
+    const n2 = String(name ?? ""), i = n2.indexOf("\u6559");
+    return i >= 0 ? n2.slice(0, i + 1) : n2;
+  }
+  var FORMS, byBase, composeStateName, REGNAL, stripOrd, leaderRng, sectName;
+  var init_naming = __esm({
+    "js/core/wcde/domains/naming.js"() {
+      init_civ_state();
+      FORMS = ["\u9023\u90A6\u5171\u548C\u56FD", "\u795E\u8056\u738B\u56FD", "\u9023\u5408\u738B\u56FD", "\u90E8\u65CF\u9023\u5408", "\u5171\u548C\u56FD", "\u6559\u56E3\u56FD", "\u795E\u8056\u56FD", "\u9996\u9577\u56FD", "\u9023\u90A6", "\u9023\u5408", "\u540C\u76DF", "\u9023\u76DF", "\u5E1D\u56FD", "\u738B\u56FD", "\u516C\u56FD", "\u4FAF\u56FD", "\u6C57\u56FD", "\u6559\u56FD", "\u90E8\u65CF", "\u5E02\u56FD", "\u671D", "\u56FD"];
+      byBase = (base, arr) => arr[hashSeed(String(base), "form") % arr.length];
+      composeStateName = (base, polity, via) => base + stateForm(polity, via, base);
+      REGNAL = /* @__PURE__ */ new Set(["chiefdom", "kingdom", "empire", "theocracy"]);
+      stripOrd = (n2) => String(n2).replace(/[0-9０-９]+世$/, "");
+      leaderRng = (civ, st, ...p) => rngOf(hashSeed(civ.historySeed, "leader", st.id, civ.monthIndex, ...p));
+      sectName = (parentName, sect) => `${religionRoot(parentName)}${sect}\u6D3E`;
+    }
+  });
+
   // js/core/civ/culture.js
   function createCulture(civ, ids2, rng, { parent = null, cell = null } = {}) {
     const id = ids2.next("culture");
-    civ.cultures[id] = { id, name: makeNameJa(rng) + (parent ? "\u7CFB" : "\u306E\u4EBA\u3005"), parent, bornAt: civ.monthIndex, cell };
+    civ.cultures[id] = { id, name: makeNameJa(rng) + "\u4EBA", parent, bornAt: civ.monthIndex, cell };
     return id;
   }
   function createLanguage2(civ, ids2, rng, { parent = null, cultureId = null } = {}) {
@@ -1005,7 +1061,7 @@
   }
   function createReligion(civ, ids2, rng, { parent = null, kind = null } = {}) {
     const id = ids2.next("religion");
-    civ.religions[id] = { id, name: makeNameJa(rng) + "\u6559", kind: kind ?? RELIGION_KINDS2[Math.floor(rng() * RELIGION_KINDS2.length)], parent, bornAt: civ.monthIndex };
+    civ.religions[id] = { id, name: parent && civ.religions[parent] ? sectName(civ.religions[parent].name, makeNameJa(rng)) : makeNameJa(rng) + "\u6559", kind: kind ?? RELIGION_KINDS2[Math.floor(rng() * RELIGION_KINDS2.length)], parent, bornAt: civ.monthIndex };
     return id;
   }
   function stepCulture(ctx) {
@@ -1053,9 +1109,10 @@
       init_events();
       init_cohorts();
       init_spatial();
+      init_naming();
       SYL = ["\u30AB", "\u30ED", "\u30DF", "\u30BF", "\u30B9", "\u30CD", "\u30F4\u30A9", "\u30EA", "\u30A2\u30F3", "\u30CF", "\u30C9", "\u30EC", "\u30E6", "\u30B5", "\u30AD", "\u30CE", "\u30D9", "\u30B0", "\u30DE", "\u30B8", "\u30E9", "\u30AA", "\u30C8", "\u30B7\u30A7"];
       makeNameJa = (rng) => {
-        const n2 = 2 + (rng() < 0.45 ? 1 : 0);
+        const n2 = 3 + (rng() < 0.5 ? 1 : 0);
         let s = "";
         for (let i = 0; i < n2; i++) s += SYL[Math.floor(rng() * SYL.length)];
         return s;
@@ -1927,54 +1984,6 @@
     }
   });
 
-  // js/core/wcde/domains/naming.js
-  function stateForm(polity, via = null) {
-    switch (polity) {
-      case "kingdom":
-        return "\u738B\u56FD";
-      case "empire":
-        return "\u5E1D\u56FD";
-      case "republic":
-        return "\u5171\u548C\u56FD";
-      case "theocracy":
-        return "\u795E\u8056\u56FD";
-      case "chiefdom":
-        return via === "city_state" ? "\u5E02\u56FD" : "\u9996\u9577\u56FD";
-      default:
-        return via === "nomad_confederation" ? "\u90E8\u65CF\u9023\u5408" : via === "agri_union" ? "\u9023\u5408" : via === "defense_league" ? "\u540C\u76DF" : "\u90E8\u65CF";
-    }
-  }
-  function baseOfState(st) {
-    if (st.nameBase) return st.nameBase;
-    const n2 = String(st.name ?? "");
-    for (const f of FORMS) if (n2.length > f.length && n2.endsWith(f)) return n2.slice(0, -f.length);
-    return n2;
-  }
-  function retitle(st, polity) {
-    if (!st.nameBase && !FORMS.some((f) => String(st.name).endsWith(f))) return null;
-    const base = baseOfState(st), next = composeStateName(base, polity, st.via);
-    return next !== st.name ? { base, name: next } : null;
-  }
-  function leaderName(st, fresh2, rnd) {
-    const raw = stripOrd(fresh2);
-    if (!REGNAL.has(st.polity)) return raw;
-    const reg = st.regnal ?? (st.regnal = {}), keys = Object.keys(reg);
-    const base = keys.length && rnd() < 0.4 ? keys[Math.floor(rnd() * keys.length)] : raw;
-    reg[base] = (reg[base] ?? 0) + 1;
-    return `${base}${reg[base]}\u4E16`;
-  }
-  var FORMS, composeStateName, REGNAL, stripOrd, leaderRng;
-  var init_naming = __esm({
-    "js/core/wcde/domains/naming.js"() {
-      init_civ_state();
-      FORMS = ["\u90E8\u65CF\u9023\u5408", "\u6559\u56E3\u56FD", "\u5E02\u56FD", "\u9996\u9577\u56FD", "\u5171\u548C\u56FD", "\u795E\u8056\u56FD", "\u738B\u56FD", "\u5E1D\u56FD", "\u9023\u5408", "\u540C\u76DF", "\u90E8\u65CF", "\u56FD"];
-      composeStateName = (base, polity, via) => base + stateForm(polity, via);
-      REGNAL = /* @__PURE__ */ new Set(["chiefdom", "kingdom", "empire", "theocracy"]);
-      stripOrd = (n2) => String(n2).replace(/[0-9０-９]+世$/, "");
-      leaderRng = (civ, st, ...p) => rngOf(hashSeed(civ.historySeed, "leader", st.id, civ.monthIndex, ...p));
-    }
-  });
-
   // js/core/wcde/regimes.js
   function officeFx(st) {
     const o = st.offices;
@@ -2276,7 +2285,7 @@
       gatedPolity = (civ, cap, p) => !POLITY_CAP[p] || groupCaps(civ, cap).has(POLITY_CAP[p]) ? p : "tribal";
       OFFICE_RULER = (st) => REGIMES2[regimeOf2(st)].ruler;
       POLITY = Object.freeze({ tribal: "\u90E8\u65CF", chiefdom: "\u9996\u9577\u5236", kingdom: "\u738B\u56FD", empire: "\u5E1D\u56FD", republic: "\u5171\u548C\u5236", theocracy: "\u795E\u6A29\u5236" });
-      VIA = Object.freeze({ city_state: { ja: "\u90FD\u5E02\u56FD\u5BB6", suffix: "\u5E02\u56FD" }, agri_union: { ja: "\u8FB2\u8015\u96C6\u843D\u306E\u7D71\u5408", suffix: "\u9023\u5408" }, nomad_confederation: { ja: "\u904A\u7267\u9023\u5408", suffix: "\u90E8\u65CF\u9023\u5408" }, religious_polity: { ja: "\u5B97\u6559\u5171\u540C\u4F53", suffix: "\u6559\u56E3\u56FD" }, defense_league: { ja: "\u9632\u885B\u9023\u5408", suffix: "\u540C\u76DF" }, secession: { ja: "\u5206\u96E2", suffix: "\u56FD" } });
+      VIA = Object.freeze({ city_state: { ja: "\u90FD\u5E02\u56FD\u5BB6", suffix: "\u516C\u56FD" }, agri_union: { ja: "\u8FB2\u8015\u96C6\u843D\u306E\u7D71\u5408", suffix: "\u9023\u90A6" }, nomad_confederation: { ja: "\u904A\u7267\u9023\u5408", suffix: "\u6C57\u56FD" }, religious_polity: { ja: "\u5B97\u6559\u5171\u540C\u4F53", suffix: "\u6559\u56FD" }, defense_league: { ja: "\u9632\u885B\u9023\u5408", suffix: "\u9023\u76DF" }, secession: { ja: "\u5206\u96E2", suffix: "\u516C\u56FD" } });
       KM = 6371;
       CLUSTER_BUDGET = 8;
       CHECK_EVERY = 12;
@@ -3561,8 +3570,21 @@
     ctx.plans = [];
     for (const id in civ.states) {
       const st = civ.states[id];
-      if (!st.alive || st.player) continue;
+      if (!st.alive) continue;
       if ((hashSeed(id) + mi2) % every !== 0) continue;
+      if (st.player) {
+        const e2 = observe(ctx, st), all2 = [];
+        for (const def of ACTIONS) if (def.enabled && AUTO_KEYS.has(def.key)) {
+          for (const c of def.candidates(ctx, st, e2)) if (c.eligible) all2.push({ def, c, total: totalOf(st, c, false) });
+        }
+        all2.sort((a, b) => b.total - a.total || (a.c.key < b.c.key ? -1 : a.c.key > b.c.key ? 1 : String(a.c.opt) < String(b.c.opt) ? -1 : 1));
+        const best2 = all2.find((x) => x.total > BASELINE);
+        if (best2) {
+          const d2 = record(ctx, st, { layer: "routine", provenance: "auto", type: best2.c.key, obs: obsOf(st, e2), candidates: all2.slice(0, SHOWN).map((x) => view(x.c, x.total)), chosen: { key: best2.c.key, target: best2.c.target, opt: best2.c.opt } });
+          ctx.plans.push({ st, d: d2, def: best2.def, c: best2.c });
+        }
+        continue;
+      }
       const e = observe(ctx, st);
       if (!st.strategy || mi2 - st.strategy.since >= STRATEGY_EVERY) chooseStrategy(ctx, st, e);
       if (st.campaign) {
@@ -3623,7 +3645,7 @@
     d.result = { ok: r.ok, error: r.error ?? null, eventIds: r.eventIds };
     return r;
   }
-  var GOALS, GOAL_JA, BASELINE, STRATEGY_EVERY, FACTORS, SHOWN, SHOWN_IDLE, expandDecision, clamp24, round3, obsOf, view;
+  var GOALS, GOAL_JA, BASELINE, STRATEGY_EVERY, FACTORS, SHOWN, SHOWN_IDLE, expandDecision, clamp24, round3, obsOf, view, AUTO_KEYS;
   var init_ai = __esm({
     "js/core/civ/ai.js"() {
       init_actions();
@@ -3642,6 +3664,7 @@
       round3 = (x) => Math.round(x * 1e3) / 1e3;
       obsOf = (st, e) => ({ pop: Math.round(st.pop), treasury: Math.round(st.treasury), stability: round3(st.stability), army: Math.round(st.army), strength: Math.round(e.my), atWar: e.atWar, neighbors: e.nbs.length, tension: round3(e.tension), threat: round3(e.threat), campaign: st.campaign ? `${st.campaign.kind}:${st.campaign.stage}` : null });
       view = (c, total2) => [c, total2];
+      AUTO_KEYS = /* @__PURE__ */ new Set(["adopt_tech", "adopt_doctrine"]);
     }
   });
 
@@ -16890,10 +16913,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "6.4.0";
-  var APP_VERSION_NAME = "\u5EFA\u56FD\u3068\u4E00\u89A7\u3068\u53CD\u4E71";
+  var APP_VERSION = "6.7.0";
+  var APP_VERSION_NAME = "\u547D\u540D\u306E\u898B\u76F4\u3057";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "e6fbc578930f" : "dev";
+  var APP_BUILD_ID = true ? "e360bcb75a98" : "dev";
 
   // js/ui/icons.js
   var P3 = {

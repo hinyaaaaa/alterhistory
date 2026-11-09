@@ -30,6 +30,8 @@ function totalOf(st, c, crisis) {
   return round(t);
 }
 const view = (c, total) => [c, total];
+/** v6.5.0: 担当国でも WCDE が自動で行う行動（技術の採用・ドクトリンの取得） */
+export const AUTO_KEYS = new Set(["adopt_tech", "adopt_doctrine"]);
 
 function chooseStrategy(ctx, st, e) {
   const needs = { expand: 0.25 + 0.4 * clamp((e.my + 1) / (e.nbs.reduce((s, n) => s + n.strength, 0) / Math.max(1, e.nbs.length) + 1) - 1, 0, 2) * 0.5, prosper: e.treasuryNeed, secure: e.threat, advance: e.techLag, consolidate: 1 - st.stability };
@@ -52,7 +54,13 @@ function planCampaign(ctx, st, e) {
 export function stepAIPlan(ctx) {
   const { civ } = ctx, mi = civ.monthIndex, every = civ.options.aiInterval; ctx.plans = [];
   for (const id in civ.states) {
-    const st = civ.states[id]; if (!st.alive || st.player) continue; if ((hashSeed(id) + mi) % every !== 0) continue;
+    const st = civ.states[id]; if (!st.alive) continue; if ((hashSeed(id) + mi) % every !== 0) continue;
+    if (st.player) { /* v6.5.0: 担当国の技術・ドクトリンは WCDE が自動で決める（ユーザーの介入はなくした）。他の行動は担当国が自分で行う */
+      const e = observe(ctx, st), all = []; for (const def of ACTIONS) if (def.enabled && AUTO_KEYS.has(def.key)) for (const c of def.candidates(ctx, st, e)) if (c.eligible) all.push({ def, c, total: totalOf(st, c, false) });
+      all.sort((a, b) => b.total - a.total || (a.c.key < b.c.key ? -1 : a.c.key > b.c.key ? 1 : String(a.c.opt) < String(b.c.opt) ? -1 : 1)); const best = all.find((x) => x.total > BASELINE);
+      if (best) { const d = record(ctx, st, { layer: "routine", provenance: "auto", type: best.c.key, obs: obsOf(st, e), candidates: all.slice(0, SHOWN).map((x) => view(x.c, x.total)), chosen: { key: best.c.key, target: best.c.target, opt: best.c.opt } }); ctx.plans.push({ st, d, def: best.def, c: best.c }); }
+      continue;
+    }
     const e = observe(ctx, st); if (!st.strategy || mi - st.strategy.since >= STRATEGY_EVERY) chooseStrategy(ctx, st, e);
     if (st.campaign) { const p = planCampaign(ctx, st, e), d = record(ctx, st, p); ctx.plans.push({ st, d, campaign: p.chosen.key, why: p.reason }); continue; }
     const crisis = st.stability < 0.35 || st.warIds.some((w) => { const wr = civ.wars[w]; return (wr.sides.a.includes(st.id) ? wr.score : -wr.score) < -40; }) || st.treasury < 0;

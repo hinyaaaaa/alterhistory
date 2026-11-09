@@ -38,7 +38,7 @@ export function ensureProfile(civ, langId) {
   const L = civ.languages[langId]; if (!L) return null; if (L.phon) return L.phon;
   const chain = []; let cur = L; while (cur && !cur.phon) { chain.push(cur); cur = cur.parent ? civ.languages[cur.parent] : null; }
   let base = cur?.phon ?? null;
-  for (const l of chain.reverse()) { l.phon = base ? childPhon(l.id, base) : rootPhon(l.id); base = l.phon; l.name = word(rngOf(hashSeed(l.id, "name")), l.phon, 2 + (hashSeed(l.id) % 2), 0) + "語"; }
+  for (const l of chain.reverse()) { l.phon = base ? childPhon(l.id, base) : rootPhon(l.id); base = l.phon; l.name = word(rngOf(hashSeed(l.id, "name")), l.phon, 3 + (hashSeed(l.id) % 2), 0) + "語"; }
   return L.phon;
 }
 /** 音節列から語を作る。同じ音節の連続は避ける。語末に母音の傾向・撥音・促音 */
@@ -52,10 +52,10 @@ function word(rng, phon, n, endBias = 0.6) {
   let w = parts.map((p) => p.kana).join(""); if (phon.coda && rng() < 0.25) w += "ン"; if (phon.geminate && n >= 3 && rng() < 0.2) w = w.slice(0, 1) + "ッ" + w.slice(1);
   return w;
 }
-/** 名前を作る。kind: person（2〜3音節）/ place（2〜3音節）/ state（2〜3音節） */
+/** 名前を作る。v6.7.0: 長めに。person（3〜4 音節、まれに 5）/ place・state（3〜4 音節、まれに 5）。2〜3 文字の短い名は出さない */
 export function nameFor(civ, rng, langId, kind = "person") {
   const phon = ensureProfile(civ, langId); if (!phon) return null;
-  const n = kind === "person" ? 2 + Math.floor(rng() * 2) : 2 + Math.floor(rng() * 2);
+  const n = 3 + (rng() < (kind === "person" ? 0.4 : 0.45) ? 1 : 0) + (rng() < 0.08 ? 1 : 0);
   return word(rng, phon, n);
 }
 /** 集団の主な言語（共有の最大の層） */
@@ -72,7 +72,7 @@ function landSuffix(civ, langId) {
 }
 export const nameGen = {
   /** 国号と語根。語根は言語の音から（＋系統の語尾）、称号は政体から（王国・帝国・共和国…） */
-  stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const base = nameFor(civ, rng, l, "state") + landSuffix(civ, l); return { base, name: composeStateName(base, polity, via) }; },
+  stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const nm = nameFor(civ, rng, l, "state"), sfx = landSuffix(civ, l), base = nm.length + sfx.length <= 8 ? nm + sfx : nm; return { base, name: composeStateName(base, polity, via) }; },
   state: (civ, cap, via, rng) => { const l = languageOfGroup(cap); return l ? nameFor(civ, rng, l, "state") + VIA[via].suffix : null; },
   person: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "person") : null; },
 };
@@ -84,7 +84,7 @@ export function stepLanguage(ctx) {
   if (ctx._langSig === nl + ":" + nc) return; ctx._langSig = nl + ":" + nc;
   for (const id in civ.languages) if (!civ.languages[id].phon) ensureProfile(civ, id);
   const byCulture = new Map(); for (const id in civ.languages) { const l = civ.languages[id]; if (l.cultureId && !byCulture.has(l.cultureId)) byCulture.set(l.cultureId, l); }
-  for (const id in civ.cultures) { const c = civ.cultures[id]; if (c.nameFixed) continue; const lang = byCulture.get(id); if (!lang?.phon) continue; c.name = word(rngOf(hashSeed(id, "cname")), lang.phon, 2 + (hashSeed(id) % 2)) + (c.parent ? "系" : "の人々"); c.nameFixed = true; }
+  for (const id in civ.cultures) { const c = civ.cultures[id]; if (c.nameFixed) continue; const lang = byCulture.get(id); if (!lang?.phon) continue; { const taken = new Set(Object.values(civ.cultures).map((x) => x.name)); let nm = "", k = 0; do { nm = word(rngOf(hashSeed(id, "cname", k)), lang.phon, 3 + (hashSeed(id, k) % 2)) + "人"; } while (taken.has(nm) && ++k < 12); c.name = nm; c.nameFixed = true; } /* v6.7.0: 文化は「〇〇人」に統一（重ならない名前） */ }
 }
 /** 全体に一度だけ（先史の終わりなど）。名前のない言語・文化を整える */
 export function finalizeLanguages(civ) { const prev = civ.options.wcde; civ.options.wcde = true; stepLanguage({ civ }); civ.options.wcde = prev; }

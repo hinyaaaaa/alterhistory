@@ -8,7 +8,7 @@ let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("  OK  ", name); } catch (e) { failed++; console.log("  FAIL", name + ":", String(e.stack ?? e).split("\n").slice(0, 3).join(" | ")); } };
 
 console.log("=== 国号 ===");
-await check("政体ごとの称号", () => { assert.equal(composeStateName("アカロ", "kingdom"), "アカロ王国"); assert.equal(composeStateName("アカロ", "empire"), "アカロ帝国"); assert.equal(composeStateName("アカロ", "republic"), "アカロ共和国"); assert.equal(stateForm("tribal", "nomad_confederation"), "部族連合"); assert.equal(stateForm("chiefdom", "city_state"), "市国"); });
+await check("政体ごとの称号", () => { assert.ok(/^アカロ(王国|朝)$/.test(composeStateName("アカロ", "kingdom"))); assert.ok(/^アカロ(帝国|朝)$/.test(composeStateName("アカロ", "empire"))); assert.equal(composeStateName("アカロ", "republic"), "アカロ共和国"); assert.equal(stateForm("tribal", "nomad_confederation"), "汗国"); assert.ok(["公国", "王国"].includes(stateForm("chiefdom", "city_state", "アカロ"))); });
 await check("政体が変わると称号が改まり、語根は保たれる。称号のない名前（創造主の命名）は改めない", () => {
   const st = { name: "アカロ王国", nameBase: "アカロ", polity: "kingdom", via: "agri_union" }; const r = retitle(st, "empire"); assert.deepEqual(r, { base: "アカロ", name: "アカロ帝国" }); assert.equal(retitle(st, "kingdom"), null);
   assert.equal(retitle({ name: "ローマ", nameBase: null, polity: "kingdom", via: "secession" }, "empire"), null); assert.equal(baseOfState({ name: "ベジ共和国" }), "ベジ");

@@ -1,11 +1,11 @@
 // v6 WCDE（World & Civilization Dynamics Engine）の入口。
 export { WCDE_VERSION, normalizeWorldConfig, derivedSeeds, BIOME_KEYS } from "./config.js";
-export { normalizeCalendar, formatDate, eraOf, applyDisplayEdit } from "./calendar.js";
+export { normalizeCalendar, formatDate, eraOf, eraLabel, applyDisplayEdit } from "./calendar.js";
 export { createWcdeCiv, runPrehistory, glacialAt } from "./prehistory.js";
 export { createWcde, dispatch, safeAdvance, AUTHORITY, COMMANDS, commandTable, domainOfCommand, restoreInto, checkpointFull } from "./contract.js";
 export { DOMAINS, DOMAIN, ENTRY_PATHS, validateRegistry, ownerOf, pathsOverlap } from "./domains/registry.js";
 export { registerCommands } from "./commands.js";
-export { createNewWorld, formatWorldDate, serializeWorld, deserializeWorld } from "./world.js";
+export { createNewWorld, formatWorldDate, advanceToEntry, advanceEntryStep, entryMonthsOf, serializeWorld, deserializeWorld } from "./world.js";
 export { listCandidates, refreshCandidates, foundAsPlayer, delegateToWorld } from "./founding.js";
 export { takeControl, releaseControl, controlledState, creatorEditState, EDITABLE_STATE_FIELDS } from "./control.js";
 export { checkWcdeIntegrity } from "./integrity.js";

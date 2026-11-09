@@ -3,19 +3,20 @@
 import { makeEvent } from "./events.js";
 import { dominant, addCohort } from "./cohorts.js";
 import { neighborGroups } from "./spatial.js";
+import { sectName } from "../wcde/domains/naming.js";
 
 const SYL = ["カ", "ロ", "ミ", "タ", "ス", "ネ", "ヴォ", "リ", "アン", "ハ", "ド", "レ", "ユ", "サ", "キ", "ノ", "ベ", "グ", "マ", "ジ", "ラ", "オ", "ト", "シェ"];
-export const makeNameJa = (rng) => { const n = 2 + (rng() < 0.45 ? 1 : 0); let s = ""; for (let i = 0; i < n; i++) s += SYL[Math.floor(rng() * SYL.length)]; return s; };
+export const makeNameJa = (rng) => { const n = 3 + (rng() < 0.5 ? 1 : 0); /* v6.7.0: 長めの名前（3〜4 音節） */ let s = ""; for (let i = 0; i < n; i++) s += SYL[Math.floor(rng() * SYL.length)]; return s; };
 export const RELIGION_KINDS = Object.freeze(["精霊信仰", "祖霊信仰", "太陽信仰", "大地母神", "多神教", "一神教"]);
 
 export function createCulture(civ, ids, rng, { parent = null, cell = null } = {}) {
-  const id = ids.next("culture"); civ.cultures[id] = { id, name: makeNameJa(rng) + (parent ? "系" : "の人々"), parent, bornAt: civ.monthIndex, cell }; return id;
+  const id = ids.next("culture"); civ.cultures[id] = { id, name: makeNameJa(rng) + "人", parent, bornAt: civ.monthIndex, cell }; return id;
 }
 export function createLanguage(civ, ids, rng, { parent = null, cultureId = null } = {}) {
   const id = ids.next("lang"); civ.languages[id] = { id, name: makeNameJa(rng) + "語", parent, bornAt: civ.monthIndex, cultureId }; return id;
 }
 export function createReligion(civ, ids, rng, { parent = null, kind = null } = {}) {
-  const id = ids.next("religion"); civ.religions[id] = { id, name: makeNameJa(rng) + "教", kind: kind ?? RELIGION_KINDS[Math.floor(rng() * RELIGION_KINDS.length)], parent, bornAt: civ.monthIndex }; return id;
+  const id = ids.next("religion"); civ.religions[id] = { id, name: parent && civ.religions[parent] ? sectName(civ.religions[parent].name, makeNameJa(rng)) : makeNameJa(rng) + "教", kind: kind ?? RELIGION_KINDS[Math.floor(rng() * RELIGION_KINDS.length)], parent, bornAt: civ.monthIndex }; return id;
 }
 const STAGE_OK = new Set(["town", "city"]);
 /** 月次（culture フェーズ）: 言語・文化の分化、宗教の発生と伝播、文化の接触と混合 */

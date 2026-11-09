@@ -12,7 +12,8 @@ window.eval(bundle);
 const $ = (s) => doc.querySelector(s), $$ = (s) => [...doc.querySelectorAll(s)], click = (el) => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })), wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const type = (el, v) => { el.value = v; el.dispatchEvent(new window.Event("input", { bubbles: true })); };
 const V = () => window.__v6, hub = (k) => click($(`[data-hub="${k}"]`)), next = () => click($("#wz-next"));
-for (let i = 0; i < 100 && !$("#gen"); i++) await wait(20);
+for (let i = 0; i < 100 && !$("#new"); i++) await wait(20);
+window.__v6.S.fastStart = true; click($("#new")); for (let i = 0; i < 100 && !$("#gen"); i++) await wait(20); // v6.6.0: タイトル → 世界の設定
 
 await check("世界を生成すると、建国の画面に『建国して担当する』と『世界に任せる』が出る", async () => {
   $("#cells").value = "3000"; $("#seed").value = "ui-640"; click($("#gen")); for (let i = 0; i < 600 && !$("#found"); i++) await wait(50);
@@ -46,15 +47,15 @@ await check("【内政】役職の一覧・組み替え（いつでも）と、�
   click($$(".lrow")[0]); await wait(30); assert.ok($("#off-edit")); const before = V().S.w.civ.states[sid].offices?.length ?? 0;
   const boxes = $$("#off-edit input[data-office]"); assert.ok(boxes.length >= 3); const off = boxes.find((b) => !b.disabled && b.checked); if (off) { off.checked = false; off.dispatchEvent(new window.Event("change", { bubbles: true })); }
   click($("#off-apply")); await wait(30); const st = V().S.w.civ.states[sid]; assert.ok(st.offices.length >= 3 && st.offices.length !== undefined); void before;
-  assert.ok($("#upr-kind") && $("#upr-pick")); assert.equal($$("#upr-kind option").length, 5);
+  assert.ok($("#upr-open")); click($("#upr-open")); await wait(20); assert.ok($("#fulltab #upr-kind") && $("#upr-pick"), "反乱の作成は全面タブ（v6.5.0）"); assert.equal($$("#upr-kind option").length, 5); click($("#full-close")); await wait(10);
 });
 await check("反乱の中心地を地図から選ぶと、規模・見通しが出て、決行でウィザードが開く", async () => {
   const w = V().S.w, st = w.civ.states[sid], g = Object.values(w.civ.groups).find((x) => x.stateId === sid && x.id !== st.capitalGroupId); if (!g) { console.log("   （担当国が 1 集団のため省略）"); return; }
-  $("#upr-kind").value = "separatist"; click($("#upr-pick")); assert.ok(V().S.upr?.picking); V().S.map.onPick({ cell: g.cell, stateId: sid, group: g, settlement: null, x: 4, y: 4 }); await wait(20);
+  click($("#upr-open")); await wait(20); $("#upr-kind").value = "separatist"; click($("#upr-pick")); assert.ok(V().S.upr?.picking); V().S.map.onPick({ cell: g.cell, stateId: sid, group: g, settlement: null, x: 4, y: 4 }); await wait(20);
   assert.ok($("#upr-plan") && /規模/.test($("#upr-plan").textContent)); click($("#upr-go")); assert.ok($(".wiz")); assert.ok(!$("#wz-map"), "反乱では首都の選択はない（中心地が首都）"); assert.ok(/反乱|UPRISING/.test($(".wizhead").textContent)); click($("#wz-cancel"));
 });
 await check("【戦争・文化・言語・宗教】一覧はセクション分け（担当国の戦争／文化が上）で、詳細を開くと一覧は出ない", async () => {
-  for (const k of ["war", "culture", "language", "religion"]) { hub(k); await wait(30); assert.ok($("#pin h2"), k); assert.ok(!$$(".vrow.full").length || true); const r = $$(".lrow")[0]; if (r) { click(r); await wait(20); assert.ok($(".back"), k + " の詳細に戻るボタン"); click($(".back")); } }
+  for (const k of ["war", "culture", "language", "religion"]) { hub(k); await wait(30); assert.ok($("#pin h2"), k); assert.ok(!$$(".vrow.full").length || true); const r = $$(".lrow")[0]; if (r) { click(r); await wait(20); if (k === "war") { assert.ok($("#fulltab"), "戦争の詳細は全面タブ（v6.5.0）"); click($("#full-close")); } else { assert.ok($(".back"), k + " の詳細に戻るボタン"); click($(".back")); } } }
 });
 await check("【創造主】担当を解除すると、国家をつくる入口が出る（創造主ハブ）", async () => {
   V().run({ type: "control.release" }); hub("creator"); hub("creator"); hub("creator"); await wait(20); assert.ok($("#cr-found")); click($("#cr-found")); assert.ok($(".wiz")); assert.ok(/国家をつくる/.test($(".wizhead").textContent)); click($("#wz-cancel"));

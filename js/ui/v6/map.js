@@ -174,11 +174,11 @@ export class MapView {
   drawLabels(ctx, own, W) {
     const geo = this.geo, civ = this.w.civ, k = this.view.k; if (this._labelsAt !== this._ownAt || this._labelsW !== W) {
       const m = new Map(); for (const [c, g] of own) { const id = g.stateId; if (!id) continue; const [x, y] = geo.proj(geo.cen[2 * c], geo.cen[2 * c + 1]); let e = m.get(id); if (!e) m.set(id, (e = { x0: x, sx: 0, sy: 0, n: 0 })); let dx = x - e.x0; dx -= W * Math.round(dx / W); e.sx += dx; e.sy += y; e.n++; }
-      this._labels = [...m].map(([id, e]) => ({ id, x: e.x0 + e.sx / e.n, y: e.sy / e.n, n: e.n })).sort((a, b) => b.n - a.n); this._labelsAt = this._ownAt; this._labelsW = W;
+      this._labels = [...m].map(([id, e]) => { const st = civ.states[id]; return { id, x: e.x0 + e.sx / e.n, y: e.sy / e.n, n: e.n, power: (st?.pop ?? 0) + 4 * (st?.army ?? 0) }; }).sort((a, b) => b.power - a.power || b.n - a.n); /* v6.5.0: 大国（人口＋兵力）の順 */ this._labelsAt = this._ownAt; this._labelsW = W;
     }
-    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round"; let shown = 0;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round"; let shown = 0, rank = 0;
     for (const e of this._labels) {
-      const name = civ.states[e.id]?.name; if (!name || (e.n < 2 && k < 3) || shown > 90) continue; shown++; const fs = clamp(8 + 2.6 * Math.sqrt(e.n), 9, 28) / Math.pow(k, 0.55);
+      const name = civ.states[e.id]?.name, mineId = civ.wcde?.control?.stateId; /* v6.5.0: 拡大が小さいほど大国だけ。拡大すると順に小国も出す（担当国は常に出す） */ if (!name || (e.id !== mineId && (rank >= Math.min(90, Math.round(7 * Math.pow(k, 1.7))) || (e.n < 2 && k < 3)))) { rank++; continue; } rank++; shown++; const big = Math.max(0.35, 1 - rank / 40), fs = clamp((8 + 2.6 * Math.sqrt(e.n)) * (0.8 + 0.4 * big), 9, 30) / Math.pow(k, 0.55);
       ctx.font = `600 ${fs}px "Shippori Mincho","Noto Serif JP","Yu Mincho",serif`; ctx.lineWidth = fs * 0.24; ctx.strokeStyle = "rgba(16,18,24,.78)"; ctx.fillStyle = "#f7f2e4"; for (const o of [0, W, -W]) { if (e.x + o < -40 || e.x + o > W + 40) continue; ctx.strokeText(name, e.x + o, e.y); ctx.fillText(name, e.x + o, e.y); }
     }
   }

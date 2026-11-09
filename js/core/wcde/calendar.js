@@ -2,7 +2,7 @@
 // 生成時に起点・表示形式・時代区分（名前と境界）を決める。生成後に変えられるのは名前と表示形式だけで、
 // 区分の境界・日付・出来事の順序は変えない（過去の客観的な事実を書き換えない）。
 export const DEFAULT_CALENDAR = Object.freeze({
-  epochName: "紀元", beforeName: "紀元前", yearOffset: 0, // 表示年 = 内部の年 + yearOffset（内部の年が負なら beforeName の側で数える）
+  epochName: "", beforeName: "", yearOffset: 0, // v6.6.0: 既定は空白（「紀元」とは名づけない）。 // 表示年 = 内部の年 + yearOffset（内部の年が負なら beforeName の側で数える）
   format: "{era}{year}年{month}月", monthNames: null,
   eras: Object.freeze([]),
 });
@@ -11,7 +11,8 @@ const isInt = (v) => Number.isInteger(v);
 /** 入力の検証と補完。{ calendar, errors } */
 export function normalizeCalendar(input = {}) {
   const errors = [], c = { ...DEFAULT_CALENDAR, ...(input ?? {}) };
-  for (const k of ["epochName", "beforeName", "format"]) if (typeof c[k] !== "string" || !c[k].trim()) errors.push(`calendar.${k} は空でない文字列`);
+  for (const k of ["epochName", "beforeName"]) { if (typeof c[k] !== "string") errors.push(`calendar.${k} は文字列（空白でもよい）`); else c[k] = c[k].trim(); }
+  if (typeof c.format !== "string" || !c.format.trim()) errors.push("calendar.format は空でない文字列");
   if (!isInt(c.yearOffset) || Math.abs(c.yearOffset) > 1e7) errors.push("calendar.yearOffset は整数");
   if (typeof c.format === "string" && !c.format.includes("{year}")) errors.push("calendar.format には {year} が必要");
   const eras = [];
@@ -39,9 +40,12 @@ export function eraOf(cal, mi) {
 /** 月通番 → 表示文字列。年の符号は yearOffset を足したあとで決める（0 年は無い数え方はせず、0 以下は「前」の側で 1 から数える） */
 export function formatDate(cal, mi) {
   const { year, month } = split(mi), shown = year + cal.yearOffset, before = shown < 0, n = before ? -shown : shown;
-  const era = before ? cal.beforeName : cal.epochName, name = cal.monthNames ? cal.monthNames[month - 1] : String(month);
+  const era = before ? (cal.beforeName || "前") : cal.epochName, name = cal.monthNames ? cal.monthNames[month - 1] : String(month);
   return cal.format.replace("{era}", era).replace("{year}", String(n)).replace("{month}", name).replace("{monthNum}", String(month));
 }
+
+/** 現在（月通番 mi）の時代区分の名前。区分が設定されていないとき、または最初の区分より前のときは空白 */
+export const eraLabel = (cal, mi) => eraOf(cal, mi)?.name ?? "";
 
 /** 生成後に許す変更（表示用のみ）。区分の名前と、表示形式・起点の名前。境界・年のずれ・日付には触れない */
 export function applyDisplayEdit(cal, edit) {

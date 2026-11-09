@@ -3,7 +3,7 @@ import { launch, root } from "./lib.mjs";
 import { pathToFileURL } from "node:url"; import path from "node:path"; import assert from "node:assert/strict";
 const { browser, page, problems } = await launch({ width: 1440, height: 860 });
 const errs = []; page.on("pageerror", (e) => errs.push(String(e).slice(0, 200)));
-await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.waitForSelector("#gen");
+await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.waitForSelector("#new"); await page.evaluate(() => { window.__v6.S.fastStart = true; }); await page.click("#splash").catch(() => {}); await page.click("#new"); await page.waitForSelector("#gen");
 await page.fill("#seed", "e2e-v6"); await page.selectOption("#cells", "3000"); await page.click("#gen"); await page.waitForSelector("#delegate", { timeout: 120000 }); await page.click("#delegate"); await page.waitForSelector("#map");
 await page.evaluate(() => { window.__v6.run({ type: "time.advance", months: 480 }); window.__v6.run({ type: "clock.setSpeed", speed: 0 }); window.__v6.render(); });
 const visible = async () => page.evaluate(() => { const r = document.getElementById("map").getBoundingClientRect(), c = document.getElementById("map"), px = c.getContext("2d").getImageData(c.width >> 1, c.height >> 1, 1, 1).data; return { inView: r.top >= 0 && r.bottom <= innerHeight + 1 && r.width > 300, drawn: px[3] > 0 && px[0] + px[1] + px[2] > 0, scroll: document.documentElement.scrollHeight <= innerHeight + 1 }; });

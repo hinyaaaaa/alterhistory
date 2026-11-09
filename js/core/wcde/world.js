@@ -10,6 +10,8 @@ import { refreshCandidates } from "./founding.js";
 import { registerCommands } from "./commands.js";
 import { formatDate } from "./calendar.js";
 import { hashSeed } from "../civ/civ-state.js";
+import { safeAdvance } from "./contract.js";
+import { skipNews } from "./clock.js";
 
 /** 新しい世界を作る。errors があれば作らない。historySeed は呼ぶ側が決める（既定は設定から導く＝同じ設定は同じ歴史）。onProgress(段階, 0..1) */
 export function createNewWorld(input, { generate = generateWorld, historySeed = null, stepYears, onProgress = null } = {}) {
@@ -21,6 +23,24 @@ export function createNewWorld(input, { generate = generateWorld, historySeed = 
   finalizeLanguages(civ); defineReligions({ civ });
   const w = createWcde(world, civ); const candidates = refreshCandidates(w);
   return { ok: true, w, errors: [], report: { prehistory: stats, candidates: candidates.length } };
+}
+/** v6.6.0: 世界の時計は、利用者が入る前から進んでいる。先史の終わり（年 0）から、プレイヤーが建国の画面に入るまでに経つ月数。
+ *  同じ設定なら同じ値（0〜50 年。短いほど出やすい）。WCDE が決める */
+export const ENTRY_MAX_YEARS = 50;
+export function entryMonthsOf(config) { const u = (hashSeed(config.worldSeed, "entry", config.schema) % 100000) / 100000; return Math.floor(ENTRY_MAX_YEARS * u * u) * 12 + (hashSeed(config.worldSeed, "entry-m") % 12); }
+/** 建国の画面に入る前に、世界を進める（国家が自然に生まれ始める）。chunk か月ずつ。終わったら建国の候補を作り直す。ニュースは走査済みにする（過去分で時間が止まらない） */
+export function advanceToEntry(w, { months = entryMonthsOf(w.civ.wcde.config), chunk = 12, onProgress = null } = {}) {
+  const { civ } = w; if (civ.wcde.phase !== "founding" || civ.wcde.entry) return { ok: true, advanced: 0 };
+  const r = safeAdvance(w, months, { chunk, onProgress }); skipNews(civ); civ.wcde.entry = { months: r.advanced, at: civ.monthIndex }; refreshCandidates(w);
+  return { ok: r.ok, advanced: r.advanced, error: r.error };
+}
+/** 1 回分だけ進める版（画面が間に描画を挟めるように、呼び出し側が繰り返す）。終わったら done:true */
+export function advanceEntryStep(w, { chunk = 12 } = {}) {
+  const { civ } = w, total = entryMonthsOf(civ.wcde.config), E = (civ.wcde.entryProgress ??= { done: 0, total });
+  if (civ.wcde.phase !== "founding" || civ.wcde.entry) return { done: true, progress: 1 };
+  const n = Math.min(chunk, E.total - E.done); if (n > 0) { const r = safeAdvance(w, n, { chunk: n }); E.done += r.advanced; if (!r.ok) E.total = E.done; }
+  if (E.done >= E.total) { skipNews(civ); civ.wcde.entry = { months: E.done, at: civ.monthIndex }; delete civ.wcde.entryProgress; refreshCandidates(w); return { done: true, progress: 1 }; }
+  return { done: false, progress: E.done / Math.max(1, E.total) };
 }
 /** 地理の生成関数（保存の読み込みが使う。球面世界への入口を、この 1 か所に保つ） */
 export const defaultGenerate = generateWorld;

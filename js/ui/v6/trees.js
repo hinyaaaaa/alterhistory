@@ -1,7 +1,7 @@
 // v6 UI: 樹形図・ツリー。技術ツリー（四方位へ広がる）・軍事ドクトリン・文化／言語／宗教の系統図。すべて実データから描く。
 //   ・パン（ドラッグ）とズーム（ホイール）で、ノードが増えても操作できる。
 //   ・技術は「採用済み」「採用できる（前提を満たす）」「発見済みだが採用できない」「未発見」を区別する。
-import { h, sv, colorOf } from "./common.js";
+import { h, sv, colorOf, n0 } from "./common.js";
 import { layoutGrid, LANES } from "../../core/civ/tech.js";
 import { STAGES, TREE } from "../../core/civ/techtree.js";
 const NODESTAGE = Object.fromEntries(TREE.map((t) => [t.id, t.stage])); // 列の見出し: その列のノードの「宣言した時代」の中央値
@@ -80,4 +80,29 @@ export function doctrineTree({ nodes, branches, status, onPick, selected, vb0 = 
   if (vb0) pz.set(vb0);
   const focus = (id) => { const p = pos.get(id); if (!p) return; const w = Math.min(W, 520), h = Math.min(H, (w * 3) / 4); pz.set({ x: Math.max(0, Math.min(W - w, p.x + NW / 2 - w / 2)), y: Math.max(0, Math.min(H - h, p.y - h / 3)), w, h }); };
   return { svg, COL, SYM: SY, fit: () => pz.set({ x: 0, y: 0, w: W, h: H }), focus, pos };
+}
+
+/** v6.5.0: 入れ子の一覧（語族・大分類から順に開く）。items: [{id,name,parent,bornAt}]。pop(id): 現在の人口。選んだものまでの道は開いておく */
+export function nestedLineage(items, { selected = null, onPick, onHover = null, pop = () => 0 }) {
+  const by = new Map(items.map((x) => [x.id, x])), kids = new Map(); for (const x of items) { const p = x.parent && by.has(x.parent) ? x.parent : null; (kids.get(p) ?? kids.set(p, []).get(p)).push(x); }
+  const total = new Map(), tot = (x) => { if (total.has(x.id)) return total.get(x.id); let s = pop(x.id); for (const k of kids.get(x.id) ?? []) s += tot(k); total.set(x.id, s); return s; };
+  for (const l of kids.values()) l.sort((a, b) => tot(b) - tot(a) || a.bornAt - b.bornAt || (a.id < b.id ? -1 : 1));
+  const open = new Set(); for (let x = by.get(selected); x; x = by.get(x.parent)) open.add(x.id);
+  const row = (x, depth) => h("div", { class: "nrow" + (x.id === selected ? " sel" : "") + (pop(x.id) > 0.5 ? "" : " dead"), style: `padding-left:${depth * 14}px`, onmouseenter: () => onHover?.(x.id), onmouseleave: () => onHover?.(null), onclick: (e) => { e.preventDefault(); onPick(x); } }, h("span", { class: "sw", style: `background:${colorOf(x.id)}` }), h("span", { class: "nm" }, x.name), h("small", {}, pop(x.id) > 0.5 ? n0(pop(x.id)) : "消滅"));
+  const node = (x, depth) => { const ks = kids.get(x.id) ?? []; if (!ks.length) return row(x, depth); const d = h("details", { class: "ntree", open: open.has(x.id) || (depth === 0 && ks.length <= 6) }, h("summary", {}, row(x, depth), h("small", { class: "cnt" }, `${ks.length}`)), ...ks.map((k) => node(k, depth + 1))); return d; };
+  return h("div", { class: "nested" }, ...(kids.get(null) ?? []).map((r) => node(r, 0)));
+}
+/** v6.5.0: 小さな系統図。選んだものの先祖（左）と子（右）だけを出す */
+export function miniLineage(items, id, { onPick }) {
+  const by = new Map(items.map((x) => [x.id, x])), cur = by.get(id); if (!cur) return sv("svg", {});
+  const anc = []; for (let x = by.get(cur.parent); x && anc.length < 4; x = by.get(x.parent)) anc.unshift(x);
+  const kids = items.filter((x) => x.parent === id).sort((a, b) => a.bornAt - b.bornAt).slice(0, 6), more = items.filter((x) => x.parent === id).length - kids.length;
+  const NW = 92, NH = 20, GX = 22, cols = anc.length + 1 + (kids.length ? 1 : 0), W = cols * (NW + GX), H = Math.max(40, kids.length * 26 + 14), midY = H / 2, svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", class: "tree mini", style: `max-height:${H * 1.4}px` });
+  const node = (x, cx, cy, sel) => svg.append(sv("g", { class: "tnode", onclick: () => !sel && onPick(x) }, sv("rect", { x: cx, y: cy - NH / 2, width: NW, height: NH, rx: 3, fill: "#1a1d23", stroke: sel ? "#d8b45a" : colorOf(x.id), "stroke-width": sel ? 2.2 : 1.3 }), sv("text", { x: cx + 5, y: cy + 4, "font-size": 11, fill: "#d9d6cc" }, x.name.slice(0, 7))));
+  const link = (x1, y1, x2, y2) => svg.append(sv("path", { d: `M${x1} ${y1}C${x1 + 12} ${y1} ${x2 - 12} ${y2} ${x2} ${y2}`, fill: "none", stroke: "#4a515c", "stroke-width": 1.2 }));
+  anc.forEach((x, i) => { node(x, i * (NW + GX), midY, false); link(i * (NW + GX) + NW, midY, (i + 1) * (NW + GX), midY); });
+  const cx = anc.length * (NW + GX); node(cur, cx, midY, true);
+  kids.forEach((k, i) => { const y = 7 + 13 + i * 26 + (H - 14 - kids.length * 26) / 2; node(k, cx + NW + GX, y, false); link(cx + NW, midY, cx + NW + GX, y); });
+  if (more > 0) svg.append(sv("text", { x: cx + NW + GX, y: H - 1, "font-size": 10, fill: "#838995" }, `ほか ${more}`));
+  return svg;
 }

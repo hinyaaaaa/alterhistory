@@ -4,6 +4,7 @@ import { hashSeed } from "../../civ/civ-state.js";
 import { createReligion } from "../../civ/culture.js";
 import { makeEvent } from "../../civ/events.js";
 import { nameFor, languageOfGroup } from "./language.js";
+import { sectName } from "./naming.js";
 
 const domRel = (g) => g.cohorts.reduce((b, c) => (c.share > b.share ? c : b));
 /** 定義の補完（最高神・聖地）。最初の月次で一度だけ。名前は、その宗教の信者が多い集団の言語から */
@@ -14,7 +15,7 @@ export function defineReligions(ctx) {
     const gs = (byRel.get(r.id) ?? []).slice().sort((a, b) => b.pop - a.pop || (a.id < b.id ? -1 : 1)), top = gs[0];
     const lang = top ? languageOfGroup(top) : null, rr = { next: ((s) => () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296))(hashSeed(r.id, "deity")) };
     r.deity = lang && civ.languages[lang] ? nameFor(civ, rr.next, lang, "person") : null; r.holyCell = top?.cell ?? null; r.founderId = null; // 創始者は未知
-    if (r.deity) r.name = `${r.deity}信仰`;
+    if (r.deity) { /* v6.7.0: 宗教は「〇〇教」。同じ名の宗教は重ならない */ const taken = new Set(Object.values(civ.religions).filter((x) => x !== r).map((x) => x.name)); let nm = `${r.deity}教`, k = 0; while (taken.has(nm) && lang && k++ < 8) nm = `${nameFor(civ, rr.next, lang, "person")}教`; r.name = nm; }
   }
 }
 /** 分派（3か月ごとに評価）。信者の集団が多く、離れていて、古い宗教は分かれることがある */
@@ -26,7 +27,7 @@ export function stepReligion(ctx) {
     // 聖地から遠い側の集団が、新しい宗派へ
     const hc = r.holyCell ?? gs[0].cell, d = (g) => Math.hypot(world.cell.lat[g.cell] - world.cell.lat[hc], world.cell.lon[g.cell] - world.cell.lon[hc]), far = gs.slice().sort((a, b) => d(b) - d(a) || (a.id < b.id ? -1 : 1)).slice(0, Math.ceil(gs.length / 3));
     const nid = createReligion(civ, ids, ctx.rng, { parent: rid, kind: r.kind }), nr = civ.religions[nid]; nr.holyCell = far[0].cell; nr.founderId = null; nr.deity = r.deity;
-    const lang = languageOfGroup(far[0]); if (lang && civ.languages[lang]) { nr.name = `${nameFor(civ, ctx.rng, lang, "person")}派`; }
+    const lang = languageOfGroup(far[0]); if (lang && civ.languages[lang]) { nr.name = sectName(r.name, nameFor(civ, ctx.rng, lang, "person")); /* 〇〇教〇〇派 */ }
     for (const g of far) for (const c of g.cohorts) if (c.religionId === rid) c.religionId = nid;
     makeEvent(civ, ids, { kind: "religion_schism", title: `${r.name}から${nr.name}が分かれた（信者の集団 ${far.length}）`, participants: [{ entityId: rid, role: "parent_religion" }, { entityId: nid, role: "new_religion" }, ...far.slice(0, 3).map((g) => ({ entityId: g.id, role: "converted_group" }))], location: { cell: far[0].cell }, effects: [{ targetId: nid, property: "religion.parent", before: null, after: rid }], provenance: "simulation" });
   }

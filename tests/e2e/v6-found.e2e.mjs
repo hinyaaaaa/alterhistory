@@ -3,7 +3,7 @@ import { launch, root } from "./lib.mjs";
 import { pathToFileURL } from "node:url"; import path from "node:path"; import assert from "node:assert/strict";
 const { browser, page, problems } = await launch({ width: 1440, height: 860 });
 const errs = []; page.on("pageerror", (e) => errs.push(String(e).slice(0, 200)));
-await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.waitForSelector("#gen");
+await page.goto(pathToFileURL(path.join(root, "index.html")).href); await page.waitForSelector("#new"); await page.evaluate(() => { window.__v6.S.fastStart = true; }); await page.click("#splash").catch(() => {}); await page.click("#new"); await page.waitForSelector("#gen");
 await page.fill("#seed", "e2e-found"); await page.selectOption("#cells", "3000"); await page.click("#gen");
 await page.waitForSelector("#delegate", { timeout: 120000 });
 const n = await page.locator("button", { hasText: "担当して建国" }).count(); assert.ok(n > 0, "建国の候補が 1 つ以上ある: " + n);

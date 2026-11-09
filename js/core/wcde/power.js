@@ -9,10 +9,17 @@ export const navyShare = (st) => { const u = (st.military?.units ?? []).find((x)
 export const landShare = (st) => 1 - navyShare(st);
 export const fx = (st) => st.military?.fx ?? {};
 
+/** v6.5.0: 編成（部隊の種類の配分）が陸の戦力に効く。歩兵だけの軍より、騎兵・銃兵・弓兵・守備兵が適度に混ざった軍のほうが強い（諸兵科連合 最大 +12%）。
+ *  騎兵 +22%／銃兵 +35%／弓・投射兵 +10%（それぞれ配分に比例）。守備兵は攻めでは −10%、守りでは +45%（配分に比例）。編成を変えても、戦力は大きく振れない（おおむね ±10% 以内） */
+export function armsMult(st, defending = false) {
+  const us = (st.military?.units ?? []).filter((u) => u.kind !== "navy"), tot = us.reduce((a, u) => a + u.size, 0); if (!(tot > 0)) return 1;
+  const sh = (k) => (us.find((u) => u.kind === k)?.size ?? 0) / tot, kinds = us.filter((u) => u.size / tot >= 0.1).length;
+  return 1 + 0.04 * Math.min(3, Math.max(0, kinds - 1)) + 0.22 * Math.min(sh("cavalry"), 0.4) + 0.35 * Math.min(sh("firearms"), 0.5) + 0.1 * Math.min(sh("ranged"), 0.4) + sh("garrison") * (defending ? 0.45 : -0.1);
+}
 /** 陸の戦力（size を指定すると、その兵力ぶん）。守る側は防御の加点が付く */
 export function landPower(civ, st, size = null, { defending = false } = {}) {
   const n = size ?? st.army * landShare(st);
-  const attack = milMult(st, civ) * (0.85 + 0.3 * effective(civ, st, "readiness"));
+  const attack = milMult(st, civ) * armsMult(st, defending) * (0.85 + 0.3 * effective(civ, st, "readiness"));
   const guard = defending ? 1 + ((st.defense ?? 0) + (st.milDef ?? 0)) * 0.5 : 1;
   return n * attack * guard;
 }

@@ -10,23 +10,24 @@ import { ecoSummary } from "../../core/wcde/domains/ecosystem.js";
 import { S, run, act, stateName, aliveStates, controlled } from "./store.js";
 import { MapView } from "./map.js";
 import { openWizard } from "./wizard.js";
+import { showTitle, showWorldConfig, runLoading, runSplash } from "./title.js";
+import { eraLabel } from "../../core/wcde/calendar.js";
 import { initNotify, notify } from "./notify.js";
-import { pGeo, pNations, link } from "./views-a.js";
+import { pGeo, pNations, link, uprisingFull } from "./views-a.js";
 import { pWar, pDiplo, pEntity, pStats, pSettings, pCreator, fileLoader } from "./views-b.js";
 export { h };
 const $ = (s) => document.querySelector(s), root = () => $("#v6-root");
 const HUB = [["geo", "地理", "GEO"], ["nations", "国家", "NATION"], ["war", "戦争", "WAR"], ["diplo", "外交", "DIPLO"], ["culture", "文化", "CULT"], ["language", "言語", "LANG"], ["religion", "宗教", "RELIG"], ["stats", "統計", "STATS"], ["creator", "創造主", "CREATOR"], ["settings", "世界設定", "CONFIG"]];
 const PANELS = { geo: pGeo, nations: pNations, war: pWar, diplo: pDiplo, culture: () => pEntity("culture"), language: () => pEntity("language"), religion: () => pEntity("religion"), stats: pStats, creator: pCreator, settings: pSettings };
 
-/* ---------- 起動: 世界の設定 → 生成 → 建国 ---------- */
+/* ---------- 起動: スタート画面 → 世界の設定 → 生成（ロード画面）→ 建国 ---------- */
 function setup() {
-  const seed = h("input", { id: "seed", value: "alter-" + Math.floor(Math.random() * 9999) }), cells = h("select", { id: "cells" }, ...[3000, 6000].map((n) => h("option", { value: n, selected: n === 3000 }, n === 3000 ? "3,000 セル（標準）" : "6,000 セル（細かい・遅い）"))), msg = h("p", { class: "n", id: "setup-msg" });
-  const go = () => { msg.textContent = "生成中…（先史の計算に数秒かかります）"; setTimeout(() => { const r = createNewWorld({ worldSeed: seed.value, spec: { resolution: { targetCells: +cells.value } } }); if (!r.ok) { msg.textContent = r.errors.join(" / "); return; } S.w = r.w; founding(); }, 30); };
-  root().replaceChildren(h("div", { class: "center" }, h("div", { class: "code" }, "ALTERHISTORY v6"), h("h1", {}, "世界を作る"), h("p", { class: "n" }, "約50万年の先史から、国家が生まれる時代へ。"), h("label", {}, "世界の種 ", seed), h("label", {}, "解像度 ", cells), h("div", { class: "rowb" }, btn("世界を生成", go, "p", { id: "gen" }), fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); })), msg));
+  const loader = fileLoader((w, warn) => { S.w = w; S.fileWarn = warn; start(); });
+  showTitle(root(), { loader, onNew: () => showWorldConfig(root(), { onBack: setup, onStart: (cfg) => runLoading(root(), cfg, (w) => { S.w = w; founding(); }, (err) => { setup(); notify("error", err); }) }) });
 }
 function founding() {
   const c = run({ type: "founding.refresh" }).candidates ?? S.w.civ.wcde.candidates ?? [], civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
-  const msg = h("p", { class: "n" }, "国を建てて担当するか、世界に任せて見守ります。国名・政体・役職・為政者・首都・技術を、順に決めます。"), list = h("div", {}); void list; void c;
+  const nowTxt = formatWorldDate(S.w), era = eraLabel(civ.wcde.config.calendar, civ.monthIndex), msg = h("div", {}, h("p", { class: "n" }, `${civ.wcde.config.name}　現在 ${nowTxt}${era ? "（" + era + "）" : ""}　— 世界の時計は、あなたが入る前から進んでいます。`), h("p", { class: "n" }, "国を建てて担当するか、世界に任せて見守ります。国名・政体・役職・為政者・首都・技術を、順に決めます。")), list = h("div", {}); void list; void c;
   const yrsAgo = (m) => Math.round(((civ.wcde.foundedAt ?? civ.monthIndex) - m) / 12);
   const fmtYears = (y) => (y >= 10000 ? `約 ${Math.round(y / 1000) / 10} 万年前` : `約 ${n0(y)} 年前`);
   // 先史の観察: 系統の移行・技術の出現・人口の推移（読み取り専用）
@@ -49,8 +50,10 @@ function shell() {
   S.map = new MapView(cv, S.w); S.map.sel = S.sel; S.map.onPick = callout; requestAnimationFrame(() => { S.map.draw(); }); window.addEventListener("resize", () => S.map?.draw());
 }
 function render() { if (!$("#hub")) return; renderHub(); renderPanel(); renderRight(); renderNews(); S.map.sel = S.sel; S.map.draw(); }
-function renderHub() { $("#hub").replaceChildren(...HUB.map(([k, ja, code]) => h("button", { class: S.hub === k ? "on" : "", "data-hub": k, onclick: () => { S.hub = S.hub === k ? null : k; S.detail = false; S.war = null; S.entity = { culture: null, language: null, religion: null }; if (S.map) S.map.hl = null; render(); setTimeout(() => S.map?.draw(), 220); } }, ja, h("small", {}, code)))); }
-function renderPanel() { const p = $("#panel"); S.paintedMonth = S.w?.civ.monthIndex ?? null; $("#prefresh")?.classList.remove("stale"); if (!S.hub) { p.classList.remove("open"); return; } p.classList.add("open"); const wide = S.hub === "nations" && (S.tab === "tech" || S.tab === "doctrine") && S.sel; /* 技術ツリー・ドクトリンは大きく見せる */ p.style.setProperty("--pw", wide ? "min(760px, 62vw)" : ""); const keep = $("#pin").scrollTop; $("#pin").replaceChildren(PANELS[S.hub]()); $("#pin").scrollTop = keep; }
+function renderHub() { $("#hub").replaceChildren(...HUB.map(([k, ja, code]) => h("button", { class: S.hub === k ? "on" : "", "data-hub": k, onclick: () => { S.hub = S.hub === k ? null : k; S.detail = false; S.war = null; S.upr = null; S.dip = null; S.entity = { culture: null, language: null, religion: null }; if (S.map) S.map.hl = null; render(); setTimeout(() => S.map?.draw(), 220); } }, ja, h("small", {}, code)))); }
+function renderPanel() { S.full = null; const p = $("#panel"); S.paintedMonth = S.w?.civ.monthIndex ?? null; $("#prefresh")?.classList.remove("stale"); if (!S.hub) { p.classList.remove("open"); return; } p.classList.add("open"); const wide = S.hub === "nations" && (S.tab === "tech" || S.tab === "doctrine") && S.sel; /* 技術ツリー・ドクトリンは大きく見せる */ p.style.setProperty("--pw", wide ? "min(760px, 62vw)" : ""); const keep = $("#pin").scrollTop; $("#pin").replaceChildren(PANELS[S.hub]()); $("#pin").scrollTop = keep; if (S.upr?.open && S.upr.stateId && S.w.civ.states[S.upr.stateId]) S.full = { key: "upr", title: "反乱・革命を起こす", build: () => uprisingFull(S.w.civ.states[S.upr.stateId]), onClose: () => { S.upr = null; } }; renderFull(); }
+/** v6.5.0: 全面タブ（地図とパネルを覆う）。建国フロー・戦争の詳細・反乱の作成など、広く使いたい画面で使う。基本は横のパネル */
+function renderFull() { document.querySelector("#fulltab")?.remove(); const f = S.full; if (!f || S.upr?.picking) return; const el = h("div", { id: "fulltab" }, h("div", { class: "fthead" }, btn("← 閉じる", () => { f.onClose?.(); S.full = null; render(); }, "", { id: "full-close" }), h("b", {}, f.title)), h("div", { class: "ftbody" }, f.build())); $("#app")?.append(el); }
 function select(id) { S.sel = id; S.detail = true; S.hub = "nations"; if (!S.tab) S.tab = "politics"; render(); $("#callout").classList.remove("on"); }
 function focusCell(cell) { const M = S.map, g = M.geo, W = M.cv.width, H = M.cv.height, [x, y] = M.proj(g.cen[cell * 2], g.cen[cell * 2 + 1], W, H); M.view.k = 4; M.view.x = W / 2 - x * 4; M.view.y = H / 2 - y * 4; M.clamp(); M.draw(); }
 /** 地図上の選択: コールアウトが基本の情報提示。詳細パネルや他領域への入口も置く */
@@ -58,7 +61,7 @@ function callout(p) {
   if (S.upr?.picking) { // v6.4.0: 反乱の中心地を地図から選ぶ
     const r = run({ type: "uprising.plan", authority: "player_order", stateId: S.upr.stateId, kind: S.upr.kind, cell: p.cell }), res = r.result ?? r;
     if (!r.ok || res.ok === false) { notify("error", res.error ?? r.error ?? "その場所は選べません"); return; }
-    S.upr.plan = res; S.upr.picking = false; S.map.pins = [{ cell: res.center.cell, big: true, color: "#ff8a5c" }]; S.map.draw(); renderPanel(); return;
+    S.upr.plan = res; S.upr.picking = false; S.upr.open = true; S.map.pins = [{ cell: res.center.cell, big: true, color: "#ff8a5c" }]; S.map.draw(); renderPanel(); return;
   }
   const c = $("#callout"), civ = S.w.civ, st = p.stateId ? civ.states[p.stateId] : null, ce = S.w.world.cell, mine = st && controlled() === st.id;
   const body = st ? [h("h3", {}, h("span", { class: "sw", style: `background:${colorOf(st.id)};display:inline-block;margin-right:6px` }), st.name), h("div", { class: "sub" }, `${polityJa(st.polity)}・人口 ${n0(st.pop)}・安定度 ${pct(st.stability)}`), h("div", { class: "sub" }, `為政者: ${st.leader?.name ?? "—"}`), p.settlement ? h("div", { class: "sub" }, `都市: ${p.settlement.name ?? "—"}（人口 ${n0(p.settlement.pop)}）`) : null, h("div", { class: "bt" }, btn("詳細", () => select(st.id)), btn("外交", () => { S.tab = "diplomacy"; select(st.id); }), mine ? null : btn("担当する", () => { run({ type: "control.take", stateId: st.id }); S.sel = st.id; render(); }, "p"))] : [h("h3", {}, p.settlement?.name ?? "未所属の地"), h("div", { class: "sub" }, `区画 ${p.cell}・標高 ${Math.round(ce.elevation[p.cell] * 100) / 100}・気温 ${Math.round(ce.temp[p.cell])}`), p.settlement ? h("div", { class: "sub" }, `人口 ${n0(p.settlement.pop)}`) : h("div", { class: "sub" }, "国家に属していません")];
@@ -68,7 +71,7 @@ function callout(p) {
 /* ---------- 右: ニュースと時間のみ ---------- */
 function renderRight() {
   const w = S.w, T = timeOf(w.civ), cs = controlled();
-  $("#clock").replaceChildren(h("div", { class: "d", id: "date" }, formatWorldDate(w)), h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); renderRight(); } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）", T.hold ? "・ニュースの確認待ち" : T.speed ? "" : "・停止中"));
+  const eraNow = eraLabel(w.civ.wcde.config.calendar, w.civ.monthIndex); $("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); renderRight(); } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）", T.hold ? "・ニュースの確認待ち" : T.speed ? "" : "・停止中"));
   announce();
 }
 /** v6.3.0: 右のニュース欄は廃止。重大でない大きな出来事は、地図のコールアウトとトースト通知で知らせる（重大ニュースは中央の確認画面） */
@@ -92,10 +95,5 @@ function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.ci
 /** 再生中の更新: 時計・ニュース・地図だけを毎回更新する。左のパネルは勝手に描き直さない（読んでいる最中・入力中・スクロール中の内容が変わらないように）。
  *  世界が進んでパネルの内容が古くなったときは、パネルの右上に「最新の状態に更新」を出し、押したときだけ描き直す */
 function live() { if (!$("#hub")) return; renderRight(); renderNews(); S.map.draw(); if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");}
-/** 起動画面: 毎回表示。初期化が済んでいれば演出（約 0.9 秒）だけで世界生成の画面へ移る。動きを減らす設定では待たずに切り替える */
-function dismissSplash() {
-  const el = document.getElementById("splash"); if (!el) return; const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches, since = performance.now() - (window.__splashAt ?? 0), wait = reduce ? 0 : Math.max(0, 900 - since);
-  setTimeout(() => { el.classList.add("out"); setTimeout(() => el.remove(), reduce ? 0 : 340); }, wait);
-}
-export function boot() { if (!document.getElementById("v6-root")) return; initNotify(); setup(); dismissSplash(); }
+export function boot() { if (!document.getElementById("v6-root")) return; initNotify(); setup(); runSplash(); }
 if (typeof window !== "undefined") { window.__v6 = { S, run, act, render: () => S.hooks.render?.(), start }; if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot(); }

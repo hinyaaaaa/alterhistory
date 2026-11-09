@@ -7,16 +7,20 @@ const KN = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
 export const kanjiNum = (n) => (n < 10 ? KN[n] : n < 20 ? "十" + KN[n % 10] : n < 100 ? KN[Math.floor(n / 10)] + "十" + KN[n % 10] : String(n));
 
 // ---- 国号 ----
-const FORMS = ["部族連合", "教団国", "市国", "首長国", "共和国", "神聖国", "王国", "帝国", "連合", "同盟", "部族", "国"]; // 長いものから
-/** 政体（と成立の経路）に合う称号 */
-export function stateForm(polity, via = null) {
+// v6.7.0: 史実の国号のように。〇〇王国・〇〇帝国・〇〇共和国・〇〇連邦・〇〇公国・〇〇朝・〇〇汗国・〇〇教国など。「市国」「部族」は使わない。
+//   同じ語根・同じ政体からは、いつも同じ称号になる（語根から決まる。改称しても揺れない）。
+const FORMS = ["連邦共和国", "神聖王国", "連合王国", "部族連合", "共和国", "教団国", "神聖国", "首長国", "連邦", "連合", "同盟", "連盟", "帝国", "王国", "公国", "侯国", "汗国", "教国", "部族", "市国", "朝", "国"]; // 長いものから（古い保存の称号も剥がせるように残す）
+const byBase = (base, arr) => arr[hashSeed(String(base), "form") % arr.length];
+/** 政体（と成立の経路）に合う称号。base は国号の語根（称号を選ぶ手がかり） */
+export function stateForm(polity, via = null, base = "") {
   switch (polity) {
-    case "kingdom": return "王国";
-    case "empire": return "帝国";
+    case "kingdom": return byBase(base, ["王国", "王国", "王国", "朝"]);
+    case "empire": return byBase(base, ["帝国", "帝国", "帝国", "朝"]);
     case "republic": return "共和国";
-    case "theocracy": return "神聖国";
-    case "chiefdom": return via === "city_state" ? "市国" : "首長国";
-    default: return via === "nomad_confederation" ? "部族連合" : via === "agri_union" ? "連合" : via === "defense_league" ? "同盟" : "部族";
+    case "federation": return "連邦";
+    case "theocracy": return via === "religious_polity" ? "教国" : byBase(base, ["神聖王国", "教国"]);
+    case "chiefdom": return via === "city_state" ? byBase(base, ["公国", "王国"]) : byBase(base, ["公国", "侯国", "王国"]);
+    default: return via === "nomad_confederation" ? "汗国" : via === "agri_union" ? byBase(base, ["王国", "連邦"]) : via === "defense_league" ? "連盟" : byBase(base, ["王国", "公国"]);
   }
 }
 /** 国号から称号を除いた語根（建国時に st.nameBase に残す。古いデータは称号を剥がして求める） */
@@ -25,7 +29,7 @@ export function baseOfState(st) {
   const n = String(st.name ?? ""); for (const f of FORMS) if (n.length > f.length && n.endsWith(f)) return n.slice(0, -f.length);
   return n;
 }
-export const composeStateName = (base, polity, via) => base + stateForm(polity, via);
+export const composeStateName = (base, polity, via) => base + stateForm(polity, via, base);
 /** 政体が変わったときの国号の改称。変わらなければ null */
 export function retitle(st, polity) {
   if (!st.nameBase && !FORMS.some((f) => String(st.name).endsWith(f))) return null; // 創造主が付けた名前など、称号のない名前は改めない
@@ -71,3 +75,8 @@ export function siteDescriptors(f) {
   if (f.forest) out.push("森"); if (f.wet) out.push("沼沢"); if (f.dry) out.push("荒野"); if (f.plain) out.push("平原", "野");
   return out.length ? out : ["野"];
 }
+
+// ---- 宗教・文化の名 ----
+/** 宗教の名から「〇〇教」までを取り出す（分派の名は「〇〇教〇〇派」。分派がさらに分かれても、元の教の名に付ける） */
+export function religionRoot(name) { const n = String(name ?? ""), i = n.indexOf("教"); return i >= 0 ? n.slice(0, i + 1) : n; }
+export const sectName = (parentName, sect) => `${religionRoot(parentName)}${sect}派`;
