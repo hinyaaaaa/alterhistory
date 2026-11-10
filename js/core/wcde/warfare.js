@@ -11,7 +11,7 @@ import { makeEvent } from "../civ/events.js";
 import { byState, neighborGroups } from "../civ/spatial.js";
 import { hashSeed, rngOf } from "../civ/civ-state.js";
 import { distKm } from "../civ/states.js";
-import { neighborStates, endWar, adjustRel } from "../civ/diplomacy.js";
+import { neighborStates, endWar, adjustRel, warMaxMonths } from "../civ/diplomacy.js";
 import { stateCan } from "../civ/tech.js";
 import { BIOMES } from "../civ/world-consts.js";
 import { effective } from "./domains/effective.js";
@@ -257,7 +257,7 @@ export function stepWar(ctx, w) {
   const mor = (side) => { const fs = forcesOf(w, side); const tot = fs.reduce((s, f) => s + f.size, 0); return tot ? fs.reduce((s, f) => s + f.morale * f.size, 0) / tot : 0; };
   const mA = mor("a"), mD = mor("d"); w.score = clamp(w.score + (mA - mD) * 2.5, -100, 100); ops.broken.a = mA < 0.15 ? ops.broken.a + 1 : 0; ops.broken.d = mD < 0.15 ? ops.broken.d + 1 : 0;
   const age = mi - w.startedAt;
-  if (w.score >= 80 || ops.broken.d >= 6) endWar(ctx, w, "aggressor_victory"); else if (w.score <= -80 || ops.broken.a >= 6) endWar(ctx, w, "defender_victory"); else if (age > 120) endWar(ctx, w, "stalemate");
+  if (w.score >= 80 || ops.broken.d >= 6) endWar(ctx, w, "aggressor_victory"); else if (w.score <= -80 || ops.broken.a >= 6) endWar(ctx, w, "defender_victory"); else if (age > warMaxMonths(ctx.civ.date.year, new Set([...w.sides.a, ...w.sides.d]).size)) endWar(ctx, w, "stalemate"); // v6.9.0: 戦争の長さは時代で決まる（古代 50 年・近代 6 年・大戦 20 年）
 }
 
 /** 終結の整理（endWar から）: 作戦・部隊・戦域を片付け、要約だけ残す。小さな戦いは個別に歴史へ残さず、代表的な戦いだけを終結の資料にする */

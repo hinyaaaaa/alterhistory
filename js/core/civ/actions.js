@@ -7,7 +7,7 @@ import { byState, neighborGroups } from "./spatial.js";
 import { foundSettlement } from "./population.js";
 import { POLITY } from "./states.js";
 import { retitle } from "../wcde/domains/naming.js";
-import { neighborStates, strength, treatyBetween, atWarWith, signTreaty, endTreaty, declareWar, endWar, adjustRel, TREATY } from "./diplomacy.js";
+import { neighborStates, strength, treatyBetween, atWarWith, signTreaty, endTreaty, declareWar, endWar, adjustRel, TREATY, rematchCooldown } from "./diplomacy.js";
 import { dominant } from "./cohorts.js";
 import { grievance } from "./interpret.js";
 import { institutionCandidates, institutionExecute } from "./magic.js";
@@ -59,7 +59,7 @@ export const ACTIONS = [
     candidates(ctx, st, e) { if (st.techAdopted.fortification == null) return [bad("build_fortification", "城壁の技術を採用していない")]; if (st.defense >= 0.5) return [bad("build_fortification", "整備済み")]; return st.treasury >= 40 ? [cand("build_fortification", { security: 0.3 + e.threat * 0.6 })] : [bad("build_fortification", "財政が足りない")]; },
     execute(ctx, st) { if (st.techAdopted.fortification == null) return { ok: false, error: "城壁の技術がない" }; if (!spend(st, 40)) return { ok: false, error: "財政が足りない" }; const ef = []; eff(ef, st, "defense", st.defense, Math.min(0.5, st.defense + 0.1)); st.defense = Math.min(0.5, st.defense + 0.1); return { ok: true, effects: ef }; } },
   { key: "plan_conquest", domain: "war", label: "征服の計画", enabled: true,
-    candidates(ctx, st, e) { if (st.campaign) return [bad("plan_conquest", "別の計画が進行中")]; if (e.mi - (st.lastWarEnd ?? -999) < 180) return [bad("plan_conquest", "戦争の疲弊から回復していない")]; return [...e.nbs, ...(e.seaNbs ?? [])].filter((n) => !n.atWar && !n.treaties.na && !n.treaties.al).map((n) => { const ratio = (e.my + 1) / (n.strength + 1); const gr = grievance(ctx.civ, st, n.st.id); return ratio >= 1.3 ? cand("plan_conquest", { expansion: clamp((ratio - 1) / 2) - 0.1 * st.warIds.length + 0.35 * gr, prestige: 0.1 + 0.3 * gr, stability: -0.2, prosperity: -0.3 }, { target: n.st.id, label: `${n.st.name}の征服` }) : bad("plan_conquest", "戦力が足りない", { target: n.st.id }); }); },
+    candidates(ctx, st, e) { if (st.campaign) return [bad("plan_conquest", "別の計画が進行中")]; if (e.mi - (st.lastWarEnd ?? -999) < 180) return [bad("plan_conquest", "戦争の疲弊から回復していない")]; return [...e.nbs, ...(e.seaNbs ?? [])].filter((n) => !n.atWar && !n.treaties.na && !n.treaties.al && !(st.lastWarWith?.[n.st.id] != null && e.mi - st.lastWarWith[n.st.id] < rematchCooldown(ctx.civ.date.year))).map((n) => { const ratio = (e.my + 1) / (n.strength + 1); const gr = grievance(ctx.civ, st, n.st.id); return ratio >= 1.3 ? cand("plan_conquest", { expansion: clamp((ratio - 1) / 2) - 0.1 * st.warIds.length + 0.35 * gr, prestige: 0.1 + 0.3 * gr, stability: -0.2, prosperity: -0.3 }, { target: n.st.id, label: `${n.st.name}の征服` }) : bad("plan_conquest", "戦力が足りない", { target: n.st.id }); }); },
     execute(ctx, st, c) { const t = free(ctx, c.target); if (!t?.alive) return { ok: false, error: "相手が存在しない" }; if (st.campaign) return { ok: false, error: "別の計画が進行中" }; st.campaign = { kind: "conquest", target: t.id, stage: "prepare", startedAt: ctx.civ.monthIndex, deadline: ctx.civ.monthIndex + 60, warId: null }; return { ok: true, effects: [{ targetId: st.id, property: "campaign", before: null, after: `conquest:${t.id}` }], title: `${t.name}の征服を計画`, targetId: t.id }; } },
   { key: "declare_war", domain: "war", label: "宣戦", enabled: true,
     candidates() { return []; }, // AI は「征服の計画」の手順として行う。プレイヤーは対象を指定して実行できる

@@ -16,7 +16,7 @@ const COLD_AFTER_YEARS = 120;         // これより古いチャンクは cold�
 /** 出来事の種別ごとの扱い。store: 個別の資料として残すか／ty: 種類（検索・再構成用）／im: 重要度 0〜3（残りやすさ） */
 const P = (ty, im, store = true) => ({ ty, im, store });
 export const KIND_POLICY = Object.freeze({
-  state_formed: P("state", 3), state_dissolved: P("state", 3), regime_change: P("state", 2), leader_succession: P("state", 1), succession_by_heir: P("state", 1), dynasty_changed: P("state", 2), heir_named: P("state", 0, false),
+  state_formed: P("state", 3), state_dissolved: P("state", 3), state_merged: P("state", 3), regime_change: P("state", 2), leader_succession: P("state", 1), succession_by_heir: P("state", 1), dynasty_changed: P("state", 2), heir_named: P("state", 0, false),
   instability: P("state", 0, false), group_joined_state: P("state", 1), conquest: P("war", 3), territory_occupied: P("war", 2), campaign_abandoned: P("war", 0, false),
   war_declared: P("war", 3), war_epilogue: P("war", 2), ideology_emerged: P("culture", 2), war_ended: P("war", 3), battle_fought: P("war", 2), peace: P("war", 3), reparations: P("war", 2), ally_joined: P("war", 2),
   treaty_signed: P("treaty", 2), treaty_ended: P("treaty", 2), treaty: P("treaty", 2), diplomacy_failed: P("treaty", 1),

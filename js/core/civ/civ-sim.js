@@ -16,12 +16,16 @@ import { commitArchive } from "./archive.js";
 import { stepClimate, stepDisaster, climateGrowth } from "./disaster.js";
 import { byState } from "./spatial.js";
 import { applyCommand } from "./commands.js";
+import { stepCalibration } from "./calibration.js";
+import { stepCompact } from "./compact.js";
 
 export function createCivSim(world, civ, { extensions = [] } = {}) {
   const ids = createIdGen(civ.seq), ticker = createTicker();
   ticker.register("clock", (ctx) => { setDate(ctx.civ, ctx.civ.monthIndex + 1); ctx.rng = rngOf(hashSeed(ctx.civ.historySeed, ctx.civ.monthIndex)); }, "advanceClock");
   ticker.register("climate", stepClimate, "stepClimate");
   ticker.register("disaster", stepDisaster, "stepDisaster");
+  ticker.register("economy_pop", stepCalibration, "stepCalibration", { every: 12, offset: 0 }); // v6.8.0: 年 1 回、世界の人口・技術の進みを史実の規模へ寄せる
+  ticker.register("archive", stepCompact, "stepCompact", { every: 12, offset: 7 }); // v6.9.0: 年 1 回、古い細部を整理してメモリを抑える
   ticker.register("economy_pop", stepPopulation, "stepPopulation");
   ticker.register("culture", stepCulture, "stepCulture");
   ticker.register("culture", stepCohorts, "stepCohorts");

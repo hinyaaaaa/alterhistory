@@ -2,10 +2,18 @@
 // 旧エディタの戦争モデル（simulation）との統合は後続。ここでは AI 行動が一貫して使える最小の戦争・外交を持つ。
 import { makeEvent } from "./events.js";
 import { byState, neighborGroups } from "./spatial.js";
+import { dominant } from "./cohorts.js";
+import { hashSeed } from "./civ-state.js";
 import { milMult } from "./techfx.js";
 import { distKm } from "./states.js";
 import { recentEventsFor, asCauses, getEvent } from "./graph.js";
 
+/** 戦争の理由の表示名（v6.9.0）。旧版は AI の戦争がすべて「conquest」だった */
+export const WAR_REASON_JA = Object.freeze({ conquest: "領土の征服", succession: "王位継承をめぐる争い", religion: "宗教的な対立", trade_route: "交易路・資源をめぐる争い", revenge: "報復・失地の回復", independence: "独立・自治を求める戦争", civil_war: "内戦・反乱", alliance: "同盟に基づく参戦", defense: "防衛" });
+/** 同じ 2 国の再戦までの冷却（月）。古代ほど長く、近代は短い（疲弊・同盟の再編を挟む）。世界の年は 0=紀元前 3000 年ごろ */
+export const rematchCooldown = (year) => (year < 3000 ? 480 : year < 4500 ? 300 : year < 4850 ? 180 : 120);
+/** 戦争の最長（月）。古代 50 年・中世 25 年・近世 10 年・近代 6 年。参戦国が多い大戦（近代）は 20 年まで */
+export const warMaxMonths = (year, nStates = 2) => (year < 3000 ? 600 : year < 4500 ? 300 : year < 4850 ? 120 : nStates >= 6 ? 240 : 72);
 export const TREATY = Object.freeze({ nonaggression: { ja: "不可侵条約", months: 240 }, alliance: { ja: "同盟", months: 480 }, trade: { ja: "通商協定", months: 240 } });
 export const adjustRel = (a, b, d) => { const c = (v) => Math.max(-100, Math.min(100, v)); a.relations[b.id] = c((a.relations[b.id] ?? 0) + d); b.relations[a.id] = c((b.relations[a.id] ?? 0) + d); };
 export const treatyBetween = (civ, a, b, type) => civ.activeTreatyIds.map((i) => civ.treaties[i]).find((t) => t.active && (!type || t.type === type) && ((t.a === a.id && t.b === b.id) || (t.a === b.id && t.b === a.id)));
@@ -24,7 +32,7 @@ export function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "s
   makeEvent(civ, ids, { kind: "treaty_signed", title: `${a.name}と${b.name}が${TREATY[type].ja}を結んだ`, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance }); return t;
 }
 export function endTreaty(ctx, t, why, byId = null) {
-  const { civ, ids } = ctx; t.active = false; t.endedAt = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
+  const { civ, ids } = ctx; t.active = false; t.endedAt = civ.monthIndex; if (t.type === "nonaggression") for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
   makeEvent(civ, ids, { kind: "treaty_ended", title: `${TREATY[t.type].ja}が${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId === t.b ? "breaker" : "party" }], location: null, effects: byId ? [{ targetId: t.id, property: "broken_by", before: null, after: byId }] : [] });
 }
 /** 過去の同じ相手との戦争が、今回の宣戦の理由になっていれば「反応」として結ぶ（負けた側が仕掛けるなら根拠は strong） */
@@ -32,8 +40,18 @@ function revengeCauses(civ, atk, def) {
   const out = []; for (const ev of recentEventsFor(civ, [atk.id], ["war_ended"], 1200, 6)) { if (!ev.participants.some((p) => p.entityId === def.id)) continue; const w = civ.wars[ev.participants.find((p) => p.role === "war")?.entityId]; const lost = w && ((w.sides.a.includes(atk.id) && w.outcome === "defender_victory") || (w.sides.d.includes(atk.id) && w.outcome === "aggressor_victory")); out.push({ targetId: ev.eventId, relation: "reaction_to", basis: lost ? "strong" : "plausible" }); if (out.length >= 2) break; }
   return out;
 }
+export function warReasonFor(ctx, atk, def) { // v6.9.0: 状況から理由を選ぶ（決定的）
+  const { civ } = ctx, h = hashSeed(atk.id, def.id, civ.monthIndex >> 3) % 100, mi = civ.monthIndex;
+  if (atk.lastWarWith?.[def.id] != null && mi - atk.lastWarWith[def.id] < 1200) return "revenge";
+  const cA = civ.groups[atk.capitalGroupId], cB = civ.groups[def.capitalGroupId];
+  if (def.dynastyChangedAt != null && mi - def.dynastyChangedAt < 240 && h < 70) return "succession"; // 王朝が代わって間もない国への介入
+  if (cA && cB && dominant(cA).religionId && dominant(cB).religionId && dominant(cA).religionId !== dominant(cB).religionId && h < 45) return "religion";
+  if (cA && cB && h >= 45 && h < 75 && (atk.econ?.trade || def.econ?.trade)) return "trade_route";
+  return "conquest";
+}
 export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation" } = {}) {
-  const { civ, ids, rng } = ctx, id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 };
+  const { civ, ids, rng } = ctx; if (reason === "conquest") reason = warReasonFor(ctx, atk, def);
+  const id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 };
   civ.wars[id] = w; civ.activeWarIds.push(id); atk.warIds.push(id); def.warIds.push(id); adjustRel(atk, def, -40);
   const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance });
   w.declaredEvent = ev.eventId;
@@ -50,6 +68,7 @@ export function endWar(ctx, w, outcome, terms = null) {
   const atk = civ.states[w.aggressor], def = civ.states[w.defender]; const lead = outcome === "aggressor_victory" || (outcome === "negotiated" && w.score > 0);
   const gained = [], moved = []; const settled = ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null; // v6.1.0 M7: WCDE の世界では、占領した国家ごとに領土を移す
   if (settled) for (const x of settled) { gained.push(x.gid); moved.push(x); } else if (lead && atk?.alive) for (const gid of w.occupied) { const g = civ.groups[gid]; if (g && g.stateId === w.defender) { g.stateId = atk.id; gained.push(gid); } }
+  for (const x of w.sides.a) for (const y of w.sides.d) { const X = civ.states[x], Y = civ.states[y]; if (X && Y) { (X.lastWarWith ??= {})[y] = civ.monthIndex; (Y.lastWarWith ??= {})[x] = civ.monthIndex; } } // v6.9.0: 同じ 2 国の再戦を抑える
   for (const s of all) { s.lastWarEnd = civ.monthIndex; s.stability = Math.max(0, s.stability - 0.04); if (s.campaign?.warId === w.id) s.campaign = null; }
   if (atk && def) adjustRel(atk, def, -10);
   makeEvent(civ, ids, { kind: "war_ended", title: `${atk?.name ?? "?"}と${def?.name ?? "?"}の戦争が終わった（${{ aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: terms?.kind === "cession" ? "講和（占領地の割譲）" : "講和", state_dissolved: "国家の消滅" }[outcome] ?? outcome}）`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => { const m = moved.find((x) => x.gid === gid); return { targetId: gid, property: "stateId", before: m?.from ?? w.defender, after: m?.to ?? atk.id }; }), facts: { warId: w.id, outcome, terms: terms?.kind ?? null, stateId: gained.length ? (moved[0]?.to ?? atk?.id ?? null) : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });

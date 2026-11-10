@@ -12,6 +12,7 @@ import { createCulture, createLanguage, createReligion } from "../civ/culture.js
 import { makeEvent } from "../civ/events.js";
 import { POP, groupCapacity, reachable, cellCapacity, spawnGroup, territoryOf } from "../civ/population.js";
 import { TECHS, TECH, refreshCand, emergenceRate, pEmerge, u01, accel } from "../civ/tech.js";
+import { calibrateStart } from "../civ/calibration.js";
 import { initEco, stepEco, ecoMult } from "./domains/ecosystem.js";
 import { SPECIES, speciesOf } from "../civ/species.js";
 import { BIOMES, LAND_WATER } from "../civ/world-consts.js";
@@ -120,7 +121,7 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
   const baseRate = POP.growthPerMonth * 12, gate = gateYears(cfg.prehistory.neolithicYears ?? 10000);
   let Kworld = 0; for (const c of landCells) Kworld += 0.04 * (0.3 + ce.fertility[c]) * ce.areaKm2[c]; // 採集狩猟だけで世界が支えられる人口の目安
   civ.eco = initEco(world, cfg.laws, 0);
-  let worldPop = 120, lastEpoch = -1, epochs = 0; const cultRel = new Map(); stats.epochs = [];
+  let worldPop = 120, lastEpoch = -1, epochs = 0, lastEpEv = null; const cultRel = new Map(); stats.epochs = [];
   for (let step = 0; step < steps; step++) {
     const mi = start + Math.round(step * stepMonths); civ.monthIndex = mi; civ.date = fromMonthIndex(mi);
     const frac = step / steps, ice = glacialAt(frac, years, phase0, vol); if (ice > stats.glacialMax) stats.glacialMax = ice;
@@ -179,16 +180,18 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
     worldPop = total; stepEco(world, civ, order.map((i) => civ.groups[i]).filter(Boolean), stepMonths / 12, { ice, laws: cfg.laws });
     if (n > stats.peakGroups) stats.peakGroups = n;
     // 時代ごとの要約イベント（個々の分派・発見を全て記録するのではなく、集計を事実として残す）
-    const ep = Math.floor(frac * EPOCHS), epEnd = step === steps - 1 || Math.floor(((step + 1) / steps) * EPOCHS) !== ep; /* v6.3.2: 時代区分の記録は「その時代の終わり」の値（以前は始まりの値で、最後の時代が最終人口の 1/19 になっていた） */ if (epEnd && ep !== lastEpoch) { lastEpoch = ep; epochs++; let popEnd = 0, nEnd = 0; { const sub = {}; for (const id of order) { const g = civ.groups[id]; if (g) { sub[g.subsistence] = (sub[g.subsistence] ?? 0) + 1; popEnd += g.pop; nEnd++; } } stats.epochs.push({ ep, groups: nEnd, pop: Math.round(popEnd), x: Math.round(popEnd / Kworld * 100) / 100, ice: Math.round(ice * 100) / 100, sub }); } note("prehistory_epoch", `先史 第${epochs}期の概況（終わりの時点で 集団 ${nEnd}・人口 約${Math.round(popEnd)}）`, [], null).effects.push({ targetId: "world", property: "prehistory.pop", before: null, after: Math.round(popEnd) }); }
+    const ep = Math.floor(frac * EPOCHS), epEnd = step === steps - 1 || Math.floor(((step + 1) / steps) * EPOCHS) !== ep; /* v6.3.2: 時代区分の記録は「その時代の終わり」の値（以前は始まりの値で、最後の時代が最終人口の 1/19 になっていた） */ if (epEnd && ep !== lastEpoch) { lastEpoch = ep; epochs++; let popEnd = 0, nEnd = 0; { const sub = {}; for (const id of order) { const g = civ.groups[id]; if (g) { sub[g.subsistence] = (sub[g.subsistence] ?? 0) + 1; popEnd += g.pop; nEnd++; } } stats.epochs.push({ ep, groups: nEnd, pop: Math.round(popEnd), x: Math.round(popEnd / Kworld * 100) / 100, ice: Math.round(ice * 100) / 100, sub }); } { const ev = note("prehistory_epoch", `先史 第${epochs}期の概況（終わりの時点で 集団 ${nEnd}・人口 約${Math.round(popEnd)}）`, [], null); ev.effects.push({ targetId: "world", property: "prehistory.pop", before: null, after: Math.round(popEnd) }); lastEpEv = ev; } }
     if (onProgress && step % 20 === 0) onProgress(step, steps);
   }
   // --- 先史の終わり: 年 0 に合わせる。定住できる集団は集落を持つ（個別のイベントは作らず、集計に残す）
   civ.monthIndex = monthIndex(0, 1); civ.date = fromMonthIndex(civ.monthIndex);
+  calibrateStart(world, civ); // v6.8.0: 世界の人口を史実の起点（約 1,400 万人）へそろえる
   for (const id of order) { const g = civ.groups[id]; if (!g) continue; g.lastBudAt = civ.monthIndex - POP.budCooldown; g.noTargetUntil = undefined; g.famineAt = -999; g.cells = g.cells ?? territoryOf(world, g.cell); delete g.gen; delete g.noTargetUntil; delete g.capMult;
     if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop) { const sid = ids.next("settle"); let best = g.cell, bs = -1; for (const c of g.cells) { const s = ce.fertility[c] + (ce.river[c] ? 0.4 : 0) + (ce.coastDist[c] <= 1 ? 0.2 : 0); if (s > bs) { bs = s; best = c; } } civ.settlements[sid] = { id: sid, groupId: g.id, cell: best, foundedAt: civ.monthIndex - 60, pop: Math.round(g.pop * POP.settledShare), stage: stageOf(Math.round(g.pop * POP.settledShare)) }; g.settlementId = sid; g.settledMonths = POP.settleMinMonths; stats.settlements++; }
     g.bornAt = Math.min(g.bornAt, civ.monthIndex); }
   for (const id of order) { const g = civ.groups[id]; if (g && g.parent && !civ.groups[g.parent]) g.parent = null; } // 先史の集計の中で消えた親は、系譜として辿らない
   stats.groups = Object.keys(civ.groups).length; stats.pop = Math.round(Object.values(civ.groups).reduce((s, g) => s + g.pop, 0));
+  { const ep = stats.epochs[stats.epochs.length - 1]; if (ep && lastEpEv) { ep.pop = stats.pop; ep.x = Math.round(stats.pop / Math.max(1, ep.pop / Math.max(0.01, ep.x)) * 100) / 100; const e0 = lastEpEv.effects.find((e) => e.property === "prehistory.pop"); if (e0) e0.after = stats.pop; lastEpEv.title = lastEpEv.title.replace(/人口 約\d+/, `人口 約${stats.pop}`); } } // v6.8.0: 起点の人口の較正のあと、最後の時代区分の値も終わりの値にそろえる
   civ.wcde.prehistory = stats; civ.wcde.phase = "founding";
   return stats;
 }

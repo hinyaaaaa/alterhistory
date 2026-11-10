@@ -63,7 +63,7 @@ function occupancy(world, civ) { const occ = new Map(); for (const id in civ.gro
 export function groupCapacity(world, g, occ) { // 領域のセルを、面積予算が尽きるまで密度×面積で積算（ほかの集団と重なるセルは按分）
   let k = 0, left = cellBudgetKm2(world, g.cell, g.subsistence); const tm = densityMult(g);
   for (const c of ensureCells(world, g)) { if (left <= 0) break; const a = Math.min(world.cell.areaKm2[c], left); k += cellDensity(world, c, g.subsistence, g.knowledge) * a / (occ.get(c) ?? 1); left -= a; }
-  return k;
+  return k * tm; // v6.8.0: 技術による倍率を収容力に掛ける（旧版は計算するだけで掛けていなかった）
 }
 
 /** 起点から予算内で届く陸（航海があれば水も）の最短コスト。二分ヒープの Dijkstra（予算で範囲が限られる） */
@@ -93,6 +93,19 @@ export function bestTargets(world, civ, g, occ, limit = 3) {
 const stageOf = (p) => (p >= POP.cityMin ? "city" : p >= POP.townMin ? "town" : "village");
 const STAGE_JA = { village: "村", town: "町", city: "都市" };
 
+/** 土地の向き不向き（v6.8.0）。農耕に向く: 肥沃で、砂漠・ツンドラ・氷・高山でない。牧畜に向く: 草原・サバンナ・寒冷砂漠・ツンドラ */
+export const agriSuited = (world, c) => { const b = world.cell.biome[c]; return world.cell.fertility[c] > 0.3 && b !== BIOMES.HOT_DESERT && b !== BIOMES.COLD_DESERT && b !== BIOMES.TUNDRA && b !== BIOMES.ICE && b !== BIOMES.ALPINE && b !== BIOMES.TAIGA; };
+export const pastoralSuited = (world, c) => { const b = world.cell.biome[c]; return b === BIOMES.GRASSLAND || b === BIOMES.SAVANNA || b === BIOMES.COLD_DESERT || b === BIOMES.TUNDRA || (b === BIOMES.HOT_DESERT && world.cell.fertility[c] > 0.05); };
+/** 月ごとの転換の確率（NPC。プレイヤーは確率でなく、条件が整えば提案）。海辺の漁撈・遊牧は農耕へ移りにくい */
+export const SHIFT_P = Object.freeze({ forageToAgri: 0.02, forageToPastoral: 0.03, fishingToAgri: 0.003, pastoralToAgri: 0.002 });
+/** 転換先（なければ null）。乱数は rng()（プレイヤーは null のとき条件だけで判定する） */
+export function subsistenceShift(world, g, rng) {
+  const k = g.knowledge, cur = g.subsistence, roll = (p) => (g.player ? true : rng() < p);
+  if (cur !== "agriculture" && k.agriculture >= 1 && agriSuited(world, g.cell)) { const p = cur === "forage" ? SHIFT_P.forageToAgri : cur === "fishing" ? SHIFT_P.fishingToAgri : SHIFT_P.pastoralToAgri; if (roll(p)) return "agriculture"; }
+  if (cur === "forage" && k.herding >= 1 && pastoralSuited(world, g.cell) && roll(SHIFT_P.forageToPastoral)) return "pastoral";
+  return null;
+}
+
 /** 新しい集団を作る（分派・移住）。IDは ids から発行 */
 /** 小さな集団が持ち出せる技術: 人口が必要規模の半分以上で、前提もすべて持ち出せるもの（創始者効果。前提の欠けた上位技術は持たない） */
 function inheritTech(known, pop) { const out = {}; for (const t of TECHS_ORDER) if (known[t.key] != null && t.minPop * 0.5 <= pop && t.prereq.every((p) => out[p] != null)) out[t.key] = known[t.key]; return out; }
@@ -118,7 +131,7 @@ export function stepPopulation(ctx) {
   const { world, civ, ids, rng } = ctx, occ = occupancy(world, civ), mi = civ.monthIndex;
   for (const id of sortedGroupIds(civ)) {
     const g = civ.groups[id]; if (!g) continue;
-    const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1) * (ctx.ecoMult ? ctx.ecoMult(g) : 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ).growth * (civ.options.growthScale ?? 1);
+    const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1) * (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (civ.popTrim ?? 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ).growth * (civ.options.growthScale ?? 1);
     // 1) 人口（ロジスティック。収容力を超えると減る）。乱数は ±20%
     const noise = 0.8 + 0.4 * rng(); g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0)); // 収容力を超えた分は、飢えで早く減る
     if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) { g.famineAt = mi; makeEvent(civ, ids, { kind: "famine", title: "飢え", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck"], 36, 1), "caused_by", "strong"), effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] }); }
@@ -128,8 +141,9 @@ export function stepPopulation(ctx) {
     if (g.order?.type === "move" && mi >= g.order.arriveAt) { g.cell = g.order.to; g.cells = null; g.order = null; g.settledMonths = 0; g.settlementId = null; makeEvent(civ, ids, { kind: "group_moved", title: "集団の移動完了", participants: [{ entityId: g.id, role: "mover" }], location: { cell: g.cell } }); }
     g.pressure = pressure; // 技術（tech.js）の条件で使う
     const c = g.cell, ce = world.cell;
-    // 4) 生業の転換: 知識が満ちたら（NPC は実行、プレイヤーは提案）
-    const want = g.subsistence !== "agriculture" && g.knowledge.agriculture >= 1 ? "agriculture" : g.subsistence === "forage" && g.knowledge.herding >= 1 ? "pastoral" : null;
+    // 4) 生業の転換（v6.8.0: 土地に合うものだけが、時間をかけて転換する。農耕が広がったあとも、採集狩猟・牧畜・漁撈は土地に応じて長く残る）
+    //    旧版は、知識が満ちた集団がすべて農耕へ転換し、牧畜・採集狩猟が 0 になっていた。
+    const want = subsistenceShift(world, g, rng);
     if (want) { if (g.player) addProposal(civ, ids, g, "change_subsistence", { subsistence: want }); else { const before = g.subsistence; g.subsistence = want; makeEvent(civ, ids, { kind: "subsistence_changed", title: `生業の転換（${SUBSISTENCE[before]}→${SUBSISTENCE[want]}）`, participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "subsistence", before, after: want }] }); } }
     // 5) 定住（集落の成立）
     if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && g.settledMonths >= POP.settleMinMonths) { if (g.player) addProposal(civ, ids, g, "found_settlement", {}); else foundSettlement(world, civ, ids, g); }

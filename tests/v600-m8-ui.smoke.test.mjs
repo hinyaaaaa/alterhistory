@@ -17,15 +17,15 @@ const V = () => window.__v6, hub = (k) => click($(`[data-hub="${k}"]`)), tab = (
 for (let i = 0; i < 100 && !$("#new"); i++) await wait(20);
 window.__v6.S.fastStart = true; click($("#new")); for (let i = 0; i < 100 && !$("#gen"); i++) await wait(20); // v6.6.0: タイトル → 世界の設定
 
-await check("世界を生成 → 建国（世界に任せる）。骨格はモックと同じ: 左ハブ・パネル・地図・右（ニュースと時間）", async () => {
+await check("世界を生成 → 建国（世界に任せる）。骨格: 左ハブ・パネル・地図・コールアウト・時計（右のニュース欄・凡例は無い）", async () => {
   set($("#cells"), "3000"); set($("#seed"), "ui-smoke"); click($("#gen")); for (let i = 0; i < 400 && !$("#delegate"); i++) await wait(50); assert.ok($("#delegate")); click($("#delegate"));
-  assert.ok($("#hub") && $("#panel") && $("#mapwrap") && $("#right") && $("#callout") && $("#leg")); assert.deepEqual($$("#hub button").map((b) => b.dataset.hub), ["geo", "nations", "war", "diplo", "culture", "language", "religion", "chron", "stats", "search", "settings"]); assert.ok(!$("#panel").classList.contains("open"), "最初は地図が最大"); V().run({ type: "clock.setSpeed", speed: 0 });
+  assert.ok($("#hub") && $("#panel") && $("#mapwrap") && $("#callout") && $("#newscall") && $("#clock")); assert.ok(!$("#right") && !$("#leg"), "右のニュース欄・凡例は廃止"); assert.deepEqual($$("#hub button").map((b) => b.dataset.hub), ["geo", "nations", "war", "diplo", "culture", "language", "religion", "stats", "creator", "settings"]); assert.ok(!$("#panel").classList.contains("open"), "最初は地図が最大"); V().run({ type: "clock.setSpeed", speed: 0 });
 });
-await check("右の常設は『ニュースと時間』だけ（タブ・関連イベント専用パネルはない）。固定トップバーもない", () => { assert.ok($("#date").textContent.includes("年") && $$("[data-speed]").length >= 4 && $("#feed")); assert.ok(!$("#related") && !/関連イベント/.test($("#right").textContent) && !$("#topbar") && !$("#right [data-tab]")); });
+await check("日時と速度の操作がある。右のニュース欄・関連イベント・固定トップバーはない", () => { assert.ok($("#date").textContent.includes("年") && $$("[data-speed]").length >= 4); assert.ok(!$("#related") && !$("#topbar") && !$("#right") && !$("#feed")); });
 await check("時間を進めると日時・ニュースが更新され、世界が実際に進む", () => { const w = V().S.w, mi = w.civ.monthIndex; assert.ok(V().run({ type: "clock.run", months: 60 }).ok); V().render(); assert.ok(w.civ.monthIndex > mi); });
-await check("【地理】塗り 1 つ + 重ね複数を同時に選べ、項目をクリックすると凡例が開く。パネル切替で地図の位置・拡大がリセットされない", () => {
-  hub("geo"); assert.ok($("#panel").classList.contains("open")); const M = V().S.map; M.view = { x: -30, y: -20, k: 2.5 }; click($("#ly-cultures")); assert.ok(M.isOn("cultures") && M.isOn("states"), "塗りも独立に重ねられる"); click($("#ly-war")); assert.ok(M.isOn("war") && M.isOn("borders") && M.isOn("cities"), "重ねは複数"); click($("[data-preset=\"biome\"]")); assert.ok(M.isOn("biomes") && !M.isOn("states"), "プリセットで一括切替"); click($("[data-preset=\"politic\"]")); click($("#ly-war"));
-  click($("#ly-war").parentElement.querySelector(".g")); assert.ok(/破線/.test($("#pin").textContent), "凡例が展開"); hub("stats"); hub("geo"); assert.deepEqual([M.view.x, M.view.y, M.view.k], [-30, -20, 2.5], "地図の位置・倍率を保つ"); 
+await check("【地理】レイヤーを自由に重ねられる（塗り・記号・線）。プリセット・凡例は無い。パネル切替で地図の位置・拡大がリセットされない", () => {
+  hub("geo"); assert.ok($("#panel").classList.contains("open")); const M = V().S.map; M.view = { x: -30, y: -20, k: 2.5 }; click($("#ly-cultures")); assert.ok(M.isOn("cultures"), "塗りを選べる"); click($("#ly-war")); assert.ok(M.isOn("war") && M.isOn("cultures"), "重ねは複数");
+  assert.ok($$("[data-preset]").length === 0 && !$("#leg"), "プリセットと凡例は廃止"); hub("stats"); hub("geo"); assert.deepEqual([M.view.x, M.view.y, M.view.k], [-30, -20, 2.5], "地図の位置・倍率を保つ");
 });
 await check("【地図】クリックでコールアウトが出る（国家・都市・入口ボタン）", () => { const w = V().S.w, st = Object.values(w.civ.states).find((s) => s.alive); const M = V().S.map; M.onPick({ cell: 0, stateId: st.id, group: null, settlement: null, x: 100, y: 100 }); assert.ok($("#callout").classList.contains("on")); assert.ok($("#callout").textContent.includes(st.name)); assert.ok(/詳細/.test($("#callout").textContent)); });
 await check("【国家】一覧は成立が新しい順。クリックしても担当は変わらない。詳細に 5 タブ", async () => {
@@ -47,18 +47,10 @@ await check("【文化・言語・宗教】樹形図・詳細・名前の編集�
   for (const k of ["culture", "language", "religion"]) { hub(k); await wait(40); if (!$$(".lrow").length) { hub(k); await wait(40); } assert.ok($$(".lrow").length >= 1, k + " は一覧が先"); click($$(".lrow")[0]); assert.ok($("svg.tree") && $$(".tnode").length >= 1, k); assert.ok($("#ent-rename"), k + " の詳細"); }
   set($("#ent-name"), "試験の信仰"); click($("#ent-rename")); const id = V().S.entity.religion; assert.equal(V().S.w.civ.religions[id].name, "試験の信仰"); assert.ok((V().S.w.civ.wcde.edits ?? []).some((e) => e.targetId === id));
 });
-await check("【年表】客観イベント／創造主の介入／後世の認識を区別して閲覧でき、絞り込める（仮想スクロール）", async () => {
-  hub("chron"); await wait(60); assert.ok($$(".lrow").length > 0 && $$(".lrow").length <= 80, "描画は見える範囲だけ " + $$(".lrow").length); click($$(".lrow")[0]); assert.ok($("#evdetail").textContent.length > 10);
-  for (const t of ["creator", "interp"]) /* v6.1.0: AI の判断は保存しないので「AI の判断」の種類はない */ { click($(`[data-ttype="${t}"]`)); await wait(40); assert.ok($("#pin").textContent.length > 20, t); }
-  click($('[data-ttype="creator"]')); assert.ok(/直接編集|介入/.test(txt()), "創造主の記録を区別して表示");
-});
-await check("【検索】国家・文化・宗教・出来事などを横断して検索し、結果から移動できる", async () => {
-  hub("search"); const nm = Object.values(V().S.w.civ.states)[0].name.slice(0, 2); set($("#q"), nm); await wait(40); assert.ok($$(".lrow").length > 0); const st = $$(".lrow").find((r) => r.textContent.startsWith("国家")); click(st); assert.equal(V().S.hub, "nations");
-});
-await check("【世界設定】生成設定・暦の表示名・保存/読み込み/Obsidian・版（アプリと保存形式は別）・整合性・過去の閲覧", async () => {
+await check("【年表】【検索】のハブは無い（v6.3.0 で廃止。歴史は国家・戦争などの個別ページと Obsidian 用 Markdown で読む）", () => { assert.ok(!$('[data-hub="chron"]') && !$('[data-hub="search"]') && !$("#feed")); });
+await check("【世界設定】生成設定・暦の表示名・保存/読み込み/Obsidian・版（アプリと保存形式は別）・整合性", async () => {
   hub("settings"); assert.ok(/世界の種/.test(txt()) && /保存形式の版/.test(txt()) && /問題なし/.test(txt())); click($("#save")); for (let i = 0; i < 100 && !/書き出しました/.test($("#exp-msg").textContent); i++) await wait(100); assert.ok(blobs >= 1 && /書き出しました/.test($("#exp-msg").textContent)); assert.ok($("#load") && $("#obs"));
   set($("#epoch-name"), "試験暦"); click($("#epoch-name").nextSibling); assert.equal(V().S.w.civ.wcde.config.calendar.epochName, "試験暦");
-  const w = V().S.w, mi = w.civ.monthIndex; V().run({ type: "view.past", month: mi - 24 }); V().render(); assert.ok(/過去を閲覧中/.test($("#hint").textContent)); assert.equal(V().run({ type: "clock.run", months: 1 }).ok, false); hub("nations"); await wait(60); assert.ok(/過去（/.test(txt()), "過去の国家一覧"); assert.ok($$(".lrow").length > 0); assert.ok(V().S.map.owner().size > 0, "過去の領域を復元"); V().run({ type: "view.past", month: null }); V().render();
 });
 await check("重大ニュースで全画面が出て、OK まで時間が進まず、OK で停止前の速度へ自動復帰する", async () => {
   const w = V().S.w; w.civ.wcde.news.queue.length = 0; w.civ.wcde.time.hold = false; V().run({ type: "clock.setSpeed", speed: 3 }); const mine = Object.values(w.civ.states).filter((x) => x.alive).sort((a, b) => b.pop - a.pop)[0]; assert.ok(V().run({ type: "control.take", stateId: mine.id }).ok); /* 重大ニュースは、自国（担当国）に関する重大な出来事と世界大戦だけ */ const big = [{ entityId: mine.id, role: "state" }];

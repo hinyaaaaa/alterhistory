@@ -82,7 +82,7 @@ export function stepLanguage(ctx) {
   const { civ } = ctx; if (!civ.options.wcde) return;
   let nl = 0, nc = 0; for (const _ in civ.languages) nl++; for (const _ in civ.cultures) nc++;
   if (ctx._langSig === nl + ":" + nc) return; ctx._langSig = nl + ":" + nc;
-  for (const id in civ.languages) if (!civ.languages[id].phon) ensureProfile(civ, id);
+  for (const id in civ.languages) if (!civ.languages[id].phon && !civ.languages[id].phonDropped) ensureProfile(civ, id); // v6.9.0: 整理で音素表を落とした言語は作り直さない（必要なとき ensureProfile が作る）
   const byCulture = new Map(); for (const id in civ.languages) { const l = civ.languages[id]; if (l.cultureId && !byCulture.has(l.cultureId)) byCulture.set(l.cultureId, l); }
   for (const id in civ.cultures) { const c = civ.cultures[id]; if (c.nameFixed) continue; const lang = byCulture.get(id); if (!lang?.phon) continue; { const taken = new Set(Object.values(civ.cultures).map((x) => x.name)); let nm = "", k = 0; do { nm = word(rngOf(hashSeed(id, "cname", k)), lang.phon, 3 + (hashSeed(id, k) % 2)) + "人"; } while (taken.has(nm) && ++k < 12); c.name = nm; c.nameFixed = true; } /* v6.7.0: 文化は「〇〇人」に統一（重ならない名前） */ }
 }

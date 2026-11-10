@@ -47,7 +47,7 @@ export function evaluateFormation(ctx, seed) {
   if (s0 && (s0.stage === "town" || s0.stage === "city") && (world.cell.coastDist[seed.cell] <= 2 || world.cell.river[seed.cell])) return { via: "city_state", groupIds: free.filter((g) => dist.get(g.cell) <= 5).map((g) => g.id) };
   const ag = free.filter((g) => g.subsistence === "agriculture" && g.settlementId); if (ag.length >= 3 && sum(ag) >= 3000) return { via: "agri_union", groupIds: ag.map((g) => g.id) };
   const byRel = new Map(); for (const g of free) if (g.settlementId) { const r = dominant(g).religionId; if (r) (byRel.get(r) ?? byRel.set(r, []).get(r)).push(g); }
-  for (const [r, a] of byRel) if (a.length >= 2 && sum(a) >= 1500 && a.some((g) => g.id === seed.id)) return { via: "religious_polity", groupIds: a.map((g) => g.id) };
+  for (const [r, a] of byRel) if (a.length >= 3 && sum(a) >= 4000 && a.some((g) => g.id === seed.id) && (hashSeed(seed.id, ctx.civ.monthIndex >> 5) % 100) < 25) return { via: "religious_polity", groupIds: a.map((g) => g.id) };
   const no = free.filter((g) => g.subsistence === "pastoral"); if (no.length >= 3 && sum(no) >= 1500) return { via: "nomad_confederation", groupIds: no.map((g) => g.id) };
   const cult = new Set(free.filter((g) => g.pop >= 300).map((g) => dominant(g).cultureId));
   if (cult.size >= 2 && free.length >= 2) { for (const s of Object.values(civ.states)) { if (!s.alive || s.pop < sum(free) * 3) continue; const cg = civ.groups[s.capitalGroupId]; if (cg && dist.has(cg.cell)) return { via: "defense_league", groupIds: free.filter((g) => g.pop >= 300).map((g) => g.id), threat: s.formedEvent ?? s.id }; } }
@@ -60,6 +60,34 @@ const dissolve = (ctx, st, why) => {
   makeEvent(civ, ids, { kind: "state_dissolved", title: `${st.name}が${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, facts: { stateId: st.id }, causes: [...(st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : []), ...asCauses(recentEventsFor(civ, [st.id], ["war_ended"], 24, 1), "contributed_to", "plausible")] });
 };
 export const aliveStates = (civ) => Object.values(civ.states).filter((s) => s.alive);
+
+/** 世界に同時に存在できる国家の数の目安（v6.8.0）。起点の直後は最大 10、時代とともに増え、約 200 に近づく（史実: 初期の国家は少数で、時代とともに増える）。上限に届いたら新しい国家は生まれにくい（分離・自然形成とも） */
+export const stateCap = (civ) => 10 + 190 * (1 - Math.exp(-Math.max(0, civ.date.year - 100) / 1500));
+/** 国家の年あたりの崩壊の確率（v6.9.0）。年齢 a 年。120 年を超えると徐々に上がる（a=250: 0.12%, 500: 0.28%, 1000: 0.64%）。生存は 1000 年で約 6%、500 年で約 35%（他の崩壊・征服は別） */
+export const lifespanHazard = (age) => 0.0012 * Math.pow(Math.max(0, age) / 250, 1.2);
+/** 統合（v6.8.0）。大きな国が、小さな近隣の国を吸収する（征服以外の統合・併合の経路。文化が同じ・相手が不安定だと起きやすい）。年 1 回。プレイヤーの国は吸収しない */
+export function stepUnification(ctx, groupsByState) {
+  const { world, civ, ids, rng } = ctx, mi = civ.monthIndex, alive = aliveStates(civ).sort((a, b) => b.pop - a.pop);
+  const merged = new Set(), absorbers = new Set(); let done = 0;
+  groupsByState = new Map(); for (const id in civ.groups) { const g = civ.groups[id]; if (g.stateId) (groupsByState.get(g.stateId) ?? groupsByState.set(g.stateId, []).get(g.stateId)).push(g); } // 古い一覧を使わない（同じ回に分離・崩壊した国の集団を取りこぼさない）
+  for (const B of alive) {
+    if (merged.has(B.id) || done >= 2 || !B.alive) continue;
+    const gsB = groupsByState.get(B.id); if (!gsB?.length || B.stability < 0.45) continue;
+    const nbr = new Map(); for (const g of gsB) for (const o of neighborGroups(ctx, g)) { const og = civ.groups[o]; if (og?.stateId && og.stateId !== B.id) nbr.set(og.stateId, (nbr.get(og.stateId) ?? 0) + 1); }
+    for (const [aid] of [...nbr].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1))) {
+      const A = civ.states[aid]; if (!A?.alive || A.player || merged.has(aid) || absorbers.has(aid) || A.pop * 2.5 > B.pop || A.warIds.length || B.warIds.some((w) => civ.wars[w]?.sides.a.includes(aid) || civ.wars[w]?.sides.d.includes(aid))) continue;
+      const cA = civ.groups[A.capitalGroupId], cB = civ.groups[B.capitalGroupId], same = cA && cB && dominant(cA).cultureId === dominant(cB).cultureId;
+      const adm = stateCan(civ, B, "polity:empire") ? 1.5 : stateCan(civ, B, "polity:kingdom") ? 1.2 : 0.7;
+      const p = 0.03 * adm * (same ? 1 : 0.35) * (A.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
+      if (rng() >= p) continue;
+      const gsA = groupsByState.get(aid) ?? []; for (const g of gsA) g.stateId = B.id; gsB.push(...gsA); groupsByState.delete(aid); absorbers.add(B.id);
+      A.alive = false; A.dissolvedAt = mi; A.mergedInto = B.id; merged.add(aid); done++;
+      makeEvent(civ, ids, { kind: "state_merged", title: `${A.name}が${B.name}に統合された`, participants: [{ entityId: aid, role: "absorbed" }, { entityId: B.id, role: "state" }], location: cB ? { cell: cB.cell } : null, facts: { stateId: B.id, absorbed: aid, same: !!same }, causes: A.lastCrisisEvent ? [{ targetId: A.lastCrisisEvent, relation: "contributed_to", basis: "plausible" }] : [] });
+      B.interpDirty = true; break;
+    }
+  }
+}
+
 
 /** 月次（conflict フェーズの前半）: 国家の形成・吸収・集計・安定度・分離・崩壊。重い処理は3か月ごと */
 export function stepStates(ctx) {
@@ -78,23 +106,27 @@ export function stepStates(ctx) {
     st.treasury += pop * st.policy.tax * 0.0012 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi).length * 0.1)); st.army = pop * (0.005 + 0.12 * st.policy.mobilization) * (0.5 + st.stability) * (1 - (st.warLoss ?? 0));
     for (const k in st.sanctions) if (st.sanctions[k] <= mi) delete st.sanctions[k];
     // 指導者の継承
-    const ls = lifeScale(civ, st), age = mi - st.leader.bornAt; if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4000 * ls))) { const heir = st.leader.heir; st.interpDirty = true; st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, ...(st.leader.title ? { title: st.leader.title } : {}) }; if (st.offices) { const ro = st.offices.find((o) => o.id === OFFICE_RULER(st)); if (ro) ro.holder = { name: st.leader.name, look: null }; /* v6.4.0: 元首の役職の担当者は為政者と同じ人 */ } st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12)); makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); }
+    const ls = lifeScale(civ, st), age = mi - st.leader.bornAt; if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4000 * ls))) { const heir = st.leader.heir; st.interpDirty = true; st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, kin: heir || rng() < 0.8, ...(st.leader.title ? { title: st.leader.title } : {}) }; /* v6.9.0: 継承者がいなくても、多くは同じ家系の親族が立つ（王朝交代は少数） */ if (st.offices) { const ro = st.offices.find((o) => o.id === OFFICE_RULER(st)); if (ro) ro.holder = { name: st.leader.name, look: null }; /* v6.4.0: 元首の役職の担当者は為政者と同じ人 */ } st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12)); makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); }
     if (st.stability < 0.08 && before < 0.2) { dissolve(ctx, st, "崩壊した"); continue; }
-    if (st.stability < 0.3 && gs.length >= 3 && mi - st.lastCrisis > 60) { // 分離: 首都から遠い半分が独立
+    if (civ.options?.wcde && !st.player && mi % 12 === 0) { const age = (mi - st.formedAt) / 12; if (age > 120 && rng() < lifespanHazard(age)) { dissolve(ctx, st, "王朝の衰えとともに崩壊した"); continue; } } // v6.9.0: 国家の寿命は史実のように偏る（1000 年を超えるのは 1 割に満たない）
+    if (st.stability < 0.3 && gs.length >= 3 && mi - st.lastCrisis > 60 && !(civ.options?.wcde && aliveStates(civ).length >= stateCap(civ))) { // 分離: 首都から遠い半分が独立
       dists.sort((a, b) => b[0] - a[0]); const part = dists.slice(0, Math.max(1, Math.floor(gs.length / 2))).map((x) => x[1]).filter((g) => !g.player || st.player === false);
       if (part.length && part.length < gs.length) { st.lastCrisis = mi; const ev = makeEvent(civ, ids, { kind: "instability", title: `${st.name}で不満が高まる`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell }, causes: [...asCauses(recentEventsFor(civ, [st.id, ...gs.map((g) => g.id)], ["famine", "disaster_struck", "demand_raised"], 48, 2), "contributed_to", "plausible"), ...asCauses(recentEventsFor(civ, [st.id], ["war_declared", "war_ended", "leader_succession"], 36, 2), "contributed_to", "strong")] }); st.lastCrisisEvent = ev.eventId; const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id, cause: ev.eventId }); if (ns) { ns.relations[st.id] = -40; st.relations[ns.id] = -40; st.stability = Math.min(1, st.stability + 0.1); } }
     }
   }
+  if (mi % 12 === 0 && civ.options?.wcde) stepUnification(ctx, byState(ctx));
   // 2) 国家のない集団: 形成の評価と吸収（NPC は自動。プレイヤー集団は提案）
   for (const id in civ.groups) {
     const g = civ.groups[id]; if (g.stateId) continue;
     if (!(g.nextStateCheck <= mi) && g.nextStateCheck !== undefined) continue;
     g.nextStateCheck = mi + CHECK_EVERY + (hashSeed(id) % 6);
     if (g.pop < 300 || (g.subsistence === "forage")) continue;
+    const capFull = !g.player && civ.options?.wcde && aliveStates(civ).length >= stateCap(civ); // v6.8.0: 同時に存在できる国家の数の目安を超えたら、自然には国家が生まれない（周囲の国への加入は続く）
     if (!g.player) {
       const ns = [...neighborGroups(ctx, g)].map((o) => civ.groups[o]).filter((o) => o?.stateId && civ.states[o.stateId].alive), best = ns.reduce((a, o) => (!a || civ.states[o.stateId].pop > civ.states[a.stateId].pop ? o : a), null);
       if (best && civ.states[best.stateId].pop >= g.pop * 2 && rng() < 0.4) { g.stateId = best.stateId; makeEvent(civ, ids, { kind: "group_joined_state", title: `${civ.states[best.stateId].name}に加わった`, participants: [{ entityId: g.id, role: "group" }, { entityId: best.stateId, role: "state" }], location: { cell: g.cell }, facts: { stateId: best.stateId, cell: g.cell } }); continue; }
     }
+    if (capFull) continue;
     const f = evaluateFormation(ctx, g); if (!f) continue;
     if (g.player) addProposal(civ, ids, g, "form_state", f); else formState(ctx, f);
   }

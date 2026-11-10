@@ -21,6 +21,7 @@ export function treatyFeasible(civ, from, to, type) {
   const mi = civ.monthIndex;
   if (!from.alive || !to.alive) return "相手が存在しない"; if (atWarWith(civ, from, to)) return "交戦中の相手とは結べない";
   if (type === "trade") { if ((from.blockade ?? 0) > mi || (to.blockade ?? 0) > mi) return "封鎖中は通商協定を結べない"; if ((to.sanctions?.[from.id] ?? 0) > mi || (from.sanctions?.[to.id] ?? 0) > mi) return "制裁中は通商協定を結べない"; if (!(from.econ && to.econ)) return "経済の算出が済んでいない"; }
+  if (type === "nonaggression") { const n = (st) => civ.activeTreatyIds.reduce((c, i) => { const t = civ.treaties[i]; return c + (t.active && t.type === "nonaggression" && (t.a === st.id || t.b === st.id) ? 1 : 0); }, 0); if (n(from) >= 2 || n(to) >= 2) return "不可侵条約はすでに多く、これ以上は結べない"; if ((from.lastNapEnd ?? -9999) + 240 > mi || (to.lastNapEnd ?? -9999) + 240 > mi) return "不可侵条約が切れて間もない"; } // v6.9.0: 不可侵条約は国あたり 2 件まで、失効後 20 年は再締結しない
   if (type === "alliance" && (from.polity === "tribal" || to.polity === "tribal") && !(from.techAdopted?.record_keeping != null || from.techAdopted?.writing != null)) return "部族の連合には、約束を記す仕組み（記録）が要る";
   return null;
 }

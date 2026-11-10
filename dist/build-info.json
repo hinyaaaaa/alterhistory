@@ -1,10 +1,10 @@
 {
-  "version": "6.7.0",
-  "buildId": "3278c77bd474",
-  "sourceSha256": "3278c77bd4749af85e1212e15f62abf209c452dff936e31c8da691fcd1b6eb3e",
+  "version": "6.10.0",
+  "buildId": "4a7c029bceb1",
+  "sourceSha256": "4a7c029bceb199aa262a3120a4b51da11bdafc6fbed09d1b2095d0be1f694e19",
   "files": {
-    "app.js": "bd25d613e783c19715908115bfcefd28a62aef235fef24891f84c4e2ade6df47",
+    "app.js": "27b90264e7c67559827c711b5ec20afc33d3485190a20cd9caf8011b546a8d4a",
     "worldgen-preview.js": "0410e756f9fe4100ffcd3c839925b4e7e3078c8786ca1a470bde2f5febae9065",
-    "v6.js": "5c0364205734b469fc6a4289a71d21b640fc51675c1bd42099e6df1352d340ec"
+    "v6.js": "dcda3c780cc078801e0f4b3a3143eafa483440c9bacf1d7c2e766fede2a46de8"
   }
 }

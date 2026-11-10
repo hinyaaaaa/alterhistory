@@ -10,6 +10,7 @@ import { dominant } from "./cohorts.js";
 import { neighborGroups } from "./spatial.js";
 import { BIOMES, RES } from "./world-consts.js";
 import { hashSeed } from "./civ-state.js";
+import { lateBoost } from "./calibration.js";
 import { TREE, NODE, LANE, LANES, validateTree, layoutGrid, COLS } from "./techtree.js";
 
 export { LANES, validateTree, layoutGrid, COLS };
@@ -51,12 +52,15 @@ const learn = (g, key, mi, civ) => { g.tech.known[key] = mi; refreshCand(g, civ)
 const forget = (g, key, civ) => { delete g.tech.known[key]; refreshCand(g, civ); g.tech.lost[key] = true; if (BASE_KNOWLEDGE[key]) g.knowledge[BASE_KNOWLEDGE[key]] = 0; };
 /** 成立条件（規模・定住・地理）を満たすか。前提と未知は別に見る */
 export const conditionsMet = (w, g, t) => g.pop >= t.minPop && (!t.settled || !!g.settlementId) && (!t.cond || t.cond(w, g));
+/** 伝播（接触・交易・教育・併合）で学べるか（v6.8.0）。規模と定住だけを見る。資源・地形の条件（cond）は、独立した発生にだけ課す（技術は知れば、資源のない土地にも伝わる。旧版は同じ集団の領域に粘土と銅・錫が両方ないと青銅が成り立たず、鉄・産業へ続く系統が丸ごと止まった） */
+export const spreadable = (g, t) => g.pop >= t.minPop && (!t.settled || !!g.settlementId);
+const lateBoostOf = (civ, t) => (civ.options?.wcde && civ.date.year >= 0 ? lateBoost(civ.date.year, t.col) : 1);
 export const available = (w, g, t, civ = null) => g.tech.known[t.key] == null && prereqOf(civ, t).every((p) => g.tech.known[p] != null) && conditionsMet(w, g, t);
 
 // ---- 発生率（1年あたり）。画面の説明・先史の圧縮モデル・月次の tick が同じ関数を使う
 export const worldDepth = (civ) => Math.min(1, Object.keys(civ.techWorld).length / 45);
 /** 知識の蓄積による加速（世界で発見された技術が多いほど、発明は速い）と、世界人口の効果 */
-export const accel = (civ, worldPop) => Math.min(1.5, Math.max(0.2, worldPop / POP_REF)) * (0.35 + 1.65 * worldDepth(civ));
+export const accel = (civ, worldPop) => Math.min(1.5, Math.max(0.2, worldPop / POP_REF)) * (0.35 + 1.65 * worldDepth(civ)) * (civ.techPace ?? 1); // v6.8.0: techPace は世界の較正（calibration.js）が掛ける係数
 // 集団の知識から導く値（知っている技術の数・学習の効果の和）。知識が変わると refreshCand が cand の配列を作り直すので、その配列を鍵に使い回す（派生データ）
 const memo = new WeakMap();
 export function knownStats(g, civ = null) { if (!g.tech.cand) refreshCand(g, civ); const c = g.tech.cand; let m = memo.get(c); if (!m) { let n = 0, l = 0; for (const k in g.tech.known) { n++; const t = TECH[k]; if (t) l += fxOf(civ, t).learn ?? 0; } m = { n, l }; memo.set(c, m); } return m; }
@@ -72,7 +76,7 @@ export function emergenceRate(world, civ, g, t, env) {
   const knowF = 0.7 + 0.5 * Math.min(1, known / 30), contactF = 1 + 0.2 * Math.min(4, env.contact ?? 0);
   const urbanF = g.settlementId ? stageMult[civ.settlements[g.settlementId]?.stage] ?? 1 : 0.85, econF = (st ? 1.2 : 1) * (1 + (st?.econ?.techBoost ?? 0)), learnF = 1 + learnFx(g, civ, st);
   const compF = 1 + (st?.warIds?.length ? 0.12 : 0) + 0.06 * Math.min(3, env.rivals ?? 0);
-  return base * popF * knowF * contactF * urbanF * econF * learnF * compF * env.accel * (env.norm ?? 1);
+  return base * popF * knowF * contactF * urbanF * econF * learnF * compF * env.accel * (env.norm ?? 1) * lateBoostOf(civ, t); // v6.8.0: 目標の年を過ぎた技術は発生しやすい
 }
 /** 期間 years の間に、一度でも発生する確率 */
 export const pEmerge = (rate, years) => 1 - Math.exp(-rate * years);
@@ -103,10 +107,10 @@ export function stepTech(ctx) {
     // 2) 近隣からの伝播（接触）。同じ文化・同じ国家は伝わりやすい。件数だけ数え、個々の伝播は歴史資料にしない
     if (ns.length && u01(civ, "contact", period, id) < 0.09) {
       const o = civ.groups[ns[Math.floor(u01(civ, "contactpick", period, id) * ns.length)]];
-      if (o) { const cand = TECHS.filter((t) => o.tech.known[t.key] != null && k[t.key] == null && prereqOf(civ, t).every((p) => k[p] != null) && conditionsMet(world, g, t)); if (cand.length) { const t = cand[Math.floor(u01(civ, "contacttech", period, id) * cand.length)], same = (dominant(o).cultureId === d.cultureId ? 0.15 : 0) + (o.stateId && o.stateId === g.stateId ? 0.2 : 0); if (u01(civ, "contactacc", period, id) < 0.25 + same) resolve(civ, g, t.key, mi, "contact"); } }
+      if (o) { const cand = TECHS.filter((t) => o.tech.known[t.key] != null && k[t.key] == null && prereqOf(civ, t).every((p) => k[p] != null) && spreadable(g, t)); if (cand.length) { const t = cand[Math.floor(u01(civ, "contacttech", period, id) * cand.length)], same = (dominant(o).cultureId === d.cultureId ? 0.15 : 0) + (o.stateId && o.stateId === g.stateId ? 0.2 : 0); if (u01(civ, "contactacc", period, id) < 0.25 + same) resolve(civ, g, t.key, mi, "contact"); } }
     }
     // 3) 教育制度（国家が記録・文字・印刷・公教育を制度化していると、首都の集団の知識が国内へ広がる）。年に 1 回
-    if (st && mi % 12 === (hashSeed(id) % 12) && st.capitalGroupId !== id) { const cap = civ.groups[st.capitalGroupId], boost = learnBonus(civ, st); if (cap && boost > 0) { const cand = TECHS.filter((t) => cap.tech.known[t.key] != null && k[t.key] == null && prereqOf(civ, t).every((p) => k[p] != null) && conditionsMet(world, g, t)); if (cand.length && u01(civ, "teach", mi, id) < Math.min(0.6, boost * 2)) resolve(civ, g, cand[Math.floor(u01(civ, "teachpick", mi, id) * cand.length)].key, mi, "teaching"); } }
+    if (st && mi % 12 === (hashSeed(id) % 12) && st.capitalGroupId !== id) { const cap = civ.groups[st.capitalGroupId], boost = learnBonus(civ, st); if (cap && boost > 0) { const cand = TECHS.filter((t) => cap.tech.known[t.key] != null && k[t.key] == null && prereqOf(civ, t).every((p) => k[p] != null) && spreadable(g, t)); if (cand.length && u01(civ, "teach", mi, id) < Math.min(0.6, boost * 2)) resolve(civ, g, cand[Math.floor(u01(civ, "teachpick", mi, id) * cand.length)].key, mi, "teaching"); } }
     // 4) 喪失（人口が必要規模の半分を割ると、まれに知識が途切れる）。上位が先に失われる
     if (u01(civ, "loss", period, id) < 0.003) for (const t of TECHS) if (k[t.key] != null && t.minPop > 0 && g.pop < t.minPop * 0.5) {
       if (TECHS.some((u) => k[u.key] != null && prereqOf(civ, u).includes(t.key) && u.col >= t.col)) continue;
@@ -122,14 +126,14 @@ function tradeTransfer(ctx) {
   const { world, civ } = ctx, mi = civ.monthIndex;
   for (const tid of civ.activeTreatyIds) {
     const tr = civ.treaties[tid]; if (!tr || tr.type !== "trade") continue; const a = civ.states[tr.a], b = civ.states[tr.b]; if (!a?.alive || !b?.alive) continue;
-    for (const [from, to, tag] of [[a, b, "ab"], [b, a, "ba"]]) { const gf = civ.groups[from.capitalGroupId], gt = civ.groups[to.capitalGroupId]; if (!gf || !gt) continue; const cand = TECHS.filter((t) => gf.tech.known[t.key] != null && gt.tech.known[t.key] == null && prereqOf(civ, t).every((p) => gt.tech.known[p] != null) && conditionsMet(world, gt, t));
+    for (const [from, to, tag] of [[a, b, "ab"], [b, a, "ba"]]) { const gf = civ.groups[from.capitalGroupId], gt = civ.groups[to.capitalGroupId]; if (!gf || !gt) continue; const cand = TECHS.filter((t) => gf.tech.known[t.key] != null && gt.tech.known[t.key] == null && prereqOf(civ, t).every((p) => gt.tech.known[p] != null) && spreadable(gt, t));
       if (cand.length && u01(civ, "trade", mi, tid, tag) < 0.25) resolve(civ, gt, cand[Math.floor(u01(civ, "tradepick", mi, tid, tag) * cand.length)].key, mi, "trade"); }
   }
 }
 /** 併合した集団が、国家の首都の知識を学ぶ（併合・征服の経路）。actions.annex_group から呼ぶ */
 export function learnByAnnexation(ctx, state, group) {
   const { world, civ } = ctx, cap = civ.groups[state.capitalGroupId]; if (!cap) return 0; let n = 0, mi = civ.monthIndex;
-  for (const t of TECHS) if (cap.tech.known[t.key] != null && group.tech.known[t.key] == null && prereqOf(civ, t).every((p) => group.tech.known[p] != null) && conditionsMet(world, group, t) && u01(civ, "annex", mi, group.id, t.key) < 0.35) { resolve(civ, group, t.key, mi, "conquest"); n++; }
+  for (const t of TECHS) if (cap.tech.known[t.key] != null && group.tech.known[t.key] == null && prereqOf(civ, t).every((p) => group.tech.known[p] != null) && spreadable(group, t) && u01(civ, "annex", mi, group.id, t.key) < 0.35) { resolve(civ, group, t.key, mi, "conquest"); n++; }
   return n;
 }
 

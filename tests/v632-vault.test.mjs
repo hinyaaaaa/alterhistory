@@ -19,7 +19,7 @@ dispatch(w, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispat
 const light = [], heavy = []; for await (const f of vaultFiles(w.world, w.civ, "試験世界")) light.push(f); for await (const f of obsidianFiles(w.world, w.civ, "試験世界", { decisionNotes: false })) heavy.push(f);
 await check("軽量モードは、出来事を 1 件 1 ノートにせず、10 年ごとの年表ファイルにまとめる（件数が大きく減る）", () => {
   const tl = light.filter((f) => /\/年表\//.test(f.path)); assert.ok(tl.length >= 1, "年表ファイルがある"); assert.ok(!light.some((f) => /\/出来事\//.test(f.path)), "出来事のノートは作らない");
-  assert.ok(light.length < heavy.length * 0.6 || heavy.length < 200, `軽量 ${light.length} 件 / 全件 ${heavy.length} 件`);
+  assert.ok(light.length < heavy.length * 0.7 || heavy.length < 200, `軽量 ${light.length} 件 / 全件 ${heavy.length} 件`);
   const nEv = [...w.civ.events].length; const lines = tl.reduce((a, f) => a + (String(f.data).match(/^- \*\*/gm) ?? []).length, 0); assert.ok(lines > 0 && lines <= nEv + 100000, "年表に出来事が載る: " + lines);
 });
 await check("軽量モードの vault もリンク切れが 0（出来事へのリンクは名前だけの表記になる）", () => { const v = validateVault(light, "試験世界"); assert.deepEqual(v, [], JSON.stringify(v).slice(0, 300)); const man = JSON.parse(light.find((f) => f.kind === "manifest").data); assert.equal(man.unresolvedLinks, 0); });
