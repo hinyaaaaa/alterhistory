@@ -122,7 +122,7 @@ export function stepPolitics(ctx) {
     st.stability = clamp(st.stability + (legE - 0.5) * 0.04);
     if (st.policy.tax > P.taxCeiling) st.policy.tax = Math.round(P.taxCeiling * 1000) / 1000;
     // 政変: 正統性が低く、軍か民衆の支持が離れているとき（長い間隔を置く）
-    if (mi % 12 === 0 && !st.player) evolvePolity(ctx, st, P, legE); // v6.9.0: 技術・規模・社会の変化による、危機によらない政体の移り変わり
+    if (mi % 12 === 0 && !st.player && civ.wcde?.control?.stateId !== st.id) evolvePolity(ctx, st, P, legE); // 担当国家の政体は、プレイヤーが決める（AI は動かさない） // v6.9.0: 技術・規模・社会の変化による、危機によらない政体の移り変わり
     if (legE < 0.3 && mi - P.lastRegimeChange > 120 && ((hashSeed(st.id, mi) % 1000) / 1000) < 0.1 * (0.3 - legE) / 0.3 + 0.02) regimeChange(ctx, st);
   }
 }
@@ -135,6 +135,9 @@ export function evolvePolity(ctx, st, P, legE) {
   const can = (pl) => pl === "tribal" || stateCan(civ, st, POLITY_NEED[pl]), f = P.factions ?? {}, sup = (k) => f[k]?.support ?? 0.5, u = (hashSeed(st.id, mi, "evolve") % 10000) / 10000;
   const opts = []; // [到達先, 毎年の確率, 理由]
   const pol = st.polity, pop = st.pop, war = st.warIds.length > 0;
+  const size = byState(ctx).get(st.id)?.length ?? 0; // v6.11.0: 領土の広さ（集団の数）による大国化。広い国が公国のままにならず、大陸ごとに王国・帝国が育つ
+  if (pol === "chiefdom" && size >= 8 && can("kingdom")) opts.push(["kingdom", 0.06, "reform"]);
+  if (pol === "kingdom" && size >= 24 && can("empire")) opts.push(["empire", 0.04, "conquest"]);
   if (pol === "tribal" && can("chiefdom") && pop > 2000) opts.push(["chiefdom", 0.02, "reform"]);
   if (pol === "chiefdom" && can("kingdom") && pop > 10000) opts.push(["kingdom", 0.012, "reform"]);
   if (pol === "chiefdom" && can("theocracy") && sup("clergy") > 0.6) opts.push(["theocracy", 0.006, "religious_reform"]);
@@ -155,7 +158,7 @@ export function reformPolity(ctx, st, P, to, how) {
   const { civ, ids } = ctx, mi = civ.monthIndex, before = st.polity, oldName = st.name;
   const war = civ.events.slice(-80).reverse().find((e) => (e.kind === "war_declared" || e.kind === "war_ended" || e.kind === "uprising" || e.kind === "famine") && e.participants.some((p) => p.entityId === st.id));
   st.polity = to; P.lastRegimeChange = mi; st.stability = clamp(st.stability + (how === "revolution" || how === "military_takeover" ? -0.2 : how === "decline" ? -0.1 : 0.02)); P.fatigue = Math.max(0, (P.fatigue ?? 0) - 0.2);
-  const rt = before !== to ? retitle(st, to) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; }
+  const rt = before !== to ? retitle(st, to, civ.date.year) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; st.titleYear = rt.year; }
   if (how === "revolution" || how === "military_takeover") st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: how };
   makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}で${HOW_JA[how]}が起き、政体が変わった${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...(rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : [])], causes: war ? [{ targetId: war.eventId ?? war.id, relation: "caused_by", basis: "plausible" }] : [], facts: { stateId: st.id, polity: to, name: st.name, by: how }, provenance: "simulation" });
 }
@@ -170,7 +173,7 @@ export function regimeChange(ctx, st) {
   for (const k of Object.keys(f)) f[k].support = clamp(f[k].support + 0.15);
   if (who === "commoners" && f.nobility) f.nobility.support = clamp(f.nobility.support - 0.15); if (who === "military") f.military.support = clamp(f.military.support + 0.1);
   const how = who === "commoners" ? (before !== to ? "民衆の蜂起で政体が変わった" : "民衆の蜂起で政権が倒れた") : before !== to ? "軍が政権を握り政体が変わった" : "軍による宮廷の政変";
-  const oldName = st.name, rt = before !== to ? retitle(st, to) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; } // 政体が変わると、国号の称号も改まる（王国→帝国・共和国など）
+  const oldName = st.name, rt = before !== to ? retitle(st, to, civ.date.year) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; st.titleYear = rt.year; } // 政体が変わると、国号の称号も改まる（王国→帝国・共和国など）
   makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}で政変が起きた（${how}）${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...(rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : []), { targetId: st.id, property: "stability", before: null, after: Math.round(st.stability * 100) / 100 }], causes, facts: { stateId: st.id, polity: to, name: st.name, by: who }, provenance: "simulation" });
   // 政変で指導者が代わる（新しい指導者は別の家系。出自の勢力を記録する。人物の記録は people.js が事実として残す）
   st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: who };

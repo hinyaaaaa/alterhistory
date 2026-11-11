@@ -49,7 +49,7 @@ export function planUprising(w, { stateId, kind, cell }) {
 /** 新しい体制（政体・役職・為政者）を国家に適用する（革命・クーデターの成功） */
 function applyReform(ctx, st, reform) {
   const { civ } = ctx, r = REGIMES[reform.regime], core = r.core, before = { polity: st.polity, regime: regimeOf(st) };
-  st.regime = reform.regime; st.polity = core; st.interpDirty = true; const rt = retitle(st, core); if (rt) { st.name = rt.name; st.nameBase = rt.base; }
+  st.regime = reform.regime; st.polity = core; st.interpDirty = true; const rt = retitle(st, core, civ.date.year); if (rt) { st.name = rt.name; st.nameBase = rt.base; st.titleYear = rt.year; }
   st.leader = { name: String(reform.leader.name).trim(), bornAt: civ.monthIndex - Math.round(360 + leaderRng(civ, st, "reform")() * 120), heir: false, look: reform.leader.look ?? 0, title: officeJa(r.ruler) };
   st.offices = null; assignOffices(ctx, st, reform.offices); if (st.politics) st.politics.lastRegimeChange = civ.monthIndex;
   return before;

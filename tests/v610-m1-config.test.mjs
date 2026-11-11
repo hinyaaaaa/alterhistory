@@ -16,7 +16,7 @@ await check("シードが空・範囲外の値は、理由つきの誤りにな�
 await check("魔法・独自種族を指定しても、設定には残らない", () => { const { config } = normalizeWorldConfig({ worldSeed: "t", magic: { enabled: true }, species: [{ id: "orc" }] }); assert.equal("magic" in config, false); assert.equal("species" in config, false); });
 await check("同じシードからは同じ派生シード。別のシードなら別の世界", () => {
   const a = derivedSeeds(normalizeWorldConfig({ worldSeed: "s1" }).config), b = derivedSeeds(normalizeWorldConfig({ worldSeed: "s1" }).config); assert.deepEqual(a, b);
-  const SMALL = { resolution: { targetCells: 1500 } }, x = createNewWorld({ worldSeed: "c-a", spec: SMALL }), y = createNewWorld({ worldSeed: "c-b", spec: SMALL }); assert.notDeepEqual(Object.keys(x.w.civ.groups).length + ":" + x.w.civ.wcde.prehistory.firstTech.agriculture, Object.keys(y.w.civ.groups).length + ":" + y.w.civ.wcde.prehistory.firstTech.agriculture);
+  const SMALL = { resolution: { targetCells: 1500 } }, x = createNewWorld({ worldSeed: "c-a", spec: SMALL }), y = createNewWorld({ worldSeed: "c-b", spec: SMALL }); const sig = (r) => Object.keys(r.w.civ.groups).length + ":" + JSON.stringify(r.w.civ.wcde.prehistory.firstTech) + ":" + Array.from(r.w.world.cell.fertility.slice(0, 400), (v) => Math.round(v * 1000)).join(","); assert.notDeepEqual(sig(x), sig(y)); // v6.10.1: 成立条件の相対化で、農耕の初出が世界によらず同じ年になりうるため、地形も比べる
 });
 await check("新石器の時期を設定すると、農耕の初出が先史の終わりの前後で変わる（早い設定ほど早く現れうる）", () => {
   const SMALL = { resolution: { targetCells: 1500 } }, late = createNewWorld({ worldSeed: "c-n", spec: SMALL, prehistory: { neolithicYears: 6000 } }), early = createNewWorld({ worldSeed: "c-n", spec: SMALL, prehistory: { neolithicYears: 20000 } });

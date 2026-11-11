@@ -33,11 +33,17 @@ await check("継承者を立てると、指導者の子が実際に生まれ（�
   assert.ok(civ.events.some((e) => e.kind === "succession_by_heir" && e.participants.some((p) => p.entityId === heir.id && p.role === "successor")));
   assert.deepEqual(checkWcdeIntegrity(w.world, civ), []);
 });
-await check("継承者がいない交代（または政変）は別の家系になり、王朝交代が原因・前後の人物つきで残る", () => {
-  const s2 = alive().filter((s) => s.id !== st.id && !s.leader.heir && civ.figures[s.leaderFigureId]).sort((a, b) => b.pop - a.pop)[0]; const old = civ.figures[s2.leaderFigureId];
-  s2.leader.bornAt = civ.monthIndex - Math.round(3000 * lifeScale(civ, s2)); let n = 0; while (s2.leaderFigureId === old.id && s2.alive && n++ < 240) adv(1); assert.ok(s2.alive, "国家が滅びた");
-  const nf = civ.figures[s2.leaderFigureId]; assert.notEqual(nf.houseId, old.houseId); assert.equal(nf.parents, null); const ev = civ.events.filter((e) => e.kind === "dynasty_changed" && e.participants.some((p) => p.entityId === nf.id)); assert.equal(ev.length, 1);
-  assert.ok(ev[0].participants.some((p) => p.entityId === old.id && p.role === "predecessor")); assert.ok(old.diedAt != null);
+await check("継承者がいない交代（または政変）は、親族が立たなければ別の家系になり、王朝交代が原因・前後の人物つきで残る", () => {
+  // v6.9.0: 継承者がいなくても多くは同じ家系の親族が立つ（王朝交代は少数）。乱数の流れが変わっても通るよう、王朝交代が起きる国が見つかるまで順に試す
+  const cands = alive().filter((s) => s.id !== st.id && !s.leader.heir && civ.figures[s.leaderFigureId]).sort((a, b) => b.pop - a.pop).slice(0, 14); let done = false;
+  for (const s2 of cands) {
+    const old = civ.figures[s2.leaderFigureId]; if (!old) continue;
+    s2.leader.bornAt = civ.monthIndex - Math.round(3000 * lifeScale(civ, s2)); let n = 0; while (s2.leaderFigureId === old.id && s2.alive && n++ < 240) adv(1);
+    if (!s2.alive) continue; const nf = civ.figures[s2.leaderFigureId]; if (!nf || nf.id === old.id || nf.houseId === old.houseId) continue;
+    assert.equal(nf.parents, null); const ev = civ.events.filter((e) => e.kind === "dynasty_changed" && e.participants.some((p) => p.entityId === nf.id)); assert.equal(ev.length, 1);
+    assert.ok(ev[0].participants.some((p) => p.entityId === old.id && p.role === "predecessor")); assert.ok(old.diedAt != null); done = true; break;
+  }
+  assert.ok(done, "王朝交代が起きた国がある");
 });
 await check("政変で指導者が代わると、新しい家系の人物が記録され、政変の事件から辿れる", async () => {
   const { regimeChange, initPolitics } = await import("../js/core/wcde/domains/politics.js"); const s3 = alive().find((s) => civ.figures[s.leaderFigureId] && s.alive); const old = civ.figures[s3.leaderFigureId]; s3.politics ??= initPolitics(s3);

@@ -8,12 +8,16 @@
 import { makeEvent } from "./events.js";
 import { dominant } from "./cohorts.js";
 import { neighborGroups } from "./spatial.js";
-import { BIOMES, RES } from "./world-consts.js";
+import { BIOMES, RES, LAND_WATER } from "./world-consts.js";
 import { hashSeed } from "./civ-state.js";
 import { lateBoost } from "./calibration.js";
 import { TREE, NODE, LANE, LANES, validateTree, layoutGrid, COLS } from "./techtree.js";
 
 export { LANES, validateTree, layoutGrid, COLS };
+// v6.10.1: 成立条件を世界ごとに相対化する。乾燥・氷の多い世界では肥沃度が 0.45 を超える土地が 0、粘土も 0 セルになり、農耕・土器が永久に発見できず、技術が 27 個で止まっていた
+const worldCond = new WeakMap();
+const condInfo = (w) => { let v = worldCond.get(w); if (v) return v; const c = w.cell, n = w.mesh.cellCount, f = []; let present = 0; for (let i = 0; i < n; i++) if (c.landWater[i] === LAND_WATER.LAND) { f.push(c.fertility[i]); present |= c.resource[i]; } f.sort((a, b) => a - b); v = { fert: Math.min(0.45, f.length ? Math.max(0.01, f[Math.floor(f.length * 0.85)]) : 0.45), present }; worldCond.set(w, v); return v; };
+const hasRes = (w, g, mask) => (resMaskOf(w, g) & mask) !== 0 || (condInfo(w).present & mask) === 0; // 世界に 1 つも無い資源は、条件にしない
 const nearWater = (w, g) => w.cell.coastDist[g.cell] <= 2 || w.cell.river[g.cell];
 const maskCache = new WeakMap();
 /** 集団の領域にある資源（ビット和）。領域が変わらない限り使い回す（派生データ） */
@@ -22,13 +26,13 @@ export function resMaskOf(w, g) { const cells = g.cells ?? [g.cell], c = maskCac
 export const COND = Object.freeze({
   water: { ja: "水辺（海・川・湖）", f: (w, g) => nearWater(w, g) },
   coast: { ja: "海岸", f: (w, g) => w.cell.coastDist[g.cell] <= 1 },
-  fertile: { ja: "肥沃で水に近く、人口圧が高い土地", f: (w, g) => w.cell.fertility[g.cell] > 0.45 && nearWater(w, g) && g.pressure > 0.6 },
+  fertile: { ja: "肥沃で水に近く、人口圧が高い土地", f: (w, g) => w.cell.fertility[g.cell] >= condInfo(w).fert && nearWater(w, g) && g.pressure > 0.6 },
   grass: { ja: "草原・サバンナで人口圧が高い土地", f: (w, g) => (w.cell.biome[g.cell] === BIOMES.GRASSLAND || w.cell.biome[g.cell] === BIOMES.SAVANNA) && g.pressure > 0.7 },
-  clay: { ja: "粘土のある土地", f: (w, g) => (resMaskOf(w, g) & RES.CLAY) !== 0 },
-  cu_sn: { ja: "銅または錫のある土地", f: (w, g) => (resMaskOf(w, g) & (RES.COPPER | RES.TIN)) !== 0 },
-  iron: { ja: "鉄鉱のある土地", f: (w, g) => (resMaskOf(w, g) & RES.IRON) !== 0 },
-  coal: { ja: "石炭のある土地", f: (w, g) => (resMaskOf(w, g) & RES.COAL) !== 0 },
-  stone: { ja: "石材のある土地", f: (w, g) => (resMaskOf(w, g) & RES.STONE) !== 0 },
+  clay: { ja: "粘土のある土地", f: (w, g) => hasRes(w, g, RES.CLAY) },
+  cu_sn: { ja: "銅または錫のある土地", f: (w, g) => hasRes(w, g, RES.COPPER | RES.TIN) },
+  iron: { ja: "鉄鉱のある土地", f: (w, g) => hasRes(w, g, RES.IRON) },
+  coal: { ja: "石炭のある土地", f: (w, g) => hasRes(w, g, RES.COAL) },
+  stone: { ja: "石材のある土地", f: (w, g) => hasRes(w, g, RES.STONE) },
 });
 const tierOf = (col) => 1 + Math.floor(col / 3);
 /** 旧来の形（key・name・field・tier・prereq・minPop・settled・cond）に、新しい項目（E・caps・fx・col・lane）を足したもの。列（col）の昇順＝前提が必ず先 */

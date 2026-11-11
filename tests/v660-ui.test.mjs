@@ -11,7 +11,7 @@ window.structuredClone = structuredClone; Object.assign(window, { TextEncoder, T
 window.eval(bundle);
 const $ = (s) => doc.querySelector(s), $$ = (s) => [...doc.querySelectorAll(s)], click = (el) => el.dispatchEvent(new window.MouseEvent("click", { bubbles: true })), wait = (ms) => new Promise((r) => setTimeout(r, ms));
 for (let i = 0; i < 100 && !$("#new"); i++) await wait(20);
-await check("タイトル画面: 背景の絵・ロゴ・「新しい世界」・版の表示", () => { assert.ok($("#new") && $(".titlebg svg") && $(".titlebox .logo svg") && /v6\.10\.0/.test($(".ver").textContent)); });
+await check("タイトル画面: 背景の絵・ロゴ・「新しい世界」・版の表示", () => { assert.ok($("#new") && $(".titlebg svg") && $(".titlebox .logo svg") && /v6\.11\.0/.test($(".ver").textContent)); });
 await check("世界の設定: 世界名・時代区分を足せる。紀元の欄は空白が既定", async () => {
   window.__v6.S.fastStart = true; click($("#new")); for (let i = 0; i < 50 && !$("#gen"); i++) await wait(20);
   assert.ok($("#wname").value.length >= 2 && $("#epoch").value === ""); click($("#addera")); click($("#addera")); assert.equal($$(".eraRow").length, 2);

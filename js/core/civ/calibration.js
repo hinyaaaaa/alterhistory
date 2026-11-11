@@ -44,8 +44,13 @@ export function stepCalibration(ctx) {
   let pop = 0; for (const id in civ.groups) pop += civ.groups[id].pop;
   const target = targetPop(year) * (landKm2(world) / EARTH_LAND_KM2), r = pop / Math.max(1, target);
   let trim = civ.popTrim ?? 1;
-  if (r < POP_DEADBAND[0] || r > POP_DEADBAND[1]) trim = clamp(trim * Math.pow(1 / Math.max(0.05, r), 0.1), 0.3, 20);
+  // v6.10.1: 収容力は目標の 40 年先を見て先に広げる（近代の急な伸びに、増加率が追いつけず年 5000 で目標の約 56% だった）。上限も 20→60 倍へ
+  const ahead = targetPop(year + 40) * (landKm2(world) / EARTH_LAND_KM2), ra = pop / Math.max(1, ahead);
+  if (r < POP_DEADBAND[0] || r > POP_DEADBAND[1] || ra < 0.8) trim = clamp(trim * Math.pow(1 / Math.max(0.05, Math.min(r, ra * 1.2)), 0.1), 0.02, 60);
   civ.popTrim = Math.round(trim * 1000) / 1000;
+  // 目標を大きく下回るあいだは、増加率にも押し上げ（1〜2.5 倍）を掛ける。上回れば戻す
+  let push = civ.popPush ?? 1; const goalPush = r < 0.85 ? clamp(Math.pow(0.85 / Math.max(0.05, r), 0.8), 1, 2.5) : 1;
+  push = clamp(push + (goalPush - push) * 0.3, 1, 2.5); civ.popPush = Math.round(push * 1000) / 1000;
   const have = Object.keys(civ.techWorld).length, want = targetTechCount(year), q = (want + 3) / (have + 3);
   let pace = civ.techPace ?? 1;
   const goal = q >= TECH_DEADBAND[0] && q <= TECH_DEADBAND[1] ? 1 : clamp(Math.pow(q, 3), 0.5, 10);

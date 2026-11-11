@@ -39,7 +39,7 @@ await check("担当国家以外・担当が無いときの、プレイヤー命�
 });
 await check("担当していない国家（全て）は AI が動かす。担当国家は AI の計画の対象にならない", () => {
   const w = fresh(), mine = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: mine.id }); const m0 = mk(w); adm(w, 30);
-  const ds = aiActs(w, m0).map((e) => ({ actorId: actorOf(e) })).filter((d) => d.actorId); assert.ok(ds.length > 0); assert.ok(ds.every((d) => d.actorId !== mine.id), "担当国家に AI の判断がある"); assert.ok(new Set(ds.map((d) => d.actorId)).size > 3, "ほかの国家は AI が動く");
+  const all = aiActs(w, m0), ds = all.map((e) => ({ actorId: actorOf(e) })).filter((d) => d.actorId); assert.ok(ds.length > 0); /* v6.5.0: 担当国の技術の制度化は WCDE が自動で決める（仕様）。それ以外の AI の判断は担当国に入らない */ assert.ok(all.filter((e) => e.kind !== "tech_institutionalized" && !/doctrine/.test(e.kind)).every((e) => actorOf(e) !== mine.id), "担当国家に AI の判断がある"); assert.ok(new Set(ds.map((d) => d.actorId)).size > 3, "ほかの国家は AI が動く");
 });
 await check("担当を外す（創造主モード）と、全国家が AI で動く。担当国家が滅びたら自動で外れる", () => {
   const w = fresh(), s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); assert.ok(dispatch(w, { type: "control.release", authority: A.ADMIN }).ok); assert.equal(alive(w).filter((x) => x.player).length, 0); const actors = new Set(); for (let i = 0; i < 6; i++) { const m0 = mk(w); adm(w, 12); for (const e of aiActs(w, m0)) { const a = actorOf(e); if (a) actors.add(a); } } /* AI の行動は大きな出来事だけが記録に残る。特定の 1 国が 6 年のうちに必ず何かを記録するとは限らないので、「全国家が AI の対象」を、担当がいないこと＋複数の国家が AI で動くことで確かめる */

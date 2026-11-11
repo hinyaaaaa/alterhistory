@@ -190,19 +190,23 @@
   }
 
   // js/core/world/spec.js
-  var GENERATOR_VERSION = "4.0.0-alpha.1";
+  var GENERATOR_VERSION = "6.11.0";
   var WORLD_SPEC_SCHEMA = 1;
-  var ISLAND_MODES = Object.freeze({ few: 12, normal: 40, many: 90 });
+  var ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });
+  var LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);
   var DEFAULT_WORLD_SPEC = Object.freeze({
     schemaVersion: WORLD_SPEC_SCHEMA,
     generatorVersion: GENERATOR_VERSION,
     worldSeed: "",
     planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
     resolution: Object.freeze({ targetCells: 25e4 }),
-    landFraction: 0.3,
-    // v6.1.0: 0.5 → 0.3（地球の陸地率は約 29%）。海を渡る拡散を直したので、地球並みでも人類は全大陸に広がる
+    landFraction: 0.36,
+    // v6.11.0: 0.3 → 0.36（フィクションの地図のように、海をやや少なく）。下限 0.1・上限 0.9 は変わらない
     continentCountTarget: 6,
-    islandMode: "many",
+    islandMode: "normal",
+    // v6.11.0: 標準は少なめ〜普通（many も選べる）
+    layout: "uneven",
+    // v6.11.0: 大陸の配置パターン（uneven / cluster / super / split）
     plateCount: 14,
     initialGroups: 12,
     climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })
@@ -230,6 +234,7 @@
       landFraction: num2(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
       continentCountTarget: num2(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
       islandMode: i.islandMode ?? d.islandMode,
+      layout: i.layout ?? d.layout,
       plateCount: num2(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
       initialGroups: num2(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
       climateModel: {
@@ -242,6 +247,10 @@
     if (!(spec.islandMode in ISLAND_MODES)) {
       errors.push(`islandMode \u306F ${Object.keys(ISLAND_MODES).join("/")} \u306E\u3044\u305A\u308C\u304B`);
       spec.islandMode = d.islandMode;
+    }
+    if (!LAYOUT_KEYS.includes(spec.layout)) {
+      errors.push(`layout \u306F ${LAYOUT_KEYS.join("/")} \u306E\u3044\u305A\u308C\u304B`);
+      spec.layout = d.layout;
     }
     if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \u306F\u73FE\u5728 equirectangular \u306E\u307F");
     if (isObj(input) && input.schemaVersion !== void 0 && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} \u306F\u672A\u5BFE\u5FDC`);
@@ -339,6 +348,256 @@
     };
   }
 
+  // js/core/world/continents.js
+  var LAYOUTS = Object.freeze({ uneven: "\u4E0D\u5747\u7B49\u5206\u6563\u578B", cluster: "\u7FA4\u5CF6\u30FB\u30AF\u30E9\u30B9\u30BF\u30FC\u578B", super: "\u8D85\u5927\u9678\u578B", split: "\u5206\u88C2\u5927\u9678\u578B" });
+  var LAYOUT_HINTS = Object.freeze({
+    uneven: "\u5927\u9678\u3054\u3068\u306B\u5927\u304D\u3055\u3068\u8DDD\u96E2\u304C\u7570\u306A\u308B\uFF08\u6A19\u6E96\uFF09",
+    cluster: "\u8FD1\u63A5\u3059\u308B\u5927\u9678\u7FA4\u3068\u3001\u5E83\u3044\u6D77\u6D0B",
+    super: "\u4E00\u3064\u306E\u5DE8\u5927\u306A\u9678\u584A\u3068\u3001\u8907\u6570\u306E\u5C0F\u5927\u9678",
+    split: "\u5185\u6D77\u30FB\u6D77\u5CE1\u30FB\u534A\u5CF6\u304C\u591A\u3044\u3001\u8907\u96D1\u306A\u5730\u5F62"
+  });
+  var D2R = Math.PI / 180;
+  var TAU = 2 * Math.PI;
+  var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var smooth01 = (t) => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+  var dot2 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  var cross2 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  var unit = (v) => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  };
+  var angle = (a, b) => Math.acos(clamp(dot2(a, b), -1, 1));
+  var rotZ = (v, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]];
+  };
+  var fromLatLon = (lat, lon) => [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+  var tangentFrame = (v) => {
+    const a = Math.abs(v[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], t = unit(cross2(a, v));
+    return [t, cross2(v, t)];
+  };
+  var walk = (v, dirAngle, distance) => {
+    const [t, b] = tangentFrame(v), d = [t[0] * Math.cos(dirAngle) + b[0] * Math.sin(dirAngle), t[1] * Math.cos(dirAngle) + b[1] * Math.sin(dirAngle), t[2] * Math.cos(dirAngle) + b[2] * Math.sin(dirAngle)];
+    const cd = Math.cos(distance), sd = Math.sin(distance);
+    return unit([v[0] * cd + d[0] * sd, v[1] * cd + d[1] * sd, v[2] * cd + d[2] * sd]);
+  };
+  var latOf = (v) => Math.asin(clamp(v[2], -1, 1));
+  var randomPoint = (rc, latLimDeg) => {
+    const s = Math.sin(latLimDeg * D2R);
+    const z = rc.range(-s, s), t = rc.range(0, TAU), r = Math.sqrt(1 - z * z);
+    return [r * Math.cos(t), r * Math.sin(t), z];
+  };
+  function makeBlob(v, R, theta, s, ragA = 0.5) {
+    const [t02, b0] = tangentFrame(v), c = Math.cos(theta), sn = Math.sin(theta);
+    const t = [t02[0] * c + b0[0] * sn, t02[1] * c + b0[1] * sn, t02[2] * c + b0[2] * sn], b = cross2(v, t);
+    const reach = R * (1 + ragA * 0.6) * Math.max(1, s) * 1.02;
+    return { v, t, b, R, s, ragA, vx: v[0], vy: v[1], vz: v[2], tx: t[0], ty: t[1], tz: t[2], bx: b[0], by: b[1], bz: b[2], cosCut: Math.cos(Math.min(Math.PI, reach)) };
+  }
+  function blobValue(l, x, y, z, rag) {
+    const dp = x * l.vx + y * l.vy + z * l.vz;
+    if (dp < l.cosCut) return 0;
+    const d = Math.acos(dp > 1 ? 1 : dp);
+    let deff = d;
+    if (l.s !== 1) {
+      const pu = x * l.tx + y * l.ty + z * l.tz, pw = x * l.bx + y * l.by + z * l.bz, h2 = Math.hypot(pu, pw);
+      if (h2 > 1e-9) {
+        const cu = pu / h2, sw = pw / h2;
+        deff = d * Math.hypot(cu / l.s, sw * l.s);
+      }
+    }
+    return smooth01((1 - deff / (l.R * (1 + l.ragA * rag))) * 2.2);
+  }
+  var polarDamp = (z) => {
+    const a = Math.abs(z);
+    if (a < 0.848) return 1;
+    if (a < 0.9397) return 1 - 0.85 * smooth01((a - 0.848) / 0.0917);
+    if (a < 0.9703) return 0.15 - 0.13 * smooth01((a - 0.9397) / 0.0306);
+    return Math.max(0, 0.02 - 0.02 * smooth01((a - 0.9703) / 0.02));
+  };
+  function planContinents(spec, islandCount, salt = 0) {
+    const seed = salt ? `${spec.worldSeed}#plan${salt}` : spec.worldSeed, K = spec.continentCountTarget, lf = spec.landFraction, layout = spec.layout in LAYOUTS ? spec.layout : "uneven";
+    const rc = makeRng(seed, "continents"), rs = makeRng(seed, "continent-shape"), ri = makeRng(seed, "islands");
+    const raw = [];
+    for (let i = 0; i < K; i++) raw.push(layout === "cluster" ? Math.exp(rc.range(-0.6, 0.5)) : layout === "split" ? Math.exp(rc.range(-0.5, 0.5)) : Math.exp(rc.range(-0.95, 0.75)));
+    raw.sort((a, b) => b - a);
+    if (layout === "super" && K > 1) {
+      let rest = 0;
+      for (let i = 1; i < K; i++) rest += raw[i];
+      raw[0] = rest * 1.15;
+    } else if (layout === "super") raw[0] = 1;
+    const sum = raw.reduce((s, x) => s + x, 0), share = raw.map((x) => x / sum);
+    const radius = share.map((s) => clamp(Math.acos(clamp(1 - 2 * lf * s * 1.1, -1, 1)), 4 * D2R, 80 * D2R));
+    const centers = [];
+    const sepOk = (p, j, f2) => centers.every((c, i) => angle(p, c) >= (radius[i] + radius[j]) * f2);
+    const place = (j, latLim, nearProb, f0) => {
+      for (let tries = 0; tries < 900; tries++) {
+        const f2 = Math.max(0.62, f0 - 0.4 * (tries / 900));
+        let p;
+        if (centers.length && rc() < nearProb) {
+          const q2 = rc.int(0, centers.length - 1);
+          p = walk(centers[q2], rc.range(0, TAU), (radius[q2] + radius[j]) * rc.range(f2 + 0.05, f2 + 0.55));
+        } else p = randomPoint(rc, latLim);
+        if (Math.abs(latOf(p)) > latLim * D2R) continue;
+        if (sepOk(p, j, f2)) return p;
+      }
+      return randomPoint(rc, latLim);
+    };
+    if (layout === "cluster") {
+      const nC = K <= 3 ? 1 : K <= 5 ? 2 : 3, cc = [];
+      let bestSep = -1, bestSet = null;
+      for (let trial = 0; trial < 800; trial++) {
+        const pts = [];
+        for (let i = 0; i < nC; i++) pts.push(randomPoint(rc, 38));
+        let sep = 9;
+        for (let i = 0; i < nC; i++) for (let j = i + 1; j < nC; j++) sep = Math.min(sep, angle(pts[i], pts[j]));
+        if (sep > bestSep) {
+          bestSep = sep;
+          bestSet = pts;
+        }
+      }
+      for (const p of bestSet) cc.push(p);
+      const groupOf = [];
+      for (let j = 0; j < K; j++) groupOf.push(j % nC);
+      for (let j = 0; j < K; j++) {
+        const g = groupOf[j], mates = [];
+        for (let i = 0; i < j; i++) if (groupOf[i] === g) mates.push(i);
+        if (!mates.length) {
+          centers.push(cc[g]);
+          continue;
+        }
+        let p = null;
+        for (let tries = 0; tries < 600 && !p; tries++) {
+          const q2 = mates[rc.int(0, mates.length - 1)], f2 = Math.max(1.2, 1.55 - 0.3 * (tries / 600));
+          const c = walk(centers[q2], rc.range(0, TAU), (radius[q2] + radius[j]) * rc.range(f2, f2 + 0.3));
+          if (Math.abs(latOf(c)) < 55 * D2R && sepOk(c, j, 1.2)) p = c;
+        }
+        centers.push(p ?? place(j, 55, 0.5, 0.9));
+      }
+    } else if (layout === "super") {
+      centers.push(randomPoint(rc, 28));
+      for (let j = 1; j < K; j++) {
+        let p = null;
+        for (let tries = 0; tries < 900 && !p; tries++) {
+          const c = randomPoint(rc, 55), f2 = Math.max(0.7, 1.3 - 0.6 * (tries / 900));
+          if (angle(c, centers[0]) >= (radius[0] + radius[j]) * f2 && sepOk(c, j, 0.95)) p = c;
+        }
+        centers.push(p ?? randomPoint(rc, 55));
+      }
+    } else if (layout === "split") {
+      centers.push(randomPoint(rc, 35));
+      for (let j = 1; j < K; j++) centers.push(place(j, 48, 0.92, 1.2));
+    } else {
+      for (let j = 0; j < K; j++) centers.push(place(j, 52, 0.33, 1));
+    }
+    const continents = [];
+    for (let j = 0; j < K; j++) {
+      const v = centers[j], r = radius[j], big = share[j] >= 0.7 / K, blobs = [], seas = [], plateSeeds = [v];
+      const nLobes = layout === "split" ? rs.int(3, 5) : big ? rs.int(2, 4) : rs.int(1, 2);
+      blobs.push(makeBlob(v, r * rs.range(0.72, 0.95), rs.range(0, TAU), rs.range(1, 1.7)));
+      for (let i = 1; i < nLobes; i++) {
+        const dist = r * rs.range(0.4, 0.95), c = walk(v, rs.range(0, TAU), dist);
+        blobs.push(makeBlob(c, r * rs.range(0.38, 0.7), rs.range(0, TAU), rs.range(1, 2.5)));
+        if (big && i <= 2 && share[j] > 0.2) plateSeeds.push(c);
+      }
+      const pSea = layout === "super" && j === 0 ? 1 : layout === "split" ? 0.9 : layout === "uneven" ? 0.55 : 0.45;
+      const nSea = rs() < pSea && big ? layout === "super" && j === 0 ? rs.int(2, 3) : layout === "split" ? rs.int(1, 2) : 1 : 0;
+      for (let i = 0; i < nSea; i++) seas.push(makeBlob(walk(v, rs.range(0, TAU), r * rs.range(0.1, 0.36)), r * rs.range(0.13, 0.24), rs.range(0, TAU), rs.range(1, 2), 0.25));
+      const nGulf = big ? layout === "split" ? rs.int(2, 4) : rs.int(0, 2) : layout === "split" ? rs.int(0, 1) : 0;
+      for (let i = 0; i < nGulf; i++) {
+        const a = rs.range(0, TAU), c = walk(v, a, r * rs.range(0.66, 0.95));
+        seas.push(makeBlob(c, r * rs.range(0.1, 0.17), a + Math.PI / 2 * 0 + rs.range(-0.4, 0.4), rs.range(2.6, 3.6), 0.2));
+      }
+      continents.push({ v, r, share: share[j], blobs, seas, plateSeeds });
+    }
+    const islands = [];
+    for (let i = 0; i < islandCount; i++) {
+      const kind = ri(), w = ri.range(0.5, 0.95);
+      let v, rr = ri.range(1.2, 5.2) * D2R, polar = false;
+      if (kind < 0.55) {
+        let q2 = 0, pick2 = ri();
+        for (let k = 0; k < K; k++) {
+          pick2 -= share[k];
+          if (pick2 <= 0) {
+            q2 = k;
+            break;
+          }
+        }
+        v = walk(centers[q2], ri.range(0, TAU), radius[q2] * ri.range(1, 1.75));
+        if (Math.abs(latOf(v)) > 72 * D2R) v = randomPoint(ri, 60);
+      } else if (kind < 0.82) {
+        v = randomPoint(ri, 62);
+        for (let t = 0; t < 40 && centers.some((c, k) => angle(v, c) < radius[k] * 1.15); t++) v = randomPoint(ri, 62);
+      } else {
+        const lat = ri.range(62, 82) * D2R * (ri() < 0.5 ? -1 : 1);
+        v = fromLatLon(lat, ri.range(-Math.PI, Math.PI));
+        polar = true;
+        rr = ri.range(1.8, 5.5) * D2R;
+      }
+      islands.push({ v, r: rr, w, polar, cosCut: Math.cos(rr * 1.5) - 1e-9 });
+    }
+    return { layout, continents, islands, share, radius };
+  }
+  function makeFields(plan) {
+    const B = [], S3 = [];
+    for (const c of plan.continents) {
+      for (const b of c.blobs) B.push(b);
+      for (const s of c.seas) S3.push(s);
+    }
+    const I = plan.islands;
+    const fieldAt = (x, y, z, rag) => {
+      let f2 = 0;
+      for (let i = 0; i < B.length; i++) {
+        const t = blobValue(B[i], x, y, z, rag);
+        if (t > f2) f2 = t;
+      }
+      if (f2 > 0) {
+        let carve = 0;
+        for (let i = 0; i < S3.length; i++) {
+          const t = blobValue(S3[i], x, y, z, rag);
+          if (t > carve) carve = t;
+        }
+        f2 *= 1 - Math.min(1, carve * 1.25);
+        f2 *= polarDamp(z);
+      }
+      return f2;
+    };
+    const islandAt = (x, y, z) => {
+      let f2 = 0;
+      for (let i = 0; i < I.length; i++) {
+        const o = I[i], dp = x * o.v[0] + y * o.v[1] + z * o.v[2];
+        if (dp < o.cosCut) continue;
+        const d = Math.acos(dp > 1 ? 1 : dp);
+        if (d < o.r * 1.5) {
+          const t = clamp(1 - d / (o.r * 1.5), 0, 1);
+          f2 = Math.max(f2, o.w * t * t * (3 - 2 * t));
+        }
+      }
+      return f2;
+    };
+    return { fieldAt, islandAt };
+  }
+  function chooseSeam(fieldAt, samples) {
+    let bestPsi = 0, bestCost = Infinity;
+    for (let k = 0; k < 120; k++) {
+      const psi = k / 120 * TAU;
+      let cost = 0;
+      for (const s of samples) {
+        const q2 = rotZ(s.p, psi), f2 = fieldAt(q2[0], q2[1], q2[2], s.rag);
+        if (f2 > 0.03) cost += s.weight * (0.4 + f2);
+      }
+      if (cost < bestCost - 1e-9) {
+        bestCost = cost;
+        bestPsi = psi;
+      }
+    }
+    return { psi: bestPsi, cost: bestCost };
+  }
+  function seamSampleSpecs() {
+    const out = [];
+    for (let lat = -72; lat <= 72; lat += 3) for (const [dl, w] of [[-9, 1], [-4.5, 2], [0, 3], [4.5, 2], [9, 1]]) out.push({ lat: lat * D2R, lon: Math.PI + dl * D2R, weight: w });
+    return out;
+  }
+
   // js/core/world/worldgen.js
   var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
   var BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });
@@ -346,12 +605,12 @@
   var SOILS = Object.freeze({ NONE: 0, ROCK: 1, SAND: 2, LOAM: 3, CLAY: 4, VOLCANIC: 5, PERMAFROST: 6, ALLUVIAL: 7, PODZOL: 8, BLACK_EARTH: 9 });
   var RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 });
   var RES_NAMES = Object.freeze({ 1: "\u9244", 2: "\u9285", 4: "\u932B", 8: "\u91D1", 16: "\u77F3\u70AD", 32: "\u5869", 64: "\u6728\u6750", 128: "\u6F01\u5834", 256: "\u77F3\u6750", 512: "\u7C98\u571F", 1024: "\u5B9D\u77F3" });
-  var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   var smooth = (t) => {
-    t = clamp(t, 0, 1);
+    t = clamp2(t, 0, 1);
     return t * t * (3 - 2 * t);
   };
-  var D2R = Math.PI / 180;
+  var D2R2 = Math.PI / 180;
   var MinHeap = class {
     constructor(cap) {
       this.k = new Float64Array(cap);
@@ -389,6 +648,8 @@
       return top;
     }
   };
+  var coarseCache = null;
+  var coarseMesh = () => coarseCache ?? (coarseCache = buildSphereMesh(frequencyForCells(2400)));
   var Cancelled = class extends Error {
   };
   var makeStager = (onProgress, signal, timings) => (name, label, fn) => {
@@ -409,7 +670,7 @@
     const lat = new Float32Array(V), lon = new Float32Array(V), areaKm2 = new Float32Array(V);
     stage("G1_derive", "\u7DEF\u5EA6\u7D4C\u5EA6\u30FB\u9762\u7A4D", () => {
       for (let c = 0; c < V; c++) {
-        lat[c] = Math.asin(clamp(X[3 * c + 2], -1, 1));
+        lat[c] = Math.asin(clamp2(X[3 * c + 2], -1, 1));
         lon[c] = Math.atan2(X[3 * c + 1], X[3 * c]);
         areaKm2[c] = cellArea(mesh, c) * R * R;
       }
@@ -419,21 +680,74 @@
     const nSeed = (name) => hashString(`${seed}::noise::${name}`);
     const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);
     const volcanic = new Float32Array(V);
+    let seamInfo = { psi: 0, cost: 0 };
+    const X3 = (c) => X[3 * c], Y3 = (c) => X[3 * c + 1];
+    const modeLevel = spec.islandMode === "many" ? 2 : spec.islandMode === "normal" ? 1 : 0;
     stage("G2_plates", "\u30D7\u30EC\u30FC\u30C8\u30FB\u5927\u9678\u306E\u6982\u5F62", () => {
       const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];
       const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);
       const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));
-      for (let c = 0; c < V; c++) {
-        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
+      const warpPt = (x, y, z) => {
         const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;
         const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);
-        wx[c] = px / l;
-        wy[c] = py / l;
-        wz[c] = pz / l;
+        return [px / l, py / l, pz / l];
+      };
+      for (let c = 0; c < V; c++) {
+        const w = warpPt(X[3 * c], X[3 * c + 1], X[3 * c + 2]);
+        wx[c] = w[0];
+        wy[c] = w[1];
+        wz[c] = w[2];
       }
+      const ragF = makeFbm3(nSeed("coast"), 3, 2.2), ragAt = (x, y, z) => (ragF(x, y, z) - 0.5) * 2;
+      const samples = seamSampleSpecs().map((s) => {
+        const p0 = [Math.cos(s.lat) * Math.cos(s.lon), Math.cos(s.lat) * Math.sin(s.lon), Math.sin(s.lat)], w = warpPt(p0[0], p0[1], p0[2]);
+        return { p: w, rag: ragAt(w[0], w[1], w[2]), weight: s.weight };
+      });
+      const coarse = coarseMesh(), CV = coarse.cellCount, CX = coarse.centerXYZ, cw = new Float32Array(3 * CV), crag = new Float32Array(CV);
+      for (let c = 0; c < CV; c++) {
+        const w = warpPt(CX[3 * c], CX[3 * c + 1], CX[3 * c + 2]);
+        cw[3 * c] = w[0];
+        cw[3 * c + 1] = w[1];
+        cw[3 * c + 2] = w[2];
+        crag[c] = ragAt(w[0], w[1], w[2]);
+      }
+      const judge = (pl, si) => {
+        const { fieldAt: fieldAt2 } = makeFields(pl), ca = Math.cos(si.psi), sa = Math.sin(si.psi), raw = new Float32Array(CV);
+        for (let c = 0; c < CV; c++) raw[c] = fieldAt2(cw[3 * c] * ca - cw[3 * c + 1] * sa, cw[3 * c] * sa + cw[3 * c + 1] * ca, cw[3 * c + 2], crag[c]);
+        const sorted = Float32Array.from(raw).sort(), lvl = sorted[Math.min(CV - 1, Math.floor(CV * (1 - spec.landFraction)))], isS = new Uint8Array(CV);
+        for (let c = 0; c < CV; c++) isS[c] = raw[c] > lvl ? 0 : 1;
+        const { sizes } = landmasses(CV, coarse.neighborOffsets, coarse.neighborIds, isS), total = sizes.reduce((a, b) => a + b, 0) || 1, big = sizes.filter((n3) => n3 >= total * 0.03).sort((a, b) => b - a);
+        const K = spec.continentCountTarget, lo = spec.layout === "uneven" ? Math.max(1, K - 2) : spec.layout === "super" ? Math.max(1, K - 3) : Math.max(1, Math.ceil(K / 2)), maxShare = spec.layout === "super" ? 0.72 : K === 1 ? 1 : 0.5;
+        let bad3 = 0;
+        if (big.length < lo) bad3 += (lo - big.length) * 2;
+        if (big.length > K + 2) bad3 += big.length - K - 2;
+        if (big[0] / total > maxShare) bad3 += (big[0] / total - maxShare) * 10;
+        return bad3 + si.cost * 0.02;
+      };
+      let plan = null, bestBad = Infinity, bestSeam = null;
+      for (let salt = 0; salt < 14 && bestBad > 0.2; salt++) {
+        const pl = planContinents(spec, ISLAND_MODES[spec.islandMode], salt), si = chooseSeam(makeFields(pl).fieldAt, samples), bad3 = judge(pl, si);
+        if (bad3 < bestBad) {
+          bestBad = bad3;
+          plan = pl;
+          bestSeam = si;
+        }
+      }
+      seamInfo = bestSeam;
+      const psi = seamInfo.psi;
+      plan.islands = plan.islands.filter((o) => {
+        const a = rotZ(o.v, -psi), lon2 = Math.atan2(a[1], a[0]);
+        return Math.abs(Math.PI - Math.abs(lon2)) > o.r * 1.6 + 5 * D2R2;
+      });
+      const { fieldAt, islandAt } = makeFields(plan);
       const rp = makeRng(seed, "plates"), P2 = spec.plateCount, seeds = [], omega = [];
+      const contSeeds = [];
+      for (const ct of plan.continents) for (const v of ct.plateSeeds) contSeeds.push(rotZ(v, -psi));
+      const nCont = Math.min(contSeeds.length, Math.max(1, P2 - 3)), isContPlate = new Uint8Array(P2);
       for (let p = 0; p < P2; p++) {
-        seeds.push(rp.unitVec());
+        const rnd = rp.unitVec();
+        seeds.push(p < nCont ? contSeeds[p] : rnd);
+        if (p < nCont) isContPlate[p] = 1;
         const w = rp.unitVec(), sp = rp.range(0.4, 1.6);
         omega.push([w[0] * sp, w[1] * sp, w[2] * sp]);
       }
@@ -452,9 +766,9 @@
         const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
         return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x];
       };
-      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V);
+      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V), srcCrust = new Float32Array(V);
       for (let c = 0; c < V; c++) {
-        let best = 0, bestAbs = 0;
+        let best = 0, bestAbs = 0, crust = 0.55;
         const vc = vel(plate[c], c);
         for (let k = off[c]; k < off[c + 1]; k++) {
           const j = nb[k];
@@ -469,14 +783,17 @@
           if (Math.abs(conv) > bestAbs) {
             bestAbs = Math.abs(conv);
             best = conv;
+            const a = isContPlate[plate[c]], b = isContPlate[plate[j]];
+            crust = a && b ? 1.15 : a || b ? 0.95 : 0.55;
           }
         }
         if (bestAbs > 0) {
           isSrc[c] = 1;
           srcStrength[c] = best;
+          srcCrust[c] = crust;
         }
       }
-      const widthCells = Math.max(2, 5 * D2R / spacingRad), maxD = Math.ceil(widthCells * 3);
+      const widthCells = Math.max(2, 5 * D2R2 / spacingRad), maxD = Math.ceil(widthCells * 3);
       const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q2 = new Int32Array(V);
       let qh = 0, qt = 0;
       for (let c = 0; c < V; c++) if (isSrc[c]) {
@@ -496,70 +813,45 @@
           }
         }
       }
-      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4);
+      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4), arcF = makeFbm3(nSeed("arc"), 3, 6);
       for (let c = 0; c < V; c++) {
         if (dist[c] < 0) continue;
         const s = srcStrength[from[c]], f2 = Math.exp(-((dist[c] / widthCells) ** 2));
         const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3);
         if (s > 0) {
-          mountain[c] = clamp(s / 1.2, 0, 1.3) * f2 * mod;
+          mountain[c] = clamp2(s / 1.2, 0, 1.3) * f2 * mod * srcCrust[from[c]];
           volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;
-        } else rift[c] = clamp(-s / 1.2, 0, 1) * f2;
+        } else rift[c] = clamp2(-s / 1.2, 0, 1) * f2;
       }
-      const rc = makeRng(seed, "continents"), K = spec.continentCountTarget;
-      const thetaLand = Math.acos(clamp(1 - 2 * spec.landFraction / K, -1, 1));
-      let bestSet = null, bestSep = -1;
-      for (let trial = 0; trial < 3e3; trial++) {
-        const pts = [];
-        for (let i = 0; i < K; i++) pts.push(rc.unitVec());
-        let sep = 9;
-        for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));
-        if (sep > bestSep) {
-          bestSep = sep;
-          bestSet = pts;
-        }
-      }
-      const cs = bestSet.map((v) => {
-        const r = thetaLand * rc.range(0.8, 0.95);
-        return { v, r, cosCut: Math.cos(Math.min(Math.PI, r * 1.1)) - 1e-9 };
-      });
-      const isl = [];
-      const NI = ISLAND_MODES[spec.islandMode];
-      for (let i = 0; i < NI; i++) {
-        const v = rc.unitVec(), r = rc.range(1.2, 5.5) * D2R, w = rc.range(0.45, 0.95);
-        isl.push({ v, r, w, cosCut: Math.cos(r * 1.5) - 1e-9 });
-      }
-      const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];
       for (let c = 0; c < V; c++) {
-        let f2 = 0;
-        for (const o of cs) {
-          const dp = dotp(c, o.v);
-          if (dp < o.cosCut) continue;
-          const d = Math.acos(clamp(dp, -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1);
-          f2 = Math.max(f2, t * t * (3 - 2 * t));
+        const ca = Math.cos(psi), sa = Math.sin(psi), x = wx[c] * ca - wy[c] * sa, y = wx[c] * sa + wy[c] * ca, z = wz[c];
+        const g = fieldAt(x, y, z, ragAt(wx[c], wy[c], wz[c])), i = islandAt(x, y, z);
+        continent[c] = Math.max(g, i);
+      }
+      for (let c = 0; c < V; c++) {
+        const dseam = Math.PI - Math.abs(Math.atan2(Y3(c), X3(c)));
+        if (dseam < 12 * D2R2) continent[c] *= smooth((dseam - 4 * D2R2) / (8 * D2R2));
+      }
+      if (modeLevel > 1) for (let c = 0; c < V; c++) {
+        if (continent[c] > 0.2 || !(mountain[c] > 0.62) || isContPlate[plate[c]]) continue;
+        const n3 = arcF(X[3 * c] * 5, X[3 * c + 1] * 5, X[3 * c + 2] * 5), th = 0.64;
+        if (n3 > th) {
+          continent[c] = Math.max(continent[c], 0.5 + 0.35 * (n3 - th) / 0.2);
+          volcanic[c] = Math.max(volcanic[c], 0.6);
         }
-        for (const o of isl) {
-          const dp = dotp(c, o.v);
-          if (dp < o.cosCut) continue;
-          const d = Math.acos(clamp(dp, -1, 1));
-          if (d < o.r * 1.5) {
-            const t = clamp(1 - d / (o.r * 1.5), 0, 1);
-            f2 = Math.max(f2, o.w * t * t * (3 - 2 * t));
-          }
-        }
-        continent[c] = f2;
       }
       const rh = makeRng(seed, "hotspots");
-      for (let h2 = 0; h2 < 6; h2++) {
-        const start2 = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;
-        const dot2 = start2[0] * dirv[0] + start2[1] * dirv[1] + start2[2] * dirv[2];
-        let t = [dirv[0] - dot2 * start2[0], dirv[1] - dot2 * start2[1], dirv[2] - dot2 * start2[2]];
+      for (let h2 = 0; h2 < [1, 2, 5][modeLevel]; h2++) {
+        const start2 = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R2;
+        const dot3 = start2[0] * dirv[0] + start2[1] * dirv[1] + start2[2] * dirv[2];
+        let t = [dirv[0] - dot3 * start2[0], dirv[1] - dot3 * start2[1], dirv[2] - dot3 * start2[2]];
         const tl = Math.hypot(...t) || 1;
         t = t.map((x) => x / tl);
         for (let i = 0; i < count; i++) {
-          const a = i * step, p = [start2[0] * Math.cos(a) + t[0] * Math.sin(a), start2[1] * Math.cos(a) + t[1] * Math.sin(a), start2[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));
+          const a = i * step, p = [start2[0] * Math.cos(a) + t[0] * Math.sin(a), start2[1] * Math.cos(a) + t[1] * Math.sin(a), start2[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R2 * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));
+          if (Math.abs(Math.PI - Math.abs(Math.atan2(p[1], p[0]))) < 5 * D2R2 || Math.abs(p[2]) > 0.94) continue;
           for (let c = 0; c < V; c++) {
-            const d = Math.acos(clamp(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));
+            const d = Math.acos(clamp2(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));
             if (d < rad * 2) {
               const g = Math.exp(-((d / rad) ** 2));
               continent[c] = Math.max(continent[c], amp * g * 0.9);
@@ -575,8 +867,19 @@
       const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);
       for (let c = 0; c < V; c++) {
         const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];
-        const land = smooth((cf - 0.25) / 0.45);
-        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) + mountain[c] * (0.03 + 0.97 * land) * 1.5 - rift[c] * 0.22;
+        const land = smooth((cf - 0.25) / 0.45), nz = 0.2 + 0.8 * smooth(cf / 0.3);
+        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz + mountain[c] * (0.03 + 0.97 * land) * 1.5 * (0.15 + 0.85 * smooth(cf / 0.3)) - rift[c] * 0.22;
+        {
+          const pl = (Math.abs(lat[c]) - 72 * D2R2) / (12 * D2R2);
+          if (pl > 0) raw[c] -= 0.22 * smooth(pl);
+        }
+        {
+          const dseam = Math.PI - Math.abs(Math.atan2(y, x));
+          if (dseam < 12 * D2R2) {
+            const m = smooth((dseam - 4 * D2R2) / (8 * D2R2));
+            raw[c] = raw[c] * m - 0.25 * (1 - m);
+          }
+        }
       }
       const sorted = Float32Array.from(raw).sort();
       seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];
@@ -647,7 +950,7 @@
     });
     const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };
     const populations = stage("G7_groups", "\u521D\u671F\u4EBA\u53E3\u96C6\u56E3", () => placeInitialGroups(gctx, spec, 0));
-    const stats = stage("G8_stats", "\u7D71\u8A08", () => computeStats({ V, off, nb, landWater, isSea: isSea2, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
+    const stats = stage("G8_stats", "\u7D71\u8A08", () => computeStats({ lon, V, off, nb, landWater, isSea: isSea2, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
     const world = {
       spec: { ...spec, generatorVersion: GENERATOR_VERSION },
       mesh,
@@ -666,7 +969,7 @@
   }
   function upwindOf(mesh, lat, lon, c) {
     const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
-    const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;
+    const la = Math.abs(lat[c]) / D2R2, east = la < 30 ? -1 : la < 60 ? 1 : -1;
     const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);
     const wx = -east * ex, wy = -east * ey;
     let best = -2, bj = -1;
@@ -686,14 +989,14 @@
   }
   function moistureStep(cx, c) {
     const u = upOf(cx, c);
-    return clamp(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);
+    return clamp2(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);
   }
   function precipAt(cx, c) {
-    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
+    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R2, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
     const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];
     let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);
     if (!sea && cx.elevation[c] > 3500) p *= 0.6;
-    return clamp(p, 0, 6e3);
+    return clamp2(p, 0, 6e3);
   }
   function computeHydrology(h2, members2 = null) {
     const { mesh, elevation, isSea: isSea2, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h2;
@@ -830,10 +1133,10 @@
     soil[c] = sl;
     if (land) {
       const t = temp[c], p = precip[c];
-      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);
-      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);
-      const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3e3, 0, 1);
-      fertility[c] = clamp(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);
+      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp2(1 - (t - 26) / 12, 0.2, 1);
+      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp2(1 - (p - 2200) / 3500, 0.5, 1);
+      const slope = 1 - clamp2(relief / 700, 0, 0.9), alt = 1 - clamp2(Math.max(0, e - 1500) / 3e3, 0, 1);
+      fertility[c] = clamp2(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);
       capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];
     } else {
       fertility[c] = 0;
@@ -849,7 +1152,7 @@
     const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
     for (const { c } of cand3) {
       if (out.length >= spec.initialGroups) break;
-      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });
+      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R2, lon: lon[c] / D2R2, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });
     }
     return out;
   }
@@ -903,12 +1206,19 @@
     }
     const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea2), total = sizes.reduce((s, x) => s + x, 0);
     const continents = sizes.filter((s) => s >= total * 0.03), islands = sizes.filter((s) => s < total * 0.03);
+    let seamN = 0, seamLand = 0;
+    if (a.lon) {
+      for (let c = 0; c < V; c++) if (Math.abs(a.lon[c]) > 175 * D2R2) {
+        seamN++;
+        if (!isSea2[c]) seamLand++;
+      }
+    }
     const biomeCounts = new Array(14).fill(0);
     for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;
     let tl = 0, nl = 0, th = 0, nh = 0;
     for (let c = 0; c < V; c++) {
       if (isSea2[c]) continue;
-      const la = Math.abs(lat[c]) / D2R;
+      const la = Math.abs(lat[c]) / D2R2;
       if (la < 20) {
         tl += temp[c];
         nl++;
@@ -918,6 +1228,8 @@
       }
     }
     return {
+      seamLandFraction: seamN ? seamLand / seamN : 0,
+      layout: a.spec?.layout ?? null,
       cells: V,
       landFraction: landCells / V,
       lakeFraction: lake / V,
@@ -1874,7 +2186,17 @@
   var kanjiNum = (n2) => n2 < 10 ? KN[n2] : n2 < 20 ? "\u5341" + KN[n2 % 10] : n2 < 100 ? KN[Math.floor(n2 / 10)] + "\u5341" + KN[n2 % 10] : String(n2);
   var FORMS = ["\u9023\u90A6\u5171\u548C\u56FD", "\u795E\u8056\u738B\u56FD", "\u9023\u5408\u738B\u56FD", "\u90E8\u65CF\u9023\u5408", "\u5171\u548C\u56FD", "\u6559\u56E3\u56FD", "\u795E\u8056\u56FD", "\u9996\u9577\u56FD", "\u9023\u90A6", "\u9023\u5408", "\u540C\u76DF", "\u9023\u76DF", "\u5E1D\u56FD", "\u738B\u56FD", "\u516C\u56FD", "\u4FAF\u56FD", "\u6C57\u56FD", "\u6559\u56FD", "\u90E8\u65CF", "\u5E02\u56FD", "\u671D", "\u56FD"];
   var byBase = (base, arr) => arr[hashSeed(String(base), "form") % arr.length];
-  function stateForm(polity, via = null, base = "") {
+  var NAME_ERA = Object.freeze({ republicFrom: 2300, federationFrom: 4300, khanateFrom: 2900, leagueFrom: 1500 });
+  function stateForm(polity, via = null, base = "", year = null) {
+    const f2 = rawForm(polity, via, base);
+    if (year == null) return f2;
+    if (year < NAME_ERA.leagueFrom && /連邦|連合|同盟|連盟|共和国|教団国|汗国/.test(f2)) return polity === "republic" || polity === "federation" || via === "defense_league" ? "\u540C\u76DF" : byBase(base, ["\u738B\u56FD", "\u9996\u9577\u56FD"]);
+    if (year < NAME_ERA.republicFrom && f2 === "\u5171\u548C\u56FD") return "\u540C\u76DF";
+    if (year < NAME_ERA.federationFrom && (f2 === "\u9023\u90A6" || f2 === "\u9023\u90A6\u5171\u548C\u56FD" || f2 === "\u9023\u5408\u738B\u56FD")) return f2 === "\u9023\u5408\u738B\u56FD" ? "\u738B\u56FD" : "\u540C\u76DF";
+    if (year < NAME_ERA.khanateFrom && f2 === "\u6C57\u56FD") return "\u90E8\u65CF\u9023\u5408";
+    return f2;
+  }
+  function rawForm(polity, via, base) {
     switch (polity) {
       case "kingdom":
         return byBase(base, ["\u738B\u56FD", "\u738B\u56FD", "\u738B\u56FD", "\u671D"]);
@@ -1898,11 +2220,11 @@
     for (const f2 of FORMS) if (n2.length > f2.length && n2.endsWith(f2)) return n2.slice(0, -f2.length);
     return n2;
   }
-  var composeStateName = (base, polity, via) => base + stateForm(polity, via, base);
-  function retitle(st2, polity) {
+  var composeStateName = (base, polity, via, year = null) => base + stateForm(polity, via, base, year);
+  function retitle(st2, polity, year = null) {
     if (!st2.nameBase && !FORMS.some((f2) => String(st2.name).endsWith(f2))) return null;
-    const base = baseOfState(st2), next = composeStateName(base, polity, st2.via);
-    return next !== st2.name ? { base, name: next } : null;
+    const base = baseOfState(st2), next = composeStateName(base, polity, st2.via, year);
+    return next !== st2.name ? year == null ? { base, name: next } : { base, name: next, year } : null;
   }
   var REGNAL = /* @__PURE__ */ new Set(["chiefdom", "kingdom", "empire", "theocracy"]);
   var stripOrd = (n2) => String(n2).replace(/[0-9０-９]+世$/, "");
@@ -1996,7 +2318,9 @@
       if (rng() < 0.03) {
         const ns = [...neighborGroups(ctx, g)];
         if (!ns.length) continue;
-        const o = civ6.groups[ns[Math.floor(rng() * ns.length)]], od = dominant(o);
+        const o = civ6.groups[ns[Math.floor(rng() * ns.length)]];
+        if (!o) continue;
+        const od = dominant(o);
         if (od.cultureId !== d.cultureId) {
           const key = [d.cultureId, od.cultureId].sort().join("|");
           if (!civ6.contacts[key]) {
@@ -2136,14 +2460,14 @@
     const late = (year - (COL_TARGET_YEAR[col] ?? 5e3)) / 150;
     return late <= 0 ? 1 : Math.min(60, 1 + late * late * 2);
   };
-  var clamp2 = (x, a, b) => x < a ? a : x > b ? b : x;
+  var clamp3 = (x, a, b) => x < a ? a : x > b ? b : x;
   var POP_DEADBAND = [0.7, 1.4];
   var TECH_DEADBAND = [0.85, 1.15];
   function calibrateStart(world, civ6) {
     let pop = 0;
     for (const id in civ6.groups) pop += civ6.groups[id].pop;
     if (pop <= 0) return 1;
-    const f2 = clamp2(targetPop(0) * (landKm2(world) / EARTH_LAND_KM2) / pop, 0.25, 20);
+    const f2 = clamp3(targetPop(0) * (landKm2(world) / EARTH_LAND_KM2) / pop, 0.25, 20);
     for (const id in civ6.groups) civ6.groups[id].pop *= f2;
     civ6.popTrim = Math.round(f2 * 1e3) / 1e3;
     return f2;
@@ -2157,12 +2481,17 @@
     for (const id in civ6.groups) pop += civ6.groups[id].pop;
     const target = targetPop(year) * (landKm2(world) / EARTH_LAND_KM2), r = pop / Math.max(1, target);
     let trim = civ6.popTrim ?? 1;
-    if (r < POP_DEADBAND[0] || r > POP_DEADBAND[1]) trim = clamp2(trim * Math.pow(1 / Math.max(0.05, r), 0.1), 0.3, 20);
+    const ahead = targetPop(year + 40) * (landKm2(world) / EARTH_LAND_KM2), ra = pop / Math.max(1, ahead);
+    if (r < POP_DEADBAND[0] || r > POP_DEADBAND[1] || ra < 0.8) trim = clamp3(trim * Math.pow(1 / Math.max(0.05, Math.min(r, ra * 1.2)), 0.1), 0.02, 60);
     civ6.popTrim = Math.round(trim * 1e3) / 1e3;
+    let push2 = civ6.popPush ?? 1;
+    const goalPush = r < 0.85 ? clamp3(Math.pow(0.85 / Math.max(0.05, r), 0.8), 1, 2.5) : 1;
+    push2 = clamp3(push2 + (goalPush - push2) * 0.3, 1, 2.5);
+    civ6.popPush = Math.round(push2 * 1e3) / 1e3;
     const have = Object.keys(civ6.techWorld).length, want = targetTechCount(year), q2 = (want + 3) / (have + 3);
     let pace = civ6.techPace ?? 1;
-    const goal = q2 >= TECH_DEADBAND[0] && q2 <= TECH_DEADBAND[1] ? 1 : clamp2(Math.pow(q2, 3), 0.5, 10);
-    pace = clamp2(pace + (goal - pace) * 0.3, 0.5, 10);
+    const goal = q2 >= TECH_DEADBAND[0] && q2 <= TECH_DEADBAND[1] ? 1 : clamp3(Math.pow(q2, 3), 0.5, 10);
+    pace = clamp3(pace + (goal - pace) * 0.3, 0.5, 10);
     civ6.techPace = Math.round(pace * 1e3) / 1e3;
   }
 
@@ -2355,6 +2684,22 @@
   }
 
   // js/core/civ/tech.js
+  var worldCond = /* @__PURE__ */ new WeakMap();
+  var condInfo = (w) => {
+    let v = worldCond.get(w);
+    if (v) return v;
+    const c = w.cell, n2 = w.mesh.cellCount, f2 = [];
+    let present = 0;
+    for (let i = 0; i < n2; i++) if (c.landWater[i] === LAND_WATER2.LAND) {
+      f2.push(c.fertility[i]);
+      present |= c.resource[i];
+    }
+    f2.sort((a, b) => a - b);
+    v = { fert: Math.min(0.45, f2.length ? Math.max(0.01, f2[Math.floor(f2.length * 0.85)]) : 0.45), present };
+    worldCond.set(w, v);
+    return v;
+  };
+  var hasRes = (w, g, mask) => (resMaskOf(w, g) & mask) !== 0 || (condInfo(w).present & mask) === 0;
   var nearWater = (w, g) => w.cell.coastDist[g.cell] <= 2 || w.cell.river[g.cell];
   var maskCache = /* @__PURE__ */ new WeakMap();
   function resMaskOf(w, g) {
@@ -2368,13 +2713,13 @@
   var COND = Object.freeze({
     water: { ja: "\u6C34\u8FBA\uFF08\u6D77\u30FB\u5DDD\u30FB\u6E56\uFF09", f: (w, g) => nearWater(w, g) },
     coast: { ja: "\u6D77\u5CB8", f: (w, g) => w.cell.coastDist[g.cell] <= 1 },
-    fertile: { ja: "\u80A5\u6C83\u3067\u6C34\u306B\u8FD1\u304F\u3001\u4EBA\u53E3\u5727\u304C\u9AD8\u3044\u571F\u5730", f: (w, g) => w.cell.fertility[g.cell] > 0.45 && nearWater(w, g) && g.pressure > 0.6 },
+    fertile: { ja: "\u80A5\u6C83\u3067\u6C34\u306B\u8FD1\u304F\u3001\u4EBA\u53E3\u5727\u304C\u9AD8\u3044\u571F\u5730", f: (w, g) => w.cell.fertility[g.cell] >= condInfo(w).fert && nearWater(w, g) && g.pressure > 0.6 },
     grass: { ja: "\u8349\u539F\u30FB\u30B5\u30D0\u30F3\u30CA\u3067\u4EBA\u53E3\u5727\u304C\u9AD8\u3044\u571F\u5730", f: (w, g) => (w.cell.biome[g.cell] === BIOMES2.GRASSLAND || w.cell.biome[g.cell] === BIOMES2.SAVANNA) && g.pressure > 0.7 },
-    clay: { ja: "\u7C98\u571F\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.CLAY) !== 0 },
-    cu_sn: { ja: "\u9285\u307E\u305F\u306F\u932B\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & (RES2.COPPER | RES2.TIN)) !== 0 },
-    iron: { ja: "\u9244\u9271\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.IRON) !== 0 },
-    coal: { ja: "\u77F3\u70AD\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.COAL) !== 0 },
-    stone: { ja: "\u77F3\u6750\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.STONE) !== 0 }
+    clay: { ja: "\u7C98\u571F\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.CLAY) },
+    cu_sn: { ja: "\u9285\u307E\u305F\u306F\u932B\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.COPPER | RES2.TIN) },
+    iron: { ja: "\u9244\u9271\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.IRON) },
+    coal: { ja: "\u77F3\u70AD\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.COAL) },
+    stone: { ja: "\u77F3\u6750\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.STONE) }
   });
   var tierOf = (col) => 1 + Math.floor(col / 3);
   var TECHS = Object.freeze([...TREE].sort((a, b) => a.col - b.col).map((t) => Object.freeze({ key: t.id, name: t.ja, field: LANE[t.lane].ja, lane: t.lane, pre: t.pre, tier: tierOf(t.col), cost: t.id === "stone_tools" ? 0 : 1, prereq: t.prereq, minPop: t.pop, settled: t.s, condKey: t.cond, cond: t.cond ? COND[t.cond].f : null, E: t.E, caps: t.caps, fx: t.fx, col: t.col, desc: t.desc, why: t.why })));
@@ -2880,7 +3225,7 @@
     for (const id of sortedGroupIds(civ6)) {
       const g = civ6.groups[id];
       if (!g) continue;
-      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1) * (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (civ6.popTrim ?? 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ6).growth * (civ6.options.growthScale ?? 1);
+      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1) * (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (civ6.popTrim ?? 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ6).growth * (civ6.options.growthScale ?? 1) * (civ6.popPush ?? 1);
       const noise = 0.8 + 0.4 * rng();
       g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0));
       if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) {
@@ -2952,14 +3297,14 @@
   // js/core/wcde/domains/ecosystem.js
   var FAUNA_BIOME = { [BIOMES2.SAVANNA]: 1, [BIOMES2.GRASSLAND]: 0.9, [BIOMES2.TROPICAL_SEASONAL]: 0.85, [BIOMES2.TEMPERATE_FOREST]: 0.75, [BIOMES2.RAINFOREST]: 0.65, [BIOMES2.WETLAND]: 0.8, [BIOMES2.TAIGA]: 0.45, [BIOMES2.TUNDRA]: 0.4, [BIOMES2.ALPINE]: 0.3, [BIOMES2.COLD_DESERT]: 0.2, [BIOMES2.HOT_DESERT]: 0.12, [BIOMES2.ICE]: 0.05 };
   var FLORA_BIOME = { [BIOMES2.RAINFOREST]: 1, [BIOMES2.TROPICAL_SEASONAL]: 0.9, [BIOMES2.TEMPERATE_FOREST]: 0.85, [BIOMES2.SAVANNA]: 0.65, [BIOMES2.GRASSLAND]: 0.7, [BIOMES2.WETLAND]: 0.8, [BIOMES2.TAIGA]: 0.5, [BIOMES2.TUNDRA]: 0.25, [BIOMES2.ALPINE]: 0.2, [BIOMES2.COLD_DESERT]: 0.15, [BIOMES2.HOT_DESERT]: 0.08, [BIOMES2.ICE]: 0.02 };
-  var TAU = { flora: 6, fauna: 30, deg: 400 };
+  var TAU2 = { flora: 6, fauna: 30, deg: 400 };
   var q3 = (x) => Math.round(x * 1e3) / 1e3;
-  var clamp3 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+  var clamp4 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
   function potentialAt(world, c, laws, ice = 0) {
     const ce = world.cell, b = ce.biome[c];
     if (ce.landWater[c] !== LAND_WATER2.LAND) return { flora: 0, fauna: 0 };
-    const lat = Math.abs(ce.lat[c]) * 180 / Math.PI, ik = 1 - ice * 0.65 * clamp3((lat - 35) / 35), water = ce.river[c] || ce.coastDist[c] <= 2 ? 1.1 : 1, fert = 0.55 + 0.6 * ce.fertility[c];
-    return { flora: clamp3((FLORA_BIOME[b] ?? 0.3) * fert * ik * (laws?.fertilityScale ?? 1)), fauna: clamp3((FAUNA_BIOME[b] ?? 0.3) * (0.6 + 0.5 * ce.fertility[c]) * water * ik * (laws?.faunaRichness ?? 1)) };
+    const lat = Math.abs(ce.lat[c]) * 180 / Math.PI, ik = 1 - ice * 0.65 * clamp4((lat - 35) / 35), water = ce.river[c] || ce.coastDist[c] <= 2 ? 1.1 : 1, fert = 0.55 + 0.6 * ce.fertility[c];
+    return { flora: clamp4((FLORA_BIOME[b] ?? 0.3) * fert * ik * (laws?.fertilityScale ?? 1)), fauna: clamp4((FAUNA_BIOME[b] ?? 0.3) * (0.6 + 0.5 * ce.fertility[c]) * water * ik * (laws?.faunaRichness ?? 1)) };
   }
   function initEco(world, laws, ice = 0) {
     const N2 = world.mesh.cellCount, flora = new Array(N2).fill(0), fauna = new Array(N2).fill(0), deg = new Array(N2).fill(0);
@@ -2974,7 +3319,7 @@
     const eco = civ6.eco ?? (civ6.eco = initEco(world, laws, ice)), N2 = world.mesh.cellCount, res = laws.ecoResilience ?? 1;
     const hunt = new Float32Array(N2), till = new Float32Array(N2), graze = new Float32Array(N2);
     for (const g of groups) {
-      const cells = cellsOf(g), n2 = Math.max(1, cells.length), p = clamp3(g.pressure ?? 0, 0, 2) / n2, k = g.knowledge ?? {};
+      const cells = cellsOf(g), n2 = Math.max(1, cells.length), p = clamp4(g.pressure ?? 0, 0, 2) / n2, k = g.knowledge ?? {};
       for (const c of cells) {
         if (g.subsistence === "agriculture" && (k.agriculture ?? 0) >= 1) till[c] += p;
         else if (g.subsistence === "pastoral" && (k.herding ?? 0) >= 1) graze[c] += p;
@@ -2982,20 +3327,20 @@
         if (g.subsistence !== "agriculture") hunt[c] += 0.25 * p;
       }
     }
-    const kf = 1 - Math.exp(-dt * res / TAU.flora), kn = 1 - Math.exp(-dt * res / TAU.fauna), kd = 1 - Math.exp(-dt * res / TAU.deg);
+    const kf = 1 - Math.exp(-dt * res / TAU2.flora), kn = 1 - Math.exp(-dt * res / TAU2.fauna), kd = 1 - Math.exp(-dt * res / TAU2.deg);
     let hs = 0, ts = 0;
     for (let c = 0; c < N2; c++) {
       const pot = potentialAt(world, c, laws, ice);
       if (pot.flora === 0 && pot.fauna === 0) continue;
       let d = eco.deg[c];
       const dUp = (0.012 * till[c] + 0.02 * graze[c]) * dt;
-      d = clamp3(d + dUp - kd * d * (till[c] + graze[c] > 0.05 ? 0.15 : 1));
+      d = clamp4(d + dUp - kd * d * (till[c] + graze[c] > 0.05 ? 0.15 : 1));
       eco.deg[c] = q3(d);
       ts += till[c] + graze[c];
-      const tf = pot.flora * (1 - 0.7 * d) * (1 - 0.35 * clamp3(graze[c])) * (1 - 0.15 * clamp3(till[c]));
-      eco.flora[c] = q3(clamp3(eco.flora[c] + (tf - eco.flora[c]) * kf));
-      const tn = pot.fauna * Math.pow(Math.max(0.05, eco.flora[c] / Math.max(0.05, pot.flora)), 0.6) * (1 - 0.8 * clamp3(hunt[c] * 1.4));
-      eco.fauna[c] = q3(clamp3(eco.fauna[c] + (tn - eco.fauna[c]) * kn));
+      const tf = pot.flora * (1 - 0.7 * d) * (1 - 0.35 * clamp4(graze[c])) * (1 - 0.15 * clamp4(till[c]));
+      eco.flora[c] = q3(clamp4(eco.flora[c] + (tf - eco.flora[c]) * kf));
+      const tn = pot.fauna * Math.pow(Math.max(0.05, eco.flora[c] / Math.max(0.05, pot.flora)), 0.6) * (1 - 0.8 * clamp4(hunt[c] * 1.4));
+      eco.fauna[c] = q3(clamp4(eco.fauna[c] + (tn - eco.fauna[c]) * kn));
       hs += hunt[c];
     }
     eco.last = civ6.monthIndex;
@@ -3017,25 +3362,25 @@
       d += eco.deg[c];
     }
     if (!n2) return 1;
-    f2 = clamp3(f2 / n2);
-    a = clamp3(a / n2);
+    f2 = clamp4(f2 / n2);
+    a = clamp4(a / n2);
     d /= n2;
     switch (g.subsistence) {
       case "agriculture":
-        return clamp3(1 - d * 0.9);
+        return clamp4(1 - d * 0.9);
       case "pastoral":
-        return clamp3(0.2 + 0.8 * f2);
+        return clamp4(0.2 + 0.8 * f2);
       case "fishing":
-        return clamp3(0.3 + 0.7 * a);
+        return clamp4(0.3 + 0.7 * a);
       default:
-        return clamp3(0.15 + 0.45 * f2 + 0.4 * a);
+        return clamp4(0.15 + 0.45 * f2 + 0.4 * a);
     }
   }
   var ecoMult = (world, civ6, g) => 0.55 + 0.6 * ecoHealth(world, civ6, g);
   function stepEcosystem(ctx) {
     const { world, civ: civ6 } = ctx;
     if (!civ6.options.wcde) return;
-    const mi = civ6.monthIndex, laws = civ6.wcde.config.laws, cl = civ6.climate?.index ?? 0, ice = clamp3(-cl * 0.4);
+    const mi = civ6.monthIndex, laws = civ6.wcde.config.laws, cl = civ6.climate?.index ?? 0, ice = clamp4(-cl * 0.4);
     const groups = Object.values(civ6.groups), before = civ6.eco ? civ6.eco.stats.hunted : 0;
     stepEco(world, civ6, groups, 1, { ice, laws });
     void before;
@@ -3094,9 +3439,9 @@
     civ6.wcde = { v: 1, phase: "prehistory", config, seeds, startMonth: civ6.monthIndex, prehistory: null, candidates: [], control: { stateId: null }, cmdIds: [], diagnostics: [], edits: [] };
     return civ6;
   }
-  var clamp4 = (v, a, b) => v < a ? a : v > b ? b : v;
-  var glacialAt = (frac, years, phase, vol) => vol <= 0 ? 0 : clamp4(vol, 0, 3) / 3 * Math.max(0, Math.sin(frac * years / 1e5 * 2 * Math.PI + phase)) ** 2;
-  var iceMult = (lat, ice) => 1 - ice * 0.65 * clamp4((Math.abs(lat) / DEG - 35) / 35, 0, 1);
+  var clamp5 = (v, a, b) => v < a ? a : v > b ? b : v;
+  var glacialAt = (frac, years, phase, vol) => vol <= 0 ? 0 : clamp5(vol, 0, 3) / 3 * Math.max(0, Math.sin(frac * years / 1e5 * 2 * Math.PI + phase)) ** 2;
+  var iceMult = (lat, ice) => 1 - ice * 0.65 * clamp5((Math.abs(lat) / DEG - 35) / 35, 0, 1);
   function landComponents(world, landCells) {
     const m = world.mesh, comp = new Int32Array(m.cellCount).fill(-1), sizes = [];
     for (const s of landCells) {
@@ -3246,7 +3591,7 @@
     stats.assimilated = 0;
     let areaSum = 0;
     for (const c of landCells) areaSum += ce.areaKm2[c];
-    const res = clamp4(Math.sqrt(POP.territoryKm2 * 1.5 / (areaSum / landCells.length)), 1, 6);
+    const res = clamp5(Math.sqrt(POP.territoryKm2 * 1.5 / (areaSum / landCells.length)), 1, 6);
     stats.moveScale = Math.round(res * 100) / 100;
     const baseRate = POP.growthPerMonth * 12, gate = gateYears(cfg.prehistory.neolithicYears ?? 1e4);
     let Kworld = 0;
@@ -3609,6 +3954,7 @@
       id,
       name: name ?? np?.name ?? ctx.nameGen?.state(civ6, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix,
       nameBase: np?.base ?? null,
+      titleYear: np?.year ?? null,
       via,
       formedAt: civ6.monthIndex,
       capitalGroupId: cap.id,
@@ -3692,17 +4038,61 @@
   var aliveStates = (civ6) => Object.values(civ6.states).filter((s) => s.alive);
   var stateCap = (civ6) => 10 + 190 * (1 - Math.exp(-Math.max(0, civ6.date.year - 100) / 1500));
   var lifespanHazard = (age) => 12e-4 * Math.pow(Math.max(0, age) / 250, 1.2);
+  var lmCache = /* @__PURE__ */ new WeakMap();
+  var landmassOf = (world) => {
+    let v = lmCache.get(world);
+    if (v) return v;
+    const V = world.mesh.cellCount, off = world.mesh.neighborOffsets, nb = world.mesh.neighborIds, el = world.cell.elevation;
+    v = new Int32Array(V).fill(-1);
+    const q2 = new Int32Array(V);
+    let n2 = 0;
+    for (let s0 = 0; s0 < V; s0++) {
+      if (v[s0] >= 0 || el[s0] <= 0) continue;
+      let h2 = 0, t = 0;
+      q2[t++] = s0;
+      v[s0] = n2;
+      while (h2 < t) {
+        const c = q2[h2++];
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (v[j] < 0 && el[j] > 0) {
+            v[j] = n2;
+            q2[t++] = j;
+          }
+        }
+      }
+      n2++;
+    }
+    lmCache.set(world, v);
+    return v;
+  };
+  var HEGEMON = Object.freeze({ fromYear: 500, ratio: 2, boost: 1.6, perYear: 1, maxShare: 0.6, crowded: 0.5 });
   function stepUnification(ctx, groupsByState) {
     const { world, civ: civ6, ids, rng } = ctx, mi = civ6.monthIndex, alive = aliveStates(civ6).sort((a, b) => b.pop - a.pop);
     const merged = /* @__PURE__ */ new Set(), absorbers = /* @__PURE__ */ new Set();
-    let done2 = 0;
+    let done2 = 0, doneLead = 0;
+    const lm = landmassOf(world), lmOfState = (s) => {
+      const g = civ6.groups[s.capitalGroupId];
+      return g ? lm[g.cell] : -1;
+    }, leaderOf = /* @__PURE__ */ new Map();
+    const lmGroups = /* @__PURE__ */ new Map();
+    for (const id in civ6.groups) {
+      const g = civ6.groups[id];
+      const k = lm[g.cell];
+      lmGroups.set(k, (lmGroups.get(k) ?? 0) + 1);
+    }
+    if (civ6.date.year >= HEGEMON.fromYear && alive.length >= HEGEMON.crowded * stateCap(civ6)) for (const s of alive) {
+      const k = lmOfState(s);
+      if (k >= 0 && !leaderOf.has(k) && (lmGroups.get(k) ?? 0) >= 12) leaderOf.set(k, s.id);
+    }
     groupsByState = /* @__PURE__ */ new Map();
     for (const id in civ6.groups) {
       const g = civ6.groups[id];
       if (g.stateId) (groupsByState.get(g.stateId) ?? groupsByState.set(g.stateId, []).get(g.stateId)).push(g);
     }
     for (const B of alive) {
-      if (merged.has(B.id) || done2 >= 2 || !B.alive) continue;
+      const lead = leaderOf.get(lmOfState(B)) === B.id && (groupsByState.get(B.id)?.length ?? 0) < HEGEMON.maxShare * (lmGroups.get(lmOfState(B)) ?? 1);
+      if (merged.has(B.id) || !B.alive || (lead ? doneLead >= HEGEMON.perYear : done2 >= 2)) continue;
       const gsB = groupsByState.get(B.id);
       if (!gsB?.length || B.stability < 0.45) continue;
       const nbr = /* @__PURE__ */ new Map();
@@ -3712,10 +4102,10 @@
       }
       for (const [aid] of [...nbr].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1))) {
         const A2 = civ6.states[aid];
-        if (!A2?.alive || A2.player || merged.has(aid) || absorbers.has(aid) || A2.pop * 2.5 > B.pop || A2.warIds.length || B.warIds.some((w) => civ6.wars[w]?.sides.a.includes(aid) || civ6.wars[w]?.sides.d.includes(aid))) continue;
+        if (!A2?.alive || A2.player || merged.has(aid) || absorbers.has(aid) || A2.pop * (lead ? HEGEMON.ratio : 2.5) > B.pop || A2.warIds.length || B.warIds.some((w) => civ6.wars[w]?.sides.a.includes(aid) || civ6.wars[w]?.sides.d.includes(aid))) continue;
         const cA = civ6.groups[A2.capitalGroupId], cB = civ6.groups[B.capitalGroupId], same = cA && cB && dominant(cA).cultureId === dominant(cB).cultureId;
         const adm = stateCan(civ6, B, "polity:empire") ? 1.5 : stateCan(civ6, B, "polity:kingdom") ? 1.2 : 0.7;
-        const p = 0.03 * adm * (same ? 1 : 0.35) * (A2.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
+        const p = 0.03 * (lead ? HEGEMON.boost : 1) * adm * (same ? 1 : lead ? 0.6 : 0.35) * (A2.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
         if (rng() >= p) continue;
         const gsA = groupsByState.get(aid) ?? [];
         for (const g of gsA) g.stateId = B.id;
@@ -3726,7 +4116,8 @@
         A2.dissolvedAt = mi;
         A2.mergedInto = B.id;
         merged.add(aid);
-        done2++;
+        if (lead) doneLead++;
+        else done2++;
         makeEvent(civ6, ids, { kind: "state_merged", title: `${A2.name}\u304C${B.name}\u306B\u7D71\u5408\u3055\u308C\u305F`, participants: [{ entityId: aid, role: "absorbed" }, { entityId: B.id, role: "state" }], location: cB ? { cell: cB.cell } : null, facts: { stateId: B.id, absorbed: aid, same: !!same }, causes: A2.lastCrisisEvent ? [{ targetId: A2.lastCrisisEvent, relation: "contributed_to", basis: "plausible" }] : [] });
         B.interpDirty = true;
         break;
@@ -3962,7 +4353,7 @@
       const l = languageOfGroup(cap);
       if (!l) return null;
       const nm = nameFor(civ6, rng, l, "state"), sfx = landSuffix(civ6, l), base = nm.length + sfx.length <= 8 ? nm + sfx : nm;
-      return { base, name: composeStateName(base, polity, via) };
+      return { base, name: composeStateName(base, polity, via, civ6.date.year), year: civ6.date.year };
     },
     state: (civ6, cap, via, rng) => {
       const l = languageOfGroup(cap);
@@ -4261,7 +4652,7 @@
   // js/core/civ/interpret.js
   var STANCE = Object.freeze({ victory: "\u52DD\u5229\u306E\u6804\u5149", humiliation: "\u5C48\u8FB1", lost_territory: "\u5931\u308F\u308C\u305F\u9818\u571F", betrayal: "\u88CF\u5207\u308A", reconciled: "\u548C\u89E3", founding: "\u5EFA\u56FD\u306E\u7269\u8A9E", inconclusive: "\u6C7A\u7740\u306E\u3064\u304B\u306A\u304B\u3063\u305F\u6226\u4E89" });
   var MAX_ACTIVE = 24;
-  var clamp5 = (v, a, b) => Math.max(a, Math.min(b, v));
+  var clamp6 = (v, a, b) => Math.max(a, Math.min(b, v));
   var r2 = (x) => Math.round(x * 100) / 100;
   function addInterp(ctx, owner, ev, stance, valence, about, supersedes = null) {
     const { civ: civ6, ids } = ctx, id = ids.next("interp");
@@ -4347,7 +4738,7 @@
       for (const iid of [...st2.interp ?? []]) {
         const x = getInterp(civ6, iid);
         if (!x || x.until != null || x.valence >= 0) continue;
-        const nv = clamp5(x.valence * k, -1, 0), ev = getEvent(civ6, x.eventId);
+        const nv = clamp6(x.valence * k, -1, 0), ev = getEvent(civ6, x.eventId);
         x.until = civ6.monthIndex;
         st2.interp = st2.interp.filter((q2) => q2 !== iid);
         if (ev) addInterp(ctx, st2, ev, Math.abs(nv) < 0.15 ? "reconciled" : x.stance, Math.abs(nv) < 0.15 ? 0 : nv, x.about, iid);
@@ -4519,7 +4910,7 @@
   var CLIMATE_JA = Object.freeze({ cool: "\u5BD2\u51B7\u671F", normal: "\u5E73\u5E38", warm: "\u6E29\u6696\u671F" });
   var HALF_LIFE = 1440;
   var RATE = 0.02;
-  var clamp6 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  var clamp7 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
   var r3 = (x) => Math.round(x * 1e3) / 1e3;
   function climateIndex(civ6, mi) {
     const h2 = hashSeed(civ6.historySeed, "climate"), a = h2 % 1e3 / 1e3 * 2 * Math.PI;
@@ -4627,13 +5018,13 @@
       if (kind === "flood") g.pop = Math.max(5, g.pop * (1 - 0.08 * sev * res));
       else if (kind === "volcano") g.pop = Math.max(5, g.pop * (1 - 0.15 * sev * res));
       if (kind !== "flood") {
-        g.capMult = r3(clamp6(1 - (kind === "drought" ? 0.45 : 0.35) * sev * res, 0.3, 1));
+        g.capMult = r3(clamp7(1 - (kind === "drought" ? 0.45 : 0.35) * sev * res, 0.3, 1));
         g.capUntil = mi + months + (kind === "volcano" ? 12 : 6);
       }
       dead += Math.max(0, before - g.pop);
       {
         const dc = g.cohorts.reduce((b, c) => c.share > b.share ? c : b);
-        dc.tension = clamp6(dc.tension + 0.05 * sev * res);
+        dc.tension = clamp7(dc.tension + 0.05 * sev * res);
       }
       effects.push({ targetId: gid, property: "pop", before, after: Math.round(g.pop) });
       if (g.stateId) states.add(g.stateId);
@@ -4682,7 +5073,7 @@
   }
 
   // js/core/civ/actions.js
-  var clamp7 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  var clamp8 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
   var cand = (key, f2, o = {}) => ({ key, target: o.target ?? null, opt: o.opt ?? null, factors: f2, eligible: o.eligible ?? true, reason: o.reason ?? null, label: o.label ?? null });
   var bad = (key, reason, o = {}) => cand(key, {}, { ...o, eligible: false, reason });
   var r32 = (x) => Math.round(x * 1e3) / 1e3;
@@ -4699,10 +5090,10 @@
       tens += t * g.pop;
     }
     const my = strength(civ6, st2), nbs = nb.map((o) => ({ st: o, pop: o.pop, strength: strength(civ6, o), rel: st2.relations[o.id] ?? 0, atWar: atWarWith(civ6, st2, o), treaties: { na: !!treatyBetween(civ6, st2, o, "nonaggression"), al: !!treatyBetween(civ6, st2, o, "alliance"), tr: !!treatyBetween(civ6, st2, o, "trade") } }));
-    const techs = Object.keys(st2.techAdopted).length, lag = nbs.length ? clamp7((nbs.reduce((s, n2) => s + Object.keys(n2.st.techAdopted).length, 0) / nbs.length - techs) / 6) : 0;
+    const techs = Object.keys(st2.techAdopted).length, lag = nbs.length ? clamp8((nbs.reduce((s, n2) => s + Object.keys(n2.st.techAdopted).length, 0) / nbs.length - techs) / 6) : 0;
     const myBase = st2.pop * 5e-3 * (0.5 + st2.stability) * (my / (st2.army + 1e-9) || 1) * (1 + st2.defense * 0.5), maxThreat = nbs.reduce((m, n2) => Math.max(m, n2.strength / (myBase + 1)), 0);
     const seaNbs = ctx.warOps ? ctx.warOps.seaTargets(ctx, st2).map((o) => ({ st: o, pop: o.pop, strength: strength(civ6, o), rel: st2.relations[o.id] ?? 0, atWar: atWarWith(civ6, st2, o), sea: true, treaties: { na: !!treatyBetween(civ6, st2, o, "nonaggression"), al: !!treatyBetween(civ6, st2, o, "alliance"), tr: !!treatyBetween(civ6, st2, o, "trade") } })) : [];
-    return { gs, nbs, seaNbs, pop: st2.pop, my, tension: st2.pop ? tens / st2.pop : 0, treasuryNeed: clamp7(1 - st2.treasury / (st2.pop * 0.02 + 50)), techLag: lag, threat: clamp7((maxThreat - 0.8) / 2), atWar: st2.warIds.length > 0, mi: civ6.monthIndex };
+    return { gs, nbs, seaNbs, pop: st2.pop, my, tension: st2.pop ? tens / st2.pop : 0, treasuryNeed: clamp8(1 - st2.treasury / (st2.pop * 0.02 + 50)), techLag: lag, threat: clamp8((maxThreat - 0.8) / 2), atWar: st2.warIds.length > 0, mi: civ6.monthIndex };
   }
   var free = (ctx, id) => ctx.civ.states[id];
   var ACTIONS = [
@@ -4720,7 +5111,7 @@
         return out;
       },
       execute(ctx, st2, c) {
-        const ef = [], b = st2.policy.tax, a = r32(clamp7(b + (c.opt === "up" ? 0.05 : -0.05), 0.02, 0.4));
+        const ef = [], b = st2.policy.tax, a = r32(clamp8(b + (c.opt === "up" ? 0.05 : -0.05), 0.02, 0.4));
         st2.policy.tax = a;
         eff(ef, st2, "policy.tax", b, a);
         return { ok: true, effects: ef, title: c.opt === "up" ? "\u5897\u7A0E" : "\u6E1B\u7A0E" };
@@ -4860,7 +5251,7 @@
         return [...e.nbs, ...e.seaNbs ?? []].filter((n2) => !n2.atWar && !n2.treaties.na && !n2.treaties.al && !(st2.lastWarWith?.[n2.st.id] != null && e.mi - st2.lastWarWith[n2.st.id] < rematchCooldown(ctx.civ.date.year))).map((n2) => {
           const ratio = (e.my + 1) / (n2.strength + 1);
           const gr = grievance(ctx.civ, st2, n2.st.id);
-          return ratio >= 1.3 ? cand("plan_conquest", { expansion: clamp7((ratio - 1) / 2) - 0.1 * st2.warIds.length + 0.35 * gr, prestige: 0.1 + 0.3 * gr, stability: -0.2, prosperity: -0.3 }, { target: n2.st.id, label: `${n2.st.name}\u306E\u5F81\u670D` }) : bad("plan_conquest", "\u6226\u529B\u304C\u8DB3\u308A\u306A\u3044", { target: n2.st.id });
+          return ratio >= 1.3 ? cand("plan_conquest", { expansion: clamp8((ratio - 1) / 2) - 0.1 * st2.warIds.length + 0.35 * gr, prestige: 0.1 + 0.3 * gr, stability: -0.2, prosperity: -0.3 }, { target: n2.st.id, label: `${n2.st.name}\u306E\u5F81\u670D` }) : bad("plan_conquest", "\u6226\u529B\u304C\u8DB3\u308A\u306A\u3044", { target: n2.st.id });
         });
       },
       execute(ctx, st2, c) {
@@ -4902,7 +5293,7 @@
       candidates(ctx, st2) {
         return st2.warIds.map((i) => ctx.civ.wars[i]).map((w) => {
           const mine = w.sides.a.includes(st2.id) ? w.score : -w.score;
-          return cand("sue_for_peace", { security: clamp7(-mine / 50) + 0.1, stability: 0.2 }, { target: w.id, label: "\u8B1B\u548C" });
+          return cand("sue_for_peace", { security: clamp8(-mine / 50) + 0.1, stability: 0.2 }, { target: w.id, label: "\u8B1B\u548C" });
         });
       },
       execute(ctx, st2, c) {
@@ -4936,7 +5327,7 @@
               out.push(bad("sign_treaty", "\u95A2\u4FC2\u304C\u826F\u304F\u306A\u3044", { target: n2.st.id, opt: type }));
               continue;
             }
-            const f2 = type === "trade" ? { prosperity: 0.35 } : type === "nonaggression" ? { security: 0.2 + clamp7(n2.strength / (e.my + 1) - 0.8) * 0.5 } : { security: 0.3 + e.threat * 0.5, prestige: 0.15 };
+            const f2 = type === "trade" ? { prosperity: 0.35 } : type === "nonaggression" ? { security: 0.2 + clamp8(n2.strength / (e.my + 1) - 0.8) * 0.5 } : { security: 0.3 + e.threat * 0.5, prestige: 0.15 };
             out.push(cand("sign_treaty", f2, { target: n2.st.id, opt: type, label: `${n2.st.name}\u3068${TREATY[type].ja}` }));
           }
         }
@@ -5042,7 +5433,7 @@
       },
       execute(ctx, st2) {
         const ef = [], b = st2.policy.autonomy;
-        st2.policy.autonomy = r32(clamp7(b + 0.2));
+        st2.policy.autonomy = r32(clamp8(b + 0.2));
         eff(ef, st2, "policy.autonomy", b, st2.policy.autonomy);
         for (const g of byState(ctx).get(st2.id) ?? []) for (const c of g.cohorts) c.tension *= 0.85;
         return { ok: true, effects: ef };
@@ -5058,7 +5449,7 @@
       },
       execute(ctx, st2) {
         const ef = [], b = st2.policy.assimilation;
-        st2.policy.assimilation = r32(clamp7(b + 0.2));
+        st2.policy.assimilation = r32(clamp8(b + 0.2));
         eff(ef, st2, "policy.assimilation", b, st2.policy.assimilation);
         return { ok: true, effects: ef };
       }
@@ -5073,7 +5464,7 @@
         return [t < 1 ? cand("set_tolerance", { stability: 0.4 * e.tension, culture: -0.1 }, { opt: "up", label: "\u5BDB\u5BB9" }) : bad("set_tolerance", "\u6700\u5927", { opt: "up" }), t > 0 ? cand("set_tolerance", { culture: 0.3, stability: -0.3 * e.tension }, { opt: "down", label: "\u56FD\u6559\u306E\u5F37\u5316" }) : bad("set_tolerance", "\u6700\u5C0F", { opt: "down" })];
       },
       execute(ctx, st2, c) {
-        const ef = [], b = st2.policy.tolerance, a = r32(clamp7(b + (c.opt === "up" ? 0.2 : -0.2)));
+        const ef = [], b = st2.policy.tolerance, a = r32(clamp8(b + (c.opt === "up" ? 0.2 : -0.2)));
         st2.policy.tolerance = a;
         eff(ef, st2, "policy.tolerance", b, a);
         return { ok: true, effects: ef };
@@ -5271,7 +5662,7 @@
   var SHOWN = 6;
   var SHOWN_IDLE = 3;
   var expandDecision = (civ6, d) => ({ ...d, candidates: [] });
-  var clamp8 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+  var clamp9 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
   var round = (x) => Math.round(x * 1e3) / 1e3;
   function record(ctx, st2, d) {
     return { decisionId: null, actorId: st2.id, result: null };
@@ -5291,7 +5682,7 @@
   var view = (c, total) => [c, total];
   var AUTO_KEYS = /* @__PURE__ */ new Set(["adopt_tech", "adopt_doctrine"]);
   function chooseStrategy(ctx, st2, e) {
-    const needs = { expand: 0.25 + 0.4 * clamp8((e.my + 1) / (e.nbs.reduce((s, n2) => s + n2.strength, 0) / Math.max(1, e.nbs.length) + 1) - 1, 0, 2) * 0.5, prosper: e.treasuryNeed, secure: e.threat, advance: e.techLag, consolidate: 1 - st2.stability };
+    const needs = { expand: 0.25 + 0.4 * clamp9((e.my + 1) / (e.nbs.reduce((s, n2) => s + n2.strength, 0) / Math.max(1, e.nbs.length) + 1) - 1, 0, 2) * 0.5, prosper: e.treasuryNeed, secure: e.threat, advance: e.techLag, consolidate: 1 - st2.stability };
     const list = Object.entries(needs).map(([goal, n2]) => ({ goal, total: round(n2 * st2.personality[GOALS[goal]]) })).sort((a, b) => b.total - a.total || (a.goal < b.goal ? -1 : 1));
     const d = record(ctx, st2, { layer: "strategy", type: "set_strategy", obs: obsOf(st2, e), candidates: list.map((x) => view({ key: x.goal, target: null, opt: null, eligible: true, reason: null, factors: {} }, x.total)), chosen: { key: list[0].goal, target: null, opt: null } });
     const changed = st2.strategy?.goal !== list[0].goal;
@@ -5858,8 +6249,8 @@
   });
   var ASSEMBLY = Object.freeze({ tribal: "\u9577\u8001\u4F1A", chiefdom: null, theocracy: "\u8056\u8077\u8005\u4F1A\u8B70", kingdom: null, empire: null, republic: "\u5E02\u6C11\u8B70\u4F1A" });
   var infl = (polity) => INFLUENCE[polity] ?? INFLUENCE.tribal;
-  var clamp9 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
-  var sat = (x, k = 1) => clamp9(x / k);
+  var clamp10 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+  var sat = (x, k = 1) => clamp10(x / k);
   var adopted2 = (st2, k) => st2.techAdopted?.[k] != null;
   function socialOf(ctx, st2) {
     const { civ: civ6 } = ctx, gs = byState(ctx).get(st2.id) ?? [];
@@ -5935,12 +6326,12 @@
     const ideas = P2.ideas ?? (P2.ideas = {}), accept = 0.5 + 0.5 * (st2.policy.tolerance ?? 0.5);
     const contacts = [.../* @__PURE__ */ new Set([...ctx.world?.mesh ? neighborStates(ctx, st2) : [], ...Object.keys(st2.econ?.trade ?? {})])].map((i) => civ6.states[i]).filter((o) => o?.alive && o.politics), ally = new Set(civ6.activeTreatyIds.map((i) => civ6.treaties[i]).filter((t) => t.type === "alliance" && (t.a === st2.id || t.b === st2.id)).map((t) => t.a === st2.id ? t.b : t.a));
     for (const id in IDEAS) {
-      const cur = ideas[id] ?? 0, tgt = clamp9(emergence(ctx, st2, id, inf, trade));
+      const cur = ideas[id] ?? 0, tgt = clamp10(emergence(ctx, st2, id, inf, trade));
       let net = 0;
       for (const o of contacts) net = Math.max(net, (o.politics.ideas?.[id] ?? 0) * (ally.has(o.id) ? 0.9 : o.econ?.trade?.[st2.id] ? 0.8 : 0.6));
       let nv = cur + 0.12 * (tgt - cur) + Math.max(0, net * accept - cur) * 0.2;
       if (tgt < cur) nv -= 0.015;
-      nv = clamp9(nv);
+      nv = clamp10(nv);
       if (nv < 0.03) delete ideas[id];
       else ideas[id] = Math.round(nv * 1e3) / 1e3;
       const reg = W2.ideas ?? (W2.ideas = {});
@@ -5963,20 +6354,20 @@
     const { civ: civ6 } = ctx, e = st2.econ ?? {}, p = st2.policy, war = st2.warIds.length > 0, trade = Object.values(e.trade ?? {}).reduce((a, b) => a + b, 0), perCap = e.perCapita ?? 0.6;
     const fat = effective(civ6, st2, "fatigue"), tr = treatiesOf(civ6, st2), mi = civ6.monthIndex, heir = st2.leader?.heir ? 1 : 0, hered = st2.polity === "kingdom" || st2.polity === "empire" || st2.polity === "chiefdom", blockaded = (st2.blockade ?? 0) > mi;
     const t = {
-      commoners: clamp9(0.35 + 0.5 * effective(ctx.civ, st2, "stability") + 0.25 * (e.foodBalance ?? 1) - 0.8 * p.tax - 0.4 * fat - 0.25 * p.mobilization),
-      merchants: clamp9(0.35 + 0.25 * Math.min(1, trade * 2) + 0.15 * (adopted2(st2, "coinage") ? 1 : 0) + 0.15 * (1 - p.tax * 2) - (war ? 0.15 : 0) + Math.min(0.12, 0.04 * tr.trade) - (blockaded ? 0.15 : 0) - (st2.sanctions?.length ? 0.08 : 0)),
-      clergy: clamp9(0.3 + (st2.polity === "theocracy" ? 0.35 : 0) + 0.2 * (1 - p.assimilation) + 0.15 * p.tolerance + (st2.magic ? 0.1 : 0)),
-      military: clamp9(0.35 + 0.4 * p.mobilization + (war ? 0.15 : 0) + 0.15 * (st2.treasury > 0 ? 1 : 0) - 0.3 * fat - Math.min(0.12, 0.04 * tr.nonaggression)),
-      nobility: clamp9(0.4 + 0.25 * (1 - p.tax) + 0.2 * effective(ctx.civ, st2, "stability") + (adopted2(st2, "bureaucracy") ? -0.2 : 0) + 0.1 * p.autonomy + Math.min(0.09, 0.03 * tr.alliance) + (hered ? heir ? 0.06 : -0.04 : 0)),
-      bureaucrats: clamp9(0.35 + 0.25 * (st2.treasury > 0 ? 1 : 0) + 0.3 * effective(ctx.civ, st2, "stability") + 0.2 * (adopted2(st2, "administration") ? 1 : 0) - 0.15 * (p.autonomy ?? 0)),
-      artisans: clamp9(0.35 + 0.3 * Math.min(1, trade * 2) + 0.25 * (1 - p.tax * 2) + 0.2 * Math.min(1, perCap) - (war ? 0.08 : 0)),
-      clans: clamp9(0.4 + 0.3 * (p.autonomy ?? 0) - 0.3 * (p.assimilation ?? 0) - 0.3 * p.tax + 0.1 * (war ? 1 : 0))
+      commoners: clamp10(0.35 + 0.5 * effective(ctx.civ, st2, "stability") + 0.25 * (e.foodBalance ?? 1) - 0.8 * p.tax - 0.4 * fat - 0.25 * p.mobilization),
+      merchants: clamp10(0.35 + 0.25 * Math.min(1, trade * 2) + 0.15 * (adopted2(st2, "coinage") ? 1 : 0) + 0.15 * (1 - p.tax * 2) - (war ? 0.15 : 0) + Math.min(0.12, 0.04 * tr.trade) - (blockaded ? 0.15 : 0) - (st2.sanctions?.length ? 0.08 : 0)),
+      clergy: clamp10(0.3 + (st2.polity === "theocracy" ? 0.35 : 0) + 0.2 * (1 - p.assimilation) + 0.15 * p.tolerance + (st2.magic ? 0.1 : 0)),
+      military: clamp10(0.35 + 0.4 * p.mobilization + (war ? 0.15 : 0) + 0.15 * (st2.treasury > 0 ? 1 : 0) - 0.3 * fat - Math.min(0.12, 0.04 * tr.nonaggression)),
+      nobility: clamp10(0.4 + 0.25 * (1 - p.tax) + 0.2 * effective(ctx.civ, st2, "stability") + (adopted2(st2, "bureaucracy") ? -0.2 : 0) + 0.1 * p.autonomy + Math.min(0.09, 0.03 * tr.alliance) + (hered ? heir ? 0.06 : -0.04 : 0)),
+      bureaucrats: clamp10(0.35 + 0.25 * (st2.treasury > 0 ? 1 : 0) + 0.3 * effective(ctx.civ, st2, "stability") + 0.2 * (adopted2(st2, "administration") ? 1 : 0) - 0.15 * (p.autonomy ?? 0)),
+      artisans: clamp10(0.35 + 0.3 * Math.min(1, trade * 2) + 0.25 * (1 - p.tax * 2) + 0.2 * Math.min(1, perCap) - (war ? 0.08 : 0)),
+      clans: clamp10(0.4 + 0.3 * (p.autonomy ?? 0) - 0.3 * (p.assimilation ?? 0) - 0.3 * p.tax + 0.1 * (war ? 1 : 0))
     };
     for (const id in st2.politics?.ideas ?? {}) {
       const s = st2.politics.ideas[id], d = IDEAS[id];
       if (!d) continue;
-      for (const k in d.pro) if (k in t) t[k] = clamp9(t[k] + d.pro[k] * s);
-      for (const k in d.con) if (k in t) t[k] = clamp9(t[k] + d.con[k] * s);
+      for (const k in d.pro) if (k in t) t[k] = clamp10(t[k] + d.pro[k] * s);
+      for (const k in d.con) if (k in t) t[k] = clamp10(t[k] + d.con[k] * s);
     }
     return t;
   }
@@ -5987,7 +6378,7 @@
     for (const st2 of Object.values(civ6.states)) {
       if (!st2.alive) continue;
       const P2 = st2.politics ?? (st2.politics = initPolitics(st2));
-      P2.fatigue = clamp9(P2.fatigue + (st2.warIds.length ? 0.025 * st2.warIds.length : -0.02));
+      P2.fatigue = clamp10(P2.fatigue + (st2.warIds.length ? 0.025 * st2.warIds.length : -0.02));
       const { keys } = factionKeys(ctx, st2), w = weightsOf(st2.polity, keys);
       for (const k of keys) (_a = P2.factions)[k] ?? (_a[k] = { support: 0.5 });
       for (const k of Object.keys(P2.factions)) if (!keys.includes(k)) delete P2.factions[k];
@@ -5997,7 +6388,7 @@
       let leg = 0;
       for (const k of keys) {
         const f2 = P2.factions[k];
-        f2.support = clamp9(f2.support + (tgt[k] - f2.support) * 0.25);
+        f2.support = clamp10(f2.support + (tgt[k] - f2.support) * 0.25);
         f2.influence = Math.round(w[k] * 1e3) / 1e3;
         leg += f2.influence * f2.support;
       }
@@ -6005,9 +6396,9 @@
       const legE = effective(civ6, st2, "legitimacy");
       P2.assembly = ASSEMBLY[st2.polity] ?? (adopted2(st2, "administration") ? "\u8AEE\u554F\u4F1A\u8B70" : null);
       P2.taxCeiling = Math.round((0.15 + 0.5 * legE) * 1e3) / 1e3;
-      st2.stability = clamp9(st2.stability + (legE - 0.5) * 0.04);
+      st2.stability = clamp10(st2.stability + (legE - 0.5) * 0.04);
       if (st2.policy.tax > P2.taxCeiling) st2.policy.tax = Math.round(P2.taxCeiling * 1e3) / 1e3;
-      if (mi % 12 === 0 && !st2.player) evolvePolity(ctx, st2, P2, legE);
+      if (mi % 12 === 0 && !st2.player && civ6.wcde?.control?.stateId !== st2.id) evolvePolity(ctx, st2, P2, legE);
       if (legE < 0.3 && mi - P2.lastRegimeChange > 120 && hashSeed(st2.id, mi) % 1e3 / 1e3 < 0.1 * (0.3 - legE) / 0.3 + 0.02) regimeChange(ctx, st2);
     }
   }
@@ -6018,6 +6409,9 @@
     const can2 = (pl) => pl === "tribal" || stateCan(civ6, st2, POLITY_NEED[pl]), f2 = P2.factions ?? {}, sup = (k) => f2[k]?.support ?? 0.5, u = hashSeed(st2.id, mi, "evolve") % 1e4 / 1e4;
     const opts = [];
     const pol = st2.polity, pop = st2.pop, war = st2.warIds.length > 0;
+    const size = byState(ctx).get(st2.id)?.length ?? 0;
+    if (pol === "chiefdom" && size >= 8 && can2("kingdom")) opts.push(["kingdom", 0.06, "reform"]);
+    if (pol === "kingdom" && size >= 24 && can2("empire")) opts.push(["empire", 0.04, "conquest"]);
     if (pol === "tribal" && can2("chiefdom") && pop > 2e3) opts.push(["chiefdom", 0.02, "reform"]);
     if (pol === "chiefdom" && can2("kingdom") && pop > 1e4) opts.push(["kingdom", 0.012, "reform"]);
     if (pol === "chiefdom" && can2("theocracy") && sup("clergy") > 0.6) opts.push(["theocracy", 6e-3, "religious_reform"]);
@@ -6045,12 +6439,13 @@
     const war = civ6.events.slice(-80).reverse().find((e) => (e.kind === "war_declared" || e.kind === "war_ended" || e.kind === "uprising" || e.kind === "famine") && e.participants.some((p) => p.entityId === st2.id));
     st2.polity = to;
     P2.lastRegimeChange = mi;
-    st2.stability = clamp9(st2.stability + (how === "revolution" || how === "military_takeover" ? -0.2 : how === "decline" ? -0.1 : 0.02));
+    st2.stability = clamp10(st2.stability + (how === "revolution" || how === "military_takeover" ? -0.2 : how === "decline" ? -0.1 : 0.02));
     P2.fatigue = Math.max(0, (P2.fatigue ?? 0) - 0.2);
-    const rt = before !== to ? retitle(st2, to) : null;
+    const rt = before !== to ? retitle(st2, to, civ6.date.year) : null;
     if (rt) {
       st2.name = rt.name;
       st2.nameBase = rt.base;
+      st2.titleYear = rt.year;
     }
     if (how === "revolution" || how === "military_takeover") st2.leader = { name: leaderName(st2, ctx.nameGen?.person(civ6, civ6.groups[st2.capitalGroupId], ctx.rng) ?? `${st2.name}\u306E\u65B0\u6307\u5C0E\u8005`, leaderRng(civ6, st2, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ6, { capitalGroupId: st2.capitalGroupId })), heir: false, deposed: true, origin: how };
     makeEvent(civ6, ids, { kind: "regime_change", title: `${oldName}\u3067${HOW_JA[how]}\u304C\u8D77\u304D\u3001\u653F\u4F53\u304C\u5909\u308F\u3063\u305F${rt ? `\u3002\u56FD\u53F7\u306F${rt.name}\u3068\u6539\u307E\u3063\u305F` : ""}`, participants: [{ entityId: st2.id, role: "state" }], effects: [{ targetId: st2.id, property: "polity", before, after: to }, ...rt ? [{ targetId: st2.id, property: "name", before: oldName, after: rt.name }] : []], causes: war ? [{ targetId: war.eventId ?? war.id, relation: "caused_by", basis: "plausible" }] : [], facts: { stateId: st2.id, polity: to, name: st2.name, by: how }, provenance: "simulation" });
@@ -6066,16 +6461,17 @@
     if (war) causes.push({ targetId: war.id, relation: "caused_by", basis: "plausible" });
     st2.polity = to;
     P2.lastRegimeChange = mi;
-    st2.stability = clamp9(st2.stability - 0.25);
+    st2.stability = clamp10(st2.stability - 0.25);
     P2.fatigue = Math.max(0, P2.fatigue - 0.3);
-    for (const k of Object.keys(f2)) f2[k].support = clamp9(f2[k].support + 0.15);
-    if (who === "commoners" && f2.nobility) f2.nobility.support = clamp9(f2.nobility.support - 0.15);
-    if (who === "military") f2.military.support = clamp9(f2.military.support + 0.1);
+    for (const k of Object.keys(f2)) f2[k].support = clamp10(f2[k].support + 0.15);
+    if (who === "commoners" && f2.nobility) f2.nobility.support = clamp10(f2.nobility.support - 0.15);
+    if (who === "military") f2.military.support = clamp10(f2.military.support + 0.1);
     const how = who === "commoners" ? before !== to ? "\u6C11\u8846\u306E\u8702\u8D77\u3067\u653F\u4F53\u304C\u5909\u308F\u3063\u305F" : "\u6C11\u8846\u306E\u8702\u8D77\u3067\u653F\u6A29\u304C\u5012\u308C\u305F" : before !== to ? "\u8ECD\u304C\u653F\u6A29\u3092\u63E1\u308A\u653F\u4F53\u304C\u5909\u308F\u3063\u305F" : "\u8ECD\u306B\u3088\u308B\u5BAE\u5EF7\u306E\u653F\u5909";
-    const oldName = st2.name, rt = before !== to ? retitle(st2, to) : null;
+    const oldName = st2.name, rt = before !== to ? retitle(st2, to, civ6.date.year) : null;
     if (rt) {
       st2.name = rt.name;
       st2.nameBase = rt.base;
+      st2.titleYear = rt.year;
     }
     makeEvent(civ6, ids, { kind: "regime_change", title: `${oldName}\u3067\u653F\u5909\u304C\u8D77\u304D\u305F\uFF08${how}\uFF09${rt ? `\u3002\u56FD\u53F7\u306F${rt.name}\u3068\u6539\u307E\u3063\u305F` : ""}`, participants: [{ entityId: st2.id, role: "state" }], effects: [{ targetId: st2.id, property: "polity", before, after: to }, ...rt ? [{ targetId: st2.id, property: "name", before: oldName, after: rt.name }] : [], { targetId: st2.id, property: "stability", before: null, after: Math.round(st2.stability * 100) / 100 }], causes, facts: { stateId: st2.id, polity: to, name: st2.name, by: who }, provenance: "simulation" });
     st2.leader = { name: leaderName(st2, ctx.nameGen?.person(civ6, civ6.groups[st2.capitalGroupId], ctx.rng) ?? `${st2.name}\u306E\u65B0\u6307\u5C0E\u8005`, leaderRng(civ6, st2, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ6, { capitalGroupId: st2.capitalGroupId })), heir: false, deposed: true, origin: who };
@@ -6191,7 +6587,7 @@
   }
 
   // js/core/wcde/domains/military.js
-  var clamp10 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+  var clamp11 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
   var has = (st2, k) => st2.techAdopted?.[k] != null;
   var can = (ctx, st2, cap) => stateCan(ctx.civ, st2, cap);
   var UNIT_KINDS = Object.freeze({
@@ -6265,12 +6661,12 @@
   }
   function recompute(ctx, st2) {
     const M = st2.military, ind = effective(ctx.civ, st2, "perCapita"), wTech = (has(st2, "bronze_weapons") ? 0.08 : 0) + (has(st2, "iron_weapons") ? 0.12 : 0) + (has(st2, "steel") ? 0.05 : 0) + (has(st2, "gunpowder") ? 0.1 : 0);
-    M.equipLevel = clamp10(0.15 + 0.35 * clamp10(ind / 1.6) + wTech + (st2.treasury > 0 ? 0.1 : -0.1) + 0.1 * (st2.econ?.investment ?? 0), 0, 1);
-    M.readiness = clamp10(0.5 * effective(ctx.civ, st2, "stability") + 0.3 * (st2.treasury >= 0 ? 1 : 0) + 0.2 * (1 - (st2.politics ? effective(ctx.civ, st2, "fatigue") : 0)), 0, 1);
+    M.equipLevel = clamp11(0.15 + 0.35 * clamp11(ind / 1.6) + wTech + (st2.treasury > 0 ? 0.1 : -0.1) + 0.1 * (st2.econ?.investment ?? 0), 0, 1);
+    M.readiness = clamp11(0.5 * effective(ctx.civ, st2, "stability") + 0.3 * (st2.treasury >= 0 ? 1 : 0) + 0.2 * (1 - (st2.politics ? effective(ctx.civ, st2, "fatigue") : 0)), 0, 1);
     const fx3 = doctrineFx(st2), off = fx3.off, def = fx3.def;
     M.fx = fx3;
     const eqE = effective(ctx.civ, st2, "equipLevel"), rdE = effective(ctx.civ, st2, "readiness");
-    st2.milBonus = Math.round(clamp10(0.35 * (eqE - 0.3) + 0.15 * (rdE - 0.5) + off, -0.6, 0.6) * 1e3) / 1e3;
+    st2.milBonus = Math.round(clamp11(0.35 * (eqE - 0.3) + 0.15 * (rdE - 0.5) + off, -0.6, 0.6) * 1e3) / 1e3;
     st2.milDef = Math.round(def * 1e3) / 1e3;
   }
   function stepMilitary(ctx) {
@@ -6288,7 +6684,7 @@
         const u = old.get(k) ?? { id: ids.next("unit"), kind: k, name: unitName(st2, k), since: mi };
         u.name = unitName(st2, k);
         u.size = Math.round(st2.army * sh * 10) / 10;
-        u.equip = Math.round(clamp10(effective(ctx.civ, st2, "equipLevel") + (k === "firearms" ? 0.1 : k === "cavalry" ? 0.03 : 0)) * 100) / 100;
+        u.equip = Math.round(clamp11(effective(ctx.civ, st2, "equipLevel") + (k === "firearms" ? 0.1 : k === "cavalry" ? 0.03 : 0)) * 100) / 100;
         u.readiness = Math.round(effective(ctx.civ, st2, "readiness") * 100) / 100;
         next.push(u);
       }
@@ -6433,7 +6829,7 @@
 
   // js/core/wcde/domains/actions.js
   var r33 = (x) => Math.round(x * 1e3) / 1e3;
-  var clamp11 = (v, a, b) => Math.max(a, Math.min(b, v));
+  var clamp12 = (v, a, b) => Math.max(a, Math.min(b, v));
   var cand2 = (key, f2, o = {}) => ({ key, target: o.target ?? null, opt: o.opt ?? null, factors: f2, eligible: o.eligible ?? true, reason: o.reason ?? null, label: o.label ?? null });
   var bad2 = (key, reason, o = {}) => cand2(key, {}, { ...o, eligible: false, reason });
   var eff2 = (list, st2, property, before, after) => {
@@ -6478,7 +6874,7 @@
         const inv = st2.econ.investment ?? 0;
         if (st2.treasury < INVEST_COST * 2) return [bad2("invest_industry", "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044")];
         if (inv >= INVEST_CAP) return [bad2("invest_industry", "\u6295\u8CC7\u306E\u52B9\u679C\u304C\u4E0A\u9650")];
-        return [cand2("invest_industry", { prosperity: 0.35 + 0.5 * (1 - clamp11(st2.econ.perCapita / 1.5, 0, 1)), tech: 0.1 }, { label: "\u7523\u696D\u3078\u6295\u8CC7\u3059\u308B" })];
+        return [cand2("invest_industry", { prosperity: 0.35 + 0.5 * (1 - clamp12(st2.econ.perCapita / 1.5, 0, 1)), tech: 0.1 }, { label: "\u7523\u696D\u3078\u6295\u8CC7\u3059\u308B" })];
       },
       execute(ctx, st2, c) {
         const ef = [], b = st2.econ.investment ?? 0, a = r33(Math.min(INVEST_CAP, b + INVEST_GAIN));
@@ -6509,7 +6905,7 @@
         const cost = 15;
         if (st2.treasury < cost) return { ok: false, error: "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044" };
         st2.treasury -= cost;
-        const b = f2.support, a = r33(clamp11(b + 0.15, 0, 1));
+        const b = f2.support, a = r33(clamp12(b + 0.15, 0, 1));
         f2.support = a;
         recomputeLegitimacy(st2.politics);
         const ef = [];
@@ -6520,10 +6916,10 @@
   }
 
   // js/core/wcde/power.js
-  var clamp12 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+  var clamp13 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
   var navyShare = (st2) => {
     const u = (st2.military?.units ?? []).find((x) => x.kind === "navy");
-    return u && st2.army > 0 ? clamp12(u.size / Math.max(1, st2.army)) : 0;
+    return u && st2.army > 0 ? clamp13(u.size / Math.max(1, st2.army)) : 0;
   };
   var landShare = (st2) => 1 - navyShare(st2);
   var fx = (st2) => st2.military?.fx ?? {};
@@ -6546,11 +6942,11 @@
     return n2 * milMult(st2, civ6) * (1 + 1.2 * (fx(st2).naval ?? 0)) * tech * (0.85 + 0.3 * effective(civ6, st2, "readiness"));
   }
   var supplyRange = (civ6, st2) => 650 * (1 + 2.2 * (fx(st2).logi ?? 0)) * (stateCan(civ6, st2, "war:far") ? 1.7 : 1) * (st2.polity === "empire" ? 1.15 : 1);
-  var supplyAt = (civ6, st2, distKm2) => clamp12(1 - Math.max(0, distKm2 - supplyRange(civ6, st2)) / (supplyRange(civ6, st2) * 1.2));
+  var supplyAt = (civ6, st2, distKm2) => clamp13(1 - Math.max(0, distKm2 - supplyRange(civ6, st2)) / (supplyRange(civ6, st2) * 1.2));
   var totalPower = (civ6, st2) => landPower(civ6, st2) * 1 + navalPower(civ6, st2) * 0.35;
 
   // js/core/wcde/warfare.js
-  var clamp13 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+  var clamp14 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
   var r34 = (x) => Math.round(x * 1e3) / 1e3;
   var POSTURES = Object.freeze({ offensive: "\u653B\u52E2", balanced: "\u5747\u8861", defensive: "\u5B88\u52E2" });
   var CAMPAIGN_KINDS = Object.freeze({ offensive: "\u9032\u653B", siege: "\u5305\u56F2", defense: "\u9632\u885B", naval_control: "\u5236\u6D77", blockade: "\u5C01\u9396", landing: "\u4E0A\u9678" });
@@ -6614,7 +7010,7 @@
     }));
   }
   var capCell = (civ6, st2) => civ6.groups[st2.capitalGroupId]?.cell ?? null;
-  var commitOf = (w, st2) => clamp13(w.ops.direction[st2.id]?.commit ?? 0.75, 0.3, 1);
+  var commitOf = (w, st2) => clamp14(w.ops.direction[st2.id]?.commit ?? 0.75, 0.3, 1);
   function syncForces(ctx, w) {
     const { civ: civ6 } = ctx, ops = w.ops, live2 = /* @__PURE__ */ new Set();
     for (const side of ["a", "d"]) for (const st2 of members(civ6, w, side)) {
@@ -6783,14 +7179,14 @@
     } else pD = garrison;
     pD *= (1 + Math.max(0, terr - adaptA)) * fort;
     const rnd = 0.75 + 0.5 * U(civ6, w.id, mi, camp.id, "r"), atk = pA * rnd, win = atk > pD ? "A" : "D", q2 = Math.max(1, win === "A" ? atk / (pD + 1e-9) : pD / (atk + 1e-9)), engaged = 0.5 + 0.5 * U(civ6, w.id, mi, camp.id, "e");
-    const loserLoss = clamp13(0.06 + 0.07 * Math.min(q2, 3), 0.05, 0.3) * engaged, winnerLoss = clamp13(loserLoss * (0.35 + 0.35 / q2), 0.01, 0.2);
+    const loserLoss = clamp14(0.06 + 0.07 * Math.min(q2, 3), 0.05, 0.3) * engaged, winnerLoss = clamp14(loserLoss * (0.35 + 0.35 / q2), 0.01, 0.2);
     const apply = (F, st2, frac, lost) => {
       const arm = st2.army, dead = Math.min(arm, F.size * frac * (1 - (fx2(st2).attr ?? 0)));
       st2.army = Math.max(0, arm - dead);
-      st2.warLoss = clamp13((st2.warLoss ?? 0) + (arm ? dead / arm * 0.6 : 0), 0, 0.7);
+      st2.warLoss = clamp14((st2.warLoss ?? 0) + (arm ? dead / arm * 0.6 : 0), 0, 0.7);
       F.size = Math.max(0, F.size - dead);
       F.lastBattle = mi;
-      F.morale = clamp13(F.morale + (lost ? -(0.1 + 0.9 * frac) * (1 - 0.8 * (fx2(st2).coh ?? 0)) : 0.05));
+      F.morale = clamp14(F.morale + (lost ? -(0.1 + 0.9 * frac) * (1 - 0.8 * (fx2(st2).coh ?? 0)) : 0.05));
       const grs = byState(ctx).get(st2.id) ?? [];
       if (grs.length && dead > 0) {
         const gg = grs[Math.floor(U(civ6, w.id, mi, camp.id, st2.id, "g") * grs.length)];
@@ -6817,7 +7213,7 @@
       }
     }
     const winSt = win === "A" ? sA : sD, loseSt = win === "A" ? sD : sA, name = battleName(ctx, w, kind, g), sign = (win === "A" ? A2.side : other(A2.side)) === "a" ? 1 : -1;
-    w.score = clamp13(w.score + sign * (2 + 14 * loserLoss), -100, 100);
+    w.score = clamp14(w.score + sign * (2 + 14 * loserLoss), -100, 100);
     const rec = { id: nid(ops, "b"), at: mi, kind, name, theater: camp.theaterId, cell: g.cell, a: A2.stateId, d: sD.id, winner: winSt.id, deadA: Math.round(deadA), deadD: Math.round(deadD), win };
     ops.battles.push(rec);
     if (ops.battles.length > 60) ops.battles.splice(0, ops.battles.length - 60);
@@ -6837,10 +7233,10 @@
     (ops.occBy ?? (ops.occBy = {}))[g.id] = camp.stateId;
     const owner = g.stateId ? civ6.states[g.stateId] : null, occ = civ6.states[camp.stateId];
     if (owner && owner.capitalGroupId === g.id) {
-      w.score = clamp13(w.score + (side === "a" ? 1 : -1) * 35, -100, 100);
-      for (const f2 of forcesOf(w, other(side))) if (f2.stateId === owner.id) f2.morale = clamp13(f2.morale - 0.3);
+      w.score = clamp14(w.score + (side === "a" ? 1 : -1) * 35, -100, 100);
+      for (const f2 of forcesOf(w, other(side))) if (f2.stateId === owner.id) f2.morale = clamp14(f2.morale - 0.3);
     }
-    w.score = clamp13(w.score + (side === "a" ? 1 : -1) * (3 + Math.min(10, Math.sqrt(g.pop) / 8)), -100, 100);
+    w.score = clamp14(w.score + (side === "a" ? 1 : -1) * (3 + Math.min(10, Math.sqrt(g.pop) / 8)), -100, 100);
     makeEvent(civ6, ctx.ids, { kind: "territory_occupied", title: `${placeName(ctx, g)}\u304C${occ.name}\u306B\u5360\u9818\u3055\u308C\u305F`, participants: [{ entityId: g.id, role: "territory" }, { entityId: w.id, role: "war" }, { entityId: camp.stateId, role: "occupier" }], location: { cell: g.cell }, causes: w.declaredEvent ? [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }] : [], facts: { warId: w.id, cell: g.cell, stateId: camp.stateId }, provenance: "simulation" });
   }
   function liberate(w, g) {
@@ -6860,7 +7256,7 @@
     const st2 = civ6.states[F.stateId], side = F.side, foe = other(side);
     const age = mi - camp.startedAt;
     if (camp.kind === "defense") {
-      F.morale = clamp13(F.morale + 0.03);
+      F.morale = clamp14(F.morale + 0.03);
       F.supply = 1;
       if (age >= 6) camp.phase = "done";
       return;
@@ -6878,12 +7274,12 @@
         if (D2 && site && U(civ6, w.id, mi, camp.id, "eng") < 0.45) {
           const coast = site;
           const r = fight(ctx, w, { kind: "naval", A: F, D: D2, camp, g: coast });
-          th.control = clamp13(th.control + (r.win === "A" ? 1 : -1) * (side === "a" ? 1 : -1) * 0.3, -1, 1);
+          th.control = clamp14(th.control + (r.win === "A" ? 1 : -1) * (side === "a" ? 1 : -1) * 0.3, -1, 1);
           if (F.morale < 0.2) {
             camp.phase = "done";
             camp.result = "failed";
           }
-        } else if (!D2) th.control = clamp13(th.control + (side === "a" ? 1 : -1) * 0.08, -1, 1);
+        } else if (!D2) th.control = clamp14(th.control + (side === "a" ? 1 : -1) * 0.08, -1, 1);
         if (age >= 12) camp.phase = "done";
         return;
       }
@@ -6916,7 +7312,7 @@
       const lost = F.size * 0.01 * (1 - (fx2(st2).attr ?? 0));
       st2.army = Math.max(0, st2.army - lost);
       F.size -= lost;
-      F.morale = clamp13(F.morale - 0.03);
+      F.morale = clamp14(F.morale - 0.03);
     }
     if (camp.kind === "landing") {
       const sea = seaTheater(w), ctl = sea ? side === "a" ? sea.control : -sea.control : 0;
@@ -6945,7 +7341,7 @@
     }
     if (Dn && U(civ6, w.id, mi, camp.id, "eng") < (camp.kind === "siege" ? 0.25 : 0.45)) {
       const r = fight(ctx, w, { kind: "field", A: F, D: Dn, camp, g: fieldSite(ctx, w, camp, g) });
-      camp.progress = clamp13(camp.progress + (r.win === "A" ? 0.3 : -0.25), 0, 1.2);
+      camp.progress = clamp14(camp.progress + (r.win === "A" ? 0.3 : -0.25), 0, 1.2);
       if (r.win !== "A" && F.morale < 0.2) {
         camp.phase = "done";
         camp.result = "failed";
@@ -6953,8 +7349,8 @@
       }
     } else {
       const atkP = landPower(civ6, st2, F.size) * moraleF(F) * (0.5 + 0.5 * F.supply), ratio = atkP / (garrison * (1 + terrainBonus(world, g.cell)) + 1);
-      const rate = camp.kind === "siege" ? clamp13(0.035 * ratio * (1 + 2 * (fx2(st2).siege ?? 0)), 0.01, 0.22) : clamp13(0.06 * ratio, 0.02, 0.3);
-      camp.progress = clamp13(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);
+      const rate = camp.kind === "siege" ? clamp14(0.035 * ratio * (1 + 2 * (fx2(st2).siege ?? 0)), 0.01, 0.22) : clamp14(0.06 * ratio, 0.02, 0.3);
+      camp.progress = clamp14(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);
       if (camp.kind === "siege") {
         const l = F.size * 4e-3 * (1 - (fx2(st2).attr ?? 0));
         st2.army = Math.max(0, st2.army - l);
@@ -6977,11 +7373,11 @@
       const wasOurs = g.stateId && sideOf(w, g.stateId) === side;
       if (wasOurs) {
         liberate(w, g);
-        w.score = clamp13(w.score + (side === "a" ? 1 : -1) * 4, -100, 100);
+        w.score = clamp14(w.score + (side === "a" ? 1 : -1) * 4, -100, 100);
       } else occupy(ctx, w, g, side, camp);
       camp.phase = "done";
       camp.result = "success";
-      F.morale = clamp13(F.morale + 0.08);
+      F.morale = clamp14(F.morale + 0.08);
     }
     if (age > 30) {
       camp.phase = "done";
@@ -7017,7 +7413,7 @@
     for (const id of Object.keys(ops.campaigns)) if (ops.campaigns[id].phase === "done" && !ops.forces[ops.campaigns[id].forceId]) delete ops.campaigns[id];
     for (const f2 of Object.values(ops.forces)) {
       const st2 = civ6.states[f2.stateId];
-      if (f2.lastBattle < mi - 1) f2.morale = clamp13(f2.morale + 0.015 + 0.02 * (fx2(st2).coh ?? 0) - 0.02 * (effective(civ6, st2, "fatigue") ?? 0));
+      if (f2.lastBattle < mi - 1) f2.morale = clamp14(f2.morale + 0.015 + 0.02 * (fx2(st2).coh ?? 0) - 0.02 * (effective(civ6, st2, "fatigue") ?? 0));
     }
     const mor = (side) => {
       const fs = forcesOf(w, side);
@@ -7025,7 +7421,7 @@
       return tot ? fs.reduce((s, f2) => s + f2.morale * f2.size, 0) / tot : 0;
     };
     const mA = mor("a"), mD = mor("d");
-    w.score = clamp13(w.score + (mA - mD) * 2.5, -100, 100);
+    w.score = clamp14(w.score + (mA - mD) * 2.5, -100, 100);
     ops.broken.a = mA < 0.15 ? ops.broken.a + 1 : 0;
     ops.broken.d = mD < 0.15 ? ops.broken.d + 1 : 0;
     const age = mi - w.startedAt;
@@ -7408,7 +7804,7 @@
   var MIN_MORTALITY = 0.01;
   var NAME_MAX = 40;
   var REASON_MAX = 200;
-  var clamp14 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+  var clamp15 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
   var r35 = (x) => Math.round(x * 1e3) / 1e3;
   var fin2 = (x) => typeof x === "number" && Number.isFinite(x);
   var catastrophesOf = (civ6) => {
@@ -7451,12 +7847,12 @@
     let dead = 0;
     const states = /* @__PURE__ */ new Map(), effects = [];
     for (const [g, k] of hit) {
-      const jitter = 0.85 + 0.15 * U2(civ6, id, g.id, "j"), frac = clamp14(pl.mortality * k * jitter, 0, MAX_MORTALITY), b = g.pop, a = Math.max(Math.min(b, 5), b * (1 - frac));
+      const jitter = 0.85 + 0.15 * U2(civ6, id, g.id, "j"), frac = clamp15(pl.mortality * k * jitter, 0, MAX_MORTALITY), b = g.pop, a = Math.max(Math.min(b, 5), b * (1 - frac));
       g.pop = a;
       dead += b - a;
-      g.capMult = r35(Math.min(g.capUntil > mi ? g.capMult : 1, clamp14(1 - 0.7 * frac, 0.25, 1)));
+      g.capMult = r35(Math.min(g.capUntil > mi ? g.capMult : 1, clamp15(1 - 0.7 * frac, 0.25, 1)));
       g.capUntil = Math.max(g.capUntil ?? 0, mi + pl.recoveryMonths);
-      for (const c of g.cohorts ?? []) c.tension = clamp14((c.tension ?? 0) + 0.3 * frac);
+      for (const c of g.cohorts ?? []) c.tension = clamp15((c.tension ?? 0) + 0.3 * frac);
       if (g.stateId) {
         const e = states.get(g.stateId) ?? { b: 0, a: 0, frac: 0, n: 0 };
         e.b += b;
@@ -7471,7 +7867,7 @@
       const f2 = e.b ? 1 - e.a / e.b : 0, sb = st2.stability;
       st2.pop = Math.max(0, st2.pop - (e.b - e.a));
       st2.army = Math.max(0, st2.army * (1 - f2));
-      st2.stability = clamp14(st2.stability - 0.3 * f2);
+      st2.stability = clamp15(st2.stability - 0.3 * f2);
       st2.treasury -= Math.max(0, st2.treasury) * 0.15 * f2;
       touched.push(sid);
       effects.push({ targetId: sid, property: "pop", before: Math.round(e.b), after: Math.round(e.a) }, { targetId: sid, property: "stability", before: r35(sb), after: r35(st2.stability) });
@@ -7692,11 +8088,11 @@
 
   // js/core/wcde/warlab.js
   var WARLAB_MODEL = "warlab-2";
-  var clamp15 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+  var clamp16 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
   var r36 = (x) => Math.round(x * 1e3) / 1e3;
   function warInputs(civ6, st2, role = "attack") {
     const equip = effective(civ6, st2, "equipLevel"), readiness = effective(civ6, st2, "readiness"), fatigue = effective(civ6, st2, "fatigue"), industry = effective(civ6, st2, "industry");
-    const sustain = clamp15(st2.treasury / (st2.army * 0.05 + 10) / 24);
+    const sustain = clamp16(st2.treasury / (st2.army * 0.05 + 10) / 24);
     const land = landPower(civ6, st2, null, { defending: role === "defend" }), naval = navalPower(civ6, st2), base = land + 0.35 * naval;
     return { army: st2.army, equip: r36(equip), readiness: r36(readiness), fatigue: r36(fatigue), industry: Math.round(industry), stability: r36(st2.stability), treasury: Math.round(st2.treasury), sustain: r36(sustain), base: Math.round(base), land: Math.round(land), naval: Math.round(naval), navyShare: r36(navyShare(st2)), supply: Math.round(supplyRange(civ6, st2)), power: Math.round(base * (1 - 0.3 * fatigue) * (0.85 + 0.15 * sustain)) };
   }
@@ -7709,14 +8105,14 @@
     const hit = cache?.get(key);
     if (hit) return hit;
     const ratio = (ia.power + 1) / (ib.power + 1), lr = Math.log(ratio);
-    const unc = clamp15(0.12 + 0.35 * (1 - (ia.readiness + ib.readiness) / 2) + 0.2 * (1 - (ia.stability + ib.stability) / 2) + 0.1 / (1 + Math.log10(1 + Math.min(ia.industry, ib.industry) / 1e3)), 0.05, 0.9);
+    const unc = clamp16(0.12 + 0.35 * (1 - (ia.readiness + ib.readiness) / 2) + 0.2 * (1 - (ia.stability + ib.stability) / 2) + 0.1 / (1 + Math.log10(1 + Math.min(ia.industry, ib.industry) / 1e3)), 0.05, 0.9);
     const win = (l) => {
       const raw = logistic(1.6 * l), stale = 0.35 * Math.exp(-(l * l) / 0.5);
       return { a: (1 - stale) * raw, b: (1 - stale) * (1 - raw), s: stale };
     };
     const mid = win(lr), lo = win(lr - unc), hi = win(lr + unc);
-    const lossA = clamp15(0.08 + 0.25 / (1 + ratio) + 0.1 * mid.s, 0.02, 0.6), lossB = clamp15(0.08 + 0.25 * ratio / (1 + ratio) + 0.1 * mid.s, 0.02, 0.6);
-    const months = Math.round(clamp15(6 + 30 * mid.s + 14 * (1 - Math.abs(mid.a - mid.b)), 4, 72));
+    const lossA = clamp16(0.08 + 0.25 / (1 + ratio) + 0.1 * mid.s, 0.02, 0.6), lossB = clamp16(0.08 + 0.25 * ratio / (1 + ratio) + 0.1 * mid.s, 0.02, 0.6);
+    const months = Math.round(clamp16(6 + 30 * mid.s + 14 * (1 - Math.abs(mid.a - mid.b)), 4, 72));
     const factors = [["army", "\u5175\u529B"], ["equip", "\u88C5\u5099\u6C34\u6E96"], ["readiness", "\u7DF4\u5EA6\u30FB\u5373\u5FDC"], ["fatigue", "\u75B2\u52B4\u5EA6"], ["sustain", "\u56FD\u5EAB\u306E\u6301\u4E45\u529B"], ["naval", "\u6D77\u8ECD\u529B"], ["supply", "\u88DC\u7D66\u306E\u5C4A\u304F\u7BC4\u56F2\uFF08km\uFF09"], ["power", "\u7DCF\u5408\u6226\u529B"]].map(([k, ja]) => ({ key: k, ja, a: ia[k], b: ib[k] }));
     const out = { model: WARLAB_MODEL, month: civ6.monthIndex, aId, bId, inputs: { a: ia, b: ib }, ratio: r36(ratio), pAWin: r36(mid.a), pBWin: r36(mid.b), pStalemate: r36(mid.s), pAWinRange: [r36(lo.a), r36(hi.a)], lossA: r36(lossA), lossB: r36(lossB), months, uncertainty: r36(unc), factors };
     if (cache) {
@@ -7727,7 +8123,7 @@
   }
 
   // js/core/wcde/negotiation.js
-  var clamp16 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+  var clamp17 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
   var r22 = (x) => Math.round(x * 100) / 100;
   var initDiplomacy = () => ({ proposals: [] });
   var ledger2 = (civ6) => {
@@ -7773,15 +8169,15 @@
     if (gr > 0.5) return { accept: false, score: -9, factors: [{ ja: "\u6B74\u53F2\u7684\u306A\u6068\u307F\u304C\u6DF1\u3044", v: -9 }], hard: true, counter: null };
     if (gr > 0) s += add("\u904E\u53BB\u306E\u6068\u307F", -3 * gr);
     const sf = strength(civ6, from), st2 = strength(civ6, to), rf = (sf + 1) / (st2 + 1);
-    if (type === "nonaggression") s += add(rf > 1 ? "\u76F8\u624B\u304C\u5F37\u3044\u306E\u3067\u4E0D\u53EF\u4FB5\u3092\u53D7\u3051\u5165\u308C\u305F\u3044" : "\u3053\u3061\u3089\u304C\u5F37\u3044\u306E\u3067\u4E0D\u53EF\u4FB5\u3092\u53D7\u3051\u5165\u308C\u306B\u304F\u3044", clamp16(Math.log(rf), -1, 1) * 0.5);
+    if (type === "nonaggression") s += add(rf > 1 ? "\u76F8\u624B\u304C\u5F37\u3044\u306E\u3067\u4E0D\u53EF\u4FB5\u3092\u53D7\u3051\u5165\u308C\u305F\u3044" : "\u3053\u3061\u3089\u304C\u5F37\u3044\u306E\u3067\u4E0D\u53EF\u4FB5\u3092\u53D7\u3051\u5165\u308C\u306B\u304F\u3044", clamp17(Math.log(rf), -1, 1) * 0.5);
     if (type === "alliance") {
       const hot2 = to.warIds.length > 0 ? 0.6 : 0;
       if (hot2) s += add("\u4EA4\u6226\u4E2D\u3067\u5473\u65B9\u304C\u307B\u3057\u3044", hot2);
-      s += add("\u6226\u529B\u306E\u91E3\u308A\u5408\u3044", clamp16(Math.log(rf), -1, 1) * 0.3);
+      s += add("\u6226\u529B\u306E\u91E3\u308A\u5408\u3044", clamp17(Math.log(rf), -1, 1) * 0.3);
     }
     if (type === "trade") {
       const ratio = (from.econ?.industry ?? 1) / ((to.econ?.industry ?? 1) + 1);
-      s += add("\u4EA4\u6613\u306E\u898B\u8FBC\u307F", clamp16(Math.log1p(Math.min(ratio, 1 / Math.max(ratio, 0.01))), 0, 1) * 0.5);
+      s += add("\u4EA4\u6613\u306E\u898B\u8FBC\u307F", clamp17(Math.log1p(Math.min(ratio, 1 / Math.max(ratio, 0.01))), 0, 1) * 0.5);
     }
     if (to.stability < 0.3) s += add("\u56FD\u5185\u304C\u4E0D\u5B89\u5B9A", -0.5);
     for (const t of civ6.activeTreatyIds.map((i) => civ6.treaties[i])) if (t.active && t.type === "alliance") {
@@ -7822,7 +8218,7 @@
       f2.push({ ja, v: r22(v) });
       return v;
     }, side = warSide(war, other2.id) ?? (war.aggressor === other2.id ? "a" : "d"), foe = side === "a" ? "d" : "a";
-    const power = (ids) => ids.map((i) => civ6.states[i]).filter((s2) => s2?.alive).reduce((a, s2) => a + totalPower(civ6, s2), 0), adv = clamp16(Math.log((power(war.sides[side]) + 1) / (power(war.sides[foe]) + 1)), -2, 2);
+    const power = (ids) => ids.map((i) => civ6.states[i]).filter((s2) => s2?.alive).reduce((a, s2) => a + totalPower(civ6, s2), 0), adv = clamp17(Math.log((power(war.sides[side]) + 1) / (power(war.sides[foe]) + 1)), -2, 2);
     const lead = side === "a" ? war.score : -war.score, occ = occupationShares(civ6, war, side);
     let s = add("\u6226\u529B\u306E\u5DEE\uFF08\u52A3\u52E2\u306A\u3089\u8B1B\u548C\u3057\u305F\u3044\uFF09", -0.6 * adv);
     s += add("\u6226\u6CC1\uFF08\u52A3\u52E2\u306A\u3089\u8B1B\u548C\u3057\u305F\u3044\uFF09", -lead / 40);
@@ -7834,11 +8230,11 @@
     s += add("\u56FD\u5185\u306E\u4E0D\u5B89\u5B9A", (1 - effective(civ6, other2, "stability")) * 0.8);
     if (other2.treasury < 0) s += add("\u56FD\u5EAB\u306E\u67AF\u6E07", 0.5);
     s += add("\u6226\u4E89\u306E\u640D\u8017", (other2.warLoss ?? 0) * 1.5);
-    s += add("\u6226\u4E89\u306E\u9577\u671F\u5316", clamp16(Math.max(0, civ6.monthIndex - war.startedAt) / 60, 0, 1.5));
+    s += add("\u6226\u4E89\u306E\u9577\u671F\u5316", clamp17(Math.max(0, civ6.monthIndex - war.startedAt) / 60, 0, 1.5));
     let need = 0.2;
     const otherPays = lead < 0 || lead === 0 && other2.treasury < proposer.treasury;
     if (terms.kind === "reparations") {
-      const pay = clamp16((terms.amount ?? 0) / (Math.max(0, otherPays ? other2.treasury : proposer.treasury) + 1), 0, 2);
+      const pay = clamp17((terms.amount ?? 0) / (Math.max(0, otherPays ? other2.treasury : proposer.treasury) + 1), 0, 2);
       need += otherPays ? add("\u8CE0\u511F\u306E\u91CD\u3055", 1.5 * pay) : -add("\u8CE0\u511F\u3092\u53D7\u3051\u53D6\u308C\u308B", 0.5 * pay);
     } else if (terms.kind === "cession") {
       need += add("\u571F\u5730\u3092\u5931\u3046\uFF08\u5272\u8B72\uFF09", 2.5 * occ.lost) - add("\u5360\u9818\u5730\u3092\u4FDD\u6301\u3067\u304D\u308B", 1.2 * occ.held);
@@ -8323,7 +8719,7 @@
   }
 
   // js/core/wcde/uprising.js
-  var clamp17 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+  var clamp18 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
   var fail4 = (error) => ({ ok: false, error });
   var UPRISING_KINDS = Object.freeze({
     revolution: { ja: "\u6C11\u8846\u8702\u8D77\uFF08\u9769\u547D\uFF09", faction: "commoners", state: false, blurb: "\u91CD\u3044\u8CA0\u62C5\u3068\u4E0D\u6E80\u3092\u62B1\u3048\u305F\u6C11\u8846\u304C\u7ACB\u3061\u4E0A\u304C\u308A\u3001\u4F53\u5236\u3092\u5012\u305D\u3046\u3068\u3059\u308B\u3002" },
@@ -8354,8 +8750,8 @@
       tens += t * g.pop;
       tp += g.pop;
     }
-    const grievance2 = clamp17((1 - st2.stability) * 0.9 + (tp ? tens / tp * 0.6 : 0) + (st2.warIds.length ? 0.1 : 0) + Math.max(0, st2.policy.tax - 0.15) * 1.2 + st2.policy.mobilization * 0.2), disc = 1 - support(st2, K.faction);
-    const far = cap ? Math.min(1, distKm(world, cap.cell, center.cell) / 6e3) : 0.3, scale = clamp17(0.12 + 0.55 * grievance2 + 0.3 * disc + 0.15 * far, 0.08, 0.95);
+    const grievance2 = clamp18((1 - st2.stability) * 0.9 + (tp ? tens / tp * 0.6 : 0) + (st2.warIds.length ? 0.1 : 0) + Math.max(0, st2.policy.tax - 0.15) * 1.2 + st2.policy.mobilization * 0.2), disc = 1 - support(st2, K.faction);
+    const far = cap ? Math.min(1, distKm(world, cap.cell, center.cell) / 6e3) : 0.3, scale = clamp18(0.12 + 0.55 * grievance2 + 0.3 * disc + 0.15 * far, 0.08, 0.95);
     const R = 1 + Math.round(scale * 7), dist = reachable(world, center.cell, R, 0), near = [];
     for (const [c, d] of dist) {
       const id2 = home.get(c);
@@ -8365,7 +8761,7 @@
     }
     near.sort((a, b) => a[0] - b[0] || b[1].pop - a[1].pop || (a[1].id < b[1].id ? -1 : 1));
     const cap2 = Math.max(1, Math.floor((gs.length - 1) * 0.6)), region = [center, ...near.map((x) => x[1]).filter((g) => g.id !== center.id)].slice(0, cap2), rebelPop = Math.round(region.reduce((s, g) => s + g.pop, 0));
-    const rebelPower = rebelPop * (0.5 + disc) * (0.6 + scale), statePower = st2.army * (0.5 + st2.stability) + Math.max(0, st2.pop - rebelPop) * 0.02, odds = clamp17(rebelPower / (rebelPower + statePower + 1e-9), 0.03, 0.97);
+    const rebelPower = rebelPop * (0.5 + disc) * (0.6 + scale), statePower = st2.army * (0.5 + st2.stability) + Math.max(0, st2.pop - rebelPop) * 0.02, odds = clamp18(rebelPower / (rebelPower + statePower + 1e-9), 0.03, 0.97);
     const oddsLabel = odds >= 0.7 ? "\u53CD\u4E71\u5074\u304C\u512A\u52E2" : odds >= 0.45 ? "\u4E92\u89D2" : odds >= 0.25 ? "\u3084\u3084\u4E0D\u5229" : "\u304B\u306A\u308A\u4E0D\u5229";
     return { ok: true, kind, kindJa: K.ja, stateMode: K.state, center: { groupId: center.id, cell: center.cell }, scale: Math.round(scale * 100) / 100, scaleLabel: scale >= 0.7 ? "\u5927\u898F\u6A21" : scale >= 0.4 ? "\u4E2D\u898F\u6A21" : "\u5C0F\u898F\u6A21", regionGroupIds: region.map((g) => g.id), rebelPop, share: st2.pop ? Math.round(rebelPop / st2.pop * 100) / 100 : 0, odds: Math.round(odds * 100) / 100, oddsLabel, grievance: Math.round(grievance2 * 100) / 100 };
   }
@@ -8374,10 +8770,11 @@
     st2.regime = reform.regime;
     st2.polity = core;
     st2.interpDirty = true;
-    const rt = retitle(st2, core);
+    const rt = retitle(st2, core, civ6.date.year);
     if (rt) {
       st2.name = rt.name;
       st2.nameBase = rt.base;
+      st2.titleYear = rt.year;
     }
     st2.leader = { name: String(reform.leader.name).trim(), bornAt: civ6.monthIndex - Math.round(360 + leaderRng(civ6, st2, "reform")() * 120), heir: false, look: reform.leader.look ?? 0, title: officeJa(r.ruler) };
     st2.offices = null;
@@ -8428,14 +8825,14 @@
       const ns = civ6.states[r.stateId];
       ns.relations[st2.id] = -60;
       st2.relations[ns.id] = -60;
-      st2.stability = clamp17(st2.stability - 0.06 - plan.scale * 0.1);
+      st2.stability = clamp18(st2.stability - 0.06 - plan.scale * 0.1);
       const war = declareWar(ctx, ns, st2, { reason: kind === "separatist" ? "independence" : kind === "religious_revolt" ? "religion" : "civil_war", provenance: "simulation" });
       return { ok: true, outcome: "new_state", newStateId: ns.id, warId: war.id, plan };
     }
     const roll = leaderRng(civ6, st2, "uprising", kind, plan.center.cell)();
     if (roll < plan.odds) {
       const before = applyReform(ctx, st2, reform);
-      st2.stability = clamp17(Math.min(st2.stability, 0.6) * 0.7 - plan.scale * 0.1 + 0.1, 0.12, 0.7);
+      st2.stability = clamp18(Math.min(st2.stability, 0.6) * 0.7 - plan.scale * 0.1 + 0.1, 0.12, 0.7);
       for (const g of regionGs) g.pop = Math.max(1, g.pop * (1 - 0.02 * (0.5 + plan.scale)));
       makeEvent(civ6, ctx.ids, { kind: "regime_change", title: `${st2.name}\u3067${K.ja}\u304C\u6210\u529F\u3057\u3001\u300C${REGIMES[reform.regime].ja}\u300D\u306E\u4F53\u5236\u306B\u306A\u3063\u305F\uFF08${st2.leader.title} ${st2.leader.name}\uFF09`, participants: [{ entityId: st2.id, role: "state" }], location: { cell: plan.center.cell }, facts: { stateId: st2.id, polity: st2.polity, regime: reform.regime, name: st2.name, uprising: kind }, effects: [{ targetId: st2.id, property: "polity", before: before.polity, after: st2.polity }], causes: [{ targetId: ev.eventId, relation: "caused_by", basis: "direct" }], provenance: "player" });
       invalidateMonthCaches(ctx);
@@ -8443,7 +8840,7 @@
     }
     const loss = 0.03 + 0.08 * plan.scale;
     for (const g of regionGs) g.pop = Math.max(1, g.pop * (1 - loss));
-    st2.stability = clamp17(st2.stability - 0.03 - plan.scale * 0.05);
+    st2.stability = clamp18(st2.stability - 0.03 - plan.scale * 0.05);
     makeEvent(civ6, ctx.ids, { kind: "uprising_crushed", title: `${st2.name}\u306E${K.ja}\u306F\u93AE\u5727\u3055\u308C\u305F`, participants: [{ entityId: st2.id, role: "state" }], location: { cell: plan.center.cell }, facts: { stateId: st2.id, kind }, causes: [{ targetId: ev.eventId, relation: "caused_by", basis: "direct" }], provenance: "player" });
     invalidateMonthCaches(ctx);
     return { ok: true, outcome: "crushed", plan };
@@ -8944,8 +9341,8 @@ ${shown}${more}`;
   var controlled = () => S2.w.civ.wcde.control.stateId;
 
   // js/ui/v6/terrain.js
-  var TAU2 = Math.PI * 2;
-  var clamp18 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var TAU3 = Math.PI * 2;
+  var clamp19 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   var hex = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
   var css = (c) => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
   function ramp(stops) {
@@ -8992,14 +9389,14 @@ ${shown}${more}`;
       const X = mesh.vertexXYZ, vlon = new Float32Array(T3), vlat = new Float32Array(T3);
       for (let v = 0; v < T3; v++) {
         vlon[v] = Math.atan2(X[3 * v + 1], X[3 * v]);
-        vlat[v] = Math.asin(clamp18(X[3 * v + 2], -1, 1));
+        vlat[v] = Math.asin(clamp19(X[3 * v + 2], -1, 1));
       }
       this.vlon = vlon;
       this.vlat = vlat;
       const C = mesh.centerXYZ, cen = new Float32Array(N2 * 2);
       for (let c = 0; c < N2; c++) {
         cen[2 * c] = Math.atan2(C[3 * c + 1], C[3 * c]);
-        cen[2 * c + 1] = Math.asin(clamp18(C[3 * c + 2], -1, 1));
+        cen[2 * c + 1] = Math.asin(clamp19(C[3 * c + 2], -1, 1));
       }
       this.cen = cen;
       this.W = 0;
@@ -9028,8 +9425,8 @@ ${shown}${more}`;
       this.land = null;
       const T3 = this.T, VX = new Float32Array(T3), VY = new Float32Array(T3), cellPx = Math.sqrt(W2 * H / this.N);
       for (let v = 0; v < T3; v++) {
-        const a = hash01(v, 1) * TAU2, r = JITTER * cellPx * (0.4 + 0.6 * hash01(v, 2));
-        VX[v] = (this.vlon[v] + Math.PI) / TAU2 * W2 + Math.cos(a) * r;
+        const a = hash01(v, 1) * TAU3, r = JITTER * cellPx * (0.4 + 0.6 * hash01(v, 2));
+        VX[v] = (this.vlon[v] + Math.PI) / TAU3 * W2 + Math.cos(a) * r;
         VY[v] = (Math.PI / 2 - this.vlat[v]) / Math.PI * H + Math.sin(a) * r;
       }
       this.VX = VX;
@@ -9037,7 +9434,7 @@ ${shown}${more}`;
       this.cellPx = cellPx;
     }
     proj(lon, lat) {
-      return [(lon + Math.PI) / TAU2 * this.W, (Math.PI / 2 - lat) / Math.PI * this.H];
+      return [(lon + Math.PI) / TAU3 * this.W, (Math.PI / 2 - lat) / Math.PI * this.H];
     }
     /** 辺 a→b の折れ線 [x0,y0,x1,y1,…]。x は a の位置を基準に、b を ±W だけずらしてつなげたもの */
     edge(a, b) {
@@ -9151,8 +9548,8 @@ ${shown}${more}`;
       for (let k = off[c]; k < off[c + 1]; k++) {
         const j = nb[k];
         let dl = cen[2 * j] - cen[2 * c];
-        if (dl > Math.PI) dl -= TAU2;
-        else if (dl < -Math.PI) dl += TAU2;
+        if (dl > Math.PI) dl -= TAU3;
+        else if (dl < -Math.PI) dl += TAU3;
         const dx = dl * cl / spacing, dy = (cen[2 * j + 1] - cen[2 * c + 1]) / spacing, dz = ((isSea2[j] ? Math.min(0, elevation[j]) * 0.3 : elevation[j]) - e) / 1e3;
         sxx += dx * dx;
         sxy += dx * dy;
@@ -9161,7 +9558,7 @@ ${shown}${more}`;
         syz += dy * dz;
       }
       const det = sxx * syy - sxy * sxy || 1, gx = (sxz * syy - syz * sxy) / det, gy = (syz * sxx - sxz * sxy) / det, nx = -gx * 1.25, ny = -gy * 1.25, len = Math.hypot(nx, ny, 1);
-      sh[c] = clamp18((nx * Lx + ny * Ly + Lz) / len - Lz, -1, 1);
+      sh[c] = clamp19((nx * Lx + ny * Ly + Lz) / len - Lz, -1, 1);
     }
     const out = new Float32Array(N2);
     for (let c = 0; c < N2; c++) {
@@ -9182,8 +9579,8 @@ ${shown}${more}`;
       const e = elevation[c];
       if (e < 700) continue;
       const [px, py] = geo.proj(geo.cen[2 * c], geo.cen[2 * c + 1]), jx = (hash01(c, 7) - 0.5) * cp * 0.45, jy = (hash01(c, 8) - 0.5) * cp * 0.35;
-      if (e >= 2200) marks.push([px + jx, py + jy, 1, cp * (0.5 + 0.28 * clamp18((e - 2200) / 3200, 0, 1))]);
-      else marks.push([px + jx, py + jy, 0, cp * (0.3 + 0.16 * clamp18((e - 700) / 1500, 0, 1))]);
+      if (e >= 2200) marks.push([px + jx, py + jy, 1, cp * (0.5 + 0.28 * clamp19((e - 2200) / 3200, 0, 1))]);
+      else marks.push([px + jx, py + jy, 0, cp * (0.3 + 0.16 * clamp19((e - 700) / 1500, 0, 1))]);
     }
     return marks.sort((a, b) => a[1] - b[1]);
   }
@@ -9260,7 +9657,7 @@ ${shown}${more}`;
   }
 
   // js/ui/v6/map.js
-  var TAU3 = Math.PI * 2;
+  var TAU4 = Math.PI * 2;
   var LAYERS = [
     ["heightmap", "\u6A19\u9AD8", "ground"],
     ["biomes", "\u30D0\u30A4\u30AA\u30FC\u30E0", "ground"],
@@ -9359,7 +9756,7 @@ ${shown}${more}`;
       cv.addEventListener("pointerleave", up);
       cv.addEventListener("wheel", (e) => {
         e.preventDefault();
-        const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k0 = this.view.k, k1 = clamp18(k0 * (e.deltaY < 0 ? 1.2 : 1 / 1.2), 1, 16);
+        const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k0 = this.view.k, k1 = clamp19(k0 * (e.deltaY < 0 ? 1.2 : 1 / 1.2), 1, 16);
         this.view.x = mx - (mx - this.view.x) / k0 * k1;
         this.view.y = my - (my - this.view.y) / k0 * k1;
         this.view.k = k1;
@@ -9402,7 +9799,7 @@ ${shown}${more}`;
       return [W2, H];
     }
     proj(lon, lat, W2, H) {
-      return [(lon + Math.PI) / TAU3 * W2, (Math.PI / 2 - lat) / Math.PI * H];
+      return [(lon + Math.PI) / TAU4 * W2, (Math.PI / 2 - lat) / Math.PI * H];
     }
     /* ---------- 世界の地形から 1 回だけ作るもの ---------- */
     terr() {
@@ -9522,7 +9919,7 @@ ${shown}${more}`;
     }
     idColor(type, g, maxDen) {
       if (type === "population") {
-        const n2 = g.cells?.length || 1, d = g.pop / n2, t = clamp18(Math.log1p(d) / Math.log1p(maxDen), 0, 1);
+        const n2 = g.cells?.length || 1, d = g.pop / n2, t = clamp19(Math.log1p(d) / Math.log1p(maxDen), 0, 1);
         return RAMPS.pop(t);
       }
       const id = idOf[type](g);
@@ -9818,14 +10215,14 @@ ${shown}${more}`;
           if (s.pop < 800) continue;
           const [x, y] = geo.proj(cen[2 * s.cell], cen[2 * s.cell + 1]), big = s.stage === "city", r = (big ? 3.4 : 2.1) / sk;
           ctx.beginPath();
-          ctx.arc(x, y, r, 0, TAU3);
+          ctx.arc(x, y, r, 0, TAU4);
           ctx.fillStyle = "#fff4cf";
           ctx.fill();
           ctx.strokeStyle = "#2a2018";
           ctx.stroke();
           if (big) {
             ctx.beginPath();
-            ctx.arc(x, y, r * 0.38, 0, TAU3);
+            ctx.arc(x, y, r * 0.38, 0, TAU4);
             ctx.fillStyle = "#2a2018";
             ctx.fill();
           }
@@ -9859,7 +10256,7 @@ ${shown}${more}`;
       if (this.pins) for (const pin of this.pins) {
         const [x, y] = geo.proj(cen[2 * pin.cell], cen[2 * pin.cell + 1]), r = (pin.big ? 7 : 4.2) / sk;
         ctx.beginPath();
-        ctx.arc(x, y, r, 0, TAU3);
+        ctx.arc(x, y, r, 0, TAU4);
         ctx.fillStyle = pin.color ?? "#f0c14d";
         ctx.globalAlpha = pin.big ? 1 : 0.85;
         ctx.fill();
@@ -9869,7 +10266,7 @@ ${shown}${more}`;
         ctx.stroke();
         if (pin.big) {
           ctx.beginPath();
-          ctx.arc(x, y, r * 1.9, 0, TAU3);
+          ctx.arc(x, y, r * 1.9, 0, TAU4);
           ctx.strokeStyle = "#ff3b30";
           ctx.lineWidth = 2 / sk;
           ctx.stroke();
@@ -9912,7 +10309,7 @@ ${shown}${more}`;
         }
         rank++;
         shown++;
-        const big = Math.max(0.35, 1 - rank / 40), fs = clamp18((8 + 2.6 * Math.sqrt(e.n)) * (0.8 + 0.4 * big), 9, 30) / Math.pow(k, 0.55);
+        const big = Math.max(0.35, 1 - rank / 40), fs = clamp19((8 + 2.6 * Math.sqrt(e.n)) * (0.8 + 0.4 * big), 9, 30) / Math.pow(k, 0.55);
         ctx.font = `600 ${fs}px "Shippori Mincho","Noto Serif JP","Yu Mincho",serif`;
         ctx.lineWidth = fs * 0.24;
         ctx.strokeStyle = "rgba(16,18,24,.78)";
@@ -9925,11 +10322,11 @@ ${shown}${more}`;
       }
     }
     click(e) {
-      const r = this.cv.getBoundingClientRect(), v = this.view, x = ((e.clientX - r.left) * (this.cv.width / r.width) - v.x) / v.k, y = ((e.clientY - r.top) * (this.cv.height / r.height) - v.y) / v.k, W2 = this.cv.width, H = this.cv.height, lon = x / W2 * TAU3 - Math.PI, lat = Math.PI / 2 - y / H * Math.PI;
+      const r = this.cv.getBoundingClientRect(), v = this.view, x = ((e.clientX - r.left) * (this.cv.width / r.width) - v.x) / v.k, y = ((e.clientY - r.top) * (this.cv.height / r.height) - v.y) / v.k, W2 = this.cv.width, H = this.cv.height, lon = x / W2 * TAU4 - Math.PI, lat = Math.PI / 2 - y / H * Math.PI;
       let best = -1, bd = 9;
       for (let c = 0; c < this.geo.N; c++) {
         let dl = Math.abs(this.geo.cen[c * 2] - lon);
-        if (dl > Math.PI) dl = TAU3 - dl;
+        if (dl > Math.PI) dl = TAU4 - dl;
         const d = dl * Math.cos(lat) + Math.abs(this.geo.cen[c * 2 + 1] - lat);
         if (d < bd) {
           bd = d;
@@ -10356,8 +10753,8 @@ ${shown}${more}`;
   }
 
   // js/version.js
-  var APP_VERSION = "6.10.0";
-  var APP_VERSION_NAME = "\u4E16\u754C\u306E\u8F03\u6B63\u3068\u4F7F\u3044\u5FC3\u5730";
+  var APP_VERSION = "6.11.0";
+  var APP_VERSION_NAME = "\u5927\u9678\u306E\u518D\u8A2D\u8A08";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/v6/title.js
@@ -11806,7 +12203,7 @@ ${shown}${more}`;
   }
 
   // js/core/wcde/save-meta.js
-  var APP_VERSION_FOR_SAVE = "6.10.0";
+  var APP_VERSION_FOR_SAVE = "6.11.0";
 
   // js/core/wcde/savefile.js
   var SAVE_FORMAT = "alterhistory-save";

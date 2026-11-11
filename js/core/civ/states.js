@@ -27,7 +27,7 @@ export function formState(ctx, { via, groupIds, predecessor = null, player = fal
   if (!gs.length) return null;
   const cap = (capitalGroupId && gs.find((g) => g.id === capitalGroupId)) || gs.reduce((a, b) => (b.pop > a.pop ? b : a)), id = ids.next("state"), h = hashSeed(id);
   const pol = gatedPolity(civ, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")), np = name ? null : ctx.nameGen?.stateParts?.(civ, cap, via, rng, pol) ?? null;
-  const st = { id, name: name ?? np?.name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix, nameBase: np?.base ?? null, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, nameLang: name ? null : (ctx.nameLangOf?.(cap) ?? null), /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */ alive: true, player, dissolvedAt: null, predecessor, polity: pol, stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
+  const st = { id, name: name ?? np?.name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix, nameBase: np?.base ?? null, titleYear: np?.year ?? null, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, nameLang: name ? null : (ctx.nameLangOf?.(cap) ?? null), /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */ alive: true, player, dissolvedAt: null, predecessor, polity: pol, stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
     policy: { tax: 0.1, mobilization: 0, assimilation: 0, tolerance: 0.5, autonomy: 0 }, techAdopted: {}, strategy: null, campaign: null, defense: 0, boostUntil: -1, sanctions: {}, relations: {}, warIds: [], leader: { name: ctx.nameGen?.person(civ, cap, rng) ?? makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false }, lastCrisis: -999,
     personality: { security: 0.6 + (h % 100) / 125, prosperity: 0.6 + ((h >> 7) % 100) / 125, expansion: 0.6 + ((h >> 14) % 100) / 125, stability: 0.6 + ((h >> 21) % 100) / 125, culture: 0.6 + ((h >> 4) % 100) / 125, tech: 0.6 + ((h >> 11) % 100) / 125, prestige: 0.6 + ((h >> 18) % 100) / 125 } };
   st.leader.name = leaderName(st, st.leader.name, leaderRng(civ, st, "found")); // 君主は「〇〇1世」
@@ -66,22 +66,35 @@ export const stateCap = (civ) => 10 + 190 * (1 - Math.exp(-Math.max(0, civ.date.
 /** 国家の年あたりの崩壊の確率（v6.9.0）。年齢 a 年。120 年を超えると徐々に上がる（a=250: 0.12%, 500: 0.28%, 1000: 0.64%）。生存は 1000 年で約 6%、500 年で約 35%（他の崩壊・征服は別） */
 export const lifespanHazard = (age) => 0.0012 * Math.pow(Math.max(0, age) / 250, 1.2);
 /** 統合（v6.8.0）。大きな国が、小さな近隣の国を吸収する（征服以外の統合・併合の経路。文化が同じ・相手が不安定だと起きやすい）。年 1 回。プレイヤーの国は吸収しない */
+const lmCache = new WeakMap();
+/** 各セルの陸塊（海で区切られた連結成分）の番号。世界ごとに 1 回だけ作る（v6.11.0: 大陸ごとの覇権に使う） */
+const landmassOf = (world) => { // 連結成分は幅優先で数える（球面世界の層は直接 import しない）
+  let v = lmCache.get(world); if (v) return v;
+  const V = world.mesh.cellCount, off = world.mesh.neighborOffsets, nb = world.mesh.neighborIds, el = world.cell.elevation; v = new Int32Array(V).fill(-1); const q = new Int32Array(V); let n = 0;
+  for (let s0 = 0; s0 < V; s0++) { if (v[s0] >= 0 || el[s0] <= 0) continue; let h = 0, t = 0; q[t++] = s0; v[s0] = n; while (h < t) { const c = q[h++]; for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (v[j] < 0 && el[j] > 0) { v[j] = n; q[t++] = j; } } } n++; }
+  lmCache.set(world, v); return v;
+};
+/** 大陸ごとの覇権（v6.11.0）。各陸塊で最大の国は、近隣の小国を吸収しやすい（大きな帝国は、大陸ごとに育つ。崩壊は国家の寿命・不安定が受け持つので、興亡をくり返す）。起点から約 500 年後（青銅器時代）から */
+export const HEGEMON = Object.freeze({ fromYear: 500, ratio: 2.0, boost: 1.6, perYear: 1, maxShare: 0.6, crowded: 0.5 }); // 国の数が目安の半分を下回るほど減ったら、これ以上は統合を促さない（数の目標と両立）
 export function stepUnification(ctx, groupsByState) {
   const { world, civ, ids, rng } = ctx, mi = civ.monthIndex, alive = aliveStates(civ).sort((a, b) => b.pop - a.pop);
-  const merged = new Set(), absorbers = new Set(); let done = 0;
+  const merged = new Set(), absorbers = new Set(); let done = 0, doneLead = 0;
+  const lm = landmassOf(world), lmOfState = (s) => { const g = civ.groups[s.capitalGroupId]; return g ? lm[g.cell] : -1; }, leaderOf = new Map();
+  const lmGroups = new Map(); for (const id in civ.groups) { const g = civ.groups[id]; const k = lm[g.cell]; lmGroups.set(k, (lmGroups.get(k) ?? 0) + 1); }
+  if (civ.date.year >= HEGEMON.fromYear && alive.length >= HEGEMON.crowded * stateCap(civ)) for (const s of alive) { const k = lmOfState(s); if (k >= 0 && !leaderOf.has(k) && (lmGroups.get(k) ?? 0) >= 12) leaderOf.set(k, s.id); } // alive は人口の多い順。小さな島の覇者は作らない
   groupsByState = new Map(); for (const id in civ.groups) { const g = civ.groups[id]; if (g.stateId) (groupsByState.get(g.stateId) ?? groupsByState.set(g.stateId, []).get(g.stateId)).push(g); } // 古い一覧を使わない（同じ回に分離・崩壊した国の集団を取りこぼさない）
   for (const B of alive) {
-    if (merged.has(B.id) || done >= 2 || !B.alive) continue;
+    const lead = leaderOf.get(lmOfState(B)) === B.id && (groupsByState.get(B.id)?.length ?? 0) < HEGEMON.maxShare * (lmGroups.get(lmOfState(B)) ?? 1); if (merged.has(B.id) || !B.alive || (lead ? doneLead >= HEGEMON.perYear : done >= 2)) continue;
     const gsB = groupsByState.get(B.id); if (!gsB?.length || B.stability < 0.45) continue;
     const nbr = new Map(); for (const g of gsB) for (const o of neighborGroups(ctx, g)) { const og = civ.groups[o]; if (og?.stateId && og.stateId !== B.id) nbr.set(og.stateId, (nbr.get(og.stateId) ?? 0) + 1); }
     for (const [aid] of [...nbr].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1))) {
-      const A = civ.states[aid]; if (!A?.alive || A.player || merged.has(aid) || absorbers.has(aid) || A.pop * 2.5 > B.pop || A.warIds.length || B.warIds.some((w) => civ.wars[w]?.sides.a.includes(aid) || civ.wars[w]?.sides.d.includes(aid))) continue;
+      const A = civ.states[aid]; if (!A?.alive || A.player || merged.has(aid) || absorbers.has(aid) || A.pop * (lead ? HEGEMON.ratio : 2.5) > B.pop || A.warIds.length || B.warIds.some((w) => civ.wars[w]?.sides.a.includes(aid) || civ.wars[w]?.sides.d.includes(aid))) continue;
       const cA = civ.groups[A.capitalGroupId], cB = civ.groups[B.capitalGroupId], same = cA && cB && dominant(cA).cultureId === dominant(cB).cultureId;
       const adm = stateCan(civ, B, "polity:empire") ? 1.5 : stateCan(civ, B, "polity:kingdom") ? 1.2 : 0.7;
-      const p = 0.03 * adm * (same ? 1 : 0.35) * (A.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
+      const p = 0.03 * (lead ? HEGEMON.boost : 1) * adm * (same ? 1 : lead ? 0.6 : 0.35) * (A.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
       if (rng() >= p) continue;
       const gsA = groupsByState.get(aid) ?? []; for (const g of gsA) g.stateId = B.id; gsB.push(...gsA); groupsByState.delete(aid); absorbers.add(B.id);
-      A.alive = false; A.dissolvedAt = mi; A.mergedInto = B.id; merged.add(aid); done++;
+      A.alive = false; A.dissolvedAt = mi; A.mergedInto = B.id; merged.add(aid); if (lead) doneLead++; else done++;
       makeEvent(civ, ids, { kind: "state_merged", title: `${A.name}が${B.name}に統合された`, participants: [{ entityId: aid, role: "absorbed" }, { entityId: B.id, role: "state" }], location: cB ? { cell: cB.cell } : null, facts: { stateId: B.id, absorbed: aid, same: !!same }, causes: A.lastCrisisEvent ? [{ targetId: A.lastCrisisEvent, relation: "contributed_to", basis: "plausible" }] : [] });
       B.interpDirty = true; break;
     }

@@ -5,6 +5,7 @@
 import { buildSphereMesh, frequencyForCells, cellArea, greatCircleRad, meshHash } from "./sphere-mesh.js";
 import { normalizeWorldSpec, GENERATOR_VERSION, ISLAND_MODES } from "./spec.js";
 import { makeRng, hashString, fbm3, makeFbm3 } from "./noise.js";
+import { planContinents, makeFields, chooseSeam, seamSampleSpecs, rotZ } from "./continents.js";
 
 export const LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
 export const BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });
@@ -32,6 +33,7 @@ class MinHeap {
   }
 }
 
+let coarseCache = null; const coarseMesh = () => (coarseCache ??= buildSphereMesh(frequencyForCells(2400))); // 大陸の計画の試し作り用（粗いメッシュ）
 class Cancelled extends Error {}
 const makeStager = (onProgress, signal, timings) => (name, label, fn) => {
   if (signal?.aborted) throw new Cancelled("キャンセルされました");
@@ -65,72 +67,88 @@ export function generateWorld(specInput, options = {}) {
   // ---- G2: プレートと大陸の概形 ----
   const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);
   const volcanic = new Float32Array(V);
+  let seamInfo = { psi: 0, cost: 0 }; const X3 = (c) => X[3 * c], Y3 = (c) => X[3 * c + 1];
+  const modeLevel = spec.islandMode === "many" ? 2 : spec.islandMode === "normal" ? 1 : 0; // 火山島列・島弧の多さ
   stage("G2_plates", "プレート・大陸の概形", () => {
     const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];
     const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);
     const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));
-    for (let c = 0; c < V; c++) {
-      const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
+    const warpPt = (x, y, z) => { // 位置の歪め（海岸線を円形から外す）。全セルと、継ぎ目の標本点で同じ式を使う
       const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;
-      const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz); wx[c] = px / l; wy[c] = py / l; wz[c] = pz / l;
-    }
-    // プレート: 種の点と、オイラー極（回転軸）。位置 x での速度 = ω × x
+      const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz); return [px / l, py / l, pz / l];
+    };
+    for (let c = 0; c < V; c++) { const w = warpPt(X[3 * c], X[3 * c + 1], X[3 * c + 2]); wx[c] = w[0]; wy[c] = w[1]; wz[c] = w[2]; }
+    const ragF = makeFbm3(nSeed("coast"), 3, 2.2), ragAt = (x, y, z) => (ragF(x, y, z) - 0.5) * 2; // 海岸線のゆらぎ（半島・湾）
+    // ---- 大陸の計画（配置パターン・不均等な大きさ・形）と、地図の左右端が海になる向き ----
+    const samples = seamSampleSpecs().map((s) => { const p0 = [Math.cos(s.lat) * Math.cos(s.lon), Math.cos(s.lat) * Math.sin(s.lon), Math.sin(s.lat)], w = warpPt(p0[0], p0[1], p0[2]); return { p: w, rag: ragAt(w[0], w[1], w[2]), weight: s.weight }; });
+    // 粗いメッシュで試し作りして、大陸が合体しすぎない・数が合う計画を選ぶ（だめなら計画を作り直す。同じシードなら同じ結果）
+    const coarse = coarseMesh(), CV = coarse.cellCount, CX = coarse.centerXYZ, cw = new Float32Array(3 * CV), crag = new Float32Array(CV);
+    for (let c = 0; c < CV; c++) { const w = warpPt(CX[3 * c], CX[3 * c + 1], CX[3 * c + 2]); cw[3 * c] = w[0]; cw[3 * c + 1] = w[1]; cw[3 * c + 2] = w[2]; crag[c] = ragAt(w[0], w[1], w[2]); }
+    const judge = (pl, si) => { // 戻り値: 問題の大きさ（0 なら合格）
+      const { fieldAt } = makeFields(pl), ca = Math.cos(si.psi), sa = Math.sin(si.psi), raw = new Float32Array(CV);
+      for (let c = 0; c < CV; c++) raw[c] = fieldAt(cw[3 * c] * ca - cw[3 * c + 1] * sa, cw[3 * c] * sa + cw[3 * c + 1] * ca, cw[3 * c + 2], crag[c]);
+      const sorted = Float32Array.from(raw).sort(), lvl = sorted[Math.min(CV - 1, Math.floor(CV * (1 - spec.landFraction)))], isS = new Uint8Array(CV); for (let c = 0; c < CV; c++) isS[c] = raw[c] > lvl ? 0 : 1;
+      const { sizes } = landmasses(CV, coarse.neighborOffsets, coarse.neighborIds, isS), total = sizes.reduce((a, b) => a + b, 0) || 1, big = sizes.filter((n) => n >= total * 0.03).sort((a, b) => b - a);
+      const K = spec.continentCountTarget, lo = spec.layout === "uneven" ? Math.max(1, K - 2) : spec.layout === "super" ? Math.max(1, K - 3) : Math.max(1, Math.ceil(K / 2)), maxShare = spec.layout === "super" ? 0.72 : K === 1 ? 1 : 0.5;
+      let bad = 0; if (big.length < lo) bad += (lo - big.length) * 2; if (big.length > K + 2) bad += big.length - K - 2; if (big[0] / total > maxShare) bad += (big[0] / total - maxShare) * 10;
+      return bad + si.cost * 0.02;
+    };
+    let plan = null, bestBad = Infinity, bestSeam = null;
+    for (let salt = 0; salt < 14 && bestBad > 0.2; salt++) { const pl = planContinents(spec, ISLAND_MODES[spec.islandMode], salt), si = chooseSeam(makeFields(pl).fieldAt, samples), bad = judge(pl, si); if (bad < bestBad) { bestBad = bad; plan = pl; bestSeam = si; } }
+    seamInfo = bestSeam;
+    const psi = seamInfo.psi;
+    plan.islands = plan.islands.filter((o) => { const a = rotZ(o.v, -psi), lon = Math.atan2(a[1], a[0]); return Math.abs(Math.PI - Math.abs(lon)) > (o.r * 1.6 + 5 * D2R); }); // 島も、左右端にはかけない
+    const { fieldAt, islandAt } = makeFields(plan);
+    // ---- プレート: 種の点と、オイラー極（回転軸）。大陸ごとに大陸プレートを置き、大陸地殻と連動させる ----
     const rp = makeRng(seed, "plates"), P = spec.plateCount, seeds = [], omega = [];
-    for (let p = 0; p < P; p++) { seeds.push(rp.unitVec()); const w = rp.unitVec(), sp = rp.range(0.4, 1.6); omega.push([w[0] * sp, w[1] * sp, w[2] * sp]); }
+    const contSeeds = []; for (const ct of plan.continents) for (const v of ct.plateSeeds) contSeeds.push(rotZ(v, -psi));
+    const nCont = Math.min(contSeeds.length, Math.max(1, P - 3)), isContPlate = new Uint8Array(P);
+    for (let p = 0; p < P; p++) { const rnd = rp.unitVec(); seeds.push(p < nCont ? contSeeds[p] : rnd); if (p < nCont) isContPlate[p] = 1; const w = rp.unitVec(), sp = rp.range(0.4, 1.6); omega.push([w[0] * sp, w[1] * sp, w[2] * sp]); }
     for (let c = 0; c < V; c++) { let best = -2, bp = 0; for (let p = 0; p < P; p++) { const d = wx[c] * seeds[p][0] + wy[c] * seeds[p][1] + wz[c] * seeds[p][2]; if (d > best) { best = d; bp = p; } } plate[c] = bp; }
     const vel = (p, c) => { const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2]; return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x]; };
-    // 境界の収束度（正: 衝突 → 山脈・島弧、負: 発散 → 地溝・海嶺）
-    const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V);
+    // 境界の収束度（正: 衝突 → 山脈・島弧、負: 発散 → 地溝・海嶺）。大陸プレートどうしの衝突は高い山脈、海洋どうしは島弧
+    const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V), srcCrust = new Float32Array(V);
     for (let c = 0; c < V; c++) {
-      let best = 0, bestAbs = 0; const vc = vel(plate[c], c);
+      let best = 0, bestAbs = 0, crust = 0.55; const vc = vel(plate[c], c);
       for (let k = off[c]; k < off[c + 1]; k++) {
         const j = nb[k]; if (plate[j] === plate[c]) continue;
         const vj = vel(plate[j], c); let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2]; const dl = Math.hypot(dx, dy, dz) || 1; dx /= dl; dy /= dl; dz /= dl;
         const conv = (vc[0] - vj[0]) * dx + (vc[1] - vj[1]) * dy + (vc[2] - vj[2]) * dz;
-        if (Math.abs(conv) > bestAbs) { bestAbs = Math.abs(conv); best = conv; }
+        if (Math.abs(conv) > bestAbs) { bestAbs = Math.abs(conv); best = conv; const a = isContPlate[plate[c]], b = isContPlate[plate[j]]; crust = a && b ? 1.15 : a || b ? 0.95 : 0.55; }
       }
-      if (bestAbs > 0) { isSrc[c] = 1; srcStrength[c] = best; }
+      if (bestAbs > 0) { isSrc[c] = 1; srcStrength[c] = best; srcCrust[c] = crust; }
     }
     // 境界からの距離（多源 BFS）。山脈の幅は角度で決める（解像度に依存しない）
     const widthCells = Math.max(2, (5 * D2R) / spacingRad), maxD = Math.ceil(widthCells * 3);
     const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V); let qh = 0, qt = 0;
     for (let c = 0; c < V; c++) if (isSrc[c]) { dist[c] = 0; from[c] = c; q[qt++] = c; }
     while (qh < qt) { const c = q[qh++]; if (dist[c] >= maxD) continue; for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (dist[j] < 0) { dist[j] = dist[c] + 1; from[j] = from[c]; q[qt++] = j; } } }
-    const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4);
+    const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4), arcF = makeFbm3(nSeed("arc"), 3, 6);
     for (let c = 0; c < V; c++) {
       if (dist[c] < 0) continue;
       const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));
       const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3); // 稜線の途切れ・ばらつき
-      if (s > 0) { mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod; volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0; } else rift[c] = clamp(-s / 1.2, 0, 1) * f;
+      if (s > 0) { mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod * srcCrust[from[c]]; volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0; } else rift[c] = clamp(-s / 1.2, 0, 1) * f;
     }
-    // 大陸: 互いに離れた種から、ゆがめた距離で広がる場。島の種は小さく、重みがまちまち
-    const rc = makeRng(seed, "continents"), K = spec.continentCountTarget;
-    const thetaLand = Math.acos(clamp(1 - (2 * spec.landFraction) / K, -1, 1));
-    // 大陸の種: ランダムな配置を多数作り、種どうしの最小距離がいちばん大きい配置を選ぶ（固定テンプレートではなく、同じ種なら同じ配置）
-    let bestSet = null, bestSep = -1;
-    for (let trial = 0; trial < 3000; trial++) {
-      const pts = []; for (let i = 0; i < K; i++) pts.push(rc.unitVec());
-      let sep = 9; for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));
-      if (sep > bestSep) { bestSep = sep; bestSet = pts; }
-    }
-    const cs = bestSet.map((v) => { const r = thetaLand * rc.range(0.8, 0.95); return { v, r, cosCut: Math.cos(Math.min(Math.PI, r * 1.1)) - 1e-9 }; });
-    const isl = []; const NI = ISLAND_MODES[spec.islandMode];
-    for (let i = 0; i < NI; i++) { const v = rc.unitVec(), r = rc.range(1.2, 5.5) * D2R, w = rc.range(0.45, 0.95); isl.push({ v, r, w, cosCut: Math.cos(r * 1.5) - 1e-9 }); }
-    const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];
+    // ---- 大陸の場: 正準座標に回してから、計画の場を当てる ----
     for (let c = 0; c < V; c++) {
-      let f = 0;
-      for (const o of cs) { const dp = dotp(c, o.v); if (dp < o.cosCut) continue; const d = Math.acos(clamp(dp, -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1); f = Math.max(f, t * t * (3 - 2 * t)); }
-      for (const o of isl) { const dp = dotp(c, o.v); if (dp < o.cosCut) continue; const d = Math.acos(clamp(dp, -1, 1)); if (d < o.r * 1.5) { const t = clamp(1 - d / (o.r * 1.5), 0, 1); f = Math.max(f, o.w * t * t * (3 - 2 * t)); } }
-      continent[c] = f;
+      const ca = Math.cos(psi), sa = Math.sin(psi), x = wx[c] * ca - wy[c] * sa, y = wx[c] * sa + wy[c] * ca, z = wz[c];
+      const g = fieldAt(x, y, z, ragAt(wx[c], wy[c], wz[c])), i = islandAt(x, y, z);
+      continent[c] = Math.max(g, i);
     }
-    // ホットスポット: 火山島列（海の上でも島になる）
+    // 地図の左右端（経度 ±180°）は必ず海にする: 継ぎ目から 4° までは 0、12° で元の値（継ぎ目の向き選びで足りない分の仕上げ）
+    for (let c = 0; c < V; c++) { const dseam = Math.PI - Math.abs(Math.atan2(Y3(c), X3(c))); if (dseam < 12 * D2R) continent[c] *= smooth((dseam - 4 * D2R) / (8 * D2R)); }
+    // 島弧: 海洋プレートどうしの衝突帯に、ところどころ島が並ぶ
+    if (modeLevel > 1) for (let c = 0; c < V; c++) { if (continent[c] > 0.2 || !(mountain[c] > 0.62) || isContPlate[plate[c]]) continue; const n = arcF(X[3 * c] * 5, X[3 * c + 1] * 5, X[3 * c + 2] * 5), th = 0.64; if (n > th) { continent[c] = Math.max(continent[c], 0.5 + 0.35 * (n - th) / 0.2); volcanic[c] = Math.max(volcanic[c], 0.6); } }
+    // ホットスポット: 火山島列（海の上でも島になる。地図の左右端にはかけない）
     const rh = makeRng(seed, "hotspots");
-    for (let h = 0; h < 6; h++) {
+    for (let h = 0; h < [1, 2, 5][modeLevel]; h++) {
       const start = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;
       // start から dirv に沿って（大円上に）火山を並べる
       const dot = start[0] * dirv[0] + start[1] * dirv[1] + start[2] * dirv[2]; let t = [dirv[0] - dot * start[0], dirv[1] - dot * start[1], dirv[2] - dot * start[2]]; const tl = Math.hypot(...t) || 1; t = t.map((x) => x / tl);
       for (let i = 0; i < count; i++) {
         const a = i * step, p = [start[0] * Math.cos(a) + t[0] * Math.sin(a), start[1] * Math.cos(a) + t[1] * Math.sin(a), start[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));
+        if (Math.abs(Math.PI - Math.abs(Math.atan2(p[1], p[0]))) < 5 * D2R || Math.abs(p[2]) > 0.94) continue; // 左右端と極（緯度 70° 超）には島列をかけない
         for (let c = 0; c < V; c++) { const d = Math.acos(clamp(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1)); if (d < rad * 2) { const g = Math.exp(-((d / rad) ** 2)); continent[c] = Math.max(continent[c], amp * g * 0.9); volcanic[c] = Math.max(volcanic[c], g); } }
       }
     }
@@ -142,9 +160,11 @@ export function generateWorld(specInput, options = {}) {
     const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);
     for (let c = 0; c < V; c++) {
       const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];
-      const land = smooth((cf - 0.25) / 0.45);
-      raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land)
-        + mountain[c] * (0.03 + 0.97 * land) * 1.5 - rift[c] * 0.22;
+      const land = smooth((cf - 0.25) / 0.45), nz = 0.2 + 0.8 * smooth(cf / 0.3); // v6.11.0: 大陸の場が 0 に近い海では、ノイズで小さな陸が散らばらないよう弱める
+      raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz
+        + mountain[c] * (0.03 + 0.97 * land) * 1.5 * (0.15 + 0.85 * smooth(cf / 0.3)) - rift[c] * 0.22; // v6.11.0: 大陸の場の外（海）では、山脈が単独で陸を持ち上げない（極などに細長い陸が生えるのを防ぐ。島弧は別に作る）
+      { const pl = (Math.abs(lat[c]) - 72 * D2R) / (12 * D2R); if (pl > 0) raw[c] -= 0.22 * smooth(pl); } // 極域は陸になりにくい（巨大大陸を抑える。島・氷雪地域は残る）
+      { const dseam = Math.PI - Math.abs(Math.atan2(y, x)); if (dseam < 12 * D2R) { const m = smooth((dseam - 4 * D2R) / (8 * D2R)); raw[c] = raw[c] * m - 0.25 * (1 - m); } } // 地図の左右端は、山脈やノイズでも陸にならないよう海側へ寄せる
     }
     // 海面の高さ = 陸地率の分位点（陸地率を目標に合わせる）
     const sorted = Float32Array.from(raw).sort(); seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];
@@ -200,7 +220,7 @@ export function generateWorld(specInput, options = {}) {
   const populations = stage("G7_groups", "初期人口集団", () => placeInitialGroups(gctx, spec, 0));
 
   // ---- G8: 統計と検証 ----
-  const stats = stage("G8_stats", "統計", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
+  const stats = stage("G8_stats", "統計", () => computeStats({ lon, V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
   const world = {
     spec: { ...spec, generatorVersion: GENERATOR_VERSION }, mesh,
     cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },
@@ -385,10 +405,12 @@ function computeStats(a) {
   for (let c = 0; c < V; c++) { if (isSea[c]) sea++; else { if (landWater[c] === LAND_WATER.LAKE) lake++; if (elevation[c] > 2500) mount++; if (river[c]) rivers++; } }
   const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea), total = sizes.reduce((s, x) => s + x, 0);
   const continents = sizes.filter((s) => s >= total * 0.03), islands = sizes.filter((s) => s < total * 0.03);
+  let seamN = 0, seamLand = 0; if (a.lon) for (let c = 0; c < V; c++) if (Math.abs(a.lon[c]) > 175 * D2R) { seamN++; if (!isSea[c]) seamLand++; } // 地図の左右端（経度 ±180° の両側 5°）の陸の割合
   const biomeCounts = new Array(14).fill(0); for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;
   // 気温の健全性: 低緯度の平均 > 高緯度の平均
   let tl = 0, nl = 0, th = 0, nh = 0; for (let c = 0; c < V; c++) { if (isSea[c]) continue; const la = Math.abs(lat[c]) / D2R; if (la < 20) { tl += temp[c]; nl++; } else if (la > 60) { th += temp[c]; nh++; } }
   return {
+    seamLandFraction: seamN ? seamLand / seamN : 0, layout: a.spec?.layout ?? null,
     cells: V, landFraction: landCells / V, lakeFraction: lake / V, mountainFraction: mount / Math.max(1, landCells), riverCells: rivers, riverFlowThreshold: riverThreshold, riverMouths: mouthCount, lakeCells: lakeCount,
     continentCount: continents.length, continentShares: continents.map((s) => +(s / total).toFixed(3)).sort((x, y) => y - x), islandCount: islands.length, largestIslandCells: islands.length ? Math.max(...islands) : 0,
     meanTempLow: nl ? tl / nl : null, meanTempHigh: nh ? th / nh : null, biomeCounts, initialGroups: populations.length,
@@ -453,9 +475,11 @@ export function generateWorldChecked(specInput, options = {}, maxAttempts = 6) {
 export function statsProblems(st, spec) {
   const r = [];
   if (Math.abs(st.landFraction - spec.landFraction) > 0.04) r.push(`陸地率 ${st.landFraction.toFixed(3)} が目標 ${spec.landFraction} から外れている`);
-  const K = spec.continentCountTarget; if (st.continentCount < Math.max(1, K - 2) || st.continentCount > K + 3) r.push(`大陸級の陸塊が ${st.continentCount} 個（目標 ${K}）`);
+  const K = spec.continentCountTarget, lay = spec.layout ?? "uneven"; // v6.11.0: 配置パターンごとに、大陸の数と最大陸塊の許容を変える（群島・分裂は大陸どうしが近く、数は目標より減りうる。超大陸は 1 つが大きい）
+  const lo = lay === "uneven" ? Math.max(1, K - 2) : lay === "super" ? Math.max(1, K - 3) : Math.max(1, Math.ceil(K / 2)); if (st.continentCount < lo || st.continentCount > K + 3) r.push(`大陸級の陸塊が ${st.continentCount} 個（目標 ${K}）`);
   if (spec.islandMode === "many" && st.islandCount < 20) r.push(`島が少ない（${st.islandCount}）`);
-  if (st.continentShares[0] > 0.45) r.push(`最大の陸塊が陸の ${(st.continentShares[0] * 100).toFixed(0)}%（偏りすぎ）`);
+  const maxShare = lay === "super" ? 0.75 : K === 1 ? 1 : 0.55; if (st.continentShares[0] > maxShare) r.push(`最大の陸塊が陸の ${(st.continentShares[0] * 100).toFixed(0)}%（偏りすぎ）`);
+  if (st.seamLandFraction > 0.08) r.push(`地図の左右端に陸が多い（${(st.seamLandFraction * 100).toFixed(0)}%）`);
   if (st.meanTempLow != null && st.meanTempHigh != null && st.meanTempLow <= st.meanTempHigh + 10) r.push("低緯度が高緯度より十分に暖かくない");
   return r;
 }

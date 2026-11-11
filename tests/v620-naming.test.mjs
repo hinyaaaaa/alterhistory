@@ -26,7 +26,7 @@ const R = createNewWorld({ worldSeed: "naming-t1", spec: { resolution: { targetC
 dispatch(w, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispatch(w, { type: "time.advance", authority: A.ADMIN, months: 500 }).ok);
 const sts = Object.values(civ.states);
 await check("国号は語根＋称号で、世襲の君主は「〇〇n世」", () => {
-  assert.ok(sts.length > 0); for (const s of sts) { if (s.nameBase) { assert.ok(s.name.startsWith(s.nameBase), s.name); assert.equal(s.name, composeStateName(s.nameBase, s.polity, s.via), `${s.name}/${s.polity}`); } /* プレイヤーが名付けた国は語根を持たない */ }
+  assert.ok(sts.length > 0); for (const s of sts) { if (s.nameBase) { assert.ok(s.name.startsWith(s.nameBase), s.name); assert.equal(s.name, composeStateName(s.nameBase, s.polity, s.via, s.titleYear ?? null), `${s.name}/${s.polity}`); } /* プレイヤーが名付けた国は語根を持たない */ }
   /* 政体が途中で世襲制に変わった国は、次の代替わりまで素の名前のまま。大多数が「〇〇n世」であればよい */
   const hered = sts.filter((s) => s.alive && ["chiefdom", "kingdom", "empire", "theocracy"].includes(s.polity)), num = hered.filter((s) => /[0-9]+世$/.test(s.leader.name)); assert.ok(hered.length > 0 && num.length / hered.length >= 0.6, `${num.length}/${hered.length}`);
 });

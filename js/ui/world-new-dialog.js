@@ -2,6 +2,7 @@
 import { el, btn } from "./kit.js";
 import { confirmDialog } from "./dialogs.js";
 import { ISLAND_MODES, makeWorldSeed, DEFAULT_WORLD_SPEC } from "../core/world/spec.js";
+import { LAYOUTS, LAYOUT_HINTS } from "../core/world/continents.js";
 
 const PRESETS = [[50000, "50,000（軽い）"], [100000, "100,000"], [250000, "250,000（標準）"], [500000, "500,000"], [1000000, "1,000,000（重い）"]];
 
@@ -21,14 +22,15 @@ export async function openNewWorldDialog({ actions, store }) {
   row("シード", seedBox, "同じシードと設定なら、同じ地形になります");
   const preset = document.createElement("select"); for (const [v, t] of PRESETS) { const o = document.createElement("option"); o.value = String(v); o.textContent = t; if (v === DEFAULT_WORLD_SPEC.resolution.targetCells) o.selected = true; preset.append(o); }
   row("セル数", preset, "大きいほど細かい世界になります（端末により生成に数秒〜数十秒）");
-  const land = document.createElement("input"); land.type = "range"; land.min = "20"; land.max = "80"; land.value = "50"; const landV = el("span", "world-row-v", "50%"); land.addEventListener("input", () => { landV.textContent = `${land.value}%`; });
+  const land = document.createElement("input"); land.type = "range"; land.min = "20"; land.max = "80"; land.value = String(Math.round(DEFAULT_WORLD_SPEC.landFraction * 100)); const landV = el("span", "world-row-v", `${land.value}%`); land.addEventListener("input", () => { landV.textContent = `${land.value}%`; });
   const landBox = el("span", "world-seedbox"); landBox.append(land, landV); row("陸地の割合", landBox);
   const cont = document.createElement("input"); cont.type = "number"; cont.min = "1"; cont.max = "12"; cont.value = "6"; row("大陸の数（目安）", cont);
-  const isl = document.createElement("select"); for (const [k, t] of [["few", "少ない"], ["normal", "ふつう"], ["many", "多い"]]) { const o = document.createElement("option"); o.value = k; o.textContent = `${t}（約${ISLAND_MODES[k]}）`; if (k === "many") o.selected = true; isl.append(o); } row("島の多さ", isl);
+  const isl = document.createElement("select"); for (const [k, t] of [["few", "少ない"], ["normal", "ふつう"], ["many", "多い"]]) { const o = document.createElement("option"); o.value = k; o.textContent = `${t}（約${ISLAND_MODES[k]}）`; if (k === DEFAULT_WORLD_SPEC.islandMode) o.selected = true; isl.append(o); } row("島の多さ", isl);
+  const lay = document.createElement("select"); for (const [k, t] of Object.entries(LAYOUTS)) { const o = document.createElement("option"); o.value = k; o.textContent = `${t}（${LAYOUT_HINTS[k]}）`; if (k === DEFAULT_WORLD_SPEC.layout) o.selected = true; lay.append(o); } row("大陸の配置", lay, "大陸の大きさ・位置・形は、いずれも不均等になります");
   const groups = document.createElement("input"); groups.type = "number"; groups.min = "1"; groups.max = "64"; groups.value = "12"; row("初期集団の候補数", groups);
   dlg.append(el("p", "hint", "世界を作ったあと、歴史を始める初期集団を選びます。国家はそこから、時間とともに成立していきます。"));
   const acts = el("div", "confirm-dialog-actions"), cancel = btn("", "キャンセル", "", () => { dlg.close(); dlg.remove(); }), ok = btn("primary", "生成する", "", () => {
-    const spec = { worldSeed: seed.value.trim(), resolution: { targetCells: Number(preset.value) }, landFraction: Number(land.value) / 100, continentCountTarget: Number(cont.value), islandMode: isl.value, initialGroups: Number(groups.value) };
+    const spec = { worldSeed: seed.value.trim(), resolution: { targetCells: Number(preset.value) }, landFraction: Number(land.value) / 100, continentCountTarget: Number(cont.value), islandMode: isl.value, layout: lay.value, initialGroups: Number(groups.value) };
     dlg.close(); dlg.remove(); actions.newWorld(spec);
   });
   acts.append(cancel, ok); dlg.append(acts); dlg.addEventListener("cancel", () => dlg.remove()); document.body.append(dlg); dlg.showModal(); seed.focus();

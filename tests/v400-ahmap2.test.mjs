@@ -1,5 +1,6 @@
 // v4.0.0 / V4-M2: .ahmap v2 コンテナ。往復の一致・破損の検出・拡張チャンクの保持・チャンクの再利用。
 import assert from "node:assert/strict";
+import { GENERATOR_VERSION } from "../js/core/world/spec.js";
 import { generateWorld } from "../js/core/world/worldgen.js";
 import { encodeAhmap2, decodeAhmap2, readAhmap2Manifest, Ahmap2Error, REQUIRED_CHUNKS, AHMAP2_MAGIC, crc32 } from "../js/core/world/ahmap2.js";
 
@@ -17,7 +18,7 @@ await acheck("保存 → 読み込みで、地形・気候・水系・トポロ�
   for (const k of Object.keys(W.cell)) assert.deepEqual(w.cell[k], W.cell[k], `cell.${k}`);
   for (const k of ["centerXYZ", "vertexXYZ", "neighborOffsets", "neighborIds", "cellVertexIds"]) assert.deepEqual(w.mesh[k], W.mesh[k], `mesh.${k}`);
 });
-await acheck("manifest: 形式版・スキーマ版・アプリ版・生成器の版・メッシュの版が別々に入る", async () => { const { manifest } = readAhmap2Manifest(saved.bytes); assert.equal(manifest.containerVersion, 1); assert.equal(manifest.schemaVersion, 1); assert.equal(manifest.appVersion, "4.0.0-test"); assert.ok(manifest.generatorVersion.startsWith("4.")); assert.equal(manifest.meshVersion, "sphere-ico-1"); assert.equal(manifest.cellCount, W.mesh.cellCount); assert.equal(manifest.worldHash, W.hash); });
+await acheck("manifest: 形式版・スキーマ版・アプリ版・生成器の版・メッシュの版が別々に入る", async () => { const { manifest } = readAhmap2Manifest(saved.bytes); assert.equal(manifest.containerVersion, 1); assert.equal(manifest.schemaVersion, 1); assert.equal(manifest.appVersion, "4.0.0-test"); assert.equal(manifest.generatorVersion, GENERATOR_VERSION); /* v6.11.0: 大陸生成を変えたので、生成器の版は 6.11.0 */ assert.equal(manifest.meshVersion, "sphere-ico-1"); assert.equal(manifest.cellCount, W.mesh.cellCount); assert.equal(manifest.worldHash, W.hash); });
 await acheck("必須チャンクがすべて manifest にあり、チャンクごとに型・要素数・圧縮・長さ・CRC を持つ", async () => { const { manifest } = readAhmap2Manifest(saved.bytes), names = new Set(manifest.chunks.map((c) => c.name)); for (const r of REQUIRED_CHUNKS) assert.ok(names.has(r), r); for (const c of manifest.chunks) { assert.ok(c.kind && c.codec && c.rawBytes >= 0 && c.storedBytes >= 0 && Number.isInteger(c.crc32), c.name); } });
 await acheck("巨大な配列は JSON にせず型付き配列で持ち、gzip で小さくなる", async () => { const { manifest } = readAhmap2Manifest(saved.bytes), raw = manifest.chunks.reduce((s, c) => s + c.rawBytes, 0); assert.ok(saved.bytes.length < raw * 0.7, `${saved.bytes.length} / ${raw}`); assert.equal(manifest.chunks.find((c) => c.name === "cell.elevation").kind, "f32"); });
 await acheck("読み込みは入力を書き換えない", async () => { const copy = saved.bytes.slice(); await decodeAhmap2(saved.bytes); assert.deepEqual(saved.bytes, copy); });

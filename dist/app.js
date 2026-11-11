@@ -994,7 +994,16 @@
   });
 
   // js/core/wcde/domains/naming.js
-  function stateForm(polity, via = null, base = "") {
+  function stateForm(polity, via = null, base = "", year = null) {
+    const f = rawForm(polity, via, base);
+    if (year == null) return f;
+    if (year < NAME_ERA.leagueFrom && /連邦|連合|同盟|連盟|共和国|教団国|汗国/.test(f)) return polity === "republic" || polity === "federation" || via === "defense_league" ? "\u540C\u76DF" : byBase(base, ["\u738B\u56FD", "\u9996\u9577\u56FD"]);
+    if (year < NAME_ERA.republicFrom && f === "\u5171\u548C\u56FD") return "\u540C\u76DF";
+    if (year < NAME_ERA.federationFrom && (f === "\u9023\u90A6" || f === "\u9023\u90A6\u5171\u548C\u56FD" || f === "\u9023\u5408\u738B\u56FD")) return f === "\u9023\u5408\u738B\u56FD" ? "\u738B\u56FD" : "\u540C\u76DF";
+    if (year < NAME_ERA.khanateFrom && f === "\u6C57\u56FD") return "\u90E8\u65CF\u9023\u5408";
+    return f;
+  }
+  function rawForm(polity, via, base) {
     switch (polity) {
       case "kingdom":
         return byBase(base, ["\u738B\u56FD", "\u738B\u56FD", "\u738B\u56FD", "\u671D"]);
@@ -1018,10 +1027,10 @@
     for (const f of FORMS) if (n2.length > f.length && n2.endsWith(f)) return n2.slice(0, -f.length);
     return n2;
   }
-  function retitle(st, polity) {
+  function retitle(st, polity, year = null) {
     if (!st.nameBase && !FORMS.some((f) => String(st.name).endsWith(f))) return null;
-    const base = baseOfState(st), next = composeStateName(base, polity, st.via);
-    return next !== st.name ? { base, name: next } : null;
+    const base = baseOfState(st), next = composeStateName(base, polity, st.via, year);
+    return next !== st.name ? year == null ? { base, name: next } : { base, name: next, year } : null;
   }
   function leaderName(st, fresh2, rnd) {
     const raw = stripOrd(fresh2);
@@ -1035,13 +1044,14 @@
     const n2 = String(name ?? ""), i = n2.indexOf("\u6559");
     return i >= 0 ? n2.slice(0, i + 1) : n2;
   }
-  var FORMS, byBase, composeStateName, REGNAL, stripOrd, leaderRng, sectName;
+  var FORMS, byBase, NAME_ERA, composeStateName, REGNAL, stripOrd, leaderRng, sectName;
   var init_naming = __esm({
     "js/core/wcde/domains/naming.js"() {
       init_civ_state();
       FORMS = ["\u9023\u90A6\u5171\u548C\u56FD", "\u795E\u8056\u738B\u56FD", "\u9023\u5408\u738B\u56FD", "\u90E8\u65CF\u9023\u5408", "\u5171\u548C\u56FD", "\u6559\u56E3\u56FD", "\u795E\u8056\u56FD", "\u9996\u9577\u56FD", "\u9023\u90A6", "\u9023\u5408", "\u540C\u76DF", "\u9023\u76DF", "\u5E1D\u56FD", "\u738B\u56FD", "\u516C\u56FD", "\u4FAF\u56FD", "\u6C57\u56FD", "\u6559\u56FD", "\u90E8\u65CF", "\u5E02\u56FD", "\u671D", "\u56FD"];
       byBase = (base, arr) => arr[hashSeed(String(base), "form") % arr.length];
-      composeStateName = (base, polity, via) => base + stateForm(polity, via, base);
+      NAME_ERA = Object.freeze({ republicFrom: 2300, federationFrom: 4300, khanateFrom: 2900, leagueFrom: 1500 });
+      composeStateName = (base, polity, via, year = null) => base + stateForm(polity, via, base, year);
       REGNAL = /* @__PURE__ */ new Set(["chiefdom", "kingdom", "empire", "theocracy"]);
       stripOrd = (n2) => String(n2).replace(/[0-9０-９]+世$/, "");
       leaderRng = (civ, st, ...p) => rngOf(hashSeed(civ.historySeed, "leader", st.id, civ.monthIndex, ...p));
@@ -1088,7 +1098,9 @@
       if (rng() < 0.03) {
         const ns = [...neighborGroups(ctx, g)];
         if (!ns.length) continue;
-        const o = civ.groups[ns[Math.floor(rng() * ns.length)]], od = dominant(o);
+        const o = civ.groups[ns[Math.floor(rng() * ns.length)]];
+        if (!o) continue;
+        const od = dominant(o);
         if (od.cultureId !== d.cultureId) {
           const key3 = [d.cultureId, od.cultureId].sort().join("|");
           if (!civ.contacts[key3]) {
@@ -1275,15 +1287,20 @@
     for (const id in civ.groups) pop += civ.groups[id].pop;
     const target = targetPop(year) * (landKm2(world) / EARTH_LAND_KM2), r = pop / Math.max(1, target);
     let trim = civ.popTrim ?? 1;
-    if (r < POP_DEADBAND[0] || r > POP_DEADBAND[1]) trim = clamp21(trim * Math.pow(1 / Math.max(0.05, r), 0.1), 0.3, 20);
+    const ahead = targetPop(year + 40) * (landKm2(world) / EARTH_LAND_KM2), ra = pop / Math.max(1, ahead);
+    if (r < POP_DEADBAND[0] || r > POP_DEADBAND[1] || ra < 0.8) trim = clamp22(trim * Math.pow(1 / Math.max(0.05, Math.min(r, ra * 1.2)), 0.1), 0.02, 60);
     civ.popTrim = Math.round(trim * 1e3) / 1e3;
+    let push2 = civ.popPush ?? 1;
+    const goalPush = r < 0.85 ? clamp22(Math.pow(0.85 / Math.max(0.05, r), 0.8), 1, 2.5) : 1;
+    push2 = clamp22(push2 + (goalPush - push2) * 0.3, 1, 2.5);
+    civ.popPush = Math.round(push2 * 1e3) / 1e3;
     const have = Object.keys(civ.techWorld).length, want = targetTechCount(year), q2 = (want + 3) / (have + 3);
     let pace = civ.techPace ?? 1;
-    const goal = q2 >= TECH_DEADBAND[0] && q2 <= TECH_DEADBAND[1] ? 1 : clamp21(Math.pow(q2, 3), 0.5, 10);
-    pace = clamp21(pace + (goal - pace) * 0.3, 0.5, 10);
+    const goal = q2 >= TECH_DEADBAND[0] && q2 <= TECH_DEADBAND[1] ? 1 : clamp22(Math.pow(q2, 3), 0.5, 10);
+    pace = clamp22(pace + (goal - pace) * 0.3, 0.5, 10);
     civ.techPace = Math.round(pace * 1e3) / 1e3;
   }
-  var EARTH_LAND_KM2, POP_CURVE, TECH_CURVE, interp, targetPop, targetTechCount, landCache, COL_TARGET_YEAR, lateBoost, clamp21, POP_DEADBAND, TECH_DEADBAND;
+  var EARTH_LAND_KM2, POP_CURVE, TECH_CURVE, interp, targetPop, targetTechCount, landCache, COL_TARGET_YEAR, lateBoost, clamp22, POP_DEADBAND, TECH_DEADBAND;
   var init_calibration = __esm({
     "js/core/civ/calibration.js"() {
       init_world_consts();
@@ -1310,7 +1327,7 @@
         const late = (year - (COL_TARGET_YEAR[col] ?? 5e3)) / 150;
         return late <= 0 ? 1 : Math.min(60, 1 + late * late * 2);
       };
-      clamp21 = (x, a, b) => x < a ? a : x > b ? b : x;
+      clamp22 = (x, a, b) => x < a ? a : x > b ? b : x;
       POP_DEADBAND = [0.7, 1.4];
       TECH_DEADBAND = [0.85, 1.15];
     }
@@ -1635,7 +1652,7 @@
     const ts = techsFor(cap);
     return `\u6280\u8853\u300C${ts.map((t) => t.name).join("\u30FB")}\u300D\u3092\u5236\u5EA6\u5316\u3057\u3066\u3044\u306A\u3044`;
   }
-  var nearWater, maskCache, COND, tierOf, TECHS, TECH, BASE_KNOWLEDGE, REDISCOVER, POP_REF, REF_GROUPS, PERIOD, ovr, prereqOf, fxOf, capsOfTech, refreshCand, learn, forget, conditionsMet, spreadable, lateBoostOf, worldDepth, accel, memo2, lbCache, stateLearn, learnFx, stageMult, pEmerge, u01, resolve, learnBonus, capCache, stateCan, techsFor, ACTION_CAP, TREATY_CAP, POLITY_CAP;
+  var worldCond, condInfo, hasRes, nearWater, maskCache, COND, tierOf, TECHS, TECH, BASE_KNOWLEDGE, REDISCOVER, POP_REF, REF_GROUPS, PERIOD, ovr, prereqOf, fxOf, capsOfTech, refreshCand, learn, forget, conditionsMet, spreadable, lateBoostOf, worldDepth, accel, memo2, lbCache, stateLearn, learnFx, stageMult, pEmerge, u01, resolve, learnBonus, capCache, stateCan, techsFor, ACTION_CAP, TREATY_CAP, POLITY_CAP;
   var init_tech = __esm({
     "js/core/civ/tech.js"() {
       init_events();
@@ -1645,18 +1662,34 @@
       init_civ_state();
       init_calibration();
       init_techtree();
+      worldCond = /* @__PURE__ */ new WeakMap();
+      condInfo = (w) => {
+        let v = worldCond.get(w);
+        if (v) return v;
+        const c = w.cell, n2 = w.mesh.cellCount, f = [];
+        let present = 0;
+        for (let i = 0; i < n2; i++) if (c.landWater[i] === LAND_WATER2.LAND) {
+          f.push(c.fertility[i]);
+          present |= c.resource[i];
+        }
+        f.sort((a, b) => a - b);
+        v = { fert: Math.min(0.45, f.length ? Math.max(0.01, f[Math.floor(f.length * 0.85)]) : 0.45), present };
+        worldCond.set(w, v);
+        return v;
+      };
+      hasRes = (w, g, mask) => (resMaskOf(w, g) & mask) !== 0 || (condInfo(w).present & mask) === 0;
       nearWater = (w, g) => w.cell.coastDist[g.cell] <= 2 || w.cell.river[g.cell];
       maskCache = /* @__PURE__ */ new WeakMap();
       COND = Object.freeze({
         water: { ja: "\u6C34\u8FBA\uFF08\u6D77\u30FB\u5DDD\u30FB\u6E56\uFF09", f: (w, g) => nearWater(w, g) },
         coast: { ja: "\u6D77\u5CB8", f: (w, g) => w.cell.coastDist[g.cell] <= 1 },
-        fertile: { ja: "\u80A5\u6C83\u3067\u6C34\u306B\u8FD1\u304F\u3001\u4EBA\u53E3\u5727\u304C\u9AD8\u3044\u571F\u5730", f: (w, g) => w.cell.fertility[g.cell] > 0.45 && nearWater(w, g) && g.pressure > 0.6 },
+        fertile: { ja: "\u80A5\u6C83\u3067\u6C34\u306B\u8FD1\u304F\u3001\u4EBA\u53E3\u5727\u304C\u9AD8\u3044\u571F\u5730", f: (w, g) => w.cell.fertility[g.cell] >= condInfo(w).fert && nearWater(w, g) && g.pressure > 0.6 },
         grass: { ja: "\u8349\u539F\u30FB\u30B5\u30D0\u30F3\u30CA\u3067\u4EBA\u53E3\u5727\u304C\u9AD8\u3044\u571F\u5730", f: (w, g) => (w.cell.biome[g.cell] === BIOMES2.GRASSLAND || w.cell.biome[g.cell] === BIOMES2.SAVANNA) && g.pressure > 0.7 },
-        clay: { ja: "\u7C98\u571F\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.CLAY) !== 0 },
-        cu_sn: { ja: "\u9285\u307E\u305F\u306F\u932B\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & (RES2.COPPER | RES2.TIN)) !== 0 },
-        iron: { ja: "\u9244\u9271\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.IRON) !== 0 },
-        coal: { ja: "\u77F3\u70AD\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.COAL) !== 0 },
-        stone: { ja: "\u77F3\u6750\u306E\u3042\u308B\u571F\u5730", f: (w, g) => (resMaskOf(w, g) & RES2.STONE) !== 0 }
+        clay: { ja: "\u7C98\u571F\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.CLAY) },
+        cu_sn: { ja: "\u9285\u307E\u305F\u306F\u932B\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.COPPER | RES2.TIN) },
+        iron: { ja: "\u9244\u9271\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.IRON) },
+        coal: { ja: "\u77F3\u70AD\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.COAL) },
+        stone: { ja: "\u77F3\u6750\u306E\u3042\u308B\u571F\u5730", f: (w, g) => hasRes(w, g, RES2.STONE) }
       });
       tierOf = (col) => 1 + Math.floor(col / 3);
       TECHS = Object.freeze([...TREE].sort((a, b) => a.col - b.col).map((t) => Object.freeze({ key: t.id, name: t.ja, field: LANE[t.lane].ja, lane: t.lane, pre: t.pre, tier: tierOf(t.col), cost: t.id === "stone_tools" ? 0 : 1, prereq: t.prereq, minPop: t.pop, settled: t.s, condKey: t.cond, cond: t.cond ? COND[t.cond].f : null, E: t.E, caps: t.caps, fx: t.fx, col: t.col, desc: t.desc, why: t.why })));
@@ -1947,7 +1980,7 @@
     for (const id of sortedGroupIds(civ)) {
       const g = civ.groups[id];
       if (!g) continue;
-      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi2 ? g.capMult : 1) * (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (civ.popTrim ?? 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ).growth * (civ.options.growthScale ?? 1);
+      const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi2 ? g.capMult : 1) * (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (civ.popTrim ?? 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ).growth * (civ.options.growthScale ?? 1) * (civ.popPush ?? 1);
       const noise = 0.8 + 0.4 * rng();
       g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0));
       if (pressure > POP.famineRatio && mi2 - g.famineAt >= POP.famineGap) {
@@ -2194,6 +2227,7 @@
       id,
       name: name ?? np?.name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix,
       nameBase: np?.base ?? null,
+      titleYear: np?.year ?? null,
       via,
       formedAt: civ.monthIndex,
       capitalGroupId: cap.id,
@@ -2269,14 +2303,29 @@
   function stepUnification(ctx, groupsByState) {
     const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, alive = aliveStates(civ).sort((a, b) => b.pop - a.pop);
     const merged = /* @__PURE__ */ new Set(), absorbers = /* @__PURE__ */ new Set();
-    let done = 0;
+    let done = 0, doneLead = 0;
+    const lm = landmassOf(world), lmOfState = (s) => {
+      const g = civ.groups[s.capitalGroupId];
+      return g ? lm[g.cell] : -1;
+    }, leaderOf2 = /* @__PURE__ */ new Map();
+    const lmGroups = /* @__PURE__ */ new Map();
+    for (const id in civ.groups) {
+      const g = civ.groups[id];
+      const k = lm[g.cell];
+      lmGroups.set(k, (lmGroups.get(k) ?? 0) + 1);
+    }
+    if (civ.date.year >= HEGEMON.fromYear && alive.length >= HEGEMON.crowded * stateCap(civ)) for (const s of alive) {
+      const k = lmOfState(s);
+      if (k >= 0 && !leaderOf2.has(k) && (lmGroups.get(k) ?? 0) >= 12) leaderOf2.set(k, s.id);
+    }
     groupsByState = /* @__PURE__ */ new Map();
     for (const id in civ.groups) {
       const g = civ.groups[id];
       if (g.stateId) (groupsByState.get(g.stateId) ?? groupsByState.set(g.stateId, []).get(g.stateId)).push(g);
     }
     for (const B of alive) {
-      if (merged.has(B.id) || done >= 2 || !B.alive) continue;
+      const lead = leaderOf2.get(lmOfState(B)) === B.id && (groupsByState.get(B.id)?.length ?? 0) < HEGEMON.maxShare * (lmGroups.get(lmOfState(B)) ?? 1);
+      if (merged.has(B.id) || !B.alive || (lead ? doneLead >= HEGEMON.perYear : done >= 2)) continue;
       const gsB = groupsByState.get(B.id);
       if (!gsB?.length || B.stability < 0.45) continue;
       const nbr = /* @__PURE__ */ new Map();
@@ -2286,10 +2335,10 @@
       }
       for (const [aid] of [...nbr].sort((x, y) => y[1] - x[1] || (x[0] < y[0] ? -1 : 1))) {
         const A = civ.states[aid];
-        if (!A?.alive || A.player || merged.has(aid) || absorbers.has(aid) || A.pop * 2.5 > B.pop || A.warIds.length || B.warIds.some((w) => civ.wars[w]?.sides.a.includes(aid) || civ.wars[w]?.sides.d.includes(aid))) continue;
+        if (!A?.alive || A.player || merged.has(aid) || absorbers.has(aid) || A.pop * (lead ? HEGEMON.ratio : 2.5) > B.pop || A.warIds.length || B.warIds.some((w) => civ.wars[w]?.sides.a.includes(aid) || civ.wars[w]?.sides.d.includes(aid))) continue;
         const cA = civ.groups[A.capitalGroupId], cB = civ.groups[B.capitalGroupId], same = cA && cB && dominant(cA).cultureId === dominant(cB).cultureId;
         const adm = stateCan(civ, B, "polity:empire") ? 1.5 : stateCan(civ, B, "polity:kingdom") ? 1.2 : 0.7;
-        const p = 0.03 * adm * (same ? 1 : 0.35) * (A.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
+        const p = 0.03 * (lead ? HEGEMON.boost : 1) * adm * (same ? 1 : lead ? 0.6 : 0.35) * (A.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
         if (rng() >= p) continue;
         const gsA = groupsByState.get(aid) ?? [];
         for (const g of gsA) g.stateId = B.id;
@@ -2300,7 +2349,8 @@
         A.dissolvedAt = mi2;
         A.mergedInto = B.id;
         merged.add(aid);
-        done++;
+        if (lead) doneLead++;
+        else done++;
         makeEvent(civ, ids2, { kind: "state_merged", title: `${A.name}\u304C${B.name}\u306B\u7D71\u5408\u3055\u308C\u305F`, participants: [{ entityId: aid, role: "absorbed" }, { entityId: B.id, role: "state" }], location: cB ? { cell: cB.cell } : null, facts: { stateId: B.id, absorbed: aid, same: !!same }, causes: A.lastCrisisEvent ? [{ targetId: A.lastCrisisEvent, relation: "contributed_to", basis: "plausible" }] : [] });
         B.interpDirty = true;
         break;
@@ -2410,7 +2460,7 @@
       else formState(ctx, f);
     }
   }
-  var gatedPolity, OFFICE_RULER, POLITY, VIA, KM, CLUSTER_BUDGET, CHECK_EVERY, distKm, dissolve, aliveStates, stateCap, lifespanHazard;
+  var gatedPolity, OFFICE_RULER, POLITY, VIA, KM, CLUSTER_BUDGET, CHECK_EVERY, distKm, dissolve, aliveStates, stateCap, lifespanHazard, lmCache, landmassOf, HEGEMON;
   var init_states = __esm({
     "js/core/civ/states.js"() {
       init_events();
@@ -2448,6 +2498,35 @@
       aliveStates = (civ) => Object.values(civ.states).filter((s) => s.alive);
       stateCap = (civ) => 10 + 190 * (1 - Math.exp(-Math.max(0, civ.date.year - 100) / 1500));
       lifespanHazard = (age) => 12e-4 * Math.pow(Math.max(0, age) / 250, 1.2);
+      lmCache = /* @__PURE__ */ new WeakMap();
+      landmassOf = (world) => {
+        let v = lmCache.get(world);
+        if (v) return v;
+        const V = world.mesh.cellCount, off = world.mesh.neighborOffsets, nb = world.mesh.neighborIds, el2 = world.cell.elevation;
+        v = new Int32Array(V).fill(-1);
+        const q2 = new Int32Array(V);
+        let n2 = 0;
+        for (let s0 = 0; s0 < V; s0++) {
+          if (v[s0] >= 0 || el2[s0] <= 0) continue;
+          let h2 = 0, t = 0;
+          q2[t++] = s0;
+          v[s0] = n2;
+          while (h2 < t) {
+            const c = q2[h2++];
+            for (let k = off[c]; k < off[c + 1]; k++) {
+              const j = nb[k];
+              if (v[j] < 0 && el2[j] > 0) {
+                v[j] = n2;
+                q2[t++] = j;
+              }
+            }
+          }
+          n2++;
+        }
+        lmCache.set(world, v);
+        return v;
+      };
+      HEGEMON = Object.freeze({ fromYear: 500, ratio: 2, boost: 1.6, perYear: 1, maxShare: 0.6, crowded: 0.5 });
     }
   });
 
@@ -2727,20 +2806,20 @@
       for (const iid of [...st.interp ?? []]) {
         const x = getInterp(civ, iid);
         if (!x || x.until != null || x.valence >= 0) continue;
-        const nv = clamp22(x.valence * k, -1, 0), ev = getEvent(civ, x.eventId);
+        const nv = clamp23(x.valence * k, -1, 0), ev = getEvent(civ, x.eventId);
         x.until = civ.monthIndex;
         st.interp = st.interp.filter((q2) => q2 !== iid);
         if (ev) addInterp(ctx, st, ev, Math.abs(nv) < 0.15 ? "reconciled" : x.stance, Math.abs(nv) < 0.15 ? 0 : nv, x.about, iid);
       }
     }
   }
-  var STANCE, MAX_ACTIVE, clamp22, r24, interpPos, TEXT2, factionOf;
+  var STANCE, MAX_ACTIVE, clamp23, r24, interpPos, TEXT2, factionOf;
   var init_interpret = __esm({
     "js/core/civ/interpret.js"() {
       init_graph();
       STANCE = Object.freeze({ victory: "\u52DD\u5229\u306E\u6804\u5149", humiliation: "\u5C48\u8FB1", lost_territory: "\u5931\u308F\u308C\u305F\u9818\u571F", betrayal: "\u88CF\u5207\u308A", reconciled: "\u548C\u89E3", founding: "\u5EFA\u56FD\u306E\u7269\u8A9E", inconclusive: "\u6C7A\u7740\u306E\u3064\u304B\u306A\u304B\u3063\u305F\u6226\u4E89" });
       MAX_ACTIVE = 24;
-      clamp22 = (v, a, b) => Math.max(a, Math.min(b, v));
+      clamp23 = (v, a, b) => Math.max(a, Math.min(b, v));
       r24 = (x) => Math.round(x * 100) / 100;
       interpPos = /* @__PURE__ */ new WeakMap();
       TEXT2 = {
@@ -2997,13 +3076,13 @@
       if (kind === "flood") g.pop = Math.max(5, g.pop * (1 - 0.08 * sev * res));
       else if (kind === "volcano") g.pop = Math.max(5, g.pop * (1 - 0.15 * sev * res));
       if (kind !== "flood") {
-        g.capMult = r32(clamp23(1 - (kind === "drought" ? 0.45 : 0.35) * sev * res, 0.3, 1));
+        g.capMult = r32(clamp24(1 - (kind === "drought" ? 0.45 : 0.35) * sev * res, 0.3, 1));
         g.capUntil = mi2 + months + (kind === "volcano" ? 12 : 6);
       }
       dead += Math.max(0, before - g.pop);
       {
         const dc = g.cohorts.reduce((b, c) => c.share > b.share ? c : b);
-        dc.tension = clamp23(dc.tension + 0.05 * sev * res);
+        dc.tension = clamp24(dc.tension + 0.05 * sev * res);
       }
       effects.push({ targetId: gid, property: "pop", before, after: Math.round(g.pop) });
       if (g.stateId) states.add(g.stateId);
@@ -3050,7 +3129,7 @@
     }
     return Math.min(1, s);
   }
-  var KIND_JA, CLIMATE_JA, HALF_LIFE, RATE2, clamp23, r32, phaseOf, climateGrowth, WEIGHT, pickKind, resist;
+  var KIND_JA, CLIMATE_JA, HALF_LIFE, RATE2, clamp24, r32, phaseOf, climateGrowth, WEIGHT, pickKind, resist;
   var init_disaster = __esm({
     "js/core/civ/disaster.js"() {
       init_events();
@@ -3063,7 +3142,7 @@
       CLIMATE_JA = Object.freeze({ cool: "\u5BD2\u51B7\u671F", normal: "\u5E73\u5E38", warm: "\u6E29\u6696\u671F" });
       HALF_LIFE = 1440;
       RATE2 = 0.02;
-      clamp23 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+      clamp24 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
       r32 = (x) => Math.round(x * 1e3) / 1e3;
       phaseOf = (i) => i > 0.35 ? "warm" : i < -0.35 ? "cool" : "normal";
       climateGrowth = (civ) => civ.climate.phase === "cool" ? 0.97 : civ.climate.phase === "warm" ? 1.01 : 1;
@@ -3112,10 +3191,10 @@
       tens += t * g.pop;
     }
     const my = strength(civ, st), nbs = nb.map((o) => ({ st: o, pop: o.pop, strength: strength(civ, o), rel: st.relations[o.id] ?? 0, atWar: atWarWith(civ, st, o), treaties: { na: !!treatyBetween(civ, st, o, "nonaggression"), al: !!treatyBetween(civ, st, o, "alliance"), tr: !!treatyBetween(civ, st, o, "trade") } }));
-    const techs = Object.keys(st.techAdopted).length, lag = nbs.length ? clamp24((nbs.reduce((s, n2) => s + Object.keys(n2.st.techAdopted).length, 0) / nbs.length - techs) / 6) : 0;
+    const techs = Object.keys(st.techAdopted).length, lag = nbs.length ? clamp25((nbs.reduce((s, n2) => s + Object.keys(n2.st.techAdopted).length, 0) / nbs.length - techs) / 6) : 0;
     const myBase = st.pop * 5e-3 * (0.5 + st.stability) * (my / (st.army + 1e-9) || 1) * (1 + st.defense * 0.5), maxThreat = nbs.reduce((m, n2) => Math.max(m, n2.strength / (myBase + 1)), 0);
     const seaNbs = ctx.warOps ? ctx.warOps.seaTargets(ctx, st).map((o) => ({ st: o, pop: o.pop, strength: strength(civ, o), rel: st.relations[o.id] ?? 0, atWar: atWarWith(civ, st, o), sea: true, treaties: { na: !!treatyBetween(civ, st, o, "nonaggression"), al: !!treatyBetween(civ, st, o, "alliance"), tr: !!treatyBetween(civ, st, o, "trade") } })) : [];
-    return { gs, nbs, seaNbs, pop: st.pop, my, tension: st.pop ? tens / st.pop : 0, treasuryNeed: clamp24(1 - st.treasury / (st.pop * 0.02 + 50)), techLag: lag, threat: clamp24((maxThreat - 0.8) / 2), atWar: st.warIds.length > 0, mi: civ.monthIndex };
+    return { gs, nbs, seaNbs, pop: st.pop, my, tension: st.pop ? tens / st.pop : 0, treasuryNeed: clamp25(1 - st.treasury / (st.pop * 0.02 + 50)), techLag: lag, threat: clamp25((maxThreat - 0.8) / 2), atWar: st.warIds.length > 0, mi: civ.monthIndex };
   }
   function runAction(ctx, st, def, c, { decisionId = null, provenance = "ai" } = {}) {
     const cc = { ...c, decisionId, provenance }, r = def.execute(ctx, st, cc), { civ, ids: ids2 } = ctx;
@@ -3137,7 +3216,7 @@
     const e = observe(ctx, st), list = def.key === "declare_war" ? [cand("declare_war", {}, { target })] : def.candidates(ctx, st, e);
     return list.find((c) => (c.target ?? null) === (target ?? null) && (c.opt ?? null) === (opt ?? null)) ?? null;
   }
-  var clamp24, cand, bad, r33, eff, spend, free, ACTIONS, ACTION, RECORDED;
+  var clamp25, cand, bad, r33, eff, spend, free, ACTIONS, ACTION, RECORDED;
   var init_actions = __esm({
     "js/core/civ/actions.js"() {
       init_events();
@@ -3151,7 +3230,7 @@
       init_interpret();
       init_magic();
       init_disaster();
-      clamp24 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+      clamp25 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
       cand = (key3, f, o = {}) => ({ key: key3, target: o.target ?? null, opt: o.opt ?? null, factors: f, eligible: o.eligible ?? true, reason: o.reason ?? null, label: o.label ?? null });
       bad = (key3, reason, o = {}) => cand(key3, {}, { ...o, eligible: false, reason });
       r33 = (x) => Math.round(x * 1e3) / 1e3;
@@ -3175,7 +3254,7 @@
             return out;
           },
           execute(ctx, st, c) {
-            const ef = [], b = st.policy.tax, a = r33(clamp24(b + (c.opt === "up" ? 0.05 : -0.05), 0.02, 0.4));
+            const ef = [], b = st.policy.tax, a = r33(clamp25(b + (c.opt === "up" ? 0.05 : -0.05), 0.02, 0.4));
             st.policy.tax = a;
             eff(ef, st, "policy.tax", b, a);
             return { ok: true, effects: ef, title: c.opt === "up" ? "\u5897\u7A0E" : "\u6E1B\u7A0E" };
@@ -3315,7 +3394,7 @@
             return [...e.nbs, ...e.seaNbs ?? []].filter((n2) => !n2.atWar && !n2.treaties.na && !n2.treaties.al && !(st.lastWarWith?.[n2.st.id] != null && e.mi - st.lastWarWith[n2.st.id] < rematchCooldown(ctx.civ.date.year))).map((n2) => {
               const ratio = (e.my + 1) / (n2.strength + 1);
               const gr = grievance(ctx.civ, st, n2.st.id);
-              return ratio >= 1.3 ? cand("plan_conquest", { expansion: clamp24((ratio - 1) / 2) - 0.1 * st.warIds.length + 0.35 * gr, prestige: 0.1 + 0.3 * gr, stability: -0.2, prosperity: -0.3 }, { target: n2.st.id, label: `${n2.st.name}\u306E\u5F81\u670D` }) : bad("plan_conquest", "\u6226\u529B\u304C\u8DB3\u308A\u306A\u3044", { target: n2.st.id });
+              return ratio >= 1.3 ? cand("plan_conquest", { expansion: clamp25((ratio - 1) / 2) - 0.1 * st.warIds.length + 0.35 * gr, prestige: 0.1 + 0.3 * gr, stability: -0.2, prosperity: -0.3 }, { target: n2.st.id, label: `${n2.st.name}\u306E\u5F81\u670D` }) : bad("plan_conquest", "\u6226\u529B\u304C\u8DB3\u308A\u306A\u3044", { target: n2.st.id });
             });
           },
           execute(ctx, st, c) {
@@ -3357,7 +3436,7 @@
           candidates(ctx, st) {
             return st.warIds.map((i) => ctx.civ.wars[i]).map((w) => {
               const mine = w.sides.a.includes(st.id) ? w.score : -w.score;
-              return cand("sue_for_peace", { security: clamp24(-mine / 50) + 0.1, stability: 0.2 }, { target: w.id, label: "\u8B1B\u548C" });
+              return cand("sue_for_peace", { security: clamp25(-mine / 50) + 0.1, stability: 0.2 }, { target: w.id, label: "\u8B1B\u548C" });
             });
           },
           execute(ctx, st, c) {
@@ -3391,7 +3470,7 @@
                   out.push(bad("sign_treaty", "\u95A2\u4FC2\u304C\u826F\u304F\u306A\u3044", { target: n2.st.id, opt: type }));
                   continue;
                 }
-                const f = type === "trade" ? { prosperity: 0.35 } : type === "nonaggression" ? { security: 0.2 + clamp24(n2.strength / (e.my + 1) - 0.8) * 0.5 } : { security: 0.3 + e.threat * 0.5, prestige: 0.15 };
+                const f = type === "trade" ? { prosperity: 0.35 } : type === "nonaggression" ? { security: 0.2 + clamp25(n2.strength / (e.my + 1) - 0.8) * 0.5 } : { security: 0.3 + e.threat * 0.5, prestige: 0.15 };
                 out.push(cand("sign_treaty", f, { target: n2.st.id, opt: type, label: `${n2.st.name}\u3068${TREATY[type].ja}` }));
               }
             }
@@ -3497,7 +3576,7 @@
           },
           execute(ctx, st) {
             const ef = [], b = st.policy.autonomy;
-            st.policy.autonomy = r33(clamp24(b + 0.2));
+            st.policy.autonomy = r33(clamp25(b + 0.2));
             eff(ef, st, "policy.autonomy", b, st.policy.autonomy);
             for (const g of byState(ctx).get(st.id) ?? []) for (const c of g.cohorts) c.tension *= 0.85;
             return { ok: true, effects: ef };
@@ -3513,7 +3592,7 @@
           },
           execute(ctx, st) {
             const ef = [], b = st.policy.assimilation;
-            st.policy.assimilation = r33(clamp24(b + 0.2));
+            st.policy.assimilation = r33(clamp25(b + 0.2));
             eff(ef, st, "policy.assimilation", b, st.policy.assimilation);
             return { ok: true, effects: ef };
           }
@@ -3528,7 +3607,7 @@
             return [t < 1 ? cand("set_tolerance", { stability: 0.4 * e.tension, culture: -0.1 }, { opt: "up", label: "\u5BDB\u5BB9" }) : bad("set_tolerance", "\u6700\u5927", { opt: "up" }), t > 0 ? cand("set_tolerance", { culture: 0.3, stability: -0.3 * e.tension }, { opt: "down", label: "\u56FD\u6559\u306E\u5F37\u5316" }) : bad("set_tolerance", "\u6700\u5C0F", { opt: "down" })];
           },
           execute(ctx, st, c) {
-            const ef = [], b = st.policy.tolerance, a = r33(clamp24(b + (c.opt === "up" ? 0.2 : -0.2)));
+            const ef = [], b = st.policy.tolerance, a = r33(clamp25(b + (c.opt === "up" ? 0.2 : -0.2)));
             st.policy.tolerance = a;
             eff(ef, st, "policy.tolerance", b, a);
             return { ok: true, effects: ef };
@@ -3703,7 +3782,7 @@
     return round3(t);
   }
   function chooseStrategy(ctx, st, e) {
-    const needs = { expand: 0.25 + 0.4 * clamp25((e.my + 1) / (e.nbs.reduce((s, n2) => s + n2.strength, 0) / Math.max(1, e.nbs.length) + 1) - 1, 0, 2) * 0.5, prosper: e.treasuryNeed, secure: e.threat, advance: e.techLag, consolidate: 1 - st.stability };
+    const needs = { expand: 0.25 + 0.4 * clamp26((e.my + 1) / (e.nbs.reduce((s, n2) => s + n2.strength, 0) / Math.max(1, e.nbs.length) + 1) - 1, 0, 2) * 0.5, prosper: e.treasuryNeed, secure: e.threat, advance: e.techLag, consolidate: 1 - st.stability };
     const list = Object.entries(needs).map(([goal, n2]) => ({ goal, total: round3(n2 * st.personality[GOALS[goal]]) })).sort((a, b) => b.total - a.total || (a.goal < b.goal ? -1 : 1));
     const d = record(ctx, st, { layer: "strategy", type: "set_strategy", obs: obsOf(st, e), candidates: list.map((x) => view({ key: x.goal, target: null, opt: null, eligible: true, reason: null, factors: {} }, x.total)), chosen: { key: list[0].goal, target: null, opt: null } });
     const changed = st.strategy?.goal !== list[0].goal;
@@ -3816,7 +3895,7 @@
     d.result = { ok: r.ok, error: r.error ?? null, eventIds: r.eventIds };
     return r;
   }
-  var GOALS, GOAL_JA, BASELINE, STRATEGY_EVERY, FACTORS, SHOWN, SHOWN_IDLE, expandDecision, clamp25, round3, obsOf, view, AUTO_KEYS;
+  var GOALS, GOAL_JA, BASELINE, STRATEGY_EVERY, FACTORS, SHOWN, SHOWN_IDLE, expandDecision, clamp26, round3, obsOf, view, AUTO_KEYS;
   var init_ai = __esm({
     "js/core/civ/ai.js"() {
       init_actions();
@@ -3831,7 +3910,7 @@
       SHOWN = 6;
       SHOWN_IDLE = 3;
       expandDecision = (civ, d) => ({ ...d, candidates: [] });
-      clamp25 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+      clamp26 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
       round3 = (x) => Math.round(x * 1e3) / 1e3;
       obsOf = (st, e) => ({ pop: Math.round(st.pop), treasury: Math.round(st.treasury), stability: round3(st.stability), army: Math.round(st.army), strength: Math.round(e.my), atWar: e.atWar, neighbors: e.nbs.length, tension: round3(e.tension), threat: round3(e.threat), campaign: st.campaign ? `${st.campaign.kind}:${st.campaign.stage}` : null });
       view = (c, total2) => [c, total2];
@@ -5935,7 +6014,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     let moraleLoss = base.moraleLoss ?? 1, defenseBonus = base.defenseBonus ?? 0, conscriptBonus = base.conscriptBonus ?? 0;
     for (const k of nodes2) {
       const fx = NODE_BY_KEY[k].fx;
-      for (const [a, unit] of Object.entries(FX)) if (fx[a]) mult[unit] = Math.round((mult[unit] ?? 1) * (1 + fx[a]) * 1e3) / 1e3;
+      for (const [a, unit2] of Object.entries(FX)) if (fx[a]) mult[unit2] = Math.round((mult[unit2] ?? 1) * (1 + fx[a]) * 1e3) / 1e3;
       if (fx.atk) war.attack = (war.attack ?? 0) + fx.atk;
       if (fx.def) {
         war.defense = (war.defense ?? 0) + fx.def;
@@ -7915,19 +7994,23 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/core/world/spec.js
-  var GENERATOR_VERSION = "4.0.0-alpha.1";
+  var GENERATOR_VERSION = "6.11.0";
   var WORLD_SPEC_SCHEMA = 1;
-  var ISLAND_MODES = Object.freeze({ few: 12, normal: 40, many: 90 });
+  var ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });
+  var LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);
   var DEFAULT_WORLD_SPEC = Object.freeze({
     schemaVersion: WORLD_SPEC_SCHEMA,
     generatorVersion: GENERATOR_VERSION,
     worldSeed: "",
     planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
     resolution: Object.freeze({ targetCells: 25e4 }),
-    landFraction: 0.3,
-    // v6.1.0: 0.5 → 0.3（地球の陸地率は約 29%）。海を渡る拡散を直したので、地球並みでも人類は全大陸に広がる
+    landFraction: 0.36,
+    // v6.11.0: 0.3 → 0.36（フィクションの地図のように、海をやや少なく）。下限 0.1・上限 0.9 は変わらない
     continentCountTarget: 6,
-    islandMode: "many",
+    islandMode: "normal",
+    // v6.11.0: 標準は少なめ〜普通（many も選べる）
+    layout: "uneven",
+    // v6.11.0: 大陸の配置パターン（uneven / cluster / super / split）
     plateCount: 14,
     initialGroups: 12,
     climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })
@@ -7955,6 +8038,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       landFraction: num3(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
       continentCountTarget: num3(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
       islandMode: i.islandMode ?? d.islandMode,
+      layout: i.layout ?? d.layout,
       plateCount: num3(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
       initialGroups: num3(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
       climateModel: {
@@ -7967,6 +8051,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     if (!(spec.islandMode in ISLAND_MODES)) {
       errors.push(`islandMode \u306F ${Object.keys(ISLAND_MODES).join("/")} \u306E\u3044\u305A\u308C\u304B`);
       spec.islandMode = d.islandMode;
+    }
+    if (!LAYOUT_KEYS.includes(spec.layout)) {
+      errors.push(`layout \u306F ${LAYOUT_KEYS.join("/")} \u306E\u3044\u305A\u308C\u304B`);
+      spec.layout = d.layout;
     }
     if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \u306F\u73FE\u5728 equirectangular \u306E\u307F");
     if (isObj(input2) && input2.schemaVersion !== void 0 && input2.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input2.schemaVersion} \u306F\u672A\u5BFE\u5FDC`);
@@ -8069,6 +8157,256 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     };
   }
 
+  // js/core/world/continents.js
+  var LAYOUTS = Object.freeze({ uneven: "\u4E0D\u5747\u7B49\u5206\u6563\u578B", cluster: "\u7FA4\u5CF6\u30FB\u30AF\u30E9\u30B9\u30BF\u30FC\u578B", super: "\u8D85\u5927\u9678\u578B", split: "\u5206\u88C2\u5927\u9678\u578B" });
+  var LAYOUT_HINTS = Object.freeze({
+    uneven: "\u5927\u9678\u3054\u3068\u306B\u5927\u304D\u3055\u3068\u8DDD\u96E2\u304C\u7570\u306A\u308B\uFF08\u6A19\u6E96\uFF09",
+    cluster: "\u8FD1\u63A5\u3059\u308B\u5927\u9678\u7FA4\u3068\u3001\u5E83\u3044\u6D77\u6D0B",
+    super: "\u4E00\u3064\u306E\u5DE8\u5927\u306A\u9678\u584A\u3068\u3001\u8907\u6570\u306E\u5C0F\u5927\u9678",
+    split: "\u5185\u6D77\u30FB\u6D77\u5CE1\u30FB\u534A\u5CF6\u304C\u591A\u3044\u3001\u8907\u96D1\u306A\u5730\u5F62"
+  });
+  var D2R = Math.PI / 180;
+  var TAU2 = 2 * Math.PI;
+  var clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var smooth01 = (t) => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+  var dot2 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  var cross2 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  var unit = (v) => {
+    const l = Math.hypot(v[0], v[1], v[2]) || 1;
+    return [v[0] / l, v[1] / l, v[2] / l];
+  };
+  var angle = (a, b) => Math.acos(clamp2(dot2(a, b), -1, 1));
+  var rotZ = (v, a) => {
+    const c = Math.cos(a), s = Math.sin(a);
+    return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]];
+  };
+  var fromLatLon = (lat, lon) => [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];
+  var tangentFrame = (v) => {
+    const a = Math.abs(v[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], t = unit(cross2(a, v));
+    return [t, cross2(v, t)];
+  };
+  var walk = (v, dirAngle, distance) => {
+    const [t, b] = tangentFrame(v), d = [t[0] * Math.cos(dirAngle) + b[0] * Math.sin(dirAngle), t[1] * Math.cos(dirAngle) + b[1] * Math.sin(dirAngle), t[2] * Math.cos(dirAngle) + b[2] * Math.sin(dirAngle)];
+    const cd = Math.cos(distance), sd = Math.sin(distance);
+    return unit([v[0] * cd + d[0] * sd, v[1] * cd + d[1] * sd, v[2] * cd + d[2] * sd]);
+  };
+  var latOf = (v) => Math.asin(clamp2(v[2], -1, 1));
+  var randomPoint = (rc, latLimDeg) => {
+    const s = Math.sin(latLimDeg * D2R);
+    const z = rc.range(-s, s), t = rc.range(0, TAU2), r = Math.sqrt(1 - z * z);
+    return [r * Math.cos(t), r * Math.sin(t), z];
+  };
+  function makeBlob(v, R, theta, s, ragA = 0.5) {
+    const [t0, b0] = tangentFrame(v), c = Math.cos(theta), sn = Math.sin(theta);
+    const t = [t0[0] * c + b0[0] * sn, t0[1] * c + b0[1] * sn, t0[2] * c + b0[2] * sn], b = cross2(v, t);
+    const reach = R * (1 + ragA * 0.6) * Math.max(1, s) * 1.02;
+    return { v, t, b, R, s, ragA, vx: v[0], vy: v[1], vz: v[2], tx: t[0], ty: t[1], tz: t[2], bx: b[0], by: b[1], bz: b[2], cosCut: Math.cos(Math.min(Math.PI, reach)) };
+  }
+  function blobValue(l, x, y, z, rag) {
+    const dp = x * l.vx + y * l.vy + z * l.vz;
+    if (dp < l.cosCut) return 0;
+    const d = Math.acos(dp > 1 ? 1 : dp);
+    let deff = d;
+    if (l.s !== 1) {
+      const pu = x * l.tx + y * l.ty + z * l.tz, pw = x * l.bx + y * l.by + z * l.bz, h2 = Math.hypot(pu, pw);
+      if (h2 > 1e-9) {
+        const cu = pu / h2, sw = pw / h2;
+        deff = d * Math.hypot(cu / l.s, sw * l.s);
+      }
+    }
+    return smooth01((1 - deff / (l.R * (1 + l.ragA * rag))) * 2.2);
+  }
+  var polarDamp = (z) => {
+    const a = Math.abs(z);
+    if (a < 0.848) return 1;
+    if (a < 0.9397) return 1 - 0.85 * smooth01((a - 0.848) / 0.0917);
+    if (a < 0.9703) return 0.15 - 0.13 * smooth01((a - 0.9397) / 0.0306);
+    return Math.max(0, 0.02 - 0.02 * smooth01((a - 0.9703) / 0.02));
+  };
+  function planContinents(spec, islandCount, salt = 0) {
+    const seed = salt ? `${spec.worldSeed}#plan${salt}` : spec.worldSeed, K = spec.continentCountTarget, lf = spec.landFraction, layout = spec.layout in LAYOUTS ? spec.layout : "uneven";
+    const rc = makeRng(seed, "continents"), rs = makeRng(seed, "continent-shape"), ri = makeRng(seed, "islands");
+    const raw = [];
+    for (let i = 0; i < K; i++) raw.push(layout === "cluster" ? Math.exp(rc.range(-0.6, 0.5)) : layout === "split" ? Math.exp(rc.range(-0.5, 0.5)) : Math.exp(rc.range(-0.95, 0.75)));
+    raw.sort((a, b) => b - a);
+    if (layout === "super" && K > 1) {
+      let rest = 0;
+      for (let i = 1; i < K; i++) rest += raw[i];
+      raw[0] = rest * 1.15;
+    } else if (layout === "super") raw[0] = 1;
+    const sum = raw.reduce((s, x) => s + x, 0), share = raw.map((x) => x / sum);
+    const radius = share.map((s) => clamp2(Math.acos(clamp2(1 - 2 * lf * s * 1.1, -1, 1)), 4 * D2R, 80 * D2R));
+    const centers = [];
+    const sepOk = (p, j, f) => centers.every((c, i) => angle(p, c) >= (radius[i] + radius[j]) * f);
+    const place = (j, latLim, nearProb, f0) => {
+      for (let tries = 0; tries < 900; tries++) {
+        const f = Math.max(0.62, f0 - 0.4 * (tries / 900));
+        let p;
+        if (centers.length && rc() < nearProb) {
+          const q2 = rc.int(0, centers.length - 1);
+          p = walk(centers[q2], rc.range(0, TAU2), (radius[q2] + radius[j]) * rc.range(f + 0.05, f + 0.55));
+        } else p = randomPoint(rc, latLim);
+        if (Math.abs(latOf(p)) > latLim * D2R) continue;
+        if (sepOk(p, j, f)) return p;
+      }
+      return randomPoint(rc, latLim);
+    };
+    if (layout === "cluster") {
+      const nC = K <= 3 ? 1 : K <= 5 ? 2 : 3, cc = [];
+      let bestSep = -1, bestSet = null;
+      for (let trial = 0; trial < 800; trial++) {
+        const pts = [];
+        for (let i = 0; i < nC; i++) pts.push(randomPoint(rc, 38));
+        let sep = 9;
+        for (let i = 0; i < nC; i++) for (let j = i + 1; j < nC; j++) sep = Math.min(sep, angle(pts[i], pts[j]));
+        if (sep > bestSep) {
+          bestSep = sep;
+          bestSet = pts;
+        }
+      }
+      for (const p of bestSet) cc.push(p);
+      const groupOf = [];
+      for (let j = 0; j < K; j++) groupOf.push(j % nC);
+      for (let j = 0; j < K; j++) {
+        const g = groupOf[j], mates = [];
+        for (let i = 0; i < j; i++) if (groupOf[i] === g) mates.push(i);
+        if (!mates.length) {
+          centers.push(cc[g]);
+          continue;
+        }
+        let p = null;
+        for (let tries = 0; tries < 600 && !p; tries++) {
+          const q2 = mates[rc.int(0, mates.length - 1)], f = Math.max(1.2, 1.55 - 0.3 * (tries / 600));
+          const c = walk(centers[q2], rc.range(0, TAU2), (radius[q2] + radius[j]) * rc.range(f, f + 0.3));
+          if (Math.abs(latOf(c)) < 55 * D2R && sepOk(c, j, 1.2)) p = c;
+        }
+        centers.push(p ?? place(j, 55, 0.5, 0.9));
+      }
+    } else if (layout === "super") {
+      centers.push(randomPoint(rc, 28));
+      for (let j = 1; j < K; j++) {
+        let p = null;
+        for (let tries = 0; tries < 900 && !p; tries++) {
+          const c = randomPoint(rc, 55), f = Math.max(0.7, 1.3 - 0.6 * (tries / 900));
+          if (angle(c, centers[0]) >= (radius[0] + radius[j]) * f && sepOk(c, j, 0.95)) p = c;
+        }
+        centers.push(p ?? randomPoint(rc, 55));
+      }
+    } else if (layout === "split") {
+      centers.push(randomPoint(rc, 35));
+      for (let j = 1; j < K; j++) centers.push(place(j, 48, 0.92, 1.2));
+    } else {
+      for (let j = 0; j < K; j++) centers.push(place(j, 52, 0.33, 1));
+    }
+    const continents = [];
+    for (let j = 0; j < K; j++) {
+      const v = centers[j], r = radius[j], big = share[j] >= 0.7 / K, blobs = [], seas = [], plateSeeds = [v];
+      const nLobes = layout === "split" ? rs.int(3, 5) : big ? rs.int(2, 4) : rs.int(1, 2);
+      blobs.push(makeBlob(v, r * rs.range(0.72, 0.95), rs.range(0, TAU2), rs.range(1, 1.7)));
+      for (let i = 1; i < nLobes; i++) {
+        const dist = r * rs.range(0.4, 0.95), c = walk(v, rs.range(0, TAU2), dist);
+        blobs.push(makeBlob(c, r * rs.range(0.38, 0.7), rs.range(0, TAU2), rs.range(1, 2.5)));
+        if (big && i <= 2 && share[j] > 0.2) plateSeeds.push(c);
+      }
+      const pSea = layout === "super" && j === 0 ? 1 : layout === "split" ? 0.9 : layout === "uneven" ? 0.55 : 0.45;
+      const nSea = rs() < pSea && big ? layout === "super" && j === 0 ? rs.int(2, 3) : layout === "split" ? rs.int(1, 2) : 1 : 0;
+      for (let i = 0; i < nSea; i++) seas.push(makeBlob(walk(v, rs.range(0, TAU2), r * rs.range(0.1, 0.36)), r * rs.range(0.13, 0.24), rs.range(0, TAU2), rs.range(1, 2), 0.25));
+      const nGulf = big ? layout === "split" ? rs.int(2, 4) : rs.int(0, 2) : layout === "split" ? rs.int(0, 1) : 0;
+      for (let i = 0; i < nGulf; i++) {
+        const a = rs.range(0, TAU2), c = walk(v, a, r * rs.range(0.66, 0.95));
+        seas.push(makeBlob(c, r * rs.range(0.1, 0.17), a + Math.PI / 2 * 0 + rs.range(-0.4, 0.4), rs.range(2.6, 3.6), 0.2));
+      }
+      continents.push({ v, r, share: share[j], blobs, seas, plateSeeds });
+    }
+    const islands = [];
+    for (let i = 0; i < islandCount; i++) {
+      const kind = ri(), w = ri.range(0.5, 0.95);
+      let v, rr = ri.range(1.2, 5.2) * D2R, polar = false;
+      if (kind < 0.55) {
+        let q2 = 0, pick = ri();
+        for (let k = 0; k < K; k++) {
+          pick -= share[k];
+          if (pick <= 0) {
+            q2 = k;
+            break;
+          }
+        }
+        v = walk(centers[q2], ri.range(0, TAU2), radius[q2] * ri.range(1, 1.75));
+        if (Math.abs(latOf(v)) > 72 * D2R) v = randomPoint(ri, 60);
+      } else if (kind < 0.82) {
+        v = randomPoint(ri, 62);
+        for (let t = 0; t < 40 && centers.some((c, k) => angle(v, c) < radius[k] * 1.15); t++) v = randomPoint(ri, 62);
+      } else {
+        const lat = ri.range(62, 82) * D2R * (ri() < 0.5 ? -1 : 1);
+        v = fromLatLon(lat, ri.range(-Math.PI, Math.PI));
+        polar = true;
+        rr = ri.range(1.8, 5.5) * D2R;
+      }
+      islands.push({ v, r: rr, w, polar, cosCut: Math.cos(rr * 1.5) - 1e-9 });
+    }
+    return { layout, continents, islands, share, radius };
+  }
+  function makeFields(plan) {
+    const B = [], S = [];
+    for (const c of plan.continents) {
+      for (const b of c.blobs) B.push(b);
+      for (const s of c.seas) S.push(s);
+    }
+    const I = plan.islands;
+    const fieldAt = (x, y, z, rag) => {
+      let f = 0;
+      for (let i = 0; i < B.length; i++) {
+        const t = blobValue(B[i], x, y, z, rag);
+        if (t > f) f = t;
+      }
+      if (f > 0) {
+        let carve = 0;
+        for (let i = 0; i < S.length; i++) {
+          const t = blobValue(S[i], x, y, z, rag);
+          if (t > carve) carve = t;
+        }
+        f *= 1 - Math.min(1, carve * 1.25);
+        f *= polarDamp(z);
+      }
+      return f;
+    };
+    const islandAt = (x, y, z) => {
+      let f = 0;
+      for (let i = 0; i < I.length; i++) {
+        const o = I[i], dp = x * o.v[0] + y * o.v[1] + z * o.v[2];
+        if (dp < o.cosCut) continue;
+        const d = Math.acos(dp > 1 ? 1 : dp);
+        if (d < o.r * 1.5) {
+          const t = clamp2(1 - d / (o.r * 1.5), 0, 1);
+          f = Math.max(f, o.w * t * t * (3 - 2 * t));
+        }
+      }
+      return f;
+    };
+    return { fieldAt, islandAt };
+  }
+  function chooseSeam(fieldAt, samples) {
+    let bestPsi = 0, bestCost = Infinity;
+    for (let k = 0; k < 120; k++) {
+      const psi = k / 120 * TAU2;
+      let cost = 0;
+      for (const s of samples) {
+        const q2 = rotZ(s.p, psi), f = fieldAt(q2[0], q2[1], q2[2], s.rag);
+        if (f > 0.03) cost += s.weight * (0.4 + f);
+      }
+      if (cost < bestCost - 1e-9) {
+        bestCost = cost;
+        bestPsi = psi;
+      }
+    }
+    return { psi: bestPsi, cost: bestCost };
+  }
+  function seamSampleSpecs() {
+    const out = [];
+    for (let lat = -72; lat <= 72; lat += 3) for (const [dl, w] of [[-9, 1], [-4.5, 2], [0, 3], [4.5, 2], [9, 1]]) out.push({ lat: lat * D2R, lon: Math.PI + dl * D2R, weight: w });
+    return out;
+  }
+
   // js/core/world/worldgen.js
   var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
   var BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });
@@ -8076,12 +8414,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var SOILS = Object.freeze({ NONE: 0, ROCK: 1, SAND: 2, LOAM: 3, CLAY: 4, VOLCANIC: 5, PERMAFROST: 6, ALLUVIAL: 7, PODZOL: 8, BLACK_EARTH: 9 });
   var RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 });
   var RES_NAMES = Object.freeze({ 1: "\u9244", 2: "\u9285", 4: "\u932B", 8: "\u91D1", 16: "\u77F3\u70AD", 32: "\u5869", 64: "\u6728\u6750", 128: "\u6F01\u5834", 256: "\u77F3\u6750", 512: "\u7C98\u571F", 1024: "\u5B9D\u77F3" });
-  var clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var clamp3 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   var smooth = (t) => {
-    t = clamp2(t, 0, 1);
+    t = clamp3(t, 0, 1);
     return t * t * (3 - 2 * t);
   };
-  var D2R = Math.PI / 180;
+  var D2R2 = Math.PI / 180;
   var MinHeap = class {
     constructor(cap) {
       this.k = new Float64Array(cap);
@@ -8119,6 +8457,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       return top;
     }
   };
+  var coarseCache = null;
+  var coarseMesh = () => coarseCache ?? (coarseCache = buildSphereMesh(frequencyForCells(2400)));
   var Cancelled = class extends Error {
   };
   var makeStager = (onProgress, signal, timings) => (name, label3, fn) => {
@@ -8139,7 +8479,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const lat = new Float32Array(V), lon = new Float32Array(V), areaKm2 = new Float32Array(V);
     stage("G1_derive", "\u7DEF\u5EA6\u7D4C\u5EA6\u30FB\u9762\u7A4D", () => {
       for (let c = 0; c < V; c++) {
-        lat[c] = Math.asin(clamp2(X[3 * c + 2], -1, 1));
+        lat[c] = Math.asin(clamp3(X[3 * c + 2], -1, 1));
         lon[c] = Math.atan2(X[3 * c + 1], X[3 * c]);
         areaKm2[c] = cellArea(mesh, c) * R * R;
       }
@@ -8149,21 +8489,74 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const nSeed = (name) => hashString(`${seed}::noise::${name}`);
     const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);
     const volcanic = new Float32Array(V);
+    let seamInfo = { psi: 0, cost: 0 };
+    const X3 = (c) => X[3 * c], Y3 = (c) => X[3 * c + 1];
+    const modeLevel = spec.islandMode === "many" ? 2 : spec.islandMode === "normal" ? 1 : 0;
     stage("G2_plates", "\u30D7\u30EC\u30FC\u30C8\u30FB\u5927\u9678\u306E\u6982\u5F62", () => {
       const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];
       const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);
       const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));
-      for (let c = 0; c < V; c++) {
-        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
+      const warpPt = (x, y, z) => {
         const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;
         const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);
-        wx[c] = px / l;
-        wy[c] = py / l;
-        wz[c] = pz / l;
+        return [px / l, py / l, pz / l];
+      };
+      for (let c = 0; c < V; c++) {
+        const w = warpPt(X[3 * c], X[3 * c + 1], X[3 * c + 2]);
+        wx[c] = w[0];
+        wy[c] = w[1];
+        wz[c] = w[2];
       }
+      const ragF = makeFbm3(nSeed("coast"), 3, 2.2), ragAt = (x, y, z) => (ragF(x, y, z) - 0.5) * 2;
+      const samples = seamSampleSpecs().map((s) => {
+        const p0 = [Math.cos(s.lat) * Math.cos(s.lon), Math.cos(s.lat) * Math.sin(s.lon), Math.sin(s.lat)], w = warpPt(p0[0], p0[1], p0[2]);
+        return { p: w, rag: ragAt(w[0], w[1], w[2]), weight: s.weight };
+      });
+      const coarse = coarseMesh(), CV = coarse.cellCount, CX = coarse.centerXYZ, cw = new Float32Array(3 * CV), crag = new Float32Array(CV);
+      for (let c = 0; c < CV; c++) {
+        const w = warpPt(CX[3 * c], CX[3 * c + 1], CX[3 * c + 2]);
+        cw[3 * c] = w[0];
+        cw[3 * c + 1] = w[1];
+        cw[3 * c + 2] = w[2];
+        crag[c] = ragAt(w[0], w[1], w[2]);
+      }
+      const judge = (pl, si) => {
+        const { fieldAt: fieldAt2 } = makeFields(pl), ca = Math.cos(si.psi), sa = Math.sin(si.psi), raw = new Float32Array(CV);
+        for (let c = 0; c < CV; c++) raw[c] = fieldAt2(cw[3 * c] * ca - cw[3 * c + 1] * sa, cw[3 * c] * sa + cw[3 * c + 1] * ca, cw[3 * c + 2], crag[c]);
+        const sorted = Float32Array.from(raw).sort(), lvl2 = sorted[Math.min(CV - 1, Math.floor(CV * (1 - spec.landFraction)))], isS = new Uint8Array(CV);
+        for (let c = 0; c < CV; c++) isS[c] = raw[c] > lvl2 ? 0 : 1;
+        const { sizes } = landmasses(CV, coarse.neighborOffsets, coarse.neighborIds, isS), total2 = sizes.reduce((a, b) => a + b, 0) || 1, big = sizes.filter((n3) => n3 >= total2 * 0.03).sort((a, b) => b - a);
+        const K = spec.continentCountTarget, lo = spec.layout === "uneven" ? Math.max(1, K - 2) : spec.layout === "super" ? Math.max(1, K - 3) : Math.max(1, Math.ceil(K / 2)), maxShare = spec.layout === "super" ? 0.72 : K === 1 ? 1 : 0.5;
+        let bad2 = 0;
+        if (big.length < lo) bad2 += (lo - big.length) * 2;
+        if (big.length > K + 2) bad2 += big.length - K - 2;
+        if (big[0] / total2 > maxShare) bad2 += (big[0] / total2 - maxShare) * 10;
+        return bad2 + si.cost * 0.02;
+      };
+      let plan = null, bestBad = Infinity, bestSeam = null;
+      for (let salt = 0; salt < 14 && bestBad > 0.2; salt++) {
+        const pl = planContinents(spec, ISLAND_MODES[spec.islandMode], salt), si = chooseSeam(makeFields(pl).fieldAt, samples), bad2 = judge(pl, si);
+        if (bad2 < bestBad) {
+          bestBad = bad2;
+          plan = pl;
+          bestSeam = si;
+        }
+      }
+      seamInfo = bestSeam;
+      const psi = seamInfo.psi;
+      plan.islands = plan.islands.filter((o) => {
+        const a = rotZ(o.v, -psi), lon2 = Math.atan2(a[1], a[0]);
+        return Math.abs(Math.PI - Math.abs(lon2)) > o.r * 1.6 + 5 * D2R2;
+      });
+      const { fieldAt, islandAt } = makeFields(plan);
       const rp = makeRng(seed, "plates"), P4 = spec.plateCount, seeds = [], omega = [];
+      const contSeeds = [];
+      for (const ct of plan.continents) for (const v of ct.plateSeeds) contSeeds.push(rotZ(v, -psi));
+      const nCont = Math.min(contSeeds.length, Math.max(1, P4 - 3)), isContPlate = new Uint8Array(P4);
       for (let p = 0; p < P4; p++) {
-        seeds.push(rp.unitVec());
+        const rnd = rp.unitVec();
+        seeds.push(p < nCont ? contSeeds[p] : rnd);
+        if (p < nCont) isContPlate[p] = 1;
         const w = rp.unitVec(), sp = rp.range(0.4, 1.6);
         omega.push([w[0] * sp, w[1] * sp, w[2] * sp]);
       }
@@ -8182,9 +8575,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];
         return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x];
       };
-      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V);
+      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V), srcCrust = new Float32Array(V);
       for (let c = 0; c < V; c++) {
-        let best = 0, bestAbs = 0;
+        let best = 0, bestAbs = 0, crust = 0.55;
         const vc = vel(plate[c], c);
         for (let k = off[c]; k < off[c + 1]; k++) {
           const j = nb[k];
@@ -8199,14 +8592,17 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
           if (Math.abs(conv) > bestAbs) {
             bestAbs = Math.abs(conv);
             best = conv;
+            const a = isContPlate[plate[c]], b = isContPlate[plate[j]];
+            crust = a && b ? 1.15 : a || b ? 0.95 : 0.55;
           }
         }
         if (bestAbs > 0) {
           isSrc[c] = 1;
           srcStrength[c] = best;
+          srcCrust[c] = crust;
         }
       }
-      const widthCells = Math.max(2, 5 * D2R / spacingRad), maxD = Math.ceil(widthCells * 3);
+      const widthCells = Math.max(2, 5 * D2R2 / spacingRad), maxD = Math.ceil(widthCells * 3);
       const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q2 = new Int32Array(V);
       let qh = 0, qt = 0;
       for (let c = 0; c < V; c++) if (isSrc[c]) {
@@ -8226,70 +8622,45 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
           }
         }
       }
-      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4);
+      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4), arcF = makeFbm3(nSeed("arc"), 3, 6);
       for (let c = 0; c < V; c++) {
         if (dist[c] < 0) continue;
         const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));
         const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3);
         if (s > 0) {
-          mountain[c] = clamp2(s / 1.2, 0, 1.3) * f * mod;
+          mountain[c] = clamp3(s / 1.2, 0, 1.3) * f * mod * srcCrust[from[c]];
           volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;
-        } else rift[c] = clamp2(-s / 1.2, 0, 1) * f;
+        } else rift[c] = clamp3(-s / 1.2, 0, 1) * f;
       }
-      const rc = makeRng(seed, "continents"), K = spec.continentCountTarget;
-      const thetaLand = Math.acos(clamp2(1 - 2 * spec.landFraction / K, -1, 1));
-      let bestSet = null, bestSep = -1;
-      for (let trial = 0; trial < 3e3; trial++) {
-        const pts = [];
-        for (let i = 0; i < K; i++) pts.push(rc.unitVec());
-        let sep = 9;
-        for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp2(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));
-        if (sep > bestSep) {
-          bestSep = sep;
-          bestSet = pts;
-        }
-      }
-      const cs = bestSet.map((v) => {
-        const r = thetaLand * rc.range(0.8, 0.95);
-        return { v, r, cosCut: Math.cos(Math.min(Math.PI, r * 1.1)) - 1e-9 };
-      });
-      const isl = [];
-      const NI = ISLAND_MODES[spec.islandMode];
-      for (let i = 0; i < NI; i++) {
-        const v = rc.unitVec(), r = rc.range(1.2, 5.5) * D2R, w = rc.range(0.45, 0.95);
-        isl.push({ v, r, w, cosCut: Math.cos(r * 1.5) - 1e-9 });
-      }
-      const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];
       for (let c = 0; c < V; c++) {
-        let f = 0;
-        for (const o of cs) {
-          const dp = dotp(c, o.v);
-          if (dp < o.cosCut) continue;
-          const d = Math.acos(clamp2(dp, -1, 1)), t = clamp2((1 - d / (o.r * 1.1)) * 2.2, 0, 1);
-          f = Math.max(f, t * t * (3 - 2 * t));
+        const ca = Math.cos(psi), sa = Math.sin(psi), x = wx[c] * ca - wy[c] * sa, y = wx[c] * sa + wy[c] * ca, z = wz[c];
+        const g = fieldAt(x, y, z, ragAt(wx[c], wy[c], wz[c])), i = islandAt(x, y, z);
+        continent[c] = Math.max(g, i);
+      }
+      for (let c = 0; c < V; c++) {
+        const dseam = Math.PI - Math.abs(Math.atan2(Y3(c), X3(c)));
+        if (dseam < 12 * D2R2) continent[c] *= smooth((dseam - 4 * D2R2) / (8 * D2R2));
+      }
+      if (modeLevel > 1) for (let c = 0; c < V; c++) {
+        if (continent[c] > 0.2 || !(mountain[c] > 0.62) || isContPlate[plate[c]]) continue;
+        const n3 = arcF(X[3 * c] * 5, X[3 * c + 1] * 5, X[3 * c + 2] * 5), th = 0.64;
+        if (n3 > th) {
+          continent[c] = Math.max(continent[c], 0.5 + 0.35 * (n3 - th) / 0.2);
+          volcanic[c] = Math.max(volcanic[c], 0.6);
         }
-        for (const o of isl) {
-          const dp = dotp(c, o.v);
-          if (dp < o.cosCut) continue;
-          const d = Math.acos(clamp2(dp, -1, 1));
-          if (d < o.r * 1.5) {
-            const t = clamp2(1 - d / (o.r * 1.5), 0, 1);
-            f = Math.max(f, o.w * t * t * (3 - 2 * t));
-          }
-        }
-        continent[c] = f;
       }
       const rh = makeRng(seed, "hotspots");
-      for (let h2 = 0; h2 < 6; h2++) {
-        const start2 = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;
-        const dot2 = start2[0] * dirv[0] + start2[1] * dirv[1] + start2[2] * dirv[2];
-        let t = [dirv[0] - dot2 * start2[0], dirv[1] - dot2 * start2[1], dirv[2] - dot2 * start2[2]];
+      for (let h2 = 0; h2 < [1, 2, 5][modeLevel]; h2++) {
+        const start2 = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R2;
+        const dot3 = start2[0] * dirv[0] + start2[1] * dirv[1] + start2[2] * dirv[2];
+        let t = [dirv[0] - dot3 * start2[0], dirv[1] - dot3 * start2[1], dirv[2] - dot3 * start2[2]];
         const tl = Math.hypot(...t) || 1;
         t = t.map((x) => x / tl);
         for (let i = 0; i < count; i++) {
-          const a = i * step, p = [start2[0] * Math.cos(a) + t[0] * Math.sin(a), start2[1] * Math.cos(a) + t[1] * Math.sin(a), start2[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));
+          const a = i * step, p = [start2[0] * Math.cos(a) + t[0] * Math.sin(a), start2[1] * Math.cos(a) + t[1] * Math.sin(a), start2[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R2 * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));
+          if (Math.abs(Math.PI - Math.abs(Math.atan2(p[1], p[0]))) < 5 * D2R2 || Math.abs(p[2]) > 0.94) continue;
           for (let c = 0; c < V; c++) {
-            const d = Math.acos(clamp2(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));
+            const d = Math.acos(clamp3(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));
             if (d < rad * 2) {
               const g = Math.exp(-((d / rad) ** 2));
               continent[c] = Math.max(continent[c], amp * g * 0.9);
@@ -8305,8 +8676,19 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);
       for (let c = 0; c < V; c++) {
         const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];
-        const land = smooth((cf - 0.25) / 0.45);
-        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) + mountain[c] * (0.03 + 0.97 * land) * 1.5 - rift[c] * 0.22;
+        const land = smooth((cf - 0.25) / 0.45), nz = 0.2 + 0.8 * smooth(cf / 0.3);
+        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz + mountain[c] * (0.03 + 0.97 * land) * 1.5 * (0.15 + 0.85 * smooth(cf / 0.3)) - rift[c] * 0.22;
+        {
+          const pl = (Math.abs(lat[c]) - 72 * D2R2) / (12 * D2R2);
+          if (pl > 0) raw[c] -= 0.22 * smooth(pl);
+        }
+        {
+          const dseam = Math.PI - Math.abs(Math.atan2(y, x));
+          if (dseam < 12 * D2R2) {
+            const m = smooth((dseam - 4 * D2R2) / (8 * D2R2));
+            raw[c] = raw[c] * m - 0.25 * (1 - m);
+          }
+        }
       }
       const sorted = Float32Array.from(raw).sort();
       seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];
@@ -8377,7 +8759,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     });
     const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };
     const populations = stage("G7_groups", "\u521D\u671F\u4EBA\u53E3\u96C6\u56E3", () => placeInitialGroups(gctx, spec, 0));
-    const stats = stage("G8_stats", "\u7D71\u8A08", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
+    const stats = stage("G8_stats", "\u7D71\u8A08", () => computeStats({ lon, V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
     const world = {
       spec: { ...spec, generatorVersion: GENERATOR_VERSION },
       mesh,
@@ -8396,7 +8778,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
   function upwindOf(mesh, lat, lon, c) {
     const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
-    const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;
+    const la = Math.abs(lat[c]) / D2R2, east = la < 30 ? -1 : la < 60 ? 1 : -1;
     const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);
     const wx = -east * ex, wy = -east * ey;
     let best = -2, bj = -1;
@@ -8416,14 +8798,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
   function moistureStep(cx, c) {
     const u = upOf(cx, c);
-    return clamp2(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);
+    return clamp3(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);
   }
   function precipAt(cx, c) {
-    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
+    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R2, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));
     const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];
     let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);
     if (!sea && cx.elevation[c] > 3500) p *= 0.6;
-    return clamp2(p, 0, 6e3);
+    return clamp3(p, 0, 6e3);
   }
   function biomeAt(T3, P4, e, sea) {
     return sea ? BIOMES.OCEAN : biomeOf(T3, P4, e);
@@ -8563,10 +8945,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     soil[c] = sl;
     if (land) {
       const t = temp[c], p = precip[c];
-      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp2(1 - (t - 26) / 12, 0.2, 1);
-      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp2(1 - (p - 2200) / 3500, 0.5, 1);
-      const slope = 1 - clamp2(relief / 700, 0, 0.9), alt = 1 - clamp2(Math.max(0, e - 1500) / 3e3, 0, 1);
-      fertility[c] = clamp2(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);
+      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp3(1 - (t - 26) / 12, 0.2, 1);
+      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp3(1 - (p - 2200) / 3500, 0.5, 1);
+      const slope = 1 - clamp3(relief / 700, 0, 0.9), alt = 1 - clamp3(Math.max(0, e - 1500) / 3e3, 0, 1);
+      fertility[c] = clamp3(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);
       capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];
     } else {
       fertility[c] = 0;
@@ -8582,7 +8964,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
     for (const { c } of cand2) {
       if (out.length >= spec.initialGroups) break;
-      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });
+      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R2, lon: lon[c] / D2R2, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });
     }
     return out;
   }
@@ -8645,12 +9027,19 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
     const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea), total2 = sizes.reduce((s, x) => s + x, 0);
     const continents = sizes.filter((s) => s >= total2 * 0.03), islands = sizes.filter((s) => s < total2 * 0.03);
+    let seamN = 0, seamLand = 0;
+    if (a.lon) {
+      for (let c = 0; c < V; c++) if (Math.abs(a.lon[c]) > 175 * D2R2) {
+        seamN++;
+        if (!isSea[c]) seamLand++;
+      }
+    }
     const biomeCounts = new Array(14).fill(0);
     for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;
     let tl = 0, nl = 0, th = 0, nh = 0;
     for (let c = 0; c < V; c++) {
       if (isSea[c]) continue;
-      const la = Math.abs(lat[c]) / D2R;
+      const la = Math.abs(lat[c]) / D2R2;
       if (la < 20) {
         tl += temp[c];
         nl++;
@@ -8660,6 +9049,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       }
     }
     return {
+      seamLandFraction: seamN ? seamLand / seamN : 0,
+      layout: a.spec?.layout ?? null,
       cells: V,
       landFraction: landCells / V,
       lakeFraction: lake / V,
@@ -8768,10 +9159,13 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function statsProblems(st, spec) {
     const r = [];
     if (Math.abs(st.landFraction - spec.landFraction) > 0.04) r.push(`\u9678\u5730\u7387 ${st.landFraction.toFixed(3)} \u304C\u76EE\u6A19 ${spec.landFraction} \u304B\u3089\u5916\u308C\u3066\u3044\u308B`);
-    const K = spec.continentCountTarget;
-    if (st.continentCount < Math.max(1, K - 2) || st.continentCount > K + 3) r.push(`\u5927\u9678\u7D1A\u306E\u9678\u584A\u304C ${st.continentCount} \u500B\uFF08\u76EE\u6A19 ${K}\uFF09`);
+    const K = spec.continentCountTarget, lay = spec.layout ?? "uneven";
+    const lo = lay === "uneven" ? Math.max(1, K - 2) : lay === "super" ? Math.max(1, K - 3) : Math.max(1, Math.ceil(K / 2));
+    if (st.continentCount < lo || st.continentCount > K + 3) r.push(`\u5927\u9678\u7D1A\u306E\u9678\u584A\u304C ${st.continentCount} \u500B\uFF08\u76EE\u6A19 ${K}\uFF09`);
     if (spec.islandMode === "many" && st.islandCount < 20) r.push(`\u5CF6\u304C\u5C11\u306A\u3044\uFF08${st.islandCount}\uFF09`);
-    if (st.continentShares[0] > 0.45) r.push(`\u6700\u5927\u306E\u9678\u584A\u304C\u9678\u306E ${(st.continentShares[0] * 100).toFixed(0)}%\uFF08\u504F\u308A\u3059\u304E\uFF09`);
+    const maxShare = lay === "super" ? 0.75 : K === 1 ? 1 : 0.55;
+    if (st.continentShares[0] > maxShare) r.push(`\u6700\u5927\u306E\u9678\u584A\u304C\u9678\u306E ${(st.continentShares[0] * 100).toFixed(0)}%\uFF08\u504F\u308A\u3059\u304E\uFF09`);
+    if (st.seamLandFraction > 0.08) r.push(`\u5730\u56F3\u306E\u5DE6\u53F3\u7AEF\u306B\u9678\u304C\u591A\u3044\uFF08${(st.seamLandFraction * 100).toFixed(0)}%\uFF09`);
     if (st.meanTempLow != null && st.meanTempHigh != null && st.meanTempLow <= st.meanTempHigh + 10) r.push("\u4F4E\u7DEF\u5EA6\u304C\u9AD8\u7DEF\u5EA6\u3088\u308A\u5341\u5206\u306B\u6696\u304B\u304F\u306A\u3044");
     return r;
   }
@@ -9897,14 +10291,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/core/sim/war-engine.js
-  var clamp3 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var clamp4 = (v, a, b) => Math.min(b, Math.max(a, v));
   var isLive8 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var LAND = ["infantry", "cavalry", "archers", "artillery", "armor", "special", "advanced"];
   var AIR = ["air"];
   var SEA = ["navy"];
   var BASE_MORALE = 70;
   var BASE_SUPPORT = 70;
-  var supportOf = (state) => clamp3(state?.support ?? BASE_SUPPORT, 0, 100);
+  var supportOf = (state) => clamp4(state?.support ?? BASE_SUPPORT, 0, 100);
   var EXHAUST_SUPPORT = 10;
   var WAR_TYPES = Object.freeze({
     limited: {
@@ -10010,7 +10404,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var ESCALATION = Object.freeze({ limited: 0, conventional: 1, asymmetric: 1, total: 2 });
   var escalationPenalty = (from, to) => Math.max(0, (ESCALATION[to] ?? 1) - (ESCALATION[from] ?? 1)) * 4;
   var doctrineOf = (state) => DOCTRINE_BY_KEY[effectiveDoctrineKey(state)] ?? DOCTRINE_BY_KEY[DEFAULT_DOCTRINE];
-  var moraleOf = (state) => clamp3(state?.morale ?? BASE_MORALE, 0, 100);
+  var moraleOf = (state) => clamp4(state?.morale ?? BASE_MORALE, 0, 100);
   function mobilized(state, muster) {
     const all = regimentsOf(state);
     const sel = muster?.[state.i];
@@ -10028,7 +10422,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
   function nationStrength(state, muster = null) {
     const regs = mobilized(state, muster);
-    const tech = clamp3(state.techLevel ?? 3, 1, 10);
+    const tech = clamp4(state.techLevel ?? 3, 1, 10);
     const m = (0.7 + tech * 0.08) * (0.8 + Math.min(1.2, (state.industry ?? 0) / 500));
     return {
       land: sumUnits(state, LAND, regs) * m,
@@ -10063,11 +10457,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const share = (x, y) => x + y <= 0 ? 0.5 : x / (x + y);
     const landTotal = a.land + b.land;
     const damp = (raw, x, y) => {
-      const w = landTotal <= 0 ? 1 : clamp3((x + y) / (0.25 * landTotal), 0, 1);
+      const w = landTotal <= 0 ? 1 : clamp4((x + y) / (0.25 * landTotal), 0, 1);
       return 0.5 + (raw - 0.5) * w;
     };
     const cmp = { land: share(a.land, b.land), sea: share(a.sea, b.sea), air: share(a.air, b.air), morale: share(a.morale, b.morale), support: share(a.support ?? BASE_SUPPORT, b.support ?? BASE_SUPPORT) };
-    cmp.eff = { sea: damp(cmp.sea, a.sea, b.sea), air: damp(cmp.air, a.air, b.air), morale: clamp3(0.5 + (cmp.morale - 0.5) * 2, 0, 1) };
+    cmp.eff = { sea: damp(cmp.sea, a.sea, b.sea), air: damp(cmp.air, a.air, b.air), morale: clamp4(0.5 + (cmp.morale - 0.5) * 2, 0, 1) };
     return cmp;
   }
   function sideDoctrine(map, ids2) {
@@ -10091,7 +10485,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
   function verdictOf(edge, band = 0.03) {
     const winner = Math.abs(edge) < band ? "stalemate" : edge > 0 ? "attacker" : "defender";
-    return { winner, decisiveness: clamp3(Math.abs(edge) * 2, 0, 1) };
+    return { winner, decisiveness: clamp4(Math.abs(edge) * 2, 0, 1) };
   }
   function previewWar(map, attackers, defenders, muster = null) {
     const A = sideStrength(map, attackers, muster), D2 = sideStrength(map, defenders, muster);
@@ -10124,12 +10518,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const verdict = verdictOf(edge, T3.asym ? 0.05 : 0.015);
     const { winner, decisiveness } = verdict;
     const base = (0.12 + (1 - decisiveness) * 0.12) * T3.lossScale;
-    const lossFor = (isWinner) => clamp3(isWinner ? base * 0.5 : base * (1 + decisiveness), 0.02, 0.6);
+    const lossFor = (isWinner) => clamp4(isWinner ? base * 0.5 : base * (1 + decisiveness), 0.02, 0.6);
     const aBase = winner === "stalemate" ? base : lossFor(winner === "attacker");
     const dBase = winner === "stalemate" ? base : lossFor(winner === "defender");
     const asym = T3.asym;
     const aMul = asym ? strongIsAttacker ? 1.2 : 0.6 : 1, dMul = asym ? strongIsAttacker ? 0.6 : 1.2 : 1;
-    const aLoss = clamp3(aBase * da.ownLoss * dd.enemyLoss * aMul, 0.02, 0.6), dLoss = clamp3(dBase * dd.ownLoss * da.enemyLoss * dMul, 0.02, 0.6);
+    const aLoss = clamp4(aBase * da.ownLoss * dd.enemyLoss * aMul, 0.02, 0.6), dLoss = clamp4(dBase * dd.ownLoss * da.enemyLoss * dMul, 0.02, 0.6);
     const losses = {}, casualties = {}, moraleDelta = {}, popLossShare = {};
     const apply = (ids2, frac, won, side) => {
       const isStrong = side === "attacker" === strongIsAttacker;
@@ -10143,13 +10537,13 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         let md = winner === "stalemate" ? -Math.round(6 * hit) : won ? Math.round(4 + 6 * decisiveness) : -Math.round((8 + 24 * decisiveness) * hit);
         if (asym && isStrong) md -= 10;
         moraleDelta[id] = md;
-        popLossShare[id] = clamp3((frac * 0.15 + (won ? 0 : decisiveness * 0.04) + (side === "defender" ? 0.01 : 0)) * T3.popScale * (asym && !isStrong ? 1.4 : 1), 0, 0.35);
+        popLossShare[id] = clamp4((frac * 0.15 + (won ? 0 : decisiveness * 0.04) + (side === "defender" ? 0.01 : 0)) * T3.popScale * (asym && !isStrong ? 1.4 : 1), 0, 0.35);
       }
     };
     apply(attackers, aLoss, winner === "attacker", "attacker");
     apply(defenders, dLoss, winner === "defender", "defender");
-    const dominance = clamp3(Math.abs(edge) * 6, 0, 1);
-    const warScore = winner === "stalemate" ? 0 : Math.round(clamp3(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T3.scoreScale, 5, 100));
+    const dominance = clamp4(Math.abs(edge) * 6, 0, 1);
+    const warScore = winner === "stalemate" ? 0 : Math.round(clamp4(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T3.scoreScale, 5, 100));
     return { winner, decisiveness, dominance, warScore, type: T3.key, compare: cmp, aStrength: A, dStrength: D2, noise, losses, casualties, moraleDelta, popLossShare, doctrine: { attacker: da, defender: dd } };
   }
   function applyVictoryConditions(map, result, { attackers, defenders, type, supportDelta, rnd }) {
@@ -10170,20 +10564,20 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         if (!cap || cap.removed) continue;
         const d = dist.get(cap.cell);
         if (d == null) continue;
-        const p = clamp3((0.05 + dom * 0.75 - 0.45 * (d / maxD)) * T3.capitalFall, 0, 0.85);
+        const p = clamp4((0.05 + dom * 0.75 - 0.45 * (d / maxD)) * T3.capitalFall, 0, 0.85);
         if (rnd.next() < p && (!best || d < best.d)) best = { d, stateId: L, burgId: cap.i, place: cap.name };
       }
       if (best) {
         capitalFall = { stateId: best.stateId, burgId: best.burgId, place: best.place };
         victory = { type: "capital", text: `\u9996\u90FD${best.place}\u306E\u9665\u843D\u306B\u3088\u308B\u6C7A\u5B9A\u7684\u52DD\u5229`, stateId: best.stateId, burgId: best.burgId };
-        warScore = clamp3(warScore + 25, 5, 100);
+        warScore = clamp4(warScore + 25, 5, 100);
         moraleDelta[best.stateId] = (moraleDelta[best.stateId] ?? 0) - 20;
         durationFactor = 0.75;
       } else {
         const frac = Math.max(...losers.map((L) => result.casualties?.[L] && result.casualties[L].before > 0 ? result.casualties[L].lost / result.casualties[L].before : 0));
         if (frac >= 0.3 && result.decisiveness >= 0.4) {
           victory = { type: "attrition", text: "\u6557\u8005\u306E\u5175\u529B\u304C\u58CA\u6EC5\u3057\u305F\uFF08\u52D5\u54E1\u5175\u529B\u306E3\u5272\u4EE5\u4E0A\u3092\u55AA\u5931\uFF09" };
-          warScore = clamp3(warScore + 10, 5, 100);
+          warScore = clamp4(warScore + 10, 5, 100);
         }
       }
     } else {
@@ -10222,8 +10616,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const edge = edgeOf(compare, r.doctrine?.attacker ?? sideDoctrine(map, war.attackers), r.doctrine?.defender ?? sideDoctrine(map, war.defenders)) + (r.noise ?? 0) + (war.edgeShift ?? 0);
     const v = verdictOf(edge, asymOf(r.type) ? 0.05 : 0.015);
     if (r.victory && (r.victory.type === "capital" || r.victory.type === "exhaustion")) return { ...r, compare, aStrength: A, dStrength: D2 };
-    const dominance = clamp3(Math.abs(edge) * 6, 0, 1);
-    const warScore = v.winner === "stalemate" ? 0 : Math.round(clamp3(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T3.scoreScale, 5, 100));
+    const dominance = clamp4(Math.abs(edge) * 6, 0, 1);
+    const warScore = v.winner === "stalemate" ? 0 : Math.round(clamp4(100 * (BALANCE.scoreBase + (1 - BALANCE.scoreBase) * dominance) * T3.scoreScale, 5, 100));
     return { ...r, ...v, dominance, warScore, compare, aStrength: A, dStrength: D2 };
   }
   function distanceFrom(map, ownerIds, targetIds, maxDepth = 40) {
@@ -10307,11 +10701,11 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     balanced: { win: ["\u5404\u5175\u79D1\u3092\u9023\u643A\u3055\u305B\u3001\u5805\u5B9F\u306B\u52DD\u5229\u3057\u305F", "\u5747\u8861\u306E\u53D6\u308C\u305F\u904B\u7528\u3067\u512A\u4F4D\u3092\u4FDD\u3063\u305F"], lose: ["\u6C7A\u3081\u624B\u3092\u6B20\u304D\u3001\u5F8C\u9000\u3057\u305F"] }
   };
   function generateBattleLog(map, { attackers, defenders, result, startedAt, durationMonths, capitalFall = null }, rnd, addMonths2) {
-    const n2 = clamp3(Math.round(2 + Math.log10(1 + (result.aStrength.manpower + result.dStrength.manpower)) * 1.1 + durationMonths / 8), 2, 9);
+    const n2 = clamp4(Math.round(2 + Math.log10(1 + (result.aStrength.manpower + result.dStrength.manpower)) * 1.1 + durationMonths / 8), 2, 9);
     const winnerSide = result.winner === "defender" ? "defender" : "attacker";
-    const pWin = result.winner === "stalemate" ? 0.5 : clamp3(0.55 + result.decisiveness * 0.35, 0.55, 0.9);
+    const pWin = result.winner === "stalemate" ? 0.5 : clamp4(0.55 + result.decisiveness * 0.35, 0.55, 0.9);
     const defenderFront = frontBurgs(map, defenders, attackers), attackerFront = frontBurgs(map, attackers, defenders);
-    const depthReach = result.winner === "attacker" ? clamp3(0.35 + result.decisiveness * 0.65, 0.3, 1) : 0.3;
+    const depthReach = result.winner === "attacker" ? clamp4(0.35 + result.decisiveness * 0.65, 0.3, 1) : 0.3;
     const log = [];
     const used = /* @__PURE__ */ new Set();
     for (let i = 0; i < n2; i++) {
@@ -10463,17 +10857,17 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const D2 = (war.defenders ?? []).filter((id) => isLive8(map.pack.states[id]) && !war.withdrawn?.[id]);
     if (!A.length || !D2.length) return null;
     const dur = Math.max(1, war.durationMonths ?? 12);
-    const prog = clamp3((war.monthsDone ?? 0) / dur, 0, 1);
+    const prog = clamp4((war.monthsDone ?? 0) / dur, 0, 1);
     const dec4 = r.decisiveness ?? 0.5;
     const winnerSide = r.winner === "defender" ? "defender" : "attacker";
-    const pWin = r.winner === "stalemate" ? 0.5 : clamp3(0.55 + dec4 * 0.35, 0.55, 0.9);
-    const pAtt = clamp3((winnerSide === "attacker" ? pWin : 1 - pWin) + (war.edgeShift ?? 0), 0.08, 0.92);
+    const pWin = r.winner === "stalemate" ? 0.5 : clamp4(0.55 + dec4 * 0.35, 0.55, 0.9);
+    const pAtt = clamp4((winnerSide === "attacker" ? pWin : 1 - pWin) + (war.edgeShift ?? 0), 0.08, 0.92);
     const side = rnd.next() < pAtt ? "attacker" : "defender";
     const wId = rnd.pick(side === "attacker" ? A : D2), lId = rnd.pick(side === "attacker" ? D2 : A);
     const counter = side === "defender" && winnerSide === "defender" && prog > 0.6;
     const defFront = frontBurgs(map, D2, A), attFront = frontBurgs(map, A, D2);
     const pool = counter ? attFront : defFront;
-    const reach = side === "attacker" ? clamp3(0.25 + dec4 * 0.75, 0.25, 1) * (0.2 + 0.8 * prog) : 0.3 * (0.2 + 0.8 * prog);
+    const reach = side === "attacker" ? clamp4(0.25 + dec4 * 0.75, 0.25, 1) * (0.2 + 0.8 * prog) : 0.3 * (0.2 + 0.8 * prog);
     const maxIdx = Math.max(0, Math.floor((pool.length - 1) * reach));
     const used = (war.battles ?? []).map((b) => b.name);
     const usedBurg = new Set((war.battles ?? []).slice(-3).map((b) => b.burgId)), everUsed = new Set((war.battles ?? []).map((b) => b.burgId));
@@ -10518,7 +10912,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/sim/war-events.js
   var isLive9 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp4 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var clamp5 = (v, a, b) => Math.min(b, Math.max(a, v));
   function newFx() {
     return { morale: /* @__PURE__ */ new Map(), support: /* @__PURE__ */ new Map(), popSurv: /* @__PURE__ */ new Map(), indSurv: /* @__PURE__ */ new Map(), troops: /* @__PURE__ */ new Map(), treasury: /* @__PURE__ */ new Map() };
   }
@@ -10919,8 +11313,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (!isLive9(st)) continue;
       const pop0 = (st.rural ?? 0) + (st.urban ?? 0), ps = fx.popSurv.get(id) ?? 1, is = fx.indSurv.get(id) ?? 1;
       const patch = {};
-      if (fx.morale.has(id)) patch.morale = clamp4((st.morale ?? 70) + fx.morale.get(id), 0, 100);
-      if (fx.support.has(id)) patch.support = clamp4((st.support ?? 70) + fx.support.get(id), 0, 100);
+      if (fx.morale.has(id)) patch.morale = clamp5((st.morale ?? 70) + fx.morale.get(id), 0, 100);
+      if (fx.support.has(id)) patch.support = clamp5((st.support ?? 70) + fx.support.get(id), 0, 100);
       if (ps !== 1) {
         patch.popPeak = Math.max(st.popPeak ?? 0, pop0);
         patch.rural = Math.round((st.rural ?? 0) * ps * 100) / 100;
@@ -10935,14 +11329,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/sim/currency.js
   var isLive10 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp5 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var clamp6 = (v, a, b) => Math.min(b, Math.max(a, v));
   function defaultCurrency(state) {
     return { name: `${state.name}\u901A\u8CA8`, code: String(state.name ?? "XXX").slice(0, 3).toUpperCase(), regime: "floating", pegTo: null, rate: 1 };
   }
   function fundamentalValue(state) {
     const pop = (state.rural ?? 0) + (state.urban ?? 0);
     const ind = state.industry ?? 0;
-    const tech = clamp5(state.techLevel ?? 3, 1, 10);
+    const tech = clamp6(state.techLevel ?? 3, 1, 10);
     return Math.max(0.01, Math.log10(10 + ind) * (0.6 + tech * 0.08) * (1 + Math.log10(10 + pop) / 20));
   }
   function getCurrency(state) {
@@ -11754,9 +12148,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
             break;
           }
           if (!on) {
-            const unit = cost / Math.max(1, c.regionCells.length);
+            const unit2 = cost / Math.max(1, c.regionCells.length);
             for (const w of [to, ...winners.filter((x) => x !== to)]) {
-              const k = Math.floor((budget[w] * 0.6 - spent[w]) / Math.max(0.01, unit));
+              const k = Math.floor((budget[w] * 0.6 - spent[w]) / Math.max(0.01, unit2));
               if (k >= 2) {
                 const cells = c.regionCells.slice(0, Math.min(k, c.regionCells.length)), set = new Set(cells);
                 const names2 = map.pack.burgs.filter((b) => b && b.i && !b.removed && set.has(b.cell)).map((b) => b.name);
@@ -12056,7 +12450,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/sim/pressure.js
   var isLive13 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp6 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp7 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var mkOf = (d) => d.year * 12 + (d.month - 1);
   var SHOCK_KINDS = Object.freeze({ food: "\u98DF\u6599", health: "\u75AB\u75C5\u30FB\u885B\u751F", order: "\u6CBB\u5B89\u30FB\u6C11\u5FC3", fiscal: "\u8CA1\u653F" });
   var FOOD_GOODS = Object.freeze(["grain", "livestock", "fish"]);
@@ -12088,7 +12482,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   function stressOf(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }) {
     const out = { food: 0, health: 0, order: 0, fiscal: 0 };
     for (const sh of listShocks(map)) if (sh.s === stateId && out[sh.k] != null) out[sh.k] += shockNow(sh, date);
-    for (const k of Object.keys(out)) out[k] = clamp6(out[k], -1, 1.5);
+    for (const k of Object.keys(out)) out[k] = clamp7(out[k], -1, 1.5);
     return out;
   }
   function activeShocks(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }) {
@@ -12129,20 +12523,20 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const inv = [...w.attackers ?? [], ...w.defenders ?? []];
       if (inv.includes(stateId)) n2 += w.civil ? 1.5 : 1;
     }
-    return clamp6(n2 * 0.35, 0, 1);
+    return clamp7(n2 * 0.35, 0, 1);
   }
   function indicatorOf(map, s, date, foodRatio) {
     const lv = getTechDoctrine(s), st = stressOf(map, s.i, date);
     const pop = (s.rural ?? 0) + (s.urban ?? 0);
     const urbanShare = pop > 0 ? (s.urban ?? 0) / pop : 0.2;
-    let food = foodRatio * (1 + 0.07 * (lv.agri - 3)) * (1 - 0.5 * clamp6(st.food, 0, 1));
+    let food = foodRatio * (1 + 0.07 * (lv.agri - 3)) * (1 - 0.5 * clamp7(st.food, 0, 1));
     if (food < 1) food += 0.03 * (lv.transport - 1);
-    food = clamp6(food, 0, 2.5);
+    food = clamp7(food, 0, 2.5);
     const expected = expectedIndustry(s);
-    const industryRatio = expected > 0 && typeof s.industry === "number" ? clamp6(s.industry / expected, 0, 2) : 1;
+    const industryRatio = expected > 0 && typeof s.industry === "number" ? clamp7(s.industry / expected, 0, 2) : 1;
     const support = typeof s.support === "number" ? s.support : 70;
     const war = warStrainOf(map, s.i);
-    const fiscalSlack = clamp6(1 - 0.4 * clamp6(st.fiscal, 0, 1) - 0.3 * war, 0.1, 1.2);
+    const fiscalSlack = clamp7(1 - 0.4 * clamp7(st.fiscal, 0, 1) - 0.3 * war, 0.1, 1.2);
     return { stateId: s.i, lv, food, foodRaw: foodRatio, urbanShare, industryRatio, support, war, fiscalSlack, stress: st, pop };
   }
   function getIndicators(map, date = map.worldTime ?? { year: 1, month: 1 }) {
@@ -12165,7 +12559,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         impact = 1 + Math.max(0, 1 - ind.food) - 0.05 * (lv.transport - 1);
         break;
       case "drought":
-        w = 1 + clamp6(st.food, 0, 1);
+        w = 1 + clamp7(st.food, 0, 1);
         impact = 1 + Math.max(0, 1 - ind.food) * 0.8;
         break;
       case "harvest":
@@ -12176,27 +12570,27 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         break;
       case "epidemic":
       case "plague":
-        w = 1 + clamp6(st.health, 0, 1.5) * 1.5 + urb * 1.2;
-        impact = Math.max(0.4, 1 - 0.07 * (lv.medicine - 1)) * (1 + clamp6(st.food, 0, 1) * 0.5);
+        w = 1 + clamp7(st.health, 0, 1.5) * 1.5 + urb * 1.2;
+        impact = Math.max(0.4, 1 - 0.07 * (lv.medicine - 1)) * (1 + clamp7(st.food, 0, 1) * 0.5);
         break;
       case "pricespike":
-        w = 1 + clamp6(st.food, 0, 1.5) * 2 + clamp6(st.fiscal, 0, 1) * 0.8;
+        w = 1 + clamp7(st.food, 0, 1.5) * 2 + clamp7(st.fiscal, 0, 1) * 0.8;
         break;
       case "riot":
-        w = 1 + clamp6(st.order, 0, 1.5) * 2 + clamp6(st.food, 0, 1.5) * 1.5;
+        w = 1 + clamp7(st.order, 0, 1.5) * 2 + clamp7(st.food, 0, 1.5) * 1.5;
         impact = 1 + idea(ideas, "equal");
         break;
       case "taxrevolt":
-        w = 1 + clamp6(st.fiscal, 0, 1.5) + clamp6(st.order, 0, 1.5) + ind.war * 0.8;
+        w = 1 + clamp7(st.fiscal, 0, 1.5) + clamp7(st.order, 0, 1.5) + ind.war * 0.8;
         break;
       case "strike":
-        w = (1 + urb * 1.5) * (1 + idea(ideas, "equal") * 2) * (1 + clamp6(st.fiscal, 0, 1));
+        w = (1 + urb * 1.5) * (1 + idea(ideas, "equal") * 2) * (1 + clamp7(st.fiscal, 0, 1));
         break;
       case "coup":
-        w = 1 + clamp6(st.order, 0, 1.5) * 2 + ind.war + (ind.support < 40 ? 1 : 0);
+        w = 1 + clamp7(st.order, 0, 1.5) * 2 + ind.war + (ind.support < 40 ? 1 : 0);
         break;
       case "refugees":
-        w = 1 + ind.war * 2 + clamp6(st.food, 0, 1.5) * 1.5;
+        w = 1 + ind.war * 2 + clamp7(st.food, 0, 1.5) * 1.5;
         break;
       case "border":
         w = 1 + idea(ideas, "nation") * 2.5;
@@ -12209,14 +12603,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         w = 1 + idea(ideas, "faith") * 2.5;
         break;
       case "tradeboom":
-        w = clamp6(ind.fiscalSlack, 0.3, 1.5) * (1 + urb);
+        w = clamp7(ind.fiscalSlack, 0.3, 1.5) * (1 + urb);
         break;
       default:
         break;
     }
-    return { w: clamp6(w, 0.1, 8), impact: clamp6(impact, 0.3, 3) };
+    return { w: clamp7(w, 0.1, 8), impact: clamp7(impact, 0.3, 3) };
   }
-  var restlessness = (ind) => ind ? 1 + 0.5 * clamp6(Math.max(ind.stress.food, 0) + Math.max(ind.stress.order, 0) + Math.max(ind.stress.health, 0), 0, 2) + 0.4 * ind.war : 1;
+  var restlessness = (ind) => ind ? 1 + 0.5 * clamp7(Math.max(ind.stress.food, 0) + Math.max(ind.stress.order, 0) + Math.max(ind.stress.health, 0), 0, 2) + 0.4 * ind.war : 1;
   function drivenWeight(key3, ind) {
     if (!ind) return 0;
     const st = ind.stress;
@@ -12241,10 +12635,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/core/sim/limits.js
-  var clamp7 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp8 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   function industrialFactor(state) {
     const ind = getTechDoctrine(state).ind;
-    return Math.min(1, (state.industry ?? 0) / 300 * clamp7(0.75 + 0.05 * ind, 0.8, 1.25));
+    return Math.min(1, (state.industry ?? 0) / 300 * clamp8(0.75 + 0.05 * ind, 0.8, 1.25));
   }
   function foodConscriptionFactor(map, stateId) {
     const k = BALANCE.causalStrength ?? 1;
@@ -12256,7 +12650,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       return 1;
     }
     if (!ind || ind.food >= 1) return 1;
-    return 1 - (1 - clamp7(0.55 + 0.45 * ind.food, 0.6, 1)) * k;
+    return 1 - (1 - clamp8(0.55 + 0.45 * ind.food, 0.6, 1)) * k;
   }
 
   // js/core/names/person.js
@@ -12513,7 +12907,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/sim/war-flow.js
   var isLive15 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp8 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var clamp9 = (v, a, b) => Math.min(b, Math.max(a, v));
   var BONDS = Object.freeze([
     { key: "loose", label: "\u7DE9\u3084\u304B", desc: "\u6226\u4E89\u306B\u5DFB\u304D\u8FBC\u307E\u308C\u306A\u3044\u3002\u8CBF\u6613\u306E\u5C01\u9396\u3082\u5404\u56FD\u306E\u81EA\u7531\u3002" },
     { key: "standard", label: "\u6A19\u6E96", desc: "\u540C\u76DF\u56FD\u304C\u653B\u3081\u3089\u308C\u305F\u3089\u53C2\u6226\u3059\u308B\uFF08\u9632\u885B\u7FA9\u52D9\uFF09\u3002\u653B\u3081\u308B\u6226\u4E89\u306B\u306F\u52A0\u308F\u3089\u306A\u3044\u3002\u76DF\u4E3B\u306E\u6575\u56FD\u3068\u306E\u8CBF\u6613\u3092\u5C01\u9396\u3059\u308B\u3002" },
@@ -12586,13 +12980,13 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       }
     }
     const terrain2 = 1 + (total2 ? rough / total2 : 0) * 0.8;
-    const closeness = 1 + (1 - clamp8(result.decisiveness ?? 0.5, 0, 1)) * 2.2;
+    const closeness = 1 + (1 - clamp9(result.decisiveness ?? 0.5, 0, 1)) * 2.2;
     const stalemate = result.winner === "stalemate" ? 1.5 : 1;
     const world = ids2.length >= 5 ? 1.6 : 1;
     const base = (2 + scale * 2.5) * 0.68 * terrain2 * closeness * stalemate * world;
     const z = Math.sqrt(-2 * Math.log(1 - rnd.next() * 0.999999)) * Math.cos(2 * Math.PI * rnd.next());
     const SIGMA = 0.45;
-    return clamp8(Math.round(base * Math.exp(SIGMA * z - SIGMA * SIGMA / 2)), 1, 120);
+    return clamp9(Math.round(base * Math.exp(SIGMA * z - SIGMA * SIGMA / 2)), 1, 120);
   }
   function stateRelationNone(map, a, b) {
     if (liveAlliances(map).some((al) => al.members.includes(a) && al.members.includes(b))) return false;
@@ -12624,7 +13018,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const loser = map.pack.states[loserId];
     const cells = new Set(cellGroups.flat());
     const total2 = Math.max(1, loser?.cells ?? 1);
-    const share = clamp8(cells.size / total2, 0, 1);
+    const share = clamp9(cells.size / total2, 0, 1);
     const pop = ((loser?.rural ?? 0) + (loser?.urban ?? 0)) * share;
     const industry = (loser?.industry ?? 0) * share;
     const burgs = map.pack.burgs.filter((b) => b && b.i && !b.removed && b.state === loserId && cells.has(b.cell)).length;
@@ -12709,7 +13103,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   var SAVE_FORMAT = 3;
   var isLive17 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
   var nameOf2 = (s) => s?.fullName ?? s?.name ?? "?";
-  var clamp9 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var clamp10 = (v, a, b) => Math.min(b, Math.max(a, v));
   var monthKey2 = (t) => t.year * 12 + (t.month - 1);
   var addMonthsTo2 = (t, n2) => {
     const k = monthKey2(t) + n2;
@@ -12945,7 +13339,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const s = map.pack.states[stateId];
     if (!isLive17(s)) return [];
     const sup2 = typeof s.support === "number" ? s.support : 70, cred = typeof s.credibility === "number" ? s.credibility : 70;
-    return [setProps(s, { support: clamp9(sup2 - supportDrop, 0, 100), credibility: clamp9(cred - creditDrop, 0, 100) })];
+    return [setProps(s, { support: clamp10(sup2 - supportDrop, 0, 100), credibility: clamp10(cred - creditDrop, 0, 100) })];
   }
   function findWarViolations(map, attackers, defenders, now = nowOf2(map)) {
     const out = [];
@@ -15042,7 +15436,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/edit/rebellion.js
   var isLive23 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  var clamp10 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp11 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   function planSplitArmy(map, fromId, toId, { bonus = 0 } = {}) {
     const from = map.pack.states[fromId], to = map.pack.states[toId];
     if (!isLive23(from) || !isLive23(to)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
@@ -15052,7 +15446,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       if (c.state[i] === fromId) mine++;
       else if (c.state[i] === toId) rebel++;
     }
-    const share = clamp10(rebel / Math.max(1, rebel + mine) + bonus, 0.1, 0.6);
+    const share = clamp11(rebel / Math.max(1, rebel + mine) + bonus, 0.1, 0.6);
     const regs = regimentsOf(from), toRegs = regimentsOf(to);
     const keep = [], moving = [], parts = [], pool = {};
     for (const r of regs) {
@@ -15209,7 +15603,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       default:
         seed = burgCells[0];
     }
-    const total2 = mine.length, target = clamp10(Math.round(total2 * sc.share), 1, Math.max(1, Math.floor(total2 * 0.65)));
+    const total2 = mine.length, target = clamp11(Math.round(total2 * sc.share), 1, Math.max(1, Math.floor(total2 * 0.65)));
     const inState = new Set(mine);
     inState.delete(capCell);
     const chosen = /* @__PURE__ */ new Set([seed]), frontier = /* @__PURE__ */ new Set();
@@ -15269,7 +15663,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   });
   var DEFAULT_NATURAL = Object.freeze({ enabled: true, frequency: "normal" });
   var isLive24 = (e) => !!e && typeof e === "object" && !e.removed && e.i > 0;
-  var clamp11 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp12 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var r1 = (v) => Math.round(v * 10) / 10;
   function getNaturalSettings(map) {
     const d = map.ext?.data?.naturalEvents ?? {};
@@ -15364,7 +15758,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       addCut("religion", c.religion[i], "rural", d);
     }
     const parts = [setIndexed((m) => m.pack.cells.pop, popChanges)];
-    parts.push(setProps(st, { rural: r35((st.rural ?? 0) * (1 - ruralLoss)), urban: r35((st.urban ?? 0) * (1 - urbanLoss)), support: clamp11(supportOf2(st) - 4, 0, 100) }));
+    parts.push(setProps(st, { rural: r35((st.rural ?? 0) * (1 - ruralLoss)), urban: r35((st.urban ?? 0) * (1 - urbanLoss)), support: clamp12(supportOf2(st) - 4, 0, 100) }));
     for (const b of map.pack.burgs) {
       if (!b || b.removed || !(b.i > 0) || b.state !== stateId || typeof b.population !== "number") continue;
       const after = r35(b.population * (1 - urbanLoss)), d = b.population - after;
@@ -15501,7 +15895,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/sim/ideas.js
   var isLive26 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp12 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp13 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var r3 = (v) => Math.round(v * 1e3) / 1e3;
   var nm3 = (s) => s?.fullName ?? s?.name ?? "?";
   var IDEAS = Object.freeze([
@@ -15531,12 +15925,12 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     const st = ind?.stress ?? { food: 0, health: 0, order: 0, fiscal: 0 }, war = ind?.war ?? 0;
     const reg = state ? regimeOf(state).key : "absolute";
     const auth = ["junta", "nationalist", "party", "anarchy"].includes(reg), theo = reg === "theocracy";
-    const enlight = clamp12(0.05 + 0.05 * comms + 0.35 * urb + 0.02 * med, 0, 1);
-    const liberal = clamp12(0.05 + 0.3 * urb + 0.03 * comms - 0.3 * war - (auth ? 0.15 : 0) + (["democracy", "presidential", "constitutional"].includes(reg) ? 0.15 : 0), 0, 1);
-    const nation = clamp12(0.12 + 0.5 * war + 0.03 * comms + (reg === "nationalist" ? 0.3 : 0), 0, 1);
-    const equal = clamp12(0.08 + 0.45 * clamp12(st.food + st.order, 0, 1.2) + 0.3 * urb * (indL >= 4 ? 1 : 0.3) + (reg === "party" ? 0.2 : 0), 0, 1);
-    const tradition = clamp12(0.78 - 0.5 * (enlight + liberal) / 2 - 0.3 * urb + (reg === "absolute" || theo || reg === "tribal" ? 0.1 : 0), 0, 1);
-    const faith = clamp12(0.25 + (theo ? 0.4 : 0) + 0.35 * clamp12((st.health + st.food) / 2, 0, 1) - 0.3 * enlight, 0, 1);
+    const enlight = clamp13(0.05 + 0.05 * comms + 0.35 * urb + 0.02 * med, 0, 1);
+    const liberal = clamp13(0.05 + 0.3 * urb + 0.03 * comms - 0.3 * war - (auth ? 0.15 : 0) + (["democracy", "presidential", "constitutional"].includes(reg) ? 0.15 : 0), 0, 1);
+    const nation = clamp13(0.12 + 0.5 * war + 0.03 * comms + (reg === "nationalist" ? 0.3 : 0), 0, 1);
+    const equal = clamp13(0.08 + 0.45 * clamp13(st.food + st.order, 0, 1.2) + 0.3 * urb * (indL >= 4 ? 1 : 0.3) + (reg === "party" ? 0.2 : 0), 0, 1);
+    const tradition = clamp13(0.78 - 0.5 * (enlight + liberal) / 2 - 0.3 * urb + (reg === "absolute" || theo || reg === "tribal" ? 0.1 : 0), 0, 1);
+    const faith = clamp13(0.25 + (theo ? 0.4 : 0) + 0.35 * clamp13((st.health + st.food) / 2, 0, 1) - 0.3 * enlight, 0, 1);
     return { enlight, liberal, nation, equal, tradition, faith };
   }
   function ideasOf(map, stateId, ind = null) {
@@ -15574,7 +15968,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
           if (n2) v += pull / n2 * 0.012 * mix2;
         }
         v += (rnd.next() - 0.5) * 0.012;
-        out[k] = r3(clamp12(v, 0, 1));
+        out[k] = r3(clamp13(v, 0, 1));
         const had = (nBefore[s.i] ?? []).includes(k) || !before[s.i] && mine[k] >= IDEA_NOTABLE;
         if (out[k] >= IDEA_NOTABLE && !had) {
           notable.push({ stateId: s.i, key: k });
@@ -15599,7 +15993,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
   // js/core/sim/minor-events.js
   var isLive27 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp13 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp14 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var MINOR_RATE = 0.035;
   var MON = (r) => r.key === "absolute" || r.key === "constitutional" || r.key === "empire" || r.key === "elective";
   var DEM = (r) => ["democracy", "presidential", "aristocratic", "federation"].includes(r.key);
@@ -15696,8 +16090,8 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     }
     let d = (fx.support ?? 0) + (ev.swing ? swing || 0 : 0);
     if (d < 0) d *= impact;
-    if (d) patch.support = clamp13(Math.round(sup(s) + d), 0, 100);
-    if (fx.morale) patch.morale = clamp13((s.morale ?? 70) + (fx.morale < 0 ? fx.morale * impact : fx.morale), 0, 100);
+    if (d) patch.support = clamp14(Math.round(sup(s) + d), 0, 100);
+    if (fx.morale) patch.morale = clamp14((s.morale ?? 70) + (fx.morale < 0 ? fx.morale * impact : fx.morale), 0, 100);
     const tf = fx.treasuryF && fx.treasuryF < 1 ? 1 - (1 - fx.treasuryF) * impact : fx.treasuryF;
     if (tf && typeof s.treasury === "number") patch.treasury = Math.round(s.treasury * tf * 100) / 100;
     if (fx.industryF && typeof s.industry === "number") patch.industry = Math.round(s.industry * (fx.industryF < 1 ? 1 - (1 - fx.industryF) * impact : fx.industryF) * 10) / 10;
@@ -16975,9 +17369,9 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     canvas.addEventListener("wheel", (e) => {
       if (!store.getState().map) return;
       e.preventDefault();
-      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+      const unit2 = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
       const [sx, sy] = localPos(e);
-      actions.zoomAt(sx, sy, Math.exp(-e.deltaY * unit * 16e-4));
+      actions.zoomAt(sx, sy, Math.exp(-e.deltaY * unit2 * 16e-4));
     }, { passive: false });
     canvas.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 && e.button !== 1) return;
@@ -17085,10 +17479,10 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
   }
 
   // js/version.js
-  var APP_VERSION = "6.10.0";
-  var APP_VERSION_NAME = "\u4E16\u754C\u306E\u8F03\u6B63\u3068\u4F7F\u3044\u5FC3\u5730";
+  var APP_VERSION = "6.11.0";
+  var APP_VERSION_NAME = "\u5927\u9678\u306E\u518D\u8A2D\u8A08";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "4a7c029bceb1" : "dev";
+  var APP_BUILD_ID = true ? "6f4d38782e7b" : "dev";
 
   // js/ui/icons.js
   var P3 = {
@@ -23410,22 +23804,22 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
 
   // js/core/sim/population.js
   var isLive44 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp14 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp15 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var r23 = (v) => Math.round(v * 100) / 100;
   var nm6 = (s) => s?.fullName ?? s?.name ?? "?";
   function growthMods(ind) {
     if (!ind) return { growthMult: 1 };
     const strength2 = BALANCE.causalStrength ?? 1;
-    const f = clamp14(0.3 + 0.7 * ind.food, 0.2, 1.25), h2 = 1 - 0.4 * clamp14(ind.stress.health, 0, 1.5), w = 1 - 0.3 * ind.war;
-    const mult = clamp14(f * h2 * w, 0.1, 1.3);
+    const f = clamp15(0.3 + 0.7 * ind.food, 0.2, 1.25), h2 = 1 - 0.4 * clamp15(ind.stress.health, 0, 1.5), w = 1 - 0.3 * ind.war;
+    const mult = clamp15(f * h2 * w, 0.1, 1.3);
     return { growthMult: 1 + (mult - 1) * strength2 };
   }
   function maxUrbanShare(lv) {
-    return clamp14(0.1 + 0.045 * ((lv?.ind ?? 3) - 1) + 0.035 * ((lv?.transport ?? 3) - 1), 0.12, 0.85);
+    return clamp15(0.1 + 0.045 * ((lv?.ind ?? 3) - 1) + 0.035 * ((lv?.transport ?? 3) - 1), 0.12, 0.85);
   }
   function attraction(ind) {
     if (!ind) return 0.5;
-    return 0.45 * clamp14(ind.support, 0, 100) / 100 + 0.35 * clamp14(ind.food, 0, 1.5) / 1.5 + 0.2 * (1 - ind.war) - 0.25 * clamp14(ind.stress.order, 0, 1);
+    return 0.45 * clamp15(ind.support, 0, 100) / 100 + 0.35 * clamp15(ind.food, 0, 1.5) / 1.5 + 0.2 * (1 - ind.war) - 0.25 * clamp15(ind.stress.order, 0, 1);
   }
   var migrationAcc = (map) => map?.ext?.data?.migrationAcc ?? {};
   var writeAcc = (m, t) => {
@@ -23455,18 +23849,18 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
       const ind = inds.get(s.i), d = delta.get(s.i), rural = s.rural ?? 0, urban = s.urban ?? 0, pop = rural + urban;
       if (!(pop > 0) || !ind) continue;
       let m = Math.max(0, 0.9 - ind.food) * 25e-4 + Math.max(0, ind.stress.health) * 12e-4;
-      m = clamp14(m, 0, 8e-3) * Math.max(0.4, 1 - 0.05 * (ind.lv.medicine - 1)) * strength2;
+      m = clamp15(m, 0, 8e-3) * Math.max(0.4, 1 - 0.05 * (ind.lv.medicine - 1)) * strength2;
       d.r -= rural * m;
       d.u -= urban * m * 1.2;
       const share = urban / pop, maxU = maxUrbanShare(ind.lv);
-      const pull = (0.5 + 0.1 * ind.lv.ind + 0.05 * ind.lv.transport) * clamp14(ind.food - 0.4, 0, 1);
-      let moved = share < maxU ? rural * 8e-4 * pull * clamp14((maxU - share) / maxU, 0, 1) * urbz : share > maxU + 0.02 ? -urban * 2e-3 : 0;
+      const pull = (0.5 + 0.1 * ind.lv.ind + 0.05 * ind.lv.transport) * clamp15(ind.food - 0.4, 0, 1);
+      let moved = share < maxU ? rural * 8e-4 * pull * clamp15((maxU - share) / maxU, 0, 1) * urbz : share > maxU + 0.02 ? -urban * 2e-3 : 0;
       if (ind.food < 0.8) moved -= urban * (0.8 - ind.food) * 3e-3;
       moved -= urban * ind.war * 8e-4;
       d.r -= moved;
       d.u += moved;
       if (migr <= 0) continue;
-      const here = attraction(ind), push2 = clamp14(ind.war + Math.max(0, 1 - ind.food) + clamp14(ind.stress.order, 0, 1), 0, 2);
+      const here = attraction(ind), push2 = clamp15(ind.war + Math.max(0, 1 - ind.food) + clamp15(ind.stress.order, 0, 1), 0, 2);
       const cands = [...nb.get(s.i) ?? []].filter((o) => inds.has(o) && !wars.has(`${s.i}>${o}`));
       for (const o of cands) {
         const diff = attraction(inds.get(o)) - here;
@@ -24003,7 +24397,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     for (const k of UNIT_KEYS) out[k] = Math.max(0, Math.floor((out[k] ?? 0) * (1 - fraction)));
     return out;
   }
-  function clamp15(v, min, max) {
+  function clamp16(v, min, max) {
     return Math.min(max, Math.max(min, v));
   }
   function round(v) {
@@ -24019,8 +24413,8 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     const dRoll = dPower * noise();
     const winner = aRoll >= dRoll ? "attacker" : "defender";
     const ratio = Math.max(aRoll, dRoll) / Math.max(1e-9, Math.min(aRoll, dRoll));
-    let winnerLoss = clamp15(0.03 + 0.09 / ratio, 0.03, 0.12);
-    let loserLoss = clamp15(0.4 - 0.25 / ratio, 0.15, 0.4);
+    let winnerLoss = clamp16(0.03 + 0.09 / ratio, 0.03, 0.12);
+    let loserLoss = clamp16(0.4 - 0.25 / ratio, 0.15, 0.4);
     const defBonusOf = (doctrineKey) => DOCTRINE_BY_KEY[doctrineKey]?.defenseBonus ?? 0;
     const defenderBonus = defBonusOf(defender.doctrine);
     if (winner === "attacker") loserLoss *= 1 - defenderBonus;
@@ -24079,8 +24473,8 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     const dRoll = dPower * noise();
     const winner = aRoll >= dRoll ? "attacker" : "defender";
     const ratio = Math.max(aRoll, dRoll) / Math.max(1e-9, Math.min(aRoll, dRoll));
-    let winnerLoss = clamp15(0.03 + 0.09 / ratio, 0.03, 0.12);
-    let loserLoss = clamp15(0.4 - 0.25 / ratio, 0.15, 0.4);
+    let winnerLoss = clamp16(0.03 + 0.09 / ratio, 0.03, 0.12);
+    let loserLoss = clamp16(0.4 - 0.25 / ratio, 0.15, 0.4);
     const defenderBonus = DOCTRINE_BY_KEY[defenderProfile.doctrine]?.defenseBonus ?? 0;
     if (winner === "attacker") loserLoss *= 1 - defenderBonus;
     else winnerLoss *= 1 - defenderBonus;
@@ -24174,7 +24568,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
 
   // js/core/sim/ai-pace.js
   var isLive48 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp16 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp17 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var median = (a) => {
     if (!a.length) return 1;
     const b = [...a].sort((x, y) => x - y), m = b.length >> 1;
@@ -24184,7 +24578,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
   var PACE_MAX = 1.6;
   function developmentScore(s, ind, popMedian) {
     const pop = (s.rural ?? 0) + (s.urban ?? 0);
-    return 0.45 * (techLevelFine(s) / 10) + 0.3 * Math.min(1, (ind?.industryRatio ?? 1) / 1.5) + 0.25 * (clamp16(pop / Math.max(1, popMedian), 0, 3) / 3);
+    return 0.45 * (techLevelFine(s) / 10) + 0.3 * Math.min(1, (ind?.industryRatio ?? 1) / 1.5) + 0.25 * (clamp17(pop / Math.max(1, popMedian), 0, 3) / 3);
   }
   var cache2 = /* @__PURE__ */ new WeakMap();
   function paceOf(map, date = map.worldTime ?? { year: 1, month: 1 }) {
@@ -24199,7 +24593,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     const out = /* @__PURE__ */ new Map();
     for (const [id, score] of scores) {
       const index = score / ref2;
-      out.set(id, { score, ref: ref2, index, mult: clamp16(Math.pow(1 / Math.max(0.05, index), 0.5), PACE_MIN, PACE_MAX) });
+      out.set(id, { score, ref: ref2, index, mult: clamp17(Math.pow(1 / Math.max(0.05, index), 0.5), PACE_MIN, PACE_MAX) });
     }
     cache2.set(map, { sig, out });
     return out;
@@ -24215,7 +24609,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
 
   // js/core/sim/tech-progress.js
   var isLive49 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp17 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp18 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var BASE_MONTHS = 600;
   function trinityOf(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }, inds = null) {
     const s = map.pack.states[stateId];
@@ -24223,9 +24617,9 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     const ind = (inds ?? getIndicators(map, date)).get(stateId);
     if (!ind) return null;
     const ideas = ideasOf(map, stateId, ind);
-    const I = clamp17(ind.industryRatio, 0.3, 1.5);
-    const E = clamp17(ind.fiscalSlack - 0.6 * militaryBurden(s), 0.15, 1.2) * Math.sqrt(clamp17(ind.food, 0.3, 1));
-    const T3 = clamp17(0.55 + 0.5 * ind.urbanShare + 0.025 * ind.lv.comms + ideaTechBonus(ideas), 0.3, 1.6);
+    const I = clamp18(ind.industryRatio, 0.3, 1.5);
+    const E = clamp18(ind.fiscalSlack - 0.6 * militaryBurden(s), 0.15, 1.2) * Math.sqrt(clamp18(ind.food, 0.3, 1));
+    const T3 = clamp18(0.55 + 0.5 * ind.urbanShare + 0.025 * ind.lv.comms + ideaTechBonus(ideas), 0.3, 1.6);
     return { I, E, T: T3, trinity: Math.cbrt(I * E * T3), ind, ideas };
   }
   function progressRates(map, stateId, date, ctx = {}) {
@@ -24240,7 +24634,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
         continue;
       }
       const ahead = neigh.length ? neigh.filter((n2) => getTechDoctrine(map.pack.states[n2])[t.key] > lv[t.key]).length / neigh.length : 0;
-      const tf = { agri: 1 + 0.3 * Math.max(0, 1 - ind.food), medicine: 1 + 0.4 * clamp17(ind.stress.health, 0, 1), ind: Math.sqrt(tri.I), energy: Math.sqrt(tri.I), transport: Math.sqrt(tri.E), comms: 0.8 + 0.4 * ind.urbanShare }[t.key] ?? 1;
+      const tf = { agri: 1 + 0.3 * Math.max(0, 1 - ind.food), medicine: 1 + 0.4 * clamp18(ind.stress.health, 0, 1), ind: Math.sqrt(tri.I), energy: Math.sqrt(tri.I), transport: Math.sqrt(tri.E), comms: 0.8 + 0.4 * ind.urbanShare }[t.key] ?? 1;
       out[t.key] = pace * tri.trinity * tf * (1 + 0.6 * ahead) * (1 - 0.5 * ind.war) / (1 + 0.1 * (lv[t.key] - 1));
     }
     return { rates: out, ...tri };
@@ -24261,7 +24655,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
       const cur = getTechProgress(s), next = { ...cur };
       let changed = false;
       for (const t of TECH_TRACKS) {
-        const v = Math.round(clamp17(cur[t.key] + r.rates[t.key], 0, 1) * 1e4) / 1e4;
+        const v = Math.round(clamp18(cur[t.key] + r.rates[t.key], 0, 1) * 1e4) / 1e4;
         if (v !== cur[t.key]) {
           next[t.key] = v;
           changed = true;
@@ -24274,7 +24668,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
 
   // js/core/sim/ai.js
   var isLive50 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp18 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp19 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   var mkOf2 = (d) => d.year * 12 + (d.month - 1);
   var nm7 = (s) => s?.fullName ?? s?.name ?? "?";
   var pk = (a, b) => a < b ? `${a}-${b}` : `${b}-${a}`;
@@ -24318,10 +24712,10 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
   function characterOf(map, s, ind, ideas, threat = 0) {
     const reg = regimeOf(s).key, warlike = ["empire", "junta", "nationalist", "tribal"].includes(reg) ? 0.2 : 0, peaceful = ["democracy", "constitutional", "federation", "presidential"].includes(reg) ? 0.15 : 0;
     return {
-      expansion: clamp18(0.2 + 0.35 * ideas.nation + warlike - peaceful - 0.15 * ideas.liberal + 0.3 * Math.max(0, 1 - ind.food), 0, 1),
-      security: clamp18(0.3 + 0.4 * threat + 0.3 * ind.war, 0, 1),
-      prosperity: clamp18(0.3 + 0.3 * ideas.enlight + peaceful, 0, 1),
-      prestige: clamp18(0.2 + 0.3 * ideas.nation + (["absolute", "empire"].includes(reg) ? 0.2 : 0), 0, 1)
+      expansion: clamp19(0.2 + 0.35 * ideas.nation + warlike - peaceful - 0.15 * ideas.liberal + 0.3 * Math.max(0, 1 - ind.food), 0, 1),
+      security: clamp19(0.3 + 0.4 * threat + 0.3 * ind.war, 0, 1),
+      prosperity: clamp19(0.3 + 0.3 * ideas.enlight + peaceful, 0, 1),
+      prestige: clamp19(0.2 + 0.3 * ideas.nation + (["absolute", "empire"].includes(reg) ? 0.2 : 0), 0, 1)
     };
   }
   var CHARACTER_LABELS = Object.freeze({ expansion: "\u62E1\u5F35", security: "\u5B89\u5168", prosperity: "\u7E41\u6804", prestige: "\u5A01\u4FE1" });
@@ -24340,7 +24734,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     if (!ind) return out;
     const ideas = ideasOf(map, s.i, ind), neigh = [...ctx.nb.get(s.i) ?? []].filter((n2) => live4(map, n2));
     let threat = 0;
-    for (const n2 of neigh) if (!ctx.allied.has(pk(s.i, n2))) threat = Math.max(threat, clamp18((1 - ctx.share(s.i, n2) - 0.5) * 2, 0, 1));
+    for (const n2 of neigh) if (!ctx.allied.has(pk(s.i, n2))) threat = Math.max(threat, clamp19((1 - ctx.share(s.i, n2) - 0.5) * 2, 0, 1));
     const ch = characterOf(map, s, ind, ideas, threat);
     out.character = ch;
     const auto = (id) => isAutonomous(map, id, ai);
@@ -24348,7 +24742,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     if (ai.verbs.tech) {
       const p = pendingFields(map, s.i)[0];
       if (p) {
-        const u = clamp18(0.6 * (0.5 + ch.prosperity) * clamp18(ind.fiscalSlack, 0.2, 1), 0, 1);
+        const u = clamp19(0.6 * (0.5 + ch.prosperity) * clamp19(ind.fiscalSlack, 0.2, 1), 0, 1);
         out.tech = { kind: "tech", stateId: s.i, field: p.field, u, reason: `${nm7(s)}\u306F\u3001${p.label}\u306E\u7814\u7A76\u304C\u5B9F\u308A\u3001\u300C${p.step}\u300D\u306E\u63A1\u7528\u306B\u8E0F\u307F\u5207\u3063\u305F` };
       }
     }
@@ -24478,7 +24872,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     if (!ind) return view2;
     const ideas = ideasOf(map, stateId, ind), neigh = [...ctx.nb.get(stateId) ?? []].filter((n2) => live4(map, n2));
     let threat = 0;
-    for (const n2 of neigh) if (!ctx.allied.has(pk(stateId, n2))) threat = Math.max(threat, clamp18((1 - ctx.share(stateId, n2) - 0.5) * 2, 0, 1));
+    for (const n2 of neigh) if (!ctx.allied.has(pk(stateId, n2))) threat = Math.max(threat, clamp19((1 - ctx.share(stateId, n2) - 0.5) * 2, 0, 1));
     view2.character = characterOf(map, s, ind, ideas, threat);
     const p = ctx.pace.get(stateId);
     view2.pace = p ? { index: p.index, mult: p.mult } : null;
@@ -24488,7 +24882,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
   }
 
   // js/core/sim/capacity.js
-  var clamp19 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  var clamp20 = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
   function constraintReport(map, stateId, date = map.worldTime ?? { year: 1, month: 1 }) {
     const s = map.pack.states[stateId];
     if (!s) return [];
@@ -24499,7 +24893,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     out.push({ key: "food", label: "\u98DF\u6599", level: lvl2(ind.food, 0.95, 0.75), value: ind.food, text: ind.food >= 0.95 ? `\u98DF\u6599\u306F\u8DB3\u308A\u3066\u3044\u308B\uFF08\u9700\u7D66 ${ind.food.toFixed(2)}\uFF09` : `\u98DF\u6599\u304C\u4E0D\u8DB3\uFF08\u9700\u7D66 ${ind.food.toFixed(2)}\uFF09\u2192 \u4EBA\u53E3\u306E\u5897\u52A0\u304C\u920D\u308A\u3001\u98E2\u9949\u304C\u8D77\u304D\u3084\u3059\u304F\u3001\u5FB4\u5175\u3082\u6E1B\u308B` });
     const f = industrialFactor(s);
     out.push({ key: "industry", label: "\u7523\u696D\u529B", level: lvl2(f, 0.8, 0.4), value: f, text: f >= 0.95 ? "\u91CD\u88C5\u5099\uFF08\u6A5F\u7532\u30FB\u822A\u7A7A\u30FB\u6D77\u8ECD\uFF09\u3092\u5341\u5206\u306B\u4F5C\u308C\u308B\u7523\u696D\u304C\u3042\u308B" : `\u7523\u696D\u529B\u304C\u8DB3\u308A\u306A\u3044 \u2192 \u91CD\u88C5\u5099\u306E\u5897\u5F37\u76EE\u6A19\u306F ${pct4(0.2 + 0.8 * f)} \u306B\u6291\u3048\u3089\u308C\u308B` });
-    const burden = militaryBurden(s), slack = clamp19(ind.fiscalSlack - 0.6 * burden, 0.15, 1.2);
+    const burden = militaryBurden(s), slack = clamp20(ind.fiscalSlack - 0.6 * burden, 0.15, 1.2);
     out.push({ key: "fiscal", label: "\u8CA1\u653F\u306E\u4F59\u529B", level: lvl2(slack, 0.7, 0.4), value: slack, text: slack >= 0.7 ? `\u8CA1\u653F\u306B\u4F59\u529B\u304C\u3042\u308B\uFF08\u8ECD\u4E8B\u8CBB ${pct4(burden)}\uFF09` : `\u8ECD\u4E8B\u8CBB\u30FB\u4F59\u6CE2\u30FB\u6226\u4E89\u3067\u8CA1\u653F\u304C\u82E6\u3057\u3044\uFF08\u8ECD\u4E8B\u8CBB ${pct4(burden)}\uFF09\u2192 \u6280\u8853\u306E\u9032\u307F\u304C\u9045\u308C\u308B` });
     const tri = trinityOf(map, stateId, date);
     if (tri) out.push({ key: "trinity", label: "\u4E09\u4F4D\u4E00\u4F53", level: lvl2(tri.trinity, 0.8, 0.5), value: tri.trinity, text: `\u7523\u696D\u529B ${tri.I.toFixed(2)} \xD7 \u7D4C\u6E08\u529B ${tri.E.toFixed(2)} \xD7 \u6280\u8853\u529B ${tri.T.toFixed(2)}\uFF08\u3069\u308C\u304B1\u3064\u304C\u6B20\u3051\u308B\u3068\u6280\u8853\u306E\u9032\u307F\u304C\u920D\u308B\uFF09` });
@@ -24535,7 +24929,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
 
   // js/core/sim/covert.js
   var isLive52 = (s) => !!s && typeof s === "object" && !s.removed && s.i > 0;
-  var clamp20 = (v, a, b) => Math.min(b, Math.max(a, v));
+  var clamp21 = (v, a, b) => Math.min(b, Math.max(a, v));
   var COVERT_KINDS = Object.freeze([
     { key: "command", label: "\u6307\u63EE\u901A\u4FE1\u7DB2\u3078\u306E\u4FB5\u5165", icon: "\u{1F4E1}", desc: "\u8ECD\u306E\u6307\u63EE\u30FB\u901A\u4FE1\u3092\u4E71\u3059\u3002\u6A19\u7684\u56FD\u306E\u58EB\u6C17\u3068\u5175\u529B\u304C\u4E0B\u304C\u308B\u3002\u6226\u4E89\u4E2D\u306E\u76F8\u624B\u306B\u7279\u306B\u52B9\u304F\u3002" },
     { key: "economy", label: "\u91D1\u878D\u30FB\u7523\u696D\u30B7\u30B9\u30C6\u30E0\u3078\u306E\u653B\u6483", icon: "\u{1F4B9}", desc: "\u5DE5\u5834\u306E\u5236\u5FA1\u3084\u6C7A\u6E08\u7DB2\u3092\u6B62\u3081\u308B\u3002\u6A19\u7684\u56FD\u306E\u7523\u696D\u3068\u56FD\u5EAB\u304C\u6E1B\u308B\u3002" },
@@ -24554,10 +24948,10 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
   };
   function covertOdds(map, attackerId, targetId, kind) {
     const A = map.pack.states[attackerId], T3 = map.pack.states[targetId];
-    const ta = clamp20(A?.techLevel ?? 3, 1, 10), tt = clamp20(T3?.techLevel ?? 3, 1, 10);
-    const success = clamp20(0.55 + 0.07 * (ta - tt), 0.25, 0.92);
-    const detect = clamp20(0.2 + 0.05 * tt - 0.02 * ta, 0.08, 0.7);
-    const power = clamp20(0.5 + 0.1 * ta - 0.03 * tt, 0.3, 1.4);
+    const ta = clamp21(A?.techLevel ?? 3, 1, 10), tt = clamp21(T3?.techLevel ?? 3, 1, 10);
+    const success = clamp21(0.55 + 0.07 * (ta - tt), 0.25, 0.92);
+    const detect = clamp21(0.2 + 0.05 * tt - 0.02 * ta, 0.08, 0.7);
+    const power = clamp21(0.5 + 0.1 * ta - 0.03 * tt, 0.3, 1.4);
     return { success, detect, power, kind };
   }
   function planCovertOp(map, { attackerId, targetId, kind, date, rnd }) {
@@ -24568,7 +24962,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     if (!def) throw new Error("\u4F5C\u6226\u306E\u7A2E\u985E\u304C\u6B63\u3057\u304F\u3042\u308A\u307E\u305B\u3093");
     const odds = covertOdds(map, attackerId, targetId, kind);
     const ok2 = rnd.next() < odds.success;
-    const detected = rnd.next() < clamp20(odds.detect + (ok2 ? 0 : 0.3), 0, 0.95);
+    const detected = rnd.next() < clamp21(odds.detect + (ok2 ? 0 : 0.3), 0, 0.95);
     let blamed = null;
     if (detected) {
       const others = map.pack.states.filter((s) => isLive52(s) && s.i !== attackerId && s.i !== targetId);
@@ -24580,7 +24974,7 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     if (ok2) {
       const p = odds.power, r = () => 0.7 + rnd.next() * 0.6;
       if (kind === "command") {
-        const morale = Math.round(-(4 + 8 * p) * r()), troops = clamp20(0.015 + 0.02 * p, 0, 0.05) * r();
+        const morale = Math.round(-(4 + 8 * p) * r()), troops = clamp21(0.015 + 0.02 * p, 0, 0.05) * r();
         effects.moraleDelta = morale;
         effects.troopLossShare = Math.round(troops * 1e3) / 1e3;
         for (const reg of regimentsOf(T3)) {
@@ -24588,19 +24982,19 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
           for (const k of Object.keys(u)) if (k !== "nuclear") u[k] = Math.max(0, Math.floor((u[k] ?? 0) * (1 - troops)));
           parts.push(setProps(reg, { u }));
         }
-        patchT.morale = clamp20((T3.morale ?? 70) + morale, 0, 100);
+        patchT.morale = clamp21((T3.morale ?? 70) + morale, 0, 100);
       } else if (kind === "economy") {
-        const ind = clamp20(0.02 + 0.04 * p, 0, 0.12) * r(), tre = clamp20(0.01 + 0.03 * p, 0, 0.1) * r(), t0 = Math.max(0, getFinance(T3).treasury);
+        const ind = clamp21(0.02 + 0.04 * p, 0, 0.12) * r(), tre = clamp21(0.01 + 0.03 * p, 0, 0.1) * r(), t0 = Math.max(0, getFinance(T3).treasury);
         effects.industryLossShare = Math.round(ind * 1e3) / 1e3;
         effects.treasuryLoss = Math.round(t0 * tre * 100) / 100;
         patchT.industry = Math.round((T3.industry ?? 0) * (1 - ind) * 10) / 10;
         patchT.treasury = Math.round((t0 - effects.treasuryLoss) * 100) / 100;
       } else {
         effects.supportDelta = Math.round(-(5 + 9 * p) * r());
-        patchT.support = clamp20((T3.support ?? 70) + effects.supportDelta, 0, 100);
+        patchT.support = clamp21((T3.support ?? 70) + effects.supportDelta, 0, 100);
       }
     }
-    if (detected && blamed === attackerId) patchT.support = clamp20((patchT.support ?? T3.support ?? 70) + 2, 0, 100);
+    if (detected && blamed === attackerId) patchT.support = clamp21((patchT.support ?? T3.support ?? 70) + 2, 0, 100);
     if (Object.keys(patchT).length) parts.push(setProps(T3, patchT));
     const nm8 = (id) => officialName(map.pack.states[id]);
     const text2 = ok2 ? `${nm8(attackerId)}\u306F${nm8(targetId)}\u306B\u5BFE\u3057\u300C${def.label}\u300D\u3092\u884C\u3044\u3001\u6210\u529F\u3057\u305F${detected ? `\uFF08\u767A\u899A\uFF1A${blamed === attackerId ? `${nm8(attackerId)}\u306E\u95A2\u4E0E\u304C\u7279\u5B9A\u3055\u308C\u305F` : `${nm8(blamed)}\u306E\u4ED5\u696D\u3068\u8AA4\u8A8D\u3055\u308C\u305F`}\uFF09` : "\uFF08\u767A\u899A\u305B\u305A\uFF09"}` : `${nm8(attackerId)}\u306E\u300C${def.label}\u300D\u306F\u5931\u6557\u306B\u7D42\u308F\u3063\u305F${detected ? `\u3002${blamed === attackerId ? `${nm8(attackerId)}\u306E\u95A2\u4E0E\u304C\u9732\u898B\u3057\u305F` : `${nm8(blamed)}\u306E\u4ED5\u696D\u3068\u7591\u308F\u308C\u305F`}` : "\uFF08\u767A\u899A\u305B\u305A\uFF09"}`;
@@ -26833,13 +27227,13 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     if (m.has(key3)) return m.get(key3);
     const mesh = world.mesh, cellAt = new Int32Array(W * H);
     let cur = 0;
-    const dot2 = (c, x, y, z) => mesh.centerXYZ[3 * c] * x + mesh.centerXYZ[3 * c + 1] * y + mesh.centerXYZ[3 * c + 2] * z;
+    const dot3 = (c, x, y, z) => mesh.centerXYZ[3 * c] * x + mesh.centerXYZ[3 * c + 1] * y + mesh.centerXYZ[3 * c + 2] * z;
     for (let py = 0; py < H; py++) for (let px = 0; px < W; px++) {
       const [x, y, z] = unprojectViewToSphere((px + 0.5) / W, (py + 0.5) / H);
       for (; ; ) {
-        let best = dot2(cur, x, y, z), bj = -1;
+        let best = dot3(cur, x, y, z), bj = -1;
         for (let k = mesh.neighborOffsets[cur]; k < mesh.neighborOffsets[cur + 1]; k++) {
-          const d = dot2(mesh.neighborIds[k], x, y, z);
+          const d = dot3(mesh.neighborIds[k], x, y, z);
           if (d > best) {
             best = d;
             bj = mesh.neighborIds[k];
@@ -28721,8 +29115,8 @@ ${shown}${more}`;
     land.type = "range";
     land.min = "20";
     land.max = "80";
-    land.value = "50";
-    const landV = el("span", "world-row-v", "50%");
+    land.value = String(Math.round(DEFAULT_WORLD_SPEC.landFraction * 100));
+    const landV = el("span", "world-row-v", `${land.value}%`);
     land.addEventListener("input", () => {
       landV.textContent = `${land.value}%`;
     });
@@ -28740,10 +29134,19 @@ ${shown}${more}`;
       const o = document.createElement("option");
       o.value = k;
       o.textContent = `${t}\uFF08\u7D04${ISLAND_MODES[k]}\uFF09`;
-      if (k === "many") o.selected = true;
+      if (k === DEFAULT_WORLD_SPEC.islandMode) o.selected = true;
       isl.append(o);
     }
     row("\u5CF6\u306E\u591A\u3055", isl);
+    const lay = document.createElement("select");
+    for (const [k, t] of Object.entries(LAYOUTS)) {
+      const o = document.createElement("option");
+      o.value = k;
+      o.textContent = `${t}\uFF08${LAYOUT_HINTS[k]}\uFF09`;
+      if (k === DEFAULT_WORLD_SPEC.layout) o.selected = true;
+      lay.append(o);
+    }
+    row("\u5927\u9678\u306E\u914D\u7F6E", lay, "\u5927\u9678\u306E\u5927\u304D\u3055\u30FB\u4F4D\u7F6E\u30FB\u5F62\u306F\u3001\u3044\u305A\u308C\u3082\u4E0D\u5747\u7B49\u306B\u306A\u308A\u307E\u3059");
     const groups = document.createElement("input");
     groups.type = "number";
     groups.min = "1";
@@ -28755,7 +29158,7 @@ ${shown}${more}`;
       dlg.close();
       dlg.remove();
     }), ok2 = btn("primary", "\u751F\u6210\u3059\u308B", "", () => {
-      const spec = { worldSeed: seed.value.trim(), resolution: { targetCells: Number(preset.value) }, landFraction: Number(land.value) / 100, continentCountTarget: Number(cont.value), islandMode: isl.value, initialGroups: Number(groups.value) };
+      const spec = { worldSeed: seed.value.trim(), resolution: { targetCells: Number(preset.value) }, landFraction: Number(land.value) / 100, continentCountTarget: Number(cont.value), islandMode: isl.value, layout: lay.value, initialGroups: Number(groups.value) };
       dlg.close();
       dlg.remove();
       actions.newWorld(spec);
@@ -28879,7 +29282,7 @@ ${shown}${more}`;
   }
 
   // js/generated/worldgen-worker.txt
-  var worldgen_worker_default = '(() => {\n  // js/core/world/sphere-mesh.js\n  var MESH_VERSION = "sphere-ico-1";\n  var cellCountForFrequency = (n) => 10 * n * n + 2;\n  var frequencyForCells = (target) => Math.max(1, Math.round(Math.sqrt((target - 2) / 10)));\n  var PHI = (1 + Math.sqrt(5)) / 2;\n  function baseIcosahedron() {\n    const raw = [[-1, PHI, 0], [1, PHI, 0], [-1, -PHI, 0], [1, -PHI, 0], [0, -1, PHI], [0, 1, PHI], [0, -1, -PHI], [0, 1, -PHI], [PHI, 0, -1], [PHI, 0, 1], [-PHI, 0, -1], [-PHI, 0, 1]];\n    const faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];\n    const a = norm(raw[0]);\n    let u = cross([0, 0, 1], a), s = Math.hypot(...u);\n    const verts = raw.map(norm);\n    if (s > 1e-12) {\n      u = u.map((v) => v / s);\n      const ang = Math.acos(Math.min(1, Math.max(-1, a[2]))), c = Math.cos(ang), sn = Math.sin(ang);\n      for (let i = 0; i < verts.length; i++) {\n        const v = verts[i], k = cross(u, v), d = dot(u, v);\n        verts[i] = [v[0] * c + k[0] * sn * -1 + u[0] * d * (1 - c), v[1] * c + k[1] * sn * -1 + u[1] * d * (1 - c), v[2] * c + k[2] * sn * -1 + u[2] * d * (1 - c)];\n      }\n    }\n    const fixed = faces.map(([p, q, r]) => {\n      const A = verts[p], B = verts[q], C = verts[r];\n      return dot(cross(sub(B, A), sub(C, A)), A) >= 0 ? [p, q, r] : [p, r, q];\n    });\n    return { verts, faces: fixed };\n  }\n  function norm(v) {\n    const l = Math.hypot(v[0], v[1], v[2]);\n    return [v[0] / l, v[1] / l, v[2] / l];\n  }\n  function cross(a, b) {\n    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];\n  }\n  function dot(a, b) {\n    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\n  }\n  function sub(a, b) {\n    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];\n  }\n  function buildSphereMesh(n) {\n    if (!Number.isInteger(n) || n < 1) throw new Error("\\u5468\\u6CE2\\u6570 n \\u306F 1 \\u4EE5\\u4E0A\\u306E\\u6574\\u6570");\n    const { verts: bv, faces } = baseIcosahedron();\n    const V = cellCountForFrequency(n), T = 20 * n * n;\n    const centerXYZ = new Float32Array(3 * V);\n    for (let i = 0; i < 12; i++) {\n      centerXYZ[3 * i] = bv[i][0];\n      centerXYZ[3 * i + 1] = bv[i][1];\n      centerXYZ[3 * i + 2] = bv[i][2];\n    }\n    const edgeBase = /* @__PURE__ */ new Map();\n    let nextEdge = 12;\n    const interiorPerFace = (n - 1) * (n - 2) / 2, faceBase0 = 12 + 30 * (n - 1);\n    const rowStart = new Int32Array(n + 1);\n    for (let i = 1, acc = 0; i <= n - 2; i++) {\n      rowStart[i] = acc;\n      acc += n - 1 - i;\n    }\n    const tmp = [0, 0, 0];\n    const place = (id, a, b, c, wa, wb, wc) => {\n      tmp[0] = a[0] * wa + b[0] * wb + c[0] * wc;\n      tmp[1] = a[1] * wa + b[1] * wb + c[1] * wc;\n      tmp[2] = a[2] * wa + b[2] * wb + c[2] * wc;\n      const l = Math.hypot(tmp[0], tmp[1], tmp[2]);\n      centerXYZ[3 * id] = tmp[0] / l;\n      centerXYZ[3 * id + 1] = tmp[1] / l;\n      centerXYZ[3 * id + 2] = tmp[2] / l;\n    };\n    const tri = new Uint32Array(3 * T);\n    let tp = 0;\n    const gid = new Int32Array((n + 1) * (n + 1));\n    for (let f = 0; f < 20; f++) {\n      const [fa, fb, fc] = faces[f], A = bv[fa], B = bv[fb], C = bv[fc], ids = [fa, fb, fc];\n      for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) {\n        const k = n - i - j, w = [k, i, j];\n        let id;\n        const zeros = (k === 0 ? 1 : 0) + (i === 0 ? 1 : 0) + (j === 0 ? 1 : 0);\n        if (zeros === 2) id = ids[k === n ? 0 : i === n ? 1 : 2];\n        else if (zeros === 1) {\n          const slots = [0, 1, 2].filter((s) => w[s] > 0), u = ids[slots[0]], v = ids[slots[1]];\n          const lo = Math.min(u, v), hi = Math.max(u, v), key = lo * 12 + hi;\n          let base = edgeBase.get(key);\n          if (base === void 0) {\n            base = nextEdge;\n            nextEdge += n - 1;\n            edgeBase.set(key, base);\n          }\n          const wLo = u === lo ? w[slots[0]] : w[slots[1]];\n          id = base + (wLo - 1);\n          if (!(centerXYZ[3 * id] || centerXYZ[3 * id + 1] || centerXYZ[3 * id + 2])) place(id, A, B, C, k, i, j);\n        } else {\n          id = faceBase0 + f * interiorPerFace + rowStart[i] + (j - 1);\n          place(id, A, B, C, k, i, j);\n        }\n        gid[i * (n + 1) + j] = id;\n      }\n      for (let i = 0; i < n; i++) for (let j = 0; i + j < n; j++) {\n        const p = gid[i * (n + 1) + j], q = gid[(i + 1) * (n + 1) + j], r = gid[i * (n + 1) + j + 1];\n        tri[tp++] = p;\n        tri[tp++] = q;\n        tri[tp++] = r;\n        if (i + j < n - 1) {\n          const s = gid[(i + 1) * (n + 1) + j + 1];\n          tri[tp++] = q;\n          tri[tp++] = s;\n          tri[tp++] = r;\n        }\n      }\n    }\n    if (tp !== 3 * T) throw new Error(`\\u4E09\\u89D2\\u5F62\\u306E\\u6570\\u304C\\u5408\\u308F\\u306A\\u3044: ${tp / 3} != ${T}`);\n    {\n      const a = tri[0] * 3, b = tri[1] * 3, c = tri[2] * 3, P = [centerXYZ[a], centerXYZ[a + 1], centerXYZ[a + 2]];\n      const Q = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];\n      if (dot(cross(sub(Q, P), sub(R, P)), P) < 0) for (let t = 0; t < T; t++) {\n        const x = tri[3 * t + 1];\n        tri[3 * t + 1] = tri[3 * t + 2];\n        tri[3 * t + 2] = x;\n      }\n    }\n    const deg = new Uint32Array(V + 1);\n    for (let t = 0; t < 3 * T; t++) deg[tri[t] + 1]++;\n    const offs = new Uint32Array(V + 1);\n    for (let i = 0; i < V; i++) offs[i + 1] = offs[i] + deg[i + 1];\n    const fill = new Uint32Array(V), sV = new Uint32Array(3 * T), sW = new Uint32Array(3 * T), sT = new Uint32Array(3 * T);\n    for (let t = 0; t < T; t++) for (let r = 0; r < 3; r++) {\n      const u = tri[3 * t + r], v = tri[3 * t + (r + 1) % 3], w = tri[3 * t + (r + 2) % 3], s = offs[u] + fill[u]++;\n      sV[s] = v;\n      sW[s] = w;\n      sT[s] = t;\n    }\n    const neighborIds = new Uint32Array(3 * T), cellVertexIds = new Uint32Array(3 * T);\n    for (let u = 0; u < V; u++) {\n      const s0 = offs[u], e0 = offs[u + 1], d = e0 - s0;\n      let cur = s0;\n      for (let k = 0; k < d; k++) {\n        neighborIds[s0 + k] = sV[cur];\n        cellVertexIds[s0 + k] = sT[cur];\n        const want = sW[cur];\n        let nx = -1;\n        for (let s = s0; s < e0; s++) if (sV[s] === want) {\n          nx = s;\n          break;\n        }\n        if (nx < 0) throw new Error(`\\u9802\\u70B9 ${u} \\u306E\\u5468\\u308A\\u304C\\u9589\\u3058\\u3066\\u3044\\u306A\\u3044`);\n        cur = nx;\n      }\n    }\n    const vertexXYZ = new Float32Array(3 * T);\n    for (let t = 0; t < T; t++) {\n      const a = tri[3 * t] * 3, b = tri[3 * t + 1] * 3, c = tri[3 * t + 2] * 3;\n      const x = centerXYZ[a] + centerXYZ[b] + centerXYZ[c], y = centerXYZ[a + 1] + centerXYZ[b + 1] + centerXYZ[c + 1], z = centerXYZ[a + 2] + centerXYZ[b + 2] + centerXYZ[c + 2], l = Math.hypot(x, y, z);\n      vertexXYZ[3 * t] = x / l;\n      vertexXYZ[3 * t + 1] = y / l;\n      vertexXYZ[3 * t + 2] = z / l;\n    }\n    return { meshVersion: MESH_VERSION, n, cellCount: V, triangleCount: T, centerXYZ, neighborOffsets: offs, neighborIds, vertexXYZ, cellVertexOffsets: offs, cellVertexIds };\n  }\n  function greatCircleRad(ax, ay, az, bx, by, bz) {\n    const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;\n    return Math.atan2(Math.hypot(cx, cy, cz), ax * bx + ay * by + az * bz);\n  }\n  function sphericalTriangleArea(ax, ay, az, bx, by, bz, cx, cy, cz) {\n    const triple = ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);\n    const den = 1 + (ax * bx + ay * by + az * bz) + (bx * cx + by * cy + bz * cz) + (cx * ax + cy * ay + cz * az);\n    return 2 * Math.atan2(Math.abs(triple), den);\n  }\n  function cellArea(mesh, c) {\n    const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1], cx = mesh.centerXYZ[3 * c], cy = mesh.centerXYZ[3 * c + 1], cz = mesh.centerXYZ[3 * c + 2];\n    let a = 0;\n    for (let k = s; k < e; k++) {\n      const p = mesh.cellVertexIds[k], q = mesh.cellVertexIds[k + 1 < e ? k + 1 : s];\n      a += sphericalTriangleArea(cx, cy, cz, mesh.vertexXYZ[3 * p], mesh.vertexXYZ[3 * p + 1], mesh.vertexXYZ[3 * p + 2], mesh.vertexXYZ[3 * q], mesh.vertexXYZ[3 * q + 1], mesh.vertexXYZ[3 * q + 2]);\n    }\n    return a;\n  }\n  function meshHash(mesh) {\n    let h = 2166136261;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < mesh.centerXYZ.length; i++) mix(Math.round(mesh.centerXYZ[i] * 1e6) | 0);\n    for (let i = 0; i < mesh.neighborIds.length; i++) mix(mesh.neighborIds[i]);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n\n  // js/core/world/spec.js\n  var GENERATOR_VERSION = "4.0.0-alpha.1";\n  var WORLD_SPEC_SCHEMA = 1;\n  var ISLAND_MODES = Object.freeze({ few: 12, normal: 40, many: 90 });\n  var DEFAULT_WORLD_SPEC = Object.freeze({\n    schemaVersion: WORLD_SPEC_SCHEMA,\n    generatorVersion: GENERATOR_VERSION,\n    worldSeed: "",\n    planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),\n    resolution: Object.freeze({ targetCells: 25e4 }),\n    landFraction: 0.3,\n    // v6.1.0: 0.5 \u2192 0.3\uFF08\u5730\u7403\u306E\u9678\u5730\u7387\u306F\u7D04 29%\uFF09\u3002\u6D77\u3092\u6E21\u308B\u62E1\u6563\u3092\u76F4\u3057\u305F\u306E\u3067\u3001\u5730\u7403\u4E26\u307F\u3067\u3082\u4EBA\u985E\u306F\u5168\u5927\u9678\u306B\u5E83\u304C\u308B\n    continentCountTarget: 6,\n    islandMode: "many",\n    plateCount: 14,\n    initialGroups: 12,\n    climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })\n  });\n  var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);\n  function normalizeWorldSpec(input = {}) {\n    const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input) ? input : {};\n    const num = (v, def, lo, hi, name, int = false) => {\n      if (v === void 0) return def;\n      if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {\n        errors.push(`${name} \\u306F ${lo}\\u301C${hi}${int ? " \\u306E\\u6574\\u6570" : ""}\\uFF08\\u53D7\\u3051\\u53D6\\u3063\\u305F\\u5024: ${String(v)}\\uFF09`);\n        return def;\n      }\n      return v;\n    };\n    const spec = {\n      schemaVersion: WORLD_SPEC_SCHEMA,\n      generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,\n      worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),\n      planet: {\n        radiusKm: num(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),\n        displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection\n      },\n      resolution: { targetCells: num(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },\n      landFraction: num(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),\n      continentCountTarget: num(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),\n      islandMode: i.islandMode ?? d.islandMode,\n      plateCount: num(i.plateCount, d.plateCount, 4, 40, "plateCount", true),\n      initialGroups: num(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),\n      climateModel: {\n        fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,\n        lapseRateCPerKm: num(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),\n        windMoistureLengthKm: num(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")\n      }\n    };\n    if (!spec.worldSeed) errors.push("worldSeed \\u304C\\u7A7A\\uFF08\\u30B7\\u30FC\\u30C9\\u3092\\u6307\\u5B9A\\u3057\\u3066\\u304F\\u3060\\u3055\\u3044\\u3002\\u751F\\u6210\\u3059\\u308B\\u5834\\u5408\\u306F makeWorldSeed \\u3092\\u4F7F\\u3046\\uFF09");\n    if (!(spec.islandMode in ISLAND_MODES)) {\n      errors.push(`islandMode \\u306F ${Object.keys(ISLAND_MODES).join("/")} \\u306E\\u3044\\u305A\\u308C\\u304B`);\n      spec.islandMode = d.islandMode;\n    }\n    if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \\u306F\\u73FE\\u5728 equirectangular \\u306E\\u307F");\n    if (isObj(input) && input.schemaVersion !== void 0 && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} \\u306F\\u672A\\u5BFE\\u5FDC`);\n    return { spec, errors };\n  }\n\n  // js/core/world/noise.js\n  function hashString(str) {\n    let h = 1779033703 ^ str.length;\n    for (let i = 0; i < str.length; i++) {\n      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);\n      h = h << 13 | h >>> 19;\n    }\n    h = Math.imul(h ^ h >>> 16, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return (h ^ h >>> 16) >>> 0;\n  }\n  function makeRng(seedStr, stage = "") {\n    let a = hashString(`${seedStr}::${stage}`);\n    const next = () => {\n      a = a + 1831565813 | 0;\n      let t = Math.imul(a ^ a >>> 15, 1 | a);\n      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;\n      return ((t ^ t >>> 14) >>> 0) / 4294967296;\n    };\n    next.range = (lo, hi) => lo + (hi - lo) * next();\n    next.int = (lo, hi) => Math.floor(next.range(lo, hi + 1));\n    next.unitVec = () => {\n      const z = next.range(-1, 1), t = next.range(0, 2 * Math.PI), r = Math.sqrt(1 - z * z);\n      return [r * Math.cos(t), r * Math.sin(t), z];\n    };\n    return next;\n  }\n  function hash3(seed, x, y, z) {\n    let h = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);\n    h = Math.imul(h ^ h >>> 15, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return ((h ^ h >>> 16) >>> 0) / 4294967296;\n  }\n  var fade = (t) => t * t * (3 - 2 * t);\n  function valueNoise3(seed, x, y, z) {\n    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx = fade(x - xi), fy = fade(y - yi), fz = fade(z - zi);\n    const c000 = hash3(seed, xi, yi, zi), c100 = hash3(seed, xi + 1, yi, zi), c010 = hash3(seed, xi, yi + 1, zi), c110 = hash3(seed, xi + 1, yi + 1, zi);\n    const c001 = hash3(seed, xi, yi, zi + 1), c101 = hash3(seed, xi + 1, yi, zi + 1), c011 = hash3(seed, xi, yi + 1, zi + 1), c111 = hash3(seed, xi + 1, yi + 1, zi + 1);\n    const x00 = c000 + (c100 - c000) * fx, x10 = c010 + (c110 - c010) * fx, x01 = c001 + (c101 - c001) * fx, x11 = c011 + (c111 - c011) * fx;\n    const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;\n    return y0 + (y1 - y0) * fz;\n  }\n  function fbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {\n    let sum = 0, amp = 1, norm2 = 0, f = freq;\n    for (let o = 0; o < octaves; o++) {\n      sum += amp * valueNoise3(seed + o * 101, x * f, y * f, z * f);\n      norm2 += amp;\n      amp *= gain;\n      f *= 2.03;\n    }\n    return sum / norm2;\n  }\n  function makeFbm3(seed, octaves = 4, freq = 1, gain = 0.5) {\n    const O = octaves, kx = new Int32Array(O).fill(2147483647), ky = new Int32Array(O), kz = new Int32Array(O), cv = new Float64Array(O * 8), fs = new Float64Array(O), sd = new Int32Array(O);\n    let f = freq, norm2 = 0, amp = 1;\n    const amps = new Float64Array(O);\n    for (let o = 0; o < O; o++) {\n      fs[o] = f;\n      sd[o] = seed + o * 101;\n      amps[o] = amp;\n      norm2 += amp;\n      amp *= gain;\n      f *= 2.03;\n    }\n    return (x, y, z) => {\n      let sum = 0;\n      for (let o = 0; o < O; o++) {\n        const X = x * fs[o], Y = y * fs[o], Z = z * fs[o], xi = Math.floor(X), yi = Math.floor(Y), zi = Math.floor(Z), b = o * 8;\n        if (xi !== kx[o] || yi !== ky[o] || zi !== kz[o]) {\n          const s0 = sd[o];\n          kx[o] = xi;\n          ky[o] = yi;\n          kz[o] = zi;\n          cv[b] = hash3(s0, xi, yi, zi);\n          cv[b + 1] = hash3(s0, xi + 1, yi, zi);\n          cv[b + 2] = hash3(s0, xi, yi + 1, zi);\n          cv[b + 3] = hash3(s0, xi + 1, yi + 1, zi);\n          cv[b + 4] = hash3(s0, xi, yi, zi + 1);\n          cv[b + 5] = hash3(s0, xi + 1, yi, zi + 1);\n          cv[b + 6] = hash3(s0, xi, yi + 1, zi + 1);\n          cv[b + 7] = hash3(s0, xi + 1, yi + 1, zi + 1);\n        }\n        const fx = fade(X - xi), fy = fade(Y - yi), fz = fade(Z - zi);\n        const x00 = cv[b] + (cv[b + 1] - cv[b]) * fx, x10 = cv[b + 2] + (cv[b + 3] - cv[b + 2]) * fx, x01 = cv[b + 4] + (cv[b + 5] - cv[b + 4]) * fx, x11 = cv[b + 6] + (cv[b + 7] - cv[b + 6]) * fx;\n        const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;\n        sum += amps[o] * (y0 + (y1 - y0) * fz);\n      }\n      return sum / norm2;\n    };\n  }\n\n  // js/core/world/worldgen.js\n  var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });\n  var BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });\n  var BIOME_NAMES = Object.freeze(["\\u6D77", "\\u6C37\\u96EA", "\\u30C4\\u30F3\\u30C9\\u30E9", "\\u30BF\\u30A4\\u30AC", "\\u6E29\\u5E2F\\u6797", "\\u8349\\u539F", "\\u71B1\\u5E2F\\u7802\\u6F20", "\\u5BD2\\u51B7\\u7802\\u6F20", "\\u30B5\\u30D0\\u30F3\\u30CA", "\\u71B1\\u5E2F\\u5B63\\u7BC0\\u6797", "\\u71B1\\u5E2F\\u96E8\\u6797", "\\u9AD8\\u5C71", "\\u6E7F\\u5730", "\\u6E56"]);\n  var SOILS = Object.freeze({ NONE: 0, ROCK: 1, SAND: 2, LOAM: 3, CLAY: 4, VOLCANIC: 5, PERMAFROST: 6, ALLUVIAL: 7, PODZOL: 8, BLACK_EARTH: 9 });\n  var RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 });\n  var RES_NAMES = Object.freeze({ 1: "\\u9244", 2: "\\u9285", 4: "\\u932B", 8: "\\u91D1", 16: "\\u77F3\\u70AD", 32: "\\u5869", 64: "\\u6728\\u6750", 128: "\\u6F01\\u5834", 256: "\\u77F3\\u6750", 512: "\\u7C98\\u571F", 1024: "\\u5B9D\\u77F3" });\n  var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;\n  var smooth = (t) => {\n    t = clamp(t, 0, 1);\n    return t * t * (3 - 2 * t);\n  };\n  var D2R = Math.PI / 180;\n  var MinHeap = class {\n    constructor(cap) {\n      this.k = new Float64Array(cap);\n      this.v = new Int32Array(cap);\n      this.n = 0;\n    }\n    push(key, val) {\n      let i = this.n++;\n      const k = this.k, v = this.v;\n      while (i > 0) {\n        const p = i - 1 >> 1;\n        if (k[p] <= key) break;\n        k[i] = k[p];\n        v[i] = v[p];\n        i = p;\n      }\n      k[i] = key;\n      v[i] = val;\n    }\n    pop() {\n      const k = this.k, v = this.v, top = v[0], key = k[--this.n], val = v[this.n];\n      let i = 0;\n      const n = this.n;\n      while (true) {\n        let c = 2 * i + 1;\n        if (c >= n) break;\n        if (c + 1 < n && k[c + 1] < k[c]) c++;\n        if (k[c] >= key) break;\n        k[i] = k[c];\n        v[i] = v[c];\n        i = c;\n      }\n      k[i] = key;\n      v[i] = val;\n      return top;\n    }\n  };\n  var Cancelled = class extends Error {\n  };\n  var makeStager = (onProgress, signal, timings) => (name, label, fn) => {\n    if (signal?.aborted) throw new Cancelled("\\u30AD\\u30E3\\u30F3\\u30BB\\u30EB\\u3055\\u308C\\u307E\\u3057\\u305F");\n    onProgress?.({ stage: name, label, fraction: 0 });\n    const t = performance.now(), r = fn();\n    timings[name] = Math.round(performance.now() - t);\n    onProgress?.({ stage: name, label, fraction: 1, ms: timings[name] });\n    return r;\n  };\n  function generateWorld(specInput, options = {}) {\n    const { spec, errors } = normalizeWorldSpec(specInput);\n    if (errors.length) throw new Error("WorldSpec \\u304C\\u4E0D\\u6B63: " + errors.join(" / "));\n    const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();\n    const n = frequencyForCells(spec.resolution.targetCells);\n    const mesh = stage("G1_mesh", "\\u7403\\u9762\\u30E1\\u30C3\\u30B7\\u30E5", () => buildSphereMesh(n));\n    const V = mesh.cellCount, X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = spec.planet.radiusKm;\n    const lat = new Float32Array(V), lon = new Float32Array(V), areaKm2 = new Float32Array(V);\n    stage("G1_derive", "\\u7DEF\\u5EA6\\u7D4C\\u5EA6\\u30FB\\u9762\\u7A4D", () => {\n      for (let c = 0; c < V; c++) {\n        lat[c] = Math.asin(clamp(X[3 * c + 2], -1, 1));\n        lon[c] = Math.atan2(X[3 * c + 1], X[3 * c]);\n        areaKm2[c] = cellArea(mesh, c) * R * R;\n      }\n    });\n    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), spacingRad = spacingKm / R;\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    const nSeed = (name) => hashString(`${seed}::noise::${name}`);\n    const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);\n    const volcanic = new Float32Array(V);\n    stage("G2_plates", "\\u30D7\\u30EC\\u30FC\\u30C8\\u30FB\\u5927\\u9678\\u306E\\u6982\\u5F62", () => {\n      const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];\n      const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);\n      const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));\n      for (let c = 0; c < V; c++) {\n        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];\n        const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;\n        const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);\n        wx[c] = px / l;\n        wy[c] = py / l;\n        wz[c] = pz / l;\n      }\n      const rp = makeRng(seed, "plates"), P = spec.plateCount, seeds = [], omega = [];\n      for (let p = 0; p < P; p++) {\n        seeds.push(rp.unitVec());\n        const w = rp.unitVec(), sp = rp.range(0.4, 1.6);\n        omega.push([w[0] * sp, w[1] * sp, w[2] * sp]);\n      }\n      for (let c = 0; c < V; c++) {\n        let best = -2, bp = 0;\n        for (let p = 0; p < P; p++) {\n          const d = wx[c] * seeds[p][0] + wy[c] * seeds[p][1] + wz[c] * seeds[p][2];\n          if (d > best) {\n            best = d;\n            bp = p;\n          }\n        }\n        plate[c] = bp;\n      }\n      const vel = (p, c) => {\n        const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];\n        return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x];\n      };\n      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V);\n      for (let c = 0; c < V; c++) {\n        let best = 0, bestAbs = 0;\n        const vc = vel(plate[c], c);\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (plate[j] === plate[c]) continue;\n          const vj = vel(plate[j], c);\n          let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2];\n          const dl = Math.hypot(dx, dy, dz) || 1;\n          dx /= dl;\n          dy /= dl;\n          dz /= dl;\n          const conv = (vc[0] - vj[0]) * dx + (vc[1] - vj[1]) * dy + (vc[2] - vj[2]) * dz;\n          if (Math.abs(conv) > bestAbs) {\n            bestAbs = Math.abs(conv);\n            best = conv;\n          }\n        }\n        if (bestAbs > 0) {\n          isSrc[c] = 1;\n          srcStrength[c] = best;\n        }\n      }\n      const widthCells = Math.max(2, 5 * D2R / spacingRad), maxD = Math.ceil(widthCells * 3);\n      const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      for (let c = 0; c < V; c++) if (isSrc[c]) {\n        dist[c] = 0;\n        from[c] = c;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        if (dist[c] >= maxD) continue;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (dist[j] < 0) {\n            dist[j] = dist[c] + 1;\n            from[j] = from[c];\n            q[qt++] = j;\n          }\n        }\n      }\n      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4);\n      for (let c = 0; c < V; c++) {\n        if (dist[c] < 0) continue;\n        const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));\n        const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3);\n        if (s > 0) {\n          mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod;\n          volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;\n        } else rift[c] = clamp(-s / 1.2, 0, 1) * f;\n      }\n      const rc = makeRng(seed, "continents"), K = spec.continentCountTarget;\n      const thetaLand = Math.acos(clamp(1 - 2 * spec.landFraction / K, -1, 1));\n      let bestSet = null, bestSep = -1;\n      for (let trial = 0; trial < 3e3; trial++) {\n        const pts = [];\n        for (let i = 0; i < K; i++) pts.push(rc.unitVec());\n        let sep = 9;\n        for (let i = 0; i < K; i++) for (let j = i + 1; j < K; j++) sep = Math.min(sep, Math.acos(clamp(pts[i][0] * pts[j][0] + pts[i][1] * pts[j][1] + pts[i][2] * pts[j][2], -1, 1)));\n        if (sep > bestSep) {\n          bestSep = sep;\n          bestSet = pts;\n        }\n      }\n      const cs = bestSet.map((v) => {\n        const r = thetaLand * rc.range(0.8, 0.95);\n        return { v, r, cosCut: Math.cos(Math.min(Math.PI, r * 1.1)) - 1e-9 };\n      });\n      const isl = [];\n      const NI = ISLAND_MODES[spec.islandMode];\n      for (let i = 0; i < NI; i++) {\n        const v = rc.unitVec(), r = rc.range(1.2, 5.5) * D2R, w = rc.range(0.45, 0.95);\n        isl.push({ v, r, w, cosCut: Math.cos(r * 1.5) - 1e-9 });\n      }\n      const dotp = (c, v) => wx[c] * v[0] + wy[c] * v[1] + wz[c] * v[2];\n      for (let c = 0; c < V; c++) {\n        let f = 0;\n        for (const o of cs) {\n          const dp = dotp(c, o.v);\n          if (dp < o.cosCut) continue;\n          const d = Math.acos(clamp(dp, -1, 1)), t = clamp((1 - d / (o.r * 1.1)) * 2.2, 0, 1);\n          f = Math.max(f, t * t * (3 - 2 * t));\n        }\n        for (const o of isl) {\n          const dp = dotp(c, o.v);\n          if (dp < o.cosCut) continue;\n          const d = Math.acos(clamp(dp, -1, 1));\n          if (d < o.r * 1.5) {\n            const t = clamp(1 - d / (o.r * 1.5), 0, 1);\n            f = Math.max(f, o.w * t * t * (3 - 2 * t));\n          }\n        }\n        continent[c] = f;\n      }\n      const rh = makeRng(seed, "hotspots");\n      for (let h = 0; h < 6; h++) {\n        const start = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R;\n        const dot2 = start[0] * dirv[0] + start[1] * dirv[1] + start[2] * dirv[2];\n        let t = [dirv[0] - dot2 * start[0], dirv[1] - dot2 * start[1], dirv[2] - dot2 * start[2]];\n        const tl = Math.hypot(...t) || 1;\n        t = t.map((x) => x / tl);\n        for (let i = 0; i < count; i++) {\n          const a = i * step, p = [start[0] * Math.cos(a) + t[0] * Math.sin(a), start[1] * Math.cos(a) + t[1] * Math.sin(a), start[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));\n          for (let c = 0; c < V; c++) {\n            const d = Math.acos(clamp(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));\n            if (d < rad * 2) {\n              const g = Math.exp(-((d / rad) ** 2));\n              continent[c] = Math.max(continent[c], amp * g * 0.9);\n              volcanic[c] = Math.max(volcanic[c], g);\n            }\n          }\n        }\n      }\n    });\n    const elevation = new Float32Array(V);\n    let seaLevelRaw = 0;\n    stage("G3_elevation", "\\u6A19\\u9AD8\\u30FB\\u6D77\\u5CB8\\u30FB\\u5CF6", () => {\n      const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);\n      for (let c = 0; c < V; c++) {\n        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];\n        const land = smooth((cf - 0.25) / 0.45);\n        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) + mountain[c] * (0.03 + 0.97 * land) * 1.5 - rift[c] * 0.22;\n      }\n      const sorted = Float32Array.from(raw).sort();\n      seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];\n      const hi = sorted[Math.min(V - 1, Math.floor(V * 0.998))], lo = sorted[0];\n      for (let c = 0; c < V; c++) {\n        const e = raw[c] - seaLevelRaw;\n        elevation[c] = e >= 0 ? Math.pow(Math.min(1.35, e / Math.max(1e-6, hi - seaLevelRaw)), 1.2) * 6500 : e / Math.max(1e-6, seaLevelRaw - lo) * 5500;\n      }\n    });\n    const isSea = new Uint8Array(V);\n    for (let c = 0; c < V; c++) isSea[c] = elevation[c] <= 0 ? 1 : 0;\n    const coastDist = new Uint16Array(V);\n    stage("G3_coast", "\\u6D77\\u5CB8\\u304B\\u3089\\u306E\\u8DDD\\u96E2", () => {\n      const q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      const seen = new Uint8Array(V);\n      for (let c = 0; c < V; c++) if (isSea[c]) {\n        seen[c] = 1;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!seen[j]) {\n            seen[j] = 1;\n            coastDist[j] = Math.min(65535, coastDist[c] + 1);\n            q[qt++] = j;\n          }\n        }\n      }\n    });\n    const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);\n    const cx = { mesh, lat, lon, elevation, isSea, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };\n    stage("G4_climate", "\\u6C17\\u5019", () => {\n      for (let c = 0; c < V; c++) temp[c] = tempAt(lat[c], elevation[c], cx.lapse);\n      cx.up = new Int32Array(V);\n      for (let c = 0; c < V; c++) cx.up[c] = upwindOf(mesh, lat, lon, c);\n      for (let c = 0; c < V; c++) moisture[c] = isSea[c] ? 1 : 0.5;\n      const passes = Math.min(200, Math.ceil(4e3 / spacingKm) + 4);\n      for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) {\n        if (!isSea[c]) moisture[c] = moistureStep(cx, c);\n      }\n      for (let c = 0; c < V; c++) precip[c] = precipAt(cx, c);\n    });\n    stage("G4_biome", "\\u30D0\\u30A4\\u30AA\\u30FC\\u30E0", () => {\n      for (let c = 0; c < V; c++) biome[c] = isSea[c] ? BIOMES.OCEAN : biomeOf(temp[c], precip[c], elevation[c]);\n    });\n    const parent = new Int32Array(V).fill(-1), filled = new Float32Array(V), flow = new Float32Array(V), basin = new Int32Array(V).fill(-1), landWater = new Uint8Array(V);\n    let lakeCount = 0;\n    const hyd = { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome };\n    stage("G5_rivers", "\\u6C34\\u7CFB", () => {\n      lakeCount = computeHydrology(hyd, null).lakeCount;\n    });\n    let riverThreshold = 0;\n    const river = new Uint8Array(V);\n    stage("G5_riverset", "\\u6CB3\\u5DDD\\u306E\\u9078\\u5B9A", () => {\n      const f = [];\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND) f.push(flow[c]);\n      f.sort((a, b) => a - b);\n      riverThreshold = f.length ? f[Math.floor(f.length * 0.93)] : 0;\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && flow[c] >= riverThreshold && flow[c] > 0) river[c] = 1;\n    });\n    const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);\n    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };\n    stage("G6_soil", "\\u571F\\u58CC\\u30FB\\u80A5\\u6C83\\u5EA6\\u30FB\\u8CC7\\u6E90", () => {\n      for (let c = 0; c < V; c++) landUseAt(lu, c);\n    });\n    const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };\n    const populations = stage("G7_groups", "\\u521D\\u671F\\u4EBA\\u53E3\\u96C6\\u56E3", () => placeInitialGroups(gctx, spec, 0));\n    const stats = stage("G8_stats", "\\u7D71\\u8A08", () => computeStats({ V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));\n    const world = {\n      spec: { ...spec, generatorVersion: GENERATOR_VERSION },\n      mesh,\n      cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },\n      entities: { populations },\n      stats,\n      timings\n    };\n    timings.total = Math.round(performance.now() - tAll);\n    world.hash = worldHash(world);\n    return world;\n  }\n  function tempAt(latRad, elevation, lapse) {\n    const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1e3;\n    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;\n  }\n  function upwindOf(mesh, lat, lon, c) {\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const la = Math.abs(lat[c]) / D2R, east = la < 30 ? -1 : la < 60 ? 1 : -1;\n    const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);\n    const wx = -east * ex, wy = -east * ey;\n    let best = -2, bj = -1;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      const j = nb[k], dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2], dl = Math.hypot(dx, dy, dz) || 1, s = (dx * wx + dy * wy) / dl;\n      if (s > best) {\n        best = s;\n        bj = j;\n      }\n    }\n    return bj;\n  }\n  var upOf = (cx, c) => cx.up ? cx.up[c] : upwindOf(cx.mesh, cx.lat, cx.lon, c);\n  function liftRaw(cx, c) {\n    const u = upOf(cx, c);\n    return Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3;\n  }\n  function moistureStep(cx, c) {\n    const u = upOf(cx, c);\n    return clamp(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);\n  }\n  function precipAt(cx, c) {\n    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));\n    const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];\n    let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);\n    if (!sea && cx.elevation[c] > 3500) p *= 0.6;\n    return clamp(p, 0, 6e3);\n  }\n  function computeHydrology(h, members = null) {\n    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;\n    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;\n    const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);\n    let on = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      filled[c] = elevation[c];\n      parent[c] = -1;\n      basin[c] = -1;\n    }\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) {\n        done[c] = 1;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && (!members || members[j])) {\n            heap.push(filled[c], c);\n            break;\n          }\n        }\n      } else if (members && !members[c]) done[c] = 1;\n    }\n    while (heap.n > 0) {\n      const c = heap.pop();\n      order[on++] = c;\n      for (let k = off[c]; k < off[c + 1]; k++) {\n        const j = nb[k];\n        if (done[j]) continue;\n        done[j] = 1;\n        parent[j] = c;\n        filled[j] = Math.max(elevation[j], filled[c] + EPS);\n        heap.push(filled[j], j);\n      }\n    }\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 95e-7;\n    }\n    for (let i = on - 1; i >= 0; i--) {\n      const c = order[i], p = parent[c];\n      if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c];\n    }\n    for (let i = 0; i < on; i++) {\n      const c = order[i];\n      if (isSea[c]) continue;\n      const p = parent[c];\n      basin[c] = isSea[p] ? c : basin[p];\n    }\n    let lakeCount = 0, unreached = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;\n      else {\n        if (parent[c] < 0) unreached++;\n        if (filled[c] - elevation[c] >= 40) {\n          landWater[c] = LAND_WATER.LAKE;\n          lakeCount++;\n          biome[c] = BIOMES.LAKE;\n        } else landWater[c] = LAND_WATER.LAND;\n      }\n    }\n    return { lakeCount, unreached };\n  }\n  function landUseNoise(seed) {\n    const ns = (name) => hashString(`${seed}::noise::${name}`);\n    return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };\n  }\n  var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };\n  function seaToLand(mesh, isSea, c) {\n    const off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    let fr = [c];\n    const seen = /* @__PURE__ */ new Set([c]);\n    for (let d = 0; d <= 6; d++) {\n      const nx = [];\n      for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) {\n        const j = nb[k];\n        if (!isSea[j]) return d + 1;\n        if (!seen.has(j)) {\n          seen.add(j);\n          nx.push(j);\n        }\n      }\n      fr = nx;\n      if (!fr.length) break;\n    }\n    return 99;\n  }\n  function landUseAt(g, c) {\n    const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];\n    let relief = 0, kn = 0;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      relief += Math.abs(elevation[nb[k]] - e);\n      kn++;\n    }\n    relief /= Math.max(1, kn);\n    const nearRiver = river[c] === 1;\n    let res = 0;\n    if (sea) {\n      if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH;\n    } else {\n      const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);\n      if (land) {\n        if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;\n        if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;\n        if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;\n        if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;\n        if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;\n        if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;\n        if (e > 200 && relief > 120) res |= RES.STONE;\n        if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;\n        if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;\n        if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;\n        if (nearRiver) res |= RES.FISH;\n      } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;\n    }\n    resource[c] = res;\n    let sl = SOILS.NONE;\n    if (!sea) {\n      if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;\n      else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;\n      else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;\n      else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;\n      else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;\n      else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;\n      else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;\n      else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;\n      else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;\n      else sl = SOILS.LOAM;\n    }\n    soil[c] = sl;\n    if (land) {\n      const t = temp[c], p = precip[c];\n      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp(1 - (t - 26) / 12, 0.2, 1);\n      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp(1 - (p - 2200) / 3500, 0.5, 1);\n      const slope = 1 - clamp(relief / 700, 0, 0.9), alt = 1 - clamp(Math.max(0, e - 1500) / 3e3, 0, 1);\n      fertility[c] = clamp(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);\n      capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];\n    } else {\n      fertility[c] = 0;\n      capacity[c] = 0;\n    }\n  }\n  function placeInitialGroups(g, spec, variant = 0) {\n    const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;\n    const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];\n    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });\n    cand.sort((a, b) => b.s - a.s || a.c - b.c);\n    const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R);\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    for (const { c } of cand) {\n      if (out.length >= spec.initialGroups) break;\n      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R, lon: lon[c] / D2R, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });\n    }\n    return out;\n  }\n  function biomeOf(T, P, e) {\n    if (e > 4500 || e > 3500 && T < 0) return BIOMES.ALPINE;\n    if (T < -8) return BIOMES.ICE;\n    if (T < 0) return BIOMES.TUNDRA;\n    if (T < 5) return P > 300 ? BIOMES.TAIGA : BIOMES.COLD_DESERT;\n    if (T < 18) return P < 200 ? BIOMES.COLD_DESERT : P < 600 ? BIOMES.GRASSLAND : P > 2600 ? BIOMES.WETLAND : BIOMES.TEMPERATE_FOREST;\n    if (P < 250) return BIOMES.HOT_DESERT;\n    if (P < 900) return BIOMES.SAVANNA;\n    if (P < 1800) return BIOMES.TROPICAL_SEASONAL;\n    return BIOMES.RAINFOREST;\n  }\n  function landmasses(V, off, nb, isSea) {\n    const comp = new Int32Array(V).fill(-1), sizes = [];\n    const q = new Int32Array(V);\n    for (let s = 0; s < V; s++) {\n      if (isSea[s] || comp[s] >= 0) continue;\n      let qh = 0, qt = 0;\n      q[qt++] = s;\n      comp[s] = sizes.length;\n      let cnt = 0;\n      while (qh < qt) {\n        const c = q[qh++];\n        cnt++;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && comp[j] < 0) {\n            comp[j] = comp[s];\n            q[qt++] = j;\n          }\n        }\n      }\n      sizes.push(cnt);\n    }\n    return { comp, sizes };\n  }\n  function computeStats(a) {\n    const { V, off, nb, isSea, landWater, elevation, temp, biome, lat, riverThreshold, river, lakeCount, parent, populations } = a;\n    let mouthCount = 0;\n    for (let c = 0; c < V; c++) if (river[c] && parent[c] >= 0 && isSea[parent[c]]) mouthCount++;\n    let sea = 0, lake = 0, mount = 0, rivers = 0, cold = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) sea++;\n      else {\n        if (landWater[c] === LAND_WATER.LAKE) lake++;\n        if (elevation[c] > 2500) mount++;\n        if (river[c]) rivers++;\n      }\n    }\n    const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea), total = sizes.reduce((s, x) => s + x, 0);\n    const continents = sizes.filter((s) => s >= total * 0.03), islands = sizes.filter((s) => s < total * 0.03);\n    const biomeCounts = new Array(14).fill(0);\n    for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;\n    let tl = 0, nl = 0, th = 0, nh = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) continue;\n      const la = Math.abs(lat[c]) / D2R;\n      if (la < 20) {\n        tl += temp[c];\n        nl++;\n      } else if (la > 60) {\n        th += temp[c];\n        nh++;\n      }\n    }\n    return {\n      cells: V,\n      landFraction: landCells / V,\n      lakeFraction: lake / V,\n      mountainFraction: mount / Math.max(1, landCells),\n      riverCells: rivers,\n      riverFlowThreshold: riverThreshold,\n      riverMouths: mouthCount,\n      lakeCells: lakeCount,\n      continentCount: continents.length,\n      continentShares: continents.map((s) => +(s / total).toFixed(3)).sort((x, y) => y - x),\n      islandCount: islands.length,\n      largestIslandCells: islands.length ? Math.max(...islands) : 0,\n      meanTempLow: nl ? tl / nl : null,\n      meanTempHigh: nh ? th / nh : null,\n      biomeCounts,\n      initialGroups: populations.length\n    };\n  }\n  function validateWorld(world) {\n    const errs = [], { cell, mesh } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    for (const k of ["elevation", "temp", "precip", "riverFlow", "fertility", "capacity"]) for (let c = 0; c < V; c++) if (!Number.isFinite(cell[k][c])) {\n      errs.push(`${k}[${c}] \\u304C\\u6709\\u9650\\u3067\\u306A\\u3044`);\n      break;\n    }\n    const state = new Uint8Array(V);\n    const stack = [];\n    for (let s = 0; s < V; s++) {\n      if (state[s]) continue;\n      let c = s;\n      stack.length = 0;\n      while (true) {\n        if (cell.landWater[c] === LAND_WATER.OCEAN) {\n          state[c] = 2;\n          break;\n        }\n        if (state[c] === 2) break;\n        if (state[c] === 1) {\n          errs.push(`\\u6D41\\u8DEF\\u306B\\u5FAA\\u74B0: ${c}`);\n          break;\n        }\n        state[c] = 1;\n        stack.push(c);\n        const p = cell.riverTo[c];\n        if (p < 0) {\n          errs.push(`\\u884C\\u304D\\u6B62\\u307E\\u308A\\u306E\\u6D41\\u8DEF: ${c}`);\n          break;\n        }\n        let adj = false;\n        for (let k = off[c]; k < off[c + 1]; k++) if (nb[k] === p) {\n          adj = true;\n          break;\n        }\n        if (!adj) {\n          errs.push(`\\u6D41\\u8DEF\\u304C\\u96A3\\u63A5\\u3057\\u3066\\u3044\\u306A\\u3044: ${c}\\u2192${p}`);\n          break;\n        }\n        c = p;\n      }\n      const ok = state[c] === 2;\n      for (const u of stack) state[u] = ok ? 2 : state[u];\n      if (errs.length > 20) break;\n    }\n    for (let c = 0; c < V; c++) {\n      if (cell.elevation[c] <= 0 !== (cell.landWater[c] === LAND_WATER.OCEAN)) {\n        errs.push(`\\u6D77\\u9678\\u3068\\u6A19\\u9AD8\\u304C\\u4E0D\\u4E00\\u81F4: ${c}`);\n        break;\n      }\n    }\n    for (const p of world.entities.populations) {\n      if (cell.landWater[p.cell] !== LAND_WATER.LAND) errs.push(`\\u521D\\u671F\\u96C6\\u56E3 ${p.id} \\u304C\\u9678\\u306B\\u3044\\u306A\\u3044`);\n    }\n    return errs;\n  }\n  function worldHash(world) {\n    let h = 2166136261;\n    const { cell } = world;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < cell.elevation.length; i++) mix(Math.round(cell.elevation[i]) | 0);\n    for (let i = 0; i < cell.landWater.length; i++) mix(cell.landWater[i] | cell.biome[i] << 8 | cell.soil[i] << 16);\n    for (let i = 0; i < cell.riverTo.length; i++) mix(cell.riverTo[i] | 0);\n    for (let i = 0; i < cell.resource.length; i++) mix(cell.resource[i]);\n    mix(meshHash(world.mesh).length);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n  function generateWorldChecked(specInput, options = {}, maxAttempts = 6) {\n    const rejected = [];\n    const base = normalizeWorldSpec(specInput).spec;\n    for (let a = 0; a < maxAttempts; a++) {\n      const seedUsed = a === 0 ? base.worldSeed : `${base.worldSeed}#r${a}`;\n      const world = generateWorld({ ...base, worldSeed: seedUsed }, options), reasons = statsProblems(world.stats, base);\n      reasons.push(...validateWorld(world).slice(0, 5));\n      if (!reasons.length) return { world, rejected, attempts: a + 1, seedUsed };\n      rejected.push({ seed: seedUsed, reasons });\n    }\n    throw new Error(`\\u8A31\\u5BB9\\u5E2F\\u306B\\u5165\\u308B\\u4E16\\u754C\\u3092\\u4F5C\\u308C\\u306A\\u304B\\u3063\\u305F\\uFF08${maxAttempts} \\u56DE\\uFF09: ` + JSON.stringify(rejected));\n  }\n  function statsProblems(st, spec) {\n    const r = [];\n    if (Math.abs(st.landFraction - spec.landFraction) > 0.04) r.push(`\\u9678\\u5730\\u7387 ${st.landFraction.toFixed(3)} \\u304C\\u76EE\\u6A19 ${spec.landFraction} \\u304B\\u3089\\u5916\\u308C\\u3066\\u3044\\u308B`);\n    const K = spec.continentCountTarget;\n    if (st.continentCount < Math.max(1, K - 2) || st.continentCount > K + 3) r.push(`\\u5927\\u9678\\u7D1A\\u306E\\u9678\\u584A\\u304C ${st.continentCount} \\u500B\\uFF08\\u76EE\\u6A19 ${K}\\uFF09`);\n    if (spec.islandMode === "many" && st.islandCount < 20) r.push(`\\u5CF6\\u304C\\u5C11\\u306A\\u3044\\uFF08${st.islandCount}\\uFF09`);\n    if (st.continentShares[0] > 0.45) r.push(`\\u6700\\u5927\\u306E\\u9678\\u584A\\u304C\\u9678\\u306E ${(st.continentShares[0] * 100).toFixed(0)}%\\uFF08\\u504F\\u308A\\u3059\\u304E\\uFF09`);\n    if (st.meanTempLow != null && st.meanTempHigh != null && st.meanTempLow <= st.meanTempHigh + 10) r.push("\\u4F4E\\u7DEF\\u5EA6\\u304C\\u9AD8\\u7DEF\\u5EA6\\u3088\\u308A\\u5341\\u5206\\u306B\\u6696\\u304B\\u304F\\u306A\\u3044");\n    return r;\n  }\n\n  // js/workers/worldgen.worker.js\n  function collectBuffers(world) {\n    const seen = /* @__PURE__ */ new Set(), list = [];\n    const add = (o) => {\n      for (const v of Object.values(o)) if (ArrayBuffer.isView(v) && !seen.has(v.buffer)) {\n        seen.add(v.buffer);\n        list.push(v.buffer);\n      }\n    };\n    add(world.mesh);\n    add(world.cell);\n    return list;\n  }\n  self.onmessage = (e) => {\n    const m = e.data;\n    if (!m || m.type !== "generate") return;\n    try {\n      const r = generateWorldChecked(m.spec, { onProgress: (p) => self.postMessage({ type: "progress", ...p }) }, m.maxAttempts ?? 4);\n      r.world.generation = { seedUsed: r.seedUsed, attempts: r.attempts, rejected: r.rejected };\n      self.postMessage({ type: "done", world: r.world }, collectBuffers(r.world));\n    } catch (err) {\n      self.postMessage({ type: "error", message: err && err.message ? err.message : String(err) });\n    }\n  };\n})();\n';
+  var worldgen_worker_default = '(() => {\n  // js/core/world/sphere-mesh.js\n  var MESH_VERSION = "sphere-ico-1";\n  var cellCountForFrequency = (n) => 10 * n * n + 2;\n  var frequencyForCells = (target) => Math.max(1, Math.round(Math.sqrt((target - 2) / 10)));\n  var PHI = (1 + Math.sqrt(5)) / 2;\n  function baseIcosahedron() {\n    const raw = [[-1, PHI, 0], [1, PHI, 0], [-1, -PHI, 0], [1, -PHI, 0], [0, -1, PHI], [0, 1, PHI], [0, -1, -PHI], [0, 1, -PHI], [PHI, 0, -1], [PHI, 0, 1], [-PHI, 0, -1], [-PHI, 0, 1]];\n    const faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];\n    const a = norm(raw[0]);\n    let u = cross([0, 0, 1], a), s = Math.hypot(...u);\n    const verts = raw.map(norm);\n    if (s > 1e-12) {\n      u = u.map((v) => v / s);\n      const ang = Math.acos(Math.min(1, Math.max(-1, a[2]))), c = Math.cos(ang), sn = Math.sin(ang);\n      for (let i = 0; i < verts.length; i++) {\n        const v = verts[i], k = cross(u, v), d = dot(u, v);\n        verts[i] = [v[0] * c + k[0] * sn * -1 + u[0] * d * (1 - c), v[1] * c + k[1] * sn * -1 + u[1] * d * (1 - c), v[2] * c + k[2] * sn * -1 + u[2] * d * (1 - c)];\n      }\n    }\n    const fixed = faces.map(([p, q, r]) => {\n      const A = verts[p], B = verts[q], C = verts[r];\n      return dot(cross(sub(B, A), sub(C, A)), A) >= 0 ? [p, q, r] : [p, r, q];\n    });\n    return { verts, faces: fixed };\n  }\n  function norm(v) {\n    const l = Math.hypot(v[0], v[1], v[2]);\n    return [v[0] / l, v[1] / l, v[2] / l];\n  }\n  function cross(a, b) {\n    return [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];\n  }\n  function dot(a, b) {\n    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\n  }\n  function sub(a, b) {\n    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];\n  }\n  function buildSphereMesh(n) {\n    if (!Number.isInteger(n) || n < 1) throw new Error("\\u5468\\u6CE2\\u6570 n \\u306F 1 \\u4EE5\\u4E0A\\u306E\\u6574\\u6570");\n    const { verts: bv, faces } = baseIcosahedron();\n    const V = cellCountForFrequency(n), T = 20 * n * n;\n    const centerXYZ = new Float32Array(3 * V);\n    for (let i = 0; i < 12; i++) {\n      centerXYZ[3 * i] = bv[i][0];\n      centerXYZ[3 * i + 1] = bv[i][1];\n      centerXYZ[3 * i + 2] = bv[i][2];\n    }\n    const edgeBase = /* @__PURE__ */ new Map();\n    let nextEdge = 12;\n    const interiorPerFace = (n - 1) * (n - 2) / 2, faceBase0 = 12 + 30 * (n - 1);\n    const rowStart = new Int32Array(n + 1);\n    for (let i = 1, acc = 0; i <= n - 2; i++) {\n      rowStart[i] = acc;\n      acc += n - 1 - i;\n    }\n    const tmp = [0, 0, 0];\n    const place = (id, a, b, c, wa, wb, wc) => {\n      tmp[0] = a[0] * wa + b[0] * wb + c[0] * wc;\n      tmp[1] = a[1] * wa + b[1] * wb + c[1] * wc;\n      tmp[2] = a[2] * wa + b[2] * wb + c[2] * wc;\n      const l = Math.hypot(tmp[0], tmp[1], tmp[2]);\n      centerXYZ[3 * id] = tmp[0] / l;\n      centerXYZ[3 * id + 1] = tmp[1] / l;\n      centerXYZ[3 * id + 2] = tmp[2] / l;\n    };\n    const tri = new Uint32Array(3 * T);\n    let tp = 0;\n    const gid = new Int32Array((n + 1) * (n + 1));\n    for (let f = 0; f < 20; f++) {\n      const [fa, fb, fc] = faces[f], A = bv[fa], B = bv[fb], C = bv[fc], ids = [fa, fb, fc];\n      for (let i = 0; i <= n; i++) for (let j = 0; i + j <= n; j++) {\n        const k = n - i - j, w = [k, i, j];\n        let id;\n        const zeros = (k === 0 ? 1 : 0) + (i === 0 ? 1 : 0) + (j === 0 ? 1 : 0);\n        if (zeros === 2) id = ids[k === n ? 0 : i === n ? 1 : 2];\n        else if (zeros === 1) {\n          const slots = [0, 1, 2].filter((s) => w[s] > 0), u = ids[slots[0]], v = ids[slots[1]];\n          const lo = Math.min(u, v), hi = Math.max(u, v), key = lo * 12 + hi;\n          let base = edgeBase.get(key);\n          if (base === void 0) {\n            base = nextEdge;\n            nextEdge += n - 1;\n            edgeBase.set(key, base);\n          }\n          const wLo = u === lo ? w[slots[0]] : w[slots[1]];\n          id = base + (wLo - 1);\n          if (!(centerXYZ[3 * id] || centerXYZ[3 * id + 1] || centerXYZ[3 * id + 2])) place(id, A, B, C, k, i, j);\n        } else {\n          id = faceBase0 + f * interiorPerFace + rowStart[i] + (j - 1);\n          place(id, A, B, C, k, i, j);\n        }\n        gid[i * (n + 1) + j] = id;\n      }\n      for (let i = 0; i < n; i++) for (let j = 0; i + j < n; j++) {\n        const p = gid[i * (n + 1) + j], q = gid[(i + 1) * (n + 1) + j], r = gid[i * (n + 1) + j + 1];\n        tri[tp++] = p;\n        tri[tp++] = q;\n        tri[tp++] = r;\n        if (i + j < n - 1) {\n          const s = gid[(i + 1) * (n + 1) + j + 1];\n          tri[tp++] = q;\n          tri[tp++] = s;\n          tri[tp++] = r;\n        }\n      }\n    }\n    if (tp !== 3 * T) throw new Error(`\\u4E09\\u89D2\\u5F62\\u306E\\u6570\\u304C\\u5408\\u308F\\u306A\\u3044: ${tp / 3} != ${T}`);\n    {\n      const a = tri[0] * 3, b = tri[1] * 3, c = tri[2] * 3, P = [centerXYZ[a], centerXYZ[a + 1], centerXYZ[a + 2]];\n      const Q = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];\n      if (dot(cross(sub(Q, P), sub(R, P)), P) < 0) for (let t = 0; t < T; t++) {\n        const x = tri[3 * t + 1];\n        tri[3 * t + 1] = tri[3 * t + 2];\n        tri[3 * t + 2] = x;\n      }\n    }\n    const deg = new Uint32Array(V + 1);\n    for (let t = 0; t < 3 * T; t++) deg[tri[t] + 1]++;\n    const offs = new Uint32Array(V + 1);\n    for (let i = 0; i < V; i++) offs[i + 1] = offs[i] + deg[i + 1];\n    const fill = new Uint32Array(V), sV = new Uint32Array(3 * T), sW = new Uint32Array(3 * T), sT = new Uint32Array(3 * T);\n    for (let t = 0; t < T; t++) for (let r = 0; r < 3; r++) {\n      const u = tri[3 * t + r], v = tri[3 * t + (r + 1) % 3], w = tri[3 * t + (r + 2) % 3], s = offs[u] + fill[u]++;\n      sV[s] = v;\n      sW[s] = w;\n      sT[s] = t;\n    }\n    const neighborIds = new Uint32Array(3 * T), cellVertexIds = new Uint32Array(3 * T);\n    for (let u = 0; u < V; u++) {\n      const s0 = offs[u], e0 = offs[u + 1], d = e0 - s0;\n      let cur = s0;\n      for (let k = 0; k < d; k++) {\n        neighborIds[s0 + k] = sV[cur];\n        cellVertexIds[s0 + k] = sT[cur];\n        const want = sW[cur];\n        let nx = -1;\n        for (let s = s0; s < e0; s++) if (sV[s] === want) {\n          nx = s;\n          break;\n        }\n        if (nx < 0) throw new Error(`\\u9802\\u70B9 ${u} \\u306E\\u5468\\u308A\\u304C\\u9589\\u3058\\u3066\\u3044\\u306A\\u3044`);\n        cur = nx;\n      }\n    }\n    const vertexXYZ = new Float32Array(3 * T);\n    for (let t = 0; t < T; t++) {\n      const a = tri[3 * t] * 3, b = tri[3 * t + 1] * 3, c = tri[3 * t + 2] * 3;\n      const x = centerXYZ[a] + centerXYZ[b] + centerXYZ[c], y = centerXYZ[a + 1] + centerXYZ[b + 1] + centerXYZ[c + 1], z = centerXYZ[a + 2] + centerXYZ[b + 2] + centerXYZ[c + 2], l = Math.hypot(x, y, z);\n      vertexXYZ[3 * t] = x / l;\n      vertexXYZ[3 * t + 1] = y / l;\n      vertexXYZ[3 * t + 2] = z / l;\n    }\n    return { meshVersion: MESH_VERSION, n, cellCount: V, triangleCount: T, centerXYZ, neighborOffsets: offs, neighborIds, vertexXYZ, cellVertexOffsets: offs, cellVertexIds };\n  }\n  function greatCircleRad(ax, ay, az, bx, by, bz) {\n    const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;\n    return Math.atan2(Math.hypot(cx, cy, cz), ax * bx + ay * by + az * bz);\n  }\n  function sphericalTriangleArea(ax, ay, az, bx, by, bz, cx, cy, cz) {\n    const triple = ax * (by * cz - bz * cy) + ay * (bz * cx - bx * cz) + az * (bx * cy - by * cx);\n    const den = 1 + (ax * bx + ay * by + az * bz) + (bx * cx + by * cy + bz * cz) + (cx * ax + cy * ay + cz * az);\n    return 2 * Math.atan2(Math.abs(triple), den);\n  }\n  function cellArea(mesh, c) {\n    const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1], cx = mesh.centerXYZ[3 * c], cy = mesh.centerXYZ[3 * c + 1], cz = mesh.centerXYZ[3 * c + 2];\n    let a = 0;\n    for (let k = s; k < e; k++) {\n      const p = mesh.cellVertexIds[k], q = mesh.cellVertexIds[k + 1 < e ? k + 1 : s];\n      a += sphericalTriangleArea(cx, cy, cz, mesh.vertexXYZ[3 * p], mesh.vertexXYZ[3 * p + 1], mesh.vertexXYZ[3 * p + 2], mesh.vertexXYZ[3 * q], mesh.vertexXYZ[3 * q + 1], mesh.vertexXYZ[3 * q + 2]);\n    }\n    return a;\n  }\n  function meshHash(mesh) {\n    let h = 2166136261;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < mesh.centerXYZ.length; i++) mix(Math.round(mesh.centerXYZ[i] * 1e6) | 0);\n    for (let i = 0; i < mesh.neighborIds.length; i++) mix(mesh.neighborIds[i]);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n\n  // js/core/world/spec.js\n  var GENERATOR_VERSION = "6.11.0";\n  var WORLD_SPEC_SCHEMA = 1;\n  var ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });\n  var LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);\n  var DEFAULT_WORLD_SPEC = Object.freeze({\n    schemaVersion: WORLD_SPEC_SCHEMA,\n    generatorVersion: GENERATOR_VERSION,\n    worldSeed: "",\n    planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),\n    resolution: Object.freeze({ targetCells: 25e4 }),\n    landFraction: 0.36,\n    // v6.11.0: 0.3 \u2192 0.36\uFF08\u30D5\u30A3\u30AF\u30B7\u30E7\u30F3\u306E\u5730\u56F3\u306E\u3088\u3046\u306B\u3001\u6D77\u3092\u3084\u3084\u5C11\u306A\u304F\uFF09\u3002\u4E0B\u9650 0.1\u30FB\u4E0A\u9650 0.9 \u306F\u5909\u308F\u3089\u306A\u3044\n    continentCountTarget: 6,\n    islandMode: "normal",\n    // v6.11.0: \u6A19\u6E96\u306F\u5C11\u306A\u3081\u301C\u666E\u901A\uFF08many \u3082\u9078\u3079\u308B\uFF09\n    layout: "uneven",\n    // v6.11.0: \u5927\u9678\u306E\u914D\u7F6E\u30D1\u30BF\u30FC\u30F3\uFF08uneven / cluster / super / split\uFF09\n    plateCount: 14,\n    initialGroups: 12,\n    climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })\n  });\n  var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);\n  function normalizeWorldSpec(input = {}) {\n    const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input) ? input : {};\n    const num = (v, def, lo, hi, name, int = false) => {\n      if (v === void 0) return def;\n      if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {\n        errors.push(`${name} \\u306F ${lo}\\u301C${hi}${int ? " \\u306E\\u6574\\u6570" : ""}\\uFF08\\u53D7\\u3051\\u53D6\\u3063\\u305F\\u5024: ${String(v)}\\uFF09`);\n        return def;\n      }\n      return v;\n    };\n    const spec = {\n      schemaVersion: WORLD_SPEC_SCHEMA,\n      generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,\n      worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),\n      planet: {\n        radiusKm: num(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),\n        displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection\n      },\n      resolution: { targetCells: num(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },\n      landFraction: num(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),\n      continentCountTarget: num(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),\n      islandMode: i.islandMode ?? d.islandMode,\n      layout: i.layout ?? d.layout,\n      plateCount: num(i.plateCount, d.plateCount, 4, 40, "plateCount", true),\n      initialGroups: num(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),\n      climateModel: {\n        fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,\n        lapseRateCPerKm: num(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),\n        windMoistureLengthKm: num(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")\n      }\n    };\n    if (!spec.worldSeed) errors.push("worldSeed \\u304C\\u7A7A\\uFF08\\u30B7\\u30FC\\u30C9\\u3092\\u6307\\u5B9A\\u3057\\u3066\\u304F\\u3060\\u3055\\u3044\\u3002\\u751F\\u6210\\u3059\\u308B\\u5834\\u5408\\u306F makeWorldSeed \\u3092\\u4F7F\\u3046\\uFF09");\n    if (!(spec.islandMode in ISLAND_MODES)) {\n      errors.push(`islandMode \\u306F ${Object.keys(ISLAND_MODES).join("/")} \\u306E\\u3044\\u305A\\u308C\\u304B`);\n      spec.islandMode = d.islandMode;\n    }\n    if (!LAYOUT_KEYS.includes(spec.layout)) {\n      errors.push(`layout \\u306F ${LAYOUT_KEYS.join("/")} \\u306E\\u3044\\u305A\\u308C\\u304B`);\n      spec.layout = d.layout;\n    }\n    if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \\u306F\\u73FE\\u5728 equirectangular \\u306E\\u307F");\n    if (isObj(input) && input.schemaVersion !== void 0 && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} \\u306F\\u672A\\u5BFE\\u5FDC`);\n    return { spec, errors };\n  }\n\n  // js/core/world/noise.js\n  function hashString(str) {\n    let h = 1779033703 ^ str.length;\n    for (let i = 0; i < str.length; i++) {\n      h = Math.imul(h ^ str.charCodeAt(i), 3432918353);\n      h = h << 13 | h >>> 19;\n    }\n    h = Math.imul(h ^ h >>> 16, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return (h ^ h >>> 16) >>> 0;\n  }\n  function makeRng(seedStr, stage = "") {\n    let a = hashString(`${seedStr}::${stage}`);\n    const next = () => {\n      a = a + 1831565813 | 0;\n      let t = Math.imul(a ^ a >>> 15, 1 | a);\n      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;\n      return ((t ^ t >>> 14) >>> 0) / 4294967296;\n    };\n    next.range = (lo, hi) => lo + (hi - lo) * next();\n    next.int = (lo, hi) => Math.floor(next.range(lo, hi + 1));\n    next.unitVec = () => {\n      const z = next.range(-1, 1), t = next.range(0, 2 * Math.PI), r = Math.sqrt(1 - z * z);\n      return [r * Math.cos(t), r * Math.sin(t), z];\n    };\n    return next;\n  }\n  function hash3(seed, x, y, z) {\n    let h = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);\n    h = Math.imul(h ^ h >>> 15, 2246822507);\n    h = Math.imul(h ^ h >>> 13, 3266489909);\n    return ((h ^ h >>> 16) >>> 0) / 4294967296;\n  }\n  var fade = (t) => t * t * (3 - 2 * t);\n  function valueNoise3(seed, x, y, z) {\n    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx = fade(x - xi), fy = fade(y - yi), fz = fade(z - zi);\n    const c000 = hash3(seed, xi, yi, zi), c100 = hash3(seed, xi + 1, yi, zi), c010 = hash3(seed, xi, yi + 1, zi), c110 = hash3(seed, xi + 1, yi + 1, zi);\n    const c001 = hash3(seed, xi, yi, zi + 1), c101 = hash3(seed, xi + 1, yi, zi + 1), c011 = hash3(seed, xi, yi + 1, zi + 1), c111 = hash3(seed, xi + 1, yi + 1, zi + 1);\n    const x00 = c000 + (c100 - c000) * fx, x10 = c010 + (c110 - c010) * fx, x01 = c001 + (c101 - c001) * fx, x11 = c011 + (c111 - c011) * fx;\n    const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;\n    return y0 + (y1 - y0) * fz;\n  }\n  function fbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {\n    let sum = 0, amp = 1, norm2 = 0, f = freq;\n    for (let o = 0; o < octaves; o++) {\n      sum += amp * valueNoise3(seed + o * 101, x * f, y * f, z * f);\n      norm2 += amp;\n      amp *= gain;\n      f *= 2.03;\n    }\n    return sum / norm2;\n  }\n  function makeFbm3(seed, octaves = 4, freq = 1, gain = 0.5) {\n    const O = octaves, kx = new Int32Array(O).fill(2147483647), ky = new Int32Array(O), kz = new Int32Array(O), cv = new Float64Array(O * 8), fs = new Float64Array(O), sd = new Int32Array(O);\n    let f = freq, norm2 = 0, amp = 1;\n    const amps = new Float64Array(O);\n    for (let o = 0; o < O; o++) {\n      fs[o] = f;\n      sd[o] = seed + o * 101;\n      amps[o] = amp;\n      norm2 += amp;\n      amp *= gain;\n      f *= 2.03;\n    }\n    return (x, y, z) => {\n      let sum = 0;\n      for (let o = 0; o < O; o++) {\n        const X = x * fs[o], Y = y * fs[o], Z = z * fs[o], xi = Math.floor(X), yi = Math.floor(Y), zi = Math.floor(Z), b = o * 8;\n        if (xi !== kx[o] || yi !== ky[o] || zi !== kz[o]) {\n          const s0 = sd[o];\n          kx[o] = xi;\n          ky[o] = yi;\n          kz[o] = zi;\n          cv[b] = hash3(s0, xi, yi, zi);\n          cv[b + 1] = hash3(s0, xi + 1, yi, zi);\n          cv[b + 2] = hash3(s0, xi, yi + 1, zi);\n          cv[b + 3] = hash3(s0, xi + 1, yi + 1, zi);\n          cv[b + 4] = hash3(s0, xi, yi, zi + 1);\n          cv[b + 5] = hash3(s0, xi + 1, yi, zi + 1);\n          cv[b + 6] = hash3(s0, xi, yi + 1, zi + 1);\n          cv[b + 7] = hash3(s0, xi + 1, yi + 1, zi + 1);\n        }\n        const fx = fade(X - xi), fy = fade(Y - yi), fz = fade(Z - zi);\n        const x00 = cv[b] + (cv[b + 1] - cv[b]) * fx, x10 = cv[b + 2] + (cv[b + 3] - cv[b + 2]) * fx, x01 = cv[b + 4] + (cv[b + 5] - cv[b + 4]) * fx, x11 = cv[b + 6] + (cv[b + 7] - cv[b + 6]) * fx;\n        const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;\n        sum += amps[o] * (y0 + (y1 - y0) * fz);\n      }\n      return sum / norm2;\n    };\n  }\n\n  // js/core/world/continents.js\n  var LAYOUTS = Object.freeze({ uneven: "\\u4E0D\\u5747\\u7B49\\u5206\\u6563\\u578B", cluster: "\\u7FA4\\u5CF6\\u30FB\\u30AF\\u30E9\\u30B9\\u30BF\\u30FC\\u578B", super: "\\u8D85\\u5927\\u9678\\u578B", split: "\\u5206\\u88C2\\u5927\\u9678\\u578B" });\n  var LAYOUT_HINTS = Object.freeze({\n    uneven: "\\u5927\\u9678\\u3054\\u3068\\u306B\\u5927\\u304D\\u3055\\u3068\\u8DDD\\u96E2\\u304C\\u7570\\u306A\\u308B\\uFF08\\u6A19\\u6E96\\uFF09",\n    cluster: "\\u8FD1\\u63A5\\u3059\\u308B\\u5927\\u9678\\u7FA4\\u3068\\u3001\\u5E83\\u3044\\u6D77\\u6D0B",\n    super: "\\u4E00\\u3064\\u306E\\u5DE8\\u5927\\u306A\\u9678\\u584A\\u3068\\u3001\\u8907\\u6570\\u306E\\u5C0F\\u5927\\u9678",\n    split: "\\u5185\\u6D77\\u30FB\\u6D77\\u5CE1\\u30FB\\u534A\\u5CF6\\u304C\\u591A\\u3044\\u3001\\u8907\\u96D1\\u306A\\u5730\\u5F62"\n  });\n  var D2R = Math.PI / 180;\n  var TAU = 2 * Math.PI;\n  var clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;\n  var smooth01 = (t) => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);\n  var dot2 = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\n  var cross2 = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];\n  var unit = (v) => {\n    const l = Math.hypot(v[0], v[1], v[2]) || 1;\n    return [v[0] / l, v[1] / l, v[2] / l];\n  };\n  var angle = (a, b) => Math.acos(clamp(dot2(a, b), -1, 1));\n  var rotZ = (v, a) => {\n    const c = Math.cos(a), s = Math.sin(a);\n    return [v[0] * c - v[1] * s, v[0] * s + v[1] * c, v[2]];\n  };\n  var fromLatLon = (lat, lon) => [Math.cos(lat) * Math.cos(lon), Math.cos(lat) * Math.sin(lon), Math.sin(lat)];\n  var tangentFrame = (v) => {\n    const a = Math.abs(v[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0], t = unit(cross2(a, v));\n    return [t, cross2(v, t)];\n  };\n  var walk = (v, dirAngle, distance) => {\n    const [t, b] = tangentFrame(v), d = [t[0] * Math.cos(dirAngle) + b[0] * Math.sin(dirAngle), t[1] * Math.cos(dirAngle) + b[1] * Math.sin(dirAngle), t[2] * Math.cos(dirAngle) + b[2] * Math.sin(dirAngle)];\n    const cd = Math.cos(distance), sd = Math.sin(distance);\n    return unit([v[0] * cd + d[0] * sd, v[1] * cd + d[1] * sd, v[2] * cd + d[2] * sd]);\n  };\n  var latOf = (v) => Math.asin(clamp(v[2], -1, 1));\n  var randomPoint = (rc, latLimDeg) => {\n    const s = Math.sin(latLimDeg * D2R);\n    const z = rc.range(-s, s), t = rc.range(0, TAU), r = Math.sqrt(1 - z * z);\n    return [r * Math.cos(t), r * Math.sin(t), z];\n  };\n  function makeBlob(v, R, theta, s, ragA = 0.5) {\n    const [t0, b0] = tangentFrame(v), c = Math.cos(theta), sn = Math.sin(theta);\n    const t = [t0[0] * c + b0[0] * sn, t0[1] * c + b0[1] * sn, t0[2] * c + b0[2] * sn], b = cross2(v, t);\n    const reach = R * (1 + ragA * 0.6) * Math.max(1, s) * 1.02;\n    return { v, t, b, R, s, ragA, vx: v[0], vy: v[1], vz: v[2], tx: t[0], ty: t[1], tz: t[2], bx: b[0], by: b[1], bz: b[2], cosCut: Math.cos(Math.min(Math.PI, reach)) };\n  }\n  function blobValue(l, x, y, z, rag) {\n    const dp = x * l.vx + y * l.vy + z * l.vz;\n    if (dp < l.cosCut) return 0;\n    const d = Math.acos(dp > 1 ? 1 : dp);\n    let deff = d;\n    if (l.s !== 1) {\n      const pu = x * l.tx + y * l.ty + z * l.tz, pw = x * l.bx + y * l.by + z * l.bz, h = Math.hypot(pu, pw);\n      if (h > 1e-9) {\n        const cu = pu / h, sw = pw / h;\n        deff = d * Math.hypot(cu / l.s, sw * l.s);\n      }\n    }\n    return smooth01((1 - deff / (l.R * (1 + l.ragA * rag))) * 2.2);\n  }\n  var polarDamp = (z) => {\n    const a = Math.abs(z);\n    if (a < 0.848) return 1;\n    if (a < 0.9397) return 1 - 0.85 * smooth01((a - 0.848) / 0.0917);\n    if (a < 0.9703) return 0.15 - 0.13 * smooth01((a - 0.9397) / 0.0306);\n    return Math.max(0, 0.02 - 0.02 * smooth01((a - 0.9703) / 0.02));\n  };\n  function planContinents(spec, islandCount, salt = 0) {\n    const seed = salt ? `${spec.worldSeed}#plan${salt}` : spec.worldSeed, K = spec.continentCountTarget, lf = spec.landFraction, layout = spec.layout in LAYOUTS ? spec.layout : "uneven";\n    const rc = makeRng(seed, "continents"), rs = makeRng(seed, "continent-shape"), ri = makeRng(seed, "islands");\n    const raw = [];\n    for (let i = 0; i < K; i++) raw.push(layout === "cluster" ? Math.exp(rc.range(-0.6, 0.5)) : layout === "split" ? Math.exp(rc.range(-0.5, 0.5)) : Math.exp(rc.range(-0.95, 0.75)));\n    raw.sort((a, b) => b - a);\n    if (layout === "super" && K > 1) {\n      let rest = 0;\n      for (let i = 1; i < K; i++) rest += raw[i];\n      raw[0] = rest * 1.15;\n    } else if (layout === "super") raw[0] = 1;\n    const sum = raw.reduce((s, x) => s + x, 0), share = raw.map((x) => x / sum);\n    const radius = share.map((s) => clamp(Math.acos(clamp(1 - 2 * lf * s * 1.1, -1, 1)), 4 * D2R, 80 * D2R));\n    const centers = [];\n    const sepOk = (p, j, f) => centers.every((c, i) => angle(p, c) >= (radius[i] + radius[j]) * f);\n    const place = (j, latLim, nearProb, f0) => {\n      for (let tries = 0; tries < 900; tries++) {\n        const f = Math.max(0.62, f0 - 0.4 * (tries / 900));\n        let p;\n        if (centers.length && rc() < nearProb) {\n          const q = rc.int(0, centers.length - 1);\n          p = walk(centers[q], rc.range(0, TAU), (radius[q] + radius[j]) * rc.range(f + 0.05, f + 0.55));\n        } else p = randomPoint(rc, latLim);\n        if (Math.abs(latOf(p)) > latLim * D2R) continue;\n        if (sepOk(p, j, f)) return p;\n      }\n      return randomPoint(rc, latLim);\n    };\n    if (layout === "cluster") {\n      const nC = K <= 3 ? 1 : K <= 5 ? 2 : 3, cc = [];\n      let bestSep = -1, bestSet = null;\n      for (let trial = 0; trial < 800; trial++) {\n        const pts = [];\n        for (let i = 0; i < nC; i++) pts.push(randomPoint(rc, 38));\n        let sep = 9;\n        for (let i = 0; i < nC; i++) for (let j = i + 1; j < nC; j++) sep = Math.min(sep, angle(pts[i], pts[j]));\n        if (sep > bestSep) {\n          bestSep = sep;\n          bestSet = pts;\n        }\n      }\n      for (const p of bestSet) cc.push(p);\n      const groupOf = [];\n      for (let j = 0; j < K; j++) groupOf.push(j % nC);\n      for (let j = 0; j < K; j++) {\n        const g = groupOf[j], mates = [];\n        for (let i = 0; i < j; i++) if (groupOf[i] === g) mates.push(i);\n        if (!mates.length) {\n          centers.push(cc[g]);\n          continue;\n        }\n        let p = null;\n        for (let tries = 0; tries < 600 && !p; tries++) {\n          const q = mates[rc.int(0, mates.length - 1)], f = Math.max(1.2, 1.55 - 0.3 * (tries / 600));\n          const c = walk(centers[q], rc.range(0, TAU), (radius[q] + radius[j]) * rc.range(f, f + 0.3));\n          if (Math.abs(latOf(c)) < 55 * D2R && sepOk(c, j, 1.2)) p = c;\n        }\n        centers.push(p ?? place(j, 55, 0.5, 0.9));\n      }\n    } else if (layout === "super") {\n      centers.push(randomPoint(rc, 28));\n      for (let j = 1; j < K; j++) {\n        let p = null;\n        for (let tries = 0; tries < 900 && !p; tries++) {\n          const c = randomPoint(rc, 55), f = Math.max(0.7, 1.3 - 0.6 * (tries / 900));\n          if (angle(c, centers[0]) >= (radius[0] + radius[j]) * f && sepOk(c, j, 0.95)) p = c;\n        }\n        centers.push(p ?? randomPoint(rc, 55));\n      }\n    } else if (layout === "split") {\n      centers.push(randomPoint(rc, 35));\n      for (let j = 1; j < K; j++) centers.push(place(j, 48, 0.92, 1.2));\n    } else {\n      for (let j = 0; j < K; j++) centers.push(place(j, 52, 0.33, 1));\n    }\n    const continents = [];\n    for (let j = 0; j < K; j++) {\n      const v = centers[j], r = radius[j], big = share[j] >= 0.7 / K, blobs = [], seas = [], plateSeeds = [v];\n      const nLobes = layout === "split" ? rs.int(3, 5) : big ? rs.int(2, 4) : rs.int(1, 2);\n      blobs.push(makeBlob(v, r * rs.range(0.72, 0.95), rs.range(0, TAU), rs.range(1, 1.7)));\n      for (let i = 1; i < nLobes; i++) {\n        const dist = r * rs.range(0.4, 0.95), c = walk(v, rs.range(0, TAU), dist);\n        blobs.push(makeBlob(c, r * rs.range(0.38, 0.7), rs.range(0, TAU), rs.range(1, 2.5)));\n        if (big && i <= 2 && share[j] > 0.2) plateSeeds.push(c);\n      }\n      const pSea = layout === "super" && j === 0 ? 1 : layout === "split" ? 0.9 : layout === "uneven" ? 0.55 : 0.45;\n      const nSea = rs() < pSea && big ? layout === "super" && j === 0 ? rs.int(2, 3) : layout === "split" ? rs.int(1, 2) : 1 : 0;\n      for (let i = 0; i < nSea; i++) seas.push(makeBlob(walk(v, rs.range(0, TAU), r * rs.range(0.1, 0.36)), r * rs.range(0.13, 0.24), rs.range(0, TAU), rs.range(1, 2), 0.25));\n      const nGulf = big ? layout === "split" ? rs.int(2, 4) : rs.int(0, 2) : layout === "split" ? rs.int(0, 1) : 0;\n      for (let i = 0; i < nGulf; i++) {\n        const a = rs.range(0, TAU), c = walk(v, a, r * rs.range(0.66, 0.95));\n        seas.push(makeBlob(c, r * rs.range(0.1, 0.17), a + Math.PI / 2 * 0 + rs.range(-0.4, 0.4), rs.range(2.6, 3.6), 0.2));\n      }\n      continents.push({ v, r, share: share[j], blobs, seas, plateSeeds });\n    }\n    const islands = [];\n    for (let i = 0; i < islandCount; i++) {\n      const kind = ri(), w = ri.range(0.5, 0.95);\n      let v, rr = ri.range(1.2, 5.2) * D2R, polar = false;\n      if (kind < 0.55) {\n        let q = 0, pick = ri();\n        for (let k = 0; k < K; k++) {\n          pick -= share[k];\n          if (pick <= 0) {\n            q = k;\n            break;\n          }\n        }\n        v = walk(centers[q], ri.range(0, TAU), radius[q] * ri.range(1, 1.75));\n        if (Math.abs(latOf(v)) > 72 * D2R) v = randomPoint(ri, 60);\n      } else if (kind < 0.82) {\n        v = randomPoint(ri, 62);\n        for (let t = 0; t < 40 && centers.some((c, k) => angle(v, c) < radius[k] * 1.15); t++) v = randomPoint(ri, 62);\n      } else {\n        const lat = ri.range(62, 82) * D2R * (ri() < 0.5 ? -1 : 1);\n        v = fromLatLon(lat, ri.range(-Math.PI, Math.PI));\n        polar = true;\n        rr = ri.range(1.8, 5.5) * D2R;\n      }\n      islands.push({ v, r: rr, w, polar, cosCut: Math.cos(rr * 1.5) - 1e-9 });\n    }\n    return { layout, continents, islands, share, radius };\n  }\n  function makeFields(plan) {\n    const B = [], S = [];\n    for (const c of plan.continents) {\n      for (const b of c.blobs) B.push(b);\n      for (const s of c.seas) S.push(s);\n    }\n    const I = plan.islands;\n    const fieldAt = (x, y, z, rag) => {\n      let f = 0;\n      for (let i = 0; i < B.length; i++) {\n        const t = blobValue(B[i], x, y, z, rag);\n        if (t > f) f = t;\n      }\n      if (f > 0) {\n        let carve = 0;\n        for (let i = 0; i < S.length; i++) {\n          const t = blobValue(S[i], x, y, z, rag);\n          if (t > carve) carve = t;\n        }\n        f *= 1 - Math.min(1, carve * 1.25);\n        f *= polarDamp(z);\n      }\n      return f;\n    };\n    const islandAt = (x, y, z) => {\n      let f = 0;\n      for (let i = 0; i < I.length; i++) {\n        const o = I[i], dp = x * o.v[0] + y * o.v[1] + z * o.v[2];\n        if (dp < o.cosCut) continue;\n        const d = Math.acos(dp > 1 ? 1 : dp);\n        if (d < o.r * 1.5) {\n          const t = clamp(1 - d / (o.r * 1.5), 0, 1);\n          f = Math.max(f, o.w * t * t * (3 - 2 * t));\n        }\n      }\n      return f;\n    };\n    return { fieldAt, islandAt };\n  }\n  function chooseSeam(fieldAt, samples) {\n    let bestPsi = 0, bestCost = Infinity;\n    for (let k = 0; k < 120; k++) {\n      const psi = k / 120 * TAU;\n      let cost = 0;\n      for (const s of samples) {\n        const q = rotZ(s.p, psi), f = fieldAt(q[0], q[1], q[2], s.rag);\n        if (f > 0.03) cost += s.weight * (0.4 + f);\n      }\n      if (cost < bestCost - 1e-9) {\n        bestCost = cost;\n        bestPsi = psi;\n      }\n    }\n    return { psi: bestPsi, cost: bestCost };\n  }\n  function seamSampleSpecs() {\n    const out = [];\n    for (let lat = -72; lat <= 72; lat += 3) for (const [dl, w] of [[-9, 1], [-4.5, 2], [0, 3], [4.5, 2], [9, 1]]) out.push({ lat: lat * D2R, lon: Math.PI + dl * D2R, weight: w });\n    return out;\n  }\n\n  // js/core/world/worldgen.js\n  var LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });\n  var BIOMES = Object.freeze({ OCEAN: 0, ICE: 1, TUNDRA: 2, TAIGA: 3, TEMPERATE_FOREST: 4, GRASSLAND: 5, HOT_DESERT: 6, COLD_DESERT: 7, SAVANNA: 8, TROPICAL_SEASONAL: 9, RAINFOREST: 10, ALPINE: 11, WETLAND: 12, LAKE: 13 });\n  var BIOME_NAMES = Object.freeze(["\\u6D77", "\\u6C37\\u96EA", "\\u30C4\\u30F3\\u30C9\\u30E9", "\\u30BF\\u30A4\\u30AC", "\\u6E29\\u5E2F\\u6797", "\\u8349\\u539F", "\\u71B1\\u5E2F\\u7802\\u6F20", "\\u5BD2\\u51B7\\u7802\\u6F20", "\\u30B5\\u30D0\\u30F3\\u30CA", "\\u71B1\\u5E2F\\u5B63\\u7BC0\\u6797", "\\u71B1\\u5E2F\\u96E8\\u6797", "\\u9AD8\\u5C71", "\\u6E7F\\u5730", "\\u6E56"]);\n  var SOILS = Object.freeze({ NONE: 0, ROCK: 1, SAND: 2, LOAM: 3, CLAY: 4, VOLCANIC: 5, PERMAFROST: 6, ALLUVIAL: 7, PODZOL: 8, BLACK_EARTH: 9 });\n  var RES = Object.freeze({ IRON: 1, COPPER: 2, TIN: 4, GOLD: 8, COAL: 16, SALT: 32, TIMBER: 64, FISH: 128, STONE: 256, CLAY: 512, GEMS: 1024 });\n  var RES_NAMES = Object.freeze({ 1: "\\u9244", 2: "\\u9285", 4: "\\u932B", 8: "\\u91D1", 16: "\\u77F3\\u70AD", 32: "\\u5869", 64: "\\u6728\\u6750", 128: "\\u6F01\\u5834", 256: "\\u77F3\\u6750", 512: "\\u7C98\\u571F", 1024: "\\u5B9D\\u77F3" });\n  var clamp2 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;\n  var smooth = (t) => {\n    t = clamp2(t, 0, 1);\n    return t * t * (3 - 2 * t);\n  };\n  var D2R2 = Math.PI / 180;\n  var MinHeap = class {\n    constructor(cap) {\n      this.k = new Float64Array(cap);\n      this.v = new Int32Array(cap);\n      this.n = 0;\n    }\n    push(key, val) {\n      let i = this.n++;\n      const k = this.k, v = this.v;\n      while (i > 0) {\n        const p = i - 1 >> 1;\n        if (k[p] <= key) break;\n        k[i] = k[p];\n        v[i] = v[p];\n        i = p;\n      }\n      k[i] = key;\n      v[i] = val;\n    }\n    pop() {\n      const k = this.k, v = this.v, top = v[0], key = k[--this.n], val = v[this.n];\n      let i = 0;\n      const n = this.n;\n      while (true) {\n        let c = 2 * i + 1;\n        if (c >= n) break;\n        if (c + 1 < n && k[c + 1] < k[c]) c++;\n        if (k[c] >= key) break;\n        k[i] = k[c];\n        v[i] = v[c];\n        i = c;\n      }\n      k[i] = key;\n      v[i] = val;\n      return top;\n    }\n  };\n  var coarseCache = null;\n  var coarseMesh = () => coarseCache ?? (coarseCache = buildSphereMesh(frequencyForCells(2400)));\n  var Cancelled = class extends Error {\n  };\n  var makeStager = (onProgress, signal, timings) => (name, label, fn) => {\n    if (signal?.aborted) throw new Cancelled("\\u30AD\\u30E3\\u30F3\\u30BB\\u30EB\\u3055\\u308C\\u307E\\u3057\\u305F");\n    onProgress?.({ stage: name, label, fraction: 0 });\n    const t = performance.now(), r = fn();\n    timings[name] = Math.round(performance.now() - t);\n    onProgress?.({ stage: name, label, fraction: 1, ms: timings[name] });\n    return r;\n  };\n  function generateWorld(specInput, options = {}) {\n    const { spec, errors } = normalizeWorldSpec(specInput);\n    if (errors.length) throw new Error("WorldSpec \\u304C\\u4E0D\\u6B63: " + errors.join(" / "));\n    const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();\n    const n = frequencyForCells(spec.resolution.targetCells);\n    const mesh = stage("G1_mesh", "\\u7403\\u9762\\u30E1\\u30C3\\u30B7\\u30E5", () => buildSphereMesh(n));\n    const V = mesh.cellCount, X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = spec.planet.radiusKm;\n    const lat = new Float32Array(V), lon = new Float32Array(V), areaKm2 = new Float32Array(V);\n    stage("G1_derive", "\\u7DEF\\u5EA6\\u7D4C\\u5EA6\\u30FB\\u9762\\u7A4D", () => {\n      for (let c = 0; c < V; c++) {\n        lat[c] = Math.asin(clamp2(X[3 * c + 2], -1, 1));\n        lon[c] = Math.atan2(X[3 * c + 1], X[3 * c]);\n        areaKm2[c] = cellArea(mesh, c) * R * R;\n      }\n    });\n    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), spacingRad = spacingKm / R;\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    const nSeed = (name) => hashString(`${seed}::noise::${name}`);\n    const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);\n    const volcanic = new Float32Array(V);\n    let seamInfo = { psi: 0, cost: 0 };\n    const X3 = (c) => X[3 * c], Y3 = (c) => X[3 * c + 1];\n    const modeLevel = spec.islandMode === "many" ? 2 : spec.islandMode === "normal" ? 1 : 0;\n    stage("G2_plates", "\\u30D7\\u30EC\\u30FC\\u30C8\\u30FB\\u5927\\u9678\\u306E\\u6982\\u5F62", () => {\n      const warpSeed = [nSeed("warpx"), nSeed("warpy"), nSeed("warpz")];\n      const wx = new Float32Array(V), wy = new Float32Array(V), wz = new Float32Array(V);\n      const wlo = warpSeed.map((sd) => makeFbm3(sd, 3, 1.5)), whi = warpSeed.map((sd) => makeFbm3(sd + 7, 3, 5.5));\n      const warpPt = (x, y, z) => {\n        const ax = (wlo[0](x, y, z) - 0.5) * 0.32 + (whi[0](x, y, z) - 0.5) * 0.3, ay = (wlo[1](x, y, z) - 0.5) * 0.32 + (whi[1](x, y, z) - 0.5) * 0.3, az = (wlo[2](x, y, z) - 0.5) * 0.32 + (whi[2](x, y, z) - 0.5) * 0.3;\n        const px = x + ax, py = y + ay, pz = z + az, l = Math.hypot(px, py, pz);\n        return [px / l, py / l, pz / l];\n      };\n      for (let c = 0; c < V; c++) {\n        const w = warpPt(X[3 * c], X[3 * c + 1], X[3 * c + 2]);\n        wx[c] = w[0];\n        wy[c] = w[1];\n        wz[c] = w[2];\n      }\n      const ragF = makeFbm3(nSeed("coast"), 3, 2.2), ragAt = (x, y, z) => (ragF(x, y, z) - 0.5) * 2;\n      const samples = seamSampleSpecs().map((s) => {\n        const p0 = [Math.cos(s.lat) * Math.cos(s.lon), Math.cos(s.lat) * Math.sin(s.lon), Math.sin(s.lat)], w = warpPt(p0[0], p0[1], p0[2]);\n        return { p: w, rag: ragAt(w[0], w[1], w[2]), weight: s.weight };\n      });\n      const coarse = coarseMesh(), CV = coarse.cellCount, CX = coarse.centerXYZ, cw = new Float32Array(3 * CV), crag = new Float32Array(CV);\n      for (let c = 0; c < CV; c++) {\n        const w = warpPt(CX[3 * c], CX[3 * c + 1], CX[3 * c + 2]);\n        cw[3 * c] = w[0];\n        cw[3 * c + 1] = w[1];\n        cw[3 * c + 2] = w[2];\n        crag[c] = ragAt(w[0], w[1], w[2]);\n      }\n      const judge = (pl, si) => {\n        const { fieldAt: fieldAt2 } = makeFields(pl), ca = Math.cos(si.psi), sa = Math.sin(si.psi), raw = new Float32Array(CV);\n        for (let c = 0; c < CV; c++) raw[c] = fieldAt2(cw[3 * c] * ca - cw[3 * c + 1] * sa, cw[3 * c] * sa + cw[3 * c + 1] * ca, cw[3 * c + 2], crag[c]);\n        const sorted = Float32Array.from(raw).sort(), lvl = sorted[Math.min(CV - 1, Math.floor(CV * (1 - spec.landFraction)))], isS = new Uint8Array(CV);\n        for (let c = 0; c < CV; c++) isS[c] = raw[c] > lvl ? 0 : 1;\n        const { sizes } = landmasses(CV, coarse.neighborOffsets, coarse.neighborIds, isS), total = sizes.reduce((a, b) => a + b, 0) || 1, big = sizes.filter((n2) => n2 >= total * 0.03).sort((a, b) => b - a);\n        const K = spec.continentCountTarget, lo = spec.layout === "uneven" ? Math.max(1, K - 2) : spec.layout === "super" ? Math.max(1, K - 3) : Math.max(1, Math.ceil(K / 2)), maxShare = spec.layout === "super" ? 0.72 : K === 1 ? 1 : 0.5;\n        let bad = 0;\n        if (big.length < lo) bad += (lo - big.length) * 2;\n        if (big.length > K + 2) bad += big.length - K - 2;\n        if (big[0] / total > maxShare) bad += (big[0] / total - maxShare) * 10;\n        return bad + si.cost * 0.02;\n      };\n      let plan = null, bestBad = Infinity, bestSeam = null;\n      for (let salt = 0; salt < 14 && bestBad > 0.2; salt++) {\n        const pl = planContinents(spec, ISLAND_MODES[spec.islandMode], salt), si = chooseSeam(makeFields(pl).fieldAt, samples), bad = judge(pl, si);\n        if (bad < bestBad) {\n          bestBad = bad;\n          plan = pl;\n          bestSeam = si;\n        }\n      }\n      seamInfo = bestSeam;\n      const psi = seamInfo.psi;\n      plan.islands = plan.islands.filter((o) => {\n        const a = rotZ(o.v, -psi), lon2 = Math.atan2(a[1], a[0]);\n        return Math.abs(Math.PI - Math.abs(lon2)) > o.r * 1.6 + 5 * D2R2;\n      });\n      const { fieldAt, islandAt } = makeFields(plan);\n      const rp = makeRng(seed, "plates"), P = spec.plateCount, seeds = [], omega = [];\n      const contSeeds = [];\n      for (const ct of plan.continents) for (const v of ct.plateSeeds) contSeeds.push(rotZ(v, -psi));\n      const nCont = Math.min(contSeeds.length, Math.max(1, P - 3)), isContPlate = new Uint8Array(P);\n      for (let p = 0; p < P; p++) {\n        const rnd = rp.unitVec();\n        seeds.push(p < nCont ? contSeeds[p] : rnd);\n        if (p < nCont) isContPlate[p] = 1;\n        const w = rp.unitVec(), sp = rp.range(0.4, 1.6);\n        omega.push([w[0] * sp, w[1] * sp, w[2] * sp]);\n      }\n      for (let c = 0; c < V; c++) {\n        let best = -2, bp = 0;\n        for (let p = 0; p < P; p++) {\n          const d = wx[c] * seeds[p][0] + wy[c] * seeds[p][1] + wz[c] * seeds[p][2];\n          if (d > best) {\n            best = d;\n            bp = p;\n          }\n        }\n        plate[c] = bp;\n      }\n      const vel = (p, c) => {\n        const w = omega[p], x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2];\n        return [w[1] * z - w[2] * y, w[2] * x - w[0] * z, w[0] * y - w[1] * x];\n      };\n      const srcStrength = new Float32Array(V), isSrc = new Uint8Array(V), srcCrust = new Float32Array(V);\n      for (let c = 0; c < V; c++) {\n        let best = 0, bestAbs = 0, crust = 0.55;\n        const vc = vel(plate[c], c);\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (plate[j] === plate[c]) continue;\n          const vj = vel(plate[j], c);\n          let dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2];\n          const dl = Math.hypot(dx, dy, dz) || 1;\n          dx /= dl;\n          dy /= dl;\n          dz /= dl;\n          const conv = (vc[0] - vj[0]) * dx + (vc[1] - vj[1]) * dy + (vc[2] - vj[2]) * dz;\n          if (Math.abs(conv) > bestAbs) {\n            bestAbs = Math.abs(conv);\n            best = conv;\n            const a = isContPlate[plate[c]], b = isContPlate[plate[j]];\n            crust = a && b ? 1.15 : a || b ? 0.95 : 0.55;\n          }\n        }\n        if (bestAbs > 0) {\n          isSrc[c] = 1;\n          srcStrength[c] = best;\n          srcCrust[c] = crust;\n        }\n      }\n      const widthCells = Math.max(2, 5 * D2R2 / spacingRad), maxD = Math.ceil(widthCells * 3);\n      const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      for (let c = 0; c < V; c++) if (isSrc[c]) {\n        dist[c] = 0;\n        from[c] = c;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        if (dist[c] >= maxD) continue;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (dist[j] < 0) {\n            dist[j] = dist[c] + 1;\n            from[j] = from[c];\n            q[qt++] = j;\n          }\n        }\n      }\n      const ridgeF = makeFbm3(nSeed("ridge"), 3, 1.4), arcF = makeFbm3(nSeed("arc"), 3, 6);\n      for (let c = 0; c < V; c++) {\n        if (dist[c] < 0) continue;\n        const s = srcStrength[from[c]], f = Math.exp(-((dist[c] / widthCells) ** 2));\n        const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3);\n        if (s > 0) {\n          mountain[c] = clamp2(s / 1.2, 0, 1.3) * f * mod * srcCrust[from[c]];\n          volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;\n        } else rift[c] = clamp2(-s / 1.2, 0, 1) * f;\n      }\n      for (let c = 0; c < V; c++) {\n        const ca = Math.cos(psi), sa = Math.sin(psi), x = wx[c] * ca - wy[c] * sa, y = wx[c] * sa + wy[c] * ca, z = wz[c];\n        const g = fieldAt(x, y, z, ragAt(wx[c], wy[c], wz[c])), i = islandAt(x, y, z);\n        continent[c] = Math.max(g, i);\n      }\n      for (let c = 0; c < V; c++) {\n        const dseam = Math.PI - Math.abs(Math.atan2(Y3(c), X3(c)));\n        if (dseam < 12 * D2R2) continent[c] *= smooth((dseam - 4 * D2R2) / (8 * D2R2));\n      }\n      if (modeLevel > 1) for (let c = 0; c < V; c++) {\n        if (continent[c] > 0.2 || !(mountain[c] > 0.62) || isContPlate[plate[c]]) continue;\n        const n2 = arcF(X[3 * c] * 5, X[3 * c + 1] * 5, X[3 * c + 2] * 5), th = 0.64;\n        if (n2 > th) {\n          continent[c] = Math.max(continent[c], 0.5 + 0.35 * (n2 - th) / 0.2);\n          volcanic[c] = Math.max(volcanic[c], 0.6);\n        }\n      }\n      const rh = makeRng(seed, "hotspots");\n      for (let h = 0; h < [1, 2, 5][modeLevel]; h++) {\n        const start = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R2;\n        const dot3 = start[0] * dirv[0] + start[1] * dirv[1] + start[2] * dirv[2];\n        let t = [dirv[0] - dot3 * start[0], dirv[1] - dot3 * start[1], dirv[2] - dot3 * start[2]];\n        const tl = Math.hypot(...t) || 1;\n        t = t.map((x) => x / tl);\n        for (let i = 0; i < count; i++) {\n          const a = i * step, p = [start[0] * Math.cos(a) + t[0] * Math.sin(a), start[1] * Math.cos(a) + t[1] * Math.sin(a), start[2] * Math.cos(a) + t[2] * Math.sin(a)], rad = rh.range(0.7, 1.6) * D2R2 * (1 - i / (count * 1.6)), amp = 0.9 * (1 - i / (count * 1.4));\n          if (Math.abs(Math.PI - Math.abs(Math.atan2(p[1], p[0]))) < 5 * D2R2 || Math.abs(p[2]) > 0.94) continue;\n          for (let c = 0; c < V; c++) {\n            const d = Math.acos(clamp2(X[3 * c] * p[0] + X[3 * c + 1] * p[1] + X[3 * c + 2] * p[2], -1, 1));\n            if (d < rad * 2) {\n              const g = Math.exp(-((d / rad) ** 2));\n              continent[c] = Math.max(continent[c], amp * g * 0.9);\n              volcanic[c] = Math.max(volcanic[c], g);\n            }\n          }\n        }\n      }\n    });\n    const elevation = new Float32Array(V);\n    let seaLevelRaw = 0;\n    stage("G3_elevation", "\\u6A19\\u9AD8\\u30FB\\u6D77\\u5CB8\\u30FB\\u5CF6", () => {\n      const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);\n      for (let c = 0; c < V; c++) {\n        const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];\n        const land = smooth((cf - 0.25) / 0.45), nz = 0.2 + 0.8 * smooth(cf / 0.3);\n        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz + mountain[c] * (0.03 + 0.97 * land) * 1.5 * (0.15 + 0.85 * smooth(cf / 0.3)) - rift[c] * 0.22;\n        {\n          const pl = (Math.abs(lat[c]) - 72 * D2R2) / (12 * D2R2);\n          if (pl > 0) raw[c] -= 0.22 * smooth(pl);\n        }\n        {\n          const dseam = Math.PI - Math.abs(Math.atan2(y, x));\n          if (dseam < 12 * D2R2) {\n            const m = smooth((dseam - 4 * D2R2) / (8 * D2R2));\n            raw[c] = raw[c] * m - 0.25 * (1 - m);\n          }\n        }\n      }\n      const sorted = Float32Array.from(raw).sort();\n      seaLevelRaw = sorted[Math.min(V - 1, Math.max(0, Math.floor(V * (1 - spec.landFraction))))];\n      const hi = sorted[Math.min(V - 1, Math.floor(V * 0.998))], lo = sorted[0];\n      for (let c = 0; c < V; c++) {\n        const e = raw[c] - seaLevelRaw;\n        elevation[c] = e >= 0 ? Math.pow(Math.min(1.35, e / Math.max(1e-6, hi - seaLevelRaw)), 1.2) * 6500 : e / Math.max(1e-6, seaLevelRaw - lo) * 5500;\n      }\n    });\n    const isSea = new Uint8Array(V);\n    for (let c = 0; c < V; c++) isSea[c] = elevation[c] <= 0 ? 1 : 0;\n    const coastDist = new Uint16Array(V);\n    stage("G3_coast", "\\u6D77\\u5CB8\\u304B\\u3089\\u306E\\u8DDD\\u96E2", () => {\n      const q = new Int32Array(V);\n      let qh = 0, qt = 0;\n      const seen = new Uint8Array(V);\n      for (let c = 0; c < V; c++) if (isSea[c]) {\n        seen[c] = 1;\n        q[qt++] = c;\n      }\n      while (qh < qt) {\n        const c = q[qh++];\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!seen[j]) {\n            seen[j] = 1;\n            coastDist[j] = Math.min(65535, coastDist[c] + 1);\n            q[qt++] = j;\n          }\n        }\n      }\n    });\n    const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);\n    const cx = { mesh, lat, lon, elevation, isSea, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };\n    stage("G4_climate", "\\u6C17\\u5019", () => {\n      for (let c = 0; c < V; c++) temp[c] = tempAt(lat[c], elevation[c], cx.lapse);\n      cx.up = new Int32Array(V);\n      for (let c = 0; c < V; c++) cx.up[c] = upwindOf(mesh, lat, lon, c);\n      for (let c = 0; c < V; c++) moisture[c] = isSea[c] ? 1 : 0.5;\n      const passes = Math.min(200, Math.ceil(4e3 / spacingKm) + 4);\n      for (let it = 0; it < passes; it++) for (let c = 0; c < V; c++) {\n        if (!isSea[c]) moisture[c] = moistureStep(cx, c);\n      }\n      for (let c = 0; c < V; c++) precip[c] = precipAt(cx, c);\n    });\n    stage("G4_biome", "\\u30D0\\u30A4\\u30AA\\u30FC\\u30E0", () => {\n      for (let c = 0; c < V; c++) biome[c] = isSea[c] ? BIOMES.OCEAN : biomeOf(temp[c], precip[c], elevation[c]);\n    });\n    const parent = new Int32Array(V).fill(-1), filled = new Float32Array(V), flow = new Float32Array(V), basin = new Int32Array(V).fill(-1), landWater = new Uint8Array(V);\n    let lakeCount = 0;\n    const hyd = { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome };\n    stage("G5_rivers", "\\u6C34\\u7CFB", () => {\n      lakeCount = computeHydrology(hyd, null).lakeCount;\n    });\n    let riverThreshold = 0;\n    const river = new Uint8Array(V);\n    stage("G5_riverset", "\\u6CB3\\u5DDD\\u306E\\u9078\\u5B9A", () => {\n      const f = [];\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND) f.push(flow[c]);\n      f.sort((a, b) => a - b);\n      riverThreshold = f.length ? f[Math.floor(f.length * 0.93)] : 0;\n      for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && flow[c] >= riverThreshold && flow[c] > 0) river[c] = 1;\n    });\n    const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);\n    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };\n    stage("G6_soil", "\\u571F\\u58CC\\u30FB\\u80A5\\u6C83\\u5EA6\\u30FB\\u8CC7\\u6E90", () => {\n      for (let c = 0; c < V; c++) landUseAt(lu, c);\n    });\n    const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };\n    const populations = stage("G7_groups", "\\u521D\\u671F\\u4EBA\\u53E3\\u96C6\\u56E3", () => placeInitialGroups(gctx, spec, 0));\n    const stats = stage("G8_stats", "\\u7D71\\u8A08", () => computeStats({ lon, V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));\n    const world = {\n      spec: { ...spec, generatorVersion: GENERATOR_VERSION },\n      mesh,\n      cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },\n      entities: { populations },\n      stats,\n      timings\n    };\n    timings.total = Math.round(performance.now() - tAll);\n    world.hash = worldHash(world);\n    return world;\n  }\n  function tempAt(latRad, elevation, lapse) {\n    const a = Math.abs(latRad) / (Math.PI / 2), h = Math.max(0, elevation) / 1e3;\n    return 27.5 - 45 * Math.pow(a, 1.6) - lapse * h;\n  }\n  function upwindOf(mesh, lat, lon, c) {\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const la = Math.abs(lat[c]) / D2R2, east = la < 30 ? -1 : la < 60 ? 1 : -1;\n    const ex = -Math.sin(lon[c]), ey = Math.cos(lon[c]);\n    const wx = -east * ex, wy = -east * ey;\n    let best = -2, bj = -1;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      const j = nb[k], dx = X[3 * j] - X[3 * c], dy = X[3 * j + 1] - X[3 * c + 1], dz = X[3 * j + 2] - X[3 * c + 2], dl = Math.hypot(dx, dy, dz) || 1, s = (dx * wx + dy * wy) / dl;\n      if (s > best) {\n        best = s;\n        bj = j;\n      }\n    }\n    return bj;\n  }\n  var upOf = (cx, c) => cx.up ? cx.up[c] : upwindOf(cx.mesh, cx.lat, cx.lon, c);\n  function liftRaw(cx, c) {\n    const u = upOf(cx, c);\n    return Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3;\n  }\n  function moistureStep(cx, c) {\n    const u = upOf(cx, c);\n    return clamp2(cx.moisture[u] * cx.decay - 0.3 * (Math.max(0, cx.elevation[c] - Math.max(0, cx.elevation[u])) / 1e3), 0.42, 1);\n  }\n  function precipAt(cx, c) {\n    const X = cx.mesh.centerXYZ, sea = cx.isSea[c], la = Math.abs(cx.lat[c]) / D2R2, zonal = 250 + 1900 * Math.exp(-((la / 9) ** 2)) + 800 * Math.exp(-(((la - 55) / 12) ** 2));\n    const lift = sea ? 0 : Math.fround(liftRaw(cx, c)), m = cx.moisture[c];\n    let p = zonal * (0.35 + 0.85 * m) * (0.7 + 0.6 * fbm3(cx.precipNoise, X[3 * c], X[3 * c + 1], X[3 * c + 2], 3, 2.5)) + 900 * lift * m * (sea ? 0 : 1);\n    if (!sea && cx.elevation[c] > 3500) p *= 0.6;\n    return clamp2(p, 0, 6e3);\n  }\n  function computeHydrology(h, members = null) {\n    const { mesh, elevation, isSea, precip, areaKm2, parent, filled, flow, basin, landWater, biome } = h;\n    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;\n    const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V);\n    let on = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      filled[c] = elevation[c];\n      parent[c] = -1;\n      basin[c] = -1;\n    }\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) {\n        done[c] = 1;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && (!members || members[j])) {\n            heap.push(filled[c], c);\n            break;\n          }\n        }\n      } else if (members && !members[c]) done[c] = 1;\n    }\n    while (heap.n > 0) {\n      const c = heap.pop();\n      order[on++] = c;\n      for (let k = off[c]; k < off[c + 1]; k++) {\n        const j = nb[k];\n        if (done[j]) continue;\n        done[j] = 1;\n        parent[j] = c;\n        filled[j] = Math.max(elevation[j], filled[c] + EPS);\n        heap.push(filled[j], j);\n      }\n    }\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      flow[c] = isSea[c] ? 0 : precip[c] * areaKm2[c] * 95e-7;\n    }\n    for (let i = on - 1; i >= 0; i--) {\n      const c = order[i], p = parent[c];\n      if (p >= 0 && !isSea[c]) flow[p] += isSea[p] ? 0 : flow[c];\n    }\n    for (let i = 0; i < on; i++) {\n      const c = order[i];\n      if (isSea[c]) continue;\n      const p = parent[c];\n      basin[c] = isSea[p] ? c : basin[p];\n    }\n    let lakeCount = 0, unreached = 0;\n    for (let c = 0; c < V; c++) {\n      if (members && !members[c]) continue;\n      if (isSea[c]) landWater[c] = LAND_WATER.OCEAN;\n      else {\n        if (parent[c] < 0) unreached++;\n        if (filled[c] - elevation[c] >= 40) {\n          landWater[c] = LAND_WATER.LAKE;\n          lakeCount++;\n          biome[c] = BIOMES.LAKE;\n        } else landWater[c] = LAND_WATER.LAND;\n      }\n    }\n    return { lakeCount, unreached };\n  }\n  function landUseNoise(seed) {\n    const ns = (name) => hashString(`${seed}::noise::${name}`);\n    return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };\n  }\n  var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };\n  function seaToLand(mesh, isSea, c) {\n    const off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    let fr = [c];\n    const seen = /* @__PURE__ */ new Set([c]);\n    for (let d = 0; d <= 6; d++) {\n      const nx = [];\n      for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) {\n        const j = nb[k];\n        if (!isSea[j]) return d + 1;\n        if (!seen.has(j)) {\n          seen.add(j);\n          nx.push(j);\n        }\n      }\n      fr = nx;\n      if (!fr.length) break;\n    }\n    return 99;\n  }\n  function landUseAt(g, c) {\n    const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;\n    const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];\n    let relief = 0, kn = 0;\n    for (let k = off[c]; k < off[c + 1]; k++) {\n      relief += Math.abs(elevation[nb[k]] - e);\n      kn++;\n    }\n    relief /= Math.max(1, kn);\n    const nearRiver = river[c] === 1;\n    let res = 0;\n    if (sea) {\n      if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH;\n    } else {\n      const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);\n      if (land) {\n        if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;\n        if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;\n        if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;\n        if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;\n        if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;\n        if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;\n        if (e > 200 && relief > 120) res |= RES.STONE;\n        if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;\n        if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;\n        if (relief < 80 && (nearRiver || coastDist[c] <= 2) && b !== BIOMES.HOT_DESERT) res |= RES.CLAY;\n        if (nearRiver) res |= RES.FISH;\n      } else if (landWater[c] === LAND_WATER.LAKE) res |= RES.FISH;\n    }\n    resource[c] = res;\n    let sl = SOILS.NONE;\n    if (!sea) {\n      if (landWater[c] === LAND_WATER.LAKE) sl = SOILS.NONE;\n      else if (b === BIOMES.ICE || b === BIOMES.TUNDRA) sl = SOILS.PERMAFROST;\n      else if (e > 3500 || b === BIOMES.ALPINE) sl = SOILS.ROCK;\n      else if (volcanic[c] > 0.3) sl = SOILS.VOLCANIC;\n      else if (b === BIOMES.HOT_DESERT) sl = SOILS.SAND;\n      else if (nearRiver && relief < 150 && elevation[c] < 800) sl = SOILS.ALLUVIAL;\n      else if (b === BIOMES.TAIGA) sl = SOILS.PODZOL;\n      else if (b === BIOMES.GRASSLAND) sl = SOILS.BLACK_EARTH;\n      else if (b === BIOMES.WETLAND) sl = SOILS.CLAY;\n      else sl = SOILS.LOAM;\n    }\n    soil[c] = sl;\n    if (land) {\n      const t = temp[c], p = precip[c];\n      const tf = t < -2 ? 0 : t < 8 ? (t + 2) / 10 * 0.6 : t <= 26 ? 1 : clamp2(1 - (t - 26) / 12, 0.2, 1);\n      const pf = p < 150 ? p / 150 * 0.15 : p < 600 ? 0.15 + (p - 150) / 450 * 0.85 : p <= 2200 ? 1 : clamp2(1 - (p - 2200) / 3500, 0.5, 1);\n      const slope = 1 - clamp2(relief / 700, 0, 0.9), alt = 1 - clamp2(Math.max(0, e - 1500) / 3e3, 0, 1);\n      fertility[c] = clamp2(tf * pf * SOIL_FERT[sl] * slope * alt, 0, 1);\n      capacity[c] = fertility[c] * 12 * (1 + (nearRiver ? 0.5 : 0) + (coastDist[c] <= 1 ? 0.3 : 0)) * areaKm2[c];\n    } else {\n      fertility[c] = 0;\n      capacity[c] = 0;\n    }\n  }\n  function placeInitialGroups(g, spec, variant = 0) {\n    const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;\n    const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];\n    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });\n    cand.sort((a, b) => b.s - a.s || a.c - b.c);\n    const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R);\n    const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);\n    for (const { c } of cand) {\n      if (out.length >= spec.initialGroups) break;\n      if (out.every((o) => ang(o.cell, c) >= minSep)) out.push({ id: out.length + 1, cell: c, lat: lat[c] / D2R2, lon: lon[c] / D2R2, size: Math.round(rg.range(150, 600)), subsistence: "forage", species: "human" });\n    }\n    return out;\n  }\n  function biomeOf(T, P, e) {\n    if (e > 4500 || e > 3500 && T < 0) return BIOMES.ALPINE;\n    if (T < -8) return BIOMES.ICE;\n    if (T < 0) return BIOMES.TUNDRA;\n    if (T < 5) return P > 300 ? BIOMES.TAIGA : BIOMES.COLD_DESERT;\n    if (T < 18) return P < 200 ? BIOMES.COLD_DESERT : P < 600 ? BIOMES.GRASSLAND : P > 2600 ? BIOMES.WETLAND : BIOMES.TEMPERATE_FOREST;\n    if (P < 250) return BIOMES.HOT_DESERT;\n    if (P < 900) return BIOMES.SAVANNA;\n    if (P < 1800) return BIOMES.TROPICAL_SEASONAL;\n    return BIOMES.RAINFOREST;\n  }\n  function landmasses(V, off, nb, isSea) {\n    const comp = new Int32Array(V).fill(-1), sizes = [];\n    const q = new Int32Array(V);\n    for (let s = 0; s < V; s++) {\n      if (isSea[s] || comp[s] >= 0) continue;\n      let qh = 0, qt = 0;\n      q[qt++] = s;\n      comp[s] = sizes.length;\n      let cnt = 0;\n      while (qh < qt) {\n        const c = q[qh++];\n        cnt++;\n        for (let k = off[c]; k < off[c + 1]; k++) {\n          const j = nb[k];\n          if (!isSea[j] && comp[j] < 0) {\n            comp[j] = comp[s];\n            q[qt++] = j;\n          }\n        }\n      }\n      sizes.push(cnt);\n    }\n    return { comp, sizes };\n  }\n  function computeStats(a) {\n    const { V, off, nb, isSea, landWater, elevation, temp, biome, lat, riverThreshold, river, lakeCount, parent, populations } = a;\n    let mouthCount = 0;\n    for (let c = 0; c < V; c++) if (river[c] && parent[c] >= 0 && isSea[parent[c]]) mouthCount++;\n    let sea = 0, lake = 0, mount = 0, rivers = 0, cold = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) sea++;\n      else {\n        if (landWater[c] === LAND_WATER.LAKE) lake++;\n        if (elevation[c] > 2500) mount++;\n        if (river[c]) rivers++;\n      }\n    }\n    const landCells = V - sea, { sizes } = landmasses(V, off, nb, isSea), total = sizes.reduce((s, x) => s + x, 0);\n    const continents = sizes.filter((s) => s >= total * 0.03), islands = sizes.filter((s) => s < total * 0.03);\n    let seamN = 0, seamLand = 0;\n    if (a.lon) {\n      for (let c = 0; c < V; c++) if (Math.abs(a.lon[c]) > 175 * D2R2) {\n        seamN++;\n        if (!isSea[c]) seamLand++;\n      }\n    }\n    const biomeCounts = new Array(14).fill(0);\n    for (let c = 0; c < V; c++) biomeCounts[biome[c]]++;\n    let tl = 0, nl = 0, th = 0, nh = 0;\n    for (let c = 0; c < V; c++) {\n      if (isSea[c]) continue;\n      const la = Math.abs(lat[c]) / D2R2;\n      if (la < 20) {\n        tl += temp[c];\n        nl++;\n      } else if (la > 60) {\n        th += temp[c];\n        nh++;\n      }\n    }\n    return {\n      seamLandFraction: seamN ? seamLand / seamN : 0,\n      layout: a.spec?.layout ?? null,\n      cells: V,\n      landFraction: landCells / V,\n      lakeFraction: lake / V,\n      mountainFraction: mount / Math.max(1, landCells),\n      riverCells: rivers,\n      riverFlowThreshold: riverThreshold,\n      riverMouths: mouthCount,\n      lakeCells: lakeCount,\n      continentCount: continents.length,\n      continentShares: continents.map((s) => +(s / total).toFixed(3)).sort((x, y) => y - x),\n      islandCount: islands.length,\n      largestIslandCells: islands.length ? Math.max(...islands) : 0,\n      meanTempLow: nl ? tl / nl : null,\n      meanTempHigh: nh ? th / nh : null,\n      biomeCounts,\n      initialGroups: populations.length\n    };\n  }\n  function validateWorld(world) {\n    const errs = [], { cell, mesh } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds;\n    for (const k of ["elevation", "temp", "precip", "riverFlow", "fertility", "capacity"]) for (let c = 0; c < V; c++) if (!Number.isFinite(cell[k][c])) {\n      errs.push(`${k}[${c}] \\u304C\\u6709\\u9650\\u3067\\u306A\\u3044`);\n      break;\n    }\n    const state = new Uint8Array(V);\n    const stack = [];\n    for (let s = 0; s < V; s++) {\n      if (state[s]) continue;\n      let c = s;\n      stack.length = 0;\n      while (true) {\n        if (cell.landWater[c] === LAND_WATER.OCEAN) {\n          state[c] = 2;\n          break;\n        }\n        if (state[c] === 2) break;\n        if (state[c] === 1) {\n          errs.push(`\\u6D41\\u8DEF\\u306B\\u5FAA\\u74B0: ${c}`);\n          break;\n        }\n        state[c] = 1;\n        stack.push(c);\n        const p = cell.riverTo[c];\n        if (p < 0) {\n          errs.push(`\\u884C\\u304D\\u6B62\\u307E\\u308A\\u306E\\u6D41\\u8DEF: ${c}`);\n          break;\n        }\n        let adj = false;\n        for (let k = off[c]; k < off[c + 1]; k++) if (nb[k] === p) {\n          adj = true;\n          break;\n        }\n        if (!adj) {\n          errs.push(`\\u6D41\\u8DEF\\u304C\\u96A3\\u63A5\\u3057\\u3066\\u3044\\u306A\\u3044: ${c}\\u2192${p}`);\n          break;\n        }\n        c = p;\n      }\n      const ok = state[c] === 2;\n      for (const u of stack) state[u] = ok ? 2 : state[u];\n      if (errs.length > 20) break;\n    }\n    for (let c = 0; c < V; c++) {\n      if (cell.elevation[c] <= 0 !== (cell.landWater[c] === LAND_WATER.OCEAN)) {\n        errs.push(`\\u6D77\\u9678\\u3068\\u6A19\\u9AD8\\u304C\\u4E0D\\u4E00\\u81F4: ${c}`);\n        break;\n      }\n    }\n    for (const p of world.entities.populations) {\n      if (cell.landWater[p.cell] !== LAND_WATER.LAND) errs.push(`\\u521D\\u671F\\u96C6\\u56E3 ${p.id} \\u304C\\u9678\\u306B\\u3044\\u306A\\u3044`);\n    }\n    return errs;\n  }\n  function worldHash(world) {\n    let h = 2166136261;\n    const { cell } = world;\n    const mix = (v) => {\n      h ^= v & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 8 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 16 & 255;\n      h = Math.imul(h, 16777619);\n      h ^= v >>> 24 & 255;\n      h = Math.imul(h, 16777619);\n    };\n    for (let i = 0; i < cell.elevation.length; i++) mix(Math.round(cell.elevation[i]) | 0);\n    for (let i = 0; i < cell.landWater.length; i++) mix(cell.landWater[i] | cell.biome[i] << 8 | cell.soil[i] << 16);\n    for (let i = 0; i < cell.riverTo.length; i++) mix(cell.riverTo[i] | 0);\n    for (let i = 0; i < cell.resource.length; i++) mix(cell.resource[i]);\n    mix(meshHash(world.mesh).length);\n    return (h >>> 0).toString(16).padStart(8, "0");\n  }\n  function generateWorldChecked(specInput, options = {}, maxAttempts = 6) {\n    const rejected = [];\n    const base = normalizeWorldSpec(specInput).spec;\n    for (let a = 0; a < maxAttempts; a++) {\n      const seedUsed = a === 0 ? base.worldSeed : `${base.worldSeed}#r${a}`;\n      const world = generateWorld({ ...base, worldSeed: seedUsed }, options), reasons = statsProblems(world.stats, base);\n      reasons.push(...validateWorld(world).slice(0, 5));\n      if (!reasons.length) return { world, rejected, attempts: a + 1, seedUsed };\n      rejected.push({ seed: seedUsed, reasons });\n    }\n    throw new Error(`\\u8A31\\u5BB9\\u5E2F\\u306B\\u5165\\u308B\\u4E16\\u754C\\u3092\\u4F5C\\u308C\\u306A\\u304B\\u3063\\u305F\\uFF08${maxAttempts} \\u56DE\\uFF09: ` + JSON.stringify(rejected));\n  }\n  function statsProblems(st, spec) {\n    const r = [];\n    if (Math.abs(st.landFraction - spec.landFraction) > 0.04) r.push(`\\u9678\\u5730\\u7387 ${st.landFraction.toFixed(3)} \\u304C\\u76EE\\u6A19 ${spec.landFraction} \\u304B\\u3089\\u5916\\u308C\\u3066\\u3044\\u308B`);\n    const K = spec.continentCountTarget, lay = spec.layout ?? "uneven";\n    const lo = lay === "uneven" ? Math.max(1, K - 2) : lay === "super" ? Math.max(1, K - 3) : Math.max(1, Math.ceil(K / 2));\n    if (st.continentCount < lo || st.continentCount > K + 3) r.push(`\\u5927\\u9678\\u7D1A\\u306E\\u9678\\u584A\\u304C ${st.continentCount} \\u500B\\uFF08\\u76EE\\u6A19 ${K}\\uFF09`);\n    if (spec.islandMode === "many" && st.islandCount < 20) r.push(`\\u5CF6\\u304C\\u5C11\\u306A\\u3044\\uFF08${st.islandCount}\\uFF09`);\n    const maxShare = lay === "super" ? 0.75 : K === 1 ? 1 : 0.55;\n    if (st.continentShares[0] > maxShare) r.push(`\\u6700\\u5927\\u306E\\u9678\\u584A\\u304C\\u9678\\u306E ${(st.continentShares[0] * 100).toFixed(0)}%\\uFF08\\u504F\\u308A\\u3059\\u304E\\uFF09`);\n    if (st.seamLandFraction > 0.08) r.push(`\\u5730\\u56F3\\u306E\\u5DE6\\u53F3\\u7AEF\\u306B\\u9678\\u304C\\u591A\\u3044\\uFF08${(st.seamLandFraction * 100).toFixed(0)}%\\uFF09`);\n    if (st.meanTempLow != null && st.meanTempHigh != null && st.meanTempLow <= st.meanTempHigh + 10) r.push("\\u4F4E\\u7DEF\\u5EA6\\u304C\\u9AD8\\u7DEF\\u5EA6\\u3088\\u308A\\u5341\\u5206\\u306B\\u6696\\u304B\\u304F\\u306A\\u3044");\n    return r;\n  }\n\n  // js/workers/worldgen.worker.js\n  function collectBuffers(world) {\n    const seen = /* @__PURE__ */ new Set(), list = [];\n    const add = (o) => {\n      for (const v of Object.values(o)) if (ArrayBuffer.isView(v) && !seen.has(v.buffer)) {\n        seen.add(v.buffer);\n        list.push(v.buffer);\n      }\n    };\n    add(world.mesh);\n    add(world.cell);\n    return list;\n  }\n  self.onmessage = (e) => {\n    const m = e.data;\n    if (!m || m.type !== "generate") return;\n    try {\n      const r = generateWorldChecked(m.spec, { onProgress: (p) => self.postMessage({ type: "progress", ...p }) }, m.maxAttempts ?? 4);\n      r.world.generation = { seedUsed: r.seedUsed, attempts: r.attempts, rejected: r.rejected };\n      self.postMessage({ type: "done", world: r.world }, collectBuffers(r.world));\n    } catch (err) {\n      self.postMessage({ type: "error", message: err && err.message ? err.message : String(err) });\n    }\n  };\n})();\n';
 
   // js/ui/v53/ui-state.js
   function createUiState(initial = {}) {
@@ -28956,7 +29359,7 @@ ${shown}${more}`;
   }
   var fmtPct = (x, digits = 0) => x == null || !Number.isFinite(x) ? "\u2014" : `${(x * 100).toFixed(digits)}%`;
   var fmtBytes = (n2) => n2 >= 1e9 ? `${(n2 / 1e9).toFixed(2)} GB` : n2 >= 1e6 ? `${(n2 / 1e6).toFixed(1)} MB` : n2 >= 1e3 ? `${(n2 / 1e3).toFixed(0)} KB` : `${n2} B`;
-  var clamp26 = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
+  var clamp27 = (x, lo, hi) => Math.min(hi, Math.max(lo, x));
 
   // js/ui/v53/impact.js
   var num2 = (x) => Number.isFinite(x) ? x : 0;
@@ -29002,12 +29405,12 @@ ${shown}${more}`;
       return value;
     };
     let score = add2("kind", "\u51FA\u6765\u4E8B\u306E\u7A2E\u985E", base[ev?.kind] ?? 0.05);
-    score += add2("popLoss", "\u4EBA\u53E3\u306E\u88AB\u5BB3", weights.popLoss * clamp26(num2(imp.popLossShare), 0, 1));
-    score += add2("territory", "\u9818\u571F\u306E\u5909\u52D5", weights.territory * clamp26(num2(imp.territoryShare), 0, 1));
-    score += add2("actorPop", "\u95A2\u4E0E\u3057\u305F\u56FD\u306E\u898F\u6A21", weights.actorPop * clamp26(num2(imp.actorPopShare), 0, 1));
+    score += add2("popLoss", "\u4EBA\u53E3\u306E\u88AB\u5BB3", weights.popLoss * clamp27(num2(imp.popLossShare), 0, 1));
+    score += add2("territory", "\u9818\u571F\u306E\u5909\u52D5", weights.territory * clamp27(num2(imp.territoryShare), 0, 1));
+    score += add2("actorPop", "\u95A2\u4E0E\u3057\u305F\u56FD\u306E\u898F\u6A21", weights.actorPop * clamp27(num2(imp.actorPopShare), 0, 1));
     const states = Math.max(1, num2(scale.states) || 1);
-    score += add2("actorCount", "\u95A2\u4E0E\u56FD\u306E\u6570", weights.actorCount * clamp26(num2(imp.actorCount) / states, 0, 1));
-    score += add2("ripple", "\u5F8C\u7D9A\u3078\u306E\u6CE2\u53CA", weights.ripple * clamp26(num2(imp.ripple), 0, 5));
+    score += add2("actorCount", "\u95A2\u4E0E\u56FD\u306E\u6570", weights.actorCount * clamp27(num2(imp.actorCount) / states, 0, 1));
+    score += add2("ripple", "\u5F8C\u7D9A\u3078\u306E\u6CE2\u53CA", weights.ripple * clamp27(num2(imp.ripple), 0, 5));
     score += add2("player", "\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u5BB6\u304C\u5F53\u4E8B\u8005", imp.player ? weights.player : 0);
     score = Math.round(score * 1e3) / 1e3;
     return { score, major: score >= threshold, notable: score >= NOTABLE_THRESHOLD, reasons };
@@ -30133,7 +30536,7 @@ ${shown}${more}`;
       if (!e.shiftKey || e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       e.preventDefault();
       const d = e.key === "ArrowLeft" ? -12 : 12, m = adapter.meta();
-      commit(clamp26((m.view ?? m.now) + d, m.first, m.now));
+      commit(clamp27((m.view ?? m.now) + d, m.first, m.now));
     });
     const u1 = adapter.subscribe(sync), u2 = ui.subscribe((s, p) => {
       if (s.majorQueue !== p.majorQueue) sync();
@@ -30186,8 +30589,9 @@ ${shown}${more}`;
     function viewWorld() {
       const seed = h("input", { type: "text", class: "v53-input", value: `world-${Date.now().toString(36)}`, "aria-label": "\u30B7\u30FC\u30C9" });
       const cells = h("select", { class: "v53-select", "aria-label": "\u30BB\u30EB\u6570" }, CELL_PRESETS.map(([v, t]) => h("option", { value: v, selected: v === 25e4 }, t)));
-      const land = h("input", { type: "range", min: "20", max: "80", value: "50", "aria-label": "\u9678\u5730\u306E\u5272\u5408" });
-      const landV = h("span", { class: "v53-hint", text: "50%" });
+      const land = h("input", { type: "range", min: "20", max: "80", value: "36", "aria-label": "\u9678\u5730\u306E\u5272\u5408" });
+      const landV = h("span", { class: "v53-hint", text: "36%" });
+      const layout = h("select", { class: "v53-select", "aria-label": "\u5927\u9678\u306E\u914D\u7F6E" }, Object.entries(LAYOUTS).map(([v, t]) => h("option", { value: v, selected: v === "uneven" }, `${t}\uFF08${LAYOUT_HINTS[v]}\uFF09`)));
       land.addEventListener("input", () => {
         landV.textContent = `${land.value}%`;
       });
@@ -30198,7 +30602,7 @@ ${shown}${more}`;
         genBusy = "\u4E16\u754C\u3092\u751F\u6210\u4E2D\u2026";
         genError = "";
         render();
-        const r = await adapter.world.newWorld({ worldSeed: seed.value.trim(), resolution: { targetCells: Number(cells.value) }, landFraction: Number(land.value) / 100 }, { signal: abort.signal, onProgress: (p) => {
+        const r = await adapter.world.newWorld({ worldSeed: seed.value.trim(), resolution: { targetCells: Number(cells.value) }, landFraction: Number(land.value) / 100, layout: layout.value }, { signal: abort.signal, onProgress: (p) => {
           genBusy = `\u4E16\u754C\u3092\u751F\u6210\u4E2D: ${p?.label ?? p?.stage ?? ""}`;
         } });
         abort = null;
@@ -30208,7 +30612,7 @@ ${shown}${more}`;
       });
       return [
         h("p", { class: "v53-lead", text: "\u5927\u9678\u30FB\u6C17\u5019\u30FB\u5DDD\u30FB\u8CC7\u6E90\u3092\u6301\u3064\u7403\u9762\u306E\u4E16\u754C\u3092\u4F5C\u308A\u307E\u3059\u3002\u540C\u3058\u30B7\u30FC\u30C9\u3068\u8A2D\u5B9A\u306A\u3089\u3001\u540C\u3058\u5730\u5F62\u306B\u306A\u308A\u307E\u3059\u3002" }),
-        h("div", { class: "v53-form grid" }, label2("\u30B7\u30FC\u30C9", seed), label2("\u30BB\u30EB\u6570", cells), label2("\u9678\u5730\u306E\u5272\u5408", h("span", { class: "v53-inline" }, land, landV))),
+        h("div", { class: "v53-form grid" }, label2("\u30B7\u30FC\u30C9", seed), label2("\u30BB\u30EB\u6570", cells), label2("\u9678\u5730\u306E\u5272\u5408", h("span", { class: "v53-inline" }, land, landV)), label2("\u5927\u9678\u306E\u914D\u7F6E", layout)),
         genBusy ? h("p", { class: "v53-hint", role: "status", text: genBusy }) : null,
         genError ? h("p", { class: "v53-error", role: "alert", text: genError }) : null,
         h("div", { class: "v53-actions" }, go, h("button", { type: "button", class: "v53-btn", dataset: { act: "open" }, text: "\u30D5\u30A1\u30A4\u30EB\u3092\u958B\u304F", onclick: () => adapter.world.openFile() }))

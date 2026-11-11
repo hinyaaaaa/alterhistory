@@ -11,7 +11,7 @@ run({ type: "founding.delegate" }); for (let i = 0; i < 6; i++) run({ type: "clo
 const top = () => Object.values(w.civ.states).filter((s) => s.alive && s.military?.units?.length).sort((a, b) => b.pop - a.pop)[0];
 await check("担当国でも、ドクトリンは WCDE が自動で取り入れる（ユーザーの介入なし）", async () => {
   const st = top(); assert.ok(st); run({ type: "control.take", stateId: st.id }); const d0 = Object.keys(st.military.doctrine.taken).length; st.treasury += 5000;
-  for (let i = 0; i < 4; i++) run({ type: "clock.run", months: 200 }); const s2 = w.civ.states[st.id]; if (!s2.alive) return; assert.ok(s2.player); assert.ok(Object.keys(s2.military.doctrine.taken).length + Object.keys(s2.techAdopted).length > d0, "自動で進む"); run({ type: "control.release" });
+  for (let i = 0; i < 4; i++) { run({ type: "news.ack" }); run({ type: "clock.run", months: 200 }); } /* 重大ニュースで時計が止まったら確認してから進める（v6.11.0） */ const s2 = w.civ.states[st.id]; if (!s2.alive) return; assert.ok(s2.player); assert.ok(Object.keys(s2.military.doctrine.taken).length + Object.keys(s2.techAdopted).length > d0, "自動で進む"); run({ type: "control.release" });
 });
 await check("編成が戦力に効く: 諸兵科の混成は歩兵だけより強く、効果は ±数十％に収まる", async () => {
   const st = top(); const u = st.military.units; const total = u.reduce((a, x) => a + x.size, 0); const mix = armsMult(st, false);

@@ -11,8 +11,19 @@ export const kanjiNum = (n) => (n < 10 ? KN[n] : n < 20 ? "十" + KN[n % 10] : n
 //   同じ語根・同じ政体からは、いつも同じ称号になる（語根から決まる。改称しても揺れない）。
 const FORMS = ["連邦共和国", "神聖王国", "連合王国", "部族連合", "共和国", "教団国", "神聖国", "首長国", "連邦", "連合", "同盟", "連盟", "帝国", "王国", "公国", "侯国", "汗国", "教国", "部族", "市国", "朝", "国"]; // 長いものから（古い保存の称号も剥がせるように残す）
 const byBase = (base, arr) => arr[hashSeed(String(base), "form") % arr.length];
-/** 政体（と成立の経路）に合う称号。base は国号の語根（称号を選ぶ手がかり） */
-export function stateForm(polity, via = null, base = "") {
+/** 時代の区切り（v6.11.0）。年 0 は紀元前 3100 年ごろ（エジプト第一王朝の頃）。初期の国は王国・首長国・同盟で、共和国・連邦・汗国は、それが史実で現れる時代から */
+export const NAME_ERA = Object.freeze({ republicFrom: 2300, federationFrom: 4300, khanateFrom: 2900, leagueFrom: 1500 });
+/** 政体（と成立の経路）に合う称号。base は国号の語根（称号を選ぶ手がかり）。year は世界の年（省略すると現代の称号。古い時代は下の置き換えが入る） */
+export function stateForm(polity, via = null, base = "", year = null) {
+  const f = rawForm(polity, via, base);
+  if (year == null) return f;
+  if (year < NAME_ERA.leagueFrom && /連邦|連合|同盟|連盟|共和国|教団国|汗国/.test(f)) return polity === "republic" || polity === "federation" || via === "defense_league" ? "同盟" : byBase(base, ["王国", "首長国"]); // 紀元前 1600 年より前: 都市の同盟か、王国・首長国
+  if (year < NAME_ERA.republicFrom && f === "共和国") return "同盟";
+  if (year < NAME_ERA.federationFrom && (f === "連邦" || f === "連邦共和国" || f === "連合王国")) return f === "連合王国" ? "王国" : "同盟";
+  if (year < NAME_ERA.khanateFrom && f === "汗国") return "部族連合";
+  return f;
+}
+function rawForm(polity, via, base) {
   switch (polity) {
     case "kingdom": return byBase(base, ["王国", "王国", "王国", "朝"]);
     case "empire": return byBase(base, ["帝国", "帝国", "帝国", "朝"]);
@@ -29,11 +40,11 @@ export function baseOfState(st) {
   const n = String(st.name ?? ""); for (const f of FORMS) if (n.length > f.length && n.endsWith(f)) return n.slice(0, -f.length);
   return n;
 }
-export const composeStateName = (base, polity, via) => base + stateForm(polity, via, base);
+export const composeStateName = (base, polity, via, year = null) => base + stateForm(polity, via, base, year);
 /** 政体が変わったときの国号の改称。変わらなければ null */
-export function retitle(st, polity) {
+export function retitle(st, polity, year = null) {
   if (!st.nameBase && !FORMS.some((f) => String(st.name).endsWith(f))) return null; // 創造主が付けた名前など、称号のない名前は改めない
-  const base = baseOfState(st), next = composeStateName(base, polity, st.via); return next !== st.name ? { base, name: next } : null;
+  const base = baseOfState(st), next = composeStateName(base, polity, st.via, year); return next !== st.name ? (year == null ? { base, name: next } : { base, name: next, year }) : null;
 }
 
 // ---- 君主名（〇〇1世） ----

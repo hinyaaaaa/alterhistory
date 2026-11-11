@@ -4,6 +4,7 @@
 //   ・停止点（国家成立の直前）の判定は adapter.start.readiness()。成立経路は複数あり、満たした経路をそのまま見せる
 import { h } from "./dom.js";
 import { fmtNum } from "./format.js";
+import { LAYOUTS, LAYOUT_HINTS } from "../../core/world/continents.js";
 
 export const CELL_PRESETS = [[50000, "50,000（軽い）"], [100000, "100,000"], [250000, "250,000（標準）"], [500000, "500,000"]];
 export const WARN_AFTER_MONTHS = 12 * 1500;
@@ -29,16 +30,17 @@ export function createStartFlow({ adapter, ui, warnAfterMonths = WARN_AFTER_MONT
   function viewWorld() {
     const seed = h("input", { type: "text", class: "v53-input", value: `world-${Date.now().toString(36)}`, "aria-label": "シード" });
     const cells = h("select", { class: "v53-select", "aria-label": "セル数" }, CELL_PRESETS.map(([v, t]) => h("option", { value: v, selected: v === 250000 }, t)));
-    const land = h("input", { type: "range", min: "20", max: "80", value: "50", "aria-label": "陸地の割合" });
-    const landV = h("span", { class: "v53-hint", text: "50%" }); land.addEventListener("input", () => { landV.textContent = `${land.value}%`; });
+    const land = h("input", { type: "range", min: "20", max: "80", value: "36", "aria-label": "陸地の割合" });
+    const landV = h("span", { class: "v53-hint", text: "36%" });
+    const layout = h("select", { class: "v53-select", "aria-label": "大陸の配置" }, Object.entries(LAYOUTS).map(([v, t]) => h("option", { value: v, selected: v === "uneven" }, `${t}（${LAYOUT_HINTS[v]}）`))); land.addEventListener("input", () => { landV.textContent = `${land.value}%`; });
     const go = h("button", { type: "button", class: "v53-btn primary large", dataset: { act: "generate" }, text: genBusy ? "生成中…" : "世界を生成する" }); go.disabled = !!genBusy;
     go.addEventListener("click", async () => {
       abort = new AbortController(); genBusy = "世界を生成中…"; genError = ""; render();
-      const r = await adapter.world.newWorld({ worldSeed: seed.value.trim(), resolution: { targetCells: Number(cells.value) }, landFraction: Number(land.value) / 100 }, { signal: abort.signal, onProgress: (p) => { genBusy = `世界を生成中: ${p?.label ?? p?.stage ?? ""}`; } });
+      const r = await adapter.world.newWorld({ worldSeed: seed.value.trim(), resolution: { targetCells: Number(cells.value) }, landFraction: Number(land.value) / 100, layout: layout.value }, { signal: abort.signal, onProgress: (p) => { genBusy = `世界を生成中: ${p?.label ?? p?.stage ?? ""}`; } });
       abort = null; genBusy = ""; if (!r?.ok && !r?.cancelled) genError = r?.error ?? "世界の生成に失敗しました"; render();
     });
     return [h("p", { class: "v53-lead", text: "大陸・気候・川・資源を持つ球面の世界を作ります。同じシードと設定なら、同じ地形になります。" }),
-      h("div", { class: "v53-form grid" }, label("シード", seed), label("セル数", cells), label("陸地の割合", h("span", { class: "v53-inline" }, land, landV))),
+      h("div", { class: "v53-form grid" }, label("シード", seed), label("セル数", cells), label("陸地の割合", h("span", { class: "v53-inline" }, land, landV)), label("大陸の配置", layout)),
       genBusy ? h("p", { class: "v53-hint", role: "status", text: genBusy }) : null, genError ? h("p", { class: "v53-error", role: "alert", text: genError }) : null,
       h("div", { class: "v53-actions" }, go, h("button", { type: "button", class: "v53-btn", dataset: { act: "open" }, text: "ファイルを開く", onclick: () => adapter.world.openFile() }))];
   }

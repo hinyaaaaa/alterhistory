@@ -33,7 +33,7 @@ export function stepCulture(ctx) {
     if (!d.religionId && st && STAGE_OK.has(st.stage) && rng() < 0.002) { const r = createReligion(civ, ids, rng); d.religionId = r; makeEvent(civ, ids, { kind: "religion_founded", title: `${civ.religions[r].name}（${civ.religions[r].kind}）が生まれた`, participants: [{ entityId: g.id, role: "origin" }, { entityId: r, role: "religion" }], location: { cell: g.cell } }); }
     // 接触・伝播・混合（近隣のうち1つを、ときどき調べる）
     if (rng() < 0.03) {
-      const ns = [...neighborGroups(ctx, g)]; if (!ns.length) continue; const o = civ.groups[ns[Math.floor(rng() * ns.length)]], od = dominant(o);
+      const ns = [...neighborGroups(ctx, g)]; if (!ns.length) continue; const o = civ.groups[ns[Math.floor(rng() * ns.length)]]; if (!o) continue; /* v6.11.0: 近隣の一覧に、すでに無い集団が残ることがある */ const od = dominant(o);
       if (od.cultureId !== d.cultureId) {
         const key = [d.cultureId, od.cultureId].sort().join("|");
         if (!civ.contacts[key]) { civ.contacts[key] = mi; makeEvent(civ, ids, { kind: "culture_contact", title: `${civ.cultures[d.cultureId].name}と${civ.cultures[od.cultureId].name}が出会った`, participants: [{ entityId: d.cultureId, role: "culture_a" }, { entityId: od.cultureId, role: "culture_b" }, { entityId: g.id, role: "place_a" }, { entityId: o.id, role: "place_b" }], location: { cell: g.cell } }); }

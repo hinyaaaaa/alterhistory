@@ -72,7 +72,7 @@ function landSuffix(civ, langId) {
 }
 export const nameGen = {
   /** 国号と語根。語根は言語の音から（＋系統の語尾）、称号は政体から（王国・帝国・共和国…） */
-  stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const nm = nameFor(civ, rng, l, "state"), sfx = landSuffix(civ, l), base = nm.length + sfx.length <= 8 ? nm + sfx : nm; return { base, name: composeStateName(base, polity, via) }; },
+  stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const nm = nameFor(civ, rng, l, "state"), sfx = landSuffix(civ, l), base = nm.length + sfx.length <= 8 ? nm + sfx : nm; return { base, name: composeStateName(base, polity, via, civ.date.year), year: civ.date.year }; },
   state: (civ, cap, via, rng) => { const l = languageOfGroup(cap); return l ? nameFor(civ, rng, l, "state") + VIA[via].suffix : null; },
   person: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "person") : null; },
 };

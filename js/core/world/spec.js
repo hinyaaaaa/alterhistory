@@ -1,8 +1,9 @@
 // WorldSpec（v4.0.0）。地理生成の入力を 1 つにまとめ、検証・既定値・範囲を持つ。
 //   同じ worldSeed・WorldSpec・generatorVersion なら、地理の出力は一致する（歴史の乱数とは別系統）。
-export const GENERATOR_VERSION = "4.0.0-alpha.1";
+export const GENERATOR_VERSION = "6.11.0";
 export const WORLD_SPEC_SCHEMA = 1;
-export const ISLAND_MODES = Object.freeze({ few: 12, normal: 40, many: 90 });
+export const ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });
+export const LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);
 
 export const DEFAULT_WORLD_SPEC = Object.freeze({
   schemaVersion: WORLD_SPEC_SCHEMA,
@@ -10,9 +11,10 @@ export const DEFAULT_WORLD_SPEC = Object.freeze({
   worldSeed: "",
   planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
   resolution: Object.freeze({ targetCells: 250000 }),
-  landFraction: 0.3, // v6.1.0: 0.5 → 0.3（地球の陸地率は約 29%）。海を渡る拡散を直したので、地球並みでも人類は全大陸に広がる
+  landFraction: 0.36, // v6.11.0: 0.3 → 0.36（フィクションの地図のように、海をやや少なく）。下限 0.1・上限 0.9 は変わらない
   continentCountTarget: 6,
-  islandMode: "many",
+  islandMode: "normal", // v6.11.0: 標準は少なめ〜普通（many も選べる）
+  layout: "uneven", // v6.11.0: 大陸の配置パターン（uneven / cluster / super / split）
   plateCount: 14,
   initialGroups: 12,
   climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 }),
@@ -40,6 +42,7 @@ export function normalizeWorldSpec(input = {}) {
     landFraction: num(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
     continentCountTarget: num(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
     islandMode: i.islandMode ?? d.islandMode,
+    layout: i.layout ?? d.layout,
     plateCount: num(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
     initialGroups: num(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
     climateModel: {
@@ -50,6 +53,7 @@ export function normalizeWorldSpec(input = {}) {
   };
   if (!spec.worldSeed) errors.push("worldSeed が空（シードを指定してください。生成する場合は makeWorldSeed を使う）");
   if (!(spec.islandMode in ISLAND_MODES)) { errors.push(`islandMode は ${Object.keys(ISLAND_MODES).join("/")} のいずれか`); spec.islandMode = d.islandMode; }
+  if (!LAYOUT_KEYS.includes(spec.layout)) { errors.push(`layout は ${LAYOUT_KEYS.join("/")} のいずれか`); spec.layout = d.layout; }
   if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection は現在 equirectangular のみ");
   if (isObj(input) && input.schemaVersion !== undefined && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} は未対応`);
   return { spec, errors };
