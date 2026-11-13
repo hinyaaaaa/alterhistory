@@ -5,6 +5,7 @@
 //     計算で決まる値（産業力・軍事能力など）は、ここでは直接変えない（M6 の介入として、記録・期間・因果つきで扱う）。
 import { POLITY } from "../civ/states.js";
 import { makeEvent } from "../civ/events.js";
+import { dropStaleDecisions } from "./decisions.js";
 
 const fail = (error) => ({ ok: false, error });
 export const controlledState = (civ) => { const id = civ.wcde.control.stateId; return id ? civ.states[id] ?? null : null; };
@@ -16,15 +17,15 @@ export function takeControl(w, stateId) {
   const { civ } = w, st = civ.states[stateId]; if (!st?.alive) return fail("その国家は存在しません");
   // 担当の切替: 前の担当国家は AI に戻る（AI が自分の方針で再開できるよう、プレイヤーの戦争の方針・計画中の戦略は破棄する）。新しい担当国家の進行中の戦略もいったん捨てる
   for (const s of Object.values(civ.states)) if (s.player && s.id !== stateId) { s.player = false; dropPlayerPlans(civ, s); }
-  dropPlayerPlans(civ, st); st.player = true; civ.wcde.control.stateId = stateId; civ.wcde.control.since = civ.monthIndex; w.sim.ctx._byState = null;
+  dropPlayerPlans(civ, st); st.player = true; civ.wcde.control.stateId = stateId; civ.wcde.control.since = civ.monthIndex; w.sim.ctx._byState = null; dropStaleDecisions(civ);
   return { ok: true, stateId };
 }
 export function releaseControl(w) {
-  const { civ } = w; for (const s of Object.values(civ.states)) { if (s.player) dropPlayerPlans(civ, s); s.player = false; } civ.wcde.control.stateId = null; civ.wcde.control.since = null; return { ok: true };
+  const { civ } = w; for (const s of Object.values(civ.states)) { if (s.player) dropPlayerPlans(civ, s); s.player = false; } civ.wcde.control.stateId = null; civ.wcde.control.since = null; dropStaleDecisions(civ); return { ok: true };
 }
 /** 担当国家が滅びたら、担当を外す（記録に残す）。tick の最後に呼ぶ */
 export function syncControl(civ) {
-  const id = civ.wcde.control.stateId; if (id && !civ.states[id]?.alive) { civ.wcde.log = (civ.wcde.log ?? []).concat([{ at: civ.monthIndex, type: "control.lost", ok: true, stateId: id }]).slice(-500); civ.wcde.control.stateId = null; civ.wcde.control.since = null; }
+  const id = civ.wcde.control.stateId; if (id && !civ.states[id]?.alive) { civ.wcde.log = (civ.wcde.log ?? []).concat([{ at: civ.monthIndex, type: "control.lost", ok: true, stateId: id }]).slice(-500); civ.wcde.control.stateId = null; civ.wcde.control.since = null; dropStaleDecisions(civ); }
 }
 
 /** 創造主の編集（直接設定できる項目だけ）。範囲・型を検証し、変更前後を記録する */

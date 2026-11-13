@@ -1,3 +1,13 @@
+# v6.12.0（最新）: 国家を動かす
+
+- 実装の中身は `docs/CHANGELOG.md` の v6.12.0。担当国の「決断」「軍団の指揮」「役職約 50・国策・勢力の支持」。
+- 新規ファイル（核）: `js/core/wcde/{decisions,decision-state,corps,offices-data,policies,statefx}.js`。画面: `js/ui/v6/{decision,military,policy}.js`。試験: `tests/v612-core.test.mjs`・`tests/v612-ui.test.mjs`・`tests/helpers/decide.mjs`。
+- 設計の要点: 決断は **live（`clock.run` の間だけ）** に出る。それ以外（試験・一括の進行）は従来どおり自動処理（`civ.wcde.decisions.live`）。呼び出しは `ctx.decisions` のフック（条約=`negotiateTreaty`、講和=`negotiatePeace`、宣戦=`declare_war`、参戦=`declareWar` の同盟ループ、継承・反乱・前兆=`stepStates`、会戦=`advance`）。解決は `decision.resolve`。
+- 軍団は担当国のみ（`st.corps`）。戦争では軍団ごとに部隊（`ops.forces[].corpsId`）。命令が `auto`（お任せ）なら従来の `planFor`。アルゴリズム国家は従来の野戦軍。
+- 役職・国策の効果は `stateFx(st)` だけを見る（アルゴリズム国家は 0）。新しい効果を足すときはここに足す。
+- 前の版の HANDOFF（v6.5.0 以前）は古い。最新は CHANGELOG を正とする。
+- 未確認: 実機・スクリーンショットでの見え方。次の版の候補: アルゴリズム国家の軍団化、海軍の編成、決断の優先度設定。
+
 # v6.5.0（最新）: ページのビジュアル化
 
 - 実装の中身は docs/CHANGELOG.md の v6.5.0。新規ファイル: `js/ui/v6/{visual,nation,diplo,war,stats,warconfirm}.js`、`trees.js` に `nestedLineage`・`miniLineage`。
@@ -41,7 +51,7 @@ v6.4.0 で建国フロー（ウィザード・政体15種・役職）・反乱�
 - 左のパネルは再生中に自動で描き直さない（`main.js` の `live()`）。古くなったら右上の「↻ 最新の状態に更新」。
 - 重大ニュース（時間が止まる）は「自国の重大事」と「世界大戦」だけ（`core/wcde/clock.js` の `OWN_CRITICAL`・`WORLD_WAR`）。基準の設定（news.configure）は廃止。
 - 国名は省略しない。同盟の図は陣営（圏）ごと（`ui/v6/alliance.js`）。
-- 観察: 試験で 100 年以上回した世界では、同盟が 1 つも結ばれず、戦争はすべて 2 か国どうしだった。このままでは世界大戦は実際にはほぼ起きない（条件は `WORLD_WAR` で調整できる）。AI が同盟を結ぶ条件の見直しが次の課題。
+- 観察: 試験で 100 年以上回した世界では、同盟が 1 つも結ばれず、戦争はすべて 2 か国どうしだった。このままでは世界大戦は実際にはほぼ起きない（条件は `WORLD_WAR` で調整できる）。アルゴリズム国家が同盟を結ぶ条件の見直しが次の課題。
 
 ---
 
@@ -54,7 +64,7 @@ v6.4.0 で建国フロー（ウィザード・政体15種・役職）・反乱�
 # v6.1.0 M9 引き継ぎ（最新）
 
 - 入口は `index.html`（v6 の画面。`dist/v6.js`）。v5 の画面は `v5.html`。`v6.html` は廃止。
-- 保存形式は schema 2。v6.0.0・v5・Azgaar 由来・AI の判断を含むデータは理由つきで拒否。
+- 保存形式は schema 2。v6.0.0・v5・Azgaar 由来・アルゴリズム国家の判断を含むデータは理由つきで拒否。
 - 開始時代・規模の較正は `docs/V6_1_CALIBRATION.md`、テストの変更は `docs/V6_1_TEST_REPORT.md`。
 - `npm test`: 126 スイート中 125 合格（`v53-scale-index` の p95 が環境により揺らぐ。単独では合格・不合格が混在。閾値は緩めていない）。`npm run test:e2e`（v6）は合格。
 - 未完了: 建国後 700 年を超える速さ・性能の測定（`tests/long/v6-long.mjs`）。技術の順序（水車・風車が早い）。建国候補の数（40〜80）。実機確認。

@@ -4,6 +4,7 @@ import { S, run, act, creator, aliveStates, controlled } from "./store.js";
 import { flag, icon, metric, ring, stackbar } from "./visual.js";
 import { confirmWar } from "./warconfirm.js";
 import { officesBox, uprisingBox, creatorBox } from "./views-a.js";
+import { policyBox } from "./policy.js";
 import { regimeJa } from "../../core/wcde/regimes.js";
 import { effective } from "../../core/wcde/domains/effective.js";
 import { ideasOf } from "../../core/wcde/domains/politics.js";
@@ -43,7 +44,7 @@ export function tPoliticsV(st, mine) {
   const tax = st.pop * st.policy.tax * 0.0012 * taxMult(st), trade = effective(c, st, "tradeIncome"), cols = ["#d8b45a", "#6fa8c9"];
   out.append(lb("財政", "FINANCE"), h("div", { class: "row" }, donut([["税収", tax], ["交易", trade]], cols), h("span", { class: "g" }, h("div", {}, h("i", { class: "dotc", style: `background:${cols[0]}` }), `税収 ${n0(tax)}`), h("div", {}, h("i", { class: "dotc", style: `background:${cols[1]}` }), `交易 ${n0(trade)}`), h("div", { class: "n" }, `税率 ${pct(st.policy.tax)}`)),
     h("div", { class: "rowb" }, btn("増税", () => act({ type: "state.act", stateId: st.id, action: "set_tax", opt: "up" }), "", { id: "tax-up", disabled: !mine, title: mine ? "" : "担当国のみ" }), btn("減税", () => act({ type: "state.act", stateId: st.id, action: "set_tax", opt: "down" }), "", { id: "tax-down", disabled: !mine }))));
-  out.append(officesBox(st, mine));
+  out.append(officesBox(st, mine)); if (st.alive && (mine || st.focus)) out.append(policyBox(st, mine)); // v6.12.0: 国策（担当国は枠に入れられる）
   const ideas = ideasOf(st).slice(0, 6); if (ideas.length) out.append(lb("思想", "IDEAS"), h("div", { class: "chips" }, ...ideas.map((x) => h("span", { class: "chip", title: pct(x.v) }, x.ja, h("i", { style: `width:${x.v * 100}%` })))));
   if (mine && st.alive) out.append(uprisingBox(st));
   out.append(h("details", { class: "dt cbox" }, h("summary", {}, "創造主の編集・介入"), creatorBox(st)));

@@ -19,7 +19,7 @@ window.__v6.S.fastStart = true; click($("#new")); for (let i = 0; i < 100 && !$(
 
 await check("世界を生成 → 建国（世界に任せる）。骨格: 左ハブ・パネル・地図・コールアウト・時計（右のニュース欄・凡例は無い）", async () => {
   set($("#cells"), "3000"); set($("#seed"), "ui-smoke"); click($("#gen")); for (let i = 0; i < 400 && !$("#delegate"); i++) await wait(50); assert.ok($("#delegate")); click($("#delegate"));
-  assert.ok($("#hub") && $("#panel") && $("#mapwrap") && $("#callout") && $("#newscall") && $("#clock")); assert.ok(!$("#right") && !$("#leg"), "右のニュース欄・凡例は廃止"); assert.deepEqual($$("#hub button").map((b) => b.dataset.hub), ["geo", "nations", "war", "diplo", "culture", "language", "religion", "stats", "creator", "settings"]); assert.ok(!$("#panel").classList.contains("open"), "最初は地図が最大"); V().run({ type: "clock.setSpeed", speed: 0 });
+  assert.ok($("#hub") && $("#panel") && $("#mapwrap") && $("#callout") && $("#newscall") && $("#clock")); assert.ok(!$("#right") && !$("#leg"), "右のニュース欄・凡例は廃止"); assert.deepEqual($$("#hub button").map((b) => b.dataset.hub), ["geo", "nations", "war", "mil", "diplo", "culture", "language", "religion", "stats", "creator", "settings"]); assert.ok(!$("#panel").classList.contains("open"), "最初は地図が最大"); V().run({ type: "clock.setSpeed", speed: 0 });
 });
 await check("日時と速度の操作がある。右のニュース欄・関連イベント・固定トップバーはない", () => { assert.ok($("#date").textContent.includes("年") && $$("[data-speed]").length >= 4); assert.ok(!$("#related") && !$("#topbar") && !$("#right") && !$("#feed")); });
 await check("時間を進めると日時・ニュースが更新され、世界が実際に進む", () => { const w = V().S.w, mi = w.civ.monthIndex; assert.ok(V().run({ type: "clock.run", months: 60 }).ok); V().render(); assert.ok(w.civ.monthIndex > mi); });

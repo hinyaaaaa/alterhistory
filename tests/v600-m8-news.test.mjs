@@ -10,7 +10,8 @@ const check = async (name, fn) => { try { await fn(); console.log("  OK  ", name
 const R = createNewWorld({ worldSeed: "m8-1", spec: { resolution: { targetCells: 6000 } }, magic: { enabled: false } }); const w0 = R.w;
 dispatch(w0, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispatch(w0, { type: "time.advance", authority: A.ADMIN, months: 200 }).ok);
 const BASE = serializeWorld(w0), fresh = () => deserializeWorld(BASE);
-const run = (w, n) => dispatch(w, { type: "clock.run", authority: A.ADMIN, months: n });
+import { settle } from "./helpers/decide.mjs";
+const run = (w, n) => { settle(w); return dispatch(w, { type: "clock.run", authority: A.ADMIN, months: n }); }; // v6.12.0: 決断が出たら既定の選択肢で解決してから進める
 const ack = (w, id) => dispatch(w, { type: "news.ack", authority: A.ADMIN, ...(id ? { id } : {}) });
 const alive = (w) => Object.values(w.civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop);
 /** 最大の国を担当する */

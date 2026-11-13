@@ -169,6 +169,11 @@ export class MapView {
       const mine = [...own].filter(([, g]) => inSet(g)).map(([c]) => c), set = new Set(mine); if (mine.length) { const p = geo.edgesWhere((c, n) => !set.has(n), mine); ctx.strokeStyle = "rgba(60,0,0,.65)"; ctx.lineWidth = 5 / sk; ctx.stroke(p); ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 2.8 / sk; ctx.stroke(p); }
     }
     if (this.pins) for (const pin of this.pins) { const [x, y] = geo.proj(cen[2 * pin.cell], cen[2 * pin.cell + 1]), r = (pin.big ? 7 : 4.2) / sk; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fillStyle = pin.color ?? "#f0c14d"; ctx.globalAlpha = pin.big ? 1 : 0.85; ctx.fill(); ctx.globalAlpha = 1; ctx.lineWidth = 1.4 / sk; ctx.strokeStyle = "#10141a"; ctx.stroke(); if (pin.big) { ctx.beginPath(); ctx.arc(x, y, r * 1.9, 0, TAU); ctx.strokeStyle = "#ff3b30"; ctx.lineWidth = 2 / sk; ctx.stroke(); } }
+    if (this.corps?.length) { // v6.12.0: 担当国の軍団の印（番号つき）。選んだ軍団は行軍ルートと目標を描く
+      for (const m of this.corps) { if (m.route?.length) { ctx.beginPath(); const [sx, sy] = geo.proj(cen[2 * m.cell], cen[2 * m.cell + 1]); ctx.moveTo(sx, sy); for (const c of m.route) { const [x, y] = geo.proj(cen[2 * c], cen[2 * c + 1]); ctx.lineTo(x, y); } ctx.setLineDash([5 / sk, 4 / sk]); ctx.lineWidth = 2 / sk; ctx.strokeStyle = "#f0c14d"; ctx.stroke(); ctx.setLineDash([]); }
+        if (m.target != null) { const [x, y] = geo.proj(cen[2 * m.target], cen[2 * m.target + 1]); ctx.beginPath(); ctx.arc(x, y, 6 / sk, 0, TAU); ctx.lineWidth = 2 / sk; ctx.strokeStyle = "#ff3b30"; ctx.stroke(); } }
+      for (const m of this.corps) { const [x, y] = geo.proj(cen[2 * m.cell], cen[2 * m.cell + 1]), r = (m.sel ? 8.5 : 7) / sk; ctx.beginPath(); ctx.rect(x - r, y - r, 2 * r, 2 * r); ctx.fillStyle = m.color; ctx.fill(); ctx.lineWidth = (m.sel ? 2.4 : 1.4) / sk; ctx.strokeStyle = m.sel ? "#ffffff" : "#10141a"; ctx.stroke(); ctx.fillStyle = "#10141a"; ctx.font = `bold ${Math.round(10 / sk * 10) / 10}px sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(m.label, x, y + 0.5 / sk); }
+    }
     if (L.has("labels")) this.drawLabels(ctx, own, W);
   }
   drawLabels(ctx, own, W) {

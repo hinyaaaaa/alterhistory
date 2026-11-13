@@ -3,6 +3,7 @@
 //   思想（ideas）は条件から自然に生まれ、接する国・交易相手・同盟国を通じて広がる（禁止はできない。寛容さが受け入れやすさを変える）。条約・指導者の継承（跡継ぎ）・封鎖も支持に効く。
 //   経済・戦争・宗教・徴税・政体から支持が決まり、正統性が安定・徴税の上限・政権の存続（政変）に効く。
 //   指導者個人の寿命・継承は states.js（v5）が扱う。ここは「政権を支える構造」を扱う。
+import { stateFx } from "../statefx.js";
 import { byState } from "../../civ/spatial.js";
 import { atWarWith, neighborStates } from "../../civ/diplomacy.js";
 import { stateCan, fxSum } from "../../civ/tech.js";
@@ -103,6 +104,7 @@ export function supportTargets(ctx, st) {
     clans: clamp(0.4 + 0.3 * (p.autonomy ?? 0) - 0.3 * (p.assimilation ?? 0) - 0.3 * p.tax + 0.1 * (war ? 1 : 0)),
   };
   for (const id in (st.politics?.ideas ?? {})) { const s = st.politics.ideas[id], d = IDEAS[id]; if (!d) continue; for (const k in d.pro) if (k in t) t[k] = clamp(t[k] + d.pro[k] * s); for (const k in d.con) if (k in t) t[k] = clamp(t[k] + d.con[k] * s); }
+  for (const [k, v] of Object.entries(stateFx(st).fac)) if (k in t) t[k] = clamp(t[k] + v); // v6.12.0: 役職・国策による勢力の支持の加減
   return t;
 }
 

@@ -18,6 +18,8 @@ import { effective } from "./domains/effective.js";
 import { nameFor, languageOfGroup } from "./domains/language.js";
 import { kanjiNum, siteDescriptors, warNameFor } from "./domains/naming.js";
 import { landPower, navalPower, navyShare, landShare, supplyAt } from "./power.js";
+import { pendingOf } from "./decision-state.js";
+import { corpsForWar, corpsById, corpsFx, corpsLoss, corpsAfterBattle, cmdMult, marchSteps, ensureCorps } from "./corps.js";
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x), r3 = (x) => Math.round(x * 1000) / 1000;
 export const POSTURES = Object.freeze({ offensive: "攻勢", balanced: "均衡", defensive: "守勢" });
@@ -77,12 +79,15 @@ const commitOf = (w, st) => clamp(w.ops.direction[st.id]?.commit ?? 0.75, 0.3, 1
 export function syncForces(ctx, w) {
   const { civ } = ctx, ops = w.ops, live = new Set();
   for (const side of ["a", "d"]) for (const st of members(civ, w, side)) {
-    const c = commitOf(w, st), ns = navyShare(st);
-    for (const kind of ["army", "fleet"]) {
-      const size = kind === "army" ? st.army * landShare(st) * c : st.army * ns * c; const key = `${st.id}|${kind}`; let f = Object.values(ops.forces).find((x) => x.key === key);
-      if (!(size > 0.5) || (kind === "fleet" && ns < 0.02)) { if (f) { if (f.campaignId) delete ops.campaigns[f.campaignId]; delete ops.forces[f.id]; } continue; }
-      if (!f) { f = { id: nid(ops, "f"), key, stateId: st.id, kind, side, size: 0, morale: 0.8, supply: 1, cell: capCell(civ, st), campaignId: null, lastBattle: -99 }; ops.forces[f.id] = f; }
-      f.size = Math.round(size * 10) / 10; f.side = side; live.add(f.id);
+    if (st.player) ensureCorps(ctx, st); // v6.12.0: 担当国は、軍団（名前・指揮官つき）ごとに部隊を出す。担当国でなければ従来どおり国家に 1 つの野戦軍
+    const c = commitOf(w, st), ns = navyShare(st), cps = corpsForWar(civ, st, w), want = [];
+    if (cps) for (const cp of cps) want.push({ key: `${st.id}|army|${cp.id}`, kind: "army", size: cp.size, corpsId: cp.id, cell: civ.groups[cp.at]?.cell ?? capCell(civ, st) }); else want.push({ key: `${st.id}|army`, kind: "army", size: st.army * landShare(st) * c });
+    want.push({ key: `${st.id}|fleet`, kind: "fleet", size: st.army * ns * c });
+    for (const x of want) {
+      const f0 = Object.values(ops.forces).find((f) => f.key === x.key);
+      if (!(x.size > 0.5) || (x.kind === "fleet" && ns < 0.02)) { if (f0) { if (f0.campaignId) delete ops.campaigns[f0.campaignId]; delete ops.forces[f0.id]; } continue; }
+      let f = f0; if (!f) { f = { id: nid(ops, "f"), key: x.key, stateId: st.id, kind: x.kind, side, size: 0, morale: 0.8, supply: 1, cell: x.cell ?? capCell(civ, st), campaignId: null, lastBattle: -99 }; if (x.corpsId) f.corpsId = x.corpsId; ops.forces[f.id] = f; }
+      f.size = Math.round(x.size * 10) / 10; f.side = side; if (x.corpsId) { f.corpsId = x.corpsId; f.cell = x.cell ?? f.cell; } live.add(f.id);
     }
   }
   for (const id of Object.keys(ops.forces)) if (!live.has(id)) { const f = ops.forces[id]; if (f.campaignId) delete ops.campaigns[f.campaignId]; delete ops.forces[id]; }
@@ -171,18 +176,18 @@ const fx = (st) => st.military?.fx ?? {};
 
 // ---- 会戦の解決。戦力は power.js（予測と共通）。補給・士気・地形・要塞・ドクトリン（適応・結束・損耗軽減）が効く
 function moraleF(f) { return 0.6 + 0.5 * f.morale; }
-function fight(ctx, w, { kind, A, D, camp, g, garrison = 0 }) {
+function fight(ctx, w, { kind, A, D, camp, g, garrison = 0, bias = 1, lossA = 1, lossD = 1 }) {
   const { civ, world } = ctx, ops = w.ops, mi = civ.monthIndex, sA = civ.states[A.stateId], sD = D ? civ.states[D.stateId] : civ.states[g.stateId];
   const naval = kind === "naval", terr = naval ? 0 : terrainBonus(world, g.cell), stage = stageOf(civ, g), fort = naval ? 1 : 1 + (kind === "siege" || stage ? (sD.defense ?? 0) + (stage === "city" ? 0.3 : stage === "town" ? 0.15 : 0.05) : 0);
-  const pA = (naval ? navalPower(civ, sA, A.size) : landPower(civ, sA, A.size)) * moraleF(A) * (0.5 + 0.5 * A.supply), adaptA = fx(sA).adapt ?? 0;
-  let pD; if (D) { const base = naval ? navalPower(civ, sD, D.size) : landPower(civ, sD, D.size, { defending: true }), prep = ops.campaigns[D.campaignId]?.kind === "defense" ? 1.12 : ops.campaigns[D.campaignId]?.kind === "offensive" ? 0.75 : 0.9; pD = base * moraleF(D) * prep * (D.lastBattle >= mi - 2 ? 0.88 : 1); } else pD = garrison;
+  const pA = (naval ? navalPower(civ, sA, A.size) : landPower(civ, sA, A.size)) * moraleF(A) * (0.5 + 0.5 * A.supply) * (naval ? 1 : cmdMult(sA, A, "atk")), adaptA = fx(sA).adapt ?? 0;
+  let pD; if (D) { const base = naval ? navalPower(civ, sD, D.size) : landPower(civ, sD, D.size, { defending: true }), prep = ops.campaigns[D.campaignId]?.kind === "defense" ? 1.12 : ops.campaigns[D.campaignId]?.kind === "offensive" ? 0.75 : 0.9; pD = base * moraleF(D) * prep * (D.lastBattle >= mi - 2 ? 0.88 : 1) * (naval ? 1 : cmdMult(sD, D, "def")); } else pD = garrison;
   pD *= (1 + Math.max(0, terr - adaptA)) * fort;
-  const rnd = 0.75 + 0.5 * U(civ, w.id, mi, camp.id, "r"), atk = pA * rnd, win = atk > pD ? "A" : "D", q = Math.max(1, win === "A" ? atk / (pD + 1e-9) : pD / (atk + 1e-9)), engaged = 0.5 + 0.5 * U(civ, w.id, mi, camp.id, "e");
+  const rnd = 0.75 + 0.5 * U(civ, w.id, mi, camp.id, "r"), atk = pA * rnd * bias, win = atk > pD ? "A" : "D", q = Math.max(1, win === "A" ? atk / (pD + 1e-9) : pD / (atk + 1e-9)), engaged = 0.5 + 0.5 * U(civ, w.id, mi, camp.id, "e");
   const loserLoss = clamp(0.06 + 0.07 * Math.min(q, 3), 0.05, 0.3) * engaged, winnerLoss = clamp(loserLoss * (0.35 + 0.35 / q), 0.01, 0.2);
-  const apply = (F, st, frac, lost) => { const arm = st.army, dead = Math.min(arm, F.size * frac * (1 - (fx(st).attr ?? 0))); st.army = Math.max(0, arm - dead); st.warLoss = clamp((st.warLoss ?? 0) + (arm ? dead / arm * 0.6 : 0), 0, 0.7); F.size = Math.max(0, F.size - dead); F.lastBattle = mi; F.morale = clamp(F.morale + (lost ? -(0.1 + 0.9 * frac) * (1 - 0.8 * (fx(st).coh ?? 0)) : 0.05)); const grs = byState(ctx).get(st.id) ?? []; if (grs.length && dead > 0) { const gg = grs[Math.floor(U(civ, w.id, mi, camp.id, st.id, "g") * grs.length)]; gg.pop = Math.max(1, gg.pop - dead * 0.8); } w.casualties += dead; ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + dead; return dead; };
-  const deadA = apply(A, sA, win === "A" ? winnerLoss : loserLoss, win !== "A"), deadD = D ? apply(D, sD, win === "A" ? loserLoss : winnerLoss, win === "A") : (sD.army = Math.max(0, sD.army - garrison * 0.03), garrison * 0.03);
+  const apply = (F, st, frac, lost) => { const arm = st.army, dead = Math.min(arm, F.size * frac * (1 - (fx(st).attr ?? 0))); st.army = Math.max(0, arm - dead); st.warLoss = clamp((st.warLoss ?? 0) + (arm ? dead / arm * 0.6 : 0), 0, 0.7); F.size = Math.max(0, F.size - dead); if (F.corpsId) corpsLoss(st, F.corpsId, dead); F.lastBattle = mi; F.morale = clamp(F.morale + (lost ? -(0.1 + 0.9 * frac) * (1 - 0.8 * clamp((fx(st).coh ?? 0) + (F.corpsId ? corpsFx(corpsById(st, F.corpsId) ?? { officers: {} }).coh : 0), 0, 0.9)) : 0.05)); const grs = byState(ctx).get(st.id) ?? []; if (grs.length && dead > 0) { const gg = grs[Math.floor(U(civ, w.id, mi, camp.id, st.id, "g") * grs.length)]; gg.pop = Math.max(1, gg.pop - dead * 0.8); } w.casualties += dead; ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + dead; return dead; };
+  const deadA = apply(A, sA, (win === "A" ? winnerLoss : loserLoss) * lossA, win !== "A"), deadD = D ? apply(D, sD, (win === "A" ? loserLoss : winnerLoss) * lossD, win === "A") : (sD.army = Math.max(0, sD.army - garrison * 0.03), garrison * 0.03);
   const mx = (s) => s.military?.exp ?? null; { const eA = mx(sA); if (eA) { if (win === "A") eA.won = (eA.won ?? 0) + 1; else eA.lost = (eA.lost ?? 0) + 1; } if (D) { const eD = mx(sD); if (eD) { if (win === "D") eD.defended = (eD.defended ?? 0) + 1; else eD.lost = (eD.lost ?? 0) + 1; } } }
-  const winSt = win === "A" ? sA : sD, loseSt = win === "A" ? sD : sA, name = battleName(ctx, w, kind, g), sign = (win === "A" ? A.side : other(A.side)) === "a" ? 1 : -1;
+  const winSt = win === "A" ? sA : sD, loseSt = win === "A" ? sD : sA, name = battleName(ctx, w, kind, g), _xp = ((A.corpsId && corpsAfterBattle(ctx, sA, A, win === "A", name)), (D?.corpsId && corpsAfterBattle(ctx, sD, D, win === "D", name))), sign = (win === "A" ? A.side : other(A.side)) === "a" ? 1 : -1;
   w.score = clamp(w.score + sign * (2 + 14 * loserLoss), -100, 100);
   const rec = { id: nid(ops, "b"), at: mi, kind, name, theater: camp.theaterId, cell: g.cell, a: A.stateId, d: sD.id, winner: winSt.id, deadA: Math.round(deadA), deadD: Math.round(deadD), win };
   ops.battles.push(rec); if (ops.battles.length > 60) ops.battles.splice(0, ops.battles.length - 60); ops.stats.battles++; ops.stats.won[winSt.id] = (ops.stats.won[winSt.id] ?? 0) + 1; if (kind === "naval") ops.stats.naval++;
@@ -200,8 +205,44 @@ function occupy(ctx, w, g, side, camp) {
 }
 export function liberate(w, g) { w.occupied = w.occupied.filter((x) => x !== g.id); delete w.ops.occ[g.id]; if (w.ops.occBy) delete w.ops.occBy[g.id]; }
 
+/** 野戦（会戦）の実行と、作戦の進み具合への反映。決断（会戦の手番）の結果も、ここを通る（forced: { site, bias, lossA, lossD }） */
+export function fieldEngage(ctx, w, camp, F, Dn, g, forced = null) {
+  const r = fight(ctx, w, { kind: "field", A: F, D: Dn, camp, g: forced?.site ?? fieldSite(ctx, w, camp, g), bias: forced?.bias ?? 1, lossA: forced?.lossA ?? 1, lossD: forced?.lossD ?? 1 });
+  camp.progress = clamp(camp.progress + (r.win === "A" ? 0.3 : -0.25), 0, 1.2); if (r.win !== "A" && F.morale < 0.2) { camp.phase = "done"; camp.result = "failed"; } return r;
+}
+/** 会戦の前の戦力（攻める側 pA・守る側 pD。fight と同じ式。何も変えない）。決断の画面と、手番の判定が使う */
+export function battleOdds(ctx, w, { A, D, camp, g }) {
+  const { civ, world } = ctx, ops = w.ops, mi = civ.monthIndex, sA = civ.states[A.stateId], sD = civ.states[D.stateId], terr = terrainBonus(world, g.cell), stage = stageOf(civ, g), fort = 1 + (stage ? (sD.defense ?? 0) + (stage === "city" ? 0.3 : stage === "town" ? 0.15 : 0.05) : 0);
+  const pA = landPower(civ, sA, A.size) * moraleF(A) * (0.5 + 0.5 * A.supply) * cmdMult(sA, A, "atk"), prep = ops.campaigns[D.campaignId]?.kind === "defense" ? 1.12 : ops.campaigns[D.campaignId]?.kind === "offensive" ? 0.75 : 0.9;
+  const pD = landPower(civ, sD, D.size, { defending: true }) * moraleF(D) * prep * (D.lastBattle >= mi - 2 ? 0.88 : 1) * cmdMult(sD, D, "def") * (1 + Math.max(0, terr - (fx(sA).adapt ?? 0))) * fort; return { pA, pD, terr, fort, stage };
+}
+export const warHelpers = { forcesOf, sideOf, other, members, holderSide, stageOf, capCell, terrainBonus, U };
+
+// ---- 軍団の移動と命令（担当国家の軍団。v6.12.0）。行軍ルートに沿って毎月数区画ずつ進み、着いたら命令の作戦（進軍・包囲・守備）を始める
+const mkCamp = (ctx, w, f, kind, o) => { const ops = w.ops, st = ctx.civ.states[f.stateId], id = nid(ops, "c"), c = { id, kind, forceId: f.id, stateId: st.id, side: f.side, theaterId: null, targetGroupId: null, targetStateId: null, startedAt: ctx.civ.monthIndex, phase: "active", progress: 0, result: null, ...o }; ops.campaigns[id] = c; f.campaignId = id; return c; };
+function moveCorps(ctx, w, f) {
+  const { civ, world } = ctx, st = civ.states[f.stateId], cp = corpsById(st, f.corpsId); if (!cp) return; const o = cp.order; f.retreating = o.kind === "retreat";
+  if (!["march", "siege", "defend", "retreat"].includes(o.kind) || !o.route?.length) return;
+  const steps = marchSteps(ctx, st); let n = 0; while (o.route.length && n < steps) { cp.at = o.route.shift(); n++; } const g = civ.groups[cp.at]; if (!g) return; f.cell = g.cell;
+  const own = holderSide(w, g, civ) === f.side, cf = corpsFx(cp), dist = distKm(world, capCell(civ, st) ?? g.cell, g.cell); f.supply = own ? 1 : clamp(supplyAt(civ, st, dist) * (1 + cf.logi));
+  if (f.supply < 0.4) { const lost = f.size * 0.01 * (1 - (fx(st).attr ?? 0)); st.army = Math.max(0, st.army - lost); f.size -= lost; corpsLoss(st, f.corpsId, lost); f.morale = clamp(f.morale - 0.03); }
+}
+function planCorps(ctx, w, f) {
+  const { civ } = ctx, ops = w.ops, mi = civ.monthIndex, st = civ.states[f.stateId], cp = corpsById(st, f.corpsId), side = f.side, foe = other(side); if (!cp) return;
+  const o = cp.order, cur = f.campaignId ? ops.campaigns[f.campaignId] : null, note = (t) => { cp.history.push({ at: mi, note: t }); if (cp.history.length > 12) cp.history.shift(); };
+  if (o.kind === "auto") { if (cur && cur.orderSince != null) { delete ops.campaigns[cur.id]; f.campaignId = null; } if (!f.campaignId || !ops.campaigns[f.campaignId] || ops.campaigns[f.campaignId].phase !== "active") { const c0 = f.campaignId ? ops.campaigns[f.campaignId] : null; if (c0) delete ops.campaigns[c0.id]; if (cur) delete ops.campaigns[cur.id]; f.campaignId = null; planFor(ctx, w, f); } return; } // お任せ: 従来どおり自動の作戦
+  if (cur && cur.orderSince !== o.since) { delete ops.campaigns[cur.id]; f.campaignId = null; } else if (cur && cur.phase === "active") return; // 命令が変わったら作戦を捨てる／同じ命令の作戦は続く
+  if (cur && f.campaignId && cur.phase === "done") { delete ops.campaigns[cur.id]; f.campaignId = null; if (o.kind === "march" || o.kind === "siege") { cp.order = { kind: "hold", since: mi }; note(cur.result === "success" ? "目標を落とし、待機に入った" : "作戦が終わり、待機に入った"); return; } }
+  if (o.kind === "hold" || o.kind === "reserve" || o.route?.length) return;
+  if (o.kind === "retreat") { cp.order = { kind: "hold", since: mi }; f.retreating = false; f.morale = clamp(f.morale + 0.1); note("撤退を終えた"); return; }
+  if (o.kind === "defend") { mkCamp(ctx, w, f, "defense", { theaterId: Object.values(ops.theaters).find((t) => t.kind === "land")?.id ?? null, orderSince: o.since }); return; }
+  const g = civ.groups[o.targetGroupId]; if (!g || holderSide(w, g, civ) !== foe) { cp.order = { kind: "hold", since: mi }; note("目標はすでに味方の土地になった"); return; }
+  const stage = stageOf(civ, g), tst = civ.states[g.stateId], isCap = tst?.capitalGroupId === g.id, th = landTheaterFor(w, st.id, g.stateId) ?? Object.values(ops.theaters).find((t) => t.kind === "land");
+  mkCamp(ctx, w, f, o.kind === "siege" || stage === "city" || stage === "town" || isCap ? "siege" : "offensive", { theaterId: th?.id ?? null, targetGroupId: g.id, targetStateId: g.stateId, orderSince: o.since });
+}
+
 // ---- 作戦の月次の進行
-const defenderForce = (ctx, w, side, targetStateId) => { const fs = forcesOf(w, side, "army").filter((f) => f.size > 1); const own = fs.filter((f) => f.stateId === targetStateId); const pool = own.length ? own : fs; return pool.reduce((b, f) => (!b || f.size > b.size ? f : b), null); };
+const defenderForce = (ctx, w, side, targetStateId, g = null) => { const fs = forcesOf(w, side, "army").filter((f) => f.size > 1 && !f.retreating); const own = fs.filter((f) => f.stateId === targetStateId); const pool = own.length ? own : fs; const big = (a) => a.reduce((b, f) => (!b || f.size > b.size ? f : b), null); if (g) { const here = pool.filter((f) => f.corpsId && f.cell === g.cell); if (here.length) return big(here); } return big(pool); }; // v6.12.0: 軍団は、守る土地にいる軍団が迎え撃つ。撤退中の軍団は戦わない
 function advance(ctx, w, camp) {
   const { civ, world } = ctx, ops = w.ops, mi = civ.monthIndex, F = ops.forces[camp.forceId]; if (!F || camp.phase !== "active") return; const st = civ.states[F.stateId], side = F.side, foe = other(side);
   const age = mi - camp.startedAt;
@@ -218,19 +259,19 @@ function advance(ctx, w, camp) {
     for (const e of members(civ, w, foe)) if ((byState(ctx).get(e.id) ?? []).some((g) => world.cell.coastDist[g.cell] <= 1)) { e.blockade = mi + 3; e.treasury -= Math.max(0, e.pop * 0.00003); }
     return;
   }
-  const g = civ.groups[camp.targetGroupId]; if (!g || holderSide(w, g, civ) !== foe) { camp.phase = "done"; camp.result = "moot"; return; }
+  if (camp.waiting) { if (pendingOf(civ).some((x) => x.id === camp.waiting)) return; camp.waiting = null; } /* v6.12.0: 会戦の決断を待っている（決断が無くなっていたら再開） */ const g = civ.groups[camp.targetGroupId]; if (!g || holderSide(w, g, civ) !== foe) { camp.phase = "done"; camp.result = "moot"; return; }
   if (F.size < 1 || F.morale < 0.15) { camp.phase = "done"; camp.result = "failed"; return; }
-  const capc = capCell(civ, st) ?? g.cell, dist = distKm(world, capc, g.cell), own = g.stateId && sideOf(w, g.stateId) === side; F.cell = g.cell; F.supply = camp.kind === "landing" ? 0.7 : own ? 1 : supplyAt(civ, st, dist);
-  if (F.supply < 0.4) { const lost = F.size * 0.01 * (1 - (fx(st).attr ?? 0)); st.army = Math.max(0, st.army - lost); F.size -= lost; F.morale = clamp(F.morale - 0.03); } // 補給が切れると、戦わずに消耗する
+  const capc = capCell(civ, st) ?? g.cell, dist = distKm(world, capc, g.cell), own = g.stateId && sideOf(w, g.stateId) === side; F.cell = g.cell; const cf = F.corpsId ? corpsFx(corpsById(st, F.corpsId) ?? { officers: {} }) : { logi: 0, siege: 0 }; F.supply = camp.kind === "landing" ? 0.7 : own ? 1 : clamp(supplyAt(civ, st, dist) * (1 + cf.logi));
+  if (F.supply < 0.4) { const lost = F.size * 0.01 * (1 - (fx(st).attr ?? 0)); st.army = Math.max(0, st.army - lost); F.size -= lost; if (F.corpsId) corpsLoss(st, F.corpsId, lost); F.morale = clamp(F.morale - 0.03); } // 補給が切れると、戦わずに消耗する
   if (camp.kind === "landing") { const sea = seaTheater(w), ctl = sea ? (side === "a" ? sea.control : -sea.control) : 0; if (ctl < -0.3) { camp.phase = "done"; camp.result = "failed"; return; } camp.progress += 0.18 + 0.4 * (fx(st).landing ?? 0); if (camp.progress < 1) return; }
-  const Dn = defenderForce(ctx, w, foe, g.stateId), tst = civ.states[g.stateId], stage = stageOf(civ, g);
+  const Dn = defenderForce(ctx, w, foe, g.stateId, g), tst = civ.states[g.stateId], stage = stageOf(civ, g);
   const garrison = (g.pop * 0.02 + 20) * (1 + (tst?.defense ?? 0) * 2 + (tst?.milDef ?? 0)) * (stage === "city" ? 2 : stage === "town" ? 1.4 : 1);
   if (camp.kind === "landing") { const r = fight(ctx, w, { kind: "landing", A: F, D: Dn && Dn.stateId === g.stateId ? Dn : null, camp, g, garrison }); if (r.win === "A") { occupy(ctx, w, g, side, camp); ops.stats.landings++; camp.phase = "done"; camp.result = "success"; } else { camp.phase = "done"; camp.result = "failed"; } return; }
-  if (Dn && U(civ, w.id, mi, camp.id, "eng") < (camp.kind === "siege" ? 0.25 : 0.45)) { const r = fight(ctx, w, { kind: "field", A: F, D: Dn, camp, g: fieldSite(ctx, w, camp, g) }); camp.progress = clamp(camp.progress + (r.win === "A" ? 0.3 : -0.25), 0, 1.2); if (r.win !== "A" && F.morale < 0.2) { camp.phase = "done"; camp.result = "failed"; return; } }
+  if (Dn && U(civ, w.id, mi, camp.id, "eng") < (camp.kind === "siege" ? 0.25 : 0.45)) { const site = fieldSite(ctx, w, camp, g), bd = ctx.decisions?.battle(ctx, w, { camp, A: F, D: Dn, g, site }); if (bd) { camp.waiting = bd; return; } /* v6.12.0: 大きな戦いは、担当国が選択肢で進める（決断） */ fieldEngage(ctx, w, camp, F, Dn, g, { site }); if (camp.phase === "done") return; }
   else {
-    const atkP = landPower(civ, st, F.size) * moraleF(F) * (0.5 + 0.5 * F.supply), ratio = atkP / (garrison * (1 + terrainBonus(world, g.cell)) + 1);
-    const rate = camp.kind === "siege" ? clamp(0.035 * ratio * (1 + 2 * (fx(st).siege ?? 0)), 0.01, 0.22) : clamp(0.06 * ratio, 0.02, 0.3); camp.progress = clamp(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);
-    if (camp.kind === "siege") { const l = F.size * 0.004 * (1 - (fx(st).attr ?? 0)); st.army = Math.max(0, st.army - l); F.size -= l; w.casualties += l; ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + l; }
+    const atkP = landPower(civ, st, F.size) * moraleF(F) * (0.5 + 0.5 * F.supply) * cmdMult(st, F, "atk"), co = F.corpsId ? 1 + 0.4 * Math.min(2, Math.max(0, Object.values(ops.campaigns).filter((c2) => c2.id !== camp.id && c2.phase === "active" && c2.side === side && c2.targetGroupId === camp.targetGroupId && ops.forces[c2.forceId]?.corpsId).length)) : 1, ratio = atkP / (garrison * (1 + terrainBonus(world, g.cell)) + 1);
+    const rate = camp.kind === "siege" ? clamp(0.035 * ratio * (1 + 2 * (fx(st).siege ?? 0) + cf.siege) * co, 0.01, 0.22) : clamp(0.06 * ratio, 0.02, 0.3); camp.progress = clamp(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);
+    if (camp.kind === "siege") { const l = F.size * 0.004 * (1 - (fx(st).attr ?? 0)); st.army = Math.max(0, st.army - l); F.size -= l; if (F.corpsId) corpsLoss(st, F.corpsId, l); w.casualties += l; ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + l; }
   }
   if (camp.progress >= 1) {
     if (camp.kind === "siege") { ops.stats.sieges++; const rec = { id: nid(ops, "b"), at: mi, kind: "siege", name: battleName(ctx, w, "siege", g), theater: camp.theaterId, cell: g.cell, a: F.stateId, d: g.stateId, winner: F.stateId, deadA: 0, deadD: 0, win: "A", notable: stage === "city" || tst?.capitalGroupId === g.id }; ops.battles.push(rec); if (rec.notable) { ops.stats.big++; if (evBudget(ops, mi)) makeEvent(civ, ctx.ids, { kind: "battle_fought", title: `${rec.name}（${st.name}が${placeName(ctx, g)}を落とした）`, participants: [{ entityId: w.id, role: "war" }, { entityId: st.id, role: "attacker" }, { entityId: g.stateId, role: "defender" }], location: { cell: g.cell }, causes: w.declaredEvent ? [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }] : [], facts: { warId: w.id, name: rec.name, kind: "siege", cell: g.cell, winnerStateId: st.id, loserStateId: g.stateId }, provenance: "simulation" }); } ops.stats.battles++; }
@@ -249,7 +290,8 @@ export function monthly(ctx) {
 export function stepWar(ctx, w) {
   const { civ } = ctx, mi = civ.monthIndex; if (!w.ops) initWar(ctx, w); const ops = w.ops;
   syncForces(ctx, w); if (mi % 3 === 0 || !Object.keys(ops.theaters).length) ensureTheaters(ctx, w);
-  for (const f of forcesOf(w, "a").concat(forcesOf(w, "d"))) { const c = f.campaignId ? ops.campaigns[f.campaignId] : null; if (!c || c.phase !== "active") { if (c) delete ops.campaigns[c.id]; f.campaignId = null; planFor(ctx, w, f); } }
+  for (const f of forcesOf(w, "a").concat(forcesOf(w, "d"))) if (f.corpsId) moveCorps(ctx, w, f); // v6.12.0: 軍団は行軍ルートに沿って動く
+  for (const f of forcesOf(w, "a").concat(forcesOf(w, "d"))) { if (f.corpsId) { planCorps(ctx, w, f); continue; } const c = f.campaignId ? ops.campaigns[f.campaignId] : null; if (!c || c.phase !== "active") { if (c) delete ops.campaigns[c.id]; f.campaignId = null; planFor(ctx, w, f); } }
   for (const c of Object.values(ops.campaigns).sort((x, y) => (x.id < y.id ? -1 : 1))) advance(ctx, w, c);
   for (const id of Object.keys(ops.campaigns)) if (ops.campaigns[id].phase === "done" && !ops.forces[ops.campaigns[id].forceId]) delete ops.campaigns[id];
   // 士気の回復（戦っていない部隊）と、疲労・補給の反映。戦況は士気の差でゆっくり動く

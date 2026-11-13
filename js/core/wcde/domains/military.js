@@ -4,6 +4,7 @@
 import { byState } from "../../civ/spatial.js";
 import { makeEvent } from "../../civ/events.js";
 import { effective } from "./effective.js";
+import { stateFx } from "../statefx.js";
 
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const has = (st, k) => st.techAdopted?.[k] != null;
@@ -74,7 +75,7 @@ function recompute(ctx, st) {
   M.readiness = clamp(0.5 * effective(ctx.civ, st, "stability") + 0.3 * (st.treasury >= 0 ? 1 : 0) + 0.2 * (1 - (st.politics ? effective(ctx.civ, st, "fatigue") : 0)), 0, 1);
   const fx = doctrineFx(st), off = fx.off, def = fx.def; M.fx = fx;
   const eqE = effective(ctx.civ, st, "equipLevel"), rdE = effective(ctx.civ, st, "readiness"); // 介入があれば有効値（通常値＋補正）で軍事能力を決める
-  st.milBonus = Math.round(clamp(0.35 * (eqE - 0.3) + 0.15 * (rdE - 0.5) + off, -0.6, 0.6) * 1000) / 1000; st.milDef = Math.round(def * 1000) / 1000;
+  const sfx = stateFx(st); st.milBonus = Math.round(clamp(0.35 * (eqE - 0.3) + 0.15 * (rdE - 0.5) + off + sfx.mil, -0.6, 0.6) * 1000) / 1000; st.milDef = Math.round((def + sfx.def) * 1000) / 1000; // v6.12.0: 役職・国策のバフ
 }
 /** 月次（3か月ごと）: 総兵力を部隊に分け、装備・練度・軍事能力を更新 */
 export function stepMilitary(ctx) {

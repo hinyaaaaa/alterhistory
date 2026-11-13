@@ -14,11 +14,13 @@ import { showTitle, showWorldConfig, runLoading, runSplash } from "./title.js";
 import { eraLabel } from "../../core/wcde/calendar.js";
 import { initNotify, notify } from "./notify.js";
 import { pGeo, pNations, link, uprisingFull } from "./views-a.js";
+import { renderDecision } from "./decision.js";
+import { pMilitary, corpsMarkers } from "./military.js";
 import { pWar, pDiplo, pEntity, pStats, pSettings, pCreator, fileLoader } from "./views-b.js";
 export { h };
 const $ = (s) => document.querySelector(s), root = () => $("#v6-root");
-const HUB = [["geo", "地理", "GEO"], ["nations", "国家", "NATION"], ["war", "戦争", "WAR"], ["diplo", "外交", "DIPLO"], ["culture", "文化", "CULT"], ["language", "言語", "LANG"], ["religion", "宗教", "RELIG"], ["stats", "統計", "STATS"], ["creator", "創造主", "CREATOR"], ["settings", "世界設定", "CONFIG"]];
-const PANELS = { geo: pGeo, nations: pNations, war: pWar, diplo: pDiplo, culture: () => pEntity("culture"), language: () => pEntity("language"), religion: () => pEntity("religion"), stats: pStats, creator: pCreator, settings: pSettings };
+const HUB = [["geo", "地理", "GEO"], ["nations", "国家", "NATION"], ["war", "戦争", "WAR"], ["mil", "軍", "MIL"], ["diplo", "外交", "DIPLO"], ["culture", "文化", "CULT"], ["language", "言語", "LANG"], ["religion", "宗教", "RELIG"], ["stats", "統計", "STATS"], ["creator", "創造主", "CREATOR"], ["settings", "世界設定", "CONFIG"]];
+const PANELS = { geo: pGeo, nations: pNations, war: pWar, mil: pMilitary, diplo: pDiplo, culture: () => pEntity("culture"), language: () => pEntity("language"), religion: () => pEntity("religion"), stats: pStats, creator: pCreator, settings: pSettings };
 
 /* ---------- 起動: スタート画面 → 世界の設定 → 生成（ロード画面）→ 建国 ---------- */
 function setup() {
@@ -46,10 +48,10 @@ function founding() {
 function start() { S.newsSeen = null; S.hub = null; S.sel = controlled() ?? null; S.hooks = { render, panel: renderPanel, mapOnly: () => { S.map.draw(); }, select, focusCell, loaded: (w, warn) => { S.w = w; S.fileWarn = warn; start(); } }; shell(); render(); clearInterval(S.timer); S.timer = setInterval(tick, 250); }
 function shell() {
   const cv = h("canvas", { id: "map", "aria-label": "世界地図" });
-  root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("button", { id: "prefresh", title: "世界が進んだので、このページの内容は古くなっています", onclick: () => renderPanel() }, "↻ 最新の状態に更新"), h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "clock" }), h("div", { id: "callout" }), h("div", { id: "newscall" }), h("div", { id: "pops" }))), h("div", { id: "newsmodal", hidden: true }));
+  root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("button", { id: "prefresh", title: "世界が進んだので、このページの内容は古くなっています", onclick: () => renderPanel() }, "↻ 最新の状態に更新"), h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "clock" }), h("div", { id: "callout" }), h("div", { id: "newscall" }), h("div", { id: "pops" }))), h("div", { id: "newsmodal", hidden: true }), h("div", { id: "decmodal", hidden: true }));
   S.map = new MapView(cv, S.w); S.map.sel = S.sel; S.map.onPick = callout; requestAnimationFrame(() => { S.map.draw(); }); window.addEventListener("resize", () => S.map?.draw());
 }
-function render() { if (!$("#hub")) return; renderHub(); renderPanel(); renderRight(); renderNews(); S.map.sel = S.sel; S.map.draw(); }
+function render() { if (!$("#hub")) return; renderHub(); renderPanel(); renderRight(); renderNews(); renderDecision(); S.map.sel = S.sel; S.map.corps = corpsMarkers(); S.map.draw(); }
 function renderHub() { $("#hub").replaceChildren(...HUB.map(([k, ja, code]) => h("button", { class: S.hub === k ? "on" : "", "data-hub": k, onclick: () => { S.hub = S.hub === k ? null : k; S.detail = false; S.war = null; S.upr = null; S.dip = null; S.entity = { culture: null, language: null, religion: null }; if (S.map) S.map.hl = null; render(); setTimeout(() => S.map?.draw(), 220); } }, ja, h("small", {}, code)))); }
 function renderPanel() { S.full = null; const p = $("#panel"); S.paintedMonth = S.w?.civ.monthIndex ?? null; $("#prefresh")?.classList.remove("stale"); if (!S.hub) { p.classList.remove("open"); return; } p.classList.add("open"); const wide = S.hub === "nations" && (S.tab === "tech" || S.tab === "doctrine") && S.sel; /* 技術ツリー・ドクトリンは大きく見せる */ p.style.setProperty("--pw", wide ? "min(760px, 62vw)" : ""); const keep = $("#pin").scrollTop; $("#pin").replaceChildren(PANELS[S.hub]()); $("#pin").scrollTop = keep; if (S.upr?.open && S.upr.stateId && S.w.civ.states[S.upr.stateId]) S.full = { key: "upr", title: "反乱・革命を起こす", build: () => uprisingFull(S.w.civ.states[S.upr.stateId]), onClose: () => { S.upr = null; } }; renderFull(); }
 /** v6.5.0: 全面タブ（地図とパネルを覆う）。建国フロー・戦争の詳細・反乱の作成など、広く使いたい画面で使う。基本は横のパネル */
@@ -91,9 +93,9 @@ function renderNews() {
   const m = $("#newsmodal"), q = newsOf(S.w.civ).queue; if (!q.length) { m.hidden = true; m.replaceChildren(); return; } const n = q[0];
   m.hidden = false; m.replaceChildren(h("div", { class: "modalbox" }, h("div", { class: "code", style: "justify-content:center" }, `重大ニュース（残り ${q.length} 件）`), h("div", { class: "n" }, `${n.date.year}年${n.date.month}月`), h("h2", {}, n.title), h("div", {}, ...n.entityIds.filter((i) => S.w.civ.states[i]).map((i) => [link(i), " "])), h("div", { class: "rowb", style: "justify-content:center;margin-top:16px" }, btn("OK", () => { run({ type: "news.ack", id: n.id }); renderRight(); renderNews(); S.map.draw(); }, "p", { id: "ack" }))));
 }
-function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ)) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold") run({ type: "clock.setSpeed", speed: 0 }); live(); }
+function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ)) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold" && r.code !== "decision_hold") run({ type: "clock.setSpeed", speed: 0 }); live(); }
 /** 再生中の更新: 時計・ニュース・地図だけを毎回更新する。左のパネルは勝手に描き直さない（読んでいる最中・入力中・スクロール中の内容が変わらないように）。
  *  世界が進んでパネルの内容が古くなったときは、パネルの右上に「最新の状態に更新」を出し、押したときだけ描き直す */
-function live() { if (!$("#hub")) return; renderRight(); renderNews(); S.map.draw(); if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");}
+function live() { if (!$("#hub")) return; renderRight(); renderNews(); renderDecision(); S.map.corps = corpsMarkers(); S.map.draw(); if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");}
 export function boot() { if (!document.getElementById("v6-root")) return; initNotify(); setup(); runSplash(); }
 if (typeof window !== "undefined") { window.__v6 = { S, run, act, render: () => S.hooks.render?.(), start }; if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot(); }

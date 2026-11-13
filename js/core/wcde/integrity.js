@@ -5,6 +5,7 @@ import { checkWars } from "./warfare.js";
 import { FACTIONS } from "./domains/politics.js";
 import { checkInterventions } from "./intervention.js";
 import { checkClock } from "./clock.js";
+import { checkDecisions } from "./decisions.js";
 import { checkCatastrophes } from "./catastrophe.js";
 
 const fin = (x) => typeof x === "number" && Number.isFinite(x);
@@ -31,7 +32,7 @@ export function checkWcdeIntegrity(world, civ) {
     }
     if (st.leaderFigureId) { const f = civ.figures?.[st.leaderFigureId]; if (!f) errs.push(`${st.id} の指導者の人物 ${st.leaderFigureId} が無い`); else if (f.diedAt != null) errs.push(`${st.id} の指導者の人物が没している`); }
   }
-  errs.push(...checkInterventions(civ)); errs.push(...checkCatastrophes(civ)); errs.push(...checkClock(civ)); errs.push(...checkWars(civ));
+  errs.push(...checkInterventions(civ)); errs.push(...checkCatastrophes(civ)); errs.push(...checkClock(civ)); errs.push(...checkWars(civ)); errs.push(...checkDecisions(civ));
   // 人物・家系: 親は先に生まれている・子は対になる・没は生より後
   for (const f of Object.values(civ.figures ?? {})) {
     if (f.diedAt != null && f.diedAt < f.bornAt) errs.push(`人物 ${f.id} の没が生より前`);

@@ -57,6 +57,7 @@ export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = nu
   w.declaredEvent = ev.eventId;
   for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) {
     if (t.type !== "alliance" || (t.a !== host.id && t.b !== host.id)) continue; const ally = civ.states[t.a === host.id ? t.b : t.a]; if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;
+    if (ally.player && ctx.decisions?.allyCall(ctx, w, side, host, foe, ally)) continue; // v6.12.0: 担当国の参戦は、自動で決まらず決断する
     if (rng() < 0.6) { w.sides[side].push(ally.id); ally.warIds.push(id); adjustRel(ally, foe, -25); makeEvent(civ, ids, { kind: "ally_joined", title: `${ally.name}が${host.name}側で参戦した`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: id, role: "war" }], location: null, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] }); }
   }
   ctx.warOps?.init(ctx, w); // v6.1.0 M6: WCDE の世界では、戦域・部隊・作戦を持つ戦争の記録にする

@@ -3,6 +3,7 @@
 //   ・講和は条約の枠に入れない。戦争ごとの専用の手続き（proposePeace）で、受諾されたときだけ戦争が終わる。講和条件は「白紙講和」と「賠償」。
 //   ・プレイヤーの行動も AI の行動も、同じ入口（civ の sign_treaty / sue_for_peace の実行）を通って、ここの評価を受ける。
 //   ・提案の記録は civ.wcde.diplomacy.proposals に残す（拒否も残す）。履歴は消さない。
+import { stateFx } from "./statefx.js";
 import { TREATY, treatyBetween, atWarWith, signTreaty, endWar, strength } from "../civ/diplomacy.js";
 import { grievance } from "../civ/interpret.js";
 import { effective } from "./domains/effective.js";
@@ -31,6 +32,7 @@ export function evaluateTreaty(civ, from, to, type) {
   const rel = effective(civ, to, "relation", from.id); let s = add("相手から見た関係", (rel - TREATY_THRESHOLD[type]) / 20);
   const gr = grievance(civ, to, from.id); if (gr > 0.5) return { accept: false, score: -9, factors: [{ ja: "歴史的な恨みが深い", v: -9 }], hard: true, counter: null };
   if (gr > 0) s += add("過去の恨み", -3 * gr);
+  { const dp = stateFx(from).dipl; if (dp) s += add("使節・外交の働き", dp); } // v6.12.0: 役職・国策の外交
   const sf = strength(civ, from), st = strength(civ, to), rf = (sf + 1) / (st + 1);
   if (type === "nonaggression") s += add(rf > 1 ? "相手が強いので不可侵を受け入れたい" : "こちらが強いので不可侵を受け入れにくい", clamp(Math.log(rf), -1, 1) * 0.5);
   if (type === "alliance") { const hot = to.warIds.length > 0 ? 0.6 : 0; if (hot) s += add("交戦中で味方がほしい", hot); s += add("戦力の釣り合い", clamp(Math.log(rf), -1, 1) * 0.3); }
@@ -70,6 +72,7 @@ export function evaluatePeace(civ, war, proposer, other, terms = { kind: "white"
 }
 
 /** 提案の記録（履歴は消さない）。残すのは結果だけ（提案・受諾・拒否・別条件・不成立・単独講和）。相手の評価の点数・要因・理由は保存しない（仕様 §2.5・§9） */
+export const recordProposal = (ctx, rec) => record(ctx, rec); // v6.12.0: 決断（decisions.js）が、申し出の結果を同じ台帳に残す
 const record = (ctx, rec) => { const id = ctx.ids.next("proposal"), { factors, score, ...rest } = rec; ledger(ctx.civ).proposals.push({ id, at: ctx.civ.monthIndex, ...rest }); return id; };
 /** 互換: 記録に評価の要因は残さない（常に空）。画面の「相手の評価」は、提案の前に evaluateTreaty / evaluatePeace を呼んで、その場で出す */
 export const factorsOf = () => [];
@@ -77,6 +80,7 @@ const failure = (error, extra = {}) => ({ ok: false, error, diplomacyFailure: tr
 
 /** 条約の提案（civ の sign_treaty の実行から呼ばれる）。受諾なら直前に再検証して締結する */
 export function negotiateTreaty(ctx, from, to, type, c = {}) {
+  { const r = ctx.decisions?.offerTreaty(ctx, from, to, type); if (r) return r; } // v6.12.0: 担当国への申し出は、勝手に結ばず決断にする
   const civ = ctx.civ, ev = evaluateTreaty(civ, from, to, type), base = { kind: "treaty", type, from: from.id, to: to.id, counter: ev.counter ? { type: ev.counter.type } : null };
   if (!ev.accept) { record(ctx, { ...base, status: ev.counter ? "countered" : "rejected" }); return failure(ev.counter ? `別の条件ならば受け入れる（${TREATY[ev.counter.type].ja}）` : "相手に受け入れられなかった", { targetId: to.id, counter: ev.counter }); }
   // 直前の再検証（評価から適用までの間に条件が変わっていないか）
@@ -97,7 +101,8 @@ export function negotiatePeace(ctx, proposer, war, c = {}) {
   const otherId = c.withId && war.sides[foe].includes(c.withId) ? c.withId : foePrincipal, other = civ.states[otherId]; if (!other?.alive) return { ok: false, error: "相手が存在しない" };
   const k = c.terms?.kind, terms = k === "reparations" ? { kind: "reparations", amount: Math.max(0, Number(c.terms.amount) || 0) } : k === "cession" ? { kind: "cession" } : k === "white" ? { kind: "white" } : defaultTerms(civ, war, proposer);
   if (!principal && terms.kind === "cession") terms.kind = "white"; // 単独講和は土地を動かさない（戦争全体の整理は主たる交戦国の講和・終戦で行う）
-  const ev = evaluatePeace(civ, war, proposer, other, terms), base = { kind: "peace", warId: war.id, from: proposer.id, to: otherId, terms, separate: !principal };
+  if (!c.forceAccept) { const r = ctx.decisions?.offerPeace(ctx, proposer, war, other, terms); if (r) return r; } // v6.12.0: 担当国への講和の申し入れは、決断にする
+  const ev = c.forceAccept ? { accept: true } : evaluatePeace(civ, war, proposer, other, terms), base = { kind: "peace", warId: war.id, from: proposer.id, to: otherId, terms, separate: !principal };
   if (!ev.accept) { record(ctx, { ...base, status: "rejected" }); return failure("講和は受け入れられなかった", { targetId: war.id }); }
   if (war.status !== "active") { record(ctx, { ...base, status: "failed_recheck" }); return failure("条件が変わり、講和できなかった", { targetId: war.id }); }
   if (terms.kind === "reparations") { const ahead = war.score >= 0 ? "a" : "d", payerSide = ahead === "a" ? "d" : "a", payer = civ.states[payerSide === mySide ? proposer.id : otherId], getter = civ.states[payer.id === proposer.id ? otherId : proposer.id]; const amt = Math.min(terms.amount, Math.max(0, payer.treasury)); payer.treasury -= amt; getter.treasury += amt; base.terms = { ...terms, paid: Math.round(amt) }; }

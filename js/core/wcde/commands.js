@@ -10,6 +10,9 @@ import { createCatastrophe, planCatastrophe } from "./catastrophe.js";
 import { createIntervention, cancelIntervention, planIntervention } from "./intervention.js";
 import { negotiatePeace } from "./negotiation.js";
 import { directWar } from "./warfare.js";
+import { resolveDecision } from "./decisions.js";
+import { setPolicy } from "./policies.js";
+import { ensureCorps, renameCorps, renameUnit, splitCorps, mergeCorps, transferUnits, convertUnit, appoint, dismiss, setOrder, commitWar } from "./corps.js";
 import { planTechEdit, techEdit, techEditReset, techGrant } from "./techedit.js";
 
 const ALL = ["prehistory", "founding", "running"];
@@ -41,6 +44,24 @@ export function registerCommands() {
   defineCommand("state.act", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const r = w.sim.command({ type: "stateAction", stateId: c.stateId, action: c.action, target: c.target ?? null, opt: c.opt ?? null }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   // 講和は一般条約の行動ではなく、戦争ごとの専用の手続き（担当国だけが申し入れられる。受諾されたときだけ戦争が終わる）
   defineCommand("diplomacy.peace", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId], war = w.civ.wars[c.warId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = negotiatePeace(w.sim.ctx, st, war, { terms: c.terms }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
+  // v6.12.0: 決断（条約の申し出・宣戦・継承・反乱・会戦）。担当国だけが答えられる。時間は、すべての決断に答えるまで止まったまま
+  defineCommand("decision.resolve", { authorities: [A.PLAYER], control: true, checkpoint: true, validate: (w, c) => (typeof c.decisionId === "string" && typeof c.option === "string" ? null : { ok: false, error: "decisionId と option が必要です" }), apply: (w, c) => resolveDecision(w, { id: c.decisionId, option: c.option, extra: c.extra ?? null }) });
+  // v6.12.0: 軍団（名前・兵力・指揮官を持つ部隊）の編成・人事・作戦命令。担当国家だけ。検証は corps.js（失敗したら何も変えない）
+  const cs = (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return null; ensureCorps(w.sim.ctx, st); return st; };
+  const corpsCmd = (type, fn) => defineCommand(type, { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = cs(w, c); if (!st) return { ok: false, error: "その国家は存在しません" }; const r = fn(w.sim.ctx, st, c); if (r?.ok === false) return { ok: false, error: r.error ?? r.reason }; w.sim.ctx._byState = null; return { ok: true, result: r }; } });
+  corpsCmd("corps.refresh", () => ({ ok: true })); // 担当国の軍団を、まだ作っていなければ作る（画面が最初に開いたとき）
+  corpsCmd("corps.rename", (ctx, st, c) => renameCorps(st, c));
+  corpsCmd("corps.renameUnit", (ctx, st, c) => renameUnit(st, c));
+  corpsCmd("corps.split", (ctx, st, c) => splitCorps(ctx, st, c));
+  corpsCmd("corps.merge", (ctx, st, c) => mergeCorps(st, c));
+  corpsCmd("corps.transfer", (ctx, st, c) => transferUnits(st, c));
+  corpsCmd("corps.convert", (ctx, st, c) => convertUnit(ctx, st, c));
+  corpsCmd("corps.appoint", (ctx, st, c) => appoint(ctx, st, c));
+  corpsCmd("corps.dismiss", (ctx, st, c) => dismiss(st, c));
+  corpsCmd("corps.order", (ctx, st, c) => setOrder(ctx, st, c));
+  corpsCmd("corps.commit", (ctx, st, c) => commitWar(ctx, st, c));
+  // v6.12.0: 国策（分野ごとの枠に入れる）。担当国家だけ
+  defineCommand("focus.set", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = setPolicy(w.sim.ctx, st, { category: c.category, slot: c.slot, policyId: c.policyId ?? null }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   // 戦争の高位の方針（posture 攻勢/均衡/守勢・投入割合・重点の戦域）。作戦の立案と実行は AI と同じ経路（プレイヤーは個々の作戦を直接動かさない）
   defineCommand("war.direct", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId], war = w.civ.wars[c.warId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; if (!war) return { ok: false, error: "その戦争はありません" }; const r = directWar(w.sim.ctx, st, war, { posture: c.posture ?? null, commit: c.commit ?? null, focus: c.focus }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   defineCommand("state.reorganize", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; return reorganize(w.sim.ctx, st, c.shares); } });

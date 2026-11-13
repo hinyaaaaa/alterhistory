@@ -19,6 +19,7 @@ import { formatWorldDate } from "../../core/wcde/world.js";
 import { UPRISING_KINDS } from "../../core/wcde/uprising.js";
 import { openWizard } from "./wizard.js";
 import { notify } from "./notify.js";
+import { officeSummary, officeChips } from "./policy.js";
 import { regimeJa, regimeOf, REGIMES, OFFICES, OFFICE_DOMAIN_JA, officeJa, defaultOffices, MIN_OFFICES, MAX_OFFICES } from "../../core/wcde/regimes.js";
 import { pastView } from "../../core/civ/archive.js";
 import { tPoliticsV, tMilitaryV, tDiplomacyV, nationHero } from "./nation.js";
@@ -73,10 +74,11 @@ function stateDetail(st) {
 /* ---------- 官制・役職（v6.4.0）: 担当国（と創造主）は、いつでも組み替えられる ---------- */
 export function officesBox(st, mine) {
   const rg = regimeOf(st), R = REGIMES[rg], offs = st.offices ?? [], can = st.alive && (mine || !controlled()), box = h("div", {}, lb("官制・役職", "OFFICES"), note(`${R.ja}・元首は${officeJa(R.ruler)}`));
-  box.append(offs.length ? h("div", { class: "offs" }, ...offs.map((o) => h("div", { class: "off" }, face(o.holder.name, st.id, o.holder.look), h("div", {}, h("b", {}, officeJa(o.id)), h("small", {}, o.holder.name))))) : note("役職はまだ定められていません（標準の役職を置けます）。"));
+  box.append(offs.length ? h("div", { class: "offs" }, ...offs.map((o) => h("div", { class: "off" }, face(o.holder.name, st.id, o.holder.look), h("div", {}, h("b", {}, officeJa(o.id)), h("small", {}, o.holder.name), h("div", { class: "chips sm" }, ...officeChips(o.id)))))) : note("役職はまだ定められていません（標準の役職を置けます）。"));
+  { const sm = officeSummary(st); if (sm) box.append(sm); }
   if (!can) return box;
   const cur = new Set(offs.length ? offs.map((o) => o.id) : defaultOffices(rg)), set = S.offEdit?.id === st.id ? S.offEdit.set : cur; S.offEdit = { id: st.id, set };
-  box.append(h("details", { class: "dt", id: "off-edit" }, h("summary", {}, "役職を組み替える（いつでも・費用なし）"), h("div", { class: "wchips" }, ...R.offices.map((id) => h("label", { class: "b", style: "display:flex;gap:4px;align-items:center" }, h("input", { type: "checkbox", "data-office": id, checked: set.has(id), disabled: id === R.ruler, onchange: (e) => { e.target.checked ? set.add(id) : set.delete(id); } }), `${officeJa(id)}（${OFFICE_DOMAIN_JA[OFFICES[id][1]]}）`))), btn("この役職に改める", () => { const list = R.offices.filter((x) => set.has(x)); if (list.length < MIN_OFFICES || list.length > MAX_OFFICES) { S.notice = `役職は ${MIN_OFFICES}〜${MAX_OFFICES} 件にしてください`; S.hooks.panel(); return; } if (mine) act({ type: "state.setOffices", offices: list }); else creator({ type: "state.setOffices", stateId: st.id, offices: list }); S.offEdit = null; S.hooks.render(); }, "p", { id: "off-apply" })));
+  box.append(h("details", { class: "dt", id: "off-edit" }, h("summary", {}, "役職を組み替える（いつでも・費用なし）"), h("p", { class: "n" }, "役職は好きなだけ置けます。置くほど維持費がかかり、多すぎると官僚が肥大して安定と民衆の支持が下がります。"), ...Object.entries(OFFICE_DOMAIN_JA).map(([dom, dja]) => { const ids = R.offices.filter((id) => OFFICES[id][1] === dom); return ids.length ? h("div", { class: "odom" }, h("small", {}, dja), h("div", { class: "wchips" }, ...ids.map((id) => h("label", { class: "b", style: "display:flex;gap:4px;align-items:center", title: officeChips(id).map((x) => x.textContent).join(" ") }, h("input", { type: "checkbox", "data-office": id, checked: set.has(id), disabled: id === R.ruler, onchange: (e) => { e.target.checked ? set.add(id) : set.delete(id); } }), officeJa(id))))) : null; }), btn("この役職に改める", () => { const list = R.offices.filter((x) => set.has(x)); if (list.length < MIN_OFFICES || list.length > MAX_OFFICES) { S.notice = `役職は ${MIN_OFFICES}〜${MAX_OFFICES} 件にしてください`; S.hooks.panel(); return; } if (mine) act({ type: "state.setOffices", offices: list }); else creator({ type: "state.setOffices", stateId: st.id, offices: list }); S.offEdit = null; S.hooks.render(); }, "p", { id: "off-apply" })));
   return box;
 }
 /* ---------- 反乱・革命（v6.4.0）: 型を選び、中心地を地図で選ぶ。規模は WCDE が決める ---------- */

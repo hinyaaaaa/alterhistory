@@ -14,7 +14,8 @@ export const gatedPolity = (civ, cap, p) => (!POLITY_CAP[p] || groupCaps(civ, ca
 import { hashSeed } from "./civ-state.js";
 import { recentEventsFor, asCauses } from "./graph.js";
 import { speciesOf, lifeScale } from "./species.js";
-import { OFFICE_STABILITY as officeStability, REGIMES as REG15, regimeOf as regimeOf15 } from "../wcde/regimes.js";
+import { REGIMES as REG15, regimeOf as regimeOf15 } from "../wcde/regimes.js";
+import { stateStability as officeStability } from "../wcde/statefx.js"; // v6.12.0: 役職と国策の効果
 const OFFICE_RULER = (st) => REG15[regimeOf15(st)].ruler;
 
 export const POLITY = Object.freeze({ tribal: "部族", chiefdom: "首長制", kingdom: "王国", empire: "帝国", republic: "共和制", theocracy: "神権制" });
@@ -102,6 +103,24 @@ export function stepUnification(ctx, groupsByState) {
 }
 
 
+/** 指導者が代わる（継承）。o を渡すと、その人物で立つ（担当国の決断）。渡さなければ従来どおり乱数で決まる */
+export function enthrone(ctx, st, o = {}) {
+  const { civ, ids, rng } = ctx, mi = civ.monthIndex, ls = lifeScale(civ, st), cap = civ.groups[st.capitalGroupId], heir = st.leader.heir; st.interpDirty = true;
+  const nm = o.name ?? (ctx.nameGen?.person(civ, cap, rng) ?? makeNameJa(rng));
+  st.leader = { name: leaderName(st, nm, leaderRng(civ, st, "succ")), bornAt: o.bornAt ?? mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, kin: o.kin ?? (heir || rng() < 0.8), ...(st.leader.title ? { title: st.leader.title } : {}) }; /* v6.9.0: 継承者がいなくても、多くは同じ家系の親族が立つ（王朝交代は少数） */
+  if (st.offices) { const ro = st.offices.find((x) => x.id === OFFICE_RULER(st)); if (ro) ro.holder = { name: st.leader.name, look: null }; /* v6.4.0: 元首の役職の担当者は為政者と同じ人 */ }
+  st.stability = Math.max(0, st.stability - (o.hit ?? (heir ? 0.03 : 0.12)));
+  makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${o.how ? `（${o.how}）` : heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: cap ? { cell: cap.cell } : null, ...(o.how ? { provenance: "player" } : {}) });
+}
+/** 分離（不満が限界を超えた）: 首都から遠い地域が独立した国になる。担当国の分離は、自動で内戦になる（v6.12.0）。アルゴリズム国家どうしは従来どおり */
+export function runSecession(ctx, st, part) {
+  const { civ, ids } = ctx, mi = civ.monthIndex, cap = civ.groups[st.capitalGroupId], gs = byState(ctx).get(st.id) ?? [];
+  st.lastCrisis = mi; const ev = makeEvent(civ, ids, { kind: "instability", title: `${st.name}で不満が高まる`, participants: [{ entityId: st.id, role: "state" }], location: cap ? { cell: cap.cell } : null, causes: [...asCauses(recentEventsFor(civ, [st.id, ...gs.map((g) => g.id)], ["famine", "disaster_struck", "demand_raised"], 48, 2), "contributed_to", "plausible"), ...asCauses(recentEventsFor(civ, [st.id], ["war_declared", "war_ended", "leader_succession"], 36, 2), "contributed_to", "strong")] }); st.lastCrisisEvent = ev.eventId;
+  const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id, cause: ev.eventId });
+  if (ns) { ns.relations[st.id] = -40; st.relations[ns.id] = -40; st.stability = Math.min(1, st.stability + 0.1); if (st.player) { ctx.corpsDefect?.(ns, st, part.map((g) => g.id)); /* v6.12.0: 忠誠度に応じて軍団が寝返る（内戦の前に） */ ctx.autoCivilWar?.(ns, st); } }
+  return ns;
+}
+
 /** 月次（conflict フェーズの前半）: 国家の形成・吸収・集計・安定度・分離・崩壊。重い処理は3か月ごと */
 export function stepStates(ctx) {
   const { world, civ, ids, rng } = ctx, mi = civ.monthIndex; if (mi % 3 !== 0) return;
@@ -119,13 +138,14 @@ export function stepStates(ctx) {
     st.treasury += pop * st.policy.tax * 0.0012 * taxMult(st) * (ctx.taxFactor?.(st) ?? 1) * (1 - Math.min(0.5, Object.keys(st.sanctions).filter((k) => st.sanctions[k] > mi).length * 0.1)); st.army = pop * (0.005 + 0.12 * st.policy.mobilization) * (0.5 + st.stability) * (1 - (st.warLoss ?? 0));
     for (const k in st.sanctions) if (st.sanctions[k] <= mi) delete st.sanctions[k];
     // 指導者の継承
-    const ls = lifeScale(civ, st), age = mi - st.leader.bornAt; if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4000 * ls))) { const heir = st.leader.heir; st.interpDirty = true; st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], rng) ?? makeNameJa(rng), leaderRng(civ, st, "succ")), bornAt: mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, kin: heir || rng() < 0.8, ...(st.leader.title ? { title: st.leader.title } : {}) }; /* v6.9.0: 継承者がいなくても、多くは同じ家系の親族が立つ（王朝交代は少数） */ if (st.offices) { const ro = st.offices.find((o) => o.id === OFFICE_RULER(st)); if (ro) ro.holder = { name: st.leader.name, look: null }; /* v6.4.0: 元首の役職の担当者は為政者と同じ人 */ } st.stability = Math.max(0, st.stability - (heir ? 0.03 : 0.12)); makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell } }); }
+    const ls = lifeScale(civ, st), age = mi - st.leader.bornAt; if (age > 480 * ls && rng() < Math.min(0.2, (age - 480 * ls) / (4000 * ls))) { if (st.player && ctx.decisions?.succession(ctx, st)) { /* v6.12.0: 担当国の継承は、時間を止めて候補者から選ぶ（決断） */ } else enthrone(ctx, st); }
     if (st.stability < 0.08 && before < 0.2) { dissolve(ctx, st, "崩壊した"); continue; }
     if (civ.options?.wcde && !st.player && mi % 12 === 0) { const age = (mi - st.formedAt) / 12; if (age > 120 && rng() < lifespanHazard(age)) { dissolve(ctx, st, "王朝の衰えとともに崩壊した"); continue; } } // v6.9.0: 国家の寿命は史実のように偏る（1000 年を超えるのは 1 割に満たない）
     if (st.stability < 0.3 && gs.length >= 3 && mi - st.lastCrisis > 60 && !(civ.options?.wcde && aliveStates(civ).length >= stateCap(civ))) { // 分離: 首都から遠い半分が独立
       dists.sort((a, b) => b[0] - a[0]); const part = dists.slice(0, Math.max(1, Math.floor(gs.length / 2))).map((x) => x[1]).filter((g) => !g.player || st.player === false);
-      if (part.length && part.length < gs.length) { st.lastCrisis = mi; const ev = makeEvent(civ, ids, { kind: "instability", title: `${st.name}で不満が高まる`, participants: [{ entityId: st.id, role: "state" }], location: { cell: cap.cell }, causes: [...asCauses(recentEventsFor(civ, [st.id, ...gs.map((g) => g.id)], ["famine", "disaster_struck", "demand_raised"], 48, 2), "contributed_to", "plausible"), ...asCauses(recentEventsFor(civ, [st.id], ["war_declared", "war_ended", "leader_succession"], 36, 2), "contributed_to", "strong")] }); st.lastCrisisEvent = ev.eventId; const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id, cause: ev.eventId }); if (ns) { ns.relations[st.id] = -40; st.relations[ns.id] = -40; st.stability = Math.min(1, st.stability + 0.1); } }
+      if (part.length && part.length < gs.length) { if (st.player && ctx.decisions?.rebellion(ctx, st, part.map((g) => g.id))) { /* v6.12.0: 担当国の反乱は、鎮圧か譲歩かを決断する */ } else runSecession(ctx, st, part); }
     }
+    if (st.player) ctx.decisions?.omen(ctx, st); // v6.12.0: 反乱の前兆（偵察が行き届いていれば見える）
   }
   if (mi % 12 === 0 && civ.options?.wcde) stepUnification(ctx, byState(ctx));
   // 2) 国家のない集団: 形成の評価と吸収（NPC は自動。プレイヤー集団は提案）

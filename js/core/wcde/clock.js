@@ -8,6 +8,7 @@
 //   ・時間を早送りする管理命令（time.advance）は、ニュースを判定せず走査位置だけを進める（早送りで飛ばした出来事で、後から全画面が出ない）。
 import { inLiveRange, findRecord } from "../civ/archive.js";
 import { checkpointFull, restoreInto } from "./contract.js";
+import { hasPending, decisionsOf } from "./decision-state.js";
 
 export const SPEEDS = Object.freeze([{ id: 0, label: "停止", mps: 0 }, { id: 1, label: "月", mps: 1 }, { id: 2, label: "3月", mps: 3 }, { id: 3, label: "年", mps: 12 }, { id: 4, label: "5年", mps: 60 }]);
 export const DEFAULT_SPEED = 1, ACK_KEEP = 400, MAX_RUN = 240, COOLDOWN = 60; // 同じ種類・同じ国の重大ニュースは、60か月は繰り返さない（次は通常の「主要ニュース」に格下げ）
@@ -78,14 +79,15 @@ export const skipNews = (civ) => { newsOf(civ).scanned = civ.events.length; };
 
 /** 世界時計を最大 months か月進める（UI の再生が呼ぶ）。重大ニュースが出た月で止まる。hold 中は拒否 */
 export function clockRun(w, months) {
-  const { civ } = w, T = timeOf(civ); if (T.hold) return { ok: false, code: "news_hold", error: "重大ニュースの確認待ちです（OK を押すまで時間は進みません）" };
+  const { civ } = w, T = timeOf(civ); if (T.hold) return hasPending(civ) ? { ok: false, code: "decision_hold", error: "決断が必要です（選ぶまで時間は進みません）。重大ニュースの確認待ちが残っていれば、先に OK を押してください" } : { ok: false, code: "news_hold", error: "重大ニュースの確認待ちです（OK を押すまで時間は進みません）" };
   const n = Math.max(1, Math.min(MAX_RUN, months | 0)), snap = checkpointFull(civ); let done = 0, held = false;
+  decisionsOf(civ).live = true; // v6.12.0: 人間が時間を進めている間だけ、決断（条約の申し出・宣戦・継承・反乱・会戦）が出る
   try { for (; done < n; done++) { w.sim.advanceMonth(); if (scanNews(civ) > 0 || timeOf(civ).hold) { done++; held = true; break; } } } catch (err) {
     // 失敗した月の手前まで、取り消し点から決定的に再現する（その手前の月は重大ニュースを出していない）
     restoreInto(w, snap); const msg = String(err?.message ?? err); for (let i = 0; i < done; i++) w.sim.advanceMonth(); const ok = done;
     skipNews(civ); timeOf(civ).speed = 0; civ.wcde.diagnostics.push({ at: civ.monthIndex, failedMonth: civ.monthIndex + 1, message: msg }); if (civ.wcde.diagnostics.length > 50) civ.wcde.diagnostics.shift();
     return { ok: false, advanced: ok, error: msg, haltedAt: { ...civ.date } };
-  }
+  } finally { if (civ.wcde?.decisions) civ.wcde.decisions.live = false; }
   return { ok: true, advanced: done, held, date: { ...civ.date } };
 }
 
@@ -94,6 +96,7 @@ export function ackNews(w, { id = null } = {}) {
   const { civ } = w, N = newsOf(civ), T = timeOf(civ), head = N.queue[0]; if (!head) return { ok: false, error: "確認待ちのニュースはありません" };
   if (id != null && id !== head.id) return { ok: false, error: "最初のニュースから順に確認してください" };
   N.queue.shift(); N.acked.push(head.eventId); if (N.acked.length > ACK_KEEP) N.acked.splice(0, N.acked.length - ACK_KEEP);
+  if (!N.queue.length && hasPending(civ)) return { ok: true, resumed: false, next: null, decisionsPending: true }; // v6.12.0: 決断が残っているあいだは時間を止めたまま
   if (!N.queue.length) { T.hold = false; T.speed = T.resumeSpeed ?? DEFAULT_SPEED; T.resumeSpeed = null; return { ok: true, resumed: true, speed: T.speed, next: null }; }
   return { ok: true, resumed: false, next: N.queue[0] };
 }
@@ -108,7 +111,7 @@ export function newsFeed(civ, { limit = 40, minLevel = "major", before = null } 
 }
 export function checkClock(civ) {
   const errs = [], T = civ.wcde.time, N = civ.wcde.news; if (!T && !N) return errs;
-  if (T) { if (!SPEEDS.some((s) => s.id === T.speed)) errs.push("時間の速度が不正"); if (T.hold && !(N?.queue.length)) errs.push("停止中なのに確認待ちのニュースがない（時間が止まったままになる）"); if (!T.hold && N?.queue.length) errs.push("確認待ちのニュースがあるのに時間が止まっていない"); if (T.hold && T.resumeSpeed != null && !SPEEDS.some((s) => s.id === T.resumeSpeed)) errs.push("復帰時の速度が不正"); }
+  if (T) { if (!SPEEDS.some((s) => s.id === T.speed)) errs.push("時間の速度が不正"); if (T.hold && !(N?.queue.length) && !hasPending(civ)) errs.push("停止中なのに確認待ちのニュースも決断もない（時間が止まったままになる）"); if (!T.hold && (N?.queue.length || hasPending(civ))) errs.push("確認待ちのニュースか決断があるのに時間が止まっていない"); if (T.hold && T.resumeSpeed != null && !SPEEDS.some((s) => s.id === T.resumeSpeed)) errs.push("復帰時の速度が不正"); }
   if (N) { const seen = new Set(); for (const q of N.queue) { if (seen.has(q.id)) errs.push(`ニュース ${q.id} が重複`); seen.add(q.id); if (!civ.events.some((e) => e.eventId === q.eventId) && (inLiveRange(civ, q.eventId) || !findRecord(civ, q.eventId))) errs.push(`ニュース ${q.id} の元の事実イベントがない`); if (N.acked.includes(q.eventId)) errs.push(`確認済みのニュース ${q.id} がキューにある`); } if (N.scanned > civ.events.length || !Number.isInteger(N.scanned) || N.scanned < 0) errs.push("ニュースの走査位置が不正"); }
   return errs;
 }
