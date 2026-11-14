@@ -5,6 +5,7 @@
 //   - 塗り命令の回数が色数まで減り、速い
 import { landHeightColor } from "../palette.js";
 import { timed } from "../profile.js";
+import { cellCountOf, centersOf, hasAlt, ringLength } from "../../core/geometry-csr.js";
 
 const OCEAN_NEAR = "#86aed0";  // 海岸に隣接する水域
 const OCEAN_MID = "#6f97c0";   // その外側
@@ -21,6 +22,15 @@ const LAKE = "#8bbbe0";
  */
 export function addCellPath(ctx, cells, vertices, i, wy = null) {
   // wy: 球面世界の表示用に y を円筒図法へ変える関数（本物の Path2D に直接足すときに使う。warpContext 経由なら不要）
+  const csr = cells.csr; // v6.13.0: 球面世界の地図は、型付き配列（CSR）を直接読む（旧形式の小さな配列を作らない）
+  if (csr) {
+    const vx = csr.vx, vy = csr.vy, ring = (ids, s, e) => {
+      for (let k = s; k < e; k++) { const t = ids[k], y = wy ? wy(vy[t]) : vy[t]; if (k === s) ctx.moveTo(vx[t], y); else ctx.lineTo(vx[t], y); }
+    };
+    ring(csr.polyIds, csr.polyOff[i], csr.polyOff[i + 1]);
+    if (csr.altOff[i + 1] > csr.altOff[i]) ring(csr.altIds, csr.altOff[i], csr.altOff[i + 1]); // 世界の継ぎ目をまたぐセルは反対側の端にも描く
+    return;
+  }
   const ring = (poly) => {
     for (let k = 0; k < poly.length; k++) {
       const p = vertices.p[poly[k]], y = wy ? wy(p[1]) : p[1];
@@ -59,10 +69,10 @@ export function drawTerrain(ctx, map, vp, mode = "biome", prof = null) {
   if (!cache || cache.stamp !== stamp) { cache = { stamp, byKey: new Map() }; pathCache.set(map.geometry, cache); }
   const hasPath2D = typeof Path2D !== "undefined";
   // 近景（世界の半分より狭くしか見えない: 拡大している・継ぎ目の外側の細い繰り返し など）: 世界全体のパスは作らず、画面にかかるセルだけを毎回まとめて塗る（見えないセルを描かない）
-  const near = vp.cullable?.() ?? (vp.fitK > 0 && vp.k / vp.fitK > 4), P = map.geometry.pack.p;
+  const near = vp.cullable?.() ?? (vp.fitK > 0 && vp.k / vp.fitK > 4), ctr = near ? centersOf(map.geometry) : null, nCells = cellCountOf(map.geometry);
   let vb = null, margin = 0;
   if (near) { vb = vp.visibleBounds(40); margin = (map.grid?.spacing || 8) * 3; }
-  const alt = cells.alt, visible = (i) => { if (alt?.[i]) return true; /* 継ぎ目をまたぐセルは反対側の端にも描くので、常に候補にする（数が少ない） */ const p = P[i]; return p[0] >= vb.x0 - margin && p[0] <= vb.x1 + margin && p[1] >= vb.y0 - margin && p[1] <= vb.y1 + margin; };
+  const visible = (i) => { if (hasAlt(cells, i)) return true; /* 継ぎ目をまたぐセルは反対側の端にも描くので、常に候補にする（数が少ない） */ const x = ctr.cx[i], y = ctr.cy[i]; return x >= vb.x0 - margin && x <= vb.x1 + margin && y >= vb.y0 - margin && y <= vb.y1 + margin; };
   function paint(landColor, { water = true, alpha = 1, key = "" } = {}) {
     if (near) return paintNear(landColor, water, alpha);
     let entries = cache.byKey.get(key);
@@ -70,7 +80,7 @@ export function drawTerrain(ctx, map, vp, mode = "biome", prof = null) {
     if (!entries) {
       const groups = new Map();
       timed(prof, "terrain.classify", null, () => {
-        for (let i = 0; i < cells.v.length; i++) {
+        for (let i = 0; i < nCells; i++) {
           const hi = h[i];
           let color;
           if (hi < 20) color = water ? waterColorOf(map, i) : null;
@@ -88,7 +98,7 @@ export function drawTerrain(ctx, map, vp, mode = "biome", prof = null) {
           else entries.push({ color, list });
         }
       });
-      if (prof) { prof.count("terrain.colorGroups", groups.size); let c = 0, vs = 0; for (const list of groups.values()) for (const i of list) { c++; vs += cells.v[i].length + (cells.alt?.[i]?.length ?? 0); } prof.count("terrain.cells", c); prof.count("terrain.verts", vs); }
+      if (prof) { prof.count("terrain.colorGroups", groups.size); let c = 0, vs = 0; for (const list of groups.values()) for (const i of list) { c++; vs += ringLength(cells, i) * (hasAlt(cells, i) ? 2 : 1); } prof.count("terrain.cells", c); prof.count("terrain.verts", vs); }
       cache.byKey.set(key, entries);
     }
     timed(prof, "terrain.fill", ctx, () => {
@@ -104,7 +114,7 @@ export function drawTerrain(ctx, map, vp, mode = "biome", prof = null) {
   function paintNear(landColor, water, alpha) {
     const groups = new Map();
     timed(prof, "terrain.near.filter", null, () => {
-      for (let i = 0; i < cells.v.length; i++) {
+      for (let i = 0; i < nCells; i++) {
         if (!visible(i)) continue;
         const hi = h[i]; let color;
         if (hi < 20) color = water ? waterColorOf(map, i) : null; else color = landColor(i, hi);

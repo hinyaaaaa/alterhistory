@@ -1,5 +1,6 @@
 // v6.8.0〜v6.9.0: 世界の較正（人口・技術・生業・国家数）と歴史の力学（戦争・政体・王朝・寿命・条約・メモリ整理）。
 import { densityMultOf } from "../js/core/civ/techfx.js";
+import { TREE } from "../js/core/civ/techtree.js";
 import { targetPop, targetTechCount, POP_CURVE, TECH_CURVE, stepCalibration } from "../js/core/civ/calibration.js";
 import { agriSuited, pastoralSuited, subsistenceShift, SHIFT_P } from "../js/core/civ/population.js";
 import { stateCap, lifespanHazard } from "../js/core/civ/states.js";
@@ -19,7 +20,8 @@ check("旧版の上限（2.4 倍）に張り付かない", densityMultOf(1.0) > 
 check("起点は約 1,400 万人・年 5000 は約 61 億人", Math.abs(targetPop(0) - 14e6) < 1 && Math.abs(targetPop(5000) - 6.1e9) < 1e3);
 check("目標人口は単調（災厄の谷は作らない）", POP_CURVE.every((p, i) => i === 0 || p[1] >= POP_CURVE[i - 1][1]));
 check("紀元 0 年（世界の年 3000）ごろは約 2.3 億人", targetPop(3000) > 2e8 && targetPop(3000) < 2.6e8);
-check("技術の目標: 年 5000 で全 129 のうち 9 割以上", targetTechCount(5000) >= 0.9 * 129 && targetTechCount(0) < targetTechCount(2000));
+const NON_FUTURE = TREE.filter((t) => t.stage < 12).length;
+check(`技術の目標: 年 5000 で（未来を除く）全 ${NON_FUTURE} のうち 9 割以上`, targetTechCount(5000) >= 0.9 * NON_FUTURE && targetTechCount(5000) <= NON_FUTURE && targetTechCount(0) < targetTechCount(2000));
 
 console.log("=== 生業 ===");
 const mk = (biome, fert, g = {}) => ({ cell: { biome: [biome], fertility: [fert] }, g: { cell: 0, subsistence: "forage", knowledge: { agriculture: 1, herding: 1 }, player: false, ...g } });

@@ -1,6 +1,6 @@
 // WorldSpec（v4.0.0）。地理生成の入力を 1 つにまとめ、検証・既定値・範囲を持つ。
 //   同じ worldSeed・WorldSpec・generatorVersion なら、地理の出力は一致する（歴史の乱数とは別系統）。
-export const GENERATOR_VERSION = "6.11.0";
+export const GENERATOR_VERSION = "6.13.0";
 export const WORLD_SPEC_SCHEMA = 1;
 export const ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });
 export const LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);

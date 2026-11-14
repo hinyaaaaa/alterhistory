@@ -3,7 +3,7 @@ import { AUTHORITY as A, defineCommand, safeAdvance } from "./contract.js";
 import { foundAsPlayer, foundAsCreator, delegateToWorld, refreshCandidates, foundingOptions } from "./founding.js";
 import { planUprising, startUprising, setOffices } from "./uprising.js";
 import { takeControl, releaseControl, creatorEditState, creatorRename } from "./control.js";
-import { reorganize, adoptDoctrine } from "./domains/military.js";
+import { reorganize, adoptDoctrine, setOrbat } from "./domains/military.js";
 import { applyDisplayEdit } from "./calendar.js";
 import { clockRun, ackNews, setSpeed, skipNews, timeOf } from "./clock.js";
 import { createCatastrophe, planCatastrophe } from "./catastrophe.js";
@@ -12,7 +12,7 @@ import { negotiatePeace } from "./negotiation.js";
 import { directWar } from "./warfare.js";
 import { resolveDecision } from "./decisions.js";
 import { setPolicy } from "./policies.js";
-import { ensureCorps, renameCorps, renameUnit, splitCorps, mergeCorps, transferUnits, convertUnit, appoint, dismiss, setOrder, commitWar } from "./corps.js";
+import { ensureCorps, renameCorps, renameUnit, splitCorps, mergeCorps, transferUnits, convertUnit, appoint, dismiss, setOrder, commitWar, setComposition, appointChief, dismissChief } from "./corps.js";
 import { planTechEdit, techEdit, techEditReset, techGrant } from "./techedit.js";
 
 const ALL = ["prehistory", "founding", "running"];
@@ -58,13 +58,17 @@ export function registerCommands() {
   corpsCmd("corps.convert", (ctx, st, c) => convertUnit(ctx, st, c));
   corpsCmd("corps.appoint", (ctx, st, c) => appoint(ctx, st, c));
   corpsCmd("corps.dismiss", (ctx, st, c) => dismiss(st, c));
-  corpsCmd("corps.order", (ctx, st, c) => setOrder(ctx, st, c));
+  corpsCmd("corps.setComposition", (ctx, st, c) => setComposition(ctx, st, c)); // v6.13.0: 部隊の兵種ごとの人数（自動／手動）
+corpsCmd("corps.appointChief", (ctx, st, c) => appointChief(ctx, st, c));
+corpsCmd("corps.dismissChief", (ctx, st, c) => dismissChief(st, c));
+corpsCmd("corps.order", (ctx, st, c) => setOrder(ctx, st, c));
   corpsCmd("corps.commit", (ctx, st, c) => commitWar(ctx, st, c));
   // v6.12.0: 国策（分野ごとの枠に入れる）。担当国家だけ
   defineCommand("focus.set", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = setPolicy(w.sim.ctx, st, { category: c.category, slot: c.slot, policyId: c.policyId ?? null }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   // 戦争の高位の方針（posture 攻勢/均衡/守勢・投入割合・重点の戦域）。作戦の立案と実行は AI と同じ経路（プレイヤーは個々の作戦を直接動かさない）
   defineCommand("war.direct", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId], war = w.civ.wars[c.warId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; if (!war) return { ok: false, error: "その戦争はありません" }; const r = directWar(w.sim.ctx, st, war, { posture: c.posture ?? null, commit: c.commit ?? null, focus: c.focus }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   defineCommand("state.reorganize", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; return reorganize(w.sim.ctx, st, c.shares); } });
+  defineCommand("state.setOrbat", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = setOrbat(w.sim.ctx, st, c); return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason }; } }); // v6.13.0: 兵種ごとの人数（自動／手動）
   defineCommand("state.adoptDoctrine", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = adoptDoctrine(w.sim.ctx, st, c.doctrineId ?? c.id, { provenance: "player" }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason }; } });
   // 創造主の直接編集（担当の有無に依らない）
   defineCommand("creator.editState", { authorities: [A.CREATOR], apply: (w, c) => creatorEditState(w, c) });

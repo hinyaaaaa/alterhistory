@@ -3,6 +3,7 @@
 
 import { effectiveDoctrineKey } from "./edit/doctrines.js";
 import { forcePower, forceHeadcount } from "./sim/units.js";
+import { centerOf } from "./geometry-csr.js";
 
 const nameOf = (list, id) => {
   const e = list?.[id];
@@ -87,7 +88,7 @@ export function placeLabel(map, cell) {
 
 export function entityPosition(map, entity) {
   if (entity.pole) return [entity.pole[0], entity.pole[1]];
-  const p = entity.center != null ? map.geometry?.pack.p[entity.center] : null;
+  const p = entity.center != null && map.geometry ? centerOf(map.geometry, entity.center) : null;
   return p ? [p[0], p[1]] : null;
 }
 

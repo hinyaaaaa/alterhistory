@@ -1,8 +1,9 @@
+import { centersOf } from "../../core/geometry-csr.js";
 // 線の層：河川と道路・航路。
 
 /** 河川。流量に応じて太くする */
 export function drawRivers(ctx, map, vp) {
-  const { p } = map.geometry.pack;
+  const ctr = centersOf(map.geometry), nC = ctr.n;
   ctx.strokeStyle = "#5f8fbf";
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
@@ -13,9 +14,8 @@ export function drawRivers(ctx, map, vp) {
     ctx.beginPath();
     let started = false;
     for (const c of r.cells) {
-      const pt = p[c];
-      if (!pt) continue; // 範囲外(-1 など)は飛ばす
-      if (!started) { ctx.moveTo(pt[0], pt[1]); started = true; } else ctx.lineTo(pt[0], pt[1]);
+      if (!(c >= 0 && c < nC)) continue; // 範囲外(-1 など)は飛ばす
+      if (!started) { ctx.moveTo(ctr.cx[c], ctr.cy[c]); started = true; } else ctx.lineTo(ctr.cx[c], ctr.cy[c]);
     }
     ctx.stroke();
   }

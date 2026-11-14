@@ -10,7 +10,7 @@ import { emptyLayers, newGroup, hashSeed, rngOf, CIV_STATE_VERSION } from "../ci
 import { fromMonthIndex, monthIndex } from "../civ/tick.js";
 import { createCulture, createLanguage, createReligion } from "../civ/culture.js";
 import { makeEvent } from "../civ/events.js";
-import { POP, groupCapacity, reachable, cellCapacity, spawnGroup, territoryOf } from "../civ/population.js";
+import { POP, groupCapacity, reachable, cellCapacity, spawnGroup, territoryOf, verGE } from "../civ/population.js";
 import { TECHS, TECH, refreshCand, emergenceRate, pEmerge, u01, accel } from "../civ/tech.js";
 import { calibrateStart } from "../civ/calibration.js";
 import { initEco, stepEco, ecoMult } from "./domains/ecosystem.js";
@@ -72,7 +72,7 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
   const phase0 = (hashSeed(seed, "ice") % 1000) / 1000 * Math.PI * 2, vol = cfg.laws.climateVolatility;
   const stats = { steps, stepYears: years / steps, species: {}, firstTech: {}, peakGroups: 0, glacialMax: 0, seaCrossings: 0, settlements: 0, budSearches: 0, farSearches: 0, extinct: 0 };
   const order = [], occ = new Map(), home = new Map(), addOcc = (g) => { for (const c of g.cells) { occ.set(c, (occ.get(c) ?? 0) + 1); home.set(c, g.id); } }, subOcc = (g) => { for (const c of g.cells) { const n = (occ.get(c) ?? 1) - 1; if (n <= 0) { occ.delete(c); home.delete(c); } else { occ.set(c, n); if (home.get(c) === g.id) home.delete(c); } } };
-  const ce = world.cell, N = world.mesh.cellCount;
+  const ce = world.cell, N = world.mesh.cellCount, siteNew = !!world.siteTools?.planSettlements && verGE(world.spec?.generatorVersion ?? "0", "6.13.0"); // 集落の選定は world.siteTools（world/ を直接 import しない決まり）
   const envFit = (sp, b) => (!sp.env?.length ? 1 : sp.env.includes(b) ? 1 : 0.3);
   const speciesIn = (id) => speciesOf(id, civ);
   const note = (kind, title, parts, g, causes = []) => makeEvent(civ, ids, { kind, title, participants: parts, location: g ? { cell: g.cell } : null, causes, provenance: "simulation" });
@@ -186,8 +186,15 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
   // --- 先史の終わり: 年 0 に合わせる。定住できる集団は集落を持つ（個別のイベントは作らず、集計に残す）
   civ.monthIndex = monthIndex(0, 1); civ.date = fromMonthIndex(civ.monthIndex);
   calibrateStart(world, civ); // v6.8.0: 世界の人口を史実の起点（約 1,400 万人）へそろえる
+  let sitePlan = null; // v6.13.0: 集落を持つ集団とそのセルを、適地スコアの高い順に・間隔をまちまちにして決める
+  if (siteNew) {
+    const elig = []; for (const id of order) { const g = civ.groups[id]; if (!g) continue; g.cells = g.cells ?? territoryOf(world, g.cell); if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop) elig.push(g); }
+    const CP = world.cityPlugin ?? null, pscore = typeof CP?.siteScore === "function" ? (w, c, base, g) => { try { const v = CP.siteScore(w, c, { civ, group: g, base }); return Number.isFinite(v) ? v : base; } catch { return base; } } : null; // 都市プラグインの得点があれば、集落の立地にも使う
+    sitePlan = world.siteTools.planSettlements(world, elig, hashSeed(world.spec.worldSeed, "sites"), pscore);
+  }
   for (const id of order) { const g = civ.groups[id]; if (!g) continue; g.lastBudAt = civ.monthIndex - POP.budCooldown; g.noTargetUntil = undefined; g.famineAt = -999; g.cells = g.cells ?? territoryOf(world, g.cell); delete g.gen; delete g.noTargetUntil; delete g.capMult;
-    if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop) { const sid = ids.next("settle"); let best = g.cell, bs = -1; for (const c of g.cells) { const s = ce.fertility[c] + (ce.river[c] ? 0.4 : 0) + (ce.coastDist[c] <= 1 ? 0.2 : 0); if (s > bs) { bs = s; best = c; } } civ.settlements[sid] = { id: sid, groupId: g.id, cell: best, foundedAt: civ.monthIndex - 60, pop: Math.round(g.pop * POP.settledShare), stage: stageOf(Math.round(g.pop * POP.settledShare)) }; g.settlementId = sid; g.settledMonths = POP.settleMinMonths; stats.settlements++; }
+    // v6.13.0: 集落の立地は適地スコア（合流点・河口・良港・防御性・平坦さ）。それ以前の版は従来どおり
+    if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && (!siteNew || sitePlan.has(g.id))) { const sid = ids.next("settle"); let best = g.cell, bs = -1; if (siteNew) best = sitePlan.get(g.id); else for (const c of g.cells) { const s = ce.fertility[c] + (ce.river[c] ? 0.4 : 0) + (ce.coastDist[c] <= 1 ? 0.2 : 0); if (s > bs) { bs = s; best = c; } } civ.settlements[sid] = { id: sid, groupId: g.id, cell: best, foundedAt: civ.monthIndex - 60, pop: Math.round(g.pop * POP.settledShare), stage: stageOf(Math.round(g.pop * POP.settledShare)) }; g.settlementId = sid; g.settledMonths = POP.settleMinMonths; stats.settlements++; }
     g.bornAt = Math.min(g.bornAt, civ.monthIndex); }
   for (const id of order) { const g = civ.groups[id]; if (g && g.parent && !civ.groups[g.parent]) g.parent = null; } // 先史の集計の中で消えた親は、系譜として辿らない
   stats.groups = Object.keys(civ.groups).length; stats.pop = Math.round(Object.values(civ.groups).reduce((s, g) => s + g.pop, 0));

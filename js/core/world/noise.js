@@ -59,3 +59,48 @@ export function makeFbm3(seed, octaves = 4, freq = 1, gain = 0.5) {
     return sum / norm;
   };
 }
+
+// ---------------------------------------------------------------------------
+// v6.13.0: 勾配ノイズ（Perlin 系）と、それを使った尾根ノイズ。
+//   値ノイズ（valueNoise3）は格子の向きに沿った「ぼてっとした塊」が出やすい。勾配ノイズは格子の影響が小さく、地形の細部（丘・谷・尾根）が自然に出る。
+//   大陸の計画・プレートなど、大枠を決める部分は従来の値ノイズのまま（海岸線の大枠を変えないため）。細部だけがこちらを使う。
+// ---------------------------------------------------------------------------
+const GRAD3 = [[1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0], [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1], [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]];
+function ghash(seed, x, y, z) {
+  let h = seed ^ Math.imul(x, 0x27d4eb2d) ^ Math.imul(y, 0x165667b1) ^ Math.imul(z, 0x9e3779b1);
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return ((h ^ (h >>> 16)) >>> 0) % 12;
+}
+const qfade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+const GX = Float64Array.from(GRAD3, (g) => g[0]), GY = Float64Array.from(GRAD3, (g) => g[1]), GZ = Float64Array.from(GRAD3, (g) => g[2]);
+/** 3 次元の勾配ノイズ。おおよそ -1〜1（0 中心）。内側の関数を作らず、8 隅の勾配を直接読む（全セルで何度も呼ぶので速さが効く） */
+export function gradNoise3(seed, x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx = x - xi, fy = y - yi, fz = z - zi, u = qfade(fx), v = qfade(fy), w = qfade(fz);
+  const gx = fx - 1, gy = fy - 1, gz = fz - 1;
+  let g = ghash(seed, xi, yi, zi); const n000 = GX[g] * fx + GY[g] * fy + GZ[g] * fz;
+  g = ghash(seed, xi + 1, yi, zi); const n100 = GX[g] * gx + GY[g] * fy + GZ[g] * fz;
+  g = ghash(seed, xi, yi + 1, zi); const n010 = GX[g] * fx + GY[g] * gy + GZ[g] * fz;
+  g = ghash(seed, xi + 1, yi + 1, zi); const n110 = GX[g] * gx + GY[g] * gy + GZ[g] * fz;
+  g = ghash(seed, xi, yi, zi + 1); const n001 = GX[g] * fx + GY[g] * fy + GZ[g] * gz;
+  g = ghash(seed, xi + 1, yi, zi + 1); const n101 = GX[g] * gx + GY[g] * fy + GZ[g] * gz;
+  g = ghash(seed, xi, yi + 1, zi + 1); const n011 = GX[g] * fx + GY[g] * gy + GZ[g] * gz;
+  g = ghash(seed, xi + 1, yi + 1, zi + 1); const n111 = GX[g] * gx + GY[g] * gy + GZ[g] * gz;
+  const x00 = n000 + (n100 - n000) * u, x10 = n010 + (n110 - n010) * u, x01 = n001 + (n101 - n001) * u, x11 = n011 + (n111 - n011) * u;
+  const y0 = x00 + (x10 - x00) * v, y1 = x01 + (x11 - x01) * v;
+  return y0 + (y1 - y0) * w;
+}
+/** 勾配ノイズのフラクタル和。fbm3 と同じ 0〜1（0.5 中心）の値域に揃えてあるので、差し替えて使える */
+export function gfbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {
+  let sum = 0, amp = 1, norm = 0, f = freq;
+  for (let o = 0; o < octaves; o++) { sum += amp * gradNoise3(seed + o * 101, x * f, y * f, z * f); norm += amp; amp *= gain; f *= 2.03; }
+  return Math.max(0, Math.min(1, 0.5 + 0.62 * (sum / norm)));
+}
+/** 尾根ノイズ 0〜1: 1 - |noise| を 2 乗して稜線を鋭くし、高い層ほど低い層の尾根に沿って重ねる（山脈の稜線・谷の筋が出る） */
+export function ridged3(seed, x, y, z, octaves = 5, freq = 1, gain = 0.5) {
+  let sum = 0, amp = 0.5, f = freq, weight = 1, norm = 0;
+  for (let o = 0; o < octaves; o++) {
+    let s = 1 - Math.abs(gradNoise3(seed + o * 131, x * f, y * f, z * f)); s *= s; s *= weight;
+    weight = Math.max(0, Math.min(1, s * 2)); sum += s * amp; norm += amp; amp *= gain; f *= 2.1;
+  }
+  return Math.min(1, sum / norm * 1.15);
+}

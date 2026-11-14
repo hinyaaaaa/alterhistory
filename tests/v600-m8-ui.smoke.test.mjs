@@ -35,7 +35,7 @@ await check("【国家】一覧は成立が新しい順。クリックしても�
 await check("【技術ツリー】実データの全ノードが四方位の放射状に並び、状態を区別し、ドラッグ・ホイールで操作できる", () => {
   tab("tech"); assert.ok($$(".tnode").length >= 39, "ノード " + $$(".tnode").length); assert.ok(/制度化/.test(txt()) && /未発見/.test(txt())); const svg = $("svg.tree"); svg.dispatchEvent(new window.WheelEvent("wheel", { deltaY: -100, clientX: 10, clientY: 10, bubbles: true, cancelable: true })); assert.ok(svg.getAttribute("viewBox").split(" ")[2] < 1000, "ズームで viewBox が変わる"); click($$(".tnode")[3]); assert.ok(/国内の普及/.test(txt()));
 });
-await check("【ドクトリン】共通と政体固有の木・取得条件・理由の表示", () => { tab("doctrine"); assert.ok($$(".tnode").length >= 30); assert.ok(/共通 5 系統/.test(txt())); click($$(".tnode")[0]); assert.ok(/攻撃/.test(txt())); });
+await check("【ドクトリン】共通と政体固有の木・取得条件・理由の表示", () => { tab("doctrine"); assert.ok($$(".tnode").length >= 30); assert.ok(/基幹 5 系統/.test(txt()) && /陸軍の路線/.test(txt()) && /空軍の路線/.test(txt())); /* v6.13.0: 基幹 5 系統に、陸・海・空の路線が並ぶ */ click($$(".tnode")[0]); assert.ok(/攻撃/.test(txt())); });
 await check("再生中、左のパネルを勝手に描き直さない（読んでいる最中・入力中の内容が変わらない）。世界が進んで古くなると「最新の状態に更新」が出て、押すと描き直す", async () => {
   hub("nations"); await wait(60); if (V().S.hub !== "nations") hub("nations"); const pin = $("#pin"), mark = doc.createElement("i"); mark.id = "keep-mark"; pin.firstChild.append(mark); assert.ok(!$("#prefresh").classList.contains("stale"));
   const mi = V().S.w.civ.monthIndex; V().run({ type: "clock.setSpeed", speed: 3 }); await wait(2600); /* 2 秒ごとの旧い自動更新の周期を超えて待つ */ V().run({ type: "clock.setSpeed", speed: 0 });

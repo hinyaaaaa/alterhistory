@@ -6,6 +6,7 @@ import { listEntities, ENTITY_KINDS } from "../core/query.js";
 import { isProvisional } from "../core/edit/naming.js";
 import { activeFills, legendKindOf, FILL_LABEL } from "../app/layers.js";
 import { byId } from "./dom.js";
+import { cellCountOf } from "../core/geometry-csr.js";
 
 export function initLegend({ store, actions, panels, highlight }) {
   const title = byId("legend-title");
@@ -23,7 +24,7 @@ export function initLegend({ store, actions, panels, highlight }) {
     wrap.classList.toggle("has-map", !!map);
     const kind = legendKindOf(view);
     const fills = activeFills(view);
-    const key = map ? `${map.geometry?.pack.p.length}:${kind}:${fills.join(",")}:${state.fileName}:${rev}` : "none";
+    const key = map ? `${map.geometry ? cellCountOf(map.geometry) : 0}:${kind}:${fills.join(",")}:${state.fileName}:${rev}` : "none";
     if (key === lastKey) return; // 表示に関係ない更新（ホバー等）では作り直さない
     lastKey = key;
 

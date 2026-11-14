@@ -41,7 +41,7 @@ await check("【国家ページ】旗・為政者の顔・主要指標のアイ�
   assert.ok($(".hero .flag") && $(".hero svg.ico")); assert.ok($$(".hero .metric").length >= 6); assert.ok($(".stackbar") || !w.civ.states[sid].politics); assert.ok(!$("#fin-open")); assert.ok(!/名称の変更は表示名だけです/.test($("#pin").textContent));
 });
 await check("【軍事】リング・編成の帯・部隊の名前（技術に合わせる）・編成の編集スライダー", async () => {
-  V().S.tab = "military"; V().render(); await wait(30); assert.ok($$(".ringbox").length === 4); assert.ok($(".stackbar")); assert.ok($$(".fcard").length >= 1); assert.ok($("#reorg-box")); const sl = $$("#reorg-box input[type=range]"); assert.ok(sl.length >= 1);
+  V().S.tab = "military"; V().render(); await wait(30); assert.ok($$(".ringbox").length === 4); assert.ok($(".stackbar")); assert.ok($$(".fcard").length >= 1); assert.ok($("#reorg-box")); const sl = $$("#reorg-box input[type=number]"); assert.ok(sl.length >= 1, "v6.13.0: 兵種ごとの人数の入力欄"); assert.ok($("#reorg") && $("#reorg-auto"));
   assert.ok(!/戦争研究所/.test($("#pin").textContent), "『戦争研究所』と名乗らない");
   const names = w.civ.states[sid].military.units.map((u) => u.name); assert.ok(names.every((n) => !n.includes("の") || true) && names.length >= 1);
 });

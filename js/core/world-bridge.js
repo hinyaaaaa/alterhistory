@@ -15,6 +15,7 @@ import { createEmptyMap } from "./model.js";
 import { LAND_WATER, BIOMES } from "./world/worldgen.js";
 import { cellViewPolygon } from "./world/sphere-mesh.js";
 import { simFrame } from "./world/projection.js";
+import { installLegacyViews } from "./geometry-csr.js";
 
 export const MAP_WIDTH = 2048, MAP_HEIGHT = 1024;
 export const WORLD_SOURCE = "alterhistory-world";
@@ -107,50 +108,58 @@ export function refreshRivers(map) {
   for (const r of map.pack.rivers) for (const c of r.cells) if (map.world.cell.landWater[c] === LAND_WATER.LAND) rv[c] = r.i;
 }
 
-/** セルの多角形・隣接・頂点（等距円筒）。継ぎ目と極を処理する */
+/**
+ * セルの多角形・隣接・頂点（等距円筒）。継ぎ目と極を処理する。
+ * v6.13.0: 型付き配列（CSR）で作る（js/core/geometry-csr.js）。旧形式の p / cells.v・c・b・alt / vertices.p・v・c は、読まれたときに初めて作る遅延ゲッター。
+ *   頂点番号の付き方（継ぎ目の複製頂点・極の追加点）は旧実装と同じなので、旧形式を作って比べても 1 つも違わない（tests/v6130-geometry-csr.test.mjs）。
+ */
 function buildGeometry(mesh, h, W, H) {
-  const N = mesh.cellCount, V = mesh.vertexXYZ.length / 3, vx = mesh.vertexXYZ;
+  const N = mesh.cellCount, V0 = mesh.vertexXYZ.length / 3, vx3 = mesh.vertexXYZ;
   const frame = simFrame(W); // 球面 → 地図座標（sim）の変換は projection.js の 1 か所だけ。表示用の円筒図法は視点側（render/viewport）が適用する
-  const vp = new Array(V), vv = new Array(V), vc = new Array(V);
-  for (let t = 0; t < V; t++) {
-    const lon = Math.atan2(vx[3 * t + 1], vx[3 * t]), lat = Math.asin(Math.max(-1, Math.min(1, vx[3 * t + 2])));
-    vp[t] = frame.toSim(lat, lon).map(r2); vv[t] = []; vc[t] = [];
+  const X = new Array(V0), Y = new Array(V0); // 頂点の座標。継ぎ目の複製頂点・極の追加点で伸びる（作り終えたら型付き配列にする）
+  for (let t = 0; t < V0; t++) {
+    const lon = Math.atan2(vx3[3 * t + 1], vx3[3 * t]), lat = Math.asin(Math.max(-1, Math.min(1, vx3[3 * t + 2]))), q = frame.toSim(lat, lon);
+    X[t] = r2(q[0]); Y[t] = r2(q[1]);
   }
-  const p = new Array(N), cv = new Array(N), cc = new Array(N), cb = new Array(N), alt = new Array(N).fill(null), dup = new Map();
-  const addV = (a, b) => { if (!vv[a].includes(b)) vv[a].push(b); if (!vv[b].includes(a)) vv[b].push(a); };
+  const dup = new Map();
   const shifted = (t, shift) => { // 継ぎ目の外へずらした複製頂点（shift 周分ずらす）
     if (shift === 0) return t;
     const key = t + ":" + shift; let id = dup.get(key);
-    if (id == null) { id = vp.length; vp.push([r2(vp[t][0] + shift * W), vp[t][1]]); vv.push(vv[t].slice()); vc.push(vc[t].slice()); dup.set(key, id); }
+    if (id == null) { id = X.length; X.push(r2(X[t] + shift * W)); Y.push(Y[t]); dup.set(key, id); }
     return id;
   };
-  const off = mesh.neighborOffsets, nb = mesh.neighborIds;
+  const cx = new Float64Array(N), cy = new Float64Array(N), border = new Uint8Array(N), polyOff = new Uint32Array(N + 1), altOff = new Uint32Array(N + 1);
+  let polyIds = new Uint32Array(mesh.cellVertexIds.length + 8), pos = 0; const altIds = [];
   for (let c = 0; c < N; c++) {
     const s = mesh.cellVertexOffsets[c], e = mesh.cellVertexOffsets[c + 1];
     const lon0 = Math.atan2(mesh.centerXYZ[3 * c + 1], mesh.centerXYZ[3 * c]), lat0 = Math.asin(Math.max(-1, Math.min(1, mesh.centerXYZ[3 * c + 2])));
-    p[c] = frame.toSim(lat0, lon0).map(r2);
+    const q = frame.toSim(lat0, lon0); cx[c] = r2(q[0]); cy[c] = r2(q[1]);
     const poly = cellViewPolygon(mesh, c), ids = [], shifts = [];
     for (let k = 0; k < e - s; k++) {
       const t = mesh.cellVertexIds[s + k];
-      const canon = Math.atan2(vx[3 * t + 1], vx[3 * t]);
+      const canon = Math.atan2(vx3[3 * t + 1], vx3[3 * t]);
       const shift = Math.round((poly.lon[k] - canon) / (2 * Math.PI)); // 継ぎ目をまたいだ分（-1 / 0 / +1）
       shifts.push(shift); ids.push(shifted(t, shift));
     }
     if (!poly.wrapsPole) { // 継ぎ目をまたぐセルは、反対側の端にも同じ形を描く（描画専用の複製）
-      let hi = false, lo = false; for (const id of ids) { if (vp[id][0] > W) hi = true; if (vp[id][0] < 0) lo = true; }
-      if (hi || lo) alt[c] = ids.map((id, k) => shifted(mesh.cellVertexIds[s + k], shifts[k] + (hi ? -1 : 1)));
+      let hi = false, lo = false; for (const id of ids) { if (X[id] > W) hi = true; if (X[id] < 0) lo = true; }
+      if (hi || lo) for (let k = 0; k < ids.length; k++) altIds.push(shifted(mesh.cellVertexIds[s + k], shifts[k] + (hi ? -1 : 1)));
     }
+    altOff[c + 1] = altIds.length;
     if (poly.wrapsPole) { // 極を囲むセル: 左端・右端の極の緯度に 2 点足して閉じる
-      const y = poly.poleSign > 0 ? 0 : H, xs = ids.map((id) => vp[id][0]);
-      const a = vp.length; vp.push([r2(Math.min(...xs)), y], [r2(Math.max(...xs)), y]); vv.push([], []); vc.push([c], [c]);
-      ids.sort((i1, i2) => vp[i1][0] - vp[i2][0]); ids.unshift(a); ids.push(a + 1);
+      const y = poly.poleSign > 0 ? 0 : H, xs = ids.map((id) => X[id]);
+      const a = X.length; X.push(r2(Math.min(...xs)), r2(Math.max(...xs))); Y.push(y, y);
+      ids.sort((i1, i2) => X[i1] - X[i2]); ids.unshift(a); ids.push(a + 1);
     }
-    cv[c] = ids;
-    for (let k = 0; k < ids.length; k++) { const a = ids[k], b = ids[(k + 1) % ids.length]; if (!vc[a].includes(c)) vc[a].push(c); if (a !== b) addV(a, b); }
-    const list = new Array(off[c + 1] - off[c]); for (let k = off[c]; k < off[c + 1]; k++) list[k - off[c]] = nb[k];
-    cc[c] = list; cb[c] = Math.abs(lat0) > 1.45 ? 1 : 0;
+    if (pos + ids.length > polyIds.length) { const bigger = new Uint32Array(polyIds.length * 2); bigger.set(polyIds); polyIds = bigger; }
+    for (let k = 0; k < ids.length; k++) polyIds[pos++] = ids[k];
+    polyOff[c + 1] = pos;
+    border[c] = Math.abs(lat0) > 1.45 ? 1 : 0;
   }
-  return { p, g: null, h: h.slice(), cells: { v: cv, c: cc, b: cb, alt }, vertices: { p: vp, v: vv, c: vc } };
+  const csr = { n: N, cx, cy, polyOff, polyIds: polyIds.slice(0, pos), altOff, altIds: Uint32Array.from(altIds), nbOff: mesh.neighborOffsets, nbIds: mesh.neighborIds, border, vx: Float64Array.from(X), vy: Float64Array.from(Y) };
+  const pack = { csr, g: null, h: h.slice(), cells: { csr }, vertices: { csr } };
+  installLegacyViews(pack);
+  return pack;
 }
 
 /** 河川の線。world.cell.riverTo を辿り、合流点（すでに通った河川セル）か海までを 1 本とする */

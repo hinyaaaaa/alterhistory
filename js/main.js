@@ -56,6 +56,7 @@ import { createWorldService } from "./app/world-service.js";
 import { visibleGroups } from "./app/group-actions.js";
 import { openNewWorldDialog } from "./ui/world-new-dialog.js";
 import { initGroupsPanel } from "./ui/groups-panel.js";
+import "./plugins/index.js"; // v6.13.0: 地形・都市プラグインの登録所（何も登録しなければ標準の生成）
 import worldWorkerSource from "./generated/worldgen-worker.txt";
 import { bootV53 } from "./ui/v53/boot-live.js";
 import { APP_VERSION, APP_BUILD_ID } from "./version.js";

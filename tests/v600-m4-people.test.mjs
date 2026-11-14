@@ -22,7 +22,7 @@ await check("全ての国家の指導者に人物（経歴・所属・家）が�
 await check("出自は捏造しない: 最初の指導者の親は未知（null）で、親子は『継承者を立てた』ときに実際に生まれたものだけ", () => {
   for (const f of Object.values(civ.figures)) { if (f.role === "leader") assert.equal(f.parents, null, "指導者の出自は未知"); else if (f.role === "heir") { assert.equal(f.parents.length, 1); assert.ok(civ.figures[f.parents[0]].children.includes(f.id)); } }
 });
-const st = alive().filter((s) => civ.figures[s.leaderFigureId]).sort((a, b) => b.pop - a.pop)[0]; const ls = lifeScale(civ, st);
+const st = alive().filter((s) => civ.figures[s.leaderFigureId] && civ.figures[s.leaderFigureId].parents == null).sort((a, b) => b.pop - a.pop)[0]; const ls = lifeScale(civ, st); // 出自が未知の（先代を持たない）指導者の国を選ぶ。世界の中身（地形）が変わっても前提が崩れないよう、人口最大の国に固定しない
 await check("継承者を立てると、指導者の子が実際に生まれ（事件が残る）、親の没後にその子が登位し、同じ家が続く", () => {
   const leaderFig = civ.figures[st.leaderFigureId], house = leaderFig.houseId; st.leader.heir = true; adv(1);
   const heir = civ.figures[st.heirFigureId]; assert.ok(heir, "継承者の人物"); assert.deepEqual(heir.parents, [leaderFig.id]); assert.ok(leaderFig.children.includes(heir.id)); assert.ok(heir.bornAt > leaderFig.bornAt && heir.bornAt < civ.monthIndex); assert.equal(heir.houseId, house);

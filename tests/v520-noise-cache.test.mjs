@@ -13,8 +13,12 @@ check("makeFbm3 は fbm3 と、乱雑な点・隣り合う点・格子をまた�
 check("同じシード・同じ設定なら、2 回作っても世界のハッシュが同じ（キャッシュの状態が出力に漏れない）", () => {
   const a = generateWorld({ worldSeed: "cache-1", resolution: { targetCells: 8000 } }), b = generateWorld({ worldSeed: "cache-1", resolution: { targetCells: 8000 } }); assert.equal(a.hash, b.hash);
 });
-check("v6.11.0 の大陸生成で作った世界と同じ出力（陸地 50% を明示）: a/20000 セル・x/20000 セル。大陸生成を変えたら、このハッシュも意図して更新する", () => {
-  assert.equal(generateWorld({ worldSeed: "a", landFraction: 0.5, resolution: { targetCells: 20000 } }).hash, "209fd65f");
-  assert.equal(generateWorld({ worldSeed: "x", landFraction: 0.5, resolution: { targetCells: 20000 } }).hash, "d2577007");
+check("generatorVersion を 6.12.0 以前にすると、v6.11.0 の大陸生成で作った世界と同じ出力（陸地 50% を明示）: a/20000 セル・x/20000 セル。古い世界を再現できなくなったら、意図して更新する", () => {
+  assert.equal(generateWorld({ worldSeed: "a", landFraction: 0.5, generatorVersion: "6.12.0", resolution: { targetCells: 20000 } }).hash, "209fd65f");
+  assert.equal(generateWorld({ worldSeed: "x", landFraction: 0.5, generatorVersion: "6.12.0", resolution: { targetCells: 20000 } }).hash, "d2577007");
+});
+check("v6.13.0 の地形（既定）の出力が固定されている（尾根ノイズ・河川侵食・高度分布）。地形の細部を変えたら、このハッシュも意図して更新する", () => {
+  assert.equal(generateWorld({ worldSeed: "a", landFraction: 0.5, resolution: { targetCells: 20000 } }).hash, "77232d3b");
+  assert.equal(generateWorld({ worldSeed: "x", landFraction: 0.5, resolution: { targetCells: 20000 } }).hash, "a9429fb5");
 });
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功"); process.exit(failed ? 1 : 0);

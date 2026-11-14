@@ -207,7 +207,7 @@ function battle(ctx, w, { camp, A, D, g, site }) {
 registerDecision("battle", (ctx, d, opt) => {
   const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], ops = w?.ops, A = ops?.forces?.[p.forceA], D = ops?.forces?.[p.forceD], camp = ops?.campaigns?.[p.campId], g = civ.groups[p.gid], site = civ.groups[p.siteId];
   if (!w || w.status !== "active" || ops?.ended || !A || !D || !camp || !g || !site) { if (camp) camp.waiting = null; return { ok: true, note: "戦況が変わり、会戦は起きなかった" }; }
-  const mineSt = civ.states[p.side === "A" ? A.stateId : D.stateId], cp = corpsById(mineSt, (p.side === "A" ? A : D).corpsId), cf = cp ? corpsFx(cp) : { off: 0, def: 0, skill: 0, siege: 0 };
+  const mineSt = civ.states[p.side === "A" ? A.stateId : D.stateId], cp = corpsById(mineSt, (p.side === "A" ? A : D).corpsId), cf = cp ? corpsFx(cp, mineSt) : { off: 0, def: 0, skill: 0, siege: 0 };
   const finish = (bias, lossMine, lossFoe, note0) => {
     const lossA = p.side === "A" ? lossMine : lossFoe, lossD = p.side === "A" ? lossFoe : lossMine; ops.lastBattleDecision = civ.monthIndex; camp.waiting = null;
     const r = fieldEngage(ctx, w, camp, A, D, g, { site, bias, lossA, lossD }), won = r.win === "A" ? p.side === "A" : p.side === "D"; return { ok: true, note: `${r.rec.name}: ${won ? "勝利" : "敗北"}（${note0}）` };

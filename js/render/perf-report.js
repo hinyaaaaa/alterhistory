@@ -6,6 +6,7 @@
 import { drawScene } from "./scene.js";
 import { createRenderProfile } from "./profile.js";
 import { OVERSCAN, MAX_TILE_PIXELS } from "./renderer.js";
+import { cellCountOf } from "../core/geometry-csr.js";
 
 export async function runRenderBenchmark({ map, viewport, getOptions, repeats = 3 }) {
   if (!map?.geometry) throw new Error("地図がありません");
@@ -30,7 +31,7 @@ export async function runRenderBenchmark({ map, viewport, getOptions, repeats = 
       rows.push({ キャンバス: mode, 回: n, "js(ms)": Math.round(b - a), "塗り終わりまで(ms)": Math.round(c - b), "合計(ms)": Math.round(c - a), タイル: `${pw}x${ph}`, コピー: tvp.copyOffsets().join(","), 層別js: profile.snapshot().ms });
     }
   }
-  console.info(`[描画ベンチ] セル ${map.geometry.pack.cells.v.length}・画面 ${viewport.screenWidth}x${viewport.screenHeight}・DPR ${dpr}（タイル ${pw}x${ph}）`);
+  console.info(`[描画ベンチ] セル ${cellCountOf(map.geometry)}・画面 ${viewport.screenWidth}x${viewport.screenHeight}・DPR ${dpr}（タイル ${pw}x${ph}）`);
   console.table(rows.map(({ 層別js, ...r }) => r));
   return rows;
 }

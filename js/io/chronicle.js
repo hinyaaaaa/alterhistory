@@ -34,6 +34,7 @@ import { TECH_TRACKS, getTechDoctrine, NODE_BY_KEY } from "../core/edit/doctrine
 import { vassalInfo, vassalsOf, VASSAL_BY_KEY } from "../core/edit/vassals.js";
 import { WAR_TYPES } from "../core/sim/war-engine.js";
 import { MINOR_EVENTS } from "../core/sim/minor-events.js";
+import { centersOf } from "../core/geometry-csr.js";
 
 export const CHRONICLE_FORMAT = "alterhistory-chronicle";
 export const CHRONICLE_VERSION = 1;
@@ -494,7 +495,7 @@ export function buildChronicle(map, { includeCells = true, fileName = "", export
     count: C.biome.length,
     legend: { biome: "バイオームID→ biomes", state: "国家ID→ states[].id（0=無所属）", culture: "文化ID→ cultures[].id", religion: "宗教ID→ religions[].id", province: "属州ID→ provinces[].id", burg: "都市ID→ burgs[].id（0=なし）", river: "河川ID→ rivers[].id（0=なし）", pop: "セル人口（千人）" },
     biome: rle(C.biome), state: rle(C.state), culture: rle(C.culture), religion: rle(C.religion), province: rle(C.province), burg: rle(C.burg), river: rle(C.river), pop: rle(C.pop.map((v) => r2(v))),
-    points: map.geometry.pack.p.map(([x, y]) => [Math.round(x * 10) / 10, Math.round(y * 10) / 10]),
+    points: (() => { const g = centersOf(map.geometry); return Array.from({ length: g.n }, (_, i) => [Math.round(g.cx[i] * 10) / 10, Math.round(g.cy[i] * 10) / 10]); })(),
   } : null;
 
   return {

@@ -1,4 +1,30 @@
-# v6.12.0（最新）: 国家を動かす
+# v6.13.0（最新）: 軍と戦争を現代まで・地形と軽さ
+
+同じ v6.12.0 から別々に作られた 2 つの v6.13.0 を統合した版（実装の中身は `docs/CHANGELOG.md` の v6.13.0）。
+
+## 統合のメモ
+- 集落の選定の道具（`pickSite`・`planSettlements`・`siteScore`）は `world.siteTools`（非列挙。`worldgen.js` の `generateWorld` と `generate.js` の `attach` が付ける）で `civ/`・`wcde/prehistory.js` に渡す（`tests/v400-architecture.test.mjs`: `world/` を直接 import しない決まり）。道具が無い世界（手で組み立てた小さな地図・外部の `generate` が返した世界で付いていないもの）は、従来の式で集落を選ぶ。
+- 都市プラグインの `siteScore` は、`generatorVersion >= 6.13.0` では適地スコアの代わりに働く（`planSettlements`・`pickSite` に得点関数を渡す）。それ未満の世界では従来の式（肥沃度＋川＋沿岸）の代わりに働く。
+- 地形プラグイン（`generateWorldPluggable`）の `generate` が返す世界には、地形の変更（`generatorVersion`）は掛からない（プラグインの責任）。
+
+- 既知の不安定な試験: `tests/v300-autonomy.test.mjs` の「アルゴリズム国家どうしの戦争は、講和条約で終わる」は、統合前の軍の側の版でも単独実行 8 回中 2 回落ちる（旧モデルの試験で、実行ごとに結果が揺れる）。統合の影響ではない。直すなら乱数の出どころ（`createRandom()` に種を渡していない呼び出し）を洗うこと。閾値は緩めない。
+- `tests/v612-ui.test.mjs` の会戦の試験は世界の形しだいで起きないことがあるため、起きる世界のシード（ui-619）に固定している。地形を変えたら、また探し直す（`ui-` の番号を替えて走らせる）。
+
+## 軍と戦争を現代まで
+- 実装の中身は `docs/CHANGELOG.md` の v6.13.0。陸・海・空の軍制、アルゴリズム国家の部隊・指揮官、技術ツリーの現代〜未来、HoI4 風の学派、地形・都市プラグイン。
+- 新規ファイル（核）: `js/core/wcde/orbat.js`（兵種 26・人数の配分・自動／手動）、`js/core/world/{plugins,generate}.js`（差し込み口）。大きく変えたもの: `corps.js`（陸海空・総司令官・自動／手動の構成・アルゴリズム国家の部隊）、`domains/doctrine.js`（学派 10 路線）、`domains/military.js`（`stepMilitary` が人数で部隊を作る）、`power.js`（編成・制空・海軍構成・抑止）、`warfare.js`（`syncForces` が担当国=部隊ごと／アルゴリズム国家=軍ごとに 1 つ）、`civ/techtree.js`・`calibration.js`。試験: `tests/v613-core.test.mjs`。
+- **兵力の正本は `st.army`**。`st.military.units`（兵種ごとの人数）は、`orbat.js` の `rosterOf`（自動または手動 `st.military.orbat`）から 3 か月ごとに作る。部隊（`st.corps.list[].units`）は、`corps.js` の `assignRoster` が国家の人数を割り当てる（手動の部隊が先、残りを自動の部隊が重みで分ける）。
+- アルゴリズム国家の部隊は、戦争に入るとき（`syncForces` → `ensureCorps`/`syncCorps`）に作られる。戦争では軍ごとに 1 つの野戦軍のまま（`force.lead`＝主力の部隊の id。`corpsId` は担当国の部隊だけ）。世界の較正を崩さないため。
+- 地形・都市プラグインは、**別のエージェントから渡されるプログラムを入れる口**。入れ方・契約は `docs/PLUGINS.md`。渡されたら、`registerTerrainPlugin` / `registerCityPlugin` で登録し、`tests/v613-core.test.mjs` の形で検証する。プラグインを入れた世界の保存は、同じ version のプラグインが要る。
+- 較正の注意: 技術の目標数（`calibration.js` の `TECH_CURVE`）は「未来を除く全ノードの 9 割」。技術ノードを増減したら、`TECH_CURVE` の終端と `tests/v680-calibration.test.mjs` を合わせること。
+- 未確認: 実機・スクリーンショットでの見え方（軍の画面・ドクトリンの木が 18 列に広がる）。空軍・ミサイルを戦場の主体にする（今は制空・包囲として効く）、海軍の海域支配、学派の切り替え、は次の版の候補。
+
+## 地形と軽さ
+- 実装の中身は `docs/CHANGELOG.md` の v6.13.0。地形の細部（尾根ノイズ・内陸の傾斜・河川侵食・地球の高度分布）と、形状の CSR 化（メモリ約 1/10）。
+- 地形の変更は `generatorVersion >= 6.13.0` のときだけ。古い版は従来と同じ世界を再現する。
+- 旧形式の `pack.p` / `cells.c` 等は遅延ゲッター。新しく形状を読むコードは `js/core/geometry-csr.js`（`centersOf`・`cellCountOf`・`centerOf`）か、`geometry.pack.csr` を直接読むこと（旧形式を読むと全セル分が作られる）。
+
+# v6.12.0: 国家を動かす
 
 - 実装の中身は `docs/CHANGELOG.md` の v6.12.0。担当国の「決断」「軍団の指揮」「役職約 50・国策・勢力の支持」。
 - 新規ファイル（核）: `js/core/wcde/{decisions,decision-state,corps,offices-data,policies,statefx}.js`。画面: `js/ui/v6/{decision,military,policy}.js`。試験: `tests/v612-core.test.mjs`・`tests/v612-ui.test.mjs`・`tests/helpers/decide.mjs`。

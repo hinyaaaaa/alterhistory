@@ -106,10 +106,10 @@ await check("反乱: 鎮圧（費用・民衆の支持が下がる）／譲歩�
 
 console.log("=== 軍団（編成・指揮官・作戦）===");
 await check("軍団: 担当国の軍を名前つきの軍団に分け、指揮官と副官を置く。兵力の合計は国家の陸の兵力と一致し、損耗のあとも毎月そろう", () => {
-  const w = fresh(), me = own(w), ctx = w.sim.ctx, S = ensureCorps(ctx, me); assert.ok(S.list.length >= 1 && S.list.length <= 6); const sum = () => corpsOf(me).reduce((a, c) => a + c.units.reduce((b, u) => b + u.size, 0), 0), land = () => me.army * landShare(me);
+  const w = fresh(), me = own(w), ctx = w.sim.ctx, S = ensureCorps(ctx, me); assert.ok(S.list.length >= 1 && S.list.length <= 6); const sum = () => corpsOf(me).filter((c) => c.service === "land").reduce((a, c) => a + c.units.reduce((b, u) => b + u.size, 0), 0), land = () => me.army * landShare(me); /* v6.13.0: 軍団は陸・海・空に分かれる。陸の合計が、陸の兵力と一致する */
   assert.ok(Math.abs(sum() - land()) < Math.max(5, land() * 0.01), `${sum()} vs ${land()}`); for (const c of corpsOf(me)) { assert.ok(c.name && c.commander?.name && c.units.length >= 1 && c.units.every((u) => u.name && u.kind)); const fx = corpsFx(c); for (const v of Object.values(fx)) assert.ok(Math.abs(v) <= 0.2); }
   me.army *= 0.8; syncCorps(ctx, me); assert.ok(Math.abs(sum() - land()) < Math.max(5, land() * 0.01), "損耗後もそろう"); assert.equal(ensureCorps(ctx, me), S, "二重に作らない");
-  const ai = alive(w)[1]; assert.equal(ensureCorps(ctx, ai), null, "担当国以外は軍団を持たない");
+  const ai = alive(w)[1]; assert.ok(ensureCorps(ctx, ai)?.list.length >= 1, "v6.13.0: アルゴリズム国家も部隊（と指揮官）を持つ"); assert.ok(corpsOf(ai).every((c) => c.commander?.name && c.service), "指揮官が自動で任命される");
 });
 await check("編成・人事の命令: 名前・分割・統合・兵の移動・再訓練・任命（指揮官は候補から）。検証に落ちたら何も変えない", () => {
   const w = fresh(), me = own(w), ctx = w.sim.ctx, S = ensureCorps(ctx, me), c0 = corpsOf(me)[0], cmd = (type, o) => dispatch(w, { type, authority: A.PLAYER, stateId: me.id, ...o }); me.treasury = 9999;
@@ -125,8 +125,8 @@ await check("編成・人事の命令: 名前・分割・統合・兵の移動�
 });
 const startWar = (w, me) => { const ctx = w.sim.ctx; for (const o of alive(w)) { if (o.id === me.id) continue; const r = dispatch(w, { type: "state.act", authority: A.PLAYER, action: "declare_war", target: o.id }); if (r.ok && me.warIds.length) return { war: w.civ.wars[me.warIds[me.warIds.length - 1]], foe: o, ctx }; } return null; };
 await check("戦争で軍団が部隊になる（担当国だけ）。予備の軍団は出さない。命令（進軍・包囲）は行軍ルートで動き、着くと作戦が始まり、命令を替えると作戦は捨てられる", () => {
-  const w = fresh(), me = own(w), c = startWar(w, me); assert.ok(c, "戦争を起こせる"); const { war, ctx } = c; const cps = corpsOf(me); const fs = Object.values(war.ops.forces).filter((f) => f.stateId === me.id && f.kind === "army"); assert.equal(fs.length, cps.length); assert.ok(fs.every((f) => f.corpsId));
-  assert.ok(Object.values(war.ops.forces).filter((f) => f.stateId !== me.id && f.kind === "army").every((f) => !f.corpsId), "相手は従来の野戦軍");
+  const w = fresh(), me = own(w), c = startWar(w, me); assert.ok(c, "戦争を起こせる"); const { war, ctx } = c; const cps = corpsOf(me); const fs = Object.values(war.ops.forces).filter((f) => f.stateId === me.id && f.kind === "army"); assert.equal(fs.length, cps.filter((c) => c.service === "land").length); assert.ok(fs.every((f) => f.corpsId));
+  assert.ok(Object.values(war.ops.forces).filter((f) => f.stateId !== me.id && f.kind === "army").every((f) => !f.corpsId), "相手は軍ごとに 1 つの野戦軍（主力の部隊の指揮官がつく）");
   const cmd = (type, o) => dispatch(w, { type, authority: A.PLAYER, stateId: me.id, ...o }); const c0 = cps[0]; assert.ok(cmd("corps.order", { corpsId: c0.id, kind: "reserve" }).ok); w.sim.advanceMonth(); assert.ok(!Object.values(war.ops.forces).some((f) => f.corpsId === c0.id), "予備は戦争に出ない"); assert.ok(cmd("corps.order", { corpsId: c0.id, kind: "auto" }).ok);
   const foeGs = Object.values(w.civ.groups).filter((g) => g.stateId === c.foe.id); let best = null; for (const g of foeGs) { const rt = routeTo(ctx, c0.at, g.id); if (rt?.length && (!best || rt.length < best.rt.length)) best = { g, rt }; } assert.ok(best, "敵地への道"); assert.equal(cmd("corps.order", { corpsId: c0.id, kind: "siege" }).ok, false, "目標が要る");
   const o = cmd("corps.order", { corpsId: c0.id, kind: "siege", targetGroupId: best.g.id, warId: war.id }); assert.ok(o.ok); assert.equal(o.result.route, best.rt.length); const at0 = c0.at; w.sim.advanceMonth(); assert.notEqual(c0.at, at0, "動く"); let guard = 0; while (c0.order.route?.length && guard++ < 40) w.sim.advanceMonth(); assert.equal(c0.at, best.g.id, "目標に着く");

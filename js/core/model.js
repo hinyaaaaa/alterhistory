@@ -1,3 +1,4 @@
+import { cellCountOf } from "./geometry-csr.js";
 // MapData：全層が共有するデータ構造。
 // 実ファイル(.map v1.139 / v1.151)で検証した構造に基づく。
 // 純粋ロジック層：DOM・ファイルI/Oに依存しない。
@@ -139,8 +140,8 @@ export function validateMap(map) {
   }
 
   // 形状が作られている場合は、属性配列と形状のセル数が一致していること
-  if (map.geometry && map.geometry.pack.p.length !== n) {
-    problems.push(`形状のセル数(${map.geometry.pack.p.length})が属性配列のセル数(${n})と一致しません`);
+  if (map.geometry && cellCountOf(map.geometry) !== n) {
+    problems.push(`形状のセル数(${cellCountOf(map.geometry)})が属性配列のセル数(${n})と一致しません`);
   }
   return problems;
 }

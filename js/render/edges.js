@@ -17,6 +17,7 @@ export function sharedVertices(v, i, j) {
  * @param {(a:number,b:number)=>boolean} [differs]  既定は a !== b
  */
 export function buildBoundarySegments(geometry, values, include = () => true, differs = (a, b) => a !== b) {
+  if (geometry.pack.csr) return boundarySegmentsCsr(geometry.pack.csr, values, include, differs);
   const { cells, vertices } = geometry.pack;
   const out = [];
   for (let i = 0; i < cells.c.length; i++) {
@@ -31,6 +32,30 @@ export function buildBoundarySegments(geometry, values, include = () => true, di
     }
   }
   return Float32Array.from(out);
+}
+
+/** buildBoundarySegments の CSR 版（型付き配列を直接読む。旧形式と同じ線分を同じ順序で返す）。共有頂点は、セル i の多角形の頂点のうち j の多角形にも含まれる最初の 2 つ */
+function boundarySegmentsCsr(csr, values, include, differs) {
+  const { n, nbOff, nbIds, polyOff, polyIds, vx, vy } = csr;
+  let out = new Float32Array(4096), len = 0;
+  for (let i = 0; i < n; i++) {
+    if (!include(i)) continue;
+    const ia = polyOff[i], ib = polyOff[i + 1];
+    for (let k = nbOff[i]; k < nbOff[i + 1]; k++) {
+      const j = nbIds[k];
+      if (j < i || !include(j) || !differs(values[i], values[j])) continue;
+      const ja = polyOff[j], jb = polyOff[j + 1];
+      let s0 = -1, s1 = -1, cnt = 0;
+      for (let a = ia; a < ib && cnt < 2; a++) {
+        const t = polyIds[a];
+        for (let b = ja; b < jb; b++) if (polyIds[b] === t) { if (cnt === 0) s0 = t; else s1 = t; cnt++; break; }
+      }
+      if (cnt < 2) continue;
+      if (len + 4 > out.length) { const bigger = new Float32Array(out.length * 2); bigger.set(out); out = bigger; }
+      out[len++] = vx[s0]; out[len++] = vy[s0]; out[len++] = vx[s1]; out[len++] = vy[s1];
+    }
+  }
+  return out.slice(0, len);
 }
 
 /** 線分の配列を1本のパスとして描く（呼び出し側が線の色・太さを設定する） */

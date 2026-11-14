@@ -10,9 +10,9 @@ export const LANES = Object.freeze([
   { id: "sci", ja: "数学・測量・天文", glyph: "∑" }, { id: "rec", ja: "記録・文字・通信", glyph: "✎" }, { id: "med", ja: "医療・衛生", glyph: "✚" }, { id: "gov", ja: "統治・行政・法", glyph: "⚖" },
   { id: "eco", ja: "経済・金融", glyph: "¤" }, { id: "mil", ja: "軍事・兵站", glyph: "⚔" }, { id: "ind", ja: "エネルギー・産業", glyph: "⚙" },
 ]);
-export const STAGES = Object.freeze(["原初", "後期旧石器", "新石器", "青銅器", "鉄器・古典", "古典後期", "中世", "近世初期", "近世", "産業革命", "近代", "現代"]);
+export const STAGES = Object.freeze(["原初", "後期旧石器", "新石器", "青銅器", "鉄器・古典", "古典後期", "中世", "近世初期", "近世", "産業革命", "近代", "現代", "未来"]);
 const POOL = 6000; // 歴史時代の E は「世界全体で次の技術が出るまでの年数 × 同条件の集団の数と、発生率に掛かる係数の典型値の積（約6000）」。1 集団あたりの独立発見は非常にまれで、世界のどこかで起こる
-const E_BY_STAGE = [400000, 1200000, 4500000, ...[110, 150, 190, 230, 250, 260, 220, 200, 170].map((y) => y * POOL)]; // 先史（原初〜新石器）の E は、集団数が数百・数千年の刻みで進む圧縮モデルを前提とした値（先史の技術は 1 集団あたり数十万〜数百万年に1回）
+const E_BY_STAGE = [400000, 1200000, 4500000, ...[110, 150, 190, 230, 250, 260, 220, 200, 170].map((y) => y * POOL), 300 * POOL]; // v6.13.0: 最後の 1 つは「未来」（現代の次の段。世界の年 5000 より先で起こる） // 先史（原初〜新石器）の E は、集団数が数百・数千年の刻みで進む圧縮モデルを前提とした値（先史の技術は 1 集団あたり数十万〜数百万年に1回）
 const nodes = [];
 const n = (id, ja, lane, stage, prereq, o = {}) => nodes.push({ id, ja, lane, stage, pre: stage <= 2, prereq, E: o.E ?? E_BY_STAGE[stage], pop: o.pop ?? 0, s: !!o.s, cond: o.cond ?? null, caps: o.caps ?? [], fx: o.fx ?? {}, desc: o.d ?? "", why: o.why ?? "" });
 // ---- 素材・道具
@@ -155,6 +155,58 @@ n("internal_combustion", "内燃機関", "ind", 10, ["industry", "chemistry"], {
 n("petroleum", "石油", "ind", 10, ["chemistry", "mining"], { cond: "coal", d: "石油の採掘と精製。", fx: { ind: 0.1 } });
 n("electric_grid", "送電網", "ind", 11, ["electricity", "industry"], { fx: { ind: 0.2 }, d: "電力を広域に配る。" });
 n("nuclear", "核", "ind", 11, ["electricity", "calculus"], { pop: 100000, caps: ["action:nuclear_program"], fx: { ind: 0.1 }, d: "原子核のエネルギー。" });
+
+// ---- v6.13.0: 近代〜未来の軍事技術（陸・海・空・誘導兵器・情報・未来）。部隊の兵種（orbat.js）とドクトリン（domains/doctrine.js）の解禁は、ここのキーから導く。
+//   fx.off / fx.def は小さく抑える（milMult は採用した技術の off の和。現代の国家どうしでは対称になる）。未来（stage 12）は年 5000 の目標の数に含めない（calibration.js）。
+// 陸
+n("crossbow", "弩", "mil", 5, ["bow", "iron_weapons"], { caps: ["unit:ranged"], fx: { off: 0.04 }, d: "機械仕掛けの弓。訓練が短くて済む。" });
+n("plate_armor", "板金鎧", "mil", 7, ["steel", "iron_weapons"], { fx: { def: 0.05, off: 0.02 }, d: "鋼板を成形した全身の鎧。" });
+n("pike_and_shot", "槍と銃の連携", "mil", 8, ["firearms", "standing_army"], { fx: { off: 0.06, def: 0.03 }, d: "槍兵が銃兵を守る方陣。" });
+n("conscription", "徴兵制", "mil", 9, ["standing_army", "public_education"], { caps: ["army:conscription"], fx: { off: 0.08 }, d: "国民から広く兵を集め、予備役に回す。" });
+n("breech_loading", "後装式小銃", "mil", 10, ["rifled_arms", "steel", "industry"], { fx: { off: 0.1 }, d: "薬莢を使う後装式の小銃。" });
+n("machine_gun", "機関銃", "mil", 10, ["breech_loading", "industry"], { caps: [], fx: { off: 0.05, def: 0.1 }, d: "連射で面を制圧する。守りが攻めより強くなる。" });
+n("howitzer", "榴弾砲・野砲", "mil", 10, ["artillery", "steel", "industry"], { fx: { off: 0.06, def: 0.02 }, d: "間接射撃の重砲。" });
+n("trench_warfare", "塹壕と鉄条網", "mil", 10, ["machine_gun", "fortification"], { fx: { def: 0.1 }, d: "地下と鉄条網で守る。陣地戦の時代。" });
+n("tank", "戦車", "mil", 11, ["mechanized_warfare", "machine_gun"], { caps: ["unit:armor"], fx: { off: 0.12 }, d: "装甲と火砲を備えた装軌車両。" });
+n("anti_tank", "対戦車兵器", "mil", 11, ["tank", "howitzer"], { fx: { def: 0.08 }, d: "戦車を止めるための砲・ロケット・地雷。" });
+n("motorized_infantry", "機械化歩兵", "mil", 11, ["tank", "radio"], { caps: ["unit:mechanized"], fx: { off: 0.06 }, d: "装甲車で戦車に随伴する歩兵。" });
+n("special_forces", "特殊部隊", "mil", 11, ["radio", "standing_army"], { caps: ["unit:special"], fx: { off: 0.03 }, d: "少数精鋭で破壊・偵察・奇襲を担う。" });
+n("guided_munitions", "精密誘導兵器", "mil", 11, ["computing", "howitzer"], { fx: { off: 0.1 }, d: "目標へ誘導される砲弾・爆弾。" });
+n("network_warfare", "指揮統制網", "mil", 11, ["radio", "computing"], { fx: { off: 0.05, def: 0.05 }, d: "通信・情報・指揮を一つの網にする。" });
+// 海
+n("ship_of_the_line", "戦列艦", "mil", 8, ["ocean_sailing", "artillery", "naval_warfare"], { caps: ["unit:capital_ship"], fx: { off: 0.06 }, d: "多数の砲を並べた帆走の主力艦。" });
+n("ironclad", "装甲艦", "mil", 9, ["steamship", "steel", "artillery"], { fx: { off: 0.08, def: 0.03 }, d: "鉄の装甲を張った蒸気の軍艦。" });
+n("torpedo", "魚雷", "mil", 10, ["ironclad", "internal_combustion"], { fx: { off: 0.05 }, d: "水中を進む自走の爆薬。" });
+n("submarine", "潜水艦", "mil", 10, ["torpedo", "electricity"], { caps: ["unit:submarine"], fx: { off: 0.04 }, d: "水中に潜る艦。通商破壊と待ち伏せ。" });
+n("dreadnought", "弩級戦艦", "mil", 10, ["ironclad", "structural_steel", "electricity"], { caps: ["unit:battleship"], fx: { off: 0.1, def: 0.03 }, d: "大口径砲を揃えた戦艦。" });
+n("aircraft_carrier", "航空母艦", "mil", 11, ["dreadnought", "aviation"], { caps: ["unit:carrier"], fx: { off: 0.08 }, d: "航空機を載せて海を渡る飛行場。" });
+n("radar_sonar", "レーダー・ソナー", "mil", 11, ["radio", "electric_grid"], { fx: { def: 0.05 }, d: "電波と音波で敵を見つける。" });
+n("guided_missiles", "誘導ミサイル", "mil", 11, ["rocketry", "guided_munitions"], { caps: ["unit:missile_force"], fx: { off: 0.1 }, d: "ロケットで飛び、目標へ誘導される。" });
+n("nuclear_propulsion", "原子力推進", "mil", 11, ["nuclear", "submarine"], { fx: { off: 0.04 }, d: "燃料補給なしで長く潜り、長く走る艦。" });
+n("amphibious_assault", "水陸両用戦", "mil", 11, ["steamship", "tank"], { caps: ["unit:marine"], fx: { off: 0.05 }, d: "艦から直接、海岸へ上陸する。" });
+// 空
+n("military_aviation", "軍用航空", "mil", 11, ["aviation", "machine_gun"], { caps: ["unit:air_corps"], fx: { off: 0.05 }, d: "偵察・観測から始まる軍の飛行機。" });
+n("fighter_aircraft", "戦闘機", "mil", 11, ["military_aviation", "radio"], { caps: ["unit:fighter"], fx: { def: 0.04 }, d: "空の主導権を争う戦闘用の飛行機。" });
+n("bomber_aircraft", "爆撃機", "mil", 11, ["military_aviation", "steel"], { caps: ["unit:bomber"], fx: { off: 0.06 }, d: "遠くの目標を空から爆撃する。" });
+n("jet_engine", "ジェット機関", "mil", 11, ["military_aviation", "petroleum", "precision_tools"], { fx: { off: 0.04 }, d: "高速・高高度のジェット推進。" });
+n("helicopter", "ヘリコプター", "mil", 11, ["military_aviation", "internal_combustion"], { caps: ["unit:helicopter"], fx: { off: 0.03 }, d: "回転翼で垂直に離着陸する。" });
+n("rocketry", "ロケット", "mil", 11, ["internal_combustion", "chemistry", "calculus"], { fx: { off: 0.03 }, d: "ロケット推進。のちの誘導兵器・宇宙へ。" });
+n("ballistic_missile", "弾道ミサイル", "mil", 11, ["rocketry", "computing"], { caps: ["unit:strategic_missile"], fx: { off: 0.06 }, d: "放物線を描いて遠方へ届くミサイル。" });
+n("nuclear_arsenal", "核戦力", "mil", 11, ["nuclear", "ballistic_missile"], { caps: ["unit:nuclear_force", "action:nuclear_weapon"], fx: { def: 0.08 }, d: "核弾頭と運搬手段。使えば終わりという抑止。" });
+n("stealth", "ステルス", "mil", 11, ["jet_engine", "radar_sonar", "computing"], { fx: { off: 0.05 }, d: "電波に映りにくい航空機・艦。" });
+n("air_defense", "防空網", "mil", 11, ["radar_sonar", "guided_missiles"], { fx: { def: 0.06 }, d: "レーダーと地対空ミサイルによる防空。" });
+n("drone_warfare", "無人機", "mil", 11, ["guided_munitions", "jet_engine", "network_warfare"], { caps: ["unit:drone"], fx: { off: 0.05 }, d: "遠隔で操る無人の航空機。" });
+n("satellites", "人工衛星", "trn", 11, ["ballistic_missile", "computing"], { caps: ["space:satellite"], fx: { trade: 0.05 }, d: "軌道上の偵察・通信・測位。" });
+n("cyber_warfare", "サイバー戦", "mil", 11, ["computing", "network_warfare"], { caps: ["unit:cyber"], fx: { def: 0.03 }, d: "情報網への侵入・防御・撹乱。" });
+// 未来（現代の次の段。年 5000 の目標の数には含めない）
+n("machine_learning", "機械学習", "rec", 12, ["computing", "statistics"], { fx: { learn: 0.06 }, d: "データから規則を学ぶ計算。" });
+n("autonomous_systems", "自律兵器", "mil", 12, ["drone_warfare", "machine_learning"], { caps: ["unit:autonomous"], fx: { off: 0.08 }, d: "人の手を離れて目標を選ぶ兵器。" });
+n("hypersonic_weapons", "極超音速兵器", "mil", 12, ["ballistic_missile", "stealth"], { fx: { off: 0.08 }, d: "音速の数倍で飛び、迎撃されにくい。" });
+n("directed_energy", "指向性エネルギー兵器", "mil", 12, ["electric_grid", "guided_missiles"], { fx: { def: 0.08 }, d: "レーザー・マイクロ波で撃ち落とす。" });
+n("orbital_warfare", "軌道戦", "mil", 12, ["satellites", "directed_energy"], { caps: ["unit:orbital"], fx: { off: 0.05, def: 0.05 }, d: "軌道上の偵察・攻撃・防衛。" });
+n("power_armor", "強化外骨格", "mil", 12, ["autonomous_systems", "special_forces"], { fx: { off: 0.05 }, d: "動力で人の力を増す着用型の装備。" });
+n("cognitive_warfare", "認知戦", "mil", 12, ["cyber_warfare", "machine_learning"], { fx: { def: 0.05 }, d: "世論・判断・意思決定を狙う情報戦。" });
+n("fusion_power", "核融合", "ind", 12, ["nuclear", "machine_learning"], { fx: { ind: 0.2 }, d: "軽い原子核を融合させるエネルギー。" });
 
 // 列（col）= max(宣言した時代, 前提の列 + 1)。左から右へだけ進むことを、データの手書きではなく構造で保証する（前提の位置は必ず自分より左）
 { const by = new Map(nodes.map((x) => [x.id, x])), memo = new Map(), colOf = (id, seen = new Set()) => { if (memo.has(id)) return memo.get(id); if (seen.has(id)) throw new Error("技術ツリーに循環がある: " + id); seen.add(id); const t = by.get(id); let c = t.stage; for (const p of t.prereq) c = Math.max(c, colOf(p, seen) + 1); memo.set(id, c); return c; }; for (const t of nodes) t.col = colOf(t.id); }

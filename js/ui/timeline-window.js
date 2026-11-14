@@ -7,6 +7,7 @@ import { cellIndexOf } from "../core/spatial.js";
 import { el } from "./kit.js";
 import { causeChain } from "../core/edit/lineage.js";
 import { findZoneByZid } from "../core/edit/zones.js";
+import { centerOf } from "../core/geometry-csr.js";
 
 const ROW_H = 58; // 1行の高さ（px）。固定にして、見える範囲を計算で出す
 const BUFFER = 8;
@@ -94,8 +95,8 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
     const zone = findZoneByZid(map, entry.zoneId);
     if (zone && zone.cells?.length) {
       actions?.setView({ zoneFocus: zone.zid });
-      const P = map.geometry.pack.p; let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-      for (const i of zone.cells) { const p = P[i]; if (!p) continue; x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const i of zone.cells) { const p = centerOf(map.geometry, i); if (!p) continue; x0 = Math.min(x0, p[0]); y0 = Math.min(y0, p[1]); x1 = Math.max(x1, p[0]); y1 = Math.max(y1, p[1]); }
       if (Number.isFinite(x0)) {
         const w = Math.max(40, x1 - x0), h = Math.max(40, y1 - y0);
         const k = Math.min(viewport.screenWidth / (w * 1.8), viewport.screenHeight / (h * 1.8));
@@ -105,7 +106,7 @@ export function initTimelineWindow({ store, wins, editActions, viewport, rendere
     }
     actions?.setView({ zoneFocus: null });
     if (entry.cell == null) { count.textContent = "この出来事には、地図上の場所がありません"; return; }
-    const pt = map.geometry.pack.p[entry.cell]; if (!pt) return;
+    const pt = centerOf(map.geometry, entry.cell); if (!pt) return;
     viewport.centerOn(pt[0], pt[1], Math.max(viewport.k, viewport.fitK * 2.5));
     renderer.requestRender();
   }

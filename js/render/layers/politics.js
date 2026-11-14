@@ -1,5 +1,6 @@
 // 政治層：国家・文化・宗教・属州による色分けと、その境界線。
 import { NEUTRAL_COLOR } from "../palette.js";
+import { cellCountOf } from "../../core/geometry-csr.js";
 import { buildBoundarySegments, strokeSegments } from "../edges.js";
 import { addCellPath } from "./terrain.js";
 import { timed } from "../profile.js";
@@ -65,7 +66,7 @@ export function drawPolitics(ctx, map, vp, kind, { alpha = 0.55, fill = true, li
 
   // エンティティごとに複合パスへまとめ、1回だけ塗る（継ぎ目・二重塗りを防ぐ）
   const groups = new Map();
-  for (let i = 0; i < cells.v.length; i++) {
+  for (let i = 0, nCells = cellCountOf(map.geometry); i < nCells; i++) {
     if (!isLand(i)) continue;
     const id = ids[i];
     const e = entities[id];

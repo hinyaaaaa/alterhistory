@@ -1,4 +1,5 @@
 import { checkRecords } from "./records-check.js";
+import { centersOf } from "../geometry-csr.js";
 // 整合性の検査：編集後の地図が、実データで成り立つ決まりを守っているかを調べる。
 //
 // baseline（編集前の状態）を渡すと、「編集前から成り立っていなかったもの」は問題にしない。
@@ -75,8 +76,8 @@ function problemsPoles(map) {
   const out = [];
   const idxOf = (pt) => {
     let best = -1, bd = Infinity;
-    const P = map.geometry.pack.p;
-    for (let i = 0; i < P.length; i++) { const d = (P[i][0] - pt[0]) ** 2 + (P[i][1] - pt[1]) ** 2; if (d < bd) { bd = d; best = i; } }
+    const P = centersOf(map.geometry);
+    for (let i = 0; i < P.n; i++) { const d = (P.cx[i] - pt[0]) ** 2 + (P.cy[i] - pt[1]) ** 2; if (d < bd) { bd = d; best = i; } }
     return best;
   };
   for (const [k, list] of [["state", map.pack.states], ["province", map.pack.provinces]]) {

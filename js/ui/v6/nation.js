@@ -8,7 +8,8 @@ import { policyBox } from "./policy.js";
 import { regimeJa } from "../../core/wcde/regimes.js";
 import { effective } from "../../core/wcde/domains/effective.js";
 import { ideasOf } from "../../core/wcde/domains/politics.js";
-import { UNIT_KINDS, formationsOf } from "../../core/wcde/domains/military.js";
+import { UNIT_KINDS, formationsOf, SCHOOL_BY_ID } from "../../core/wcde/domains/military.js";
+import { SERVICES, SERVICE_KEYS, serviceOf, itemsOf } from "../../core/wcde/orbat.js";
 import { taxMult } from "../../core/civ/techfx.js";
 import { atWarWith, treatyBetween } from "../../core/civ/diplomacy.js";
 import { formatWorldDate } from "../../core/wcde/world.js";
@@ -54,16 +55,22 @@ export function tPoliticsV(st, mine) {
 /** 軍事: 兵力・能力のリング、編成の帯と部隊カード、編成の編集（配分のスライダー）、宣戦 */
 export function tMilitaryV(st, mine) {
   const c = civ(), M = st.military; if (!M) return h("p", { class: "n" }, "軍事のデータがありません。");
-  const can = st.alive && (mine || !controlled()), units = M.units ?? [], tot = units.reduce((a, u) => a + u.size, 0) || 1, out = h("div", {});
+  const can = st.alive && (mine || !controlled()), units = M.units ?? [], tot = units.reduce((a, u) => a + u.size, 0) || 1, out = h("div", {}), ctx = S.w.sim.ctx, colOf = (k) => KIND_COL[k] ?? SERVICES[serviceOf(k)].color, manual = M.orbat?.mode === "manual";
   out.append(h("div", { class: "rings" }, ring(effective(c, st, "equipLevel"), "装備", "#d8b45a"), ring(effective(c, st, "readiness"), "練度", "#9fbf8a"), ring(Math.min(1, Math.max(0, 0.5 + st.milBonus)), "軍事能力", "#d0605a"), ring(Math.min(1, st.defense ?? 0), "要塞", "#8fb3b0")));
-  out.append(lb("編成", "ORGANIZATION"), stackbar(units.map((u) => ({ label: u.name, value: u.size, color: KIND_COL[u.kind] })), { height: 16 }));
-  out.append(h("div", { class: "forms" }, ...units.flatMap((u) => [h("div", { class: "uhead" }, h("span", { style: `color:${KIND_COL[u.kind]}` }, icon(KIND_ICON[u.kind] ?? "flag", 16)), h("b", {}, u.name), h("small", {}, `${n0(u.size)}（${pct(u.size / tot)}）`), h("span", { class: "barv", title: `装備 ${pct(u.equip)}` }, h("i", { style: `width:${u.equip * 100}%;background:#d8b45a` })), h("span", { class: "barv", title: `練度 ${pct(u.readiness)}` }, h("i", { style: `width:${u.readiness * 100}%;background:#9fbf8a` }))),
-    h("div", { class: "fcards" }, ...formationsOf(st, u).map((f) => h("div", { class: "fcard", style: `border-color:${KIND_COL[u.kind]}` }, h("b", {}, f.name), h("small", {}, n0(f.size)))))])));
-  if (can) { // 編成の編集: 配分のスライダー。合計は自動で 100% に揃える
-    const avail = Object.entries(UNIT_KINDS).filter(([k, d]) => d.need(st, S.w.sim.ctx)), cur = Object.fromEntries(avail.map(([k]) => [k, Math.round(((units.find((u) => u.kind === k)?.size ?? 0) / tot) * 100)])), val = { ...cur }, sl = {};
-    const sum = () => Object.values(val).reduce((a, b) => a + b, 0), info = h("small", {}), paint = () => { info.textContent = `合計 ${sum()}%`; info.style.color = sum() === 100 ? "var(--dim)" : "#d0605a"; for (const k in sl) { sl[k].lab.textContent = `${val[k]}%`; sl[k].inp.value = val[k]; } };
-    const rows = avail.map(([k, d]) => { const inp = h("input", { type: "range", min: 0, max: 100, step: 5, value: val[k], "data-kind": k, oninput: (e) => { val[k] = Number(e.target.value); paint(); } }), lab = h("small", {}, `${val[k]}%`); sl[k] = { inp, lab }; return h("div", { class: "slrow" }, h("span", { style: `color:${KIND_COL[k]}` }, icon(KIND_ICON[k] ?? "flag", 15)), h("span", { class: "nm" }, d.ja), inp, lab); });
-    out.append(h("details", { class: "dt", id: "reorg-box" }, h("summary", {}, "編成を編集する"), ...rows, h("div", { class: "rowb" }, info, btn("均す", () => { const n = avail.length; avail.forEach(([k], i) => (val[k] = Math.floor(100 / n) + (i < 100 % n ? 1 : 0))); paint(); }), btn("この編成にする", () => { const s = {}; for (const k in val) s[k] = val[k] / 100; (mine ? act : creator)({ type: "state.reorganize", stateId: st.id, shares: s }); }, "p", { id: "reorg" }))));
+  // v6.13.0: 陸・海・空の 3 軍。兵種ごとの人数（％ではなく人数）で見る
+  const sch = M.school ?? {}, schName = (s) => SCHOOL_BY_ID[sch[s]]?.ja ?? "未選択";
+  out.append(lb("編成", "ORGANIZATION"), stackbar(units.map((u) => ({ label: u.name, value: u.size, color: colOf(u.kind) })), { height: 16 }), h("small", { class: "n" }, `総兵力 ${n0(st.army)} 人・${manual ? "手動の編成" : "自動の編成（技術・地理・ドクトリンから決まる）"}　路線：陸 ${schName("land")}／海 ${schName("sea")}／空 ${schName("air")}`));
+  for (const svc of SERVICE_KEYS) {
+    const us = units.filter((u) => serviceOf(u.kind) === svc); if (!us.length) continue; const sum = us.reduce((a, u) => a + u.size, 0);
+    out.append(h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja), h("small", {}, `${n0(sum)} 人（${pct(sum / tot)}）`)));
+    out.append(h("div", { class: "forms" }, ...us.flatMap((u) => { const it = itemsOf(u.kind, u.size); return [h("div", { class: "uhead" }, h("span", { style: `color:${colOf(u.kind)}` }, icon(KIND_ICON[u.kind] ?? "flag", 16)), h("b", {}, u.name), h("small", {}, `${n0(u.size)} 人${it ? `（約 ${n0(it)} ${UNIT_KINDS[u.kind].item}）` : ""}`), h("span", { class: "barv", title: `装備 ${pct(u.equip)}` }, h("i", { style: `width:${u.equip * 100}%;background:#d8b45a` })), h("span", { class: "barv", title: `練度 ${pct(u.readiness)}` }, h("i", { style: `width:${u.readiness * 100}%;background:#9fbf8a` }))), svc === "land" ? h("div", { class: "fcards" }, ...formationsOf(st, u).map((f) => h("div", { class: "fcard", style: `border-color:${colOf(u.kind)}` }, h("b", {}, f.name), h("small", {}, n0(f.size))))) : null]; })));
+  }
+  if (can) { // 編成の編集: 兵種ごとの人数。自動／手動
+    const avail = Object.entries(UNIT_KINDS).filter(([k, d]) => d.need(st, ctx)), cur = Object.fromEntries(avail.map(([k]) => [k, Math.round(units.find((u) => u.kind === k)?.size ?? 0)])), val = { ...cur }, inp = {};
+    const sum = () => Object.values(val).reduce((a, b) => a + b, 0), info = h("small", {}), paint = () => { const s = sum(); info.textContent = `指定の合計 ${n0(s)} 人／総兵力 ${n0(st.army)} 人${s > st.army ? "（超えた分は比例して縮む）" : s < st.army ? `（足りない ${n0(st.army - s)} 人は予備役になる）` : ""}`; info.style.color = s > st.army ? "#d0605a" : "var(--dim)"; for (const k in inp) inp[k].value = val[k]; };
+    const rows = SERVICE_KEYS.flatMap((svc) => { const list = avail.filter(([k, d]) => d.service === svc); if (!list.length) return []; return [h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja)), ...list.map(([k, d]) => { const i = h("input", { type: "number", min: 0, step: 100, value: val[k], "data-kind": k, style: "width:110px", oninput: (e) => { val[k] = Math.max(0, Math.round(Number(e.target.value) || 0)); info.textContent = ""; paint1(); } }); inp[k] = i; return h("div", { class: "slrow" }, h("span", { style: `color:${colOf(k)}` }, icon(KIND_ICON[k] ?? "flag", 15)), h("span", { class: "nm", title: d.hint }, d.ja), i, h("small", {}, d.per ? `1${d.item}≒${d.per}人` : "")); })]; });
+    const paint1 = () => { const s = sum(); info.textContent = `指定の合計 ${n0(s)} 人／総兵力 ${n0(st.army)} 人${s > st.army ? "（超えた分は比例して縮む）" : s < st.army ? `（足りない ${n0(st.army - s)} 人は予備役になる）` : ""}`; info.style.color = s > st.army ? "#d0605a" : "var(--dim)"; };
+    out.append(h("details", { class: "dt", id: "reorg-box" }, h("summary", {}, "編成を編集する（兵種ごとの人数）"), h("small", { class: "n" }, "人数を指定すると手動の編成になります。総兵力は国の人口・経済で決まるので、指定の合計が多すぎれば比例して縮み、足りない分は予備役（徴集民兵）になります。"), ...rows, h("div", { class: "rowb" }, info, btn("今の人数を入れ直す", () => { for (const k in cur) val[k] = cur[k]; paint(); }), btn("この編成にする（手動）", () => { const hs = {}; for (const k in val) if (val[k] > 0) hs[k] = val[k]; (mine ? act : creator)({ type: "state.setOrbat", stateId: st.id, mode: "manual", heads: hs }); }, "p", { id: "reorg" }), btn("自動に戻す", () => (mine ? act : creator)({ type: "state.setOrbat", stateId: st.id, mode: "auto" }), "", { id: "reorg-auto" }))));
     setTimeout(paint, 0);
   }
   // 宣戦: 宣戦できる国をすべて（件数の上限なし）。名前で検索して絞り込める。交戦中・同盟国・不可侵条約のある国は出さない（外交ページと同じ条件）

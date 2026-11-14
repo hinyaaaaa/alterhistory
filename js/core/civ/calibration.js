@@ -8,8 +8,8 @@ import { LAND_WATER } from "./world-consts.js";
 const EARTH_LAND_KM2 = 149.8e6;
 /** 史実の世界人口（McEvedy & Jones ほか）。[世界の年, 人口]。年 0=紀元前 3000 年、年 3000=紀元 0 年、年 5000=2000 年 */
 export const POP_CURVE = Object.freeze([[0, 14e6], [1000, 27e6], [2000, 50e6], [2500, 100e6], [3000, 230e6], [3500, 235e6], [4000, 270e6], [4300, 400e6], [4500, 460e6], [4700, 600e6], [4800, 990e6], [4900, 1650e6], [4950, 2500e6], [5000, 6100e6]]);
-/** 発見された技術の目標数（全 129 のうち）。年 5000 で 9 割以上（≥117） */
-export const TECH_CURVE = Object.freeze([[0, 23], [1000, 33], [2000, 48], [3000, 62], [4000, 74], [4300, 82], [4600, 92], [4800, 102], [4900, 112], [4950, 118], [5000, 122]]);
+/** 発見された技術の目標数（未来を除く全 166 のうち）。年 5000 で 9 割以上（≥150）。v6.13.0: 近代〜現代の軍事技術 37 を足したので、後半の目標を引き上げた（〜年 4000 は従来と同じ） */
+export const TECH_CURVE = Object.freeze([[0, 23], [1000, 33], [2000, 48], [3000, 62], [4000, 74], [4300, 83], [4600, 98], [4800, 118], [4900, 134], [4950, 146], [5000, 154]]);
 
 const interp = (pts, y, logY) => {
   if (y <= pts[0][0]) return pts[0][1];
@@ -24,7 +24,7 @@ const landCache = new WeakMap();
 export function landKm2(world) { let v = landCache.get(world); if (v == null) { v = 0; const c = world.cell, n = world.mesh.cellCount; for (let i = 0; i < n; i++) if (c.landWater[i] === LAND_WATER.LAND) v += c.areaKm2[i]; landCache.set(world, v); } return v; }
 
 /** 技術の列（col）ごとの、史実の時代に対応する目標の年（世界の年）。この年を過ぎても発見されていない技術は、発生率が上がる（遅れた分だけ。起点の技術が遅れると、その先の系統が丸ごと止まるため） */
-export const COL_TARGET_YEAR = Object.freeze({ 0: 0, 1: 0, 2: 0, 3: 200, 4: 900, 5: 1800, 6: 2600, 7: 3200, 8: 3900, 9: 4300, 10: 4700, 11: 4850, 12: 4930, 13: 4970 });
+export const COL_TARGET_YEAR = Object.freeze({ 0: 0, 1: 0, 2: 0, 3: 200, 4: 900, 5: 1800, 6: 2600, 7: 3200, 8: 3900, 9: 4300, 10: 4700, 11: 4850, 12: 4930, 13: 4970, 14: 4960, 15: 4975, 16: 4990, 17: 5000, 18: 5040, 19: 5080 });
 /** 遅れの係数（1〜60）。目標の年から 150 年遅れるごとに加速が増す（二次）。先史（年 < 0）は 1 */
 export const lateBoost = (year, col) => { const late = (year - (COL_TARGET_YEAR[col] ?? 5000)) / 150; return late <= 0 ? 1 : Math.min(60, 1 + late * late * 2); };
 const clamp = (x, a, b) => (x < a ? a : x > b ? b : x);

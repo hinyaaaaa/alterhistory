@@ -3,8 +3,10 @@
 //   → G6 土壌・肥沃度・資源 → G7 初期人口集団 → G8 統計検証
 //   歴史（月次シミュレーション）は走らせない。地理だけを作る。
 import { buildSphereMesh, frequencyForCells, cellArea, greatCircleRad, meshHash } from "./sphere-mesh.js";
-import { normalizeWorldSpec, GENERATOR_VERSION, ISLAND_MODES } from "./spec.js";
-import { makeRng, hashString, fbm3, makeFbm3 } from "./noise.js";
+import { normalizeWorldSpec, ISLAND_MODES } from "./spec.js";
+import { siteScore, pickSite, planSettlements } from "./sites.js";
+import { activePlugin } from "./plugins.js";
+import { makeRng, hashString, fbm3, makeFbm3, gradNoise3, gfbm3, ridged3 } from "./noise.js";
 import { planContinents, makeFields, chooseSeam, seamSampleSpecs, rotZ } from "./continents.js";
 
 export const LAND_WATER = Object.freeze({ OCEAN: 0, LAND: 1, LAKE: 2 });
@@ -33,6 +35,65 @@ class MinHeap {
   }
 }
 
+/** バージョン文字列 "6.13.0" の大小比較（a >= b なら true） */
+export function versionAtLeast(a, b) {
+  const pa = String(a).split(".").map((x) => parseInt(x, 10) || 0), pb = String(b).split(".").map((x) => parseInt(x, 10) || 0);
+  for (let i = 0; i < 3; i++) { if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0); }
+  return true;
+}
+/** 隣接セルとの平均に寄せる平滑化（passes 回。w=1 で完全に平均）。f をその場で書き換える */
+export function blurField(f, off, nb, passes, w) {
+  const V = f.length, t = new Float32Array(V);
+  for (let it = 0; it < passes; it++) {
+    for (let c = 0; c < V; c++) { let s = 0; const d = off[c + 1] - off[c]; for (let k = off[c]; k < off[c + 1]; k++) s += f[nb[k]]; t[c] = f[c] * (1 - w) + (d ? s / d : f[c]) * w; }
+    f.set(t);
+  }
+}
+/**
+ * 河川侵食（v6.13.0）。陸のセルの高さだけを下げる。海のセル・海陸の境（陸は 1 m 以上を保つ）は動かさない → 海陸比・大陸の数は変わらない。
+ *   1. 優先度つき洪水法で、窪地を埋めた高さと流下先を求める（すべての流路が海へ着く）。
+ *   2. 上流の面積 A（km²）を流下先へ足し合わせる。
+ *   3. 流下先から上流へ向かって、陰解法の stream power 侵食: r = (f + F·r_下流) / (1 + F)。F = kf·√(A / 10⁵km²)。
+ *      流量の大きいセルほど下流との高低差が縮む → 本流の谷が深くなり、尾根と谷の対比が生まれる。陰解法なので F が大きくても安定する。
+ *   F は上流面積（物理量）だけで決まり、セルの大きさ（解像度）には依らない。
+ * 戻り値: 下げた高さの合計（m）と、最大の下げ幅（m）
+ */
+export function erodeRivers(mesh, elevation, areaKm2, { iterations = 6, kf = 0.085 } = {}) {
+  const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;
+  const isSea = new Uint8Array(V); for (let c = 0; c < V; c++) isSea[c] = elevation[c] <= 0 ? 1 : 0;
+  const heap = new MinHeap(V + 16), done = new Uint8Array(V), order = new Int32Array(V), parent = new Int32Array(V), f = new Float32Array(V), r = new Float32Array(V), A = new Float32Array(V);
+  let total = 0, maxDrop = 0;
+  for (let it = 0; it < iterations; it++) {
+    done.fill(0); parent.fill(-1); heap.n = 0; let on = 0;
+    for (let c = 0; c < V; c++) { f[c] = elevation[c]; if (isSea[c]) { done[c] = 1; for (let k = off[c]; k < off[c + 1]; k++) if (!isSea[nb[k]]) { heap.push(f[c], c); break; } } }
+    while (heap.n > 0) {
+      const c = heap.pop(); order[on++] = c;
+      for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (done[j]) continue; done[j] = 1; parent[j] = c; f[j] = Math.max(elevation[j], f[c] + EPS); heap.push(f[j], j); }
+    }
+    for (let c = 0; c < V; c++) A[c] = isSea[c] ? 0 : areaKm2[c];
+    for (let i = on - 1; i >= 0; i--) { const c = order[i], p = parent[c]; if (p >= 0 && !isSea[c] && !isSea[p]) A[p] += A[c]; }
+    for (let i = 0; i < on; i++) {
+      const c = order[i]; if (isSea[c]) continue;
+      const p = parent[c], rp = p < 0 || isSea[p] ? 0 : r[p], F = Math.min(0.9, kf * Math.sqrt(A[c] / 1e5));
+      r[c] = (f[c] + F * rp) / (1 + F);
+    }
+    for (let c = 0; c < V; c++) {
+      if (isSea[c]) continue;
+      const e = Math.max(1, Math.min(elevation[c], r[c])), d = elevation[c] - e;
+      if (d > 0) { elevation[c] = e; total += d; if (d > maxDrop) maxDrop = d; }
+    }
+  }
+  return { total, maxDrop };
+}
+
+/** 地球の陸の高度分布（ハイプソメトリック曲線）: [陸のセルの低い方からの割合, 標高 m]。中央値 約 370 m・平均 約 800 m・上位 2% が 4,000 m 超 */
+const HYPSO = [[0, 6], [0.1, 40], [0.2, 90], [0.3, 160], [0.4, 250], [0.5, 370], [0.6, 520], [0.7, 740], [0.8, 1100], [0.88, 1700], [0.94, 2600], [0.98, 4000], [0.995, 5400], [1, 6800]];
+export function hypsoAt(q) {
+  if (q <= 0) return HYPSO[0][1]; if (q >= 1) return HYPSO[HYPSO.length - 1][1];
+  let k = 1; while (HYPSO[k][0] < q) k++;
+  const [q0, e0] = HYPSO[k - 1], [q1, e1] = HYPSO[k]; return e0 + (e1 - e0) * ((q - q0) / (q1 - q0));
+}
+
 let coarseCache = null; const coarseMesh = () => (coarseCache ??= buildSphereMesh(frequencyForCells(2400))); // 大陸の計画の試し作り用（粗いメッシュ）
 class Cancelled extends Error {}
 const makeStager = (onProgress, signal, timings) => (name, label, fn) => {
@@ -51,6 +112,7 @@ export function generateWorld(specInput, options = {}) {
   const { spec, errors } = normalizeWorldSpec(specInput);
   if (errors.length) throw new Error("WorldSpec が不正: " + errors.join(" / "));
   const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();
+  const D2 = versionAtLeast(spec.generatorVersion, "6.13.0"); // v6.13.0 の地形の細部（尾根ノイズ・内陸への傾斜・河川侵食・山脈の平滑化）。それ以前の generatorVersion の世界は、従来と同じ結果で再現する
 
   // ---- G1: 球面メッシュ ----
   const n = frequencyForCells(spec.resolution.targetCells);
@@ -118,6 +180,13 @@ export function generateWorld(specInput, options = {}) {
       }
       if (bestAbs > 0) { isSrc[c] = 1; srcStrength[c] = best; srcCrust[c] = crust; }
     }
+    if (D2) { // v6.13.0: 境界の強さ・地殻の種類を、境界に沿って平均する（最も近い境界セルの値をそのまま使うと、山の高さが階段状の縞になる）
+      const t1 = new Float32Array(V), t2 = new Float32Array(V);
+      for (let it = 0; it < 3; it++) {
+        for (let c = 0; c < V; c++) { if (!isSrc[c]) continue; let a = srcStrength[c], b = srcCrust[c], n = 1; for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (isSrc[j]) { a += srcStrength[j]; b += srcCrust[j]; n++; } } t1[c] = a / n; t2[c] = b / n; }
+        for (let c = 0; c < V; c++) if (isSrc[c]) { srcStrength[c] = t1[c]; srcCrust[c] = t2[c]; }
+      }
+    }
     // 境界からの距離（多源 BFS）。山脈の幅は角度で決める（解像度に依存しない）
     const widthCells = Math.max(2, (5 * D2R) / spacingRad), maxD = Math.ceil(widthCells * 3);
     const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q = new Int32Array(V); let qh = 0, qt = 0;
@@ -130,6 +199,7 @@ export function generateWorld(specInput, options = {}) {
       const mod = 0.55 + 0.9 * ridgeF(X[3 * c] * 3, X[3 * c + 1] * 3, X[3 * c + 2] * 3); // 稜線の途切れ・ばらつき
       if (s > 0) { mountain[c] = clamp(s / 1.2, 0, 1.3) * f * mod * srcCrust[from[c]]; volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0; } else rift[c] = clamp(-s / 1.2, 0, 1) * f;
     }
+    if (D2) { blurField(mountain, off, nb, 2, 0.5); blurField(rift, off, nb, 1, 0.5); } // v6.13.0: 稜線の途切れ方を自然にし、セルの継ぎ目の段差をなだらかにする（高さは次の段階で尾根ノイズが付ける）
     // ---- 大陸の場: 正準座標に回してから、計画の場を当てる ----
     for (let c = 0; c < V; c++) {
       const ca = Math.cos(psi), sa = Math.sin(psi), x = wx[c] * ca - wy[c] * sa, y = wx[c] * sa + wy[c] * ca, z = wz[c];
@@ -158,11 +228,19 @@ export function generateWorld(specInput, options = {}) {
   const elevation = new Float32Array(V); let seaLevelRaw = 0;
   stage("G3_elevation", "標高・海岸・島", () => {
     const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);
+    // v6.13.0: 細部は勾配ノイズ（格子の向きの癖が出にくい）。位置を低周波ノイズでゆがめて（ドメインワープ）、一様な「ぼてっとした丘」をほぐす。尾根ノイズで稜線と谷の筋を付ける
+    const wsd = [nSeed("dwx"), nSeed("dwy"), nSeed("dwz")], rdM = nSeed("ridgeM"), rdH = nSeed("ridgeH"), nz3 = D2 ? gfbm3 : fbm3;
     for (let c = 0; c < V; c++) {
       const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];
       const land = smooth((cf - 0.25) / 0.45), nz = 0.2 + 0.8 * smooth(cf / 0.3); // v6.11.0: 大陸の場が 0 に近い海では、ノイズで小さな陸が散らばらないよう弱める
-      raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz
+      let qx = x, qy = y, qz = z;
+      if (D2) { qx += 0.1 * gradNoise3(wsd[0], x * 2.2, y * 2.2, z * 2.2); qy += 0.1 * gradNoise3(wsd[1], x * 2.2, y * 2.2, z * 2.2); qz += 0.1 * gradNoise3(wsd[2], x * 2.2, y * 2.2, z * 2.2); }
+      raw[c] = cf * 0.8 + (nz3(s1, qx, qy, qz, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (nz3(s2, qx, qy, qz, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (nz3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz
         + mountain[c] * (0.03 + 0.97 * land) * 1.5 * (0.15 + 0.85 * smooth(cf / 0.3)) - rift[c] * 0.22; // v6.11.0: 大陸の場の外（海）では、山脈が単独で陸を持ち上げない（極などに細長い陸が生えるのを防ぐ。島弧は別に作る）
+      if (D2 && land > 0) { // 山脈には鋭い稜線と谷を、低地にもゆるい尾根筋を（陸の内側だけ。海岸線の大枠は変えない）
+        const mm = Math.min(1.3, mountain[c]), rm = ridged3(rdM, qx, qy, qz, 5, 5), rh = ridged3(rdH, qx, qy, qz, 4, 13);
+        raw[c] += land * (mm * 0.5 * (rm - 0.62) + 0.07 * smooth(cf / 0.6) * (rh - 0.62));
+      }
       { const pl = (Math.abs(lat[c]) - 72 * D2R) / (12 * D2R); if (pl > 0) raw[c] -= 0.22 * smooth(pl); } // 極域は陸になりにくい（巨大大陸を抑える。島・氷雪地域は残る）
       { const dseam = Math.PI - Math.abs(Math.atan2(y, x)); if (dseam < 12 * D2R) { const m = smooth((dseam - 4 * D2R) / (8 * D2R)); raw[c] = raw[c] * m - 0.25 * (1 - m); } } // 地図の左右端は、山脈やノイズでも陸にならないよう海側へ寄せる
     }
@@ -173,6 +251,11 @@ export function generateWorld(specInput, options = {}) {
       const e = raw[c] - seaLevelRaw;
       elevation[c] = e >= 0 ? Math.pow(Math.min(1.35, e / Math.max(1e-6, hi - seaLevelRaw)), 1.2) * 6500 : (e / Math.max(1e-6, seaLevelRaw - lo)) * 5500;
     }
+    if (D2) { // v6.13.0: 陸は、高さの順位だけを保って、地球の高度分布に写し直す（大陸の内側が高原になる癖をなくし、平野・丘陵・山脈の割合を史実に近づける。順位が同じなので稜線・谷・海岸線は変わらない）
+      const idx = []; for (let c = 0; c < V; c++) if (raw[c] > seaLevelRaw) idx.push(c);
+      idx.sort((a, b) => raw[a] - raw[b] || a - b);
+      const L = idx.length; for (let r = 0; r < L; r++) elevation[idx[r]] = hypsoAt((r + 0.5) / L);
+    }
   });
   const isSea = new Uint8Array(V); for (let c = 0; c < V; c++) isSea[c] = elevation[c] <= 0 ? 1 : 0;
 
@@ -182,6 +265,13 @@ export function generateWorld(specInput, options = {}) {
     const q = new Int32Array(V); let qh = 0, qt = 0; const seen = new Uint8Array(V);
     for (let c = 0; c < V; c++) if (isSea[c]) { seen[c] = 1; q[qt++] = c; }
     while (qh < qt) { const c = q[qh++]; for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (!seen[j]) { seen[j] = 1; coastDist[j] = Math.min(65535, coastDist[c] + 1); q[qt++] = j; } } }
+  });
+
+  // v6.13.0: 内陸へ緩やかに登る傾斜（平野の川が最寄りの海へ向かう）→ 河川侵食（本流の谷を刻む）。陸は 1 m 以上を保つので、海陸の形は変わらない
+  if (D2) stage("G3_erode", "河川侵食", () => {
+    const perCell = 0.035 * spacingKm; // 海岸から 1 セル内陸へ入るごとに上がる高さ（m）。0.035 m/km ≒ 大河の下流平野の勾配
+    for (let c = 0; c < V; c++) if (!isSea[c]) elevation[c] = Math.max(1, elevation[c] + Math.min(coastDist[c], 40) * perCell);
+    erodeRivers(mesh, elevation, areaKm2, { iterations: 6, kf: 0.085 });
   });
 
   // ---- G4: 気候・バイオーム ----
@@ -213,21 +303,23 @@ export function generateWorld(specInput, options = {}) {
   // ---- G6: 土壌・肥沃度・資源・人口の受け皿 ----
   const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);
   const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };
-  stage("G6_soil", "土壌・肥沃度・資源", () => { for (let c = 0; c < V; c++) landUseAt(lu, c); });
+  stage("G6_soil", "土壌・肥沃度・資源", () => { lu.seaDist = seaDistances(mesh, isSea); for (let c = 0; c < V; c++) landUseAt(lu, c); delete lu.seaDist; });
 
   // ---- G7: 初期人口集団の配置 ----
   const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };
+  if (D2) { const sw = { mesh, cell: { elevation, landWater, river, riverTo: parent, fertility, temp, areaKm2 } }; gctx.site = (c) => siteScore(sw, c); } // v6.13.0: 初期の人口集団も、適地スコアで置く
   const populations = stage("G7_groups", "初期人口集団", () => placeInitialGroups(gctx, spec, 0));
 
   // ---- G8: 統計と検証 ----
   const stats = stage("G8_stats", "統計", () => computeStats({ lon, V, off, nb, landWater, isSea, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
   const world = {
-    spec: { ...spec, generatorVersion: GENERATOR_VERSION }, mesh,
+    spec: { ...spec }, mesh, // generatorVersion は、実際に使った版（指定がなければ現行版）をそのまま記録する。古い版を指定して作った世界を、あとで同じ結果で再現できる
     cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },
     entities: { populations }, stats, timings,
   };
   timings.total = Math.round(performance.now() - tAll);
   world.hash = worldHash(world);
+  Object.defineProperty(world, "siteTools", { value: { pickSite, planSettlements, siteScore }, enumerable: false, writable: true, configurable: true }); // 集落の選定の道具。国家運営層（civ）は world/ を直接 import できないので、世界に持たせて渡す（保存・複製・ハッシュに入らない）
   return world;
 }
 
@@ -298,7 +390,15 @@ export function computeHydrology(h, members = null) {
 /** 土壌・資源・肥沃度のノイズ種（シードから決まる） */
 export function landUseNoise(seed) { const ns = (name) => hashString(`${seed}::noise::${name}`); return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") }; }
 const SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };
-/** 海のセルから、最も近い陸までのセル数（6 まで見る。見つからなければ 99） */
+/** 全セルについて、海のセルから最も近い陸（水域でない所）までのセル数（多源 BFS。7 を超える所と陸は 99）。seaToLand をセルごとに呼ぶのと同じ値 */
+export function seaDistances(mesh, isSea) {
+  const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, d = new Uint8Array(V).fill(99), q = new Int32Array(V); let qh = 0, qt = 0;
+  for (let c = 0; c < V; c++) if (!isSea[c]) { d[c] = 0; q[qt++] = c; }
+  while (qh < qt) { const c = q[qh++]; if (d[c] >= 7) continue; for (let k = off[c]; k < off[c + 1]; k++) { const j = nb[k]; if (d[j] === 99) { d[j] = d[c] + 1; q[qt++] = j; } } }
+  for (let c = 0; c < V; c++) if (!isSea[c]) d[c] = 99;
+  return d;
+}
+/** 海のセルから、最も近い陸までのセル数（6 まで見る。見つからなければ 99）。局所再計算（編集）用 */
 function seaToLand(mesh, isSea, c) {
   const off = mesh.neighborOffsets, nb = mesh.neighborIds; let fr = [c]; const seen = new Set([c]);
   for (let d = 0; d <= 6; d++) { const nx = []; for (const u of fr) for (let k = off[u]; k < off[u + 1]; k++) { const j = nb[k]; if (!isSea[j]) return d + 1; if (!seen.has(j)) { seen.add(j); nx.push(j); } } fr = nx; if (!fr.length) break; }
@@ -306,21 +406,22 @@ function seaToLand(mesh, isSea, c) {
 }
 /** 1 セルの土壌・資源・肥沃度・人口の受け皿を決める（全体生成と局所再計算で共通） */
 export function landUseAt(g, c) {
-  const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;
+  const { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt, seaDist } = g;
   const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
   const sea = isSea[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];
   let relief = 0, kn = 0; for (let k = off[c]; k < off[c + 1]; k++) { relief += Math.abs(elevation[nb[k]] - e); kn++; } relief /= Math.max(1, kn); // 起伏（隣との標高差の平均）
   const nearRiver = river[c] === 1; let res = 0;
-  if (sea) { if (e > -300 && seaToLand(mesh, isSea, c) <= 6) res |= RES.FISH; }
+  if (sea) { if (e > -300 && (seaDist ? seaDist[c] : seaToLand(mesh, isSea, c)) <= 6) res |= RES.FISH; } // seaDist: 全体生成で一括計算した距離（無ければ 1 セルずつ探す）
   else {
     const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q = (i, f) => fbm3(rs[i], x, y, z, 3, f);
     if (land) {
-      if (q(0, 7) > 0.6 && e > 300) res |= RES.IRON;
-      if (q(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;
-      if (q(2, 9) > 0.72 && e > 800) res |= RES.TIN;
-      if (q(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;
-      if (q(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;
-      if (q(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;
+      // v6.13.0: ノイズ（高価）は、安い条件を先に判定してから評価する（結果は同じ。全体生成の G6 が約 7 倍速い）
+      if (e > 300 && q(0, 7) > 0.6) res |= RES.IRON;
+      if ((e > 500 || volcanic[c] > 0.3) && q(1, 8) > 0.66) res |= RES.COPPER;
+      if (e > 800 && q(2, 9) > 0.72) res |= RES.TIN;
+      if ((nearRiver || mountain[c] > 0.4) && q(3, 10) > 0.74) res |= RES.GOLD;
+      if (e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL) && q(4, 6) > 0.62) res |= RES.COAL;
+      if (mountain[c] > 0.5 && q(5, 11) > 0.78) res |= RES.GEMS;
       if (e > 200 && relief > 120) res |= RES.STONE;
       if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;
       if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;
@@ -358,9 +459,10 @@ export function landUseAt(g, c) {
  * g: { mesh, landWater, fertility, temp, river, coastDist, lat, lon }
  */
 export function placeInitialGroups(g, spec, variant = 0) {
+  { const P = activePlugin("city"); if (typeof P?.initialGroups === "function") { try { const alt = P.initialGroups(g, spec, variant); if (Array.isArray(alt) && alt.length && alt.every((o) => Number.isInteger(o.cell) && g.landWater[o.cell] === LAND_WATER.LAND)) return alt.slice(0, spec.initialGroups).map((o, i) => ({ id: i + 1, subsistence: "forage", species: "human", size: 300, ...o, lat: g.lat[o.cell] / D2R, lon: g.lon[o.cell] / D2R })); } catch { /* プラグインの失敗は標準へ */ } } } // v6.13.0: 都市プラグイン
   const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;
   const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand = [];
-  for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });
+  for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand.push({ c, s: (g.site ? Math.max(0.05, g.site(c)) : fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0))) * (0.7 + 0.6 * rg()) });
   cand.sort((a, b) => b.s - a.s || a.c - b.c);
   const out = [], minSep = Math.min(0.25 * Math.PI, 2000 / R);
   const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);

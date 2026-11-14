@@ -115,8 +115,17 @@ export function spawnGroup(civ, ids, parent, cell, pop) {
   for (const [k, v] of Object.entries({ agriculture: "agriculture", pastoralism: "herding", seafaring: "seafaring" })) g.knowledge[v] = g.tech.known[k] != null ? 1 : 0;
   civ.groups[id] = g; return g;
 }
+/** "6.13.0" 以上か（civ は world/ を import できないので、ここに小さく持つ） */
+export const verGE = (a, b) => { const pa = String(a).split(".").map((x) => parseInt(x, 10) || 0), pb = String(b).split(".").map((x) => parseInt(x, 10) || 0); for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0); return true; };
 export function foundSettlement(world, civ, ids, g, cause = null) {
-  let best = g.cell, bs = -1; for (const c of ensureCells(world, g)) { const s = world.cell.fertility[c] + (world.cell.river[c] ? 0.4 : 0) + (world.cell.coastDist[c] <= 1 ? 0.2 : 0); if (s > bs) { bs = s; best = c; } }
+  const P = world.cityPlugin ?? null, cells = ensureCells(world, g); let best = g.cell, bs = -1; // 都市プラグインは世界が持つ（generate.js が付ける。civ は world/ を直接 import しない）
+  const std = (c) => world.cell.fertility[c] + (world.cell.river[c] ? 0.4 : 0) + (world.cell.coastDist[c] <= 1 ? 0.2 : 0);
+  const withPlugin = (c, base) => { if (typeof P?.siteScore === "function") { try { const v = P.siteScore(world, c, { civ, group: g, base }); if (Number.isFinite(v)) return v; } catch { /* 標準へ */ } } return base; };
+  if (world.siteTools?.pickSite && verGE(world.spec?.generatorVersion ?? "0", "6.13.0")) { // v6.13.0: 適地スコア（既存の集落に近い所は減点）。都市プラグインの得点があれば、それを基準にする
+    const occ = new Set(Object.values(civ.settlements).map((x) => x.cell));
+    const p = world.siteTools.pickSite(world, cells, occ, typeof P?.siteScore === "function" ? (w, c, base) => withPlugin(c, base) : undefined); if (p >= 0) best = p;
+  } else for (const c of cells) { const s = withPlugin(c, std(c)); if (s > bs) { bs = s; best = c; } }
+  if (typeof P?.settlementCell === "function") { try { const c = P.settlementCell(world, civ, g, cells, best); if (Number.isInteger(c) && cells.includes(c)) best = c; } catch { /* 標準へ */ } } // 都市プラグイン（集落のセル）
   const id = ids.next("settle"), s = { id, groupId: g.id, cell: best, foundedAt: civ.monthIndex, pop: Math.round(g.pop * POP.settledShare), stage: "village" };
   civ.settlements[id] = s; g.settlementId = id;
   makeEvent(civ, ids, { kind: "settlement_founded", title: "集落の成立", participants: [{ entityId: g.id, role: "founder" }, { entityId: id, role: "settlement" }], location: { cell: best }, causes: cause ? [{ targetId: cause, relation: "caused_by", basis: "direct" }] : [] });

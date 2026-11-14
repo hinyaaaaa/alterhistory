@@ -5,6 +5,7 @@ import { byId } from "./dom.js";
 import { alertDialog } from "./dialogs.js";
 import { needsStartGroup } from "../app/group-actions.js";
 import { describeCell } from "../app/describe-cell.js";
+import { centerOf } from "../core/geometry-csr.js";
 
 const fmt = (v, d = 0) => (Number.isFinite(v) ? v.toLocaleString("ja-JP", { maximumFractionDigits: d, minimumFractionDigits: d }) : "—");
 
@@ -23,7 +24,7 @@ export function initGroupsPanel({ store, actions, viewport, renderer, editMode }
     for (const p of pops) {
       const d = describeCell(w, p.cell), row = el("button", "world-group" + (p.id === sel ? " on" : ""), ""); row.type = "button"; row.dataset.group = String(p.id);
       row.append(el("b", null, `#${p.id}`), el("span", null, `${fmt(d.lat, 1)}°, ${fmt(d.lon, 1)}° ・ 人口 ${p.size}`), el("span", null, `${d.biome}・${fmt(d.temp, 0)}℃・肥沃 ${fmt(d.fertility, 2)}`), el("span", null, [d.river ? "川" : "", d.coastDist <= 2 ? "海辺" : "", ...d.resources.slice(0, 3)].filter(Boolean).join("・") || "—"));
-      row.addEventListener("click", () => { actions.selectGroup(p.id); const pt = s.map.geometry.pack.p[p.cell]; viewport.centerOn(pt[0], pt[1], Math.max(viewport.k, viewport.fitK * 3)); renderer.requestRender(); });
+      row.addEventListener("click", () => { actions.selectGroup(p.id); const pt = centerOf(s.map.geometry, p.cell); viewport.centerOn(pt[0], pt[1], Math.max(viewport.k, viewport.fitK * 3)); renderer.requestRender(); });
       list.append(row);
     }
     const acts = el("div", "world-acts");

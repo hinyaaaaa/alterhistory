@@ -9,6 +9,7 @@ import { activeTreaties, partyIds, TREATY_BY_KEY } from "../core/edit/treaties.j
 import { statePopulation } from "../core/query.js";
 import { byId } from "./dom.js";
 import { tagLabels, burgKindLabel, resourceLabels, provinceTitleLabel } from "../core/edit/world-info.js";
+import { centerOf } from "../core/geometry-csr.js";
 
 const SVGNS = "http://www.w3.org/2000/svg";
 const CARD_W = 224, GAP = 56;
@@ -36,7 +37,7 @@ export function describeTarget(map, cell, { shift = false } = {}) {
   if (shift && c.province[cell] > 0 && map.pack.provinces[c.province[cell]] && !map.pack.provinces[c.province[cell]].removed) {
     const p = map.pack.provinces[c.province[cell]];
     const n = []; for (let i = 0; i < c.province.length; i++) if (c.province[i] === p.i) n.push(i);
-    return { kind: "province", kick: "属州", name: nm(p), at: map.geometry.pack.p[cell], rows: [["所属", st ? nm(st) : "無所属"], ["セル数", String(n.length), true], ...(provinceTitleLabel(p) ? [["称号", provinceTitleLabel(p)]] : []), ...(resourceLabels(p).length ? [["特産", resourceLabels(p).join("・")]] : [])] };
+    return { kind: "province", kick: "属州", name: nm(p), at: centerOf(map.geometry, cell), rows: [["所属", st ? nm(st) : "無所属"], ["セル数", String(n.length), true], ...(provinceTitleLabel(p) ? [["称号", provinceTitleLabel(p)]] : []), ...(resourceLabels(p).length ? [["特産", resourceLabels(p).join("・")]] : [])] };
   }
   if (!st) return null;
   const cap = st.capital ? map.pack.burgs[st.capital] : null;
@@ -44,7 +45,7 @@ export function describeTarget(map, cell, { shift = false } = {}) {
   const rows = [["首都", cap ? cap.name : "—"], ["人口", fmtPop(statePopulation(st)), true], ["戦争", wars.length ? `${wars.length}件 進行中` : "なし"]];
   if (treaties.length) rows.push(["条約", treaties.slice(0, 2).map((t) => TREATY_BY_KEY[t.kind].short).join("・") + (treaties.length > 2 ? ` ほか${treaties.length - 2}` : "")]);
   if (tagLabels(st).length) rows.push(["特色", tagLabels(st).join("・")]);
-  return { kind: "state", kick: "国家", name: nm(st), at: cap ? pos(cap) : map.geometry.pack.p[cell], rows };
+  return { kind: "state", kick: "国家", name: nm(st), at: cap ? pos(cap) : centerOf(map.geometry, cell), rows };
 }
 
 const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;

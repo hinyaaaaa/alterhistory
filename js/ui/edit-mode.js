@@ -6,6 +6,7 @@ import { pickAt } from "./tools/selection.js";
 import { createBrushController } from "./tools/brush.js";
 import { PAINT_KINDS } from "../core/edit/paint.js";
 import { byId } from "./dom.js";
+import { centerOf } from "../core/geometry-csr.js";
 
 export const TOOLS = Object.freeze({
   SELECT: "select",
@@ -39,7 +40,7 @@ export function initEditMode({ store, viewport, editActions, panels, openSetup }
     getRadius: () => radius,
     onStroke(cell, r, painted) {
       const map = store.getState().map;
-      const [wx, wy] = [map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1]];
+      const [wx, wy] = [centerOf(map.geometry, cell)[0], centerOf(map.geometry, cell)[1]];
       if (tool === TOOLS.PAINT_HEIGHT) { // 標高は球面世界の編集器で行う（気候・水系を再計算するので、間引いて当てる）
         if (lastSculpt && Math.hypot(wx - lastSculpt[0], wy - lastSculpt[1]) < r * 0.6) return;
         lastSculpt = [wx, wy]; editActions.sculpt(cell, r, target); return;

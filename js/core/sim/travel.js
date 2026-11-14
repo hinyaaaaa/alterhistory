@@ -10,6 +10,7 @@
 // 純粋ロジック層：DOM に依存しない。map を変更しない。
 
 import { getScale } from "../../render/layers/annotations.js";
+import { centersOf } from "../geometry-csr.js";
 
 /** 移動手段。speed: 距離単位/時、hoursPerDay: 1日に進める時間、domain: land|water|air|stay */
 export const TRANSPORTS = Object.freeze([
@@ -62,12 +63,12 @@ export function canEndAt(map, cell, transport) {
  * @returns {{ok:true, path:number[], distancePx:number} | {ok:false, reason:string}}
  */
 export function findPath(map, from, to, transport) {
-  const pa = map.geometry.pack.p;
+  const ctr = centersOf(map.geometry);
   const ends = [canEndAt(map, from, transport), canEndAt(map, to, transport)];
   const bad = ends.find((e) => !e.ok);
   if (bad) return { ok: false, reason: bad.reason };
   if (transport.domain === "stay") return { ok: true, path: [from], distancePx: 0 };
-  const px = (a, b) => Math.hypot(pa[a][0] - pa[b][0], pa[a][1] - pa[b][1]);
+  const px = (a, b) => Math.hypot(ctr.cx[a] - ctr.cx[b], ctr.cy[a] - ctr.cy[b]);
   if (transport.domain === "air") return { ok: true, path: from === to ? [from] : [from, to], distancePx: px(from, to) };
   if (from === to) return { ok: true, path: [from], distancePx: 0 };
 

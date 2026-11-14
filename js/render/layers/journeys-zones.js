@@ -1,5 +1,6 @@
 // 旅の線とゾーンの範囲を描く層。どちらも「地図に重ねる情報」で、書き出し画像にも入る。
 import { addCellPath } from "./terrain.js";
+import { centersOf } from "../../core/geometry-csr.js";
 import { buildBoundarySegments, strokeSegments } from "../edges.js";
 import { zoneColor } from "../../core/edit/zones.js";
 import { listJourneys } from "../../core/edit/journeys.js";
@@ -46,7 +47,7 @@ export function drawZones(ctx, map, vp, { selected = null } = {}) {
 export function drawJourneys(ctx, map, vp, { selected = null } = {}) {
   const journeys = listJourneys(map);
   if (!journeys.length) return;
-  const p = map.geometry.pack.p;
+  const ctr = centersOf(map.geometry), p = { get: (c) => (c >= 0 && c < ctr.n ? [ctr.cx[c], ctr.cy[c]] : undefined) };
   const k = vp.k;
   ctx.save();
   ctx.lineCap = "round"; ctx.lineJoin = "round";
@@ -54,7 +55,7 @@ export function drawJourneys(ctx, map, vp, { selected = null } = {}) {
     const sel = j.id === selected;
     const w = (sel ? 3.2 : 2) / k;
     for (const leg of j.legs ?? []) {
-      const pts = (leg.path ?? []).map((c) => p[c]).filter(Boolean);
+      const pts = (leg.path ?? []).map((c) => p.get(c)).filter(Boolean);
       if (leg.transport === "stay") {
         if (pts[0]) { ctx.fillStyle = j.color; ctx.beginPath(); ctx.arc(pts[0][0], pts[0][1], 4 / k, 0, Math.PI * 2); ctx.fill(); }
         continue;
@@ -73,7 +74,7 @@ export function drawJourneys(ctx, map, vp, { selected = null } = {}) {
     }
     // 出発点（白丸）と到着点（旗代わりの塗り丸）
     const first = j.legs?.[0], last = j.legs?.at(-1);
-    const a = first && p[first.from], z = last && p[last.to];
+    const a = first && p.get(first.from), z = last && p.get(last.to);
     if (a) { ctx.fillStyle = "#fff"; ctx.strokeStyle = j.color; ctx.lineWidth = 2 / k; ctx.beginPath(); ctx.arc(a[0], a[1], 4.2 / k, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
     if (z) { ctx.fillStyle = j.color; ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6 / k; ctx.beginPath(); ctx.arc(z[0], z[1], 4.6 / k, 0, Math.PI * 2); ctx.fill(); ctx.stroke(); }
   }

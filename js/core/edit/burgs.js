@@ -14,6 +14,7 @@
 import { makeCommand, setList, setProps, setIndexed } from "./commands.js";
 import { removeLegacyNotesPart } from "./notes.js";
 import { cellIndexOf } from "../spatial.js";
+import { centerOf } from "../geometry-csr.js";
 
 const isLive = (b) => !!b && typeof b === "object" && !b.removed && b.i > 0;
 const round6 = (v) => Math.round(v * 1e6) / 1e6;
@@ -22,7 +23,7 @@ const liveList = (arr) => arr.filter(isLive);
 /** 新しい都市の人口の見積もり（近隣の都市の人口の中央値に、ばらつきを掛けた値） */
 export function estimatePopulation(map, cell, rnd) {
   const idx = cellIndexOf(map);
-  const near = idx.findWithin(map.geometry.pack.p[cell][0], map.geometry.pack.p[cell][1], map.grid.spacing * 6)
+  const near = idx.findWithin(centerOf(map.geometry, cell)[0], centerOf(map.geometry, cell)[1], map.grid.spacing * 6)
     .map((i) => map.pack.cells.burg[i]).filter((id) => id > 0).map((id) => map.pack.burgs[id]).filter(isLive);
   const base = near.length
     ? near.map((b) => b.population).sort((a, b) => a - b)[near.length >> 1]

@@ -1,5 +1,6 @@
 // ステータスバー：読み込み中の地図・ホバー中のセル情報・ズーム倍率。
 import { byId } from "./dom.js";
+import { cellCountOf } from "../core/geometry-csr.js";
 
 export function formatCell(info) {
   if (!info) return "";
@@ -21,7 +22,7 @@ export function initStatusBar({ store, viewport, renderer }) {
 
   const update = (state) => {
     mapEl.textContent = state.map
-      ? `${state.map.meta.name || state.fileName} ｜ ${state.map.geometry.pack.p.length}セル`
+      ? `${state.map.meta.name || state.fileName} ｜ ${cellCountOf(state.map.geometry)}セル`
       : "未読み込み";
     hoverEl.textContent = formatCell(state.hover);
   };

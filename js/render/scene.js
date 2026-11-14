@@ -3,6 +3,7 @@
 // 状態を変更しない（読むだけ）。
 
 import { drawTerrain } from "./layers/terrain.js";
+import { centersOf } from "../core/geometry-csr.js";
 import { drawPolitics, drawCoast } from "./layers/politics.js";
 import { drawRivers, drawRoutes } from "./layers/lines.js";
 import { drawBurgs, drawLabels } from "./layers/places.js";
@@ -65,9 +66,9 @@ const bandCache = new WeakMap();
 function polarColors(map) {
   const stamp = `${map.rev?.terrain ?? 0}`, hit = bandCache.get(map.geometry);
   if (hit && hit.stamp === stamp) return hit.colors;
-  const P = map.geometry.pack.p, biome = map.pack.cells.biome, H = map.meta.height, lim = (10 / 180) * H; // 緯度 80° より極側（sim の y）
+  const ctr = centersOf(map.geometry), biome = map.pack.cells.biome, H = map.meta.height, lim = (10 / 180) * H; // 緯度 80° より極側（sim の y）
   const tally = [new Map(), new Map()];
-  for (let i = 0; i < P.length; i++) { const y = P[i][1], side = y < lim ? 0 : y > H - lim ? 1 : -1; if (side < 0) continue; const m = tally[side]; m.set(biome[i], (m.get(biome[i]) ?? 0) + 1); }
+  for (let i = 0; i < ctr.n; i++) { const y = ctr.cy[i], side = y < lim ? 0 : y > H - lim ? 1 : -1; if (side < 0) continue; const m = tally[side]; m.set(biome[i], (m.get(biome[i]) ?? 0) + 1); }
   const colors = tally.map((m) => { let best = 0, bn = -1; for (const [b, n] of m) if (n > bn) { bn = n; best = b; } return bn < 0 ? null : best === 0 ? "#5a82ad" : (map.biomesData[best]?.color ?? null); }); // 海は地形層の「外洋」と同じ色
   bandCache.set(map.geometry, { stamp, colors }); return colors;
 }

@@ -49,7 +49,7 @@ await check("担当を外す（創造主モード）と、全国家が AI で動
 
 console.log("=== プレイヤーと AI の共通経路 ===");
 await check("同じ行動（増税）を、プレイヤー命令と AI の経路で行うと、同じ結果になる（同じ検証・同じ実行）", () => {
-  const a = fresh(), b = fresh(), id = alive(a)[0].id; dispatch(a, { type: "control.take", authority: A.ADMIN, stateId: id });
+  const a = fresh(), b = fresh(), id = (alive(a).find((s) => s.policy.tax > 0.03) ?? alive(a)[0]).id; /* 減税できる（税率が下限でない）国を選ぶ。世界の中身が変わっても前提が崩れない */ dispatch(a, { type: "control.take", authority: A.ADMIN, stateId: id });
   const ra = dispatch(a, { type: "state.act", authority: A.PLAYER, stateId: id, action: "set_tax", opt: "down" }); assert.ok(ra.ok, ra.error);
   const sb = b.civ.states[id]; const rb = runAction(b.sim.ctx, sb, ACTION.set_tax, { key: "set_tax", opt: "down", target: null, factors: {} }, { provenance: "ai" }); assert.ok(rb.ok);
   assert.deepEqual(a.civ.states[id].policy, sb.policy); assert.equal(a.civ.states[id].treasury, sb.treasury);

@@ -40,7 +40,7 @@
   function buildSphereMesh(n3) {
     if (!Number.isInteger(n3) || n3 < 1) throw new Error("\u5468\u6CE2\u6570 n \u306F 1 \u4EE5\u4E0A\u306E\u6574\u6570");
     const { verts: bv, faces } = baseIcosahedron();
-    const V = cellCountForFrequency(n3), T3 = 20 * n3 * n3;
+    const V = cellCountForFrequency(n3), T4 = 20 * n3 * n3;
     const centerXYZ = new Float32Array(3 * V);
     for (let i = 0; i < 12; i++) {
       centerXYZ[3 * i] = bv[i][0];
@@ -65,7 +65,7 @@
       centerXYZ[3 * id + 1] = tmp[1] / l;
       centerXYZ[3 * id + 2] = tmp[2] / l;
     };
-    const tri2 = new Uint32Array(3 * T3);
+    const tri2 = new Uint32Array(3 * T4);
     let tp = 0;
     const gid = new Int32Array((n3 + 1) * (n3 + 1));
     for (let f2 = 0; f2 < 20; f2++) {
@@ -106,28 +106,28 @@
         }
       }
     }
-    if (tp !== 3 * T3) throw new Error(`\u4E09\u89D2\u5F62\u306E\u6570\u304C\u5408\u308F\u306A\u3044: ${tp / 3} != ${T3}`);
+    if (tp !== 3 * T4) throw new Error(`\u4E09\u89D2\u5F62\u306E\u6570\u304C\u5408\u308F\u306A\u3044: ${tp / 3} != ${T4}`);
     {
       const a = tri2[0] * 3, b = tri2[1] * 3, c = tri2[2] * 3, P3 = [centerXYZ[a], centerXYZ[a + 1], centerXYZ[a + 2]];
       const Q = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];
-      if (dot(cross(sub(Q, P3), sub(R, P3)), P3) < 0) for (let t = 0; t < T3; t++) {
+      if (dot(cross(sub(Q, P3), sub(R, P3)), P3) < 0) for (let t = 0; t < T4; t++) {
         const x = tri2[3 * t + 1];
         tri2[3 * t + 1] = tri2[3 * t + 2];
         tri2[3 * t + 2] = x;
       }
     }
     const deg = new Uint32Array(V + 1);
-    for (let t = 0; t < 3 * T3; t++) deg[tri2[t] + 1]++;
+    for (let t = 0; t < 3 * T4; t++) deg[tri2[t] + 1]++;
     const offs = new Uint32Array(V + 1);
     for (let i = 0; i < V; i++) offs[i + 1] = offs[i] + deg[i + 1];
-    const fill = new Uint32Array(V), sV = new Uint32Array(3 * T3), sW = new Uint32Array(3 * T3), sT = new Uint32Array(3 * T3);
-    for (let t = 0; t < T3; t++) for (let r = 0; r < 3; r++) {
+    const fill = new Uint32Array(V), sV = new Uint32Array(3 * T4), sW = new Uint32Array(3 * T4), sT = new Uint32Array(3 * T4);
+    for (let t = 0; t < T4; t++) for (let r = 0; r < 3; r++) {
       const u = tri2[3 * t + r], v = tri2[3 * t + (r + 1) % 3], w = tri2[3 * t + (r + 2) % 3], s = offs[u] + fill[u]++;
       sV[s] = v;
       sW[s] = w;
       sT[s] = t;
     }
-    const neighborIds = new Uint32Array(3 * T3), cellVertexIds = new Uint32Array(3 * T3);
+    const neighborIds = new Uint32Array(3 * T4), cellVertexIds = new Uint32Array(3 * T4);
     for (let u = 0; u < V; u++) {
       const s0 = offs[u], e0 = offs[u + 1], d = e0 - s0;
       let cur = s0;
@@ -144,15 +144,15 @@
         cur = nx;
       }
     }
-    const vertexXYZ = new Float32Array(3 * T3);
-    for (let t = 0; t < T3; t++) {
+    const vertexXYZ = new Float32Array(3 * T4);
+    for (let t = 0; t < T4; t++) {
       const a = tri2[3 * t] * 3, b = tri2[3 * t + 1] * 3, c = tri2[3 * t + 2] * 3;
       const x = centerXYZ[a] + centerXYZ[b] + centerXYZ[c], y = centerXYZ[a + 1] + centerXYZ[b + 1] + centerXYZ[c + 1], z = centerXYZ[a + 2] + centerXYZ[b + 2] + centerXYZ[c + 2], l = Math.hypot(x, y, z);
       vertexXYZ[3 * t] = x / l;
       vertexXYZ[3 * t + 1] = y / l;
       vertexXYZ[3 * t + 2] = z / l;
     }
-    return { meshVersion: MESH_VERSION, n: n3, cellCount: V, triangleCount: T3, centerXYZ, neighborOffsets: offs, neighborIds, vertexXYZ, cellVertexOffsets: offs, cellVertexIds };
+    return { meshVersion: MESH_VERSION, n: n3, cellCount: V, triangleCount: T4, centerXYZ, neighborOffsets: offs, neighborIds, vertexXYZ, cellVertexOffsets: offs, cellVertexIds };
   }
   function greatCircleRad(ax, ay, az, bx, by, bz) {
     const cx = ay * bz - az * by, cy = az * bx - ax * bz, cz = ax * by - ay * bx;
@@ -190,7 +190,7 @@
   }
 
   // js/core/world/spec.js
-  var GENERATOR_VERSION = "6.11.0";
+  var GENERATOR_VERSION = "6.13.0";
   var WORLD_SPEC_SCHEMA = 1;
   var ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });
   var LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);
@@ -256,6 +256,116 @@
     if (isObj(input) && input.schemaVersion !== void 0 && input.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input.schemaVersion} \u306F\u672A\u5BFE\u5FDC`);
     return { spec, errors };
   }
+
+  // js/core/world/sites.js
+  var LAKE = 2;
+  function siteScore(world, c) {
+    const { mesh, cell } = world, off = mesh.neighborOffsets, nb = mesh.neighborIds, e = cell.elevation;
+    let seaN = 0, lakeN = 0, inflow = 0, n3 = 0, eSum = 0, higher = 0;
+    for (let k = off[c]; k < off[c + 1]; k++) {
+      const j = nb[k];
+      n3++;
+      if (e[j] <= 0) seaN++;
+      else {
+        eSum += e[j];
+        if (e[j] > e[c]) higher++;
+      }
+      if (cell.landWater[j] === LAKE) lakeN++;
+      if (cell.river[j] && cell.riverTo[j] === c) inflow++;
+    }
+    const land = Math.max(1, n3 - seaN), mean = eSum / land, rel = e[c] - mean, T4 = cell.temp[c];
+    let s = cell.fertility[c];
+    if (cell.river[c]) s += 0.35;
+    else if (lakeN) s += 0.25;
+    if (inflow >= 2) s += 0.3 + 0.1 * Math.min(3, inflow - 2);
+    if (cell.river[c] && cell.riverTo[c] >= 0 && e[cell.riverTo[c]] <= 0) s += 0.4;
+    if (seaN > 0) s += seaN <= 3 ? 0.3 : 0.1;
+    if (rel > 15 && rel < 160 && higher <= 2) s += 0.12;
+    const slope = Math.abs(rel) / (cell.areaKm2 ? Math.sqrt(cell.areaKm2[c]) : 70);
+    s += slope < 3 ? 0.1 : 0;
+    if (e[c] > 1500) s -= 0.4 + (e[c] - 1500) / 2500;
+    if (T4 < 2) s -= (2 - T4) * 0.05;
+    else if (T4 > 30) s -= (T4 - 30) * 0.05;
+    return s;
+  }
+  function cellRand(seed, c, salt = 0) {
+    let h2 = (seed ^ Math.imul(c + 1, 2654435761) ^ Math.imul(salt + 7, 2246822507)) >>> 0;
+    h2 = Math.imul(h2 ^ h2 >>> 15, 739982445);
+    h2 = Math.imul(h2 ^ h2 >>> 12, 695872825);
+    return ((h2 ^ h2 >>> 15) >>> 0) / 4294967296;
+  }
+  function planSettlements(world, groups, seed, score = null) {
+    const { mesh } = world, off = mesh.neighborOffsets, nb = mesh.neighborIds, V = mesh.cellCount, plan = [];
+    for (const g of groups) {
+      let best = -1, bs = -Infinity;
+      for (const c of g.cells) {
+        if (world.cell.elevation[c] <= 0) continue;
+        const s = (score ? score(world, c, siteScore(world, c), g) : siteScore(world, c)) + (cellRand(seed, c, 1) - 0.5) * 0.3;
+        if (s > bs) {
+          bs = s;
+          best = c;
+        }
+      }
+      if (best >= 0) plan.push({ g, c: best, s: bs });
+    }
+    plan.sort((a, b) => b.s - a.s || a.c - b.c);
+    const blocked = new Uint8Array(V), q2 = new Int32Array(V), depth = new Uint8Array(V), seen = new Int32Array(V).fill(-1), out = /* @__PURE__ */ new Map();
+    plan.forEach(({ g, c }, idx) => {
+      if (blocked[c]) return;
+      out.set(g.id, c);
+      const r = Math.floor(cellRand(seed, c, 2) * 3);
+      let qh = 0, qt = 0;
+      q2[qt++] = c;
+      depth[c] = 0;
+      seen[c] = idx;
+      blocked[c] = 1;
+      while (qh < qt) {
+        const x = q2[qh++];
+        if (depth[x] >= r) continue;
+        for (let k = off[x]; k < off[x + 1]; k++) {
+          const j = nb[k];
+          if (seen[j] !== idx) {
+            seen[j] = idx;
+            depth[j] = depth[x] + 1;
+            blocked[j] = 1;
+            q2[qt++] = j;
+          }
+        }
+      }
+    });
+    return out;
+  }
+  function pickSite(world, cells, occ, score = null) {
+    const { mesh } = world, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    let best = -1, bs = -Infinity;
+    for (const c of cells) {
+      if (world.cell.elevation[c] <= 0 || occ.has(c)) continue;
+      let s = score ? score(world, c, siteScore(world, c)) : siteScore(world, c);
+      for (let k = off[c]; k < off[c + 1]; k++) {
+        const j = nb[k];
+        if (occ.has(j)) {
+          s -= 0.6;
+          continue;
+        }
+        for (let m = off[j]; m < off[j + 1]; m++) if (occ.has(nb[m])) {
+          s -= 0.25;
+          break;
+        }
+      }
+      if (s > bs) {
+        bs = s;
+        best = c;
+      }
+    }
+    return best;
+  }
+
+  // js/core/world/plugins.js
+  var REG = { terrain: /* @__PURE__ */ new Map(), city: /* @__PURE__ */ new Map() };
+  var ACTIVE = { terrain: null, city: null };
+  var KINDS = Object.freeze({ terrain: ["generate", "refine"], city: ["initialGroups", "siteScore", "settlementCell"] });
+  var activePlugin = (kind) => ACTIVE[kind] ? REG[kind].get(ACTIVE[kind]) ?? null : null;
+  var pluginStamp = () => ({ terrain: activePlugin("terrain") ? `${ACTIVE.terrain}@${activePlugin("terrain").version}` : null, city: activePlugin("city") ? `${ACTIVE.city}@${activePlugin("city").version}` : null });
 
   // js/core/world/noise.js
   function hashString(str) {
@@ -346,6 +456,64 @@
       }
       return sum / norm2;
     };
+  }
+  var GRAD3 = [[1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0], [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1], [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]];
+  function ghash(seed, x, y, z) {
+    let h2 = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
+    h2 = Math.imul(h2 ^ h2 >>> 15, 2246822507);
+    h2 = Math.imul(h2 ^ h2 >>> 13, 3266489909);
+    return ((h2 ^ h2 >>> 16) >>> 0) % 12;
+  }
+  var qfade = (t) => t * t * t * (t * (t * 6 - 15) + 10);
+  var GX = Float64Array.from(GRAD3, (g) => g[0]);
+  var GY = Float64Array.from(GRAD3, (g) => g[1]);
+  var GZ = Float64Array.from(GRAD3, (g) => g[2]);
+  function gradNoise3(seed, x, y, z) {
+    const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx3 = x - xi, fy = y - yi, fz = z - zi, u = qfade(fx3), v = qfade(fy), w = qfade(fz);
+    const gx = fx3 - 1, gy = fy - 1, gz = fz - 1;
+    let g = ghash(seed, xi, yi, zi);
+    const n000 = GX[g] * fx3 + GY[g] * fy + GZ[g] * fz;
+    g = ghash(seed, xi + 1, yi, zi);
+    const n100 = GX[g] * gx + GY[g] * fy + GZ[g] * fz;
+    g = ghash(seed, xi, yi + 1, zi);
+    const n010 = GX[g] * fx3 + GY[g] * gy + GZ[g] * fz;
+    g = ghash(seed, xi + 1, yi + 1, zi);
+    const n110 = GX[g] * gx + GY[g] * gy + GZ[g] * fz;
+    g = ghash(seed, xi, yi, zi + 1);
+    const n001 = GX[g] * fx3 + GY[g] * fy + GZ[g] * gz;
+    g = ghash(seed, xi + 1, yi, zi + 1);
+    const n101 = GX[g] * gx + GY[g] * fy + GZ[g] * gz;
+    g = ghash(seed, xi, yi + 1, zi + 1);
+    const n011 = GX[g] * fx3 + GY[g] * gy + GZ[g] * gz;
+    g = ghash(seed, xi + 1, yi + 1, zi + 1);
+    const n111 = GX[g] * gx + GY[g] * gy + GZ[g] * gz;
+    const x00 = n000 + (n100 - n000) * u, x10 = n010 + (n110 - n010) * u, x01 = n001 + (n101 - n001) * u, x11 = n011 + (n111 - n011) * u;
+    const y0 = x00 + (x10 - x00) * v, y1 = x01 + (x11 - x01) * v;
+    return y0 + (y1 - y0) * w;
+  }
+  function gfbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {
+    let sum = 0, amp = 1, norm2 = 0, f2 = freq;
+    for (let o = 0; o < octaves; o++) {
+      sum += amp * gradNoise3(seed + o * 101, x * f2, y * f2, z * f2);
+      norm2 += amp;
+      amp *= gain;
+      f2 *= 2.03;
+    }
+    return Math.max(0, Math.min(1, 0.5 + 0.62 * (sum / norm2)));
+  }
+  function ridged3(seed, x, y, z, octaves = 5, freq = 1, gain = 0.5) {
+    let sum = 0, amp = 0.5, f2 = freq, weight = 1, norm2 = 0;
+    for (let o = 0; o < octaves; o++) {
+      let s = 1 - Math.abs(gradNoise3(seed + o * 131, x * f2, y * f2, z * f2));
+      s *= s;
+      s *= weight;
+      weight = Math.max(0, Math.min(1, s * 2));
+      sum += s * amp;
+      norm2 += amp;
+      amp *= gain;
+      f2 *= 2.1;
+    }
+    return Math.min(1, sum / norm2 * 1.15);
   }
 
   // js/core/world/continents.js
@@ -648,6 +816,90 @@
       return top;
     }
   };
+  function versionAtLeast(a, b) {
+    const pa = String(a).split(".").map((x) => parseInt(x, 10) || 0), pb = String(b).split(".").map((x) => parseInt(x, 10) || 0);
+    for (let i = 0; i < 3; i++) {
+      if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+    }
+    return true;
+  }
+  function blurField(f2, off, nb, passes, w) {
+    const V = f2.length, t = new Float32Array(V);
+    for (let it = 0; it < passes; it++) {
+      for (let c = 0; c < V; c++) {
+        let s = 0;
+        const d = off[c + 1] - off[c];
+        for (let k = off[c]; k < off[c + 1]; k++) s += f2[nb[k]];
+        t[c] = f2[c] * (1 - w) + (d ? s / d : f2[c]) * w;
+      }
+      f2.set(t);
+    }
+  }
+  function erodeRivers(mesh, elevation, areaKm2, { iterations = 6, kf = 0.085 } = {}) {
+    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, EPS = 0.05;
+    const isSea2 = new Uint8Array(V);
+    for (let c = 0; c < V; c++) isSea2[c] = elevation[c] <= 0 ? 1 : 0;
+    const heap = new MinHeap(V + 16), done2 = new Uint8Array(V), order = new Int32Array(V), parent = new Int32Array(V), f2 = new Float32Array(V), r = new Float32Array(V), A2 = new Float32Array(V);
+    let total2 = 0, maxDrop = 0;
+    for (let it = 0; it < iterations; it++) {
+      done2.fill(0);
+      parent.fill(-1);
+      heap.n = 0;
+      let on = 0;
+      for (let c = 0; c < V; c++) {
+        f2[c] = elevation[c];
+        if (isSea2[c]) {
+          done2[c] = 1;
+          for (let k = off[c]; k < off[c + 1]; k++) if (!isSea2[nb[k]]) {
+            heap.push(f2[c], c);
+            break;
+          }
+        }
+      }
+      while (heap.n > 0) {
+        const c = heap.pop();
+        order[on++] = c;
+        for (let k = off[c]; k < off[c + 1]; k++) {
+          const j = nb[k];
+          if (done2[j]) continue;
+          done2[j] = 1;
+          parent[j] = c;
+          f2[j] = Math.max(elevation[j], f2[c] + EPS);
+          heap.push(f2[j], j);
+        }
+      }
+      for (let c = 0; c < V; c++) A2[c] = isSea2[c] ? 0 : areaKm2[c];
+      for (let i = on - 1; i >= 0; i--) {
+        const c = order[i], p = parent[c];
+        if (p >= 0 && !isSea2[c] && !isSea2[p]) A2[p] += A2[c];
+      }
+      for (let i = 0; i < on; i++) {
+        const c = order[i];
+        if (isSea2[c]) continue;
+        const p = parent[c], rp = p < 0 || isSea2[p] ? 0 : r[p], F = Math.min(0.9, kf * Math.sqrt(A2[c] / 1e5));
+        r[c] = (f2[c] + F * rp) / (1 + F);
+      }
+      for (let c = 0; c < V; c++) {
+        if (isSea2[c]) continue;
+        const e = Math.max(1, Math.min(elevation[c], r[c])), d = elevation[c] - e;
+        if (d > 0) {
+          elevation[c] = e;
+          total2 += d;
+          if (d > maxDrop) maxDrop = d;
+        }
+      }
+    }
+    return { total: total2, maxDrop };
+  }
+  var HYPSO = [[0, 6], [0.1, 40], [0.2, 90], [0.3, 160], [0.4, 250], [0.5, 370], [0.6, 520], [0.7, 740], [0.8, 1100], [0.88, 1700], [0.94, 2600], [0.98, 4e3], [0.995, 5400], [1, 6800]];
+  function hypsoAt(q2) {
+    if (q2 <= 0) return HYPSO[0][1];
+    if (q2 >= 1) return HYPSO[HYPSO.length - 1][1];
+    let k = 1;
+    while (HYPSO[k][0] < q2) k++;
+    const [q0, e0] = HYPSO[k - 1], [q1, e1] = HYPSO[k];
+    return e0 + (e1 - e0) * ((q2 - q0) / (q1 - q0));
+  }
   var coarseCache = null;
   var coarseMesh = () => coarseCache ?? (coarseCache = buildSphereMesh(frequencyForCells(2400)));
   var Cancelled = class extends Error {
@@ -664,6 +916,7 @@
     const { spec, errors } = normalizeWorldSpec(specInput);
     if (errors.length) throw new Error("WorldSpec \u304C\u4E0D\u6B63: " + errors.join(" / "));
     const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();
+    const D2 = versionAtLeast(spec.generatorVersion, "6.13.0");
     const n3 = frequencyForCells(spec.resolution.targetCells);
     const mesh = stage("G1_mesh", "\u7403\u9762\u30E1\u30C3\u30B7\u30E5", () => buildSphereMesh(n3));
     const V = mesh.cellCount, X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = spec.planet.radiusKm;
@@ -793,6 +1046,29 @@
           srcCrust[c] = crust;
         }
       }
+      if (D2) {
+        const t1 = new Float32Array(V), t2 = new Float32Array(V);
+        for (let it = 0; it < 3; it++) {
+          for (let c = 0; c < V; c++) {
+            if (!isSrc[c]) continue;
+            let a = srcStrength[c], b = srcCrust[c], n4 = 1;
+            for (let k = off[c]; k < off[c + 1]; k++) {
+              const j = nb[k];
+              if (isSrc[j]) {
+                a += srcStrength[j];
+                b += srcCrust[j];
+                n4++;
+              }
+            }
+            t1[c] = a / n4;
+            t2[c] = b / n4;
+          }
+          for (let c = 0; c < V; c++) if (isSrc[c]) {
+            srcStrength[c] = t1[c];
+            srcCrust[c] = t2[c];
+          }
+        }
+      }
       const widthCells = Math.max(2, 5 * D2R2 / spacingRad), maxD = Math.ceil(widthCells * 3);
       const dist = new Int16Array(V).fill(-1), from = new Int32Array(V).fill(-1), q2 = new Int32Array(V);
       let qh = 0, qt = 0;
@@ -822,6 +1098,10 @@
           mountain[c] = clamp2(s / 1.2, 0, 1.3) * f2 * mod * srcCrust[from[c]];
           volcanic[c] = mountain[c] > 0.7 ? 0.5 : 0;
         } else rift[c] = clamp2(-s / 1.2, 0, 1) * f2;
+      }
+      if (D2) {
+        blurField(mountain, off, nb, 2, 0.5);
+        blurField(rift, off, nb, 1, 0.5);
       }
       for (let c = 0; c < V; c++) {
         const ca = Math.cos(psi), sa = Math.sin(psi), x = wx[c] * ca - wy[c] * sa, y = wx[c] * sa + wy[c] * ca, z = wz[c];
@@ -865,10 +1145,21 @@
     let seaLevelRaw = 0;
     stage("G3_elevation", "\u6A19\u9AD8\u30FB\u6D77\u5CB8\u30FB\u5CF6", () => {
       const s1 = nSeed("hills"), s2 = nSeed("detail"), s3 = nSeed("micro"), raw = new Float32Array(V);
+      const wsd = [nSeed("dwx"), nSeed("dwy"), nSeed("dwz")], rdM = nSeed("ridgeM"), rdH = nSeed("ridgeH"), nz3 = D2 ? gfbm3 : fbm3;
       for (let c = 0; c < V; c++) {
         const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], cf = continent[c];
         const land = smooth((cf - 0.25) / 0.45), nz = 0.2 + 0.8 * smooth(cf / 0.3);
-        raw[c] = cf * 0.8 + (fbm3(s1, x, y, z, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (fbm3(s2, x, y, z, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (fbm3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz + mountain[c] * (0.03 + 0.97 * land) * 1.5 * (0.15 + 0.85 * smooth(cf / 0.3)) - rift[c] * 0.22;
+        let qx = x, qy = y, qz = z;
+        if (D2) {
+          qx += 0.1 * gradNoise3(wsd[0], x * 2.2, y * 2.2, z * 2.2);
+          qy += 0.1 * gradNoise3(wsd[1], x * 2.2, y * 2.2, z * 2.2);
+          qz += 0.1 * gradNoise3(wsd[2], x * 2.2, y * 2.2, z * 2.2);
+        }
+        raw[c] = cf * 0.8 + (nz3(s1, qx, qy, qz, 5, 2.2) - 0.5) * (0.12 + 0.6 * land) * nz + (nz3(s2, qx, qy, qz, 4, 9) - 0.5) * (0.06 + 0.16 * land) * nz + (nz3(s3, x, y, z, 3, 38) - 0.5) * (0.02 + 0.07 * land) * nz + mountain[c] * (0.03 + 0.97 * land) * 1.5 * (0.15 + 0.85 * smooth(cf / 0.3)) - rift[c] * 0.22;
+        if (D2 && land > 0) {
+          const mm = Math.min(1.3, mountain[c]), rm = ridged3(rdM, qx, qy, qz, 5, 5), rh = ridged3(rdH, qx, qy, qz, 4, 13);
+          raw[c] += land * (mm * 0.5 * (rm - 0.62) + 0.07 * smooth(cf / 0.6) * (rh - 0.62));
+        }
         {
           const pl = (Math.abs(lat[c]) - 72 * D2R2) / (12 * D2R2);
           if (pl > 0) raw[c] -= 0.22 * smooth(pl);
@@ -887,6 +1178,13 @@
       for (let c = 0; c < V; c++) {
         const e = raw[c] - seaLevelRaw;
         elevation[c] = e >= 0 ? Math.pow(Math.min(1.35, e / Math.max(1e-6, hi - seaLevelRaw)), 1.2) * 6500 : e / Math.max(1e-6, seaLevelRaw - lo) * 5500;
+      }
+      if (D2) {
+        const idx = [];
+        for (let c = 0; c < V; c++) if (raw[c] > seaLevelRaw) idx.push(c);
+        idx.sort((a, b) => raw[a] - raw[b] || a - b);
+        const L = idx.length;
+        for (let r = 0; r < L; r++) elevation[idx[r]] = hypsoAt((r + 0.5) / L);
       }
     });
     const isSea2 = new Uint8Array(V);
@@ -911,6 +1209,11 @@
           }
         }
       }
+    });
+    if (D2) stage("G3_erode", "\u6CB3\u5DDD\u4FB5\u98DF", () => {
+      const perCell = 0.035 * spacingKm;
+      for (let c = 0; c < V; c++) if (!isSea2[c]) elevation[c] = Math.max(1, elevation[c] + Math.min(coastDist[c], 40) * perCell);
+      erodeRivers(mesh, elevation, areaKm2, { iterations: 6, kf: 0.085 });
     });
     const temp = new Float32Array(V), precip = new Float32Array(V), biome = new Uint8Array(V), moisture = new Float32Array(V);
     const cx = { mesh, lat, lon, elevation, isSea: isSea2, moisture, precipNoise: nSeed("precip"), lapse: spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / spec.climateModel.windMoistureLengthKm) };
@@ -946,14 +1249,21 @@
     const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);
     const lu = { mesh, isSea: isSea2, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };
     stage("G6_soil", "\u571F\u58CC\u30FB\u80A5\u6C83\u5EA6\u30FB\u8CC7\u6E90", () => {
+      lu.seaDist = seaDistances(mesh, isSea2);
       for (let c = 0; c < V; c++) landUseAt(lu, c);
+      delete lu.seaDist;
     });
     const gctx = { mesh, landWater, fertility, temp, river, coastDist, lat, lon };
+    if (D2) {
+      const sw = { mesh, cell: { elevation, landWater, river, riverTo: parent, fertility, temp, areaKm2 } };
+      gctx.site = (c) => siteScore(sw, c);
+    }
     const populations = stage("G7_groups", "\u521D\u671F\u4EBA\u53E3\u96C6\u56E3", () => placeInitialGroups(gctx, spec, 0));
     const stats = stage("G8_stats", "\u7D71\u8A08", () => computeStats({ lon, V, off, nb, landWater, isSea: isSea2, elevation, temp, precip, biome, flow, riverThreshold, river, lakeCount, parent, lat, areaKm2, populations, spec }));
     const world = {
-      spec: { ...spec, generatorVersion: GENERATOR_VERSION },
+      spec: { ...spec },
       mesh,
+      // generatorVersion は、実際に使った版（指定がなければ現行版）をそのまま記録する。古い版を指定して作った世界を、あとで同じ結果で再現できる
       cell: { elevation, landWater, plate, temp, precip, biome, soil, fertility, resource, riverTo: parent, riverFlow: flow, river, basin, coastDist, capacity, areaKm2, lat, lon, volcanic, filled, continent, mountain, moisture },
       entities: { populations },
       stats,
@@ -961,6 +1271,7 @@
     };
     timings.total = Math.round(performance.now() - tAll);
     world.hash = worldHash(world);
+    Object.defineProperty(world, "siteTools", { value: { pickSite, planSettlements, siteScore }, enumerable: false, writable: true, configurable: true });
     return world;
   }
   function tempAt(latRad, elevation, lapse) {
@@ -1067,6 +1378,27 @@
     return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };
   }
   var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };
+  function seaDistances(mesh, isSea2) {
+    const V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, d = new Uint8Array(V).fill(99), q2 = new Int32Array(V);
+    let qh = 0, qt = 0;
+    for (let c = 0; c < V; c++) if (!isSea2[c]) {
+      d[c] = 0;
+      q2[qt++] = c;
+    }
+    while (qh < qt) {
+      const c = q2[qh++];
+      if (d[c] >= 7) continue;
+      for (let k = off[c]; k < off[c + 1]; k++) {
+        const j = nb[k];
+        if (d[j] === 99) {
+          d[j] = d[c] + 1;
+          q2[qt++] = j;
+        }
+      }
+    }
+    for (let c = 0; c < V; c++) if (!isSea2[c]) d[c] = 99;
+    return d;
+  }
   function seaToLand(mesh, isSea2, c) {
     const off = mesh.neighborOffsets, nb = mesh.neighborIds;
     let fr = [c];
@@ -1087,7 +1419,7 @@
     return 99;
   }
   function landUseAt(g, c) {
-    const { mesh, isSea: isSea2, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt } = g;
+    const { mesh, isSea: isSea2, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, rs, sSalt, seaDist } = g;
     const X = mesh.centerXYZ, off = mesh.neighborOffsets, nb = mesh.neighborIds;
     const sea = isSea2[c], land = !sea && landWater[c] === LAND_WATER.LAND, b = biome[c], e = elevation[c];
     let relief = 0, kn = 0;
@@ -1099,16 +1431,16 @@
     const nearRiver = river[c] === 1;
     let res = 0;
     if (sea) {
-      if (e > -300 && seaToLand(mesh, isSea2, c) <= 6) res |= RES.FISH;
+      if (e > -300 && (seaDist ? seaDist[c] : seaToLand(mesh, isSea2, c)) <= 6) res |= RES.FISH;
     } else {
       const x = X[3 * c], y = X[3 * c + 1], z = X[3 * c + 2], q2 = (i, f2) => fbm3(rs[i], x, y, z, 3, f2);
       if (land) {
-        if (q2(0, 7) > 0.6 && e > 300) res |= RES.IRON;
-        if (q2(1, 8) > 0.66 && (e > 500 || volcanic[c] > 0.3)) res |= RES.COPPER;
-        if (q2(2, 9) > 0.72 && e > 800) res |= RES.TIN;
-        if (q2(3, 10) > 0.74 && (nearRiver || mountain[c] > 0.4)) res |= RES.GOLD;
-        if (q2(4, 6) > 0.62 && e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL)) res |= RES.COAL;
-        if (q2(5, 11) > 0.78 && mountain[c] > 0.5) res |= RES.GEMS;
+        if (e > 300 && q2(0, 7) > 0.6) res |= RES.IRON;
+        if ((e > 500 || volcanic[c] > 0.3) && q2(1, 8) > 0.66) res |= RES.COPPER;
+        if (e > 800 && q2(2, 9) > 0.72) res |= RES.TIN;
+        if ((nearRiver || mountain[c] > 0.4) && q2(3, 10) > 0.74) res |= RES.GOLD;
+        if (e < 1500 && (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.WETLAND || b === BIOMES.TROPICAL_SEASONAL) && q2(4, 6) > 0.62) res |= RES.COAL;
+        if (mountain[c] > 0.5 && q2(5, 11) > 0.78) res |= RES.GEMS;
         if (e > 200 && relief > 120) res |= RES.STONE;
         if ((b === BIOMES.HOT_DESERT || b === BIOMES.COLD_DESERT) && e < 600 && fbm3(sSalt, x, y, z, 3, 8) > 0.6) res |= RES.SALT;
         if (b === BIOMES.TEMPERATE_FOREST || b === BIOMES.TAIGA || b === BIOMES.TROPICAL_SEASONAL || b === BIOMES.RAINFOREST) res |= RES.TIMBER;
@@ -1144,9 +1476,19 @@
     }
   }
   function placeInitialGroups(g, spec, variant = 0) {
+    {
+      const P3 = activePlugin("city");
+      if (typeof P3?.initialGroups === "function") {
+        try {
+          const alt = P3.initialGroups(g, spec, variant);
+          if (Array.isArray(alt) && alt.length && alt.every((o) => Number.isInteger(o.cell) && g.landWater[o.cell] === LAND_WATER.LAND)) return alt.slice(0, spec.initialGroups).map((o, i) => ({ id: i + 1, subsistence: "forage", species: "human", size: 300, ...o, lat: g.lat[o.cell] / D2R2, lon: g.lon[o.cell] / D2R2 }));
+        } catch {
+        }
+      }
+    }
     const { mesh, landWater, fertility, temp, river, coastDist, lat, lon } = g, V = mesh.cellCount, X = mesh.centerXYZ, R = spec.planet.radiusKm;
     const rg = makeRng(spec.worldSeed, variant ? `groups#${variant}` : "groups"), cand3 = [];
-    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand3.push({ c, s: fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0)) * (0.7 + 0.6 * rg()) });
+    for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && fertility[c] > 0.35 && temp[c] > 4 && temp[c] < 30) cand3.push({ c, s: (g.site ? Math.max(0.05, g.site(c)) : fertility[c] * (1 + (river[c] ? 0.3 : 0) + (coastDist[c] <= 2 ? 0.2 : 0))) * (0.7 + 0.6 * rg()) });
     cand3.sort((a, b) => b.s - a.s || a.c - b.c);
     const out = [], minSep = Math.min(0.25 * Math.PI, 2e3 / R);
     const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
@@ -1156,12 +1498,12 @@
     }
     return out;
   }
-  function biomeOf(T3, P3, e) {
-    if (e > 4500 || e > 3500 && T3 < 0) return BIOMES.ALPINE;
-    if (T3 < -8) return BIOMES.ICE;
-    if (T3 < 0) return BIOMES.TUNDRA;
-    if (T3 < 5) return P3 > 300 ? BIOMES.TAIGA : BIOMES.COLD_DESERT;
-    if (T3 < 18) return P3 < 200 ? BIOMES.COLD_DESERT : P3 < 600 ? BIOMES.GRASSLAND : P3 > 2600 ? BIOMES.WETLAND : BIOMES.TEMPERATE_FOREST;
+  function biomeOf(T4, P3, e) {
+    if (e > 4500 || e > 3500 && T4 < 0) return BIOMES.ALPINE;
+    if (T4 < -8) return BIOMES.ICE;
+    if (T4 < 0) return BIOMES.TUNDRA;
+    if (T4 < 5) return P3 > 300 ? BIOMES.TAIGA : BIOMES.COLD_DESERT;
+    if (T4 < 18) return P3 < 200 ? BIOMES.COLD_DESERT : P3 < 600 ? BIOMES.GRASSLAND : P3 > 2600 ? BIOMES.WETLAND : BIOMES.TEMPERATE_FOREST;
     if (P3 < 250) return BIOMES.HOT_DESERT;
     if (P3 < 900) return BIOMES.SAVANNA;
     if (P3 < 1800) return BIOMES.TROPICAL_SEASONAL;
@@ -1248,6 +1590,61 @@
       initialGroups: populations.length
     };
   }
+  function validateWorld(world) {
+    const errs = [], { cell, mesh } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds;
+    for (const k of ["elevation", "temp", "precip", "riverFlow", "fertility", "capacity"]) for (let c = 0; c < V; c++) if (!Number.isFinite(cell[k][c])) {
+      errs.push(`${k}[${c}] \u304C\u6709\u9650\u3067\u306A\u3044`);
+      break;
+    }
+    const state = new Uint8Array(V);
+    const stack = [];
+    for (let s = 0; s < V; s++) {
+      if (state[s]) continue;
+      let c = s;
+      stack.length = 0;
+      while (true) {
+        if (cell.landWater[c] === LAND_WATER.OCEAN) {
+          state[c] = 2;
+          break;
+        }
+        if (state[c] === 2) break;
+        if (state[c] === 1) {
+          errs.push(`\u6D41\u8DEF\u306B\u5FAA\u74B0: ${c}`);
+          break;
+        }
+        state[c] = 1;
+        stack.push(c);
+        const p = cell.riverTo[c];
+        if (p < 0) {
+          errs.push(`\u884C\u304D\u6B62\u307E\u308A\u306E\u6D41\u8DEF: ${c}`);
+          break;
+        }
+        let adj = false;
+        for (let k = off[c]; k < off[c + 1]; k++) if (nb[k] === p) {
+          adj = true;
+          break;
+        }
+        if (!adj) {
+          errs.push(`\u6D41\u8DEF\u304C\u96A3\u63A5\u3057\u3066\u3044\u306A\u3044: ${c}\u2192${p}`);
+          break;
+        }
+        c = p;
+      }
+      const ok2 = state[c] === 2;
+      for (const u of stack) state[u] = ok2 ? 2 : state[u];
+      if (errs.length > 20) break;
+    }
+    for (let c = 0; c < V; c++) {
+      if (cell.elevation[c] <= 0 !== (cell.landWater[c] === LAND_WATER.OCEAN)) {
+        errs.push(`\u6D77\u9678\u3068\u6A19\u9AD8\u304C\u4E0D\u4E00\u81F4: ${c}`);
+        break;
+      }
+    }
+    for (const p of world.entities.populations) {
+      if (cell.landWater[p.cell] !== LAND_WATER.LAND) errs.push(`\u521D\u671F\u96C6\u56E3 ${p.id} \u304C\u9678\u306B\u3044\u306A\u3044`);
+    }
+    return errs;
+  }
   function worldHash(world) {
     let h2 = 2166136261;
     const { cell } = world;
@@ -1267,6 +1664,66 @@
     for (let i = 0; i < cell.resource.length; i++) mix(cell.resource[i]);
     mix(meshHash(world.mesh).length);
     return (h2 >>> 0).toString(16).padStart(8, "0");
+  }
+
+  // js/core/world/generate.js
+  var hide = (world, key, value) => {
+    Object.defineProperty(world, key, { value, enumerable: false, writable: true, configurable: true });
+    return value;
+  };
+  var note = (world, msg) => {
+    (world.pluginReport ?? hide(world, "pluginReport", { notes: [], used: pluginStamp() })).notes.push(msg);
+  };
+  var attach = (world) => {
+    hide(world, "pluginReport", { notes: world.pluginReport?.notes ?? [], used: pluginStamp() });
+    hide(world, "cityPlugin", activePlugin("city") ?? null);
+    if (!world.siteTools) hide(world, "siteTools", { pickSite, planSettlements, siteScore });
+    return world;
+  };
+  function generateWorldPluggable(specInput, options = {}) {
+    const T4 = activePlugin("terrain");
+    if (!T4) return attach(generateWorld(specInput, options));
+    let world = null;
+    if (typeof T4.generate === "function") {
+      try {
+        world = T4.generate(specInput, options);
+        const errs = world ? validateWorld(world) : ["\u4E16\u754C\u304C\u8FD4\u3089\u306A\u3044"];
+        if (errs.length) {
+          const first = errs.slice(0, 3).join(" / ");
+          world = null;
+          options.onWarning?.(`\u5730\u5F62\u30D7\u30E9\u30B0\u30A4\u30F3 ${T4.id}: \u691C\u8A3C\u306B\u5931\u6557\uFF08${first}\uFF09\u3002\u6A19\u6E96\u306E\u751F\u6210\u3078\u623B\u3057\u307E\u3059`);
+          var failed = first;
+        }
+      } catch (e) {
+        world = null;
+        failed = String(e?.message ?? e);
+        options.onWarning?.(`\u5730\u5F62\u30D7\u30E9\u30B0\u30A4\u30F3 ${T4.id}: \u4F8B\u5916\uFF08${failed}\uFF09\u3002\u6A19\u6E96\u306E\u751F\u6210\u3078\u623B\u3057\u307E\u3059`);
+      }
+    }
+    if (!world) {
+      world = generateWorld(specInput, options);
+      if (typeof failed === "string") note(world, `generate \u304C\u5931\u6557\u3057\u305F\u305F\u3081\u6A19\u6E96\u306E\u751F\u6210\u3092\u4F7F\u3063\u305F: ${failed}`);
+    }
+    if (typeof T4.refine === "function") {
+      try {
+        const r = T4.refine(world, world.spec, options) ?? world, errs = validateWorld(r);
+        if (errs.length) {
+          const why2 = errs.slice(0, 3).join(" / ");
+          world = generateWorld(specInput, options);
+          note(world, `refine \u304C\u691C\u8A3C\u306B\u5931\u6557\u3057\u305F\u305F\u3081\u6A19\u6E96\u306E\u751F\u6210\u3078\u623B\u3057\u305F: ${why2}`);
+          options.onWarning?.(`\u5730\u5F62\u30D7\u30E9\u30B0\u30A4\u30F3 ${T4.id}: refine \u306E\u7D50\u679C\u304C\u691C\u8A3C\u306B\u5931\u6557\u3002\u6A19\u6E96\u306E\u751F\u6210\u3078\u623B\u3057\u307E\u3059`);
+        } else {
+          world = r;
+          world.hash = worldHash(world);
+        }
+      } catch (e) {
+        const why2 = String(e?.message ?? e);
+        world = generateWorld(specInput, options);
+        note(world, `refine \u304C\u4F8B\u5916\u306E\u305F\u3081\u6A19\u6E96\u306E\u751F\u6210\u3078\u623B\u3057\u305F: ${why2}`);
+        options.onWarning?.(`\u5730\u5F62\u30D7\u30E9\u30B0\u30A4\u30F3 ${T4.id}: refine \u304C\u4F8B\u5916\u3002\u6A19\u6E96\u306E\u751F\u6210\u3078\u623B\u3057\u307E\u3059`);
+      }
+    }
+    return attach(world);
   }
 
   // js/core/wcde/calendar.js
@@ -2429,7 +2886,7 @@
   // js/core/civ/calibration.js
   var EARTH_LAND_KM2 = 1498e5;
   var POP_CURVE = Object.freeze([[0, 14e6], [1e3, 27e6], [2e3, 5e7], [2500, 1e8], [3e3, 23e7], [3500, 235e6], [4e3, 27e7], [4300, 4e8], [4500, 46e7], [4700, 6e8], [4800, 99e7], [4900, 165e7], [4950, 25e8], [5e3, 61e8]]);
-  var TECH_CURVE = Object.freeze([[0, 23], [1e3, 33], [2e3, 48], [3e3, 62], [4e3, 74], [4300, 82], [4600, 92], [4800, 102], [4900, 112], [4950, 118], [5e3, 122]]);
+  var TECH_CURVE = Object.freeze([[0, 23], [1e3, 33], [2e3, 48], [3e3, 62], [4e3, 74], [4300, 83], [4600, 98], [4800, 118], [4900, 134], [4950, 146], [5e3, 154]]);
   var interp = (pts, y, logY) => {
     if (y <= pts[0][0]) return pts[0][1];
     for (let i = 1; i < pts.length; i++) {
@@ -2455,7 +2912,7 @@
     }
     return v;
   }
-  var COL_TARGET_YEAR = Object.freeze({ 0: 0, 1: 0, 2: 0, 3: 200, 4: 900, 5: 1800, 6: 2600, 7: 3200, 8: 3900, 9: 4300, 10: 4700, 11: 4850, 12: 4930, 13: 4970 });
+  var COL_TARGET_YEAR = Object.freeze({ 0: 0, 1: 0, 2: 0, 3: 200, 4: 900, 5: 1800, 6: 2600, 7: 3200, 8: 3900, 9: 4300, 10: 4700, 11: 4850, 12: 4930, 13: 4970, 14: 4960, 15: 4975, 16: 4990, 17: 5e3, 18: 5040, 19: 5080 });
   var lateBoost = (year, col) => {
     const late = (year - (COL_TARGET_YEAR[col] ?? 5e3)) / 150;
     return late <= 0 ? 1 : Math.min(60, 1 + late * late * 2);
@@ -2509,9 +2966,9 @@
     { id: "mil", ja: "\u8ECD\u4E8B\u30FB\u5175\u7AD9", glyph: "\u2694" },
     { id: "ind", ja: "\u30A8\u30CD\u30EB\u30AE\u30FC\u30FB\u7523\u696D", glyph: "\u2699" }
   ]);
-  var STAGES = Object.freeze(["\u539F\u521D", "\u5F8C\u671F\u65E7\u77F3\u5668", "\u65B0\u77F3\u5668", "\u9752\u9285\u5668", "\u9244\u5668\u30FB\u53E4\u5178", "\u53E4\u5178\u5F8C\u671F", "\u4E2D\u4E16", "\u8FD1\u4E16\u521D\u671F", "\u8FD1\u4E16", "\u7523\u696D\u9769\u547D", "\u8FD1\u4EE3", "\u73FE\u4EE3"]);
+  var STAGES = Object.freeze(["\u539F\u521D", "\u5F8C\u671F\u65E7\u77F3\u5668", "\u65B0\u77F3\u5668", "\u9752\u9285\u5668", "\u9244\u5668\u30FB\u53E4\u5178", "\u53E4\u5178\u5F8C\u671F", "\u4E2D\u4E16", "\u8FD1\u4E16\u521D\u671F", "\u8FD1\u4E16", "\u7523\u696D\u9769\u547D", "\u8FD1\u4EE3", "\u73FE\u4EE3", "\u672A\u6765"]);
   var POOL = 6e3;
-  var E_BY_STAGE = [4e5, 12e5, 45e5, ...[110, 150, 190, 230, 250, 260, 220, 200, 170].map((y) => y * POOL)];
+  var E_BY_STAGE = [4e5, 12e5, 45e5, ...[110, 150, 190, 230, 250, 260, 220, 200, 170].map((y) => y * POOL), 300 * POOL];
   var nodes = [];
   var n = (id, ja, lane, stage, prereq, o = {}) => nodes.push({ id, ja, lane, stage, pre: stage <= 2, prereq, E: o.E ?? E_BY_STAGE[stage], pop: o.pop ?? 0, s: !!o.s, cond: o.cond ?? null, caps: o.caps ?? [], fx: o.fx ?? {}, desc: o.d ?? "", why: o.why ?? "" });
   n("stone_tools", "\u77F3\u5668", "mat", 0, [], { E: 0, d: "\u6253\u3061\u6B20\u3044\u305F\u77F3\u306E\u5203\u3002\u3059\u3079\u3066\u306E\u96C6\u56E3\u304C\u6700\u521D\u304B\u3089\u6301\u3064\u3002" });
@@ -2643,6 +3100,51 @@
   n("petroleum", "\u77F3\u6CB9", "ind", 10, ["chemistry", "mining"], { cond: "coal", d: "\u77F3\u6CB9\u306E\u63A1\u6398\u3068\u7CBE\u88FD\u3002", fx: { ind: 0.1 } });
   n("electric_grid", "\u9001\u96FB\u7DB2", "ind", 11, ["electricity", "industry"], { fx: { ind: 0.2 }, d: "\u96FB\u529B\u3092\u5E83\u57DF\u306B\u914D\u308B\u3002" });
   n("nuclear", "\u6838", "ind", 11, ["electricity", "calculus"], { pop: 1e5, caps: ["action:nuclear_program"], fx: { ind: 0.1 }, d: "\u539F\u5B50\u6838\u306E\u30A8\u30CD\u30EB\u30AE\u30FC\u3002" });
+  n("crossbow", "\u5F29", "mil", 5, ["bow", "iron_weapons"], { caps: ["unit:ranged"], fx: { off: 0.04 }, d: "\u6A5F\u68B0\u4ED5\u639B\u3051\u306E\u5F13\u3002\u8A13\u7DF4\u304C\u77ED\u304F\u3066\u6E08\u3080\u3002" });
+  n("plate_armor", "\u677F\u91D1\u93A7", "mil", 7, ["steel", "iron_weapons"], { fx: { def: 0.05, off: 0.02 }, d: "\u92FC\u677F\u3092\u6210\u5F62\u3057\u305F\u5168\u8EAB\u306E\u93A7\u3002" });
+  n("pike_and_shot", "\u69CD\u3068\u9283\u306E\u9023\u643A", "mil", 8, ["firearms", "standing_army"], { fx: { off: 0.06, def: 0.03 }, d: "\u69CD\u5175\u304C\u9283\u5175\u3092\u5B88\u308B\u65B9\u9663\u3002" });
+  n("conscription", "\u5FB4\u5175\u5236", "mil", 9, ["standing_army", "public_education"], { caps: ["army:conscription"], fx: { off: 0.08 }, d: "\u56FD\u6C11\u304B\u3089\u5E83\u304F\u5175\u3092\u96C6\u3081\u3001\u4E88\u5099\u5F79\u306B\u56DE\u3059\u3002" });
+  n("breech_loading", "\u5F8C\u88C5\u5F0F\u5C0F\u9283", "mil", 10, ["rifled_arms", "steel", "industry"], { fx: { off: 0.1 }, d: "\u85AC\u83A2\u3092\u4F7F\u3046\u5F8C\u88C5\u5F0F\u306E\u5C0F\u9283\u3002" });
+  n("machine_gun", "\u6A5F\u95A2\u9283", "mil", 10, ["breech_loading", "industry"], { caps: [], fx: { off: 0.05, def: 0.1 }, d: "\u9023\u5C04\u3067\u9762\u3092\u5236\u5727\u3059\u308B\u3002\u5B88\u308A\u304C\u653B\u3081\u3088\u308A\u5F37\u304F\u306A\u308B\u3002" });
+  n("howitzer", "\u69B4\u5F3E\u7832\u30FB\u91CE\u7832", "mil", 10, ["artillery", "steel", "industry"], { fx: { off: 0.06, def: 0.02 }, d: "\u9593\u63A5\u5C04\u6483\u306E\u91CD\u7832\u3002" });
+  n("trench_warfare", "\u5879\u58D5\u3068\u9244\u6761\u7DB2", "mil", 10, ["machine_gun", "fortification"], { fx: { def: 0.1 }, d: "\u5730\u4E0B\u3068\u9244\u6761\u7DB2\u3067\u5B88\u308B\u3002\u9663\u5730\u6226\u306E\u6642\u4EE3\u3002" });
+  n("tank", "\u6226\u8ECA", "mil", 11, ["mechanized_warfare", "machine_gun"], { caps: ["unit:armor"], fx: { off: 0.12 }, d: "\u88C5\u7532\u3068\u706B\u7832\u3092\u5099\u3048\u305F\u88C5\u8ECC\u8ECA\u4E21\u3002" });
+  n("anti_tank", "\u5BFE\u6226\u8ECA\u5175\u5668", "mil", 11, ["tank", "howitzer"], { fx: { def: 0.08 }, d: "\u6226\u8ECA\u3092\u6B62\u3081\u308B\u305F\u3081\u306E\u7832\u30FB\u30ED\u30B1\u30C3\u30C8\u30FB\u5730\u96F7\u3002" });
+  n("motorized_infantry", "\u6A5F\u68B0\u5316\u6B69\u5175", "mil", 11, ["tank", "radio"], { caps: ["unit:mechanized"], fx: { off: 0.06 }, d: "\u88C5\u7532\u8ECA\u3067\u6226\u8ECA\u306B\u968F\u4F34\u3059\u308B\u6B69\u5175\u3002" });
+  n("special_forces", "\u7279\u6B8A\u90E8\u968A", "mil", 11, ["radio", "standing_army"], { caps: ["unit:special"], fx: { off: 0.03 }, d: "\u5C11\u6570\u7CBE\u92ED\u3067\u7834\u58CA\u30FB\u5075\u5BDF\u30FB\u5947\u8972\u3092\u62C5\u3046\u3002" });
+  n("guided_munitions", "\u7CBE\u5BC6\u8A98\u5C0E\u5175\u5668", "mil", 11, ["computing", "howitzer"], { fx: { off: 0.1 }, d: "\u76EE\u6A19\u3078\u8A98\u5C0E\u3055\u308C\u308B\u7832\u5F3E\u30FB\u7206\u5F3E\u3002" });
+  n("network_warfare", "\u6307\u63EE\u7D71\u5236\u7DB2", "mil", 11, ["radio", "computing"], { fx: { off: 0.05, def: 0.05 }, d: "\u901A\u4FE1\u30FB\u60C5\u5831\u30FB\u6307\u63EE\u3092\u4E00\u3064\u306E\u7DB2\u306B\u3059\u308B\u3002" });
+  n("ship_of_the_line", "\u6226\u5217\u8266", "mil", 8, ["ocean_sailing", "artillery", "naval_warfare"], { caps: ["unit:capital_ship"], fx: { off: 0.06 }, d: "\u591A\u6570\u306E\u7832\u3092\u4E26\u3079\u305F\u5E06\u8D70\u306E\u4E3B\u529B\u8266\u3002" });
+  n("ironclad", "\u88C5\u7532\u8266", "mil", 9, ["steamship", "steel", "artillery"], { fx: { off: 0.08, def: 0.03 }, d: "\u9244\u306E\u88C5\u7532\u3092\u5F35\u3063\u305F\u84B8\u6C17\u306E\u8ECD\u8266\u3002" });
+  n("torpedo", "\u9B5A\u96F7", "mil", 10, ["ironclad", "internal_combustion"], { fx: { off: 0.05 }, d: "\u6C34\u4E2D\u3092\u9032\u3080\u81EA\u8D70\u306E\u7206\u85AC\u3002" });
+  n("submarine", "\u6F5C\u6C34\u8266", "mil", 10, ["torpedo", "electricity"], { caps: ["unit:submarine"], fx: { off: 0.04 }, d: "\u6C34\u4E2D\u306B\u6F5C\u308B\u8266\u3002\u901A\u5546\u7834\u58CA\u3068\u5F85\u3061\u4F0F\u305B\u3002" });
+  n("dreadnought", "\u5F29\u7D1A\u6226\u8266", "mil", 10, ["ironclad", "structural_steel", "electricity"], { caps: ["unit:battleship"], fx: { off: 0.1, def: 0.03 }, d: "\u5927\u53E3\u5F84\u7832\u3092\u63C3\u3048\u305F\u6226\u8266\u3002" });
+  n("aircraft_carrier", "\u822A\u7A7A\u6BCD\u8266", "mil", 11, ["dreadnought", "aviation"], { caps: ["unit:carrier"], fx: { off: 0.08 }, d: "\u822A\u7A7A\u6A5F\u3092\u8F09\u305B\u3066\u6D77\u3092\u6E21\u308B\u98DB\u884C\u5834\u3002" });
+  n("radar_sonar", "\u30EC\u30FC\u30C0\u30FC\u30FB\u30BD\u30CA\u30FC", "mil", 11, ["radio", "electric_grid"], { fx: { def: 0.05 }, d: "\u96FB\u6CE2\u3068\u97F3\u6CE2\u3067\u6575\u3092\u898B\u3064\u3051\u308B\u3002" });
+  n("guided_missiles", "\u8A98\u5C0E\u30DF\u30B5\u30A4\u30EB", "mil", 11, ["rocketry", "guided_munitions"], { caps: ["unit:missile_force"], fx: { off: 0.1 }, d: "\u30ED\u30B1\u30C3\u30C8\u3067\u98DB\u3073\u3001\u76EE\u6A19\u3078\u8A98\u5C0E\u3055\u308C\u308B\u3002" });
+  n("nuclear_propulsion", "\u539F\u5B50\u529B\u63A8\u9032", "mil", 11, ["nuclear", "submarine"], { fx: { off: 0.04 }, d: "\u71C3\u6599\u88DC\u7D66\u306A\u3057\u3067\u9577\u304F\u6F5C\u308A\u3001\u9577\u304F\u8D70\u308B\u8266\u3002" });
+  n("amphibious_assault", "\u6C34\u9678\u4E21\u7528\u6226", "mil", 11, ["steamship", "tank"], { caps: ["unit:marine"], fx: { off: 0.05 }, d: "\u8266\u304B\u3089\u76F4\u63A5\u3001\u6D77\u5CB8\u3078\u4E0A\u9678\u3059\u308B\u3002" });
+  n("military_aviation", "\u8ECD\u7528\u822A\u7A7A", "mil", 11, ["aviation", "machine_gun"], { caps: ["unit:air_corps"], fx: { off: 0.05 }, d: "\u5075\u5BDF\u30FB\u89B3\u6E2C\u304B\u3089\u59CB\u307E\u308B\u8ECD\u306E\u98DB\u884C\u6A5F\u3002" });
+  n("fighter_aircraft", "\u6226\u95D8\u6A5F", "mil", 11, ["military_aviation", "radio"], { caps: ["unit:fighter"], fx: { def: 0.04 }, d: "\u7A7A\u306E\u4E3B\u5C0E\u6A29\u3092\u4E89\u3046\u6226\u95D8\u7528\u306E\u98DB\u884C\u6A5F\u3002" });
+  n("bomber_aircraft", "\u7206\u6483\u6A5F", "mil", 11, ["military_aviation", "steel"], { caps: ["unit:bomber"], fx: { off: 0.06 }, d: "\u9060\u304F\u306E\u76EE\u6A19\u3092\u7A7A\u304B\u3089\u7206\u6483\u3059\u308B\u3002" });
+  n("jet_engine", "\u30B8\u30A7\u30C3\u30C8\u6A5F\u95A2", "mil", 11, ["military_aviation", "petroleum", "precision_tools"], { fx: { off: 0.04 }, d: "\u9AD8\u901F\u30FB\u9AD8\u9AD8\u5EA6\u306E\u30B8\u30A7\u30C3\u30C8\u63A8\u9032\u3002" });
+  n("helicopter", "\u30D8\u30EA\u30B3\u30D7\u30BF\u30FC", "mil", 11, ["military_aviation", "internal_combustion"], { caps: ["unit:helicopter"], fx: { off: 0.03 }, d: "\u56DE\u8EE2\u7FFC\u3067\u5782\u76F4\u306B\u96E2\u7740\u9678\u3059\u308B\u3002" });
+  n("rocketry", "\u30ED\u30B1\u30C3\u30C8", "mil", 11, ["internal_combustion", "chemistry", "calculus"], { fx: { off: 0.03 }, d: "\u30ED\u30B1\u30C3\u30C8\u63A8\u9032\u3002\u306E\u3061\u306E\u8A98\u5C0E\u5175\u5668\u30FB\u5B87\u5B99\u3078\u3002" });
+  n("ballistic_missile", "\u5F3E\u9053\u30DF\u30B5\u30A4\u30EB", "mil", 11, ["rocketry", "computing"], { caps: ["unit:strategic_missile"], fx: { off: 0.06 }, d: "\u653E\u7269\u7DDA\u3092\u63CF\u3044\u3066\u9060\u65B9\u3078\u5C4A\u304F\u30DF\u30B5\u30A4\u30EB\u3002" });
+  n("nuclear_arsenal", "\u6838\u6226\u529B", "mil", 11, ["nuclear", "ballistic_missile"], { caps: ["unit:nuclear_force", "action:nuclear_weapon"], fx: { def: 0.08 }, d: "\u6838\u5F3E\u982D\u3068\u904B\u642C\u624B\u6BB5\u3002\u4F7F\u3048\u3070\u7D42\u308F\u308A\u3068\u3044\u3046\u6291\u6B62\u3002" });
+  n("stealth", "\u30B9\u30C6\u30EB\u30B9", "mil", 11, ["jet_engine", "radar_sonar", "computing"], { fx: { off: 0.05 }, d: "\u96FB\u6CE2\u306B\u6620\u308A\u306B\u304F\u3044\u822A\u7A7A\u6A5F\u30FB\u8266\u3002" });
+  n("air_defense", "\u9632\u7A7A\u7DB2", "mil", 11, ["radar_sonar", "guided_missiles"], { fx: { def: 0.06 }, d: "\u30EC\u30FC\u30C0\u30FC\u3068\u5730\u5BFE\u7A7A\u30DF\u30B5\u30A4\u30EB\u306B\u3088\u308B\u9632\u7A7A\u3002" });
+  n("drone_warfare", "\u7121\u4EBA\u6A5F", "mil", 11, ["guided_munitions", "jet_engine", "network_warfare"], { caps: ["unit:drone"], fx: { off: 0.05 }, d: "\u9060\u9694\u3067\u64CD\u308B\u7121\u4EBA\u306E\u822A\u7A7A\u6A5F\u3002" });
+  n("satellites", "\u4EBA\u5DE5\u885B\u661F", "trn", 11, ["ballistic_missile", "computing"], { caps: ["space:satellite"], fx: { trade: 0.05 }, d: "\u8ECC\u9053\u4E0A\u306E\u5075\u5BDF\u30FB\u901A\u4FE1\u30FB\u6E2C\u4F4D\u3002" });
+  n("cyber_warfare", "\u30B5\u30A4\u30D0\u30FC\u6226", "mil", 11, ["computing", "network_warfare"], { caps: ["unit:cyber"], fx: { def: 0.03 }, d: "\u60C5\u5831\u7DB2\u3078\u306E\u4FB5\u5165\u30FB\u9632\u5FA1\u30FB\u64B9\u4E71\u3002" });
+  n("machine_learning", "\u6A5F\u68B0\u5B66\u7FD2", "rec", 12, ["computing", "statistics"], { fx: { learn: 0.06 }, d: "\u30C7\u30FC\u30BF\u304B\u3089\u898F\u5247\u3092\u5B66\u3076\u8A08\u7B97\u3002" });
+  n("autonomous_systems", "\u81EA\u5F8B\u5175\u5668", "mil", 12, ["drone_warfare", "machine_learning"], { caps: ["unit:autonomous"], fx: { off: 0.08 }, d: "\u4EBA\u306E\u624B\u3092\u96E2\u308C\u3066\u76EE\u6A19\u3092\u9078\u3076\u5175\u5668\u3002" });
+  n("hypersonic_weapons", "\u6975\u8D85\u97F3\u901F\u5175\u5668", "mil", 12, ["ballistic_missile", "stealth"], { fx: { off: 0.08 }, d: "\u97F3\u901F\u306E\u6570\u500D\u3067\u98DB\u3073\u3001\u8FCE\u6483\u3055\u308C\u306B\u304F\u3044\u3002" });
+  n("directed_energy", "\u6307\u5411\u6027\u30A8\u30CD\u30EB\u30AE\u30FC\u5175\u5668", "mil", 12, ["electric_grid", "guided_missiles"], { fx: { def: 0.08 }, d: "\u30EC\u30FC\u30B6\u30FC\u30FB\u30DE\u30A4\u30AF\u30ED\u6CE2\u3067\u6483\u3061\u843D\u3068\u3059\u3002" });
+  n("orbital_warfare", "\u8ECC\u9053\u6226", "mil", 12, ["satellites", "directed_energy"], { caps: ["unit:orbital"], fx: { off: 0.05, def: 0.05 }, d: "\u8ECC\u9053\u4E0A\u306E\u5075\u5BDF\u30FB\u653B\u6483\u30FB\u9632\u885B\u3002" });
+  n("power_armor", "\u5F37\u5316\u5916\u9AA8\u683C", "mil", 12, ["autonomous_systems", "special_forces"], { fx: { off: 0.05 }, d: "\u52D5\u529B\u3067\u4EBA\u306E\u529B\u3092\u5897\u3059\u7740\u7528\u578B\u306E\u88C5\u5099\u3002" });
+  n("cognitive_warfare", "\u8A8D\u77E5\u6226", "mil", 12, ["cyber_warfare", "machine_learning"], { fx: { def: 0.05 }, d: "\u4E16\u8AD6\u30FB\u5224\u65AD\u30FB\u610F\u601D\u6C7A\u5B9A\u3092\u72D9\u3046\u60C5\u5831\u6226\u3002" });
+  n("fusion_power", "\u6838\u878D\u5408", "ind", 12, ["nuclear", "machine_learning"], { fx: { ind: 0.2 }, d: "\u8EFD\u3044\u539F\u5B50\u6838\u3092\u878D\u5408\u3055\u305B\u308B\u30A8\u30CD\u30EB\u30AE\u30FC\u3002" });
   {
     const by = new Map(nodes.map((x) => [x.id, x])), memo2 = /* @__PURE__ */ new Map(), colOf = (id, seen = /* @__PURE__ */ new Set()) => {
       if (memo2.has(id)) return memo2.get(id);
@@ -3205,13 +3707,41 @@
     civ7.groups[id] = g;
     return g;
   }
+  var verGE = (a, b) => {
+    const pa = String(a).split(".").map((x) => parseInt(x, 10) || 0), pb = String(b).split(".").map((x) => parseInt(x, 10) || 0);
+    for (let i = 0; i < 3; i++) if ((pa[i] ?? 0) !== (pb[i] ?? 0)) return (pa[i] ?? 0) > (pb[i] ?? 0);
+    return true;
+  };
   function foundSettlement(world, civ7, ids, g, cause = null) {
+    const P3 = world.cityPlugin ?? null, cells = ensureCells(world, g);
     let best = g.cell, bs = -1;
-    for (const c of ensureCells(world, g)) {
-      const s2 = world.cell.fertility[c] + (world.cell.river[c] ? 0.4 : 0) + (world.cell.coastDist[c] <= 1 ? 0.2 : 0);
+    const std = (c) => world.cell.fertility[c] + (world.cell.river[c] ? 0.4 : 0) + (world.cell.coastDist[c] <= 1 ? 0.2 : 0);
+    const withPlugin = (c, base) => {
+      if (typeof P3?.siteScore === "function") {
+        try {
+          const v = P3.siteScore(world, c, { civ: civ7, group: g, base });
+          if (Number.isFinite(v)) return v;
+        } catch {
+        }
+      }
+      return base;
+    };
+    if (world.siteTools?.pickSite && verGE(world.spec?.generatorVersion ?? "0", "6.13.0")) {
+      const occ = new Set(Object.values(civ7.settlements).map((x) => x.cell));
+      const p = world.siteTools.pickSite(world, cells, occ, typeof P3?.siteScore === "function" ? (w, c, base) => withPlugin(c, base) : void 0);
+      if (p >= 0) best = p;
+    } else for (const c of cells) {
+      const s2 = withPlugin(c, std(c));
       if (s2 > bs) {
         bs = s2;
         best = c;
+      }
+    }
+    if (typeof P3?.settlementCell === "function") {
+      try {
+        const c = P3.settlementCell(world, civ7, g, cells, best);
+        if (Number.isInteger(c) && cells.includes(c)) best = c;
+      } catch {
       }
     }
     const id = ids.next("settle"), s = { id, groupId: g.id, cell: best, foundedAt: civ7.monthIndex, pop: Math.round(g.pop * POP.settledShare), stage: "village" };
@@ -3498,10 +4028,10 @@
         }
       }
     };
-    const ce = world.cell, N2 = world.mesh.cellCount;
+    const ce = world.cell, N2 = world.mesh.cellCount, siteNew = !!world.siteTools?.planSettlements && verGE(world.spec?.generatorVersion ?? "0", "6.13.0");
     const envFit = (sp, b) => !sp.env?.length ? 1 : sp.env.includes(b) ? 1 : 0.3;
     const speciesIn = (id) => speciesOf(id, civ7);
-    const note3 = (kind, title, parts, g, causes = []) => makeEvent(civ7, ids, { kind, title, participants: parts, location: g ? { cell: g.cell } : null, causes, provenance: "simulation" });
+    const note4 = (kind, title, parts, g, causes = []) => makeEvent(civ7, ids, { kind, title, participants: parts, location: g ? { cell: g.cell } : null, causes, provenance: "simulation" });
     const KB = { agriculture: "agriculture", pastoralism: "herding", seafaring: "seafaring" };
     let pending = [];
     const learn2 = (g, key, mi) => {
@@ -3515,7 +4045,7 @@
       rec.independent++;
       if (!prior) {
         stats.firstTech[key] = mi;
-        rec.firstEventId = note3("tech_discovered", `${t.name}\u3092\u521D\u3081\u3066\u767A\u898B`, [{ entityId: g.id, role: "discoverer" }], g).eventId;
+        rec.firstEventId = note4("tech_discovered", `${t.name}\u3092\u521D\u3081\u3066\u767A\u898B`, [{ entityId: g.id, role: "discoverer" }], g).eventId;
       }
       pending.push({ g, key, d: 0 });
     };
@@ -3584,7 +4114,7 @@
     civ7.date = fromMonthIndex(start2);
     const hg = mk(origin, 120, "archaic");
     civ7.species.archaic = { id: "archaic", name: "\u53E4\u4EE3\u578B\u4EBA\u985E", bornAt: start2 };
-    note3("species_emerged", "\u53E4\u4EE3\u578B\u4EBA\u985E\u306E\u96C6\u56E3\u304C\u73FE\u308C\u305F", [{ entityId: "archaic", role: "species" }, { entityId: hg.id, role: "first_group" }], hg);
+    note4("species_emerged", "\u53E4\u4EE3\u578B\u4EBA\u985E\u306E\u96C6\u56E3\u304C\u73FE\u308C\u305F", [{ entityId: "archaic", role: "species" }, { entityId: hg.id, role: "first_group" }], hg);
     stats.species.archaic = { at: start2, cell: origin };
     const modernAt = Math.floor(steps * (0.3 + 0.25 * (hashSeed(civ7.wcde.seeds.lineage, "modern") % 1e3) / 1e3));
     let modernDone = false;
@@ -3615,7 +4145,7 @@
           for (const c of cand3.cohorts) c.speciesId = "human";
           civ7.species.human = { id: "human", name: "\u4EBA\u9593", bornAt: mi };
           stats.species.human = { at: mi, cell: cand3.cell };
-          note3("species_emerged", "\u73FE\u751F\u4EBA\u985E\u304C\u73FE\u308C\u305F", [{ entityId: "human", role: "species" }, { entityId: cand3.id, role: "first_group" }], cand3);
+          note4("species_emerged", "\u73FE\u751F\u4EBA\u985E\u304C\u73FE\u308C\u305F", [{ entityId: "human", role: "species" }, { entityId: cand3.id, role: "first_group" }], cand3);
         }
       }
       if (modernDone) for (const id of order) {
@@ -3690,7 +4220,7 @@
             addOcc(child);
             if (ce.landWater[g.cell] === LAND_WATER2.LAND && g.knowledge.seafaring >= 1 && t.cost >= POP.waterCost * res * 0.5) {
               stats.seaCrossings++;
-              if (stats.seaCrossings === 1) note3("sea_crossed", "\u6D77\u3092\u6E21\u3063\u3066\u65B0\u3057\u3044\u571F\u5730\u3078\u4EBA\u3005\u304C\u79FB\u3063\u305F", [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "settlers" }], child);
+              if (stats.seaCrossings === 1) note4("sea_crossed", "\u6D77\u3092\u6E21\u3063\u3066\u65B0\u3057\u3044\u571F\u5730\u3078\u4EBA\u3005\u304C\u79FB\u3063\u305F", [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "settlers" }], child);
             }
             const co = child.cohorts[0];
             if (child.gen >= 8 && rng() < 0.5) {
@@ -3738,7 +4268,7 @@
           stats.epochs.push({ ep, groups: nEnd, pop: Math.round(popEnd), x: Math.round(popEnd / Kworld * 100) / 100, ice: Math.round(ice * 100) / 100, sub: sub2 });
         }
         {
-          const ev = note3("prehistory_epoch", `\u5148\u53F2 \u7B2C${epochs}\u671F\u306E\u6982\u6CC1\uFF08\u7D42\u308F\u308A\u306E\u6642\u70B9\u3067 \u96C6\u56E3 ${nEnd}\u30FB\u4EBA\u53E3 \u7D04${Math.round(popEnd)}\uFF09`, [], null);
+          const ev = note4("prehistory_epoch", `\u5148\u53F2 \u7B2C${epochs}\u671F\u306E\u6982\u6CC1\uFF08\u7D42\u308F\u308A\u306E\u6642\u70B9\u3067 \u96C6\u56E3 ${nEnd}\u30FB\u4EBA\u53E3 \u7D04${Math.round(popEnd)}\uFF09`, [], null);
           ev.effects.push({ targetId: "world", property: "prehistory.pop", before: null, after: Math.round(popEnd) });
           lastEpEv = ev;
         }
@@ -3748,6 +4278,25 @@
     civ7.monthIndex = monthIndex(0, 1);
     civ7.date = fromMonthIndex(civ7.monthIndex);
     calibrateStart(world, civ7);
+    let sitePlan = null;
+    if (siteNew) {
+      const elig = [];
+      for (const id of order) {
+        const g = civ7.groups[id];
+        if (!g) continue;
+        g.cells = g.cells ?? territoryOf(world, g.cell);
+        if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop) elig.push(g);
+      }
+      const CP = world.cityPlugin ?? null, pscore = typeof CP?.siteScore === "function" ? (w, c, base, g) => {
+        try {
+          const v = CP.siteScore(w, c, { civ: civ7, group: g, base });
+          return Number.isFinite(v) ? v : base;
+        } catch {
+          return base;
+        }
+      } : null;
+      sitePlan = world.siteTools.planSettlements(world, elig, hashSeed(world.spec.worldSeed, "sites"), pscore);
+    }
     for (const id of order) {
       const g = civ7.groups[id];
       if (!g) continue;
@@ -3758,10 +4307,11 @@
       delete g.gen;
       delete g.noTargetUntil;
       delete g.capMult;
-      if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop) {
+      if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && (!siteNew || sitePlan.has(g.id))) {
         const sid = ids.next("settle");
         let best = g.cell, bs = -1;
-        for (const c of g.cells) {
+        if (siteNew) best = sitePlan.get(g.id);
+        else for (const c of g.cells) {
           const s = ce.fertility[c] + (ce.river[c] ? 0.4 : 0) + (ce.coastDist[c] <= 1 ? 0.2 : 0);
           if (s > bs) {
             bs = s;
@@ -4380,6 +4930,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   var dissolve = (ctx2, st2, why2) => {
     const { civ: civ7, ids } = ctx2;
     st2.alive = false;
+    st2.corps = null;
     st2.dissolvedAt = civ7.monthIndex;
     for (const gid in civ7.groups) if (civ7.groups[gid].stateId === st2.id) civ7.groups[gid].stateId = null;
     for (const wid of [...st2.warIds]) ctx2.endWarHook?.(ctx2, civ7.wars[wid], "state_dissolved");
@@ -4463,6 +5014,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
         groupsByState.delete(aid);
         absorbers.add(B.id);
         A2.alive = false;
+        A2.corps = null;
         A2.dissolvedAt = mi;
         A2.mergedInto = B.id;
         merged.add(aid);
@@ -6849,11 +7401,189 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     st2.leader = { name: leaderName(st2, ctx2.nameGen?.person(civ7, civ7.groups[st2.capitalGroupId], ctx2.rng) ?? `${st2.name}\u306E\u65B0\u6307\u5C0E\u8005`, leaderRng(civ7, st2, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx2.rng() * 200)) * lifeScale(civ7, { capitalGroupId: st2.capitalGroupId })), heir: false, deposed: true, origin: who };
   }
 
+  // js/core/wcde/orbat.js
+  var has = (st2, k) => st2.techAdopted?.[k] != null;
+  var can = (ctx2, st2, cap) => stateCan(ctx2.civ, st2, cap);
+  var coastal = (ctx2, st2) => (byState(ctx2).get(st2.id) ?? []).some((g) => ctx2.world.cell.coastDist[g.cell] <= 1);
+  var SERVICES = Object.freeze({
+    land: { ja: "\u9678\u8ECD", formation: "\u8ECD\u56E3", chief: "\u9678\u8ECD\u7DCF\u53F8\u4EE4\u5B98", color: "#9fbf8a", ranks: ["\u968A\u9577", "\u5C06\u8ECD", "\u5927\u5C06", "\u5143\u5E25"] },
+    sea: { ja: "\u6D77\u8ECD", formation: "\u8266\u968A", chief: "\u6D77\u8ECD\u7DCF\u53F8\u4EE4\u5B98", color: "#6fa8c9", ranks: ["\u8266\u9577", "\u63D0\u7763", "\u5927\u63D0\u7763", "\u5143\u5E25\u63D0\u7763"] },
+    air: { ja: "\u7A7A\u8ECD", formation: "\u822A\u7A7A\u8ECD", chief: "\u7A7A\u8ECD\u7DCF\u53F8\u4EE4\u5B98", color: "#c9b36f", ranks: ["\u822A\u7A7A\u968A\u9577", "\u7A7A\u5C06", "\u7A7A\u8ECD\u5927\u5C06", "\u7A7A\u8ECD\u5143\u5E25"] }
+  });
+  var SERVICE_KEYS = Object.freeze(["land", "sea", "air"]);
+  var T = (id, service, ja, need2, terms, o = {}) => [id, { id, service, ja, need: need2, terms, item: o.item ?? null, per: o.per ?? 0, hint: o.hint ?? "" }];
+  var UNIT_TYPES = Object.freeze(Object.fromEntries([
+    // ---- 陸軍
+    T("infantry", "land", "\u6B69\u5175", () => true, [["network_warfare", "\u73FE\u4EE3\u6B69\u5175\u5E2B\u56E3"], ["breech_loading", "\u8FD1\u4EE3\u6B69\u5175\u5E2B\u56E3"], ["gunpowder", "\u7DDA\u5217\u6B69\u5175\u56E3"], ["steel", "\u7CBE\u92ED\u6B69\u5175\u56E3"], ["iron_weapons", "\u91CD\u88C5\u6B69\u5175\u56E3"], ["bronze_weapons", "\u69CD\u5175\u56E3"], [null, "\u6226\u58EB\u56E3"]], { hint: "\u8ECD\u306E\u4E3B\u529B\u3002\u5B89\u304F\u3001\u6570\u304C\u51FA\u305B\u308B" }),
+    T("levy", "land", "\u4E88\u5099\u5F79\u30FB\u6C11\u5175", () => true, [["conscription", "\u4E88\u5099\u5F79\u56E3"], [null, "\u5FB4\u96C6\u6C11\u5175\u56E3"]], { hint: "\u6570\u5408\u308F\u305B\u3002\u5F31\u3044\u304C\u5B88\u308A\u306B\u306F\u7C98\u308B" }),
+    T("ranged", "land", "\u5F13\u30FB\u6295\u5C04\u5175", (st2, ctx2) => can(ctx2, st2, "unit:ranged") && !has(st2, "breech_loading"), [["crossbow", "\u5F29\u5175\u56E3"], ["steel", "\u5F29\u5175\u56E3"], ["bronze_weapons", "\u5F13\u5175\u56E3"], [null, "\u6295\u5C04\u5175\u56E3"]], { hint: "\u5F8C\u65B9\u304B\u3089\u524A\u308B" }),
+    T("cavalry", "land", "\u9A0E\u5175", (st2, ctx2) => can(ctx2, st2, "unit:cavalry"), [["gunpowder", "\u80F8\u7532\u9A0E\u5175\u56E3"], ["iron_weapons", "\u91CD\u9A0E\u5175\u56E3"], [null, "\u9A0E\u99AC\u968A"]], { hint: "\u6A5F\u52D5\u3068\u8FFD\u6483" }),
+    T("garrison", "land", "\u5B88\u5099\u5175", (st2, ctx2) => can(ctx2, st2, "unit:garrison"), [["fortification", "\u57CE\u585E\u5B88\u5099\u8ECD"], [null, "\u5B88\u5099\u968A"]], { hint: "\u5B88\u308A\u306B\u5F37\u3044\u3002\u653B\u3081\u306B\u306F\u5411\u304B\u306A\u3044" }),
+    T("firearms", "land", "\u9283\u5175", (st2, ctx2) => can(ctx2, st2, "unit:firearms") && !has(st2, "breech_loading"), [["steel", "\u8FD1\u885B\u9283\u5175\u56E3"], [null, "\u9283\u5175\u56E3"]], { hint: "\u706B\u529B\u3067\u62BC\u3059" }),
+    T("artillery", "land", "\u7832\u5175", (st2) => has(st2, "artillery"), [["guided_munitions", "\u8A98\u5C0E\u7832\u5175\u56E3"], ["howitzer", "\u91CE\u6226\u7832\u5175\u56E3"], [null, "\u7832\u5175\u56E3"]], { hint: "\u57CE\u653B\u3081\u3068\u706B\u529B\u652F\u63F4" }),
+    T("armor", "land", "\u6A5F\u7532", (st2) => has(st2, "tank"), [["network_warfare", "\u6A5F\u7532\u65C5\u56E3"], [null, "\u6226\u8ECA\u56E3"]], { hint: "\u7A81\u7834\u3068\u6A5F\u52D5\u3002\u5BFE\u6226\u8ECA\u5175\u5668\u306B\u5F31\u3044" }),
+    T("mechanized", "land", "\u6A5F\u68B0\u5316\u6B69\u5175", (st2) => has(st2, "motorized_infantry"), [[null, "\u6A5F\u68B0\u5316\u6B69\u5175\u56E3"]], { hint: "\u6226\u8ECA\u306B\u968F\u4F34\u3059\u308B\u6B69\u5175" }),
+    T("special", "land", "\u7279\u6B8A\u90E8\u968A", (st2) => has(st2, "special_forces"), [["power_armor", "\u7279\u6B8A\u4F5C\u6226\u7FA4"], [null, "\u7279\u6B8A\u90E8\u968A"]], { hint: "\u5C11\u6570\u7CBE\u92ED\u3002\u5947\u8972\u3068\u7834\u58CA" }),
+    T("marine", "land", "\u6D77\u5175", (st2, ctx2) => has(st2, "amphibious_assault") && coastal(ctx2, st2), [[null, "\u6D77\u5175\u968A"]], { hint: "\u4E0A\u9678\u4F5C\u6226" }),
+    T("powered", "land", "\u5F37\u5316\u88C5\u7532\u5175", (st2) => has(st2, "power_armor"), [[null, "\u5F37\u5316\u5916\u9AA8\u683C\u5175\u56E3"]], { hint: "\u672A\u6765\u306E\u6B69\u5175" }),
+    T("autonomous", "land", "\u81EA\u5F8B\u6226\u95D8\u7FA4", (st2) => has(st2, "autonomous_systems"), [[null, "\u81EA\u5F8B\u6226\u95D8\u7FA4"]], { hint: "\u672A\u6765\u306E\u7121\u4EBA\u5730\u4E0A\u6226\u529B" }),
+    // ---- 海軍（人数＝乗員の数。item は艦 1 隻あたりの人数の目安）
+    T("navy", "sea", "\u6C34\u4E0A\u8266\u968A", (st2, ctx2) => can(ctx2, st2, "unit:navy") && coastal(ctx2, st2), [["guided_missiles", "\u30DF\u30B5\u30A4\u30EB\u8B77\u885B\u8266\u968A"], ["steamship", "\u84B8\u6C17\u8266\u968A"], ["gunpowder", "\u5927\u8266\u968A"], ["naval_warfare", "\u8266\u968A"], [null, "\u821F\u8ECD"]], { item: "\u96BB", per: 120, hint: "\u8B77\u885B\u30FB\u54E8\u6212\u30FB\u4E3B\u529B" }),
+    T("capital_ship", "sea", "\u4E3B\u529B\u8266", (st2, ctx2) => has(st2, "ship_of_the_line") && coastal(ctx2, st2), [["dreadnought", "\u6226\u8266\u6226\u968A"], ["ironclad", "\u88C5\u7532\u8266\u6226\u968A"], [null, "\u6226\u5217\u8266\u968A"]], { item: "\u96BB", per: 900, hint: "\u8266\u968A\u6C7A\u6226\u306E\u4E3B\u529B" }),
+    T("submarine", "sea", "\u6F5C\u6C34\u8266", (st2, ctx2) => has(st2, "submarine") && coastal(ctx2, st2), [["nuclear_propulsion", "\u539F\u6F5C\u90E8\u968A"], [null, "\u6F5C\u6C34\u8266\u968A"]], { item: "\u96BB", per: 90, hint: "\u901A\u5546\u7834\u58CA\u3068\u5F85\u3061\u4F0F\u305B" }),
+    T("carrier", "sea", "\u7A7A\u6BCD", (st2, ctx2) => has(st2, "aircraft_carrier") && coastal(ctx2, st2), [[null, "\u7A7A\u6BCD\u6A5F\u52D5\u90E8\u968A"]], { item: "\u96BB", per: 2800, hint: "\u822A\u7A7A\u6226\u529B\u3092\u6D77\u3078\u904B\u3076" }),
+    // ---- 空軍（人数＝搭乗員と地上要員。item は 1 機あたりの人数の目安）
+    T("air_corps", "air", "\u521D\u671F\u822A\u7A7A\u968A", (st2) => has(st2, "military_aviation") && !has(st2, "fighter_aircraft"), [[null, "\u822A\u7A7A\u968A"]], { item: "\u6A5F", per: 14, hint: "\u5075\u5BDF\u3068\u89B3\u6E2C" }),
+    T("fighter", "air", "\u6226\u95D8\u6A5F", (st2) => has(st2, "fighter_aircraft"), [["stealth", "\u30B9\u30C6\u30EB\u30B9\u6226\u95D8\u822A\u7A7A\u56E3"], ["jet_engine", "\u30B8\u30A7\u30C3\u30C8\u6226\u95D8\u822A\u7A7A\u56E3"], [null, "\u6226\u95D8\u822A\u7A7A\u56E3"]], { item: "\u6A5F", per: 10, hint: "\u5236\u7A7A\u3002\u6575\u306E\u822A\u7A7A\u6226\u529B\u3092\u843D\u3068\u3059" }),
+    T("bomber", "air", "\u7206\u6483\u6A5F", (st2) => has(st2, "bomber_aircraft"), [["jet_engine", "\u30B8\u30A7\u30C3\u30C8\u7206\u6483\u822A\u7A7A\u56E3"], [null, "\u7206\u6483\u822A\u7A7A\u56E3"]], { item: "\u6A5F", per: 26, hint: "\u5730\u4E0A\u30FB\u6E2F\u30FB\u5DE5\u696D\u3092\u53E9\u304F" }),
+    T("helicopter", "air", "\u30D8\u30EA\u30B3\u30D7\u30BF\u30FC", (st2) => has(st2, "helicopter"), [[null, "\u822A\u7A7A\u6A5F\u52D5\u56E3"]], { item: "\u6A5F", per: 14, hint: "\u7A7A\u4E2D\u6A5F\u52D5\u30FB\u8FD1\u63A5\u652F\u63F4" }),
+    T("drone", "air", "\u7121\u4EBA\u6A5F", (st2) => has(st2, "drone_warfare"), [[null, "\u7121\u4EBA\u6A5F\u90E8\u968A"]], { item: "\u6A5F", per: 6, hint: "\u5075\u5BDF\u3068\u7CBE\u5BC6\u6253\u6483" }),
+    T("missile", "air", "\u30DF\u30B5\u30A4\u30EB", (st2) => has(st2, "guided_missiles"), [[null, "\u30DF\u30B5\u30A4\u30EB\u65C5\u56E3"]], { item: "\u57FA", per: 30, hint: "\u9060\u8DDD\u96E2\u306E\u7CBE\u5BC6\u6253\u6483" }),
+    T("strategic", "air", "\u6226\u7565\u30ED\u30B1\u30C3\u30C8", (st2) => has(st2, "ballistic_missile"), [["nuclear_arsenal", "\u6226\u7565\u6838\u30ED\u30B1\u30C3\u30C8\u8ECD"], [null, "\u6226\u7565\u30ED\u30B1\u30C3\u30C8\u8ECD"]], { item: "\u57FA", per: 45, hint: "\u6291\u6B62\u3002\u56FD\u306E\u5B88\u308A\u3092\u56FA\u3081\u308B" }),
+    T("cyber", "air", "\u30B5\u30A4\u30D0\u30FC", (st2) => has(st2, "cyber_warfare"), [["cognitive_warfare", "\u60C5\u5831\u30FB\u8A8D\u77E5\u6226\u8ECD"], [null, "\u30B5\u30A4\u30D0\u30FC\u8ECD"]], { hint: "\u60C5\u5831\u7DB2\u306E\u9632\u5FA1\u3068\u64B9\u4E71" }),
+    T("orbital", "air", "\u5B87\u5B99", (st2) => has(st2, "orbital_warfare"), [[null, "\u5B87\u5B99\u8ECD"]], { hint: "\u8ECC\u9053\u4E0A\u306E\u5075\u5BDF\u30FB\u653B\u6483\u30FB\u9632\u885B" })
+  ]));
+  var serviceOf = (kind) => UNIT_TYPES[kind]?.service ?? "land";
+  var KEYS = Object.keys(UNIT_TYPES);
+  function unitTerm(st2, kind) {
+    const T0 = UNIT_TYPES[kind];
+    if (!T0) return kind;
+    for (const [k, t] of T0.terms) if (k == null || has(st2, k)) return t;
+    return T0.ja;
+  }
+  function unitName(st2, kind) {
+    const fx3 = st2.military?.fx ?? {}, tag = kind === "navy" || serviceOf(kind) !== "land" ? "" : (fx3.off ?? 0) >= 0.06 && (fx3.off ?? 0) >= (fx3.def ?? 0) ? "\u7A81\u6483" : (fx3.def ?? 0) >= 0.08 ? "\u5805\u9663" : "";
+    return `${tag}${unitTerm(st2, kind)}`;
+  }
+  var itemsOf = (kind, heads) => {
+    const t = UNIT_TYPES[kind];
+    return t?.per ? Math.max(1, Math.round(heads / t.per)) : null;
+  };
+  var sat2 = (x, k = 1) => Math.max(0, Math.min(1, x / k));
+  function autoWeights(ctx2, st2) {
+    const gs = byState(ctx2).get(st2.id) ?? [], pastoral = gs.length ? gs.filter((g) => g.subsistence === "pastoral").length / gs.length : 0, M = st2.military ?? {}, sch = M.school ?? {}, w = {};
+    for (const k of KEYS) if (UNIT_TYPES[k].need(st2, ctx2)) w[k] = 0;
+    const set = (k, v) => {
+      if (k in w) w[k] = v;
+    };
+    set("infantry", 1);
+    set("ranged", 0.25);
+    set("cavalry", 0.2 + 0.5 * pastoral);
+    set("navy", 0.15);
+    set("garrison", 0.1);
+    set("firearms", 0.4);
+    if (has(st2, "breech_loading")) {
+      w.infantry += 0.4;
+    }
+    set("artillery", 0.2 + (has(st2, "howitzer") ? 0.1 : 0));
+    set("armor", 0.3);
+    set("mechanized", 0.28);
+    set("special", 0.04);
+    set("marine", 0.05);
+    set("powered", 0.06);
+    set("autonomous", 0.1);
+    set("levy", has(st2, "conscription") ? 0.3 : 0);
+    set("capital_ship", has(st2, "dreadnought") ? 0.1 : 0.07);
+    set("submarine", 0.05);
+    set("carrier", 0.04);
+    set("air_corps", 0.08);
+    set("fighter", 0.14);
+    set("bomber", 0.1);
+    set("helicopter", 0.06);
+    set("drone", 0.05);
+    set("missile", 0.05);
+    set("strategic", 0.02);
+    set("cyber", 0.02);
+    set("orbital", 0.01);
+    if (w.infantry != null && has(st2, "tank")) w.infantry *= 0.9;
+    const bias = (k, f2) => {
+      if (k in w) w[k] *= f2;
+    };
+    const L = sch.land, S3 = sch.sea, A2 = sch.air;
+    if (L === "mass") {
+      bias("infantry", 1.5);
+      bias("levy", 2);
+      bias("artillery", 0.8);
+      bias("armor", 0.7);
+    } else if (L === "firepower") {
+      bias("artillery", 2);
+      bias("firearms", 1.3);
+    } else if (L === "mobile") {
+      bias("armor", 2);
+      bias("mechanized", 1.8);
+      bias("cavalry", 1.3);
+      bias("infantry", 0.8);
+    } else if (L === "battle_plan") {
+      bias("special", 2);
+      bias("infantry", 1.1);
+      bias("artillery", 1.2);
+    }
+    if (S3 === "decisive") {
+      bias("capital_ship", 2);
+    } else if (S3 === "interdiction") {
+      bias("submarine", 3);
+      bias("navy", 1.2);
+    } else if (S3 === "base_strike") {
+      bias("carrier", 3);
+      bias("marine", 1.5);
+    }
+    if (A2 === "superiority") {
+      bias("fighter", 2);
+    } else if (A2 === "strategic") {
+      bias("bomber", 2);
+      bias("strategic", 2);
+      bias("missile", 1.5);
+    } else if (A2 === "support") {
+      bias("helicopter", 2);
+      bias("drone", 1.6);
+      bias("bomber", 0.8);
+    }
+    const ind = sat2(st2.econ?.perCapita ?? 0.5, 1.6);
+    for (const k of KEYS) if (k in w && w[k] > 0 && (serviceOf(k) === "air" || k === "armor" || k === "carrier" || k === "capital_ship")) w[k] *= 0.5 + 0.7 * ind;
+    return w;
+  }
+  function autoRoster(ctx2, st2, total2 = st2.army) {
+    const w = autoWeights(ctx2, st2), tot = Object.values(w).reduce((a, b) => a + b, 0), out = {};
+    if (!(tot > 0) || !(total2 > 0)) return out;
+    for (const k in w) if (w[k] > 0) out[k] = total2 * w[k] / tot;
+    return out;
+  }
+  function manualRoster(ctx2, st2, target, total2 = st2.army) {
+    const ok2 = Object.fromEntries(Object.entries(target ?? {}).filter(([k, v]) => UNIT_TYPES[k] && v > 0 && UNIT_TYPES[k].need(st2, ctx2))), S3 = Object.values(ok2).reduce((a, b) => a + b, 0), out = {};
+    if (!(total2 > 0)) return out;
+    if (S3 >= total2) {
+      for (const k in ok2) out[k] = ok2[k] * total2 / S3;
+      return out;
+    }
+    for (const k in ok2) out[k] = ok2[k];
+    const rest = total2 - S3, sink = UNIT_TYPES.levy.need(st2, ctx2) ? "levy" : "infantry";
+    out[sink] = (out[sink] ?? 0) + rest;
+    return out;
+  }
+  function rosterOf(ctx2, st2) {
+    const O = st2.military?.orbat;
+    return O?.mode === "manual" && O.target ? manualRoster(ctx2, st2, O.target) : autoRoster(ctx2, st2);
+  }
+  var headsOf = (st2, service) => (st2.military?.units ?? []).reduce((a, u) => a + (serviceOf(u.kind) === service ? u.size : 0), 0);
+  function validateTarget(ctx2, st2, heads) {
+    if (!heads || typeof heads !== "object") return { ok: false, reason: "\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044" };
+    const out = {};
+    for (const [k, v] of Object.entries(heads)) {
+      if (!UNIT_TYPES[k]) return { ok: false, reason: `\u672A\u77E5\u306E\u5175\u7A2E ${k}` };
+      const n3 = Math.round(Number(v));
+      if (!Number.isFinite(n3) || n3 < 0) return { ok: false, reason: "\u4EBA\u6570\u306F 0 \u4EE5\u4E0A\u306E\u6574\u6570" };
+      if (n3 > 0 && !UNIT_TYPES[k].need(st2, ctx2)) return { ok: false, reason: `${UNIT_TYPES[k].ja}\u306F\u4ECA\u306E\u6280\u8853\u30FB\u5730\u7406\u3067\u306F\u7DE8\u5236\u3067\u304D\u306A\u3044` };
+      if (n3 > 0) out[k] = n3;
+    }
+    if (!Object.keys(out).length) return { ok: false, reason: "\u5C11\u306A\u304F\u3068\u3082 1 \u3064\u306E\u5175\u7A2E\u306B\u4EBA\u6570\u3092\u5165\u308C\u3066\u304F\u3060\u3055\u3044" };
+    return { ok: true, target: out };
+  }
+
   // js/core/wcde/domains/doctrine.js
-  var FX_KEYS = Object.freeze(["off", "def", "logi", "attr", "naval", "siege", "adapt", "coh", "landing"]);
-  var CAP = Object.freeze({ off: 0.25, def: 0.4, logi: 0.3, attr: 0.25, naval: 0.35, siege: 0.3, adapt: 0.2, coh: 0.25, landing: 0.25 });
+  var FX_KEYS = Object.freeze(["off", "def", "logi", "attr", "naval", "siege", "adapt", "coh", "landing", "armor", "air", "subs", "strike"]);
+  var CAP = Object.freeze({ off: 0.25, def: 0.4, logi: 0.3, attr: 0.25, naval: 0.35, siege: 0.3, adapt: 0.2, coh: 0.25, landing: 0.25, armor: 0.3, air: 0.35, subs: 0.3, strike: 0.3 });
   var BRANCH_SHARE = 0.6;
-  var FX_JA = Object.freeze({ off: "\u653B\u6483", def: "\u9632\u5FA1", logi: "\u88DC\u7D66", attr: "\u640D\u8017\u8EFD\u6E1B", naval: "\u6D77\u8ECD\u904B\u7528", siege: "\u653B\u57CE", adapt: "\u6226\u5834\u9069\u5FDC", coh: "\u58EB\u6C17\u306E\u7D50\u675F", landing: "\u4E0A\u9678" });
+  var FX_JA = Object.freeze({ off: "\u653B\u6483", def: "\u9632\u5FA1", logi: "\u88DC\u7D66", attr: "\u640D\u8017\u8EFD\u6E1B", naval: "\u6D77\u8ECD\u904B\u7528", siege: "\u653B\u57CE", adapt: "\u6226\u5834\u9069\u5FDC", coh: "\u58EB\u6C17\u306E\u7D50\u675F", landing: "\u4E0A\u9678", armor: "\u6A5F\u7532\u904B\u7528", air: "\u822A\u7A7A\u904B\u7528", subs: "\u6F5C\u6C34\u904B\u7528", strike: "\u6253\u6483\u529B" });
   var N = (id, ja, branch, tier, prereq, tech, cost, fx3) => ({ id, ja, branch, tier, prereq, tech, cost, fx: fx3, special: false });
   var COMMON_BRANCHES = Object.freeze([
     { id: "infantry", ja: "\u9678\u6226" },
@@ -6890,25 +7620,113 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     N("blue_water", "\u5916\u6D0B\u9060\u5F81", "sea", 5, ["fleet_doctrine"], ["navigation"], 380, { naval: 0.1, logi: 0.05, landing: 0.12 })
   ]);
   var COMMON_BY_ID = Object.freeze(Object.fromEntries(COMMON_NODES.map((d) => [d.id, d])));
+  var SC = (id, service, ja, desc, tiers) => ({ id, service, ja, desc, tiers });
+  var ST_ = (ja, tech, cost, fx3) => ({ ja, tech, cost, fx: fx3 });
+  var SCHOOLS = Object.freeze([
+    SC("firepower", "land", "\u706B\u529B\u512A\u52E2", "\u7832\u3068\u706B\u529B\u3067\u6575\u3092\u524A\u308A\u3001\u5473\u65B9\u306E\u640D\u8017\u3092\u6291\u3048\u308B\u3002", [
+      ST_("\u706B\u529B\u306E\u96C6\u4E2D", ["firearms"], 280, { off: 0.03, siege: 0.04 }),
+      ST_("\u7832\u5175\u306E\u7D44\u7E54\u5316", ["artillery", "pike_and_shot"], 420, { off: 0.04, siege: 0.06, attr: 0.02 }),
+      ST_("\u5F3E\u5E55\u5C04\u6483", ["howitzer"], 600, { off: 0.05, def: 0.03, attr: 0.03 }),
+      ST_("\u5236\u5727\u5C04\u6483", ["machine_gun"], 760, { def: 0.06, off: 0.03 }),
+      ST_("\u7CBE\u5BC6\u706B\u529B", ["guided_munitions"], 900, { off: 0.06, siege: 0.06, attr: 0.03 }),
+      ST_("\u7DB2\u3067\u3064\u306A\u3050\u706B\u529B", ["network_warfare"], 1100, { off: 0.05, coh: 0.04, adapt: 0.03 })
+    ]),
+    SC("mass", "land", "\u5927\u8846\u52D5\u54E1", "\u5175\u306E\u6570\u3068\u58EB\u6C17\u3067\u62BC\u3059\u3002\u88DC\u7D66\u3068\u640D\u8017\u304C\u91CD\u304F\u306A\u308B\u3002", [
+      ST_("\u5927\u8846\u306E\u52D5\u54E1", ["firearms"], 260, { off: 0.03, coh: 0.03, logi: -0.02 }),
+      ST_("\u5FB4\u5175\u3068\u4E88\u5099\u5F79", ["conscription"], 400, { off: 0.04, coh: 0.04, attr: -0.02 }),
+      ST_("\u4EBA\u6D77\u306E\u7A81\u6483", ["breech_loading"], 560, { off: 0.06, coh: 0.03, attr: -0.04 }),
+      ST_("\u7DCF\u529B\u6226\u4F53\u5236", ["machine_gun", "railway"], 740, { logi: 0.06, def: 0.04, coh: 0.04 }),
+      ST_("\u5168\u56FD\u6C11\u306E\u9632\u885B", ["anti_tank"], 880, { def: 0.08, coh: 0.05 }),
+      ST_("\u52D5\u54E1\u306E\u81EA\u52D5\u5316", ["network_warfare"], 1100, { logi: 0.06, off: 0.04, coh: 0.03 })
+    ]),
+    SC("battle_plan", "land", "\u4F5C\u6226\u8A08\u753B", "\u53C2\u8B00\u304C\u7DF4\u3063\u305F\u8A08\u753B\u3067\u3001\u8ECD\u3092\u7CBE\u5BC6\u306B\u52D5\u304B\u3059\u3002", [
+      ST_("\u8A08\u753B\u3055\u308C\u305F\u4F5C\u6226", ["standing_army", "firearms"], 280, { coh: 0.03, logi: 0.03 }),
+      ST_("\u53C2\u8B00\u672C\u90E8\u306E\u62E1\u5145", ["pike_and_shot"], 420, { off: 0.03, def: 0.03, coh: 0.03 }),
+      ST_("\u9244\u9053\u52D5\u54E1\u8A08\u753B", ["railway"], 580, { logi: 0.08, off: 0.03 }),
+      ST_("\u4F5C\u6226\u8853", ["howitzer", "machine_gun"], 760, { off: 0.05, def: 0.04, adapt: 0.03 }),
+      ST_("\u7D71\u5408\u6307\u63EE", ["network_warfare"], 900, { coh: 0.06, logi: 0.05, adapt: 0.03 }),
+      ST_("\u5168\u57DF\u4F5C\u6226", ["drone_warfare"], 1100, { off: 0.05, def: 0.04, adapt: 0.05 })
+    ]),
+    SC("mobile", "land", "\u6A5F\u52D5\u6226", "\u6A5F\u7532\u3068\u6A5F\u68B0\u5316\u3067\u3001\u6575\u306E\u9632\u5FA1\u3092\u7A81\u304D\u629C\u3051\u308B\u3002", [
+      ST_("\u9A0E\u5175\u3068\u6A5F\u52D5", ["firearms", "horse_riding"], 280, { adapt: 0.04, off: 0.03 }),
+      ST_("\u81EA\u52D5\u8ECA\u5316", ["motor_vehicle"], 440, { logi: 0.05, adapt: 0.03 }),
+      ST_("\u88C5\u7532\u7A81\u7834", ["tank"], 640, { off: 0.07, adapt: 0.04, armor: 0.06 }),
+      ST_("\u96FB\u6483\u6226", ["motorized_infantry", "radio"], 820, { off: 0.06, adapt: 0.05, armor: 0.06, def: -0.02 }),
+      ST_("\u7E26\u6DF1\u7A81\u7834", ["network_warfare"], 960, { off: 0.06, adapt: 0.05, logi: 0.04, armor: 0.05 }),
+      ST_("\u81EA\u5F8B\u6A5F\u52D5", ["autonomous_systems"], 1200, { off: 0.06, adapt: 0.05, armor: 0.06 })
+    ]),
+    SC("decisive", "sea", "\u8266\u968A\u6C7A\u6226", "\u4E3B\u529B\u8266\u3092\u63C3\u3048\u3001\u6575\u306E\u8266\u968A\u3092\u4E00\u6226\u3067\u6C7A\u3059\u308B\u3002", [
+      ST_("\u6226\u5217\u306E\u7832\u6226", ["ship_of_the_line"], 300, { naval: 0.06, off: 0.02 }),
+      ST_("\u88C5\u7532\u8266\u306E\u904B\u7528", ["ironclad"], 440, { naval: 0.06, off: 0.03 }),
+      ST_("\u5927\u53E3\u5F84\u7832\u306E\u7D71\u5236", ["dreadnought"], 640, { naval: 0.08, off: 0.04, def: 0.02 }),
+      ST_("\u96FB\u6CE2\u306B\u3088\u308B\u7D22\u6575", ["radar_sonar"], 780, { naval: 0.06, adapt: 0.03 }),
+      ST_("\u30DF\u30B5\u30A4\u30EB\u6226", ["guided_missiles"], 920, { naval: 0.06, off: 0.05 }),
+      ST_("\u6307\u5411\u6027\u306E\u9632\u5FA1", ["directed_energy"], 1100, { naval: 0.06, def: 0.05 })
+    ]),
+    SC("interdiction", "sea", "\u901A\u5546\u7834\u58CA", "\u6F5C\u6C34\u8266\u3068\u8B77\u885B\u3067\u3001\u6575\u306E\u88DC\u7D66\u3068\u4EA4\u6613\u3092\u65AD\u3064\u3002", [
+      ST_("\u79C1\u63A0\u3068\u5DE1\u822A", ["ship_of_the_line"], 300, { naval: 0.04, logi: 0.02 }),
+      ST_("\u9B5A\u96F7\u306E\u904B\u7528", ["torpedo"], 440, { naval: 0.05, subs: 0.06 }),
+      ST_("\u6F5C\u6C34\u8266\u6226", ["submarine"], 640, { subs: 0.1, naval: 0.04 }),
+      ST_("\u97F3\u306B\u3088\u308B\u63A2\u77E5", ["radar_sonar"], 780, { subs: 0.06, def: 0.03 }),
+      ST_("\u9577\u671F\u6F5C\u822A", ["nuclear_propulsion"], 920, { subs: 0.08, naval: 0.04, logi: 0.04 }),
+      ST_("\u7121\u4EBA\u306E\u6F5C\u822A\u4F53", ["autonomous_systems"], 1100, { subs: 0.08, naval: 0.05 })
+    ]),
+    SC("base_strike", "sea", "\u7A7A\u6BCD\u6253\u6483", "\u7A7A\u6BCD\u3068\u4E0A\u9678\u6226\u529B\u3067\u3001\u6D77\u304B\u3089\u9678\u3092\u53E9\u304F\u3002", [
+      ST_("\u6CBF\u5CB8\u3078\u306E\u7832\u6483", ["ship_of_the_line"], 300, { landing: 0.04, naval: 0.03 }),
+      ST_("\u4E0A\u9678\u306E\u6E96\u5099", ["ironclad"], 440, { landing: 0.05, logi: 0.03 }),
+      ST_("\u7A7A\u6BCD\u6A5F\u52D5\u90E8\u968A", ["aircraft_carrier"], 700, { air: 0.06, naval: 0.05, strike: 0.04 }),
+      ST_("\u6C34\u9678\u4E21\u7528\u6226", ["amphibious_assault"], 820, { landing: 0.1, off: 0.03 }),
+      ST_("\u9060\u8DDD\u96E2\u306E\u6253\u6483", ["stealth"], 940, { strike: 0.07, air: 0.05 }),
+      ST_("\u6975\u8D85\u97F3\u901F\u306E\u6253\u6483", ["hypersonic_weapons"], 1100, { strike: 0.08, naval: 0.04 })
+    ]),
+    SC("superiority", "air", "\u5236\u7A7A", "\u7A7A\u306E\u4E3B\u5C0E\u6A29\u3092\u63E1\u308A\u3001\u9678\u3068\u6D77\u3092\u5B88\u308B\u3002", [
+      ST_("\u7A7A\u306E\u5075\u5BDF", ["military_aviation"], 320, { air: 0.05 }),
+      ST_("\u6226\u95D8\u6A5F\u306E\u7DE8\u968A", ["fighter_aircraft"], 460, { air: 0.06, def: 0.02 }),
+      ST_("\u9632\u7A7A\u3068\u8FCE\u6483", ["radar_sonar"], 640, { air: 0.06, adapt: 0.03 }),
+      ST_("\u30B8\u30A7\u30C3\u30C8\u306E\u6642\u4EE3", ["jet_engine"], 800, { air: 0.07 }),
+      ST_("\u30B9\u30C6\u30EB\u30B9\u512A\u4F4D", ["stealth"], 960, { air: 0.07, off: 0.03 }),
+      ST_("\u5B87\u5B99\u304B\u3089\u306E\u5236\u7A7A", ["orbital_warfare"], 1150, { air: 0.06, def: 0.04 })
+    ]),
+    SC("strategic", "air", "\u6226\u7565\u7206\u6483", "\u5F8C\u65B9\u306E\u5DE5\u696D\u3068\u90FD\u5E02\u3092\u53E9\u304D\u3001\u6226\u4E89\u306E\u7D99\u7D9A\u529B\u3092\u596A\u3046\u3002", [
+      ST_("\u7206\u6483\u306E\u69CB\u60F3", ["military_aviation"], 320, { air: 0.03, strike: 0.03 }),
+      ST_("\u91CD\u7206\u6483", ["bomber_aircraft"], 480, { strike: 0.07, siege: 0.05 }),
+      ST_("\u9AD8\u9AD8\u5EA6\u306E\u7206\u6483", ["jet_engine"], 660, { strike: 0.07, siege: 0.05 }),
+      ST_("\u5F3E\u9053\u30DF\u30B5\u30A4\u30EB", ["ballistic_missile"], 820, { strike: 0.08, def: 0.03 }),
+      ST_("\u6838\u306E\u6291\u6B62", ["nuclear_arsenal"], 980, { strike: 0.08, def: 0.06 }),
+      ST_("\u6975\u8D85\u97F3\u901F\u306E\u6253\u6483", ["hypersonic_weapons"], 1150, { strike: 0.08, off: 0.04 })
+    ]),
+    SC("support", "air", "\u6226\u5834\u652F\u63F4", "\u5730\u4E0A\u8ECD\u306B\u5BC4\u308A\u6DFB\u3044\u3001\u8FD1\u63A5\u306E\u822A\u7A7A\u652F\u63F4\u3068\u5075\u5BDF\u3092\u63D0\u4F9B\u3059\u308B\u3002", [
+      ST_("\u89B3\u6E2C\u3068\u9023\u7D61", ["military_aviation"], 320, { air: 0.03, adapt: 0.03 }),
+      ST_("\u8FD1\u63A5\u652F\u63F4", ["fighter_aircraft"], 460, { air: 0.04, off: 0.03, adapt: 0.03 }),
+      ST_("\u7A7A\u4E2D\u6A5F\u52D5", ["helicopter"], 640, { off: 0.05, adapt: 0.04 }),
+      ST_("\u8A98\u5C0E\u5175\u5668\u306E\u652F\u63F4", ["guided_munitions"], 800, { off: 0.06, siege: 0.04, air: 0.04 }),
+      ST_("\u7121\u4EBA\u6A5F\u306E\u7FA4\u308C", ["drone_warfare"], 960, { off: 0.05, air: 0.05, attr: 0.03 }),
+      ST_("\u81EA\u5F8B\u3059\u308B\u652F\u63F4", ["autonomous_systems"], 1150, { off: 0.06, air: 0.05, adapt: 0.04 })
+    ])
+  ]);
+  var SCHOOL_BY_ID = Object.freeze(Object.fromEntries(SCHOOLS.map((s) => [s.id, s])));
+  var SCHOOL_NODES = Object.freeze(SCHOOLS.flatMap((s) => s.tiers.map((x, i) => Object.freeze({ id: `${s.service}:${s.id}:${i + 1}`, ja: x.ja, branch: `${s.service}:${s.id}`, tier: i + 1, prereq: i ? [`${s.service}:${s.id}:${i}`] : [], tech: x.tech, cost: x.cost, fx: x.fx, special: false, service: s.service, school: s.id }))));
+  var SCHOOL_NODE_BY_ID = Object.freeze(Object.fromEntries(SCHOOL_NODES.map((d) => [d.id, d])));
+  var SERVICE_JA = Object.freeze({ land: "\u9678\u8ECD", sea: "\u6D77\u8ECD", air: "\u7A7A\u8ECD" });
   var S = (id, ja, score, tiers) => ({ id, ja, score, tiers });
-  var T = (ja, tier, tech, cost, fx3) => ({ ja, tier, tech, cost, fx: fx3 });
-  var sat2 = (x, k = 1) => Math.max(0, Math.min(1, x / k));
+  var T2 = (ja, tier, tech, cost, fx3) => ({ ja, tier, tech, cost, fx: fx3 });
+  var sat3 = (x, k = 1) => Math.max(0, Math.min(1, x / k));
   var SPECIAL_TEMPLATES = Object.freeze([
-    S("steppe_riders", "\u8349\u539F\u306E\u9A0E\u5C04", (i) => 0.9 * i.pastoral + 0.5 * i.steppe, [T("\u9A0E\u99AC\u306E\u6C0F\u65CF\u8ECD", 1, [], 30, { off: 0.04, adapt: 0.03 }), T("\u79FB\u52D5\u3059\u308B\u672C\u55B6", 2, ["horse_riding"], 70, { logi: 0.07, adapt: 0.04 }), T("\u5305\u56F2\u3068\u507D\u88C5\u9000\u5374", 3, ["horse_riding"], 130, { off: 0.07, attr: 0.04 })]),
-    S("mountain_war", "\u5C71\u5CB3\u6226", (i) => 1.1 * i.mountain, [T("\u5CE0\u306E\u5B88\u308A", 1, [], 30, { def: 0.06 }), T("\u5C71\u306E\u9698\u8DEF", 2, [], 70, { def: 0.05, adapt: 0.05 }), T("\u5C71\u306E\u904A\u6483", 3, ["bow"], 120, { off: 0.04, attr: 0.06, adapt: 0.04 })]),
-    S("river_war", "\u6CB3\u5DDD\u30FB\u6E7F\u5730\u6226", (i) => 1 * i.river + 0.3 * i.wet, [T("\u6E21\u6CB3\u306E\u5099\u3048", 1, [], 30, { adapt: 0.04, def: 0.02 }), T("\u6CB3\u5DDD\u306E\u821F\u5175", 2, ["seafaring"], 70, { naval: 0.06, logi: 0.04 }), T("\u6C34\u9678\u306E\u6A5F\u52D5", 3, ["shipbuilding"], 120, { off: 0.04, landing: 0.06, adapt: 0.03 })]),
-    S("warband", "\u6226\u58EB\u56E3\u306E\u7D46", (i) => (i.polity === "tribal" ? 0.7 : i.polity === "chiefdom" ? 0.55 : 0) + 0.3 * i.inf.military, [T("\u8972\u6483\u306E\u4F5C\u6CD5", 1, [], 25, { off: 0.05 }), T("\u6226\u58EB\u56E3\u306E\u8A93\u3044", 2, [], 50, { off: 0.04, coh: 0.05 }), T("\u9996\u9577\u306E\u89AA\u885B", 3, ["bronze_weapons"], 100, { def: 0.05, coh: 0.06 })]),
-    S("feudal_knights", "\u5C01\u5EFA\u306E\u8ECD\u5F79", (i) => (i.polity === "kingdom" ? 0.6 : 0) + 0.8 * i.inf.nobility, [T("\u9818\u4E3B\u306E\u8ECD\u5F79", 1, [], 50, { off: 0.04, def: 0.03 }), T("\u9A0E\u58EB\u56E3", 2, ["horse_riding"], 120, { off: 0.08, coh: 0.03 }), T("\u57CE\u585E\u3068\u5C01\u571F", 3, ["fortification"], 150, { def: 0.08, attr: 0.03 })]),
-    S("temple_host", "\u8056\u6226\u3068\u795E\u6BBF", (i) => (i.polity === "theocracy" ? 0.8 : 0) + 0.9 * i.inf.clergy, [T("\u8056\u6226\u306E\u6559\u3048", 1, [], 60, { off: 0.06, coh: 0.04 }), T("\u795E\u6BBF\u5B88\u8B77", 2, ["construction"], 90, { def: 0.07, coh: 0.04 }), T("\u6B89\u6559\u306E\u899A\u609F", 3, [], 130, { attr: 0.07, coh: 0.06 })]),
-    S("citizen_army", "\u5E02\u6C11\u306E\u8ECD", (i) => (i.polity === "republic" ? 0.7 : 0) + 0.7 * i.inf.commoners, [T("\u5E02\u6C11\u7686\u5175", 1, [], 55, { def: 0.06, coh: 0.03 }), T("\u5E02\u6C11\u306E\u6226\u5217", 2, ["iron_weapons"], 110, { off: 0.04, def: 0.05, coh: 0.04 }), T("\u5FD7\u9858\u306E\u5C06\u6821", 3, ["writing"], 160, { off: 0.05, coh: 0.06 })]),
-    S("imperial_legions", "\u8ECD\u56E3\u3068\u5B98\u50DA", (i) => (i.polity === "empire" ? 0.8 : 0) + (i.admin ? 0.4 : 0) + 0.3 * i.inf.military, [T("\u8ECD\u56E3\u5236", 1, ["iron_weapons"], 130, { off: 0.06, def: 0.04 }), T("\u8857\u9053\u3068\u99D0\u5C6F", 2, ["construction"], 150, { logi: 0.1, def: 0.03 }), T("\u5B98\u50DA\u306E\u5175\u7AD9", 3, ["administration"], 220, { logi: 0.08, attr: 0.05 })]),
-    S("maritime_league", "\u6D77\u4E0A\u306E\u8B77\u308A", (i) => 0.9 * i.coast + 0.6 * i.inf.merchants + 0.4 * sat2(i.trade, 1), [T("\u6CBF\u5CB8\u306E\u8B77\u885B\u8239", 1, ["seafaring"], 50, { naval: 0.06 }), T("\u5546\u8239\u306E\u6B66\u88C5", 2, ["shipbuilding"], 110, { naval: 0.08, logi: 0.04 }), T("\u901A\u5546\u8DEF\u306E\u5236\u6D77", 3, ["naval_warfare"], 200, { naval: 0.1, landing: 0.05 })]),
-    S("fortress_towns", "\u57CE\u5E02\u306E\u5B88\u308A", (i) => 0.9 * i.city + 0.5 * sat2(i.expDef, 6), [T("\u57CE\u9580\u3068\u5E02\u58C1", 1, [], 40, { def: 0.06 }), T("\u5E02\u6C11\u306E\u5B88\u5099\u968A", 2, ["fortification"], 100, { def: 0.07, coh: 0.04 }), T("\u7C60\u57CE\u306E\u5099\u84C4", 3, ["fortification"], 150, { attr: 0.07, def: 0.05 })]),
-    S("expedition", "\u9060\u5F81\u306E\u8ECD", (i) => 0.8 * sat2(i.expOff, 8) + (i.polity === "empire" || i.polity === "kingdom" ? 0.25 : 0), [T("\u9060\u5F81\u306E\u968A\u5217", 1, [], 60, { logi: 0.05, off: 0.03 }), T("\u73FE\u5730\u8ABF\u9054", 2, [], 110, { logi: 0.08, attr: 0.03 }), T("\u96FB\u6483\u306E\u9032\u8ECD", 3, ["military_logistics"], 200, { off: 0.07, adapt: 0.05 })]),
-    S("irregular_war", "\u7FA9\u52C7\u3068\u904A\u6483", (i) => 0.7 * sat2(i.expLost, 6) + 0.4 * (1 - i.stability), [T("\u5728\u5730\u306E\u7FA9\u52C7", 1, [], 25, { def: 0.04, adapt: 0.04 }), T("\u904A\u6483\u3068\u64B9\u4E71", 2, [], 60, { attr: 0.05, adapt: 0.05 }), T("\u4F4F\u6C11\u306E\u652F\u3048", 3, [], 100, { coh: 0.07, def: 0.04 })]),
+    S("steppe_riders", "\u8349\u539F\u306E\u9A0E\u5C04", (i) => 0.9 * i.pastoral + 0.5 * i.steppe, [T2("\u9A0E\u99AC\u306E\u6C0F\u65CF\u8ECD", 1, [], 30, { off: 0.04, adapt: 0.03 }), T2("\u79FB\u52D5\u3059\u308B\u672C\u55B6", 2, ["horse_riding"], 70, { logi: 0.07, adapt: 0.04 }), T2("\u5305\u56F2\u3068\u507D\u88C5\u9000\u5374", 3, ["horse_riding"], 130, { off: 0.07, attr: 0.04 })]),
+    S("mountain_war", "\u5C71\u5CB3\u6226", (i) => 1.1 * i.mountain, [T2("\u5CE0\u306E\u5B88\u308A", 1, [], 30, { def: 0.06 }), T2("\u5C71\u306E\u9698\u8DEF", 2, [], 70, { def: 0.05, adapt: 0.05 }), T2("\u5C71\u306E\u904A\u6483", 3, ["bow"], 120, { off: 0.04, attr: 0.06, adapt: 0.04 })]),
+    S("river_war", "\u6CB3\u5DDD\u30FB\u6E7F\u5730\u6226", (i) => 1 * i.river + 0.3 * i.wet, [T2("\u6E21\u6CB3\u306E\u5099\u3048", 1, [], 30, { adapt: 0.04, def: 0.02 }), T2("\u6CB3\u5DDD\u306E\u821F\u5175", 2, ["seafaring"], 70, { naval: 0.06, logi: 0.04 }), T2("\u6C34\u9678\u306E\u6A5F\u52D5", 3, ["shipbuilding"], 120, { off: 0.04, landing: 0.06, adapt: 0.03 })]),
+    S("warband", "\u6226\u58EB\u56E3\u306E\u7D46", (i) => (i.polity === "tribal" ? 0.7 : i.polity === "chiefdom" ? 0.55 : 0) + 0.3 * i.inf.military, [T2("\u8972\u6483\u306E\u4F5C\u6CD5", 1, [], 25, { off: 0.05 }), T2("\u6226\u58EB\u56E3\u306E\u8A93\u3044", 2, [], 50, { off: 0.04, coh: 0.05 }), T2("\u9996\u9577\u306E\u89AA\u885B", 3, ["bronze_weapons"], 100, { def: 0.05, coh: 0.06 })]),
+    S("feudal_knights", "\u5C01\u5EFA\u306E\u8ECD\u5F79", (i) => (i.polity === "kingdom" ? 0.6 : 0) + 0.8 * i.inf.nobility, [T2("\u9818\u4E3B\u306E\u8ECD\u5F79", 1, [], 50, { off: 0.04, def: 0.03 }), T2("\u9A0E\u58EB\u56E3", 2, ["horse_riding"], 120, { off: 0.08, coh: 0.03 }), T2("\u57CE\u585E\u3068\u5C01\u571F", 3, ["fortification"], 150, { def: 0.08, attr: 0.03 })]),
+    S("temple_host", "\u8056\u6226\u3068\u795E\u6BBF", (i) => (i.polity === "theocracy" ? 0.8 : 0) + 0.9 * i.inf.clergy, [T2("\u8056\u6226\u306E\u6559\u3048", 1, [], 60, { off: 0.06, coh: 0.04 }), T2("\u795E\u6BBF\u5B88\u8B77", 2, ["construction"], 90, { def: 0.07, coh: 0.04 }), T2("\u6B89\u6559\u306E\u899A\u609F", 3, [], 130, { attr: 0.07, coh: 0.06 })]),
+    S("citizen_army", "\u5E02\u6C11\u306E\u8ECD", (i) => (i.polity === "republic" ? 0.7 : 0) + 0.7 * i.inf.commoners, [T2("\u5E02\u6C11\u7686\u5175", 1, [], 55, { def: 0.06, coh: 0.03 }), T2("\u5E02\u6C11\u306E\u6226\u5217", 2, ["iron_weapons"], 110, { off: 0.04, def: 0.05, coh: 0.04 }), T2("\u5FD7\u9858\u306E\u5C06\u6821", 3, ["writing"], 160, { off: 0.05, coh: 0.06 })]),
+    S("imperial_legions", "\u8ECD\u56E3\u3068\u5B98\u50DA", (i) => (i.polity === "empire" ? 0.8 : 0) + (i.admin ? 0.4 : 0) + 0.3 * i.inf.military, [T2("\u8ECD\u56E3\u5236", 1, ["iron_weapons"], 130, { off: 0.06, def: 0.04 }), T2("\u8857\u9053\u3068\u99D0\u5C6F", 2, ["construction"], 150, { logi: 0.1, def: 0.03 }), T2("\u5B98\u50DA\u306E\u5175\u7AD9", 3, ["administration"], 220, { logi: 0.08, attr: 0.05 })]),
+    S("maritime_league", "\u6D77\u4E0A\u306E\u8B77\u308A", (i) => 0.9 * i.coast + 0.6 * i.inf.merchants + 0.4 * sat3(i.trade, 1), [T2("\u6CBF\u5CB8\u306E\u8B77\u885B\u8239", 1, ["seafaring"], 50, { naval: 0.06 }), T2("\u5546\u8239\u306E\u6B66\u88C5", 2, ["shipbuilding"], 110, { naval: 0.08, logi: 0.04 }), T2("\u901A\u5546\u8DEF\u306E\u5236\u6D77", 3, ["naval_warfare"], 200, { naval: 0.1, landing: 0.05 })]),
+    S("fortress_towns", "\u57CE\u5E02\u306E\u5B88\u308A", (i) => 0.9 * i.city + 0.5 * sat3(i.expDef, 6), [T2("\u57CE\u9580\u3068\u5E02\u58C1", 1, [], 40, { def: 0.06 }), T2("\u5E02\u6C11\u306E\u5B88\u5099\u968A", 2, ["fortification"], 100, { def: 0.07, coh: 0.04 }), T2("\u7C60\u57CE\u306E\u5099\u84C4", 3, ["fortification"], 150, { attr: 0.07, def: 0.05 })]),
+    S("expedition", "\u9060\u5F81\u306E\u8ECD", (i) => 0.8 * sat3(i.expOff, 8) + (i.polity === "empire" || i.polity === "kingdom" ? 0.25 : 0), [T2("\u9060\u5F81\u306E\u968A\u5217", 1, [], 60, { logi: 0.05, off: 0.03 }), T2("\u73FE\u5730\u8ABF\u9054", 2, [], 110, { logi: 0.08, attr: 0.03 }), T2("\u96FB\u6483\u306E\u9032\u8ECD", 3, ["military_logistics"], 200, { off: 0.07, adapt: 0.05 })]),
+    S("irregular_war", "\u7FA9\u52C7\u3068\u904A\u6483", (i) => 0.7 * sat3(i.expLost, 6) + 0.4 * (1 - i.stability), [T2("\u5728\u5730\u306E\u7FA9\u52C7", 1, [], 25, { def: 0.04, adapt: 0.04 }), T2("\u904A\u6483\u3068\u64B9\u4E71", 2, [], 60, { attr: 0.05, adapt: 0.05 }), T2("\u4F4F\u6C11\u306E\u652F\u3048", 3, [], 100, { coh: 0.07, def: 0.04 })]),
     // 下の 2 つは、どの条件にも当てはまらない国家の受け皿
-    S("levy_tradition", "\u6C11\u5175\u306E\u4F1D\u7D71", () => 0.1, [T("\u6751\u306E\u6C11\u5175", 1, [], 20, { def: 0.04 }), T("\u5B63\u7BC0\u306E\u52D5\u54E1", 2, [], 50, { logi: 0.04, off: 0.03 }), T("\u5728\u90F7\u306E\u5C06", 3, [], 90, { coh: 0.05, off: 0.03 })]),
-    S("border_guard", "\u8FBA\u5883\u306E\u5B88\u308A", () => 0.09, [T("\u70FD\u706B\u3068\u7826", 1, [], 25, { def: 0.04, adapt: 0.02 }), T("\u8FBA\u5883\u306E\u5C6F\u7530", 2, [], 60, { logi: 0.05 }), T("\u56FD\u5883\u306E\u6A5F\u52D5", 3, [], 100, { adapt: 0.05, off: 0.03 })])
+    S("levy_tradition", "\u6C11\u5175\u306E\u4F1D\u7D71", () => 0.1, [T2("\u6751\u306E\u6C11\u5175", 1, [], 20, { def: 0.04 }), T2("\u5B63\u7BC0\u306E\u52D5\u54E1", 2, [], 50, { logi: 0.04, off: 0.03 }), T2("\u5728\u90F7\u306E\u5C06", 3, [], 90, { coh: 0.05, off: 0.03 })]),
+    S("border_guard", "\u8FBA\u5883\u306E\u5B88\u308A", () => 0.09, [T2("\u70FD\u706B\u3068\u7826", 1, [], 25, { def: 0.04, adapt: 0.02 }), T2("\u8FBA\u5883\u306E\u5C6F\u7530", 2, [], 60, { logi: 0.05 }), T2("\u56FD\u5883\u306E\u6A5F\u52D5", 3, [], 100, { adapt: 0.05, off: 0.03 })])
   ]);
   var TPL = Object.freeze(Object.fromEntries(SPECIAL_TEMPLATES.map((t) => [t.id, t])));
   function doctrineInfo(ctx2, st2) {
@@ -6935,9 +7753,9 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     const keep = new Set(prev.map((b) => b.key)), list = SPECIAL_TEMPLATES.map((t) => ({ t, s: t.score(info) + (keep.has(t.id) ? 0.12 : 0) })).sort((a, b) => b.s - a.s || (a.t.id < b.t.id ? -1 : 1)).slice(0, 3);
     return list.map(({ t }, bi) => ({ key: t.id, ja: t.ja, lane: bi, nodes: t.tiers.map((x) => ({ id: `sp:${t.id}:${x.tier}`, ja: x.ja, branch: `sp:${t.id}`, tier: x.tier, prereq: x.tier > 1 ? [`sp:${t.id}:${x.tier - 1}`] : [], tech: x.tech, cost: x.cost, fx: x.fx, special: true })) }));
   }
-  var nodesOf = (st2) => [...COMMON_NODES, ...(st2.military?.special ?? []).flatMap((b) => b.nodes)];
-  var nodeOf = (st2, id) => COMMON_BY_ID[id] ?? (st2.military?.special ?? []).flatMap((b) => b.nodes).find((n3) => n3.id === id) ?? null;
-  var branchesOf = (st2) => [...COMMON_BRANCHES.map((b) => ({ ...b, special: false })), ...(st2.military?.special ?? []).map((b) => ({ id: `sp:${b.key}`, ja: b.ja, special: true }))];
+  var nodesOf = (st2) => [...COMMON_NODES, ...SCHOOL_NODES, ...(st2.military?.special ?? []).flatMap((b) => b.nodes)];
+  var nodeOf = (st2, id) => COMMON_BY_ID[id] ?? SCHOOL_NODE_BY_ID[id] ?? (st2.military?.special ?? []).flatMap((b) => b.nodes).find((n3) => n3.id === id) ?? null;
+  var branchesOf = (st2) => [...COMMON_BRANCHES.map((b) => ({ ...b, special: false })), ...SCHOOLS.map((s) => ({ id: `${s.service}:${s.id}`, ja: `${SERVICE_JA[s.service]}\u30FB${s.ja}`, special: false, service: s.service, school: s.id, desc: s.desc })), ...(st2.military?.special ?? []).map((b) => ({ id: `sp:${b.key}`, ja: b.ja, special: true }))];
   function activeNodes(st2) {
     const taken = st2.military?.doctrine?.taken ?? {}, sp = new Set((st2.military?.special ?? []).map((b) => `sp:${b.key}`)), out = [];
     for (const id in taken) {
@@ -6946,6 +7764,11 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     }
     return out;
   }
+  var MASTERY = Object.freeze({ off: 0.02, def: 0.02, coh: 0.03 });
+  var masteredSchools = (st2) => {
+    const taken = st2.military?.doctrine?.taken ?? {};
+    return SCHOOLS.filter((s) => s.tiers.every((_, i) => taken[`${s.service}:${s.id}:${i + 1}`] != null));
+  };
   function doctrineFx(st2) {
     const by = /* @__PURE__ */ new Map();
     for (const n3 of activeNodes(st2)) {
@@ -6953,75 +7776,47 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       for (const k in n3.fx) m[k] = (m[k] ?? 0) + n3.fx[k];
     }
     const out = Object.fromEntries(FX_KEYS.map((k) => [k, 0]));
-    for (const m of by.values()) for (const k in m) out[k] += Math.min(m[k], CAP[k] * BRANCH_SHARE);
-    for (const k of FX_KEYS) out[k] = Math.round(Math.min(out[k], CAP[k]) * 1e3) / 1e3;
+    for (const m of by.values()) for (const k in m) if (k in out) out[k] += Math.min(m[k], CAP[k] * BRANCH_SHARE);
+    for (const s of masteredSchools(st2)) for (const k in MASTERY) out[k] += MASTERY[k];
+    for (const k of FX_KEYS) out[k] = Math.round(Math.max(-CAP[k] * 0.5, Math.min(out[k], CAP[k])) * 1e3) / 1e3;
     return out;
   }
 
   // js/core/wcde/domains/military.js
   var clamp13 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
-  var has = (st2, k) => st2.techAdopted?.[k] != null;
-  var can = (ctx2, st2, cap) => stateCan(ctx2.civ, st2, cap);
-  var UNIT_KINDS = Object.freeze({
-    infantry: { ja: "\u6B69\u5175", need: () => true },
-    ranged: { ja: "\u5F13\u30FB\u6295\u5C04\u5175", need: (st2, ctx2) => can(ctx2, st2, "unit:ranged") },
-    cavalry: { ja: "\u9A0E\u5175", need: (st2, ctx2) => can(ctx2, st2, "unit:cavalry") },
-    navy: { ja: "\u6C34\u8ECD", need: (st2, ctx2) => can(ctx2, st2, "unit:navy") && coastal(ctx2, st2) },
-    garrison: { ja: "\u5B88\u5099\u5175", need: (st2, ctx2) => can(ctx2, st2, "unit:garrison") },
-    firearms: { ja: "\u9283\u5175", need: (st2, ctx2) => can(ctx2, st2, "unit:firearms") }
-  });
-  var TERMS = {
-    infantry: [["gunpowder", "\u7DDA\u5217\u6B69\u5175\u56E3"], ["steel", "\u7CBE\u92ED\u6B69\u5175\u56E3"], ["iron_weapons", "\u91CD\u88C5\u6B69\u5175\u56E3"], ["bronze_weapons", "\u69CD\u5175\u56E3"], [null, "\u6226\u58EB\u56E3"]],
-    ranged: [["steel", "\u5F29\u5175\u56E3"], ["bronze_weapons", "\u5F13\u5175\u56E3"], [null, "\u6295\u5C04\u5175\u56E3"]],
-    cavalry: [["gunpowder", "\u80F8\u7532\u9A0E\u5175\u56E3"], ["iron_weapons", "\u91CD\u9A0E\u5175\u56E3"], [null, "\u9A0E\u99AC\u968A"]],
-    navy: [["gunpowder", "\u5927\u8266\u968A"], ["war:naval", "\u8266\u968A"], [null, "\u821F\u8ECD"]],
-    garrison: [["fortification", "\u57CE\u585E\u5B88\u5099\u8ECD"], [null, "\u5B88\u5099\u968A"]],
-    firearms: [["steel", "\u8FD1\u885B\u9283\u5175\u56E3"], [null, "\u9283\u5175\u56E3"]]
-  };
-  function unitTerm(st2, kind) {
-    for (const [k, t] of TERMS[kind] ?? []) if (k == null || has(st2, k) || k === "war:naval" && st2.techAdopted?.naval_warfare != null) return t;
-    return UNIT_KINDS[kind]?.ja ?? kind;
-  }
-  function unitName(st2, kind) {
-    const fx3 = st2.military?.fx ?? {}, tag = (fx3.off ?? 0) >= 0.06 && (fx3.off ?? 0) >= (fx3.def ?? 0) ? "\u7A81\u6483" : (fx3.def ?? 0) >= 0.08 ? "\u5805\u9663" : "";
-    return `${tag}${unitTerm(st2, kind)}`;
-  }
+  var has2 = (st2, k) => st2.techAdopted?.[k] != null;
+  var UNIT_KINDS = UNIT_TYPES;
   function formationsOf(st2, u) {
-    const per = has(st2, "gunpowder") ? 6e3 : has(st2, "iron_weapons") ? 3e3 : 1200, n3 = Math.max(1, Math.min(6, Math.round(u.size / per))), term = unitName(st2, u.kind), ORD2 = ["\u7B2C\u4E00", "\u7B2C\u4E8C", "\u7B2C\u4E09", "\u7B2C\u56DB", "\u7B2C\u4E94", "\u7B2C\u516D"];
+    const per = has2(st2, "tank") ? 24e3 : has2(st2, "breech_loading") ? 14e3 : has2(st2, "gunpowder") ? 6e3 : has2(st2, "iron_weapons") ? 3e3 : 1200, n3 = Math.max(1, Math.min(6, Math.round(u.size / per))), term = unitName(st2, u.kind), ORD2 = ["\u7B2C\u4E00", "\u7B2C\u4E8C", "\u7B2C\u4E09", "\u7B2C\u56DB", "\u7B2C\u4E94", "\u7B2C\u516D"];
     return Array.from({ length: n3 }, (_, i) => ({ name: n3 === 1 ? term : `${ORD2[i]}${term}`, size: Math.round(u.size / n3 * 10) / 10 }));
   }
-  var coastal = (ctx2, st2) => (byState(ctx2).get(st2.id) ?? []).some((g) => ctx2.world.cell.coastDist[g.cell] <= 1);
-  var shareOf = (ctx2, st2) => {
-    const gs = byState(ctx2).get(st2.id) ?? [], pastoral = gs.length ? gs.filter((g) => g.subsistence === "pastoral").length / gs.length : 0, w = {};
-    for (const [k, def] of Object.entries(UNIT_KINDS)) if (def.need(st2, ctx2)) w[k] = k === "infantry" ? 1 : k === "ranged" ? 0.25 : k === "cavalry" ? 0.2 + 0.5 * pastoral : k === "navy" ? 0.15 : k === "garrison" ? 0.1 : 0.4;
-    if (w.firearms) {
-      delete w.ranged;
-    }
-    const tot = Object.values(w).reduce((a, b) => a + b, 0);
-    for (const k in w) w[k] /= tot;
-    return w;
-  };
   var OFF_CAP = CAP.off;
   var DEF_CAP = CAP.def;
-  var initMilitary = () => ({ units: [], equipLevel: 0.3, readiness: 0.5, doctrine: { taken: {} }, shares: null, special: [], fx: Object.fromEntries(FX_KEYS.map((k) => [k, 0])), exp: { won: 0, lost: 0, defended: 0, sieges: 0, sea: 0, wars: 0 } });
+  var initMilitary = () => ({ units: [], equipLevel: 0.3, readiness: 0.5, doctrine: { taken: {} }, shares: null, orbat: { mode: "auto" }, school: { land: null, sea: null, air: null }, special: [], fx: Object.fromEntries(FX_KEYS.map((k) => [k, 0])), exp: { won: 0, lost: 0, defended: 0, sieges: 0, sea: 0, wars: 0 } });
   function canAdopt(st2, id) {
     const d = nodeOf(st2, id);
     if (!d) return { ok: false, reason: "\u305D\u306E\u30C9\u30AF\u30C8\u30EA\u30F3\u306F\u3042\u308A\u307E\u305B\u3093" };
     const M = st2.military;
     if (M?.doctrine.taken[id] != null) return { ok: false, reason: "\u3059\u3067\u306B\u53D6\u5F97\u6E08\u307F" };
     if (d.special && !(M?.special ?? []).some((b) => `sp:${b.key}` === d.branch)) return { ok: false, reason: `${d.ja}\u306F\u3001\u4ECA\u306E\u3053\u306E\u56FD\u306E\u56FA\u6709\u306E\u7CFB\u7D71\u3067\u306F\u306A\u3044` };
+    if (d.school) {
+      const cur = M?.school?.[d.service];
+      if (cur && cur !== d.school) return { ok: false, reason: `${SERVICE_JA[d.service]}\u306F\u3001\u3059\u3067\u306B\u300C${SCHOOL_BY_ID[cur]?.ja}\u300D\u306E\u8DEF\u7DDA\u3092\u9078\u3093\u3067\u3044\u308B\uFF081 \u3064\u306E\u8ECD\u306B\u3064\u304D\u8DEF\u7DDA\u306F 1 \u3064\uFF09` };
+    }
     for (const p of d.prereq) if (M?.doctrine.taken[p] == null) return { ok: false, reason: `\u524D\u63D0\u306E\u30C9\u30AF\u30C8\u30EA\u30F3\u300C${nodeOf(st2, p)?.ja ?? p}\u300D\u304C\u672A\u53D6\u5F97` };
-    for (const t of d.tech) if (!has(st2, t)) return { ok: false, reason: `\u6280\u8853\u300C${t}\u300D\u304C\u5FC5\u8981` };
+    for (const t of d.tech) if (!has2(st2, t)) return { ok: false, reason: `\u6280\u8853\u300C${t}\u300D\u304C\u5FC5\u8981` };
     if (st2.treasury < d.cost) return { ok: false, reason: `\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044\uFF08${d.cost}\uFF09` };
     return { ok: true };
   }
   function adoptDoctrine(ctx2, st2, id, { provenance = "simulation", decisionId = null } = {}) {
+    var _a, _b;
     const c = canAdopt(st2, id);
     if (!c.ok) return c;
     const { civ: civ7, ids } = ctx2, d = nodeOf(st2, id);
     const M = st2.military ?? (st2.military = initMilitary());
     st2.treasury -= d.cost;
     M.doctrine.taken[id] = civ7.monthIndex;
+    if (d.school) (_a = M.school ?? (M.school = { land: null, sea: null, air: null }))[_b = d.service] ?? (_a[_b] = d.school);
     const ev = makeEvent(civ7, ids, { kind: "doctrine_adopted", title: `${st2.name}\u304C\u300C${d.ja}\u300D\u3092\u53D6\u308A\u5165\u308C\u305F`, participants: [{ entityId: st2.id, role: "state" }], effects: [{ targetId: st2.id, property: "military.doctrine", before: null, after: id }], provenance, decisionId });
     recompute(ctx2, st2);
     return { ok: true, eventId: ev?.eventId ?? null };
@@ -7032,7 +7827,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     if (!same) M.special = next;
   }
   function recompute(ctx2, st2) {
-    const M = st2.military, ind = effective(ctx2.civ, st2, "perCapita"), wTech = (has(st2, "bronze_weapons") ? 0.08 : 0) + (has(st2, "iron_weapons") ? 0.12 : 0) + (has(st2, "steel") ? 0.05 : 0) + (has(st2, "gunpowder") ? 0.1 : 0);
+    const M = st2.military, ind = effective(ctx2.civ, st2, "perCapita"), wTech = (has2(st2, "bronze_weapons") ? 0.08 : 0) + (has2(st2, "iron_weapons") ? 0.12 : 0) + (has2(st2, "steel") ? 0.05 : 0) + (has2(st2, "gunpowder") ? 0.1 : 0);
     M.equipLevel = clamp13(0.15 + 0.35 * clamp13(ind / 1.6) + wTech + (st2.treasury > 0 ? 0.1 : -0.1) + 0.1 * (st2.econ?.investment ?? 0), 0, 1);
     M.readiness = clamp13(0.5 * effective(ctx2.civ, st2, "stability") + 0.3 * (st2.treasury >= 0 ? 1 : 0) + 0.2 * (1 - (st2.politics ? effective(ctx2.civ, st2, "fatigue") : 0)), 0, 1);
     const fx3 = doctrineFx(st2), off = fx3.off, def = fx3.def;
@@ -7040,7 +7835,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     const eqE = effective(ctx2.civ, st2, "equipLevel"), rdE = effective(ctx2.civ, st2, "readiness");
     const sfx = stateFx(st2);
     st2.milBonus = Math.round(clamp13(0.35 * (eqE - 0.3) + 0.15 * (rdE - 0.5) + off + sfx.mil, -0.6, 0.6) * 1e3) / 1e3;
-    st2.milDef = Math.round((def + sfx.def) * 1e3) / 1e3;
+    st2.milDef = Math.round(clamp13(def + sfx.def, 0, 0.4) * 1e3) / 1e3;
   }
   function stepMilitary(ctx2) {
     const { civ: civ7, ids } = ctx2, mi = civ7.monthIndex;
@@ -7048,22 +7843,52 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     for (const st2 of Object.values(civ7.states)) {
       if (!st2.alive) continue;
       const M = st2.military ?? (st2.military = initMilitary());
+      M.school ?? (M.school = { land: null, sea: null, air: null });
+      M.orbat ?? (M.orbat = { mode: "auto" });
       if (!M.special?.length || mi % 12 === 0) refreshSpecial(ctx2, st2);
       recompute(ctx2, st2);
-      const shares = M.shares && Object.keys(M.shares).every((k) => UNIT_KINDS[k]?.need(st2, ctx2)) ? M.shares : shareOf(ctx2, st2);
-      if (M.shares && shares !== M.shares) M.shares = null;
-      const old = new Map(M.units.map((u) => [u.kind, u])), next = [];
-      for (const [k, sh] of Object.entries(shares)) {
+      if (M.shares) {
+        M.shares = null;
+      }
+      if (M.orbat.mode === "manual") {
+        const keep = Object.fromEntries(Object.entries(M.orbat.target ?? {}).filter(([k]) => UNIT_TYPES[k]?.need(st2, ctx2)));
+        if (!Object.keys(keep).length) M.orbat = { mode: "auto" };
+        else M.orbat.target = keep;
+      }
+      const roster = rosterOf(ctx2, st2), old = new Map(M.units.map((u) => [u.kind, u])), next = [];
+      for (const [k, heads] of Object.entries(roster)) {
+        if (!(heads > 0.05)) continue;
         const u = old.get(k) ?? { id: ids.next("unit"), kind: k, name: unitName(st2, k), since: mi };
         u.name = unitName(st2, k);
-        u.size = Math.round(st2.army * sh * 10) / 10;
-        u.equip = Math.round(clamp13(effective(ctx2.civ, st2, "equipLevel") + (k === "firearms" ? 0.1 : k === "cavalry" ? 0.03 : 0)) * 100) / 100;
+        u.service = serviceOf(k);
+        u.size = Math.round(heads * 10) / 10;
+        u.equip = Math.round(clamp13(effective(ctx2.civ, st2, "equipLevel") + (k === "firearms" ? 0.1 : k === "cavalry" ? 0.03 : k === "armor" || k === "fighter" ? 0.06 : 0)) * 100) / 100;
         u.readiness = Math.round(effective(ctx2.civ, st2, "readiness") * 100) / 100;
         next.push(u);
       }
       M.units = next;
       M.armyBasis = st2.army;
     }
+  }
+  function setOrbat(ctx2, st2, { mode, heads }) {
+    const M = st2.military ?? (st2.military = initMilitary());
+    if (mode === "auto") {
+      M.orbat = { mode: "auto" };
+      stepMilitaryNow(ctx2, st2);
+      return { ok: true, cost: 0 };
+    }
+    if (mode !== "manual") return { ok: false, reason: "mode \u306F auto \u304B manual" };
+    const v = validateTarget(ctx2, st2, heads);
+    if (!v.ok) return v;
+    const cur = Object.fromEntries(M.units.map((u) => [u.kind, u.size]));
+    let diff = 0;
+    for (const k of /* @__PURE__ */ new Set([...Object.keys(cur), ...Object.keys(v.target)])) diff += Math.abs((v.target[k] ?? 0) - (cur[k] ?? 0));
+    const cost = Math.round(diff * 5e-4 * 10) / 10;
+    if (st2.treasury < cost) return { ok: false, reason: `\u518D\u7DE8\u306E\u8CBB\u7528 ${cost} \u304C\u8DB3\u308A\u306A\u3044` };
+    st2.treasury -= cost;
+    M.orbat = { mode: "manual", target: v.target };
+    stepMilitaryNow(ctx2, st2);
+    return { ok: true, cost };
   }
   function reorganize(ctx2, st2, shares) {
     const sum = Object.values(shares).reduce((a, b) => a + b, 0);
@@ -7073,18 +7898,13 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       if (!(v >= 0)) return { ok: false, reason: "\u914D\u5206\u306F 0 \u4EE5\u4E0A" };
       if (v > 0 && !UNIT_KINDS[k].need(st2, ctx2)) return { ok: false, reason: `${UNIT_KINDS[k].ja}\u306F\u4ECA\u306E\u6280\u8853\u30FB\u5730\u7406\u3067\u306F\u7DE8\u5236\u3067\u304D\u306A\u3044` };
     }
-    const cost = Math.round(st2.army * 2e-3 * 10) / 10;
-    if (st2.treasury < cost) return { ok: false, reason: `\u518D\u7DE8\u306E\u8CBB\u7528 ${cost} \u304C\u8DB3\u308A\u306A\u3044` };
-    st2.treasury -= cost;
-    (st2.military ?? (st2.military = initMilitary())).shares = Object.fromEntries(Object.entries(shares).filter(([, v]) => v > 0));
-    stepMilitaryNow(ctx2, st2);
-    return { ok: true, cost };
+    const heads = Object.fromEntries(Object.entries(shares).filter(([, v]) => v > 0).map(([k, v]) => [k, Math.round(st2.army * v)]));
+    return setOrbat(ctx2, st2, { mode: "manual", heads });
   }
   function stepMilitaryNow(ctx2, st2) {
     const mi = ctx2.civ.monthIndex;
     const prev = ctx2.civ.monthIndex;
     ctx2.civ.monthIndex = mi - mi % 3;
-    const only = (s) => s;
     try {
       const states = ctx2.civ.states;
       const keep = Object.values(states).filter((s) => s !== st2).map((s) => [s, s.alive]);
@@ -7227,7 +8047,8 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
         for (const d of nodesOf(st2)) {
           const c = canAdopt(st2, d.id);
           if (!c.ok) continue;
-          const x = f2(d), sec = 0.15 + 2.2 * (x.def ?? 0) + 0.8 * (x.off ?? 0) + (at2 ? 0.2 : 0) + 1.2 * (x.attr ?? 0) + 0.8 * (x.coh ?? 0) + (coastal2 ? 1.5 * (x.naval ?? 0) : -0.5 * (x.naval ?? 0)) + 0.6 * (x.logi ?? 0);
+          if (d.service === "sea" && !coastal2) continue;
+          const x = f2(d), taste = d.school ? 0.5 * (hashSeed(ctx2.civ.historySeed, "school", st2.id, d.school) % 1e3 / 1e3) + (st2.military?.school?.[d.service] === d.school ? 0.4 : 0) : 0, sec0 = 0.5 * (x.armor ?? 0) + 0.8 * (x.air ?? 0) + 0.6 * (x.subs ?? 0) + 0.6 * (x.strike ?? 0) + taste, sec = 0.15 + 2.2 * (x.def ?? 0) + 0.8 * (x.off ?? 0) + (at2 ? 0.2 : 0) + 1.2 * (x.attr ?? 0) + 0.8 * (x.coh ?? 0) + (coastal2 ? 1.5 * (x.naval ?? 0) : -0.5 * (x.naval ?? 0)) + 0.6 * (x.logi ?? 0) + sec0;
           out.push(cand2("adopt_doctrine", { security: sec, expansion: 3 * (x.off ?? 0) + 1.2 * (x.siege ?? 0) + 0.8 * (x.landing ?? 0) - d.cost / 2e3 }, { opt: d.id, label: `${d.ja}\u3092\u53D6\u308A\u5165\u308C\u308B` }));
         }
         return out.sort((a, b) => b.factors.security + b.factors.expansion - (a.factors.security + a.factors.expansion) || (a.opt < b.opt ? -1 : 1)).slice(0, 3);
@@ -7290,29 +8111,54 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
 
   // js/core/wcde/power.js
   var clamp15 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
-  var navyShare = (st2) => {
-    const u = (st2.military?.units ?? []).find((x) => x.kind === "navy");
-    return u && st2.army > 0 ? clamp15(u.size / Math.max(1, st2.army)) : 0;
-  };
-  var landShare = (st2) => 1 - navyShare(st2);
+  var navyShare = (st2) => st2.army > 0 ? clamp15(headsOf(st2, "sea") / Math.max(1, st2.army)) : 0;
+  var airShare = (st2) => st2.army > 0 ? clamp15(headsOf(st2, "air") / Math.max(1, st2.army)) : 0;
+  var landShare = (st2) => Math.max(0, 1 - navyShare(st2) - airShare(st2));
   var fx = (st2) => st2.military?.fx ?? {};
+  var COEF = Object.freeze({ cavalry: [0.22, 0.4], firearms: [0.35, 0.5], ranged: [0.1, 0.4], artillery: [0.45, 0.25], armor: [0.9, 0.25], mechanized: [0.5, 0.25], special: [0.8, 0.05], marine: [0.3, 0.1], autonomous: [1, 0.2], powered: [1.2, 0.1] });
   function armsMult(st2, defending = false) {
-    const us = (st2.military?.units ?? []).filter((u) => u.kind !== "navy"), tot = us.reduce((a, u) => a + u.size, 0);
+    const us = (st2.military?.units ?? []).filter((u) => serviceOf(u.kind) === "land"), tot = us.reduce((a, u) => a + u.size, 0);
     if (!(tot > 0)) return 1;
     const sh = (k) => (us.find((u) => u.kind === k)?.size ?? 0) / tot, kinds = us.filter((u) => u.size / tot >= 0.1).length;
-    return 1 + 0.04 * Math.min(3, Math.max(0, kinds - 1)) + 0.22 * Math.min(sh("cavalry"), 0.4) + 0.35 * Math.min(sh("firearms"), 0.5) + 0.1 * Math.min(sh("ranged"), 0.4) + sh("garrison") * (defending ? 0.45 : -0.1);
+    let m = 1 + 0.04 * Math.min(3, Math.max(0, kinds - 1));
+    for (const k in COEF) m += COEF[k][0] * Math.min(sh(k), COEF[k][1]);
+    m += sh("garrison") * (defending ? 0.45 : -0.1) + sh("levy") * (defending ? 0.1 : -0.15);
+    m += (fx(st2).armor ?? 0) * Math.min(0.6, sh("armor") + sh("mechanized") + sh("powered")) * 2;
+    return m;
+  }
+  var AIR_W = Object.freeze({ air_corps: 0.6, fighter: 1, bomber: 0.9, helicopter: 0.8, drone: 0.7, missile: 0.9, strategic: 0.3, cyber: 0.4, orbital: 0.6 });
+  function airPower(st2) {
+    let p = 0;
+    for (const u of st2.military?.units ?? []) if (AIR_W[u.kind]) p += u.size * AIR_W[u.kind];
+    return p;
+  }
+  function airSupport(st2) {
+    const ap = airPower(st2);
+    if (!(ap > 0)) return 0;
+    const land = Math.max(1, st2.army * landShare(st2));
+    return clamp15(2 * ap / (land + ap) * (1 + 2 * (fx(st2).air ?? 0)), 0, 0.45);
+  }
+  function deterrence(st2) {
+    const n3 = (st2.military?.units ?? []).find((u) => u.kind === "strategic")?.size ?? 0;
+    return clamp15(Math.sqrt(n3) / 600, 0, 0.2);
+  }
+  function navalMix(st2) {
+    const us = (st2.military?.units ?? []).filter((u) => serviceOf(u.kind) === "sea"), tot = us.reduce((a, u) => a + u.size, 0);
+    if (!(tot > 0)) return 1;
+    const sh = (k) => (us.find((u) => u.kind === k)?.size ?? 0) / tot;
+    return 1 + 0.35 * Math.min(sh("capital_ship"), 0.4) + 0.3 * Math.min(sh("submarine"), 0.3) * (1 + 3 * (fx(st2).subs ?? 0)) + 0.5 * Math.min(sh("carrier"), 0.2) * (1 + 2 * (fx(st2).air ?? 0));
   }
   function landPower(civ7, st2, size = null, { defending = false } = {}) {
     const n3 = size ?? st2.army * landShare(st2);
     const attack = milMult(st2, civ7) * armsMult(st2, defending) * (0.85 + 0.3 * effective(civ7, st2, "readiness"));
-    const guard = defending ? 1 + ((st2.defense ?? 0) + (st2.milDef ?? 0)) * 0.5 : 1;
+    const guard = defending ? 1 + ((st2.defense ?? 0) + (st2.milDef ?? 0)) * 0.5 + deterrence(st2) : 1;
     return n3 * attack * guard;
   }
   function navalPower(civ7, st2, size = null) {
     const n3 = size ?? st2.army * navyShare(st2);
     if (!(n3 > 0)) return 0;
     const tech = stateCan(civ7, st2, "war:naval") ? 1.3 : stateCan(civ7, st2, "unit:navy") ? 1 : 0.4;
-    return n3 * milMult(st2, civ7) * (1 + 1.2 * (fx(st2).naval ?? 0)) * tech * (0.85 + 0.3 * effective(civ7, st2, "readiness"));
+    return n3 * milMult(st2, civ7) * (1 + 1.2 * (fx(st2).naval ?? 0)) * tech * navalMix(st2) * (0.85 + 0.3 * effective(civ7, st2, "readiness"));
   }
   var supplyRange = (civ7, st2) => 650 * (1 + 2.2 * (fx(st2).logi ?? 0)) * (stateCan(civ7, st2, "war:far") ? 1.7 : 1) * (st2.polity === "empire" ? 1.15 : 1);
   var supplyAt = (civ7, st2, distKm2) => clamp15(1 - Math.max(0, distKm2 - supplyRange(civ7, st2)) / (supplyRange(civ7, st2) * 1.2));
@@ -7339,8 +8185,10 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   var clamp16 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
   var r1 = (x) => Math.round(x * 10) / 10;
   var r22 = (x) => Math.round(x * 100) / 100;
-  var CORPS_MAX = 8;
-  var POOL_MAX = 8;
+  var CORPS_MAX = 12;
+  var POOL_MAX = 12;
+  var SERVICE_CAP = Object.freeze({ land: 6, sea: 3, air: 3 });
+  var AI_CAP = Object.freeze({ land: 4, sea: 2, air: 2 });
   var OFFICER_SLOTS = Object.freeze({ vanguard: "\u5148\u92D2", quartermaster: "\u5175\u7AD9", strategist: "\u53C2\u8B00" });
   var ORDER_KINDS = Object.freeze({ auto: "\u304A\u4EFB\u305B\uFF08\u81EA\u52D5\u306E\u4F5C\u6226\uFF09", hold: "\u5F85\u6A5F", march: "\u9032\u8ECD", siege: "\u5305\u56F2", defend: "\u5B88\u5099", retreat: "\u64A4\u9000", reserve: "\u4E88\u5099\uFF08\u6226\u4E89\u306B\u51FA\u3055\u306A\u3044\uFF09" });
   var TRAITS = Object.freeze({
@@ -7353,111 +8201,234 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     cautious: { ja: "\u614E\u91CD", def: 0.04, off: -0.05 },
     vain: { ja: "\u540D\u8A89\u6B32", off: 0.03, logi: -0.06 },
     frugal: { ja: "\u5039\u7D04\u5BB6", logi: 0.06, coh: -0.04 },
-    veteran: { ja: "\u6B74\u6226", off: 0.03, def: 0.03 }
+    veteran: { ja: "\u6B74\u6226", off: 0.03, def: 0.03 },
+    // v6.13.0: 軍ごとの特性（その軍の指揮官だけが持つ）
+    armored_thinker: { ja: "\u6A5F\u7532\u306E\u9583\u304D", off: 0.07, svc: "land" },
+    logistician: { ja: "\u5175\u7AD9\u306E\u9B3C", logi: 0.1, svc: "land" },
+    storm_wise: { ja: "\u8352\u6D77\u306E\u5C06", logi: 0.08, coh: 0.05, svc: "sea" },
+    gunnery: { ja: "\u7832\u8853\u306E\u540D\u624B", off: 0.07, svc: "sea" },
+    convoy: { ja: "\u8B77\u885B\u306E\u9054\u4EBA", def: 0.06, logi: 0.04, svc: "sea" },
+    air_ace: { ja: "\u6483\u589C\u738B", off: 0.08, svc: "air" },
+    air_strategist: { ja: "\u6226\u7565\u773C", siege: 0.12, svc: "air" },
+    air_defender: { ja: "\u9632\u7A7A\u306E\u540D\u624B", def: 0.08, svc: "air" }
   });
   var TRAIT_KEYS = Object.keys(TRAITS);
-  var ORD = ["\u7B2C\u4E00", "\u7B2C\u4E8C", "\u7B2C\u4E09", "\u7B2C\u56DB", "\u7B2C\u4E94", "\u7B2C\u516D", "\u7B2C\u4E03", "\u7B2C\u516B"];
+  var traitsFor = (svc) => TRAIT_KEYS.filter((k) => !TRAITS[k].svc || TRAITS[k].svc === svc);
+  var ORD = ["\u7B2C\u4E00", "\u7B2C\u4E8C", "\u7B2C\u4E09", "\u7B2C\u56DB", "\u7B2C\u4E94", "\u7B2C\u516D", "\u7B2C\u4E03", "\u7B2C\u516B", "\u7B2C\u4E5D", "\u7B2C\u5341", "\u7B2C\u5341\u4E00", "\u7B2C\u5341\u4E8C"];
   var idOf = (S3, p) => `${p}${++S3.seq}`;
   var corpsOf = (st2) => st2.corps?.list ?? [];
   var corpsById = (st2, id) => corpsOf(st2).find((c) => c.id === id) ?? null;
   var fkeysOf = (st2) => Object.keys(st2.politics?.factions ?? {});
-  function genPerson(ctx2, st2, tag, { minSkill = 0.25, spread = 0.6 } = {}) {
+  var rankOf = (p) => {
+    const R = SERVICES[p?.service ?? "land"].ranks, s = p?.skill ?? 0;
+    return R[s < 0.4 ? 0 : s < 0.6 ? 1 : s < 0.8 ? 2 : 3];
+  };
+  function genPerson(ctx2, st2, tag, { minSkill = 0.25, spread = 0.6, service = "land" } = {}) {
     const { civ: civ7 } = ctx2, S3 = st2.corps, seed = hashSeed(civ7.historySeed, "cp", st2.id, tag, S3.seq + 1), r = rngOf(seed), cap = civ7.groups[st2.capitalGroupId];
-    const name = ctx2.nameGen?.person(civ7, cap, r) ?? `\u5C06${S3.seq + 1}`, n3 = r() < 0.55 ? 1 : r() < 0.6 ? 0 : 2, traits = [];
+    const name = ctx2.nameGen?.person(civ7, cap, r) ?? `\u5C06${S3.seq + 1}`, n3 = r() < 0.55 ? 1 : r() < 0.6 ? 0 : 2, traits = [], pool = traitsFor(service);
     while (traits.length < n3) {
-      const k = TRAIT_KEYS[Math.floor(r() * TRAIT_KEYS.length)];
+      const k = pool[Math.floor(r() * pool.length)];
       if (!traits.includes(k)) traits.push(k);
     }
     const keys = fkeysOf(st2);
-    return { id: idOf(S3, "pp"), name, skill: r22(minSkill + spread * r()), traits, xp: 0, age: 28 + Math.floor(r() * 25), backer: r() < 0.6 && keys.includes("military") ? "military" : keys.includes("nobility") ? "nobility" : "military", since: civ7.monthIndex };
+    return { id: idOf(S3, "pp"), name, service, skill: r22(minSkill + spread * r()), traits, xp: 0, age: 28 + Math.floor(r() * 25), backer: r() < 0.6 && keys.includes("military") ? "military" : keys.includes("nobility") ? "nobility" : "military", since: civ7.monthIndex };
   }
+  var serviceUsable = (ctx2, st2, svc) => svc === "land" || Object.values(UNIT_TYPES).some((T4) => T4.service === svc && T4.need(st2, ctx2));
   function refreshPool(ctx2, st2, force = false) {
     const S3 = st2.corps, mi = ctx2.civ.monthIndex;
-    if (!S3) return;
+    if (!S3 || !st2.player) return;
     if (!force && mi - (S3.poolAt ?? -999) < 12) return;
     S3.poolAt = mi;
     S3.pool = (S3.pool ?? []).filter((p) => mi - p.since < 120);
-    while (S3.pool.length < POOL_MAX && (force || S3.pool.length < 4 || hashSeed(ctx2.civ.historySeed, "pool", st2.id, mi, S3.pool.length) % 3 === 0)) {
+    for (const p of S3.pool) p.service ?? (p.service = "land");
+    for (const svc of SERVICE_KEYS) {
+      if (!serviceUsable(ctx2, st2, svc)) continue;
+      const want = svc === "land" ? 4 : 2;
+      let n3 = S3.pool.filter((p) => p.service === svc).length;
+      while (n3 < want && S3.pool.length < POOL_MAX + 4) {
+        S3.pool.push(genPerson(ctx2, st2, `pool${mi}${svc}`, { service: svc }));
+        n3++;
+      }
+    }
+    while (S3.pool.length < POOL_MAX && (force || hashSeed(ctx2.civ.historySeed, "pool", st2.id, mi, S3.pool.length) % 3 === 0)) {
       S3.pool.push(genPerson(ctx2, st2, `pool${mi}`));
-      if (!force && S3.pool.length >= 4 && S3.pool.length >= POOL_MAX) break;
+      if (!force && S3.pool.length >= 4) break;
     }
   }
-  function corpsFx(cp) {
+  function corpsFx(cp, st2 = null) {
     const fx3 = { off: 0, def: 0, siege: 0, logi: 0, coh: 0, skill: 0 }, add = (p, wt) => {
       if (!p) return;
       fx3.skill += (p.skill - 0.5) * 0.2 * wt;
       for (const t of p.traits ?? []) {
-        const T3 = TRAITS[t];
-        if (!T3) continue;
-        for (const k of ["off", "def", "siege", "logi", "coh"]) if (T3[k]) fx3[k] += T3[k] * wt;
+        const T4 = TRAITS[t];
+        if (!T4) continue;
+        for (const k of ["off", "def", "siege", "logi", "coh"]) if (T4[k]) fx3[k] += T4[k] * wt;
       }
     };
     add(cp.commander, 1);
     for (const o of Object.values(cp.officers ?? {})) add(o, 0.4);
+    add(st2?.corps?.chiefs?.[cp.service ?? "land"], 0.35);
     for (const k of Object.keys(fx3)) fx3[k] = r22(clamp16(fx3[k], -0.2, 0.2));
     return fx3;
   }
   function cmdMult(st2, F, role) {
-    if (!F?.corpsId) return 1;
-    const cp = corpsById(st2, F.corpsId);
+    const id = F?.corpsId ?? F?.lead;
+    if (!id) return 1;
+    const cp = corpsById(st2, id);
     if (!cp) return 1;
-    const fx3 = corpsFx(cp);
+    const fx3 = corpsFx(cp, st2);
     return 1 + clamp16(fx3.skill + (role === "atk" ? fx3.off : fx3.def), -0.25, 0.3);
   }
-  var perCorps = (st2) => st2.techAdopted?.gunpowder != null ? 14e3 : st2.techAdopted?.iron_weapons != null ? 7500 : 3e3;
-  function landKinds(st2) {
-    const us = (st2.military?.units ?? []).filter((u) => u.kind !== "navy" && u.size > 0), tot = us.reduce((a, u) => a + u.size, 0);
-    return tot > 0 ? us.map((u) => [u.kind, u.size / tot]) : [["infantry", 1]];
-  }
+  var perFormation = (st2, svc) => svc === "land" ? st2.techAdopted?.tank != null ? 3e4 : st2.techAdopted?.breech_loading != null ? 2e4 : st2.techAdopted?.gunpowder != null ? 14e3 : st2.techAdopted?.iron_weapons != null ? 7500 : 3e3 : svc === "sea" ? st2.techAdopted?.dreadnought != null ? 25e3 : st2.techAdopted?.ironclad != null ? 12e3 : 4e3 : 9e3;
   var mkUnit = (S3, st2, kind, size) => ({ id: idOf(S3, "un"), kind, size: r1(size), name: unitName(st2, kind), autoName: true });
+  var total = (cp) => cp.units.reduce((a, u) => a + u.size, 0);
+  var headsOfSvc = (R, svc) => Object.entries(R).reduce((a, [k, v]) => a + (serviceOf(k) === svc ? v : 0), 0);
+  function liveRoster(ctx2, st2) {
+    const us = st2.military?.units ?? [], base = us.reduce((a, u) => a + u.size, 0);
+    if (!(base > 0)) return autoRoster(ctx2, st2);
+    const f2 = st2.army / base, out = {};
+    for (const u of us) out[u.kind] = u.size * f2;
+    return out;
+  }
+  var capOf = (st2, svc) => (st2.player ? SERVICE_CAP : AI_CAP)[svc];
+  function newFormation(ctx2, st2, svc) {
+    const S3 = st2.corps, n3 = S3.list.filter((c) => c.service === svc).length, cap = ctx2.civ.groups[st2.capitalGroupId];
+    const cp = { id: idOf(S3, "cp"), name: `${ORD[n3] ?? `\u7B2C${n3 + 1}`}${SERVICES[svc].formation}`, service: svc, comp: "auto", weight: 1, manual: null, size: 0, at: cap?.id ?? null, order: { kind: "auto", since: ctx2.civ.monthIndex }, warId: null, units: [], commander: null, officers: {}, history: [], created: ctx2.civ.monthIndex };
+    S3.list.push(cp);
+    return cp;
+  }
   function ensureCorps(ctx2, st2) {
-    if (!st2.player || st2.corps) return st2.corps ?? null;
-    const { civ: civ7 } = ctx2, land = Math.max(0, st2.army * landShare(st2));
-    const S3 = st2.corps = { v: 1, seq: 0, list: [], pool: [], poolAt: -999 };
-    const N2 = clamp16(Math.round(land / perCorps(st2)), 1, 6), kinds = landKinds(st2), cap = civ7.groups[st2.capitalGroupId];
-    refreshPool(ctx2, st2, true);
-    for (let i = 0; i < N2; i++) {
-      const cp = { id: idOf(S3, "cp"), name: `${ORD[i]}\u8ECD\u56E3`, size: 0, at: cap?.id ?? null, order: { kind: "auto", since: civ7.monthIndex }, warId: null, units: [], commander: null, officers: {}, history: [], created: civ7.monthIndex };
-      for (const [k, sh] of kinds) if (sh >= 0.04) cp.units.push(mkUnit(S3, st2, k, land / N2 * sh));
-      cp.size = r1(cp.units.reduce((a, u) => a + u.size, 0));
-      cp.commander = S3.pool.shift() ?? genPerson(ctx2, st2, "cmd");
-      cp.commander.role = "commander";
-      if (i < 3) {
-        const o = S3.pool.shift() ?? genPerson(ctx2, st2, "off");
-        o.role = "vanguard";
-        cp.officers.vanguard = o;
-        if (N2 <= 2 || i === 0) {
-          const q2 = S3.pool.shift() ?? genPerson(ctx2, st2, "qm");
-          q2.role = "quartermaster";
-          cp.officers.quartermaster = q2;
-        }
-      }
-      S3.list.push(cp);
+    if (!st2?.alive) return st2?.corps ?? null;
+    let S3 = st2.corps;
+    if (S3 && S3.v >= 2) {
+      const cur = S3.list.reduce((a, c) => a + c.size, 0);
+      if (Math.abs(cur - st2.army) > Math.max(1, st2.army * 0.01)) assignRoster(ctx2, st2);
+      if (st2.player && (S3.pool?.length ?? 0) < 3) refreshPool(ctx2, st2, true);
+      return S3;
     }
+    if (S3) {
+      S3.v = 2;
+      S3.chiefs ?? (S3.chiefs = { land: null, sea: null, air: null });
+      for (const cp of S3.list) {
+        cp.service ?? (cp.service = "land");
+        if (!cp.comp) {
+          cp.comp = "manual";
+          cp.manual = Object.fromEntries(cp.units.map((u) => [u.kind, u.size]));
+        }
+        cp.weight ?? (cp.weight = 1);
+      }
+      for (const p of S3.pool ?? []) p.service ?? (p.service = "land");
+      return S3;
+    }
+    S3 = st2.corps = { v: 2, seq: 0, list: [], pool: [], poolAt: -999, chiefs: { land: null, sea: null, air: null } };
+    refreshPool(ctx2, st2, true);
+    growFormations(ctx2, st2);
+    assignRoster(ctx2, st2);
+    staffAll(ctx2, st2, true);
     refreshPool(ctx2, st2, true);
     return S3;
   }
-  var total = (cp) => cp.units.reduce((a, u) => a + u.size, 0);
-  function syncCorps(ctx2, st2) {
-    if (!st2.player) return;
-    const S3 = ensureCorps(ctx2, st2);
+  function growFormations(ctx2, st2) {
+    const S3 = st2.corps, R = liveRoster(ctx2, st2);
+    for (const svc of SERVICE_KEYS) {
+      const heads = headsOfSvc(R, svc), have = S3.list.filter((c) => c.service === svc).length;
+      if (svc !== "land" && heads < 30) continue;
+      const want = clamp16(Math.round(heads / perFormation(st2, svc)), heads > 0.5 ? 1 : 0, capOf(st2, svc)), room = (st2.player ? CORPS_MAX : 99) - S3.list.length;
+      for (let i = have; i < want && i - have < room; i++) newFormation(ctx2, st2, svc);
+    }
+  }
+  function setUnits(S3, st2, cp, heads) {
+    const old = new Map(cp.units.map((u) => [u.kind, u])), next = [];
+    for (const k of Object.keys(UNIT_TYPES)) {
+      const n3 = heads[k];
+      if (!(n3 > 0.05)) continue;
+      const u = old.get(k) ?? mkUnit(S3, st2, k, n3);
+      u.size = r1(n3);
+      if (u.autoName) u.name = unitName(st2, k);
+      next.push(u);
+    }
+    cp.units = next;
+    cp.size = r1(total(cp));
+  }
+  function assignRoster(ctx2, st2) {
+    const S3 = st2.corps;
     if (!S3) return;
-    const { civ: civ7 } = ctx2, land = Math.max(0, st2.army * landShare(st2)), cur = S3.list.reduce((a, c) => a + total(c), 0);
-    if (cur > 0 && Math.abs(land - cur) > Math.max(1, cur * 3e-3)) {
-      const f2 = land / cur;
-      for (const cp of S3.list) for (const u of cp.units) u.size = r1(u.size * f2);
-    } else if (!(cur > 0) && land > 0 && S3.list.length) {
-      const per = land / S3.list.length, kinds = landKinds(st2);
-      for (const cp of S3.list) {
-        cp.units = kinds.filter(([, sh]) => sh >= 0.04).map(([k, sh]) => mkUnit(S3, st2, k, per * sh));
+    const R = liveRoster(ctx2, st2);
+    for (const svc of SERVICE_KEYS) {
+      const fs = S3.list.filter((c) => c.service === svc);
+      if (!fs.length) continue;
+      const autos = fs.filter((c) => c.comp !== "manual"), mans = fs.filter((c) => c.comp === "manual"), give = new Map(fs.map((c) => [c, {}]));
+      for (const k of Object.keys(R).filter((x) => serviceOf(x) === svc)) {
+        const Rk = R[k];
+        let ms = 0;
+        for (const c of mans) ms += c.manual?.[k] ?? 0;
+        const f2 = ms > Rk ? Rk / ms : 1;
+        for (const c of mans) {
+          const v = (c.manual?.[k] ?? 0) * f2;
+          if (v > 0) give.get(c)[k] = v;
+        }
+        const rest = Math.max(0, Rk - ms * f2);
+        if (rest > 0) {
+          const pool = autos.length ? autos : fs, ws = pool.reduce((a, c) => a + (c.weight ?? 1), 0) || 1;
+          for (const c of pool) give.get(c)[k] = (give.get(c)[k] ?? 0) + rest * (c.weight ?? 1) / ws;
+        }
+      }
+      for (const c of fs) setUnits(S3, st2, c, give.get(c));
+    }
+  }
+  var lockManual = (cp) => {
+    cp.comp = "manual";
+    cp.manual = Object.fromEntries(cp.units.map((u) => [u.kind, u.size]));
+  };
+  function staffOne(ctx2, st2, cp, i) {
+    const S3 = st2.corps, svc = cp.service ?? "land";
+    if (cp.commander) return;
+    const k = st2.player ? S3.pool.findIndex((p) => (p.service ?? "land") === svc) : -1;
+    cp.commander = k >= 0 ? S3.pool.splice(k, 1)[0] : genPerson(ctx2, st2, "cmd", { service: svc, minSkill: st2.player ? 0.25 : 0.3 });
+    cp.commander.role = "commander";
+    if (svc === "land" && st2.player && i < 3) {
+      const j = S3.pool.findIndex((p) => (p.service ?? "land") === "land"), o = j >= 0 ? S3.pool.splice(j, 1)[0] : genPerson(ctx2, st2, "off");
+      o.role = "vanguard";
+      cp.officers.vanguard = o;
+    }
+  }
+  function staffAll(ctx2, st2, initial = false) {
+    const S3 = st2.corps;
+    for (const svc of SERVICE_KEYS) S3.list.filter((c) => c.service === svc).forEach((cp, i) => staffOne(ctx2, st2, cp, i));
+    if (!st2.player) for (const svc of SERVICE_KEYS) {
+      const has3 = S3.list.some((c) => c.service === svc);
+      if (has3 && !S3.chiefs[svc]) {
+        const c = genPerson(ctx2, st2, `chief${svc}`, { service: svc, minSkill: 0.4, spread: 0.45 });
+        c.age += 10;
+        c.role = "chief";
+        S3.chiefs[svc] = c;
       }
     }
+  }
+  function retireOld(ctx2, st2) {
+    if (st2.player) return;
+    const S3 = st2.corps, mi = ctx2.civ.monthIndex, old = (p) => p && p.age + (mi - p.since) / 12 > 58 + hashSeed(ctx2.civ.historySeed, "ret", p.id) % 12;
+    for (const cp of S3.list) if (old(cp.commander)) {
+      cp.commander = null;
+      staffOne(ctx2, st2, cp, 9);
+    }
+    for (const svc of SERVICE_KEYS) if (old(S3.chiefs[svc])) S3.chiefs[svc] = null;
+    staffAll(ctx2, st2);
+  }
+  function syncCorps(ctx2, st2) {
+    if (!st2?.alive) return;
+    const S3 = ensureCorps(ctx2, st2);
+    if (!S3) return;
+    const { civ: civ7 } = ctx2, mi = civ7.monthIndex;
+    growFormations(ctx2, st2);
+    assignRoster(ctx2, st2);
+    staffAll(ctx2, st2);
     for (const cp of S3.list) {
-      cp.size = r1(total(cp));
       for (const u of cp.units) if (u.autoName) u.name = unitName(st2, u.kind);
       if (cp.warId && civ7.wars[cp.warId]?.status !== "active") cp.warId = null;
       if (!civ7.groups[cp.at]) cp.at = civ7.groups[st2.capitalGroupId]?.id ?? null;
     }
+    if (mi % 12 === 0) retireOld(ctx2, st2);
     refreshPool(ctx2, st2);
   }
   function corpsLoss(st2, corpsId, dead) {
@@ -7467,12 +8438,20 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     if (!(t > 0)) return;
     const f2 = Math.max(0, 1 - dead / t);
     for (const u of cp.units) u.size = r1(u.size * f2);
+    if (cp.manual) for (const k in cp.manual) cp.manual[k] *= f2;
     cp.size = r1(total(cp));
   }
+  function serviceLoss(st2, svc, dead) {
+    const fs = corpsOf(st2).filter((c) => c.service === svc), t = fs.reduce((a, c) => a + c.size, 0);
+    if (!(t > 0) || !(dead > 0)) return;
+    for (const c of fs) corpsLoss(st2, c.id, dead * c.size / t);
+  }
+  var leadCorps = (st2, svc) => corpsOf(st2).filter((c) => c.service === svc && c.size > 0.5).reduce((b, c) => !b || c.size > b.size ? c : b, null);
   function corpsAfterBattle(ctx2, st2, F, won, name = null) {
-    const cp = corpsById(st2, F?.corpsId);
+    const cp = corpsById(st2, F?.corpsId ?? F?.lead);
     if (!cp) return;
-    for (const p of [cp.commander, ...Object.values(cp.officers)]) {
+    const chief = st2.corps?.chiefs?.[cp.service ?? "land"];
+    for (const p of [cp.commander, ...Object.values(cp.officers), chief]) {
       if (!p) continue;
       p.xp = r22((p.xp ?? 0) + (won ? 1 : 0.4));
       if (p.xp >= 3) {
@@ -7526,13 +8505,15 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   }
   function splitCorps(ctx2, st2, { corpsId, name, fraction, commanderId }) {
     const S3 = st2.corps, cp = need(st2, corpsId);
-    if (!cp) return fail2("\u305D\u306E\u8ECD\u56E3\u306F\u3042\u308A\u307E\u305B\u3093");
-    if (S3.list.length >= CORPS_MAX) return fail2(`\u8ECD\u56E3\u306F ${CORPS_MAX} \u307E\u3067`);
+    if (!cp) return fail2("\u305D\u306E\u90E8\u968A\u306F\u3042\u308A\u307E\u305B\u3093");
+    if (S3.list.length >= CORPS_MAX) return fail2(`\u90E8\u968A\u306F ${CORPS_MAX} \u307E\u3067`);
+    if (S3.list.filter((c) => c.service === cp.service).length >= SERVICE_CAP[cp.service]) return fail2(`${SERVICES[cp.service].ja}\u306E\u90E8\u968A\u306F ${SERVICE_CAP[cp.service]} \u307E\u3067`);
     if (!(fraction >= 0.1 && fraction <= 0.9)) return fail2("\u5206\u3051\u308B\u5272\u5408\u306F 0.1\u301C0.9");
     const n3 = typeof name === "string" ? name.trim() : "";
-    if (!n3 || n3.length > 20) return fail2("\u65B0\u3057\u3044\u8ECD\u56E3\u306E\u540D\u524D\u306F 1\u301C20 \u6587\u5B57");
+    if (!n3 || n3.length > 20) return fail2("\u65B0\u3057\u3044\u90E8\u968A\u306E\u540D\u524D\u306F 1\u301C20 \u6587\u5B57");
     const cmd = S3.pool.find((p) => p.id === commanderId);
     if (!cmd) return fail2("\u6307\u63EE\u5B98\u306E\u5019\u88DC\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if ((cmd.service ?? "land") !== cp.service) return fail2(`${SERVICES[cp.service].ja}\u306E\u6307\u63EE\u5B98\u306B\u306F\u3001${SERVICES[cp.service].ja}\u306E\u4EBA\u7269\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044`);
     const cost = r1(cp.size * fraction * 1e-3);
     if (st2.treasury < cost) return fail2(`\u7DE8\u6210\u306E\u8CBB\u7528 ${cost} \u304C\u8DB3\u308A\u306A\u3044`);
     st2.treasury -= cost;
@@ -7545,21 +8526,25 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     S3.pool = S3.pool.filter((p) => p.id !== cmd.id);
     cmd.role = "commander";
     cp.size = r1(total(cp));
-    const nc = { id: idOf(S3, "cp"), name: n3, size: r1(nu.reduce((a, u) => a + u.size, 0)), at: cp.at, order: { kind: "hold", since: ctx2.civ.monthIndex }, warId: cp.warId, units: nu, commander: cmd, officers: {}, history: [], created: ctx2.civ.monthIndex };
+    lockManual(cp);
+    const nc = { id: idOf(S3, "cp"), name: n3, service: cp.service, comp: "manual", weight: 1, manual: null, size: r1(nu.reduce((a, u) => a + u.size, 0)), at: cp.at, order: { kind: "hold", since: ctx2.civ.monthIndex }, warId: cp.warId, units: nu, commander: cmd, officers: {}, history: [], created: ctx2.civ.monthIndex };
+    lockManual(nc);
     S3.list.push(nc);
     return { ok: true, corpsId: nc.id, cost };
   }
   function mergeCorps(st2, { from, into }) {
     const S3 = st2.corps, a = need(st2, from), b = need(st2, into);
-    if (!a || !b || a === b) return fail2("\u7D71\u5408\u3059\u308B\u8ECD\u56E3\u3092 2 \u3064\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
-    if (S3.list.length <= 1) return fail2("\u6700\u5F8C\u306E\u8ECD\u56E3\u306F\u7D71\u5408\u3067\u304D\u306A\u3044");
-    if (a.at !== b.at) return fail2("\u540C\u3058\u5834\u6240\u306B\u3044\u308B\u8ECD\u56E3\u3069\u3046\u3057\u3060\u3051\u7D71\u5408\u3067\u304D\u308B");
+    if (!a || !b || a === b) return fail2("\u7D71\u5408\u3059\u308B\u90E8\u968A\u3092 2 \u3064\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if (a.service !== b.service) return fail2("\u540C\u3058\u8ECD\u306E\u90E8\u968A\u3069\u3046\u3057\u3060\u3051\u7D71\u5408\u3067\u304D\u308B");
+    if (S3.list.filter((c) => c.service === a.service).length <= 1 && a.service === "land") return fail2("\u6700\u5F8C\u306E\u9678\u8ECD\u306E\u90E8\u968A\u306F\u7D71\u5408\u3067\u304D\u306A\u3044");
+    if (a.at !== b.at) return fail2("\u540C\u3058\u5834\u6240\u306B\u3044\u308B\u90E8\u968A\u3069\u3046\u3057\u3060\u3051\u7D71\u5408\u3067\u304D\u308B");
     for (const u of a.units) {
       const t = b.units.find((x) => x.kind === u.kind);
       if (t) t.size = r1(t.size + u.size);
       else b.units.push(u);
     }
     b.size = r1(total(b));
+    lockManual(b);
     for (const p of [a.commander, ...Object.values(a.officers)]) if (p) {
       p.role = null;
       S3.pool.push(p);
@@ -7569,11 +8554,12 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   }
   function transferUnits(st2, { from, to, unitId, size }) {
     const a = need(st2, from), b = need(st2, to), u = a?.units.find((x) => x.id === unitId);
-    if (!a || !b || a === b || !u) return fail2("\u79FB\u3059\u90E8\u968A\u3068\u8ECD\u56E3\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
-    if (a.at !== b.at) return fail2("\u540C\u3058\u5834\u6240\u306B\u3044\u308B\u8ECD\u56E3\u3069\u3046\u3057\u3060\u3051\u5175\u3092\u79FB\u305B\u308B");
+    if (!a || !b || a === b || !u) return fail2("\u79FB\u3059\u90E8\u968A\u3068\u79FB\u3057\u5148\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    if (a.service !== b.service) return fail2("\u540C\u3058\u8ECD\u306E\u90E8\u968A\u3069\u3046\u3057\u3060\u3051\u5175\u3092\u79FB\u305B\u308B");
+    if (a.at !== b.at) return fail2("\u540C\u3058\u5834\u6240\u306B\u3044\u308B\u90E8\u968A\u3069\u3046\u3057\u3060\u3051\u5175\u3092\u79FB\u305B\u308B");
     const m = r1(Number(size));
-    if (!(m > 0) || m > u.size) return fail2("\u79FB\u3059\u5175\u529B\u304C\u7BC4\u56F2\u5916");
-    if (m >= u.size && a.units.length === 1) return fail2("\u8ECD\u56E3\u306E\u6700\u5F8C\u306E\u90E8\u968A\u306F\u3001\u3059\u3079\u3066\u306F\u79FB\u305B\u306A\u3044");
+    if (!(m > 0) || m > u.size) return fail2("\u79FB\u3059\u4EBA\u6570\u304C\u7BC4\u56F2\u5916");
+    if (m >= u.size && a.units.length === 1) return fail2("\u90E8\u968A\u306E\u6700\u5F8C\u306E\u5175\u7A2E\u306F\u3001\u3059\u3079\u3066\u306F\u79FB\u305B\u306A\u3044");
     u.size = r1(u.size - m);
     const t = b.units.find((x) => x.kind === u.kind && x.name === u.name) ?? b.units.find((x) => x.kind === u.kind);
     if (t) t.size = r1(t.size + m);
@@ -7581,18 +8567,31 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     a.units = a.units.filter((x) => x.size > 0.05);
     a.size = r1(total(a));
     b.size = r1(total(b));
+    lockManual(a);
+    lockManual(b);
     return { ok: true };
+  }
+  function bumpTarget(ctx2, st2, deltas) {
+    const M = st2.military;
+    if (!M) return;
+    const cur = M.orbat?.mode === "manual" && M.orbat.target ? { ...M.orbat.target } : Object.fromEntries((M.units ?? []).map((u) => [u.kind, Math.round(u.size)]));
+    for (const [k, d] of Object.entries(deltas)) cur[k] = Math.max(0, Math.round((cur[k] ?? 0) + d));
+    for (const k in cur) if (!(cur[k] > 0)) delete cur[k];
+    M.orbat = { mode: "manual", target: cur };
   }
   function convertUnit(ctx2, st2, { corpsId, unitId, toKind }) {
     const cp = need(st2, corpsId), u = cp?.units.find((x) => x.id === unitId);
-    if (!u) return fail2("\u305D\u306E\u90E8\u968A\u306F\u3042\u308A\u307E\u305B\u3093");
-    const K = UNIT_KINDS[toKind];
-    if (!K || toKind === "navy") return fail2("\u305D\u306E\u5175\u7A2E\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
-    if (!K.need(st2, ctx2)) return fail2(`${K.ja}\u306F\u4ECA\u306E\u6280\u8853\u3067\u306F\u7DE8\u5236\u3067\u304D\u306A\u3044`);
+    if (!u) return fail2("\u305D\u306E\u5175\u7A2E\u306E\u90E8\u968A\u306F\u3042\u308A\u307E\u305B\u3093");
+    const K = UNIT_TYPES[toKind];
+    if (!K) return fail2("\u305D\u306E\u5175\u7A2E\u306B\u306F\u3067\u304D\u307E\u305B\u3093");
+    if (K.service !== serviceOf(u.kind)) return fail2("\u540C\u3058\u8ECD\u306E\u5175\u7A2E\u306B\u3057\u304B\u5909\u3048\u3089\u308C\u307E\u305B\u3093");
+    if (!K.need(st2, ctx2)) return fail2(`${K.ja}\u306F\u4ECA\u306E\u6280\u8853\u30FB\u5730\u7406\u3067\u306F\u7DE8\u5236\u3067\u304D\u306A\u3044`);
     if (u.kind === toKind) return fail2("\u3059\u3067\u306B\u305D\u306E\u5175\u7A2E\u3067\u3059");
     const cost = r1(u.size * 2e-3);
     if (st2.treasury < cost) return fail2(`\u518D\u8A13\u7DF4\u306E\u8CBB\u7528 ${cost} \u304C\u8DB3\u308A\u306A\u3044`);
     st2.treasury -= cost;
+    bumpTarget(ctx2, st2, { [u.kind]: -u.size, [toKind]: u.size });
+    const from = u.kind;
     u.kind = toKind;
     u.name = unitName(st2, toKind);
     u.autoName = true;
@@ -7601,14 +8600,50 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       t.size = r1(t.size + u.size);
       cp.units = cp.units.filter((x) => x !== u);
     }
+    lockManual(cp);
+    void from;
     return { ok: true, cost };
+  }
+  function setComposition(ctx2, st2, { corpsId, mode = "manual", heads, weight }) {
+    const cp = need(st2, corpsId);
+    if (!cp) return fail2("\u305D\u306E\u90E8\u968A\u306F\u3042\u308A\u307E\u305B\u3093");
+    if (weight != null) {
+      const w = Number(weight);
+      if (!(w >= 0.2 && w <= 5)) return fail2("\u91CD\u307F\u306F 0.2\u301C5");
+      cp.weight = w;
+    }
+    if (mode === "auto") {
+      cp.comp = "auto";
+      cp.manual = null;
+      assignRoster(ctx2, st2);
+      return { ok: true };
+    }
+    if (mode !== "manual") return fail2("mode \u306F auto \u304B manual");
+    if (!heads || typeof heads !== "object") return fail2("\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044");
+    const out = {};
+    for (const [k, v] of Object.entries(heads)) {
+      const K = UNIT_TYPES[k];
+      if (!K) return fail2(`\u672A\u77E5\u306E\u5175\u7A2E ${k}`);
+      if (K.service !== cp.service) return fail2(`${K.ja}\u306F${SERVICES[K.service].ja}\u306E\u5175\u7A2E\u3067\u3059\uFF08\u3053\u306E\u90E8\u968A\u306F${SERVICES[cp.service].ja}\uFF09`);
+      const n3 = Math.round(Number(v));
+      if (!Number.isFinite(n3) || n3 < 0) return fail2("\u4EBA\u6570\u306F 0 \u4EE5\u4E0A\u306E\u6574\u6570");
+      if (n3 > 0 && !K.need(st2, ctx2)) return fail2(`${K.ja}\u306F\u4ECA\u306E\u6280\u8853\u30FB\u5730\u7406\u3067\u306F\u7DE8\u5236\u3067\u304D\u306A\u3044`);
+      if (n3 > 0) out[k] = n3;
+    }
+    if (!Object.keys(out).length) return fail2("\u5C11\u306A\u304F\u3068\u3082 1 \u3064\u306E\u5175\u7A2E\u306B\u4EBA\u6570\u3092\u5165\u308C\u3066\u304F\u3060\u3055\u3044");
+    cp.comp = "manual";
+    cp.manual = out;
+    assignRoster(ctx2, st2);
+    const R = liveRoster(ctx2, st2), clipped = Object.keys(out).filter((k) => (cp.units.find((u) => u.kind === k)?.size ?? 0) < out[k] - 1 && out[k] > (R[k] ?? 0) - 0);
+    return { ok: true, clipped };
   }
   function appoint(ctx2, st2, { corpsId, slot, personId }) {
     const S3 = st2.corps, cp = need(st2, corpsId);
-    if (!cp) return fail2("\u305D\u306E\u8ECD\u56E3\u306F\u3042\u308A\u307E\u305B\u3093");
+    if (!cp) return fail2("\u305D\u306E\u90E8\u968A\u306F\u3042\u308A\u307E\u305B\u3093");
     if (slot !== "commander" && !OFFICER_SLOTS[slot]) return fail2("\u5F79\u76EE\u306F commander / vanguard / quartermaster / strategist");
     const p = S3.pool.find((x) => x.id === personId);
     if (!p) return fail2("\u305D\u306E\u5019\u88DC\u306F\u3044\u307E\u305B\u3093");
+    if (slot === "commander" && (p.service ?? "land") !== cp.service) return fail2(`${SERVICES[cp.service].ja}\u306E\u90E8\u968A\u306E\u6307\u63EE\u5B98\u306B\u306F\u3001${SERVICES[cp.service].ja}\u306E\u4EBA\u7269\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044`);
     S3.pool = S3.pool.filter((x) => x.id !== personId);
     const old = slot === "commander" ? cp.commander : cp.officers[slot];
     p.role = slot;
@@ -7626,16 +8661,45 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     delete cp.officers[slot];
     return { ok: true };
   }
+  function appointChief(ctx2, st2, { service, personId }) {
+    const S3 = st2.corps;
+    if (!SERVICES[service]) return fail2("\u8ECD\u306F land / sea / air");
+    const p = S3.pool.find((x) => x.id === personId);
+    if (!p) return fail2("\u305D\u306E\u5019\u88DC\u306F\u3044\u307E\u305B\u3093");
+    if ((p.service ?? "land") !== service) return fail2(`${SERVICES[service].chief}\u306B\u306F\u3001${SERVICES[service].ja}\u306E\u4EBA\u7269\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044`);
+    S3.pool = S3.pool.filter((x) => x.id !== personId);
+    const old = S3.chiefs[service];
+    if (old) {
+      old.role = null;
+      S3.pool.push(old);
+    }
+    p.role = "chief";
+    S3.chiefs[service] = p;
+    const F = st2.politics?.factions;
+    if (F?.[p.backer]) F[p.backer].support = clamp16(F[p.backer].support + 0.025);
+    return { ok: true, replaced: old?.name ?? null };
+  }
+  function dismissChief(st2, { service }) {
+    const S3 = st2.corps;
+    if (!SERVICES[service] || !S3.chiefs[service]) return fail2("\u305D\u306E\u8ECD\u306E\u7DCF\u53F8\u4EE4\u5B98\u306F\u7A7A\u3044\u3066\u3044\u307E\u3059");
+    const old = S3.chiefs[service];
+    old.role = null;
+    S3.pool.push(old);
+    S3.chiefs[service] = null;
+    return { ok: true };
+  }
   function setOrder(ctx2, st2, { corpsId, kind, targetGroupId = null, warId = null }) {
     const { civ: civ7 } = ctx2, cp = need(st2, corpsId);
-    if (!cp) return fail2("\u305D\u306E\u8ECD\u56E3\u306F\u3042\u308A\u307E\u305B\u3093");
+    if (!cp) return fail2("\u305D\u306E\u90E8\u968A\u306F\u3042\u308A\u307E\u305B\u3093");
     if (!ORDER_KINDS[kind]) return fail2("\u672A\u77E5\u306E\u547D\u4EE4");
+    if (cp.service === "air" && !["auto", "hold", "reserve"].includes(kind)) return fail2("\u7A7A\u8ECD\u306E\u90E8\u968A\u306B\u306F\u3001\u304A\u4EFB\u305B\u30FB\u5F85\u6A5F\u30FB\u4E88\u5099\u306E\u547D\u4EE4\u3060\u3051\u51FA\u305B\u307E\u3059\uFF08\u822A\u7A7A\u6226\u529B\u306F\u3001\u9678\u3068\u6D77\u306E\u6226\u3044\u3092\u652F\u3048\u307E\u3059\uFF09");
+    if (cp.service === "sea" && !["auto", "hold", "reserve", "defend"].includes(kind)) return fail2("\u6D77\u8ECD\u306E\u90E8\u968A\u306B\u306F\u3001\u304A\u4EFB\u305B\u30FB\u5F85\u6A5F\u30FB\u5B88\u5099\u30FB\u4E88\u5099\u306E\u547D\u4EE4\u3060\u3051\u51FA\u305B\u307E\u3059");
     if (warId != null) {
       const w = civ7.wars[warId];
       if (!w || w.status !== "active" || !(w.sides.a.includes(st2.id) || w.sides.d.includes(st2.id))) return fail2("\u305D\u306E\u6226\u4E89\u306B\u306F\u53C2\u6226\u3057\u3066\u3044\u307E\u305B\u3093");
       cp.warId = warId;
     }
-    if (kind === "auto" || kind === "hold" || kind === "reserve") {
+    if (kind === "auto" || kind === "hold" || kind === "reserve" || kind === "defend" && cp.service !== "land") {
       cp.order = { kind, since: civ7.monthIndex };
       if (kind === "reserve") cp.warId = null;
       return { ok: true };
@@ -7652,6 +8716,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     const { civ: civ7 } = ctx2, w = civ7.wars[warId];
     if (!w || w.status !== "active") return fail2("\u305D\u306E\u6226\u4E89\u306F\u9032\u884C\u4E2D\u3067\u306F\u306A\u3044");
     for (const cp of corpsOf(st2)) {
+      if (cp.service === "air") continue;
       if (corpsIds.includes(cp.id)) {
         cp.warId = warId;
         if (cp.order.kind === "reserve") cp.order = { kind: "auto", since: civ7.monthIndex };
@@ -7662,11 +8727,11 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     }
     return { ok: true };
   }
-  function corpsForWar(civ7, st2, w) {
+  function corpsForWar(civ7, st2, w, service = "land") {
     if (!st2.player || !st2.corps) return null;
     const out = [];
     for (const cp of st2.corps.list) {
-      if (cp.order.kind === "reserve" || !(cp.size > 0.5)) continue;
+      if (cp.service !== service || cp.order.kind === "reserve" || !(cp.size > 0.5)) continue;
       if (cp.warId && civ7.wars[cp.warId]?.status === "active" && cp.warId !== w.id) continue;
       if (!cp.warId) cp.warId = w.id;
       out.push(cp);
@@ -7704,7 +8769,8 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     if (!S3) return null;
     const { civ: civ7 } = ctx2;
     const name = (gid) => civ7.groups[gid] ? civ7.settlements[civ7.groups[gid].settlementId]?.name ?? null : null;
-    return { list: S3.list.map((cp) => ({ ...cp, fx: corpsFx(cp), atName: name(cp.at) })), pool: S3.pool, max: CORPS_MAX };
+    const heads = Object.fromEntries(SERVICE_KEYS.map((k) => [k, r1(S3.list.filter((c) => c.service === k).reduce((a, c) => a + c.size, 0))]));
+    return { list: S3.list.map((cp) => ({ ...cp, fx: corpsFx(cp, st2), atName: name(cp.at), rank: cp.commander ? rankOf(cp.commander) : null })), pool: S3.pool.map((p) => ({ ...p, rank: rankOf(p) })), chiefs: Object.fromEntries(SERVICE_KEYS.map((k) => [k, S3.chiefs?.[k] ? { ...S3.chiefs[k], rank: rankOf(S3.chiefs[k]) } : null])), heads, usable: Object.fromEntries(SERVICE_KEYS.map((k) => [k, serviceUsable(ctx2, st2, k)])), max: CORPS_MAX };
   }
 
   // js/core/wcde/warfare.js
@@ -7776,11 +8842,13 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   function syncForces(ctx2, w) {
     const { civ: civ7 } = ctx2, ops = w.ops, live2 = /* @__PURE__ */ new Set();
     for (const side of ["a", "d"]) for (const st2 of members(civ7, w, side)) {
-      if (st2.player) ensureCorps(ctx2, st2);
-      const c = commitOf(w, st2), ns = navyShare(st2), cps = corpsForWar(civ7, st2, w), want = [];
+      ensureCorps(ctx2, st2);
+      if (!st2.player) syncCorps(ctx2, st2);
+      const c = commitOf(w, st2), ns = navyShare(st2), cps = corpsForWar(civ7, st2, w, "land"), fls = corpsForWar(civ7, st2, w, "sea"), want = [];
       if (cps) for (const cp of cps) want.push({ key: `${st2.id}|army|${cp.id}`, kind: "army", size: cp.size, corpsId: cp.id, cell: civ7.groups[cp.at]?.cell ?? capCell(civ7, st2) });
-      else want.push({ key: `${st2.id}|army`, kind: "army", size: st2.army * landShare(st2) * c });
-      want.push({ key: `${st2.id}|fleet`, kind: "fleet", size: st2.army * ns * c });
+      else want.push({ key: `${st2.id}|army`, kind: "army", size: st2.army * landShare(st2) * c, lead: leadCorps(st2, "land")?.id ?? null });
+      if (fls?.length) for (const cp of fls) want.push({ key: `${st2.id}|fleet|${cp.id}`, kind: "fleet", size: cp.size, corpsId: cp.id, cell: civ7.groups[cp.at]?.cell ?? capCell(civ7, st2) });
+      else want.push({ key: `${st2.id}|fleet`, kind: "fleet", size: st2.army * ns * c, lead: leadCorps(st2, "sea")?.id ?? null });
       for (const x of want) {
         const f0 = Object.values(ops.forces).find((f3) => f3.key === x.key);
         if (!(x.size > 0.5) || x.kind === "fleet" && ns < 0.02) {
@@ -7802,6 +8870,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
           f2.corpsId = x.corpsId;
           f2.cell = x.cell ?? f2.cell;
         }
+        if (x.lead !== void 0) f2.lead = x.lead;
         live2.add(f2.id);
       }
     }
@@ -7935,29 +9004,35 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     return mk("defense", { theaterId: Object.values(ops.theaters).find((t) => t.kind === "land")?.id ?? null });
   }
   var fx2 = (st2) => st2.military?.fx ?? {};
+  var cpOf = (st2, F) => corpsById(st2, F.corpsId ?? F.lead);
+  var lossOf = (st2, F, dead) => {
+    if (F.corpsId) corpsLoss(st2, F.corpsId, dead);
+    else if (F.lead) serviceLoss(st2, F.kind === "fleet" ? "sea" : "land", dead);
+  };
   function moraleF(f2) {
     return 0.6 + 0.5 * f2.morale;
   }
   function fight(ctx2, w, { kind, A: A2, D: D2, camp, g, garrison = 0, bias = 1, lossA = 1, lossD = 1 }) {
     const { civ: civ7, world } = ctx2, ops = w.ops, mi = civ7.monthIndex, sA = civ7.states[A2.stateId], sD = D2 ? civ7.states[D2.stateId] : civ7.states[g.stateId];
     const naval = kind === "naval", terr = naval ? 0 : terrainBonus(world, g.cell), stage = stageOf3(civ7, g), fort = naval ? 1 : 1 + (kind === "siege" || stage ? (sD.defense ?? 0) + (stage === "city" ? 0.3 : stage === "town" ? 0.15 : 0.05) : 0);
-    const pA = (naval ? navalPower(civ7, sA, A2.size) : landPower(civ7, sA, A2.size)) * moraleF(A2) * (0.5 + 0.5 * A2.supply) * (naval ? 1 : cmdMult(sA, A2, "atk")), adaptA = fx2(sA).adapt ?? 0;
+    const pA = (naval ? navalPower(civ7, sA, A2.size) : landPower(civ7, sA, A2.size)) * moraleF(A2) * (0.5 + 0.5 * A2.supply) * cmdMult(sA, A2, "atk") * (1 + (kind === "siege" || kind === "landing" ? fx2(sA).strike ?? 0 : 0)), adaptA = fx2(sA).adapt ?? 0;
     let pD;
     if (D2) {
       const base = naval ? navalPower(civ7, sD, D2.size) : landPower(civ7, sD, D2.size, { defending: true }), prep = ops.campaigns[D2.campaignId]?.kind === "defense" ? 1.12 : ops.campaigns[D2.campaignId]?.kind === "offensive" ? 0.75 : 0.9;
-      pD = base * moraleF(D2) * prep * (D2.lastBattle >= mi - 2 ? 0.88 : 1) * (naval ? 1 : cmdMult(sD, D2, "def"));
+      pD = base * moraleF(D2) * prep * (D2.lastBattle >= mi - 2 ? 0.88 : 1) * cmdMult(sD, D2, "def");
     } else pD = garrison;
     pD *= (1 + Math.max(0, terr - adaptA)) * fort;
-    const rnd = 0.75 + 0.5 * U(civ7, w.id, mi, camp.id, "r"), atk = pA * rnd * bias, win = atk > pD ? "A" : "D", q2 = Math.max(1, win === "A" ? atk / (pD + 1e-9) : pD / (atk + 1e-9)), engaged = 0.5 + 0.5 * U(civ7, w.id, mi, camp.id, "e");
+    const airEdge = naval ? 0 : clamp17(airSupport(sA) - airSupport(sD), -0.3, 0.3);
+    const rnd = 0.75 + 0.5 * U(civ7, w.id, mi, camp.id, "r"), atk = pA * rnd * bias * (1 + airEdge), win = atk > pD ? "A" : "D", q2 = Math.max(1, win === "A" ? atk / (pD + 1e-9) : pD / (atk + 1e-9)), engaged = 0.5 + 0.5 * U(civ7, w.id, mi, camp.id, "e");
     const loserLoss = clamp17(0.06 + 0.07 * Math.min(q2, 3), 0.05, 0.3) * engaged, winnerLoss = clamp17(loserLoss * (0.35 + 0.35 / q2), 0.01, 0.2);
     const apply = (F, st2, frac, lost) => {
       const arm = st2.army, dead = Math.min(arm, F.size * frac * (1 - (fx2(st2).attr ?? 0)));
       st2.army = Math.max(0, arm - dead);
       st2.warLoss = clamp17((st2.warLoss ?? 0) + (arm ? dead / arm * 0.6 : 0), 0, 0.7);
       F.size = Math.max(0, F.size - dead);
-      if (F.corpsId) corpsLoss(st2, F.corpsId, dead);
+      lossOf(st2, F, dead);
       F.lastBattle = mi;
-      F.morale = clamp17(F.morale + (lost ? -(0.1 + 0.9 * frac) * (1 - 0.8 * clamp17((fx2(st2).coh ?? 0) + (F.corpsId ? corpsFx(corpsById(st2, F.corpsId) ?? { officers: {} }).coh : 0), 0, 0.9)) : 0.05));
+      F.morale = clamp17(F.morale + (lost ? -(0.1 + 0.9 * frac) * (1 - 0.8 * clamp17((fx2(st2).coh ?? 0) + (cpOf(st2, F) ? corpsFx(cpOf(st2, F), st2).coh : 0), 0, 0.9)) : 0.05));
       const grs = byState(ctx2).get(st2.id) ?? [];
       if (grs.length && dead > 0) {
         const gg = grs[Math.floor(U(civ7, w.id, mi, camp.id, st2.id, "g") * grs.length)];
@@ -7983,7 +9058,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
         }
       }
     }
-    const winSt = win === "A" ? sA : sD, loseSt = win === "A" ? sD : sA, name = battleName(ctx2, w, kind, g), _xp = (A2.corpsId && corpsAfterBattle(ctx2, sA, A2, win === "A", name), D2?.corpsId && corpsAfterBattle(ctx2, sD, D2, win === "D", name)), sign = (win === "A" ? A2.side : other(A2.side)) === "a" ? 1 : -1;
+    const winSt = win === "A" ? sA : sD, loseSt = win === "A" ? sD : sA, name = battleName(ctx2, w, kind, g), _xp = ((A2.corpsId || A2.lead) && corpsAfterBattle(ctx2, sA, A2, win === "A", name), (D2?.corpsId || D2?.lead) && corpsAfterBattle(ctx2, sD, D2, win === "D", name)), sign = (win === "A" ? A2.side : other(A2.side)) === "a" ? 1 : -1;
     w.score = clamp17(w.score + sign * (2 + 14 * loserLoss), -100, 100);
     const rec = { id: nid(ops, "b"), at: mi, kind, name, theater: camp.theaterId, cell: g.cell, a: A2.stateId, d: sD.id, winner: winSt.id, deadA: Math.round(deadA), deadD: Math.round(deadD), win };
     ops.battles.push(rec);
@@ -8052,7 +9127,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     const g = civ7.groups[cp.at];
     if (!g) return;
     f2.cell = g.cell;
-    const own = holderSide(w, g, civ7) === f2.side, cf = corpsFx(cp), dist = distKm(world, capCell(civ7, st2) ?? g.cell, g.cell);
+    const own = holderSide(w, g, civ7) === f2.side, cf = corpsFx(cp, st2), dist = distKm(world, capCell(civ7, st2) ?? g.cell, g.cell);
     f2.supply = own ? 1 : clamp17(supplyAt(civ7, st2, dist) * (1 + cf.logi));
     if (f2.supply < 0.4) {
       const lost = f2.size * 0.01 * (1 - (fx2(st2).attr ?? 0));
@@ -8065,7 +9140,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   function planCorps(ctx2, w, f2) {
     const { civ: civ7 } = ctx2, ops = w.ops, mi = civ7.monthIndex, st2 = civ7.states[f2.stateId], cp = corpsById(st2, f2.corpsId), side = f2.side, foe = other(side);
     if (!cp) return;
-    const o = cp.order, cur = f2.campaignId ? ops.campaigns[f2.campaignId] : null, note3 = (t) => {
+    const o = cp.order, cur = f2.campaignId ? ops.campaigns[f2.campaignId] : null, note4 = (t) => {
       cp.history.push({ at: mi, note: t });
       if (cp.history.length > 12) cp.history.shift();
     };
@@ -8092,7 +9167,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       f2.campaignId = null;
       if (o.kind === "march" || o.kind === "siege") {
         cp.order = { kind: "hold", since: mi };
-        note3(cur.result === "success" ? "\u76EE\u6A19\u3092\u843D\u3068\u3057\u3001\u5F85\u6A5F\u306B\u5165\u3063\u305F" : "\u4F5C\u6226\u304C\u7D42\u308F\u308A\u3001\u5F85\u6A5F\u306B\u5165\u3063\u305F");
+        note4(cur.result === "success" ? "\u76EE\u6A19\u3092\u843D\u3068\u3057\u3001\u5F85\u6A5F\u306B\u5165\u3063\u305F" : "\u4F5C\u6226\u304C\u7D42\u308F\u308A\u3001\u5F85\u6A5F\u306B\u5165\u3063\u305F");
         return;
       }
     }
@@ -8101,7 +9176,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       cp.order = { kind: "hold", since: mi };
       f2.retreating = false;
       f2.morale = clamp17(f2.morale + 0.1);
-      note3("\u64A4\u9000\u3092\u7D42\u3048\u305F");
+      note4("\u64A4\u9000\u3092\u7D42\u3048\u305F");
       return;
     }
     if (o.kind === "defend") {
@@ -8111,7 +9186,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     const g = civ7.groups[o.targetGroupId];
     if (!g || holderSide(w, g, civ7) !== foe) {
       cp.order = { kind: "hold", since: mi };
-      note3("\u76EE\u6A19\u306F\u3059\u3067\u306B\u5473\u65B9\u306E\u571F\u5730\u306B\u306A\u3063\u305F");
+      note4("\u76EE\u6A19\u306F\u3059\u3067\u306B\u5473\u65B9\u306E\u571F\u5730\u306B\u306A\u3063\u305F");
       return;
     }
     const stage = stageOf3(civ7, g), tst = civ7.states[g.stateId], isCap = tst?.capitalGroupId === g.id, th = landTheaterFor(w, st2.id, g.stateId) ?? Object.values(ops.theaters).find((t) => t.kind === "land");
@@ -8189,13 +9264,13 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     }
     const capc = capCell(civ7, st2) ?? g.cell, dist = distKm(world, capc, g.cell), own = g.stateId && sideOf(w, g.stateId) === side;
     F.cell = g.cell;
-    const cf = F.corpsId ? corpsFx(corpsById(st2, F.corpsId) ?? { officers: {} }) : { logi: 0, siege: 0 };
+    const cf = cpOf(st2, F) ? corpsFx(cpOf(st2, F), st2) : { logi: 0, siege: 0 };
     F.supply = camp.kind === "landing" ? 0.7 : own ? 1 : clamp17(supplyAt(civ7, st2, dist) * (1 + cf.logi));
     if (F.supply < 0.4) {
       const lost = F.size * 0.01 * (1 - (fx2(st2).attr ?? 0));
       st2.army = Math.max(0, st2.army - lost);
       F.size -= lost;
-      if (F.corpsId) corpsLoss(st2, F.corpsId, lost);
+      lossOf(st2, F, lost);
       F.morale = clamp17(F.morale - 0.03);
     }
     if (camp.kind === "landing") {
@@ -8233,13 +9308,13 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       if (camp.phase === "done") return;
     } else {
       const atkP = landPower(civ7, st2, F.size) * moraleF(F) * (0.5 + 0.5 * F.supply) * cmdMult(st2, F, "atk"), co = F.corpsId ? 1 + 0.4 * Math.min(2, Math.max(0, Object.values(ops.campaigns).filter((c2) => c2.id !== camp.id && c2.phase === "active" && c2.side === side && c2.targetGroupId === camp.targetGroupId && ops.forces[c2.forceId]?.corpsId).length)) : 1, ratio = atkP / (garrison * (1 + terrainBonus(world, g.cell)) + 1);
-      const rate = camp.kind === "siege" ? clamp17(0.035 * ratio * (1 + 2 * (fx2(st2).siege ?? 0) + cf.siege) * co, 0.01, 0.22) : clamp17(0.06 * ratio, 0.02, 0.3);
+      const rate = camp.kind === "siege" ? clamp17(0.035 * ratio * (1 + 2 * (fx2(st2).siege ?? 0) + cf.siege + (fx2(st2).strike ?? 0) + 0.5 * airSupport(st2)) * co, 0.01, 0.22) : clamp17(0.06 * ratio, 0.02, 0.3);
       camp.progress = clamp17(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);
       if (camp.kind === "siege") {
         const l = F.size * 4e-3 * (1 - (fx2(st2).attr ?? 0));
         st2.army = Math.max(0, st2.army - l);
         F.size -= l;
-        if (F.corpsId) corpsLoss(st2, F.corpsId, l);
+        lossOf(st2, F, l);
         w.casualties += l;
         ops.stats.dead[st2.id] = (ops.stats.dead[st2.id] ?? 0) + l;
       }
@@ -8577,7 +9652,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   }
   var newsItem = (civ7, ev, c) => ({ id: "news_" + ev.eventId, eventId: ev.eventId, date: ev.date, kind: ev.kind, title: c.title ?? ev.title, level: c.level, score: c.score, entityIds: [...new Set(ev.participants.map((p) => p.entityId))] });
   function scanNews(civ7) {
-    const N2 = newsOf(civ7), T3 = timeOf(civ7);
+    const N2 = newsOf(civ7), T4 = timeOf(civ7);
     if (N2.scanned > civ7.events.length) N2.scanned = civ7.events.length;
     delete N2.settings;
     const cx = newsContext(civ7), fresh = [];
@@ -8598,9 +9673,9 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     N2.scanned = civ7.events.length;
     fresh.sort((a, b) => b.score - a.score || (a.eventId < b.eventId ? -1 : 1));
     N2.queue.push(...fresh);
-    if (N2.queue.length && !T3.hold) {
-      T3.hold = true;
-      T3.resumeSpeed = T3.speed;
+    if (N2.queue.length && !T4.hold) {
+      T4.hold = true;
+      T4.resumeSpeed = T4.speed;
     }
     return fresh.length;
   }
@@ -8608,8 +9683,8 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     newsOf(civ7).scanned = civ7.events.length;
   };
   function clockRun(w, months) {
-    const { civ: civ7 } = w, T3 = timeOf(civ7);
-    if (T3.hold) return hasPending(civ7) ? { ok: false, code: "decision_hold", error: "\u6C7A\u65AD\u304C\u5FC5\u8981\u3067\u3059\uFF08\u9078\u3076\u307E\u3067\u6642\u9593\u306F\u9032\u307F\u307E\u305B\u3093\uFF09\u3002\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061\u304C\u6B8B\u3063\u3066\u3044\u308C\u3070\u3001\u5148\u306B OK \u3092\u62BC\u3057\u3066\u304F\u3060\u3055\u3044" } : { ok: false, code: "news_hold", error: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061\u3067\u3059\uFF08OK \u3092\u62BC\u3059\u307E\u3067\u6642\u9593\u306F\u9032\u307F\u307E\u305B\u3093\uFF09" };
+    const { civ: civ7 } = w, T4 = timeOf(civ7);
+    if (T4.hold) return hasPending(civ7) ? { ok: false, code: "decision_hold", error: "\u6C7A\u65AD\u304C\u5FC5\u8981\u3067\u3059\uFF08\u9078\u3076\u307E\u3067\u6642\u9593\u306F\u9032\u307F\u307E\u305B\u3093\uFF09\u3002\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061\u304C\u6B8B\u3063\u3066\u3044\u308C\u3070\u3001\u5148\u306B OK \u3092\u62BC\u3057\u3066\u304F\u3060\u3055\u3044" } : { ok: false, code: "news_hold", error: "\u91CD\u5927\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061\u3067\u3059\uFF08OK \u3092\u62BC\u3059\u307E\u3067\u6642\u9593\u306F\u9032\u307F\u307E\u305B\u3093\uFF09" };
     const n3 = Math.max(1, Math.min(MAX_RUN, months | 0)), snap = checkpointFull(civ7);
     let done2 = 0, held = false;
     decisionsOf(civ7).live = true;
@@ -8638,7 +9713,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     return { ok: true, advanced: done2, held, date: { ...civ7.date } };
   }
   function ackNews(w, { id = null } = {}) {
-    const { civ: civ7 } = w, N2 = newsOf(civ7), T3 = timeOf(civ7), head2 = N2.queue[0];
+    const { civ: civ7 } = w, N2 = newsOf(civ7), T4 = timeOf(civ7), head2 = N2.queue[0];
     if (!head2) return { ok: false, error: "\u78BA\u8A8D\u5F85\u3061\u306E\u30CB\u30E5\u30FC\u30B9\u306F\u3042\u308A\u307E\u305B\u3093" };
     if (id != null && id !== head2.id) return { ok: false, error: "\u6700\u521D\u306E\u30CB\u30E5\u30FC\u30B9\u304B\u3089\u9806\u306B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044" };
     N2.queue.shift();
@@ -8646,21 +9721,21 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     if (N2.acked.length > ACK_KEEP) N2.acked.splice(0, N2.acked.length - ACK_KEEP);
     if (!N2.queue.length && hasPending(civ7)) return { ok: true, resumed: false, next: null, decisionsPending: true };
     if (!N2.queue.length) {
-      T3.hold = false;
-      T3.speed = T3.resumeSpeed ?? DEFAULT_SPEED;
-      T3.resumeSpeed = null;
-      return { ok: true, resumed: true, speed: T3.speed, next: null };
+      T4.hold = false;
+      T4.speed = T4.resumeSpeed ?? DEFAULT_SPEED;
+      T4.resumeSpeed = null;
+      return { ok: true, resumed: true, speed: T4.speed, next: null };
     }
     return { ok: true, resumed: false, next: N2.queue[0] };
   }
   function setSpeed(w, { speed }) {
-    const { civ: civ7 } = w, T3 = timeOf(civ7);
+    const { civ: civ7 } = w, T4 = timeOf(civ7);
     if (!SPEEDS.some((s) => s.id === speed)) return { ok: false, error: "\u305D\u306E\u901F\u5EA6\u306F\u3042\u308A\u307E\u305B\u3093" };
-    if (T3.hold) {
-      T3.resumeSpeed = speed;
+    if (T4.hold) {
+      T4.resumeSpeed = speed;
       return { ok: true, held: true, willResume: speed };
     }
-    T3.speed = speed;
+    T4.speed = speed;
     return { ok: true, speed };
   }
   function newsFeed(civ7, { limit = 40, minLevel = "major", before = null } = {}) {
@@ -8672,13 +9747,13 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     return out;
   }
   function checkClock(civ7) {
-    const errs = [], T3 = civ7.wcde.time, N2 = civ7.wcde.news;
-    if (!T3 && !N2) return errs;
-    if (T3) {
-      if (!SPEEDS.some((s) => s.id === T3.speed)) errs.push("\u6642\u9593\u306E\u901F\u5EA6\u304C\u4E0D\u6B63");
-      if (T3.hold && !N2?.queue.length && !hasPending(civ7)) errs.push("\u505C\u6B62\u4E2D\u306A\u306E\u306B\u78BA\u8A8D\u5F85\u3061\u306E\u30CB\u30E5\u30FC\u30B9\u3082\u6C7A\u65AD\u3082\u306A\u3044\uFF08\u6642\u9593\u304C\u6B62\u307E\u3063\u305F\u307E\u307E\u306B\u306A\u308B\uFF09");
-      if (!T3.hold && (N2?.queue.length || hasPending(civ7))) errs.push("\u78BA\u8A8D\u5F85\u3061\u306E\u30CB\u30E5\u30FC\u30B9\u304B\u6C7A\u65AD\u304C\u3042\u308B\u306E\u306B\u6642\u9593\u304C\u6B62\u307E\u3063\u3066\u3044\u306A\u3044");
-      if (T3.hold && T3.resumeSpeed != null && !SPEEDS.some((s) => s.id === T3.resumeSpeed)) errs.push("\u5FA9\u5E30\u6642\u306E\u901F\u5EA6\u304C\u4E0D\u6B63");
+    const errs = [], T4 = civ7.wcde.time, N2 = civ7.wcde.news;
+    if (!T4 && !N2) return errs;
+    if (T4) {
+      if (!SPEEDS.some((s) => s.id === T4.speed)) errs.push("\u6642\u9593\u306E\u901F\u5EA6\u304C\u4E0D\u6B63");
+      if (T4.hold && !N2?.queue.length && !hasPending(civ7)) errs.push("\u505C\u6B62\u4E2D\u306A\u306E\u306B\u78BA\u8A8D\u5F85\u3061\u306E\u30CB\u30E5\u30FC\u30B9\u3082\u6C7A\u65AD\u3082\u306A\u3044\uFF08\u6642\u9593\u304C\u6B62\u307E\u3063\u305F\u307E\u307E\u306B\u306A\u308B\uFF09");
+      if (!T4.hold && (N2?.queue.length || hasPending(civ7))) errs.push("\u78BA\u8A8D\u5F85\u3061\u306E\u30CB\u30E5\u30FC\u30B9\u304B\u6C7A\u65AD\u304C\u3042\u308B\u306E\u306B\u6642\u9593\u304C\u6B62\u307E\u3063\u3066\u3044\u306A\u3044");
+      if (T4.hold && T4.resumeSpeed != null && !SPEEDS.some((s) => s.id === T4.resumeSpeed)) errs.push("\u5FA9\u5E30\u6642\u306E\u901F\u5EA6\u304C\u4E0D\u6B63");
     }
     if (N2) {
       const seen = /* @__PURE__ */ new Set();
@@ -8728,12 +9803,12 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       f2.push({ ja, v: r23(v) });
       return v;
     };
-    const T3 = TREATY[type];
+    const T4 = TREATY[type];
     {
-      const nf = T3 ? treatyFeasible(civ7, from, to, type) : null;
+      const nf = T4 ? treatyFeasible(civ7, from, to, type) : null;
       if (nf) return { accept: false, score: -9, factors: [{ ja: nf, v: -9 }], hard: true, counter: null };
     }
-    if (!T3) return { accept: false, score: -9, factors: [{ ja: "\u305D\u306E\u7A2E\u985E\u306E\u6761\u7D04\u306F\u306A\u3044", v: -9 }], hard: true, counter: null };
+    if (!T4) return { accept: false, score: -9, factors: [{ ja: "\u305D\u306E\u7A2E\u985E\u306E\u6761\u7D04\u306F\u306A\u3044", v: -9 }], hard: true, counter: null };
     const rel = effective(civ7, to, "relation", from.id);
     let s = add("\u76F8\u624B\u304B\u3089\u898B\u305F\u95A2\u4FC2", (rel - TREATY_THRESHOLD[type]) / 20);
     const gr = grievance(civ7, to, from.id);
@@ -8902,18 +9977,18 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   };
   var DECISION_JA = Object.freeze({ treaty_offer: "\u6761\u7D04\u306E\u7533\u3057\u51FA", peace_offer: "\u8B1B\u548C\u306E\u7533\u3057\u51FA", war_incoming: "\u5BA3\u6226\u5E03\u544A", ally_call: "\u540C\u76DF\u56FD\u306E\u53C2\u6226\u8981\u8ACB", succession: "\u738B\u4F4D\u306E\u7D99\u627F", rebellion: "\u53CD\u4E71\u30FB\u5206\u96E2", omen: "\u4E0D\u7A4F\u306E\u524D\u5146", battle: "\u4F1A\u6226" });
   function hold(civ7) {
-    const T3 = timeOf(civ7);
-    if (!T3.hold) {
-      T3.hold = true;
-      T3.resumeSpeed = T3.speed;
+    const T4 = timeOf(civ7);
+    if (!T4.hold) {
+      T4.hold = true;
+      T4.resumeSpeed = T4.speed;
     }
   }
   function release(civ7) {
-    const T3 = timeOf(civ7);
-    if (T3.hold && !newsOf(civ7).queue.length && !pendingOf(civ7).length) {
-      T3.hold = false;
-      T3.speed = T3.resumeSpeed ?? DEFAULT_SPEED;
-      T3.resumeSpeed = null;
+    const T4 = timeOf(civ7);
+    if (T4.hold && !newsOf(civ7).queue.length && !pendingOf(civ7).length) {
+      T4.hold = false;
+      T4.speed = T4.resumeSpeed ?? DEFAULT_SPEED;
+      T4.resumeSpeed = null;
     }
   }
   var openKey = (civ7, key) => pendingOf(civ7).some((d) => d.key === key);
@@ -9086,22 +10161,22 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   var FACT_JA = { nobility: "\u8CB4\u65CF", military: "\u8ECD", clergy: "\u8056\u8077\u8005", merchants: "\u5546\u4EBA", commoners: "\u6C11\u8846", bureaucrats: "\u5B98\u50DA", artisans: "\u8077\u4EBA", clans: "\u6C0F\u65CF" };
   function successionOptions(ctx2, st2) {
     const { civ: civ7 } = ctx2, mi = civ7.monthIndex, ls = lifeScale(civ7, st2), person2 = (k) => ctx2.nameGen?.person(civ7, civ7.groups[st2.capitalGroupId], leaderRng(civ7, st2, `sc${k}${mi}`)) ?? `${st2.name}\u306E\u4EBA${k}`, u = (k) => U2(civ7, st2.id, mi, "sc", k);
-    const heirFig = st2.heirFigureId ? civ7.figures?.[st2.heirFigureId] : null, fkeys = Object.keys(st2.politics?.factions ?? {}), has2 = (k) => fkeys.includes(k), ageM = (y) => Math.round(y * 12 * ls);
+    const heirFig = st2.heirFigureId ? civ7.figures?.[st2.heirFigureId] : null, fkeys = Object.keys(st2.politics?.factions ?? {}), has3 = (k) => fkeys.includes(k), ageM = (y) => Math.round(y * 12 * ls);
     const mk = (id, relation, name, ageY, legit, backer, kin, extra = {}) => ({ id, relation, name, bornAt: mi - ageM(ageY), ageYears: ageY, skill: r35(0.3 + 0.55 * u(id)), legit, backer, kin, ...extra });
     const list = [];
     if (heirFig) {
       const age = Math.max(1, Math.round((mi - heirFig.bornAt) / 12 / ls));
       list.push({ id: "heir", relation: "\u6307\u540D\u3055\u308C\u305F\u7D99\u627F\u8005", name: heirFig.name, bornAt: heirFig.bornAt, ageYears: age, skill: r35(0.35 + 0.5 * u("heir")), legit: 0.9, backer: "nobility", kin: true, minor: age < 16 });
     } else list.push(mk("eldest", "\u9577\u5B50", person2(1), 22 + Math.round(10 * u("a1")), 0.7, "nobility", true));
-    list.push(mk("brother", "\u5F1F\u30FB\u508D\u6D41\u306E\u738B\u65CF", person2(2), 28 + Math.round(15 * u("a2")), 0.5, has2("clans") && u("cl") < 0.4 ? "clans" : "nobility", true));
+    list.push(mk("brother", "\u5F1F\u30FB\u508D\u6D41\u306E\u738B\u65CF", person2(2), 28 + Math.round(15 * u("a2")), 0.5, has3("clans") && u("cl") < 0.4 ? "clans" : "nobility", true));
     list.push(mk("general", "\u8ECD\u304C\u63A8\u3059\u5C06\u8ECD", person2(3), 35 + Math.round(15 * u("a3")), 0.3, "military", false, { skill: r35(0.5 + 0.4 * u("g")) }));
-    if (has2("clergy") || has2("bureaucrats") || has2("merchants")) {
-      const k = has2("clergy") && u("b") < 0.5 ? "clergy" : has2("bureaucrats") ? "bureaucrats" : has2("merchants") ? "merchants" : "clergy";
+    if (has3("clergy") || has3("bureaucrats") || has3("merchants")) {
+      const k = has3("clergy") && u("b") < 0.5 ? "clergy" : has3("bureaucrats") ? "bureaucrats" : has3("merchants") ? "merchants" : "clergy";
       list.push(mk("faction", `${FACT_JA[k]}\u304C\u63A8\u3059\u4EBA\u7269`, person2(4), 30 + Math.round(15 * u("a4")), 0.35, k, false));
     }
     const opts = [];
     for (const c of list) {
-      if (c.minor) for (const [rid, rel, bk, k] of [["queen", "\u6BCD\u540E", "nobility", 5], ["vizier", "\u5BB0\u76F8", has2("bureaucrats") ? "bureaucrats" : "nobility", 6], ["general", "\u5C06\u8ECD", "military", 7]]) {
+      if (c.minor) for (const [rid, rel, bk, k] of [["queen", "\u6BCD\u540E", "nobility", 5], ["vizier", "\u5BB0\u76F8", has3("bureaucrats") ? "bureaucrats" : "nobility", 6], ["general", "\u5C06\u8ECD", "military", 7]]) {
         const reg = { name: person2(k), skill: r35(0.35 + 0.5 * u(`r${rid}`)), backer: bk, relation: rel };
         opts.push({ id: `${c.id}:${rid}`, ja: `${c.name}\uFF08${c.ageYears}\u6B73\uFF09\u3092\u7ACB\u3066\u3001${rel}${reg.name}\u304C\u6442\u653F`, hint: `\u80FD\u529B${Math.round(reg.skill * 100)}\u30FB${FACT_JA[bk]}\u304C\u652F\u6301\uFF0F\u6B63\u7D71\u6027 \u9AD8`, payload: { cand: c, regent: reg } });
       }
@@ -9262,7 +10337,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       if (camp) camp.waiting = null;
       return { ok: true, note: "\u6226\u6CC1\u304C\u5909\u308F\u308A\u3001\u4F1A\u6226\u306F\u8D77\u304D\u306A\u304B\u3063\u305F" };
     }
-    const mineSt = civ7.states[p.side === "A" ? A2.stateId : D2.stateId], cp = corpsById(mineSt, (p.side === "A" ? A2 : D2).corpsId), cf = cp ? corpsFx(cp) : { off: 0, def: 0, skill: 0, siege: 0 };
+    const mineSt = civ7.states[p.side === "A" ? A2.stateId : D2.stateId], cp = corpsById(mineSt, (p.side === "A" ? A2 : D2).corpsId), cf = cp ? corpsFx(cp, mineSt) : { off: 0, def: 0, skill: 0, siege: 0 };
     const finish = (bias2, lossMine, lossFoe, note0) => {
       const lossA = p.side === "A" ? lossMine : lossFoe, lossD = p.side === "A" ? lossFoe : lossMine;
       ops.lastBattleDecision = civ7.monthIndex;
@@ -10360,6 +11435,9 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     corpsCmd("corps.convert", (ctx2, st2, c) => convertUnit(ctx2, st2, c));
     corpsCmd("corps.appoint", (ctx2, st2, c) => appoint(ctx2, st2, c));
     corpsCmd("corps.dismiss", (ctx2, st2, c) => dismiss(st2, c));
+    corpsCmd("corps.setComposition", (ctx2, st2, c) => setComposition(ctx2, st2, c));
+    corpsCmd("corps.appointChief", (ctx2, st2, c) => appointChief(ctx2, st2, c));
+    corpsCmd("corps.dismissChief", (ctx2, st2, c) => dismissChief(st2, c));
     corpsCmd("corps.order", (ctx2, st2, c) => setOrder(ctx2, st2, c));
     corpsCmd("corps.commit", (ctx2, st2, c) => commitWar(ctx2, st2, c));
     defineCommand("focus.set", { authorities: [AUTHORITY.PLAYER], control: true, apply: (w, c) => {
@@ -10379,6 +11457,12 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       const st2 = w.civ.states[c.stateId];
       if (!st2?.alive) return { ok: false, error: "\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093" };
       return reorganize(w.sim.ctx, st2, c.shares);
+    } });
+    defineCommand("state.setOrbat", { authorities: [AUTHORITY.PLAYER, AUTHORITY.CREATOR], control: true, apply: (w, c) => {
+      const st2 = w.civ.states[c.stateId];
+      if (!st2?.alive) return { ok: false, error: "\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093" };
+      const r = setOrbat(w.sim.ctx, st2, c);
+      return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason };
     } });
     defineCommand("state.adoptDoctrine", { authorities: [AUTHORITY.PLAYER], control: true, apply: (w, c) => {
       const st2 = w.civ.states[c.stateId];
@@ -10410,7 +11494,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   }
 
   // js/core/wcde/world.js
-  function createNewWorld(input, { generate = generateWorld, historySeed = null, stepYears, onProgress = null } = {}) {
+  function createNewWorld(input, { generate = generateWorldPluggable, historySeed = null, stepYears, onProgress = null } = {}) {
     registerCommands();
     const { config, errors } = normalizeWorldConfig(input);
     if (errors.length) return { ok: false, errors };
@@ -10424,6 +11508,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     finalizeLanguages(civ7);
     defineReligions({ civ: civ7 });
     const w = createWcde(world, civ7);
+    civ7.wcde.plugins = pluginStamp();
     const candidates = refreshCandidates(w);
     return { ok: true, w, errors: [], report: { prehistory: stats, candidates: candidates.length } };
   }
@@ -10451,7 +11536,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     }
     return { done: false, progress: E.done / Math.max(1, E.total) };
   }
-  var defaultGenerate = generateWorld;
+  var defaultGenerate = generateWorldPluggable;
   var formatWorldDate = (w, mi = w.civ.monthIndex) => formatDate(w.civ.wcde.config.calendar, mi);
 
   // js/ui/v6/common.js
@@ -10485,21 +11570,21 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     return x >>> 0;
   };
   var PALETTE = [[6, 64, 62], [176, 46, 48], [46, 78, 60], [268, 44, 66], [100, 42, 52], [212, 58, 62], [330, 52, 64], [28, 70, 58], [148, 40, 46], [240, 44, 70], [62, 56, 52], [290, 36, 60], [190, 52, 56], [14, 42, 48], [130, 34, 62], [52, 62, 70], [224, 40, 50], [350, 54, 54], [82, 50, 62], [258, 38, 56], [36, 46, 66], [168, 36, 62], [306, 44, 70], [200, 44, 40]];
-  var REG = /* @__PURE__ */ new Map();
+  var REG2 = /* @__PURE__ */ new Map();
   var USE = new Array(PALETTE.length).fill(0);
   var pdist = (a, b) => {
     const A2 = PALETTE[a], B = PALETTE[b], dh = Math.abs(A2[0] - B[0]), h2 = Math.min(dh, 360 - dh) / 180;
     return h2 + 0.6 * Math.abs(A2[2] - B[2]) / 30 + 0.3 * Math.abs(A2[1] - B[1]) / 40;
   };
-  var hasColor = (id) => REG.has(id);
+  var hasColor = (id) => REG2.has(id);
   function resetColors() {
-    REG.clear();
+    REG2.clear();
     USE.fill(0);
   }
   function assignColors(ids, adj) {
     for (const id of ids) {
-      if (REG.has(id)) continue;
-      const near = [...adj.get(id) ?? []].map((n3) => REG.get(n3)).filter((x) => x != null);
+      if (REG2.has(id)) continue;
+      const near = [...adj.get(id) ?? []].map((n3) => REG2.get(n3)).filter((x) => x != null);
       let best = 0, bs = -1e9;
       for (let i = 0; i < PALETTE.length; i++) {
         const sep = near.length ? Math.min(...near.map((j) => pdist(i, j))) : 9, sc = Math.min(sep, 1.2) * 10 - USE[i] * 1.5;
@@ -10508,12 +11593,12 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
           best = i;
         }
       }
-      REG.set(id, best);
+      REG2.set(id, best);
       USE[best]++;
     }
   }
   var colorOf = (id, l) => {
-    const i = REG.get(id);
+    const i = REG2.get(id);
     if (i != null) {
       const p = PALETTE[i];
       return `hsl(${p[0]} ${p[1]}% ${l ?? p[2]}%)`;
@@ -10752,11 +11837,11 @@ ${shown}${more}`;
   var Geo = class {
     constructor(mesh) {
       this.mesh = mesh;
-      const N2 = mesh.cellCount, T3 = mesh.vertexXYZ.length / 3;
+      const N2 = mesh.cellCount, T4 = mesh.vertexXYZ.length / 3;
       this.N = N2;
-      this.T = T3;
-      const X = mesh.vertexXYZ, vlon = new Float32Array(T3), vlat = new Float32Array(T3);
-      for (let v = 0; v < T3; v++) {
+      this.T = T4;
+      const X = mesh.vertexXYZ, vlon = new Float32Array(T4), vlat = new Float32Array(T4);
+      for (let v = 0; v < T4; v++) {
         vlon[v] = Math.atan2(X[3 * v + 1], X[3 * v]);
         vlat[v] = Math.asin(clamp23(X[3 * v + 2], -1, 1));
       }
@@ -10792,8 +11877,8 @@ ${shown}${more}`;
       this.ec = /* @__PURE__ */ new Map();
       this.cp = null;
       this.land = null;
-      const T3 = this.T, VX = new Float32Array(T3), VY = new Float32Array(T3), cellPx = Math.sqrt(W2 * H / this.N);
-      for (let v = 0; v < T3; v++) {
+      const T4 = this.T, VX = new Float32Array(T4), VY = new Float32Array(T4), cellPx = Math.sqrt(W2 * H / this.N);
+      for (let v = 0; v < T4; v++) {
         const a = hash01(v, 1) * TAU3, r = JITTER * cellPx * (0.4 + 0.6 * hash01(v, 2));
         VX[v] = (this.vlon[v] + Math.PI) / TAU3 * W2 + Math.cos(a) * r;
         VY[v] = (Math.PI / 2 - this.vlat[v]) / Math.PI * H + Math.sin(a) * r;
@@ -11207,44 +12292,44 @@ ${shown}${more}`;
     }
     /** 画面の幅が変わったときだけ、形状まわりのキャッシュを作り直す */
     ensureGeo(W2, H) {
-      const T3 = this.terr();
+      const T4 = this.terr();
       if (this.wKey === W2) return;
       this.wKey = W2;
       this.geo.build(W2, H);
-      this.cp = this.geo.paths(T3.isSea);
-      T3.marks = reliefMarks(this.geo, this.w.world.cell, T3.isSea);
+      this.cp = this.geo.paths(T4.isSea);
+      T4.marks = reliefMarks(this.geo, this.w.world.cell, T4.isSea);
       const ce = this.w.world.cell, g = this.geo;
-      T3.coast = g.edgesWhere((c, n3) => !T3.isSea[c] && T3.isSea[n3]);
-      T3.lakeEdge = g.edgesWhere((c, n3) => ce.landWater[c] !== 2 && !T3.isSea[c] && ce.landWater[n3] === 2);
-      T3.cellsP = null;
-      T3.rivers = riverPaths(g, ce, T3.isSea);
-      T3.grid = null;
+      T4.coast = g.edgesWhere((c, n3) => !T4.isSea[c] && T4.isSea[n3]);
+      T4.lakeEdge = g.edgesWhere((c, n3) => ce.landWater[c] !== 2 && !T4.isSea[c] && ce.landWater[n3] === 2);
+      T4.cellsP = null;
+      T4.rivers = riverPaths(g, ce, T4.isSea);
+      T4.grid = null;
       this.gc = this.rc = this.frame = null;
       this._labelsAt = -1;
-      T3.tex = null;
+      T4.tex = null;
       try {
         const t = textureTile(mkCanvas);
-        T3.tex = t && this.cv.getContext("2d")?.createPattern(t, "repeat");
+        T4.tex = t && this.cv.getContext("2d")?.createPattern(t, "repeat");
       } catch {
-        T3.tex = null;
+        T4.tex = null;
       }
     }
     cellColors(id) {
-      const T3 = this.T, ce = this.w.world.cell, N2 = this.geo.N;
-      if (T3.col[id]) return T3.col[id];
+      const T4 = this.T, ce = this.w.world.cell, N2 = this.geo.N;
+      if (T4.col[id]) return T4.col[id];
       const a = new Array(N2).fill(null);
       for (let c = 0; c < N2; c++) {
-        if (T3.isSea[c]) continue;
+        if (T4.isSea[c]) continue;
         if (ce.landWater[c] === 2) {
           a[c] = LAKE_COLOR;
           continue;
         }
-        if (id === "heightmap") a[c] = RAMPS.land(T3.elS[c]);
+        if (id === "heightmap") a[c] = RAMPS.land(T4.elS[c]);
         else if (id === "biomes") a[c] = BIOME_COLORS[ce.biome[c]] ?? LAND_BASE;
         else if (id === "temperature") a[c] = RAMPS.temp(ce.temp[c]);
         else if (id === "precipitation") a[c] = RAMPS.precip(ce.precip[c]);
       }
-      return T3.col[id] = a;
+      return T4.col[id] = a;
     }
     /* ---------- 所有・色 ---------- */
     owner() {
@@ -11334,8 +12419,8 @@ ${shown}${more}`;
     }
     /** 地形・気候（静的）: 海の深さ・海岸・陸・標高/バイオーム/気温/降水 */
     renderGround(g, W2, H) {
-      const T3 = this.T, geo = this.geo, v = this.view, cp = this.cp, N2 = geo.N, cpx = geo.cellPx, seaIds = [], landIds = [];
-      for (let c = 0; c < N2; c++) (T3.isSea[c] ? seaIds : landIds).push(c);
+      const T4 = this.T, geo = this.geo, v = this.view, cp = this.cp, N2 = geo.N, cpx = geo.cellPx, seaIds = [], landIds = [];
+      for (let c = 0; c < N2; c++) (T4.isSea[c] ? seaIds : landIds).push(c);
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.globalAlpha = 1;
       g.fillStyle = SEA_DEEP;
@@ -11343,13 +12428,13 @@ ${shown}${more}`;
       g.setTransform(v.k, 0, 0, v.k, v.x, v.y);
       g.lineJoin = "round";
       g.lineWidth = 0.9 / v.k;
-      if (!T3.seaCol) T3.seaCol = Array.from({ length: N2 }, (_, c) => T3.isSea[c] ? RAMPS.sea(-T3.seaS[c]) : null);
-      this.paintCells(g, seaIds, (c) => T3.seaCol[c]);
+      if (!T4.seaCol) T4.seaCol = Array.from({ length: N2 }, (_, c) => T4.isSea[c] ? RAMPS.sea(-T4.seaS[c]) : null);
+      this.paintCells(g, seaIds, (c) => T4.seaCol[c]);
       g.lineCap = "round";
       for (const [w, a] of [[0.95, 0.09], [0.6, 0.12], [0.3, 0.17]]) {
         g.lineWidth = cpx * w;
         g.strokeStyle = `rgba(200,238,246,${a})`;
-        g.stroke(T3.coast);
+        g.stroke(T4.coast);
       }
       g.lineWidth = 0.9 / v.k;
       g.fillStyle = LAND_BASE;
@@ -11358,38 +12443,38 @@ ${shown}${more}`;
         const col = this.cellColors(id);
         this.pass(g, W2, H, this.alpha[id], (t) => this.paintCells(t, landIds, (c) => col[c]));
       }
-      if (!T3.lakes) {
+      if (!T4.lakes) {
         const ce = this.w.world.cell;
-        T3.lakes = landIds.filter((c) => ce.landWater[c] === 2);
+        T4.lakes = landIds.filter((c) => ce.landWater[c] === 2);
       }
-      this.paintCells(g, T3.lakes, () => LAKE_COLOR);
+      this.paintCells(g, T4.lakes, () => LAKE_COLOR);
       g.strokeStyle = "rgba(24,38,52,.7)";
       g.lineWidth = Math.max(0.5, 1.1 / Math.sqrt(v.k));
-      g.stroke(T3.coast);
+      g.stroke(T4.coast);
       g.strokeStyle = "rgba(24,38,52,.45)";
-      g.stroke(T3.lakeEdge);
+      g.stroke(T4.lakeEdge);
     }
     /** 陰影・山岳・紙の模様（静的）。透明な紙に描き、塗りの上に重ねる */
     renderRelief(g, W2, H) {
-      const T3 = this.T, v = this.view, cp = this.cp, N2 = this.geo.N;
+      const T4 = this.T, v = this.view, cp = this.cp, N2 = this.geo.N;
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.clearRect(0, 0, W2, H);
       g.setTransform(v.k, 0, 0, v.k, v.x, v.y);
       for (let c = 0; c < N2; c++) {
-        if (T3.isSea[c]) continue;
-        const s = T3.shade[c];
+        if (T4.isSea[c]) continue;
+        const s = T4.shade[c];
         if (s < -0.035) g.fillStyle = `rgba(22,18,40,${Math.min(0.28, -s * 0.8).toFixed(3)})`;
         else if (s > 0.035) g.fillStyle = `rgba(255,252,240,${Math.min(0.2, s * 0.65).toFixed(3)})`;
         else continue;
         g.fill(cp[c]);
       }
-      if (T3.tex) {
+      if (T4.tex) {
         g.globalAlpha = 0.55;
-        g.fillStyle = T3.tex;
+        g.fillStyle = T4.tex;
         g.fill(this.geo.land);
         g.globalAlpha = 1;
       }
-      drawMarks(g, T3.marks, v.k);
+      drawMarks(g, T4.marks, v.k);
     }
     cached(slot, key, W2, H, fn) {
       const c = this[slot];
@@ -11404,7 +12489,7 @@ ${shown}${more}`;
       if (!ctx2) return;
       const [W2, H] = this.size();
       this.ensureGeo(W2, H);
-      const T3 = this.T, geo = this.geo, v = this.view, civ7 = this.w.civ, own = this.owner(), cell = this.w.world.cell;
+      const T4 = this.T, geo = this.geo, v = this.view, civ7 = this.w.civ, own = this.owner(), cell = this.w.world.cell;
       const vk = `${W2}|${v.k.toFixed(4)}|${v.x.toFixed(1)}|${v.y.toFixed(1)}`, gsig = vk + FILL_IDS.slice(0, 4).map((i) => this.layers.has(i) ? i + this.alpha[i] : "").join(",");
       ctx2.setTransform(1, 0, 0, 1, 0, 0);
       ctx2.globalAlpha = 1;
@@ -11454,7 +12539,7 @@ ${shown}${more}`;
     }
     /** 線・記号・文字（月ごとに変わるものを含む。毎回描く） */
     lines(ctx2, own, W2, H) {
-      const T3 = this.T, geo = this.geo, v = this.view, civ7 = this.w.civ, L = this.layers, k = v.k, sk = Math.sqrt(k), cen = geo.cen, ln = (a, b, p) => {
+      const T4 = this.T, geo = this.geo, v = this.view, civ7 = this.w.civ, L = this.layers, k = v.k, sk = Math.sqrt(k), cen = geo.cen, ln = (a, b, p) => {
         const [x1, y1] = geo.proj(cen[2 * a], cen[2 * a + 1]);
         let [x2, y2] = geo.proj(cen[2 * b], cen[2 * b + 1]);
         x2 += W2 * Math.round((x1 - x2) / W2);
@@ -11462,7 +12547,7 @@ ${shown}${more}`;
         p.lineTo(x2, y2);
       };
       if (L.has("grid")) {
-        if (!T3.grid) {
+        if (!T4.grid) {
           const p = new Path2D();
           for (let lo = -150; lo <= 180; lo += 30) {
             const [x] = geo.proj(lo * Math.PI / 180, 0);
@@ -11474,27 +12559,27 @@ ${shown}${more}`;
             p.moveTo(0, y);
             p.lineTo(W2, y);
           }
-          T3.grid = p;
+          T4.grid = p;
         }
         ctx2.strokeStyle = "rgba(255,255,255,.22)";
         ctx2.lineWidth = 0.8 / k;
         ctx2.setLineDash([4 / k, 4 / k]);
-        ctx2.stroke(T3.grid);
+        ctx2.stroke(T4.grid);
         ctx2.setLineDash([]);
       }
       if (L.has("cells")) {
-        T3.cellsP ?? (T3.cellsP = geo.edgesWhere((c, n3) => c < n3));
+        T4.cellsP ?? (T4.cellsP = geo.edgesWhere((c, n3) => c < n3));
         ctx2.strokeStyle = "rgba(20,24,30,.28)";
         ctx2.lineWidth = 0.6 / k;
-        ctx2.stroke(T3.cellsP);
+        ctx2.stroke(T4.cellsP);
       }
-      if (L.has("rivers") && T3.rivers.length) {
+      if (L.has("rivers") && T4.rivers.length) {
         ctx2.strokeStyle = "#4f97d4";
         [[0, 0.5, 3], [1, 0.75, 1.4], [2, 1.15, 0]].forEach(([b, w, kmin]) => {
           if (k < kmin) return;
           ctx2.lineWidth = w * geo.cellPx * 0.11 / Math.pow(k, 0.55);
           ctx2.globalAlpha = 0.95;
-          ctx2.stroke(T3.rivers[b]);
+          ctx2.stroke(T4.rivers[b]);
         });
         ctx2.globalAlpha = 1;
       }
@@ -11502,7 +12587,7 @@ ${shown}${more}`;
       if (L.has("borders")) {
         const p = geo.edgesWhere((c, n3) => {
           const a = stateOf(c), b = stateOf(n3);
-          return a && a !== b && !T3.isSea[n3] && (b ? c < n3 : true);
+          return a && a !== b && !T4.isSea[n3] && (b ? c < n3 : true);
         }, own.keys());
         ctx2.strokeStyle = "rgba(24,22,30,.45)";
         ctx2.lineWidth = 3.2 / sk;
@@ -11519,7 +12604,7 @@ ${shown}${more}`;
         }
         const p = geo.edgesWhere((c, n3) => {
           const a = stateOf(c);
-          return a && warring.has(a) && stateOf(n3) !== a && !T3.isSea[n3];
+          return a && warring.has(a) && stateOf(n3) !== a && !T4.isSea[n3];
         }, own.keys());
         ctx2.strokeStyle = "#e0463c";
         ctx2.lineWidth = 2.4 / sk;
@@ -12163,8 +13248,8 @@ ${shown}${more}`;
   }
 
   // js/version.js
-  var APP_VERSION = "6.12.0";
-  var APP_VERSION_NAME = "\u56FD\u5BB6\u3092\u52D5\u304B\u3059";
+  var APP_VERSION = "6.13.0";
+  var APP_VERSION_NAME = "\u8ECD\u3068\u6226\u4E89\u3092\u73FE\u4EE3\u307E\u3067\u30FB\u5730\u5F62\u3068\u8EFD\u3055";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/v6/title.js
@@ -12459,7 +13544,10 @@ ${shown}${more}`;
       const a = colX.get(list[0].id), b = colX.get(list.at(-1).id) + NW;
       svg.append(sv("rect", { x: a - 6, y: BUS_Y + 4, width: b - a + 12, height: H - BUS_Y - 8, fill: col, opacity: 0.07 }), sv("text", { x: a, y: BUS_Y - 4, "font-size": 10, fill: "#838995" }, label));
     };
-    grp(common, "\u5171\u901A 5 \u7CFB\u7D71", "#6fa8c9");
+    grp(common.filter((b) => !b.service), "\u57FA\u5E79 5 \u7CFB\u7D71", "#6fa8c9");
+    grp(common.filter((b) => b.service === "land"), "\u9678\u8ECD\u306E\u8DEF\u7DDA\uFF081 \u3064\u9078\u3076\uFF09", "#9fbf8a");
+    grp(common.filter((b) => b.service === "sea"), "\u6D77\u8ECD\u306E\u8DEF\u7DDA\uFF081 \u3064\u9078\u3076\uFF09", "#5a8fb0");
+    grp(common.filter((b) => b.service === "air"), "\u7A7A\u8ECD\u306E\u8DEF\u7DDA\uFF081 \u3064\u9078\u3076\uFF09", "#c9b36f");
     grp(special, "\u56FD\u5BB6\u56FA\u6709 3 \u7CFB\u7D71 \u2605\uFF08\u653F\u4F53\u30FB\u652F\u6301\u52E2\u529B\u30FB\u5730\u5F62\u30FB\u6226\u4E89\u306E\u7D4C\u9A13\u3067\u6C7A\u307E\u308B\uFF09", "#a58bd0");
     for (const b of order) {
       line(`M${cx(b)} ${BUS_Y}V${HEAD_Y}`);
@@ -12528,28 +13616,28 @@ ${shown}${more}`;
     const anc = [];
     for (let x = by.get(cur.parent); x && anc.length < 4; x = by.get(x.parent)) anc.unshift(x);
     const kids = items.filter((x) => x.parent === id).sort((a, b) => a.bornAt - b.bornAt).slice(0, 6), more = items.filter((x) => x.parent === id).length - kids.length;
-    const NW = 92, NH = 20, GX = 22, cols = anc.length + 1 + (kids.length ? 1 : 0), W2 = cols * (NW + GX), H = Math.max(40, kids.length * 26 + 14), midY = H / 2, svg = sv("svg", { viewBox: `0 0 ${W2} ${H}`, width: "100%", class: "tree mini", style: `max-height:${H * 1.4}px` });
+    const NW = 92, NH = 20, GX2 = 22, cols = anc.length + 1 + (kids.length ? 1 : 0), W2 = cols * (NW + GX2), H = Math.max(40, kids.length * 26 + 14), midY = H / 2, svg = sv("svg", { viewBox: `0 0 ${W2} ${H}`, width: "100%", class: "tree mini", style: `max-height:${H * 1.4}px` });
     const node = (x, cx2, cy, sel) => svg.append(sv("g", { class: "tnode", onclick: () => !sel && onPick(x) }, sv("rect", { x: cx2, y: cy - NH / 2, width: NW, height: NH, rx: 3, fill: "#1a1d23", stroke: sel ? "#d8b45a" : colorOf(x.id), "stroke-width": sel ? 2.2 : 1.3 }), sv("text", { x: cx2 + 5, y: cy + 4, "font-size": 11, fill: "#d9d6cc" }, x.name.slice(0, 7))));
     const link2 = (x1, y1, x2, y2) => svg.append(sv("path", { d: `M${x1} ${y1}C${x1 + 12} ${y1} ${x2 - 12} ${y2} ${x2} ${y2}`, fill: "none", stroke: "#4a515c", "stroke-width": 1.2 }));
     anc.forEach((x, i) => {
-      node(x, i * (NW + GX), midY, false);
-      link2(i * (NW + GX) + NW, midY, (i + 1) * (NW + GX), midY);
+      node(x, i * (NW + GX2), midY, false);
+      link2(i * (NW + GX2) + NW, midY, (i + 1) * (NW + GX2), midY);
     });
-    const cx = anc.length * (NW + GX);
+    const cx = anc.length * (NW + GX2);
     node(cur, cx, midY, true);
     kids.forEach((k, i) => {
       const y = 7 + 13 + i * 26 + (H - 14 - kids.length * 26) / 2;
-      node(k, cx + NW + GX, y, false);
-      link2(cx + NW, midY, cx + NW + GX, y);
+      node(k, cx + NW + GX2, y, false);
+      link2(cx + NW, midY, cx + NW + GX2, y);
     });
-    if (more > 0) svg.append(sv("text", { x: cx + NW + GX, y: H - 1, "font-size": 10, fill: "#838995" }, `\u307B\u304B ${more}`));
+    if (more > 0) svg.append(sv("text", { x: cx + NW + GX2, y: H - 1, "font-size": 10, fill: "#838995" }, `\u307B\u304B ${more}`));
     return svg;
   }
 
   // js/ui/v6/policy.js
   var sg = (x, d = 1) => (x >= 0 ? "+" : "") + (Math.round(x * 100 * 10 ** (d - 1)) / 10 ** (d - 1)).toFixed(d - 1 > 0 ? d - 1 : 0) + "%";
-  var KEYS = { tax: "\u7A0E\u53CE", mil: "\u8ECD\u4E8B", def: "\u9632\u885B", stab: "\u5B89\u5B9A", dipl: "\u5916\u4EA4", scout: "\u5075\u5BDF", tech: "\u6280\u8853", cult: "\u6587\u5316" };
-  var fxChips = (fx3 = {}, fac = {}) => [...Object.entries(KEYS).filter(([k]) => fx3[k]).map(([k, ja]) => h("span", { class: "chip" + (fx3[k] < 0 ? " bad" : " good") }, `${ja} ${sg(fx3[k])}`)), ...Object.entries(fac).filter(([, v]) => v).map(([k, v]) => h("span", { class: "chip" + (v < 0 ? " bad" : " good"), title: "\u52E2\u529B\u306E\u652F\u6301\u306E\u76EE\u6A19" }, `${FJ[k] ?? k}\u306E\u652F\u6301 ${sg(v)}`))];
+  var KEYS2 = { tax: "\u7A0E\u53CE", mil: "\u8ECD\u4E8B", def: "\u9632\u885B", stab: "\u5B89\u5B9A", dipl: "\u5916\u4EA4", scout: "\u5075\u5BDF", tech: "\u6280\u8853", cult: "\u6587\u5316" };
+  var fxChips = (fx3 = {}, fac = {}) => [...Object.entries(KEYS2).filter(([k]) => fx3[k]).map(([k, ja]) => h("span", { class: "chip" + (fx3[k] < 0 ? " bad" : " good") }, `${ja} ${sg(fx3[k])}`)), ...Object.entries(fac).filter(([, v]) => v).map(([k, v]) => h("span", { class: "chip" + (v < 0 ? " bad" : " good"), title: "\u52E2\u529B\u306E\u652F\u6301\u306E\u76EE\u6A19" }, `${FJ[k] ?? k}\u306E\u652F\u6301 ${sg(v)}`))];
   var FJ = { nobility: "\u8CB4\u65CF", clergy: "\u8056\u8077\u8005", merchants: "\u5546\u4EBA", military: "\u8ECD", commoners: "\u6C11\u8846", bureaucrats: "\u5B98\u50DA", artisans: "\u8077\u4EBA", clans: "\u6C0F\u65CF" };
   function officeSummary(st2) {
     const e = officeEffects(st2, S2.w.civ.monthIndex);
@@ -12820,40 +13908,54 @@ ${shown}${more}`;
   function tMilitaryV(st2, mine) {
     const c = civ(), M = st2.military;
     if (!M) return h("p", { class: "n" }, "\u8ECD\u4E8B\u306E\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3002");
-    const can2 = st2.alive && (mine || !controlled()), units = M.units ?? [], tot = units.reduce((a, u) => a + u.size, 0) || 1, out = h("div", {});
+    const can2 = st2.alive && (mine || !controlled()), units = M.units ?? [], tot = units.reduce((a, u) => a + u.size, 0) || 1, out = h("div", {}), ctx2 = S2.w.sim.ctx, colOf = (k) => KIND_COL[k] ?? SERVICES[serviceOf(k)].color, manual = M.orbat?.mode === "manual";
     out.append(h("div", { class: "rings" }, ring(effective(c, st2, "equipLevel"), "\u88C5\u5099", "#d8b45a"), ring(effective(c, st2, "readiness"), "\u7DF4\u5EA6", "#9fbf8a"), ring(Math.min(1, Math.max(0, 0.5 + st2.milBonus)), "\u8ECD\u4E8B\u80FD\u529B", "#d0605a"), ring(Math.min(1, st2.defense ?? 0), "\u8981\u585E", "#8fb3b0")));
-    out.append(lb("\u7DE8\u6210", "ORGANIZATION"), stackbar(units.map((u) => ({ label: u.name, value: u.size, color: KIND_COL[u.kind] })), { height: 16 }));
-    out.append(h("div", { class: "forms" }, ...units.flatMap((u) => [
-      h("div", { class: "uhead" }, h("span", { style: `color:${KIND_COL[u.kind]}` }, icon(KIND_ICON[u.kind] ?? "flag", 16)), h("b", {}, u.name), h("small", {}, `${n0(u.size)}\uFF08${pct(u.size / tot)}\uFF09`), h("span", { class: "barv", title: `\u88C5\u5099 ${pct(u.equip)}` }, h("i", { style: `width:${u.equip * 100}%;background:#d8b45a` })), h("span", { class: "barv", title: `\u7DF4\u5EA6 ${pct(u.readiness)}` }, h("i", { style: `width:${u.readiness * 100}%;background:#9fbf8a` }))),
-      h("div", { class: "fcards" }, ...formationsOf(st2, u).map((f2) => h("div", { class: "fcard", style: `border-color:${KIND_COL[u.kind]}` }, h("b", {}, f2.name), h("small", {}, n0(f2.size)))))
-    ])));
+    const sch = M.school ?? {}, schName = (s) => SCHOOL_BY_ID[sch[s]]?.ja ?? "\u672A\u9078\u629E";
+    out.append(lb("\u7DE8\u6210", "ORGANIZATION"), stackbar(units.map((u) => ({ label: u.name, value: u.size, color: colOf(u.kind) })), { height: 16 }), h("small", { class: "n" }, `\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA\u30FB${manual ? "\u624B\u52D5\u306E\u7DE8\u6210" : "\u81EA\u52D5\u306E\u7DE8\u6210\uFF08\u6280\u8853\u30FB\u5730\u7406\u30FB\u30C9\u30AF\u30C8\u30EA\u30F3\u304B\u3089\u6C7A\u307E\u308B\uFF09"}\u3000\u8DEF\u7DDA\uFF1A\u9678 ${schName("land")}\uFF0F\u6D77 ${schName("sea")}\uFF0F\u7A7A ${schName("air")}`));
+    for (const svc of SERVICE_KEYS) {
+      const us = units.filter((u) => serviceOf(u.kind) === svc);
+      if (!us.length) continue;
+      const sum = us.reduce((a, u) => a + u.size, 0);
+      out.append(h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja), h("small", {}, `${n0(sum)} \u4EBA\uFF08${pct(sum / tot)}\uFF09`)));
+      out.append(h("div", { class: "forms" }, ...us.flatMap((u) => {
+        const it = itemsOf(u.kind, u.size);
+        return [h("div", { class: "uhead" }, h("span", { style: `color:${colOf(u.kind)}` }, icon(KIND_ICON[u.kind] ?? "flag", 16)), h("b", {}, u.name), h("small", {}, `${n0(u.size)} \u4EBA${it ? `\uFF08\u7D04 ${n0(it)} ${UNIT_KINDS[u.kind].item}\uFF09` : ""}`), h("span", { class: "barv", title: `\u88C5\u5099 ${pct(u.equip)}` }, h("i", { style: `width:${u.equip * 100}%;background:#d8b45a` })), h("span", { class: "barv", title: `\u7DF4\u5EA6 ${pct(u.readiness)}` }, h("i", { style: `width:${u.readiness * 100}%;background:#9fbf8a` }))), svc === "land" ? h("div", { class: "fcards" }, ...formationsOf(st2, u).map((f2) => h("div", { class: "fcard", style: `border-color:${colOf(u.kind)}` }, h("b", {}, f2.name), h("small", {}, n0(f2.size))))) : null];
+      })));
+    }
     if (can2) {
-      const avail = Object.entries(UNIT_KINDS).filter(([k, d]) => d.need(st2, S2.w.sim.ctx)), cur = Object.fromEntries(avail.map(([k]) => [k, Math.round((units.find((u) => u.kind === k)?.size ?? 0) / tot * 100)])), val = { ...cur }, sl = {};
+      const avail = Object.entries(UNIT_KINDS).filter(([k, d]) => d.need(st2, ctx2)), cur = Object.fromEntries(avail.map(([k]) => [k, Math.round(units.find((u) => u.kind === k)?.size ?? 0)])), val = { ...cur }, inp = {};
       const sum = () => Object.values(val).reduce((a, b) => a + b, 0), info = h("small", {}), paint = () => {
-        info.textContent = `\u5408\u8A08 ${sum()}%`;
-        info.style.color = sum() === 100 ? "var(--dim)" : "#d0605a";
-        for (const k in sl) {
-          sl[k].lab.textContent = `${val[k]}%`;
-          sl[k].inp.value = val[k];
-        }
+        const s = sum();
+        info.textContent = `\u6307\u5B9A\u306E\u5408\u8A08 ${n0(s)} \u4EBA\uFF0F\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA${s > st2.army ? "\uFF08\u8D85\u3048\u305F\u5206\u306F\u6BD4\u4F8B\u3057\u3066\u7E2E\u3080\uFF09" : s < st2.army ? `\uFF08\u8DB3\u308A\u306A\u3044 ${n0(st2.army - s)} \u4EBA\u306F\u4E88\u5099\u5F79\u306B\u306A\u308B\uFF09` : ""}`;
+        info.style.color = s > st2.army ? "#d0605a" : "var(--dim)";
+        for (const k in inp) inp[k].value = val[k];
       };
-      const rows = avail.map(([k, d]) => {
-        const inp = h("input", { type: "range", min: 0, max: 100, step: 5, value: val[k], "data-kind": k, oninput: (e) => {
-          val[k] = Number(e.target.value);
-          paint();
-        } }), lab = h("small", {}, `${val[k]}%`);
-        sl[k] = { inp, lab };
-        return h("div", { class: "slrow" }, h("span", { style: `color:${KIND_COL[k]}` }, icon(KIND_ICON[k] ?? "flag", 15)), h("span", { class: "nm" }, d.ja), inp, lab);
+      const rows = SERVICE_KEYS.flatMap((svc) => {
+        const list = avail.filter(([k, d]) => d.service === svc);
+        if (!list.length) return [];
+        return [h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja)), ...list.map(([k, d]) => {
+          const i = h("input", { type: "number", min: 0, step: 100, value: val[k], "data-kind": k, style: "width:110px", oninput: (e) => {
+            val[k] = Math.max(0, Math.round(Number(e.target.value) || 0));
+            info.textContent = "";
+            paint1();
+          } });
+          inp[k] = i;
+          return h("div", { class: "slrow" }, h("span", { style: `color:${colOf(k)}` }, icon(KIND_ICON[k] ?? "flag", 15)), h("span", { class: "nm", title: d.hint }, d.ja), i, h("small", {}, d.per ? `1${d.item}\u2252${d.per}\u4EBA` : ""));
+        })];
       });
-      out.append(h("details", { class: "dt", id: "reorg-box" }, h("summary", {}, "\u7DE8\u6210\u3092\u7DE8\u96C6\u3059\u308B"), ...rows, h("div", { class: "rowb" }, info, btn("\u5747\u3059", () => {
-        const n3 = avail.length;
-        avail.forEach(([k], i) => val[k] = Math.floor(100 / n3) + (i < 100 % n3 ? 1 : 0));
+      const paint1 = () => {
+        const s = sum();
+        info.textContent = `\u6307\u5B9A\u306E\u5408\u8A08 ${n0(s)} \u4EBA\uFF0F\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA${s > st2.army ? "\uFF08\u8D85\u3048\u305F\u5206\u306F\u6BD4\u4F8B\u3057\u3066\u7E2E\u3080\uFF09" : s < st2.army ? `\uFF08\u8DB3\u308A\u306A\u3044 ${n0(st2.army - s)} \u4EBA\u306F\u4E88\u5099\u5F79\u306B\u306A\u308B\uFF09` : ""}`;
+        info.style.color = s > st2.army ? "#d0605a" : "var(--dim)";
+      };
+      out.append(h("details", { class: "dt", id: "reorg-box" }, h("summary", {}, "\u7DE8\u6210\u3092\u7DE8\u96C6\u3059\u308B\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09"), h("small", { class: "n" }, "\u4EBA\u6570\u3092\u6307\u5B9A\u3059\u308B\u3068\u624B\u52D5\u306E\u7DE8\u6210\u306B\u306A\u308A\u307E\u3059\u3002\u7DCF\u5175\u529B\u306F\u56FD\u306E\u4EBA\u53E3\u30FB\u7D4C\u6E08\u3067\u6C7A\u307E\u308B\u306E\u3067\u3001\u6307\u5B9A\u306E\u5408\u8A08\u304C\u591A\u3059\u304E\u308C\u3070\u6BD4\u4F8B\u3057\u3066\u7E2E\u307F\u3001\u8DB3\u308A\u306A\u3044\u5206\u306F\u4E88\u5099\u5F79\uFF08\u5FB4\u96C6\u6C11\u5175\uFF09\u306B\u306A\u308A\u307E\u3059\u3002"), ...rows, h("div", { class: "rowb" }, info, btn("\u4ECA\u306E\u4EBA\u6570\u3092\u5165\u308C\u76F4\u3059", () => {
+        for (const k in cur) val[k] = cur[k];
         paint();
-      }), btn("\u3053\u306E\u7DE8\u6210\u306B\u3059\u308B", () => {
-        const s = {};
-        for (const k in val) s[k] = val[k] / 100;
-        (mine ? act : creator)({ type: "state.reorganize", stateId: st2.id, shares: s });
-      }, "p", { id: "reorg" }))));
+      }), btn("\u3053\u306E\u7DE8\u6210\u306B\u3059\u308B\uFF08\u624B\u52D5\uFF09", () => {
+        const hs = {};
+        for (const k in val) if (val[k] > 0) hs[k] = val[k];
+        (mine ? act : creator)({ type: "state.setOrbat", stateId: st2.id, mode: "manual", heads: hs });
+      }, "p", { id: "reorg" }), btn("\u81EA\u52D5\u306B\u623B\u3059", () => (mine ? act : creator)({ type: "state.setOrbat", stateId: st2.id, mode: "auto" }), "", { id: "reorg-auto" }))));
       setTimeout(paint, 0);
     }
     const c0 = S2.w.civ, foes = aliveStates2().filter((x) => x.id !== st2.id && !atWarWith(c0, st2, x) && !treatyBetween(c0, st2, x, "alliance") && !treatyBetween(c0, st2, x, "nonaggression")).sort((a, b) => b.pop - a.pop);
@@ -12916,10 +14018,10 @@ ${shown}${more}`;
     e.preventDefault();
     S2.hooks.select(id);
   } }, stateName(id)) : String(id);
-  var note = (t) => h("p", { class: "n" }, t);
+  var note2 = (t) => h("p", { class: "n" }, t);
   var why = (t) => h("p", { class: "n err", id: "why" }, t);
   function pGeo() {
-    const M = S2.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "\u5730\u7406"), note("\u5404\u30EC\u30A4\u30E4\u30FC\u3092\u81EA\u7531\u306B\u91CD\u306D\u3089\u308C\u307E\u3059\u3002\u5857\u308A\u306E\u5C64\u306F\u4E0D\u900F\u660E\u5EA6\u3082\u5909\u3048\u3089\u308C\u307E\u3059\u3002"));
+    const M = S2.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "\u5730\u7406"), note2("\u5404\u30EC\u30A4\u30E4\u30FC\u3092\u81EA\u7531\u306B\u91CD\u306D\u3089\u308C\u307E\u3059\u3002\u5857\u308A\u306E\u5C64\u306F\u4E0D\u900F\u660E\u5EA6\u3082\u5909\u3048\u3089\u308C\u307E\u3059\u3002"));
     const done2 = () => {
       S2.hooks.mapOnly();
       S2.hooks.panel();
@@ -12937,7 +14039,7 @@ ${shown}${more}`;
         } }) : null)));
       }
     }
-    return box.append(note("\u5730\u5F62\u30FB\u6C17\u5019\u30FB\u8CC7\u6E90\u3092\u751F\u6210\u5F8C\u306B\u624B\u3067\u7DE8\u96C6\u3059\u308B\u6A5F\u80FD\u306F\u8A2D\u3051\u3066\u3044\u307E\u305B\u3093\u3002"), h("div", { class: "rowb" }, btn("\u8868\u793A\u3092\u521D\u671F\u4F4D\u7F6E\u3078", () => {
+    return box.append(note2("\u5730\u5F62\u30FB\u6C17\u5019\u30FB\u8CC7\u6E90\u3092\u751F\u6210\u5F8C\u306B\u624B\u3067\u7DE8\u96C6\u3059\u308B\u6A5F\u80FD\u306F\u8A2D\u3051\u3066\u3044\u307E\u305B\u3093\u3002"), h("div", { class: "rowb" }, btn("\u8868\u793A\u3092\u521D\u671F\u4F4D\u7F6E\u3078", () => {
       M.view = { x: 0, y: 0, k: 1 };
       M.draw();
     }))) || box;
@@ -13002,8 +14104,8 @@ ${shown}${more}`;
     );
   }
   function officesBox(st2, mine) {
-    const rg = regimeOf(st2), R = REGIMES[rg], offs = st2.offices ?? [], can2 = st2.alive && (mine || !controlled()), box = h("div", {}, lb("\u5B98\u5236\u30FB\u5F79\u8077", "OFFICES"), note(`${R.ja}\u30FB\u5143\u9996\u306F${officeJa(R.ruler)}`));
-    box.append(offs.length ? h("div", { class: "offs" }, ...offs.map((o) => h("div", { class: "off" }, face(o.holder.name, st2.id, o.holder.look), h("div", {}, h("b", {}, officeJa(o.id)), h("small", {}, o.holder.name), h("div", { class: "chips sm" }, ...officeChips(o.id)))))) : note("\u5F79\u8077\u306F\u307E\u3060\u5B9A\u3081\u3089\u308C\u3066\u3044\u307E\u305B\u3093\uFF08\u6A19\u6E96\u306E\u5F79\u8077\u3092\u7F6E\u3051\u307E\u3059\uFF09\u3002"));
+    const rg = regimeOf(st2), R = REGIMES[rg], offs = st2.offices ?? [], can2 = st2.alive && (mine || !controlled()), box = h("div", {}, lb("\u5B98\u5236\u30FB\u5F79\u8077", "OFFICES"), note2(`${R.ja}\u30FB\u5143\u9996\u306F${officeJa(R.ruler)}`));
+    box.append(offs.length ? h("div", { class: "offs" }, ...offs.map((o) => h("div", { class: "off" }, face(o.holder.name, st2.id, o.holder.look), h("div", {}, h("b", {}, officeJa(o.id)), h("small", {}, o.holder.name), h("div", { class: "chips sm" }, ...officeChips(o.id)))))) : note2("\u5F79\u8077\u306F\u307E\u3060\u5B9A\u3081\u3089\u308C\u3066\u3044\u307E\u305B\u3093\uFF08\u6A19\u6E96\u306E\u5F79\u8077\u3092\u7F6E\u3051\u307E\u3059\uFF09\u3002"));
     {
       const sm = officeSummary(st2);
       if (sm) box.append(sm);
@@ -13091,7 +14193,7 @@ ${shown}${more}`;
       "div",
       {},
       lb("\u5275\u9020\u4E3B\u306E\u4ECB\u5165", "INTERVENTION"),
-      note("\u8A08\u7B97\u3055\u308C\u308B\u5024\u306B\u4E00\u6642\u7684\u306A\u88DC\u6B63\u3092\u5165\u308C\u307E\u3059\u3002\u88DC\u6B63\u306F\u6642\u9593\u3068\u3068\u3082\u306B\u901A\u5E38\u5024\u3078\u623B\u308A\u307E\u3059\u304C\u3001\u4ECB\u5165\u4E2D\u306B\u8D77\u304D\u305F\u7D50\u679C\u306F\u623B\u308A\u307E\u305B\u3093\u3002"),
+      note2("\u8A08\u7B97\u3055\u308C\u308B\u5024\u306B\u4E00\u6642\u7684\u306A\u88DC\u6B63\u3092\u5165\u308C\u307E\u3059\u3002\u88DC\u6B63\u306F\u6642\u9593\u3068\u3068\u3082\u306B\u901A\u5E38\u5024\u3078\u623B\u308A\u307E\u3059\u304C\u3001\u4ECB\u5165\u4E2D\u306B\u8D77\u304D\u305F\u7D50\u679C\u306F\u623B\u308A\u307E\u305B\u3093\u3002"),
       h("div", { class: "rowb" }, field, other2, val, half),
       rsn,
       h("div", { class: "rowb" }, btn("\u4ECB\u5165\u3059\u308B", () => creator({ type: "creator.intervene", stateId: st2.id, field: field.value, otherId: FIELDS[field.value].pair ? other2.value : null, value: Number(val.value), halfLifeMonths: half.value ? Number(half.value) : null, reason: rsn.value }), "p", { id: "iv-go" })),
@@ -13140,7 +14242,7 @@ ${shown}${more}`;
         document.querySelector("#tech-q")?.focus();
       }, 250);
     }, id: "tech-q" });
-    let detail = note("\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u524D\u63D0\u30FB\u6210\u7ACB\u306E\u6761\u4EF6\u30FB\u89E3\u7981\u3055\u308C\u308B\u3053\u3068\u30FB\u52B9\u679C\u30FB\u4E16\u754C\u3067\u306E\u5E83\u304C\u308A\u304C\u51FA\u307E\u3059\u3002");
+    let detail = note2("\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u524D\u63D0\u30FB\u6210\u7ACB\u306E\u6761\u4EF6\u30FB\u89E3\u7981\u3055\u308C\u308B\u3053\u3068\u30FB\u52B9\u679C\u30FB\u4E16\u754C\u3067\u306E\u5E83\u304C\u308A\u304C\u51FA\u307E\u3059\u3002");
     if (sel) {
       const gs = Object.values(c.groups).filter((g) => g.stateId === st2.id), cov = Math.round(status.cov(sel.key) * 100), w = c.techWorld[sel.key], deps = TECHS.filter((t) => t.prereq.includes(sel.key)), gate = actionGate(c, st2, "adopt_tech");
       const needs = sel.prereq.map((p) => {
@@ -13192,7 +14294,7 @@ ${shown}${more}`;
       {},
       search,
       h("div", { class: "rowb", style: "flex-wrap:wrap" }, ...laneBtns),
-      TECH_FULL ? note("\u62E1\u5927\u8868\u793A\u4E2D\u3067\u3059\uFF08\u753B\u9762\u3044\u3063\u3071\u3044\uFF09\u3002\u53F3\u306E\u300C\u9589\u3058\u308B\u300D\u3067\u623B\u308C\u307E\u3059\u3002") : wrap,
+      TECH_FULL ? note2("\u62E1\u5927\u8868\u793A\u4E2D\u3067\u3059\uFF08\u753B\u9762\u3044\u3063\u3071\u3044\uFF09\u3002\u53F3\u306E\u300C\u9589\u3058\u308B\u300D\u3067\u623B\u308C\u307E\u3059\u3002") : wrap,
       h("div", { class: "lg" }, ...Object.entries({ adopted: "\u5236\u5EA6\u5316", available: "\u63A1\u7528\u3067\u304D\u308B", known: "\u4FDD\u6709", lost: "\u5931\u308F\u308C\u305F", locked: "\u672A\u767A\u898B" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "locked" ? "dashed" : "solid"} ${COL[k][0]}` }), `${SYM[k]} ${t}`)))
     );
   }
@@ -13206,16 +14308,18 @@ ${shown}${more}`;
     } }), { svg, COL } = dt;
     const fxText = (d) => Object.entries(d.fx).map(([k, v]) => `${FX_JA[k] ?? k} +${pct(v)}`).join("\u30FB");
     const fx3 = M?.fx ?? {}, now = Object.entries(fx3).filter(([, v]) => v > 0).map(([k, v]) => `${FX_JA[k] ?? k} +${pct(v)}`).join("\u30FB") || "\u306A\u3057";
+    const sc = M?.school ?? {}, routes = `\u9678 ${SCHOOL_BY_ID[sc.land]?.ja ?? "\u672A\u9078\u629E"}\uFF0F\u6D77 ${SCHOOL_BY_ID[sc.sea]?.ja ?? "\u672A\u9078\u629E"}\uFF0F\u7A7A ${SCHOOL_BY_ID[sc.air]?.ja ?? "\u672A\u9078\u629E"}`;
     return h(
       "div",
       {},
       h("div", { class: "dt" }, `\u3044\u307E\u306E\u52B9\u679C: ${now}`),
+      h("div", { class: "dt" }, `\u9078\u3093\u3060\u8DEF\u7DDA: ${routes}\uFF08\u5404\u8ECD\u3067 1 \u3064\u30026 \u6BB5\u305D\u308D\u3048\u308B\u3068\u719F\u9054\u306E\u52A0\u7B97\uFF09`),
       h("div", { class: "docwrap" }, svg, h("div", { class: "rowb" }, btn("\u5168\u4F53", dt.fit, "", { id: "doc-fit" }), btn("\u9078\u3093\u3060\u65B9\u91DD\u3078", () => S2.doc && dt.focus(S2.doc), "", { id: "doc-goto", disabled: !S2.doc }))),
       h("div", { class: "lg" }, ...Object.entries({ taken: "\u25A0 \u53D6\u5F97\u6E08\u307F", available: "\u25C6 \u53D6\u5F97\u3067\u304D\u308B", blocked: "\u25CB \u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\uFF08\u70B9\u7DDA\uFF09" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "blocked" ? "dashed" : "solid"} ${COL[k][0]}` }), t))),
       sel ? (() => {
         const ca = canAdopt(st2, sel.id), br = branches.find((b) => b.id === sel.branch);
-        return h("div", { class: "dt" }, h("b", {}, sel.ja), `\uFF08${br?.ja ?? ""}\u30FB\u6BB5\u968E ${sel.tier}${sel.special ? "\u30FB\u56FA\u6709" : "\u30FB\u5171\u901A"}\uFF09`, h("br"), `\u52B9\u679C: ${fxText(sel)}\u30FB\u8CBB\u7528 ${sel.cost}`, h("br"), `\u524D\u63D0: ${sel.prereq.length ? sel.prereq.map((p) => nodeOf(st2, p)?.ja ?? p).join("\u3001") : "\u306A\u3057"}${sel.tech.length ? "\u3000\u6280\u8853: " + sel.tech.map((t) => TECH[t]?.name ?? t).join("\u3001") : ""}`, h("br"), taken[sel.id] != null ? "\u53D6\u5F97\u6E08\u307F" : ca.ok ? "\u53D6\u5F97\u3067\u304D\u307E\u3059" : `\u53D6\u5F97\u3067\u304D\u306A\u3044\u7406\u7531: ${ca.reason}`, h("small", { style: "color:var(--dim)" }, "\u53D6\u5F97\u306F\u3001\u4E16\u754C\u306E\u4ED5\u7D44\u307F\u304C\u81EA\u52D5\u3067\u884C\u3044\u307E\u3059"));
-      })() : note("\u6728\u306E\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u52B9\u679C\u3068\u524D\u63D0\u304C\u51FA\u307E\u3059\u3002")
+        return h("div", { class: "dt" }, h("b", {}, sel.ja), `\uFF08${br?.ja ?? ""}\u30FB\u6BB5\u968E ${sel.tier}${sel.special ? "\u30FB\u56FA\u6709" : sel.school ? "\u30FB\u8DEF\u7DDA" : "\u30FB\u57FA\u5E79"}\uFF09`, h("br"), `\u52B9\u679C: ${fxText(sel)}\u30FB\u8CBB\u7528 ${sel.cost}`, h("br"), `\u524D\u63D0: ${sel.prereq.length ? sel.prereq.map((p) => nodeOf(st2, p)?.ja ?? p).join("\u3001") : "\u306A\u3057"}${sel.tech.length ? "\u3000\u6280\u8853: " + sel.tech.map((t) => TECH[t]?.name ?? t).join("\u3001") : ""}`, h("br"), taken[sel.id] != null ? "\u53D6\u5F97\u6E08\u307F" : ca.ok ? "\u53D6\u5F97\u3067\u304D\u307E\u3059" : `\u53D6\u5F97\u3067\u304D\u306A\u3044\u7406\u7531: ${ca.reason}`, h("small", { style: "color:var(--dim)" }, "\u53D6\u5F97\u306F\u3001\u4E16\u754C\u306E\u4ED5\u7D44\u307F\u304C\u81EA\u52D5\u3067\u884C\u3044\u307E\u3059"));
+      })() : note2("\u6728\u306E\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u52B9\u679C\u3068\u524D\u63D0\u304C\u51FA\u307E\u3059\u3002")
     );
   }
 
@@ -13295,13 +14399,13 @@ ${shown}${more}`;
     return s?.name ?? `${civ3().states[g.stateId]?.name ?? "\u7121\u4E3B"}\u306E\u5730`;
   };
   var traitChips = (p) => (p.traits ?? []).map((t) => {
-    const T3 = TRAITS[t];
-    if (!T3) return null;
-    const fx3 = ["off", "def", "siege", "logi", "coh"].map((k) => T3[k] ? `${{ off: "\u653B", def: "\u5B88", siege: "\u5305\u56F2", logi: "\u88DC\u7D66", coh: "\u58EB\u6C17" }[k]}${sgn(T3[k])}` : "").filter(Boolean).join(" ");
-    const bad3 = Object.values(T3).some((v) => typeof v === "number" && v < 0);
-    return h("span", { class: "chip trait" + (bad3 ? " bad" : ""), title: fx3 }, T3.ja);
+    const T4 = TRAITS[t];
+    if (!T4) return null;
+    const fx3 = ["off", "def", "siege", "logi", "coh"].map((k) => T4[k] ? `${{ off: "\u653B", def: "\u5B88", siege: "\u5305\u56F2", logi: "\u88DC\u7D66", coh: "\u58EB\u6C17" }[k]}${sgn(T4[k])}` : "").filter(Boolean).join(" ");
+    const bad3 = Object.values(T4).some((v) => typeof v === "number" && v < 0);
+    return h("span", { class: "chip trait" + (bad3 ? " bad" : ""), title: fx3 }, T4.ja);
   });
-  var personLine = (p) => `${p.name}\uFF08\u80FD\u529B ${Math.round(p.skill * 100)}\u30FB${(p.traits ?? []).map((t) => TRAITS[t]?.ja ?? t).join("\u30FB") || "\u7279\u6027\u306A\u3057"}\u30FB${FACTION_JA[p.backer] ?? p.backer}\uFF09`;
+  var personLine = (p) => `${rankOf(p)} ${p.name}\uFF08\u80FD\u529B ${Math.round(p.skill * 100)}\u30FB${(p.traits ?? []).map((t) => TRAITS[t]?.ja ?? t).join("\u30FB") || "\u7279\u6027\u306A\u3057"}\u30FB${FACTION_JA[p.backer] ?? p.backer}\uFF09`;
   var orderText = (cp) => {
     const o = cp.order, k = ORDER_KINDS[o.kind] ?? o.kind;
     if (!o.targetGroupId) return k;
@@ -13320,7 +14424,8 @@ ${shown}${more}`;
     return out.sort((a, b) => a.d - b.d).slice(0, 40);
   }
   function personBox(cp, slot, st2, pool) {
-    const p = slot === "commander" ? cp.commander : cp.officers[slot], title = slot === "commander" ? "\u6700\u9AD8\u6307\u63EE\u5B98" : OFFICER_SLOTS[slot];
+    pool = pool.filter((q2) => (q2.service ?? "land") === (cp.service ?? "land"));
+    const p = slot === "commander" ? cp.commander : cp.officers[slot], title = slot === "commander" ? `${SERVICES[cp.service ?? "land"].formation}\u306E\u6700\u9AD8\u6307\u63EE\u5B98` : OFFICER_SLOTS[slot];
     const sel = h("select", { "data-slot": slot }, h("option", { value: "" }, pool.length ? "\u5019\u88DC\u304B\u3089\u4EFB\u547D\u2026" : "\u5019\u88DC\u306F\u3044\u307E\u305B\u3093"), ...pool.map((q2) => h("option", { value: q2.id }, personLine(q2))));
     return h(
       "div",
@@ -13336,10 +14441,11 @@ ${shown}${more}`;
     const c = civ3(), wars = myWars(st2), war = c.wars[cp.warId] ?? wars[0] ?? null, out = h("div", { class: "corpsdetail" });
     const nm = h("input", { id: "cp-name", value: cp.name, maxlength: 20 });
     out.append(h("div", { class: "whead" }, h("h2", {}, cp.name), h("div", { class: "sub" }, `\u5175\u529B ${n0(cp.size)}\u30FB\u73FE\u5728\u5730 ${placeOf(cp.at)}\u30FB${orderText(cp)}`)), h("div", { class: "rowb" }, nm, btn("\u6539\u540D", () => act({ type: "corps.rename", stateId: st2.id, corpsId: cp.id, name: nm.value }), "", { id: "cp-rename" })));
+    out.append(h("div", { class: "sub" }, `${SERVICES[cp.service ?? "land"].ja}\u30FB${cp.commander ? rankOf(cp.commander) : ""}\u30FB${cp.comp === "manual" ? "\u624B\u52D5\u306E\u69CB\u6210" : "\u81EA\u52D5\u306E\u69CB\u6210"}`));
     const fx3 = cp.fx;
     out.append(h("div", { class: "chips fxs" }, ...[["\u653B\u3081", fx3.off + fx3.skill], ["\u5B88\u308A", fx3.def + fx3.skill], ["\u5305\u56F2", fx3.siege], ["\u88DC\u7D66", fx3.logi], ["\u58EB\u6C17", fx3.coh]].map(([k, v]) => h("span", { class: "chip" + (v < 0 ? " bad" : v > 0 ? " good" : "") }, `${k} ${sgn(v)}`))));
     out.append(lb("\u6307\u63EE\u5B98\u3068\u526F\u5B98", "COMMAND"), personBox(cp, "commander", st2, view2.pool), ...Object.keys(OFFICER_SLOTS).map((s) => personBox(cp, s, st2, view2.pool)));
-    const kind = h("select", { id: "cp-kind" }, ...Object.entries(ORDER_KINDS).map(([k, ja]) => h("option", { value: k, selected: cp.order.kind === k }, ja))), tgt = h("select", { id: "cp-target" }), wsel = h("select", { id: "cp-war" }, ...wars.map((x) => h("option", { value: x.id, selected: x.id === war?.id }, x.name ?? x.id)));
+    const kind = h("select", { id: "cp-kind" }, ...Object.entries(ORDER_KINDS).filter(([k]) => cp.service === "air" ? ["auto", "hold", "reserve"].includes(k) : cp.service === "sea" ? ["auto", "hold", "reserve", "defend"].includes(k) : true).map(([k, ja]) => h("option", { value: k, selected: cp.order.kind === k }, ja))), tgt = h("select", { id: "cp-target" }), wsel = h("select", { id: "cp-war" }, ...wars.map((x) => h("option", { value: x.id, selected: x.id === war?.id }, x.name ?? x.id)));
     const fill = () => {
       const k = kind.value;
       tgt.replaceChildren();
@@ -13357,16 +14463,36 @@ ${shown}${more}`;
       n2("\u9032\u8ECD\u306F\u6575\u306E\u571F\u5730\u3078\u3002\u7740\u304F\u3068\u4F5C\u6226\u304C\u59CB\u307E\u308B\u3002\u5305\u56F2\u306F\u57CE\u3084\u90FD\u5E02\u3092\u653B\u3081\u3001\u8907\u6570\u306E\u8ECD\u56E3\u3067\u540C\u3058\u76EE\u6A19\u3092\u5305\u56F2\u3059\u308B\u3068\u901F\u304F\u843D\u3068\u305B\u308B\u3002\u5B88\u5099\u306F\u5473\u65B9\u306E\u571F\u5730\u3067\u8FCE\u3048\u6483\u3064\u3002\u64A4\u9000\u306F\u6226\u308F\u305A\u9000\u304F\u3002\u304A\u4EFB\u305B\u306F\u5F93\u6765\u3069\u304A\u308A\u81EA\u52D5\u3067\u52D5\u304F\u3002"),
       h("div", { class: "rowb" }, kind, tgt, wars.length ? wsel : null, btn("\u547D\u4EE4\u3059\u308B", () => act({ type: "corps.order", stateId: st2.id, corpsId: cp.id, kind: kind.value, targetGroupId: tgt.disabled ? null : tgt.value || null, warId: wars.length ? wsel.value : null }), "p", { id: "cp-order" }))
     );
-    const others = view2.list.filter((x) => x.id !== cp.id && x.at === cp.at);
+    const others = view2.list.filter((x) => x.id !== cp.id && x.at === cp.at && x.service === cp.service);
     out.append(lb("\u90E8\u968A", "UNITS"), ...cp.units.map((u) => {
-      const inp = h("input", { value: u.name, maxlength: 20, "data-unit": u.id }), kinds = Object.entries(UNIT_KINDS).filter(([k, K]) => k !== "navy" && K.need(st2, ctx())), ks = h("select", {}, h("option", { value: "" }, "\u5175\u7A2E\u3092\u5909\u3048\u308B\u2026"), ...kinds.map(([k, K]) => h("option", { value: k }, K.ja))), to = h("select", {}, h("option", { value: "" }, others.length ? "\u79FB\u3059\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name))), sz = h("input", { type: "number", min: 1, max: Math.floor(u.size), value: Math.max(1, Math.floor(u.size / 2)), style: "width:80px" });
+      const inp = h("input", { value: u.name, maxlength: 20, "data-unit": u.id }), kinds = Object.entries(UNIT_KINDS).filter(([k, K]) => K.service === cp.service && K.need(st2, ctx())), ks = h("select", {}, h("option", { value: "" }, "\u5175\u7A2E\u3092\u5909\u3048\u308B\u2026"), ...kinds.map(([k, K]) => h("option", { value: k }, K.ja))), to = h("select", {}, h("option", { value: "" }, others.length ? "\u79FB\u3059\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name))), sz = h("input", { type: "number", min: 1, max: Math.floor(u.size), value: Math.max(1, Math.floor(u.size / 2)), style: "width:80px" });
       return h("div", { class: "unit" }, h("div", { class: "rowb" }, inp, h("b", {}, `${UNIT_KINDS[u.kind]?.ja ?? u.kind} ${n0(u.size)}`), btn("\u6539\u540D", () => act({ type: "corps.renameUnit", stateId: st2.id, corpsId: cp.id, unitId: u.id, name: inp.value }))), h("div", { class: "rowb" }, ks, btn("\u518D\u8A13\u7DF4", () => {
         if (ks.value) act({ type: "corps.convert", stateId: st2.id, corpsId: cp.id, unitId: u.id, toKind: ks.value });
       }), to, sz, btn("\u5175\u3092\u79FB\u3059", () => {
         if (to.value) act({ type: "corps.transfer", stateId: st2.id, from: cp.id, to: to.value, unitId: u.id, size: Number(sz.value) });
       })));
     }));
-    const sname = h("input", { id: "cp-split-name", placeholder: "\u65B0\u3057\u3044\u8ECD\u56E3\u306E\u540D\u524D", maxlength: 20 }), frac = h("input", { id: "cp-split-frac", type: "range", min: 0.1, max: 0.9, step: 0.05, value: 0.4 }), pc = h("select", { id: "cp-split-cmd" }, h("option", { value: "" }, "\u6307\u63EE\u5B98\u306E\u5019\u88DC\u2026"), ...view2.pool.map((q2) => h("option", { value: q2.id }, personLine(q2)))), into = h("select", { id: "cp-merge-into" }, h("option", { value: "" }, others.length ? "\u7D71\u5408\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name)));
+    {
+      const avail = Object.entries(UNIT_KINDS).filter(([k, K]) => K.service === cp.service && K.need(st2, ctx())), val = Object.fromEntries(avail.map(([k]) => [k, Math.round(cp.units.find((u) => u.kind === k)?.size ?? 0)])), inps = {}, wt = h("input", { id: "cp-weight", type: "number", min: 0.2, max: 5, step: 0.1, value: cp.weight ?? 1, style: "width:70px" });
+      out.append(
+        lb("\u69CB\u6210\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09", "COMPOSITION"),
+        n2(cp.comp === "manual" ? "\u624B\u52D5\u3067\u3059\u3002\u56FD\u5BB6\u306E\u4EBA\u6570\uFF08\u8ECD\u5236\uFF09\u3092\u8D85\u3048\u308B\u5175\u7A2E\u306F\u3001\u6BD4\u4F8B\u3057\u3066\u7E2E\u307F\u307E\u3059\u3002" : "\u81EA\u52D5\u3067\u3059\u3002\u56FD\u5BB6\u306E\u4EBA\u6570\u3092\u3001\u3053\u306E\u8ECD\u306E\u81EA\u52D5\u306E\u90E8\u968A\u306B\u91CD\u307F\u3067\u5206\u3051\u3066\u3044\u307E\u3059\u3002"),
+        ...avail.map(([k, K]) => {
+          const i = h("input", { type: "number", min: 0, step: 50, value: val[k], "data-comp": k, style: "width:100px", oninput: (e) => {
+            val[k] = Math.max(0, Math.round(Number(e.target.value) || 0));
+          } });
+          inps[k] = i;
+          const it = itemsOf(k, val[k]);
+          return h("div", { class: "slrow" }, h("span", { class: "nm", title: K.hint }, K.ja), i, h("small", {}, K.per ? `1${K.item}\u2252${K.per}\u4EBA${it ? `\u30FB\u4ECA \u7D04${it}${K.item}` : ""}` : ""));
+        }),
+        h("div", { class: "rowb" }, btn("\u3053\u306E\u69CB\u6210\u306B\u3059\u308B\uFF08\u624B\u52D5\uFF09", () => {
+          const hs = {};
+          for (const k in val) if (val[k] > 0) hs[k] = val[k];
+          act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: "manual", heads: hs });
+        }, "p", { id: "cp-comp" }), btn("\u81EA\u52D5\u306B\u623B\u3059", () => act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: "auto" }), "", { id: "cp-comp-auto" }), h("small", {}, "\u81EA\u52D5\u306E\u3068\u304D\u306E\u91CD\u307F"), wt, btn("\u91CD\u307F\u3092\u5909\u3048\u308B", () => act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: cp.comp === "manual" ? "manual" : "auto", heads: cp.comp === "manual" ? cp.manual : void 0, weight: Number(wt.value) }), "", { id: "cp-weight-set" }))
+      );
+    }
+    const sname = h("input", { id: "cp-split-name", placeholder: "\u65B0\u3057\u3044\u90E8\u968A\u306E\u540D\u524D", maxlength: 20 }), frac = h("input", { id: "cp-split-frac", type: "range", min: 0.1, max: 0.9, step: 0.05, value: 0.4 }), pc = h("select", { id: "cp-split-cmd" }, h("option", { value: "" }, "\u6307\u63EE\u5B98\u306E\u5019\u88DC\u2026"), ...view2.pool.filter((q2) => (q2.service ?? "land") === (cp.service ?? "land")).map((q2) => h("option", { value: q2.id }, personLine(q2)))), into = h("select", { id: "cp-merge-into" }, h("option", { value: "" }, others.length ? "\u7D71\u5408\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name)));
     out.append(
       lb("\u7DE8\u6210", "ORGANIZE"),
       n2(`\u8ECD\u56E3\u306F ${view2.max} \u307E\u3067\u3002\u5206\u3051\u308B\u3068\u304D\u306F\u3001\u65B0\u3057\u3044\u8ECD\u56E3\u306E\u6307\u63EE\u5B98\u3092\u5019\u88DC\u304B\u3089\u9078\u3076\uFF08\u8CBB\u7528\uFF1A\u5175\u529B\u306E 0.1% \xD7 \u5272\u5408\uFF09\u3002`),
@@ -13400,22 +14526,32 @@ ${shown}${more}`;
       S2.corpsSel = null;
       S2.map?.draw();
     } };
-    const land = st2.army * landShare(st2), wars = myWars(st2);
-    box.append(n2(`\u9678\u8ECD ${n0(land)} \u4EBA\u30FB\u8ECD\u56E3 ${view2.list.length} / ${view2.max}\u30FB\u6226\u4E89\u4E2D ${wars.length} \u4EF6`), n2("\u8ECD\u56E3\u3092\u9078\u3076\u3068\u3001\u6307\u63EE\u5B98\u306E\u4EBA\u4E8B\u30FB\u90E8\u968A\u306E\u7DE8\u6210\u30FB\u4F5C\u6226\u306E\u547D\u4EE4\u304C\u3067\u304D\u307E\u3059\u3002\u547D\u4EE4\u304C\u306A\u3051\u308C\u3070\u3001\u8ECD\u56E3\u306F\u5F93\u6765\u3069\u304A\u308A\u81EA\u52D5\u3067\u52D5\u304D\u307E\u3059\u3002"));
-    box.append(h("div", { class: "corpslist" }, ...view2.list.map((cp) => h(
-      "button",
-      { class: "corpsrow" + (S2.corpsSel === cp.id ? " on" : ""), "data-corps": cp.id, onclick: () => {
-        S2.corpsSel = cp.id;
-        S2.hooks.panel();
-        S2.hooks.mapOnly?.();
-        const g = c.groups[cp.at];
-        if (g) S2.hooks.focusCell?.(g.cell);
-      } },
-      h("div", { class: "cr1" }, h("b", {}, cp.name), h("span", {}, `${n0(cp.size)} \u4EBA`)),
-      h("div", { class: "cr2" }, `${cp.commander.name}\uFF08\u80FD\u529B${Math.round(cp.commander.skill * 100)}\uFF09\u30FB${placeOf(cp.at)}`),
-      h("div", { class: "cr3" }, orderText(cp)),
-      h("div", { class: "chips" }, ...traitChips(cp.commander))
-    ))));
+    const wars = myWars(st2), H = view2.heads;
+    box.append(n2(`\u9678 ${n0(H.land)}\u30FB\u6D77 ${n0(H.sea)}\u30FB\u7A7A ${n0(H.air)} \u4EBA\uFF08\u90E8\u968A ${view2.list.length} / ${view2.max}\uFF09\u30FB\u6226\u4E89\u4E2D ${wars.length} \u4EF6`), n2("\u9678\u30FB\u6D77\u30FB\u7A7A\u306E 3 \u8ECD\u3002\u90E8\u968A\u3092\u9078\u3076\u3068\u3001\u6307\u63EE\u5B98\u306E\u4EBA\u4E8B\u30FB\u69CB\u6210\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09\u30FB\u4F5C\u6226\u306E\u547D\u4EE4\u304C\u3067\u304D\u307E\u3059\u3002\u547D\u4EE4\u304C\u306A\u3051\u308C\u3070\u3001\u90E8\u968A\u306F\u81EA\u52D5\u3067\u52D5\u304D\u307E\u3059\u3002\u7A7A\u8ECD\u306E\u90E8\u968A\u306F\u3001\u9678\u3068\u6D77\u306E\u6226\u3044\u3092\u652F\u3048\u307E\u3059\uFF08\u5236\u7A7A\u6A29\uFF09\u3002"));
+    box.append(lb("\u7DCF\u53F8\u4EE4\u5B98", "COMMANDERS-IN-CHIEF"), ...SERVICE_KEYS.filter((k) => view2.usable[k]).map((k) => {
+      const ch = view2.chiefs[k], pool = view2.pool.filter((q2) => (q2.service ?? "land") === k), sel2 = h("select", { "data-chief": k }, h("option", { value: "" }, pool.length ? "\u5019\u88DC\u304B\u3089\u4EFB\u547D\u2026" : "\u5019\u88DC\u306F\u3044\u307E\u305B\u3093"), ...pool.map((q2) => h("option", { value: q2.id }, personLine(q2))));
+      return h("div", { class: "pbox" }, h("small", { style: `color:${SERVICES[k].color}` }, SERVICES[k].chief), ch ? h("div", {}, h("b", {}, `${ch.rank} ${ch.name}`), h("div", { class: "chips" }, ...traitChips(ch), h("span", { class: "chip" }, `\u80FD\u529B ${Math.round(ch.skill * 100)}`))) : n2("\uFF08\u7A7A\u304D\uFF09\u3000\u7DCF\u53F8\u4EE4\u5B98\u306F\u3001\u305D\u306E\u8ECD\u306E\u5168\u90E8\u968A\u306B\u5C0F\u3055\u304F\u52B9\u304D\u307E\u3059\u3002"), h("div", { class: "rowb" }, sel2, btn("\u4EFB\u547D", () => {
+        if (sel2.value) act({ type: "corps.appointChief", stateId: st2.id, service: k, personId: sel2.value });
+      }, "", { "data-appoint-chief": k }), ch ? btn("\u89E3\u4EFB", () => act({ type: "corps.dismissChief", stateId: st2.id, service: k }), "") : null));
+    }));
+    for (const svc of SERVICE_KEYS) {
+      const fl = view2.list.filter((x) => x.service === svc);
+      if (!fl.length) continue;
+      box.append(lb(SERVICES[svc].ja, SERVICES[svc].formation.toUpperCase()), h("div", { class: "corpslist" }, ...fl.map((cp) => h(
+        "button",
+        { class: "corpsrow" + (S2.corpsSel === cp.id ? " on" : ""), "data-corps": cp.id, onclick: () => {
+          S2.corpsSel = cp.id;
+          S2.hooks.panel();
+          S2.hooks.mapOnly?.();
+          const g = c.groups[cp.at];
+          if (g) S2.hooks.focusCell?.(g.cell);
+        } },
+        h("div", { class: "cr1" }, h("b", {}, cp.name), h("span", {}, `${n0(cp.size)} \u4EBA`)),
+        h("div", { class: "cr2" }, `${cp.rank ?? ""} ${cp.commander.name}\uFF08\u80FD\u529B${Math.round(cp.commander.skill * 100)}\uFF09\u30FB${placeOf(cp.at)}`),
+        h("div", { class: "cr3" }, orderText(cp)),
+        h("div", { class: "chips" }, ...traitChips(cp.commander))
+      ))));
+    }
     void pct;
     return box;
   }
@@ -13870,7 +15006,7 @@ ${shown}${more}`;
   }
 
   // js/core/wcde/save-meta.js
-  var APP_VERSION_FOR_SAVE = "6.12.0";
+  var APP_VERSION_FOR_SAVE = "6.13.0";
 
   // js/core/wcde/savefile.js
   var SAVE_FORMAT = "alterhistory-save";
@@ -14011,7 +15147,7 @@ ${shown}${more}`;
   }
 
   // js/io/crc32.js
-  var T2 = (() => {
+  var T3 = (() => {
     const t = new Uint32Array(256);
     for (let n3 = 0; n3 < 256; n3++) {
       let c = n3;
@@ -14022,7 +15158,7 @@ ${shown}${more}`;
   })();
   function crc32(bytes) {
     let c = 4294967295;
-    for (let i = 0; i < bytes.length; i++) c = T2[(c ^ bytes[i]) & 255] ^ c >>> 8;
+    for (let i = 0; i < bytes.length; i++) c = T3[(c ^ bytes[i]) & 255] ^ c >>> 8;
     return (c ^ 4294967295) >>> 0;
   }
 
@@ -14713,12 +15849,12 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   } }, "\u2190 " + label);
   var civ6 = () => S2.w.civ;
   var date4 = (mi) => formatWorldDate(S2.w, mi);
-  var note2 = (t) => h("p", { class: "n" }, t);
+  var note3 = (t) => h("p", { class: "n" }, t);
   var head = (code, ja) => [h("div", { class: "code" }, code), h("h2", {}, ja)];
-  var KINDS = { culture: ["cultures", "\u6587\u5316", "CULTURE"], language: ["languages", "\u8A00\u8A9E", "LANGUAGE"], religion: ["religions", "\u5B97\u6559", "RELIGION"] };
+  var KINDS2 = { culture: ["cultures", "\u6587\u5316", "CULTURE"], language: ["languages", "\u8A00\u8A9E", "LANGUAGE"], religion: ["religions", "\u5B97\u6559", "RELIGION"] };
   function pEntity(kind) {
     var _a;
-    const [key, ja, code] = KINDS[kind], c = civ6(), items = Object.values(c[key]), cur = c[key][S2.entity[kind]], box = h("div", {}, ...head(code, ja));
+    const [key, ja, code] = KINDS2[kind], c = civ6(), items = Object.values(c[key]), cur = c[key][S2.entity[kind]], box = h("div", {}, ...head(code, ja));
     const use = /* @__PURE__ */ new Map(), fk = kind === "culture" ? "cultureId" : kind === "language" ? "languageId" : "religionId";
     for (const g of Object.values(c.groups)) for (const co of g.cohorts ?? []) if (co[fk]) use.set(co[fk], (use.get(co[fk]) ?? 0) + g.pop * co.share);
     if (cur) {
@@ -14759,30 +15895,30 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     return box;
   }
   function entityDetail(kind, x, use) {
-    const c = civ6(), nm = h("input", { id: "ent-name", value: x.name }), par = x.parent ? c[KINDS[kind][0]][x.parent]?.name : "\uFF08\u8D77\u6E90\uFF09", kids = Object.values(c[KINDS[kind][0]]).filter((y) => y.parent === x.id), rows = [["\u540D\u524D", x.name], ["\u7CFB\u7D71\uFF08\u89AA\uFF09", par], ["\u6D3E\u751F\u3057\u305F\u5148", kids.length ? kids.map((k) => k.name).join("\u30FB") : "\u306A\u3057"], ["\u6210\u7ACB", date4(Math.max(0, x.bornAt))], ["\u73FE\u5728\u306E\u4EBA\u53E3", n0(use.get(x.id) ?? 0)]];
+    const c = civ6(), nm = h("input", { id: "ent-name", value: x.name }), par = x.parent ? c[KINDS2[kind][0]][x.parent]?.name : "\uFF08\u8D77\u6E90\uFF09", kids = Object.values(c[KINDS2[kind][0]]).filter((y) => y.parent === x.id), rows = [["\u540D\u524D", x.name], ["\u7CFB\u7D71\uFF08\u89AA\uFF09", par], ["\u6D3E\u751F\u3057\u305F\u5148", kids.length ? kids.map((k) => k.name).join("\u30FB") : "\u306A\u3057"], ["\u6210\u7ACB", date4(Math.max(0, x.bornAt))], ["\u73FE\u5728\u306E\u4EBA\u53E3", n0(use.get(x.id) ?? 0)]];
     if (kind === "religion") rows.push(["\u6700\u9AD8\u795E", x.deity ?? "\u2014"], ["\u4FE1\u4EF0\u5F62\u614B", x.kind ?? "\u2014"], ["\u8056\u5730", x.holyCell != null ? `\u533A\u753B ${x.holyCell}` : "\u2014"], ["\u5275\u59CB\u8005", x.founderId ? c.figures?.[x.founderId]?.name ?? x.founderId : "\u2014"]);
     if (kind === "language" && x.phon) rows.push(["\u5B50\u97F3", x.phon.c.join(" ")], ["\u6BCD\u97F3", x.phon.v.join(" ")], ["\u97F3\u7BC0\u672B\u306E\u5B50\u97F3", x.phon.coda ? "\u3042\u308A" : "\u306A\u3057"], ["\u4FC3\u97F3", x.phon.geminate ? "\u3042\u308A" : "\u306A\u3057"], ["\u97F3\u306E\u5909\u5316", `${x.phon.changes.length} \u4EF6`]);
     if (kind === "culture") rows.push(["\u767A\u7965\u306E\u533A\u753B", x.cell != null ? `\u533A\u753B ${x.cell}` : "\u2014"], ["\u540D\u524D\u306E\u56FA\u5B9A", x.nameFixed ? "\u56FA\u5B9A\uFF08\u5275\u9020\u4E3B\u306E\u7DE8\u96C6\uFF09" : "\u81EA\u52D5"]);
-    return h("div", { class: "dt rs" }, h("b", {}, x.name), table(["\u9805\u76EE", "\u5185\u5BB9"], rows), h("div", { class: "rowb" }, nm, btn("\u540D\u524D\u3092\u7DE8\u96C6\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.rename", kind, id: x.id, name: nm.value }), "", { id: "ent-rename" })), note2("\u5B9A\u7FA9\u306E\u7DE8\u96C6\u306F\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u3068\u3057\u3066\u8A18\u9332\u3055\u308C\u3001\u904E\u53BB\u306E\u5BA2\u89B3\u30A4\u30D9\u30F3\u30C8\u306F\u66F8\u304D\u63DB\u3048\u307E\u305B\u3093\u3002\u5B9A\u7FA9\u3068\u3001\u96C6\u56E3\u3067\u5B9F\u969B\u306B\u4F7F\u308F\u308C\u3066\u3044\u308B\u72B6\u614B\u306F\u5225\u3067\u3059\u3002"));
+    return h("div", { class: "dt rs" }, h("b", {}, x.name), table(["\u9805\u76EE", "\u5185\u5BB9"], rows), h("div", { class: "rowb" }, nm, btn("\u540D\u524D\u3092\u7DE8\u96C6\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.rename", kind, id: x.id, name: nm.value }), "", { id: "ent-rename" })), note3("\u5B9A\u7FA9\u306E\u7DE8\u96C6\u306F\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u3068\u3057\u3066\u8A18\u9332\u3055\u308C\u3001\u904E\u53BB\u306E\u5BA2\u89B3\u30A4\u30D9\u30F3\u30C8\u306F\u66F8\u304D\u63DB\u3048\u307E\u305B\u3093\u3002\u5B9A\u7FA9\u3068\u3001\u96C6\u56E3\u3067\u5B9F\u969B\u306B\u4F7F\u308F\u308C\u3066\u3044\u308B\u72B6\u614B\u306F\u5225\u3067\u3059\u3002"));
   }
   function pCreator() {
     const on = !controlled();
     const box = h("div", {}, ...head("CREATOR", "\u5275\u9020\u4E3B"));
-    if (!on) return box.append(note2(`\u3044\u307E ${stateName(controlled())} \u3092\u62C5\u5F53\u3057\u3066\u3044\u307E\u3059\u3002\u5275\u9020\u4E3B\u306E\u64CD\u4F5C\u306F\u3001\u62C5\u5F53\u3092\u89E3\u9664\u3059\u308B\u3068\u4F7F\u3048\u307E\u3059\u3002`), btn("\u62C5\u5F53\u3092\u89E3\u9664\u3057\u3066\u5275\u9020\u4E3B\u306B\u623B\u308B", () => {
+    if (!on) return box.append(note3(`\u3044\u307E ${stateName(controlled())} \u3092\u62C5\u5F53\u3057\u3066\u3044\u307E\u3059\u3002\u5275\u9020\u4E3B\u306E\u64CD\u4F5C\u306F\u3001\u62C5\u5F53\u3092\u89E3\u9664\u3059\u308B\u3068\u4F7F\u3048\u307E\u3059\u3002`), btn("\u62C5\u5F53\u3092\u89E3\u9664\u3057\u3066\u5275\u9020\u4E3B\u306B\u623B\u308B", () => {
       run({ type: "control.release" });
       S2.hooks.render();
     }, "p", { id: "release" })) || box;
     const names = aliveStates2().sort((a, b) => b.pop - a.pop);
     const pick2 = h("select", { id: "cr-state" }, ...names.slice(0, 120).map((s) => h("option", { value: s.id }, s.name)));
     box.append(
-      note2("\u4E16\u754C\u3092\u898B\u5B88\u308B\u7ACB\u5834\u3067\u3067\u304D\u308B\u3053\u3068\u3092\u3001\u3053\u3053\u306B\u307E\u3068\u3081\u3066\u3044\u307E\u3059\u3002"),
+      note3("\u4E16\u754C\u3092\u898B\u5B88\u308B\u7ACB\u5834\u3067\u3067\u304D\u308B\u3053\u3068\u3092\u3001\u3053\u3053\u306B\u307E\u3068\u3081\u3066\u3044\u307E\u3059\u3002"),
       lb("\u56FD\u5BB6\u3078\u306E\u4ECB\u5165\u30FB\u7DE8\u96C6", "INTERVENE"),
-      note2("\u56FD\u5BB6\u3092\u9078\u3093\u3067\u3001\u8A73\u7D30\u30DA\u30FC\u30B8\u306E\u300C\u4ECB\u5165\u300D\u300C\u540D\u524D\u306E\u7DE8\u96C6\u300D\u304B\u3089\u884C\u3044\u307E\u3059\u3002"),
+      note3("\u56FD\u5BB6\u3092\u9078\u3093\u3067\u3001\u8A73\u7D30\u30DA\u30FC\u30B8\u306E\u300C\u4ECB\u5165\u300D\u300C\u540D\u524D\u306E\u7DE8\u96C6\u300D\u304B\u3089\u884C\u3044\u307E\u3059\u3002"),
       h("div", { class: "rowb" }, pick2, btn("\u305D\u306E\u56FD\u3092\u958B\u304F", () => {
         if (pick2.value) S2.hooks.select(pick2.value);
       })),
       lb("\u56FD\u5BB6\u3092\u3064\u304F\u308B", "CREATE A NATION"),
-      note2("\u56FD\u540D\u30FB\u653F\u4F53\u30FB\u5F79\u8077\u30FB\u70BA\u653F\u8005\u30FB\u9996\u90FD\u30FB\u6280\u8853\u3092\u6C7A\u3081\u3066\u3001\u65B0\u3057\u3044\u56FD\u3092\u4E16\u754C\u306B\u751F\u307F\u307E\u3059\uFF08\u62C5\u5F53\u306F\u3057\u307E\u305B\u3093\uFF09\u3002"),
+      note3("\u56FD\u540D\u30FB\u653F\u4F53\u30FB\u5F79\u8077\u30FB\u70BA\u653F\u8005\u30FB\u9996\u90FD\u30FB\u6280\u8853\u3092\u6C7A\u3081\u3066\u3001\u65B0\u3057\u3044\u56FD\u3092\u4E16\u754C\u306B\u751F\u307F\u307E\u3059\uFF08\u62C5\u5F53\u306F\u3057\u307E\u305B\u3093\uFF09\u3002"),
       h("div", { class: "rowb" }, btn("\u56FD\u5BB6\u3092\u3064\u304F\u308B", () => openWizard({ mode: "creator", onDone: (r) => {
         S2.sel = r.stateId;
         notify("ok", "\u65B0\u3057\u3044\u56FD\u304C\u751F\u307E\u308C\u307E\u3057\u305F");
@@ -14818,10 +15954,10 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       creator({ type: "creator.catastrophe", name: nm.value, reason: why2.value, scope: scope.value, center: cell ?? null, radiusKm: Number(rad.value), mortality: Number(mor.value) / 100, recoveryMonths: Number(rec.value) });
     };
     const log3 = (c.wcde.catastrophes ?? []).slice(-4).reverse();
-    return h("div", {}, lb("\u5275\u9020\u4E3B\u306E\u707D\u5384", "CATASTROPHE"), note2("\u5927\u304D\u306A\u707D\u5384\u3092\u8D77\u3053\u3057\u307E\u3059\u3002\u4EBA\u53E3\u30FB\u8ECD\u30FB\u5B89\u5B9A\u306B\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u767A\u751F\u524D\u3078\u306F\u623B\u308A\u307E\u305B\u3093\u3002"), nm, why2, h("div", { class: "rowb" }, scope, at2), h("div", { class: "rowb" }, h("small", {}, "\u534A\u5F84(km)"), rad, h("small", {}, "\u4EBA\u53E3\u306E\u640D\u5931 %"), mor, h("small", {}, "\u56DE\u5FA9\u306E\u76EE\u5B89(\u6708)"), rec), h("div", { class: "rowb" }, h("label", {}, ok2, " \u53D6\u308A\u6D88\u305B\u306A\u3044\u3053\u3068\u3092\u7406\u89E3\u3057\u305F"), btn("\u707D\u5384\u3092\u8D77\u3053\u3059", go, "p", { id: "cat-go" })), ...log3.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `\u300C${r.name}\u300D${r.scope === "world" ? "\u4E16\u754C\u898F\u6A21" : "\u5730\u57DF\u898F\u6A21"}`, h("br"), h("small", {}, `${date4(r.at)}\u30FB\u5B9F\u969B\u306E\u640D\u5931 ${Math.round(r.result.share * 100)}%\uFF08\u7D04 ${n0(r.result.dead)} \u4EBA\uFF09`)))));
+    return h("div", {}, lb("\u5275\u9020\u4E3B\u306E\u707D\u5384", "CATASTROPHE"), note3("\u5927\u304D\u306A\u707D\u5384\u3092\u8D77\u3053\u3057\u307E\u3059\u3002\u4EBA\u53E3\u30FB\u8ECD\u30FB\u5B89\u5B9A\u306B\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u767A\u751F\u524D\u3078\u306F\u623B\u308A\u307E\u305B\u3093\u3002"), nm, why2, h("div", { class: "rowb" }, scope, at2), h("div", { class: "rowb" }, h("small", {}, "\u534A\u5F84(km)"), rad, h("small", {}, "\u4EBA\u53E3\u306E\u640D\u5931 %"), mor, h("small", {}, "\u56DE\u5FA9\u306E\u76EE\u5B89(\u6708)"), rec), h("div", { class: "rowb" }, h("label", {}, ok2, " \u53D6\u308A\u6D88\u305B\u306A\u3044\u3053\u3068\u3092\u7406\u89E3\u3057\u305F"), btn("\u707D\u5384\u3092\u8D77\u3053\u3059", go, "p", { id: "cat-go" })), ...log3.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `\u300C${r.name}\u300D${r.scope === "world" ? "\u4E16\u754C\u898F\u6A21" : "\u5730\u57DF\u898F\u6A21"}`, h("br"), h("small", {}, `${date4(r.at)}\u30FB\u5B9F\u969B\u306E\u640D\u5931 ${Math.round(r.result.share * 100)}%\uFF08\u7D04 ${n0(r.result.dead)} \u4EBA\uFF09`)))));
   }
   function pSettings() {
-    const c = civ6(), cf = c.wcde.config, T3 = timeOf(c), errs = checkWcdeIntegrity(S2.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
+    const c = civ6(), cf = c.wcde.config, T4 = timeOf(c), errs = checkWcdeIntegrity(S2.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
     const dl = (blob, name) => {
       const a = h("a", { href: URL.createObjectURL(blob), download: name });
       document.body.append(a);
@@ -14893,7 +16029,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       msg,
       ...S2.fileWarn.map((x) => h("p", { class: "warn" }, x)),
       lb("\u30D0\u30FC\u30B8\u30E7\u30F3\u60C5\u5831", "VERSION"),
-      table(["\u9805\u76EE", "\u5024"], [["\u30A2\u30D7\u30EA\u306E\u7248", APP_VERSION_LABEL], ["\u4FDD\u5B58\u5F62\u5F0F\u306E\u7248\uFF08\u30A2\u30D7\u30EA\u306E\u7248\u3068\u306F\u5225\uFF09", SAVE_SCHEMA], ["\u6574\u5408\u6027\u306E\u691C\u67FB", errs.length ? `${errs.length} \u4EF6\u306E\u554F\u984C` : "\u554F\u984C\u306A\u3057"], ["\u6642\u9593\u306E\u901F\u5EA6", SPEEDS.find((s) => s.id === T3.speed)?.label]])
+      table(["\u9805\u76EE", "\u5024"], [["\u30A2\u30D7\u30EA\u306E\u7248", APP_VERSION_LABEL], ["\u4FDD\u5B58\u5F62\u5F0F\u306E\u7248\uFF08\u30A2\u30D7\u30EA\u306E\u7248\u3068\u306F\u5225\uFF09", SAVE_SCHEMA], ["\u6574\u5408\u6027\u306E\u691C\u67FB", errs.length ? `${errs.length} \u4EF6\u306E\u554F\u984C` : "\u554F\u984C\u306A\u3057"], ["\u6642\u9593\u306E\u901F\u5EA6", SPEEDS.find((s) => s.id === T4.speed)?.label]])
     );
   }
   function fileLoader(done2) {
@@ -15098,12 +16234,12 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     }
   }
   function renderRight() {
-    const w = S2.w, T3 = timeOf(w.civ), cs = controlled();
+    const w = S2.w, T4 = timeOf(w.civ), cs = controlled();
     const eraNow = eraLabel(w.civ.wcde.config.calendar, w.civ.monthIndex);
-    $2("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T3.hold ? T3.resumeSpeed : T3.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} \u304B\u6708\uFF0F\u79D2` : "\u505C\u6B62", onclick: () => {
+    $2("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T4.hold ? T4.resumeSpeed : T4.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} \u304B\u6708\uFF0F\u79D2` : "\u505C\u6B62", onclick: () => {
       run({ type: "clock.setSpeed", speed: s.id });
       renderRight();
-    } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `\u62C5\u5F53: ${stateName(cs)}` : "\u62C5\u5F53\u56FD\u306A\u3057\uFF08\u898B\u5B88\u308A\uFF09", T3.hold ? "\u30FB\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061" : T3.speed ? "" : "\u30FB\u505C\u6B62\u4E2D"));
+    } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `\u62C5\u5F53: ${stateName(cs)}` : "\u62C5\u5F53\u56FD\u306A\u3057\uFF08\u898B\u5B88\u308A\uFF09", T4.hold ? "\u30FB\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061" : T4.speed ? "" : "\u30FB\u505C\u6B62\u4E2D"));
     announce();
   }
   function announce() {
@@ -15146,7 +16282,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   function tick2() {
     const w = S2.w;
     if (!w || w.viewPast != null || !isRunning(w.civ)) return;
-    const T3 = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T3.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) });
+    const T4 = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T4.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) });
     if (!r.ok && r.code !== "news_hold" && r.code !== "decision_hold") run({ type: "clock.setSpeed", speed: 0 });
     live();
   }
