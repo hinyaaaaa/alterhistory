@@ -23,7 +23,7 @@ export function normalizeCalendar(input = {}) {
       if (!e || typeof e.name !== "string" || !e.name.trim()) { errors.push(`calendar.eras[${i}].name は空でない文字列`); continue; }
       if (!isInt(e.startYear)) { errors.push(`calendar.eras[${i}].startYear は整数（内部の年）`); continue; }
       if (e.startYear <= prev) errors.push(`calendar.eras[${i}] の境界は前より後（${e.startYear} ≤ ${prev}）`);
-      prev = e.startYear; eras.push({ id: e.id ?? `era${i}`, name: e.name.trim(), startYear: e.startYear });
+      prev = e.startYear; eras.push({ id: e.id ?? `era${i}`, name: e.name.trim(), startYear: e.startYear, restart: e.restart === true });
     }
   }
   if (c.monthNames != null && !(Array.isArray(c.monthNames) && c.monthNames.length === 12 && c.monthNames.every((x) => typeof x === "string" && x))) errors.push("calendar.monthNames は12個の文字列");
@@ -39,7 +39,10 @@ export function eraOf(cal, mi) {
 }
 /** 月通番 → 表示文字列。年の符号は yearOffset を足したあとで決める（0 年は無い数え方はせず、0 以下は「前」の側で 1 から数える） */
 export function formatDate(cal, mi) {
-  const { year, month } = split(mi), shown = year + cal.yearOffset, before = shown < 0, n = before ? -shown : shown;
+  const { year, month } = split(mi), era0 = eraOf(cal, mi);
+  // v6.14.0: 時代が変わると、その時代の始まりが 0 年になる（世界暦 2000 年 = 新しい暦の 0 年）。restart の時代だけ。
+  if (era0?.restart) return cal.format.replace("{era}", era0.name).replace("{year}", String(year - era0.startYear)).replace("{month}", cal.monthNames ? cal.monthNames[month - 1] : String(month)).replace("{monthNum}", String(month));
+  const shown = year + cal.yearOffset, before = shown < 0, n = before ? -shown : shown;
   const era = before ? (cal.beforeName || "前") : cal.epochName, name = cal.monthNames ? cal.monthNames[month - 1] : String(month);
   return cal.format.replace("{era}", era).replace("{year}", String(n)).replace("{month}", name).replace("{monthNum}", String(month));
 }
@@ -50,12 +53,19 @@ export const eraLabel = (cal, mi) => eraOf(cal, mi)?.name ?? "";
 /** 生成後に許す変更（表示用のみ）。区分の名前と、表示形式・起点の名前。境界・年のずれ・日付には触れない */
 export function applyDisplayEdit(cal, edit) {
   const errors = [], next = { ...cal, eras: cal.eras.map((e) => ({ ...e })) };
-  const allowed = new Set(["epochName", "beforeName", "format", "monthNames", "eraNames"]);
+  const allowed = new Set(["epochName", "beforeName", "format", "monthNames", "eraNames", "addEra", "removeEra"]);
   for (const k of Object.keys(edit)) if (!allowed.has(k)) errors.push(`${k} は生成後に変更できません（表示用の設定だけ変えられます）`);
   if (errors.length) return { calendar: cal, errors };
   for (const k of ["epochName", "beforeName", "format"]) if (edit[k] !== undefined) next[k] = edit[k];
   if (edit.monthNames !== undefined) next.monthNames = edit.monthNames;
   if (edit.eraNames) for (const [id, name] of Object.entries(edit.eraNames)) { const e = next.eras.find((x) => x.id === id); if (!e) errors.push(`時代区分 ${id} がありません`); else e.name = name; }
+  if (edit.addEra) { // v6.14.0: 時代はいつでも足せる（「開始から n 年から〇〇時代」。表示だけで、出来事の日付には触れない）
+    const n = String(edit.addEra.name ?? "").trim(), y = edit.addEra.startYear;
+    if (!n) errors.push("時代の名前を入れてください"); else if (!isInt(y) || y < 0) errors.push("開始年は 0 以上の整数で入れてください"); else if (next.eras.some((e) => e.startYear === y)) errors.push(`${y}年から始まる時代がすでにあります`);
+    else { const id = `era${Math.max(-1, ...next.eras.map((e) => Number(String(e.id).replace(/\D/g, "")) || 0)) + 1}`; next.eras.push({ id, name: n, startYear: y, restart: true }); next.eras.sort((a, b) => a.startYear - b.startYear); }
+  }
+  if (edit.removeEra) next.eras = next.eras.filter((e) => e.id !== edit.removeEra);
+  if (errors.length) return { calendar: cal, errors };
   const v = normalizeCalendar(next); if (v.errors.length) return { calendar: cal, errors: v.errors };
   return { calendar: v.calendar, errors: [] };
 }

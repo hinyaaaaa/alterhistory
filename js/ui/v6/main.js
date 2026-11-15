@@ -2,6 +2,7 @@
 //   ・左: ハブ（地理・国家・戦争・外交・文化・言語・宗教・統計・創造主・世界設定）／中央: 地図（上部中央に時計）。ニュースはコールアウトとトーストで出す（v6.3.0 で右のニュース欄・年表・検索・凡例を廃止）。
 //   ・UI は WorldState を直接変えない。成功した Command の結果を、読み取りモデルへ反映するだけ。
 //   ・パネルの開閉・切替で、地図の位置・拡大・選択・検索条件をリセットしない。
+import "./domsafe.js";
 import { createNewWorld, formatWorldDate } from "../../core/wcde/world.js";
 import { SPEEDS, timeOf, newsOf, newsFeed, isRunning } from "../../core/wcde/clock.js";
 import { h, btn, polityJa, n0, pct, colorOf, face, sv } from "./common.js";
@@ -11,7 +12,7 @@ import { S, run, act, stateName, aliveStates, controlled } from "./store.js";
 import { MapView } from "./map.js";
 import { openWizard } from "./wizard.js";
 import { showTitle, showWorldConfig, runLoading, runSplash } from "./title.js";
-import { eraLabel } from "../../core/wcde/calendar.js";
+import { eraLabel, eraOf } from "../../core/wcde/calendar.js";
 import { initNotify, notify } from "./notify.js";
 import { pGeo, pNations, link, uprisingFull } from "./views-a.js";
 import { renderDecision } from "./decision.js";
@@ -29,14 +30,14 @@ function setup() {
 }
 function founding() {
   const c = run({ type: "founding.refresh" }).candidates ?? S.w.civ.wcde.candidates ?? [], civ = S.w.civ, pre = civ.wcde.prehistory ?? {}, ce = S.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
-  const nowTxt = formatWorldDate(S.w), era = eraLabel(civ.wcde.config.calendar, civ.monthIndex), msg = h("div", {}, h("p", { class: "n" }, `${civ.wcde.config.name}　現在 ${nowTxt}${era ? "（" + era + "）" : ""}　— 世界の時計は、あなたが入る前から進んでいます。`), h("p", { class: "n" }, "国を建てて担当するか、世界に任せて見守ります。国名・政体・役職・為政者・首都・技術を、順に決めます。")), list = h("div", {}); void list; void c;
+  const nowTxt = formatWorldDate(S.w), era = eraLabel(civ.wcde.config.calendar, civ.monthIndex), msg = h("div", {}, h("p", { class: "n" }, `${civ.wcde.config.name}　${nowTxt}`)), list = h("div", {}); void list; void c;
   const yrsAgo = (m) => Math.round(((civ.wcde.foundedAt ?? civ.monthIndex) - m) / 12);
   const fmtYears = (y) => (y >= 10000 ? `約 ${Math.round(y / 1000) / 10} 万年前` : `約 ${n0(y)} 年前`);
   // 先史の観察: 系統の移行・技術の出現・人口の推移（読み取り専用）
   const techTl = Object.entries(pre.firstTech ?? {}).sort((x, y) => x[1] - y[1]).map(([k, m]) => `${fmtYears(yrsAgo(m))}　${TECH[k]?.name ?? k}`);
   const ep = pre.epochs ?? [], mx = Math.max(1, ...ep.map((e) => Math.log10(Math.max(10, e.pop)))), spark = sv("svg", { viewBox: "0 0 300 60", style: "width:100%;height:60px" }, sv("polyline", { points: ep.map((e, i) => `${(i / Math.max(1, ep.length - 1)) * 300},${58 - (Math.log10(Math.max(10, e.pop)) / mx) * 54}`).join(" "), fill: "none", stroke: "#6fa8c9", "stroke-width": 1.6 }), sv("polyline", { points: ep.map((e, i) => `${(i / Math.max(1, ep.length - 1)) * 300},${58 - (e.ice ?? 0) * 54}`).join(" "), fill: "none", stroke: "#c97a6f", "stroke-width": 1, "stroke-dasharray": "3 3" }));
   const eco = ecoSummary(S.w.world, civ), sp = pre.species ?? {};
-  const obs = h("details", { class: "dt" }, h("summary", {}, "先史の観察（読み取り専用）"),
+  const obs = h("details", { class: "dt" }, h("summary", {}, "先史の観察"),
     sp.archaic ? `古代型人類の集団が現れる: ${fmtYears(yrsAgo(sp.archaic.at))}` : "", h("br"), sp.human ? `現生人類が現れる: ${fmtYears(yrsAgo(sp.human.at))}（置き換わり・混血: ${n0(pre.assimilated ?? 0)} 集団）` : "", h("br"),
     `集団 ${n0(pre.groups ?? Object.keys(civ.groups).length)}・人口 ${n0(Math.round(Object.values(civ.groups).reduce((a, g) => a + g.pop, 0)))}・定住 ${n0(pre.settlements ?? 0)}・氷期の最大 ${Math.round((pre.glacialMax ?? 0) * 100)}%・海を渡った ${n0(pre.seaCrossings ?? 0)} 回`, h("br"),
     eco ? `生態系: 植物 ${Math.round(eco.flora * 100)}%・動物 ${Math.round(eco.fauna * 100)}%・荒廃した土地 ${Math.round(eco.degraded * 100)}%` : "", h("br"), "人口（青・対数）と氷期（赤の破線）の推移", spark, h("b", {}, "技術の出現"), h("br"), ...techTl.flatMap((t) => [t, h("br")]));
@@ -73,7 +74,7 @@ function callout(p) {
 /* ---------- 右: ニュースと時間のみ ---------- */
 function renderRight() {
   const w = S.w, T = timeOf(w.civ), cs = controlled();
-  const eraNow = eraLabel(w.civ.wcde.config.calendar, w.civ.monthIndex); $("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); renderRight(); } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）", T.hold ? "・ニュースの確認待ち" : T.speed ? "" : "・停止中"));
+  const eraNow = eraLabel(w.civ.wcde.config.calendar, w.civ.monthIndex); $("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow && !eraOf(w.civ.wcde.config.calendar, w.civ.monthIndex)?.restart ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); renderRight(); } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）", overlayOpen() || T.hold ? "・一時停止" : T.speed ? "" : "・停止中"));
   announce();
 }
 /** v6.3.0: 右のニュース欄は廃止。重大でない大きな出来事は、地図のコールアウトとトースト通知で知らせる（重大ニュースは中央の確認画面） */
@@ -82,7 +83,6 @@ function announce() {
   if (!S.newsSeen) { S.newsSeen = new Set(feed.map(key)); return; }
   const fresh = feed.filter((n) => n.level !== "critical" && !S.newsSeen.has(key(n))).reverse(); feed.forEach((n) => S.newsSeen.add(key(n)));
   if (!fresh.length) return; const shown = fresh.slice(-3);
-  for (const n of shown) notify("ok", `${n.date.year}年${n.date.month}月　${n.title}`);
   const last = shown[shown.length - 1], sid = (last.entityIds ?? []).find((i) => c.states[i]), g = sid ? c.groups[c.states[sid].capitalGroupId] : null, el = $("#newscall"), M = S.map;
   if (!g || !el || !M) return;
   const [x, y] = M.proj(M.geo.cen[g.cell * 2], M.geo.cen[g.cell * 2 + 1], M.cv.width, M.cv.height), r = M.cv.clientWidth / (M.cv.width || 1), px = (x * M.view.k + M.view.x) * r, py = (y * M.view.k + M.view.y) * r;
@@ -93,7 +93,9 @@ function renderNews() {
   const m = $("#newsmodal"), q = newsOf(S.w.civ).queue; if (!q.length) { m.hidden = true; m.replaceChildren(); return; } const n = q[0];
   m.hidden = false; m.replaceChildren(h("div", { class: "modalbox" }, h("div", { class: "code", style: "justify-content:center" }, `重大ニュース（残り ${q.length} 件）`), h("div", { class: "n" }, `${n.date.year}年${n.date.month}月`), h("h2", {}, n.title), h("div", {}, ...n.entityIds.filter((i) => S.w.civ.states[i]).map((i) => [link(i), " "])), h("div", { class: "rowb", style: "justify-content:center;margin-top:16px" }, btn("OK", () => { run({ type: "news.ack", id: n.id }); renderRight(); renderNews(); S.map.draw(); }, "p", { id: "ack" }))));
 }
-function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ)) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold" && r.code !== "decision_hold") run({ type: "clock.setSpeed", speed: 0 }); live(); }
+/** 全画面・確認画面・建国の画面が開いている間は進行を止め、閉じたら自動で再開する（速度の設定は変えない） */
+const overlayOpen = () => { const on = (id) => { const e = document.getElementById(id); return !!e && !e.hidden; }; return !!document.querySelector("#fulltab, .wiz, .fullmodal") || on("decmodal") || on("newsmodal"); };
+function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ) || overlayOpen()) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold" && r.code !== "decision_hold") run({ type: "clock.setSpeed", speed: 0 }); live(); }
 /** 再生中の更新: 時計・ニュース・地図だけを毎回更新する。左のパネルは勝手に描き直さない（読んでいる最中・入力中・スクロール中の内容が変わらないように）。
  *  世界が進んでパネルの内容が古くなったときは、パネルの右上に「最新の状態に更新」を出し、押したときだけ描き直す */
 function live() { if (!$("#hub")) return; renderRight(); renderNews(); renderDecision(); S.map.corps = corpsMarkers(); S.map.draw(); if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");}

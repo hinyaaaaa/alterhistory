@@ -1,4 +1,21 @@
 (() => {
+  // js/ui/v6/domsafe.js
+  if (typeof Element !== "undefined" && !Element.prototype.__domsafe) {
+    const keep = (a) => a.filter((x) => x != null && x !== false);
+    const wrap = (proto, names) => {
+      for (const k of names) {
+        const o = proto[k];
+        if (typeof o !== "function") continue;
+        proto[k] = function(...a) {
+          return o.apply(this, keep(a));
+        };
+      }
+    };
+    wrap(Element.prototype, ["append", "prepend", "replaceChildren", "before", "after", "replaceWith"]);
+    if (typeof DocumentFragment !== "undefined") wrap(DocumentFragment.prototype, ["append", "prepend", "replaceChildren"]);
+    Object.defineProperty(Element.prototype, "__domsafe", { value: true });
+  }
+
   // js/core/world/sphere-mesh.js
   var MESH_VERSION = "sphere-ico-1";
   var cellCountForFrequency = (n3) => 10 * n3 * n3 + 2;
@@ -1761,7 +1778,7 @@
         }
         if (e.startYear <= prev) errors.push(`calendar.eras[${i}] \u306E\u5883\u754C\u306F\u524D\u3088\u308A\u5F8C\uFF08${e.startYear} \u2264 ${prev}\uFF09`);
         prev = e.startYear;
-        eras.push({ id: e.id ?? `era${i}`, name: e.name.trim(), startYear: e.startYear });
+        eras.push({ id: e.id ?? `era${i}`, name: e.name.trim(), startYear: e.startYear, restart: e.restart === true });
       }
     }
     if (c.monthNames != null && !(Array.isArray(c.monthNames) && c.monthNames.length === 12 && c.monthNames.every((x) => typeof x === "string" && x))) errors.push("calendar.monthNames \u306F12\u500B\u306E\u6587\u5B57\u5217");
@@ -1781,14 +1798,16 @@
     return hit;
   }
   function formatDate(cal, mi) {
-    const { year, month } = split(mi), shown = year + cal.yearOffset, before = shown < 0, n3 = before ? -shown : shown;
+    const { year, month } = split(mi), era0 = eraOf(cal, mi);
+    if (era0?.restart) return cal.format.replace("{era}", era0.name).replace("{year}", String(year - era0.startYear)).replace("{month}", cal.monthNames ? cal.monthNames[month - 1] : String(month)).replace("{monthNum}", String(month));
+    const shown = year + cal.yearOffset, before = shown < 0, n3 = before ? -shown : shown;
     const era = before ? cal.beforeName || "\u524D" : cal.epochName, name = cal.monthNames ? cal.monthNames[month - 1] : String(month);
     return cal.format.replace("{era}", era).replace("{year}", String(n3)).replace("{month}", name).replace("{monthNum}", String(month));
   }
   var eraLabel = (cal, mi) => eraOf(cal, mi)?.name ?? "";
   function applyDisplayEdit(cal, edit) {
     const errors = [], next = { ...cal, eras: cal.eras.map((e) => ({ ...e })) };
-    const allowed = /* @__PURE__ */ new Set(["epochName", "beforeName", "format", "monthNames", "eraNames"]);
+    const allowed = /* @__PURE__ */ new Set(["epochName", "beforeName", "format", "monthNames", "eraNames", "addEra", "removeEra"]);
     for (const k of Object.keys(edit)) if (!allowed.has(k)) errors.push(`${k} \u306F\u751F\u6210\u5F8C\u306B\u5909\u66F4\u3067\u304D\u307E\u305B\u3093\uFF08\u8868\u793A\u7528\u306E\u8A2D\u5B9A\u3060\u3051\u5909\u3048\u3089\u308C\u307E\u3059\uFF09`);
     if (errors.length) return { calendar: cal, errors };
     for (const k of ["epochName", "beforeName", "format"]) if (edit[k] !== void 0) next[k] = edit[k];
@@ -1798,6 +1817,19 @@
       if (!e) errors.push(`\u6642\u4EE3\u533A\u5206 ${id} \u304C\u3042\u308A\u307E\u305B\u3093`);
       else e.name = name;
     }
+    if (edit.addEra) {
+      const n3 = String(edit.addEra.name ?? "").trim(), y = edit.addEra.startYear;
+      if (!n3) errors.push("\u6642\u4EE3\u306E\u540D\u524D\u3092\u5165\u308C\u3066\u304F\u3060\u3055\u3044");
+      else if (!isInt(y) || y < 0) errors.push("\u958B\u59CB\u5E74\u306F 0 \u4EE5\u4E0A\u306E\u6574\u6570\u3067\u5165\u308C\u3066\u304F\u3060\u3055\u3044");
+      else if (next.eras.some((e) => e.startYear === y)) errors.push(`${y}\u5E74\u304B\u3089\u59CB\u307E\u308B\u6642\u4EE3\u304C\u3059\u3067\u306B\u3042\u308A\u307E\u3059`);
+      else {
+        const id = `era${Math.max(-1, ...next.eras.map((e) => Number(String(e.id).replace(/\D/g, "")) || 0)) + 1}`;
+        next.eras.push({ id, name: n3, startYear: y, restart: true });
+        next.eras.sort((a, b) => a.startYear - b.startYear);
+      }
+    }
+    if (edit.removeEra) next.eras = next.eras.filter((e) => e.id !== edit.removeEra);
+    if (errors.length) return { calendar: cal, errors };
     const v = normalizeCalendar(next);
     if (v.errors.length) return { calendar: cal, errors: v.errors };
     return { calendar: v.calendar, errors: [] };
@@ -2106,12 +2138,6 @@
     return null;
   }
   var inLiveRange = (civ7, id) => !civ7.events.length || idNum(id) >= idNum(civ7.events[0].eventId);
-  function recordsOf(civ7, entityId, { limit = 50 } = {}) {
-    const out = [];
-    for (const r of iterRecords(civ7)) if (r.participants.some((p) => p.entityId === entityId)) out.push(r);
-    out.sort((x, y) => y.t - x.t);
-    return out.slice(0, limit);
-  }
   function pastView(civ7, month) {
     const states = /* @__PURE__ */ new Map(), cities = [], wars = /* @__PURE__ */ new Map();
     const ensure = (id) => states.get(id) ?? (states.set(id, { id, name: null, polity: null, capitalCell: null, cells: /* @__PURE__ */ new Set(), formedAt: null, endedAt: null, known: { formed: false, ended: false }, mentions: 0 }), states.get(id));
@@ -11610,7 +11636,44 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   var lb = (ja, en) => h("div", { class: "lb" }, ja, en ? h("em", {}, en) : null);
   var bar = (v, col = "var(--blue)") => h("span", { class: "barv" }, h("i", { style: `width:${Math.max(0, Math.min(1, v)) * 100}%;background:${col}` }));
   var btn = (label, onclick, cls = "", props = {}) => h("button", { class: "b " + cls, onclick, ...props }, label);
-  var table = (head2, rows, cls = "") => h("table", { class: "tb " + cls, style: "width:100%;border-collapse:collapse;font-size:12px" }, h("thead", {}, h("tr", {}, ...head2.map((x) => h("th", { style: "text-align:left;font-weight:400;color:var(--dim);border-bottom:1px solid var(--line);padding:3px 4px" }, x)))), h("tbody", {}, ...rows.map((r) => h("tr", {}, ...r.map((c) => h("td", { style: "border-bottom:1px solid #262a31;padding:3px 4px" }, c))))));
+  function holdBtn(label, onDone, cls = "", props = {}, ms = 1100) {
+    let t = null, fired = false;
+    const fill = h("i", { class: "holdfill" }), b = h("button", { class: "b hold " + cls, ...props }, fill, h("span", {}, label));
+    const reset = () => {
+      clearTimeout(t);
+      t = null;
+      fill.style.transition = "width .15s";
+      fill.style.width = "0";
+    };
+    const start2 = () => {
+      if (t) return;
+      fired = false;
+      fill.style.transition = `width ${ms}ms linear`;
+      fill.style.width = "100%";
+      t = setTimeout(() => {
+        fired = true;
+        reset();
+        onDone();
+      }, ms);
+    };
+    b.addEventListener("pointerdown", (e) => {
+      if (e.button === 0 || e.button === void 0) start2();
+    });
+    for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, () => {
+      if (t && !fired) reset();
+    });
+    b.addEventListener("keydown", (e) => {
+      if ((e.key === "Enter" || e.key === " ") && !e.repeat) {
+        e.preventDefault();
+        start2();
+      }
+    });
+    b.addEventListener("keyup", () => {
+      if (t && !fired) reset();
+    });
+    return b;
+  }
+  var table = (head2, rows, cls = "") => h("table", { class: "tb " + cls, style: "width:100%;border-collapse:collapse;font-size:14px" }, h("thead", {}, h("tr", {}, ...head2.map((x) => h("th", { style: "text-align:left;font-weight:400;color:var(--dim);border-bottom:1px solid var(--line);padding:3px 4px" }, x)))), h("tbody", {}, ...rows.map((r) => h("tr", {}, ...r.map((c) => h("td", { style: "border-bottom:1px solid #262a31;padding:3px 4px" }, c))))));
   function face(name, stateId, look = null) {
     const k = look != null ? hash("look" + look) : hash(name + stateId), sk = ["#e0b79a", "#c99a76", "#a87654", "#f0cfb5"][k % 4], hr = ["#2a2420", "#6b4a2f", "#9a9a9a", "#4a3020"][(k >> 3) % 4], st2 = (k >> 6) % 4, c = colorOf(stateId, 45);
     let g = `<rect width="64" height="64" fill="#1b1f26"/><path d="M6 64Q8 46 32 44Q56 46 58 64Z" fill="${c}" fill-opacity=".8"/><rect x="28" y="38" width="8" height="8" fill="${sk}"/><ellipse cx="32" cy="27" rx="12" ry="14" fill="${sk}"/>`;
@@ -11767,7 +11830,6 @@ ${shown}${more}`;
   var tell = (c, r, quiet) => {
     const n3 = LABEL[c.type] ?? c.type;
     if (!r.ok) notify("error", `${n3}\u306B\u5931\u6557: ${r.error ?? "\u4E0D\u660E\u306A\u30A8\u30E9\u30FC"}`);
-    else if (!quiet && LABEL[c.type]) notify("ok", `${n3}\u3092\u5B9F\u884C\u3057\u307E\u3057\u305F`);
   };
   var run = (c) => {
     const r = dispatch(S2.w, { authority: AUTHORITY.ADMIN, ...c });
@@ -13059,7 +13121,7 @@ ${shown}${more}`;
   }
 
   // js/ui/v6/scenes.js
-  var SCENE_COUNT = 1e3;
+  var SCENE_COUNT = 500;
   var SCENE_KINDS = Object.freeze(["\u5C71\u306E\u591C\u660E\u3051", "\u68DA\u7530\u3068\u8FB2\u8015", "\u7802\u6F20\u306E\u968A\u5546", "\u6D77\u3068\u5E06\u8239", "\u6DF1\u3044\u68EE", "\u8349\u539F\u306E\u9A0E\u99AC", "\u57CE\u5E02\u306E\u9060\u666F", "\u6226\u91CE\u306E\u65D7", "\u96EA\u5DBA\u3068\u661F", "\u5927\u6CB3\u306E\u307B\u3068\u308A"]);
   var PALETTES = [
     { n: "\u6681", sky: ["#2b2f4a", "#e0905a"], sun: "#ffd89a", far: "#59486a", mid: "#38384f", near: "#1a1c28" },
@@ -13236,20 +13298,42 @@ ${shown}${more}`;
         break;
       }
     }
-    return o + `<rect width="1600" height="900" fill="#000" opacity=".16"/></svg>`;
+    o += `<defs><linearGradient id="f${s}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${pal.sky[1]}" stop-opacity="0"/><stop offset=".5" stop-color="${pal.sky[1]}" stop-opacity=".2"/><stop offset="1" stop-color="${pal.sky[0]}" stop-opacity=".08"/></linearGradient><radialGradient id="v${s}" cx=".5" cy=".46" r=".78"><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient></defs><rect y="440" width="1600" height="460" fill="url(#f${s})"/>`;
+    if (pal.n !== "\u591C" && kind !== 8 && kind !== 7) for (let i = 0, n3 = 3 + s % 5; i < n3; i++) {
+      const bx = 160 + r() * 1200, by = 110 + r() * 200, bw = 9 + r() * 9;
+      o += `<path d="M${f(bx)},${f(by)} q${f(bw / 2)},${f(-bw / 2)} ${f(bw)},0 q${f(bw / 2)},${f(-bw / 2)} ${f(bw)},0" stroke="${pal.near}" stroke-width="2" fill="none" opacity=".55"/>`;
+    }
+    return o + `<rect width="1600" height="900" fill="url(#v${s})"/></svg>`;
   }
   var sceneName = (seed) => {
     const s = (seed % SCENE_COUNT + SCENE_COUNT) % SCENE_COUNT;
     return `${PALETTES[Math.floor(s / 10) % 10].n}\u306E${SCENE_KINDS[s % 10]}`;
   };
-  function logoSvg({ withText = true } = {}) {
-    const emblem = `<g fill="none" stroke="#d8b45a" stroke-linecap="round"><circle cx="100" cy="100" r="86" stroke-width="3"/><circle cx="100" cy="100" r="76" stroke-width="1" opacity=".6"/><ellipse cx="100" cy="100" rx="34" ry="76" stroke-width="1" opacity=".5"/><path d="M24 100H176" stroke-width="1" opacity=".5"/><path d="M100 168V118Q100 100 80 80Q64 62 64 36M100 118Q100 100 120 80Q136 62 136 36" stroke-width="5"/></g><circle cx="64" cy="34" r="6" fill="#d8b45a"/><circle cx="136" cy="34" r="6" fill="#6fa8c9"/><circle cx="100" cy="170" r="5" fill="#e8e2d0"/>`;
-    return withText ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="ALTERHISTORY"><g transform="translate(10,10)">${emblem}</g><text x="232" y="112" font-family="'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif" font-size="58" letter-spacing="9" fill="#e8e2d0">ALTER</text><text x="232" y="172" font-family="'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif" font-size="58" letter-spacing="9" fill="#d8b45a">HISTORY</text></svg>` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="ALTERHISTORY">${emblem}</svg>`;
+  function compassSvgPart(cx, cy, r, { gold = "#d8b45a", blue = "#6fa8c9" } = {}) {
+    const pts = [];
+    for (let k = 0; k < 16; k++) {
+      const a = k * Math.PI / 8 - Math.PI / 2, rr = k % 4 === 0 ? r * 0.98 : k % 2 === 0 ? r * 0.62 : r * 0.2;
+      pts.push(`${f(cx + rr * Math.cos(a))},${f(cy + rr * Math.sin(a))}`);
+    }
+    let ticks = "";
+    for (let k = 0; k < 72; k++) {
+      const a = k * Math.PI / 36, r13 = r * (k % 6 === 0 ? 1.1 : 1.06), r25 = r * 1.14;
+      ticks += `M${f(cx + r13 * Math.cos(a))},${f(cy + r13 * Math.sin(a))} L${f(cx + r25 * Math.cos(a))},${f(cy + r25 * Math.sin(a))} `;
+    }
+    return `<g fill="none" stroke="${gold}" stroke-linecap="round"><circle cx="${cx}" cy="${cy}" r="${f(r * 1.18)}" stroke-width="1.2"/><circle cx="${cx}" cy="${cy}" r="${f(r * 1.04)}" stroke-width=".8" opacity=".6"/><path d="${ticks}" stroke-width=".8" opacity=".7"/><polygon points="${pts.join(" ")}" fill="${gold}" fill-opacity=".14" stroke-width="1.4" stroke-linejoin="round"/></g><polygon points="${f(cx)},${f(cy - r * 1.02)} ${f(cx - r * 0.1)},${f(cy - r * 0.55)} ${f(cx + r * 0.1)},${f(cy - r * 0.55)}" fill="${blue}"/><circle cx="${cx}" cy="${cy}" r="${f(r * 0.07)}" fill="${gold}"/>`;
+  }
+  function logoSvg({ withText = true, variant = "a" } = {}) {
+    const ff = "'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif", T4 = (x, y, t, sz, anchor, col, ls) => `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${ff}" font-weight="300" font-size="${sz}" letter-spacing="${ls}" fill="${col}">${t}</text>`;
+    if (!withText) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="ALTERHISTORY">${compassSvgPart(100, 100, 74)}</svg>`;
+    const head2 = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ALTERHISTORY" `;
+    if (variant === "b") return head2 + `viewBox="0 0 640 300">${compassSvgPart(320, 100, 62)}${T4(326, 250, "ALTERHISTORY", 50, "middle", "#e8e2d0", 16)}</svg>`;
+    if (variant === "c") return head2 + `viewBox="0 0 760 270"><g opacity=".38">${compassSvgPart(380, 135, 90)}</g>${T4(386, 155, "ALTERHISTORY", 58, "middle", "#e8e2d0", 20)}</svg>`;
+    return head2 + `viewBox="0 0 800 180">${T4(330, 106, "ALTER", 54, "end", "#e8e2d0", 14)}${compassSvgPart(400, 90, 52)}${T4(470, 106, "HISTORY", 54, "start", "#d8b45a", 14)}</svg>`;
   }
 
   // js/version.js
-  var APP_VERSION = "6.13.0";
-  var APP_VERSION_NAME = "\u8ECD\u3068\u6226\u4E89\u3092\u73FE\u4EE3\u307E\u3067\u30FB\u5730\u5F62\u3068\u8EFD\u3055";
+  var APP_VERSION = "6.14.0";
+  var APP_VERSION_NAME = "Obsidian\u51FA\u529B\u306E\u8EFD\u91CF\u5316\u30FBZIP\u5316";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/v6/title.js
@@ -13323,7 +13407,7 @@ ${shown}${more}`;
     const screen = h("div", { class: "titlescreen" }, bg, h("div", { class: "vig" }), h("div", { class: "titlebox" }, h("div", { class: "logo big" }), h("div", { class: "menu" }, btn("\u65B0\u3057\u3044\u4E16\u754C", () => {
       bg.__stop?.();
       onNew();
-    }, "p big", { id: "new" }), loader), h("div", { class: "ver" }, APP_VERSION_LABEL)));
+    }, "p big", { id: "new" }), loader), h("div", { class: "ver" }, "v" + APP_VERSION)));
     screen.querySelector(".logo").replaceChildren(html(logoSvg()));
     root2.replaceChildren(screen);
     return () => bg.__stop?.();
@@ -13332,8 +13416,8 @@ ${shown}${more}`;
     const bg = h("div", { class: "titlebg dim" });
     slideshow(bg);
     const name = h("input", { id: "wname", value: randomWorldName(), maxlength: 24 }), seed = h("input", { id: "seed", value: "alter-" + Math.floor(Math.random() * 9999) }), cells = h("select", { id: "cells" }, ...[3e3, 6e3].map((n3) => h("option", { value: n3, selected: n3 === 3e3 }, n3 === 3e3 ? "3,000 \u30BB\u30EB\uFF08\u6A19\u6E96\uFF09" : "6,000 \u30BB\u30EB\uFF08\u7D30\u304B\u3044\u30FB\u9045\u3044\uFF09")));
-    const epoch = h("input", { id: "epoch", placeholder: "\u7A7A\u767D\u306E\u307E\u307E\uFF08\u540D\u3065\u3051\u306A\u3044\uFF09", maxlength: 12 }), eras = [], list = h("div", { class: "erarows", id: "eras" }), msg = h("p", { class: "err", id: "setup-msg" });
-    const paint = () => list.replaceChildren(...eras.map((e, i) => h("div", { class: "eraRow" }, h("span", {}, "\u7D00\u5E74"), h("input", { type: "number", class: "ey", value: e.year, onchange: (ev) => {
+    const eras = [], list = h("div", { class: "erarows", id: "eras" }), msg = h("p", { class: "err", id: "setup-msg" });
+    const paint = () => list.replaceChildren(...eras.map((e, i) => h("div", { class: "eraRow" }, h("span", {}, "\u958B\u59CB\u304B\u3089"), h("input", { type: "number", class: "ey", value: e.year, onchange: (ev) => {
       e.year = +ev.target.value;
     } }), h("span", {}, "\u5E74\u304B\u3089"), h("input", { class: "en", value: e.name, placeholder: "\u3007\u3007\u6642\u4EE3", maxlength: 14, oninput: (ev) => {
       e.name = ev.target.value;
@@ -13347,8 +13431,8 @@ ${shown}${more}`;
       paint();
     };
     const calendarOf = () => {
-      const list2 = eras.filter((e) => e.name.trim()).map((e) => ({ name: e.name.trim(), startYear: Math.round(e.year) })).sort((a, b) => a.startYear - b.startYear);
-      return { epochName: epoch.value.trim(), eras: list2 };
+      const list2 = eras.filter((e) => e.name.trim()).map((e) => ({ name: e.name.trim(), startYear: Math.round(e.year), restart: true })).sort((a, b) => a.startYear - b.startYear);
+      return { eras: list2 };
     };
     const go = () => {
       const cfg = { name: name.value.trim() || "\u540D\u3082\u306A\u304D\u4E16\u754C", worldSeed: seed.value || "alter", spec: { resolution: { targetCells: +cells.value } }, calendar: calendarOf() };
@@ -13370,11 +13454,9 @@ ${shown}${more}`;
       }))),
       h("label", { class: "fld" }, h("span", {}, "\u4E16\u754C\u306E\u7A2E"), seed),
       h("label", { class: "fld" }, h("span", {}, "\u89E3\u50CF\u5EA6"), cells),
-      h("div", { class: "lb" }, "\u66A6"),
-      h("label", { class: "fld" }, h("span", {}, "\u5E74\u53F7\u30FB\u7D00\u5143\u306E\u540D\u524D\uFF08\u7A7A\u767D\u306A\u3089\u3001\u5E74\u306E\u6570\u5B57\u3060\u3051\u3092\u8868\u793A\uFF09"), epoch),
-      h("span", { class: "n" }, "\u6642\u4EE3\u533A\u5206\uFF08\u300C\u4F55\u5E74\u304B\u3089\u3007\u3007\u6642\u4EE3\u300D\uFF09\u3002\u3044\u304F\u3064\u3067\u3082\u3002\u306A\u304F\u3066\u3082\u3088\u3044"),
+      h("div", { class: "lb" }, "\u6642\u4EE3"),
       list,
-      h("div", { class: "rowb" }, btn("\u6642\u4EE3\u533A\u5206\u3092\u8DB3\u3059", add, "", { id: "addera" })),
+      h("div", { class: "rowb" }, btn("\u6642\u4EE3\u3092\u8DB3\u3059", add, "", { id: "addera" })),
       msg,
       h("div", { class: "rowb" }, btn("\u4E16\u754C\u3092\u751F\u6210", go, "p big", { id: "gen" }), btn("\u2190 \u623B\u308B", () => {
         bg.__stop?.();
@@ -14331,8 +14413,6 @@ ${shown}${more}`;
     const r = act({ type: "decision.resolve", decisionId: d.id, option });
     if (!r.ok) return;
     const res = r.result ?? {};
-    if (res.step) notify("ok", res.step.text);
-    else if (res.note) notify("ok", res.note);
     S2.decFocus = null;
   }
   var optBtn = (d, o, extra = "") => h("button", { class: "decopt" + extra, "data-opt": o.id, disabled: !!o.disabled, title: o.disabled ?? o.hint ?? "", onclick: () => resolve2(d, o.id) }, h("b", {}, o.ja), o.hint ? h("small", {}, o.disabled ? o.disabled : o.hint) : null);
@@ -14384,7 +14464,7 @@ ${shown}${more}`;
       if (g) S2.hooks.focusCell?.(g.cell);
     }
     const body = d.kind === "succession" ? successionCards(d) : battle2 ? battleBox(d) : h("div", { class: "decopts" }, ...d.options.map((o) => optBtn(d, o)));
-    m.replaceChildren(h("div", { class: "decbox k-" + d.kind }, h("div", { class: "decseal" }, SEAL[d.kind] ?? "\u6C7A"), h("div", { class: "code" }, `${DECISION_JA[d.kind] ?? "\u6C7A\u65AD"}\uFF08\u672A\u6C7A ${q2.length} \u4EF6\uFF09`), h("div", { class: "n" }, `${d.date.year}\u5E74${d.date.month}\u6708\u3000\u6642\u9593\u306F\u6B62\u307E\u3063\u3066\u3044\u307E\u3059`), h("h2", {}, d.title), h("p", { class: "decbody" }, d.body), body));
+    m.replaceChildren(h("div", { class: "decbox k-" + d.kind }, h("div", { class: "decseal" }, SEAL[d.kind] ?? "\u6C7A"), h("div", { class: "code" }, `${DECISION_JA[d.kind] ?? "\u6C7A\u65AD"}\uFF08\u672A\u6C7A ${q2.length} \u4EF6\uFF09`), h("div", { class: "n" }, `${d.date.year}\u5E74${d.date.month}\u6708`), h("h2", {}, d.title), h("p", { class: "decbody" }, d.body), body));
   }
 
   // js/ui/v6/military.js
@@ -15162,60 +15242,6 @@ ${shown}${more}`;
     return (c ^ 4294967295) >>> 0;
   }
 
-  // js/io/zip.js
-  var enc3 = new TextEncoder();
-  async function deflateRaw(bytes) {
-    const out = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
-    return new Uint8Array(out);
-  }
-  var u16 = (n3) => [n3 & 255, n3 >>> 8 & 255];
-  var u32 = (n3) => [n3 & 255, n3 >>> 8 & 255, n3 >>> 16 & 255, n3 >>> 24 & 255];
-  function dosTime(d) {
-    return [(d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1) & 65535, (d.getFullYear() - 1980 << 9 | d.getMonth() + 1 << 5 | d.getDate()) & 65535];
-  }
-  async function zipFiles(files, { compress = true, date: date5 = /* @__PURE__ */ new Date(), onProgress = null } = {}) {
-    const parts = [], central = [], [dt, dd] = dosTime(date5);
-    let offset = 0, n3 = 0;
-    const names = /* @__PURE__ */ new Set();
-    for await (const f2 of files) {
-      if (names.has(f2.path)) throw new Error(`ZIP \u306E\u30D1\u30B9\u304C\u91CD\u8907: ${f2.path}`);
-      names.add(f2.path);
-      const raw = typeof f2.data === "string" ? enc3.encode(f2.data) : f2.data, name = enc3.encode(f2.path), crc = crc32(raw);
-      let method = 0, body = raw;
-      if (compress && raw.length > 128) {
-        const z = await deflateRaw(raw);
-        if (z.length < raw.length) {
-          method = 8;
-          body = z;
-        }
-      }
-      const head2 = Uint8Array.from([80, 75, 3, 4, ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0)]);
-      if (offset + head2.length + name.length + body.length > 4294967280) throw new Error("ZIP \u304C 4GB \u3092\u8D85\u3048\u307E\u3059\uFF08\u5206\u5272\u3057\u3066\u66F8\u304D\u51FA\u3057\u3066\u304F\u3060\u3055\u3044\uFF09");
-      central.push(Uint8Array.from([80, 75, 1, 2, ...u16(20), ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
-      parts.push(head2, name, body);
-      offset += head2.length + name.length + body.length;
-      n3++;
-      if (onProgress && n3 % 500 === 0) await onProgress(n3);
-    }
-    let csize = 0;
-    for (const c of central) csize += c.length;
-    const big = n3 > 65534, tail2 = [];
-    if (big) {
-      const u64 = (x) => [...u32(x >>> 0), ...u32(Math.floor(x / 4294967296))];
-      tail2.push(Uint8Array.from([80, 75, 6, 6, ...u64(44), ...u16(45), ...u16(45), ...u32(0), ...u32(0), ...u64(n3), ...u64(n3), ...u64(csize), ...u64(offset)]), Uint8Array.from([80, 75, 6, 7, ...u32(0), ...u64(offset + csize), ...u32(1)]));
-    }
-    tail2.push(Uint8Array.from([80, 75, 5, 6, 0, 0, 0, 0, ...u16(big ? 65535 : n3), ...u16(big ? 65535 : n3), ...u32(csize), ...u32(offset), 0, 0]));
-    let total2 = offset + csize;
-    for (const t of tail2) total2 += t.length;
-    const out = new Uint8Array(total2);
-    let o = 0;
-    for (const p of [...parts, ...central, ...tail2]) {
-      out.set(p, o);
-      o += p.length;
-    }
-    return out;
-  }
-
   // js/io/png.js
   var be32 = (n3) => [n3 >>> 24 & 255, n3 >>> 16 & 255, n3 >>> 8 & 255, n3 & 255];
   function chunk(type, data) {
@@ -15237,6 +15263,8 @@ ${shown}${more}`;
   // js/io/obsidian.js
   var evList = (civ7) => [...iterRecords(civ7)];
   var OBSIDIAN_VERSION = 1;
+  var MINOR_KINDS = Object.freeze(["tech_transferred", "demand_raised", "cohort_formed", "cohort_assimilated", "culture_contact", "settlement_stage", "settlement_founded", "state_action", "group_split", "language_diverged"]);
+  var MINOR_SET = new Set(MINOR_KINDS);
   var FOLDERS = Object.freeze({ timeline: "\u5E74\u8868", state: "\u56FD\u5BB6", person: "\u4EBA\u7269", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5/\u80FD\u529B", org: "\u9B54\u6CD5/\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269", chronicle: "\u5E74\u4EE3\u8A18", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", logState: "\u8A73\u7D30\u30ED\u30B0/\u56FD\u5BB6\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0/AI\u5224\u65AD", map: "\u5730\u56F3" });
   var mi2s = (mi) => `${Math.floor(mi / 12)}\u5E74${(mi % 12 + 12) % 12 + 1}\u6708`;
   var d2s = (d) => `${d.year}\u5E74${d.month}\u6708`;
@@ -15265,14 +15293,14 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
     return [f2(0), f2(8), f2(4)];
   };
   function planPaths(world, civ7, opts = {}) {
-    const P3 = /* @__PURE__ */ new Map(), add = (id, folder, name) => P3.set(id, `${folder}/${safe(name)}__${id}`);
+    const P3 = /* @__PURE__ */ new Map(), add = (id, folder, name) => P3.set(id, `${folder}/${safe(name)}__${id}`), lean = !!opts.lean, drop = P3.dropped = /* @__PURE__ */ new Set(), evs = opts.evs ?? evList(civ7);
     for (const s of Object.values(civ7.states)) add(s.id, FOLDERS.state, s.name);
     for (const p of Object.values(civ7.persons)) add(p.id, FOLDERS.person, p.name);
     for (const f2 of Object.values(civ7.figures ?? {})) if (!P3.has(f2.id)) add(f2.id, FOLDERS.person, f2.name);
     for (const w of Object.values(civ7.wars)) add(w.id, FOLDERS.war, `${civ7.states[w.aggressor]?.name ?? "?"}\u5BFE${civ7.states[w.defender]?.name ?? "?"}\u306E\u6226\u4E89`);
     for (const t of Object.values(civ7.treaties)) add(t.id, FOLDERS.treaty, `${civ7.states[t.a]?.name ?? "?"}\u3068${civ7.states[t.b]?.name ?? "?"}\u306E${TREATY_JA[t.type] ?? t.type}`);
     const lo = opts.fromMonth ?? -Infinity, hi = opts.toMonth ?? Infinity;
-    if (opts.eventNotes !== false) for (const e of evList(civ7)) {
+    if (opts.eventNotes !== false) for (const e of evs) {
       const m = evMonth(e);
       if (m >= lo && m <= hi) add(e.eventId, e.kind === "battle_fought" ? FOLDERS.battle : FOLDERS.event, e.title);
     }
@@ -15280,26 +15308,69 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       const m = d2mi(d.date);
       if (m >= lo && m <= hi) add(d.decisionId, FOLDERS.decision, `${civ7.states[d.actorId]?.name ?? d.actorId}\u306E\u5224\u65AD`);
     }
-    for (const s of Object.values(civ7.settlements)) add(s.id, FOLDERS.settlement, `\u96C6\u843D ${STAGE_JA2[s.stage] ?? s.stage}`);
-    for (const g of Object.values(civ7.groups)) add(g.id, FOLDERS.group, `\u96C6\u56E3 ${g.subsistence}`);
-    for (const c of Object.values(civ7.cultures)) add(c.id, FOLDERS.culture, c.name);
-    for (const l of Object.values(civ7.languages)) add(l.id, FOLDERS.language, l.name);
-    for (const r of Object.values(civ7.religions)) add(r.id, FOLDERS.religion, r.name);
-    for (const t of TECHS) P3.set(`tech:${t.key}`, `${FOLDERS.tech}/${safe(t.name)}__${t.key}`);
+    const keep = lean ? leanKeep(civ7) : null;
+    for (const s of Object.values(civ7.settlements)) if (lean) drop.add(s.id);
+    else add(s.id, FOLDERS.settlement, `\u96C6\u843D ${STAGE_JA2[s.stage] ?? s.stage}`);
+    for (const g of Object.values(civ7.groups)) if (lean) drop.add(g.id);
+    else add(g.id, FOLDERS.group, `\u96C6\u56E3 ${g.subsistence}`);
+    for (const c of Object.values(civ7.cultures)) if (!lean || keep.cultures.has(c.id)) add(c.id, FOLDERS.culture, c.name);
+    else drop.add(c.id);
+    for (const l of Object.values(civ7.languages)) if (!lean || keep.languages.has(l.id)) add(l.id, FOLDERS.language, l.name);
+    else drop.add(l.id);
+    for (const r of Object.values(civ7.religions)) if (!lean || keep.religions.has(r.id)) add(r.id, FOLDERS.religion, r.name);
+    else drop.add(r.id);
+    for (const t of TECHS) if (lean) drop.add(`tech:${t.key}`);
+    else P3.set(`tech:${t.key}`, `${FOLDERS.tech}/${safe(t.name)}__${t.key}`);
     for (const s of Object.keys(civ7.species)) P3.set(s, `${FOLDERS.species}/${safe(SPECIES[s]?.ja ?? s)}__${s}`);
-    for (const a of Object.values(ABILITIES)) P3.set(`ability:${a.id}`, `${FOLDERS.ability}/${safe(a.ja)}__${a.id}`);
+    const hasMagic = !lean || Object.keys(civ7.persons).length > 0 || Object.keys(civ7.magic.orgs).length > 0;
+    for (const a of Object.values(ABILITIES)) if (hasMagic) P3.set(`ability:${a.id}`, `${FOLDERS.ability}/${safe(a.ja)}__${a.id}`);
+    else drop.add(`ability:${a.id}`);
     for (const o of Object.values(civ7.magic.orgs)) add(o.id, FOLDERS.org, o.name);
     for (const d of Object.values(civ7.disasters)) add(d.id, FOLDERS.disaster, `${KIND_JA[d.kind]}\uFF08${mi2s(d.startedAt)}\uFF09`);
     for (const x of civ7.interpretations) add(x.interpId, FOLDERS.interp, `${civ7.states[x.ownerId]?.name ?? "?"}\u306E\u8A8D\u8B58 ${STANCE[x.stance] ?? x.stance}`);
     for (const w of civ7.works) add(w.workId, FOLDERS.work, `${civ7.states[w.authorId]?.name ?? "?"}\u306E\u5E74\u4EE3\u8A18`);
-    for (const c of regionsOf(world)) P3.set(`region:${c.id}`, `${FOLDERS.region}/${safe(c.name)}__region_${c.id}`);
+    for (const c of regionsOf(world, lean)) P3.set(`region:${c.id}`, `${FOLDERS.region}/${safe(c.name)}__region_${c.id}`);
     return P3;
   }
   var TREATY_JA = { nonaggression: "\u4E0D\u53EF\u4FB5\u6761\u7D04", alliance: "\u540C\u76DF", trade: "\u901A\u5546\u6761\u7D04", defense: "\u9632\u885B\u5354\u5B9A", vassal: "\u5F93\u5C5E\u95A2\u4FC2", tribute: "\u671D\u8CA2" };
   var STAGE_JA2 = { camp: "\u91CE\u55B6\u5730", village: "\u6751", town: "\u753A", city: "\u90FD\u5E02", metropolis: "\u5927\u90FD\u5E02" };
   var OUTCOME_JA = { aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", negotiated: "\u8B1B\u548C", stalemate: "\u81A0\u7740" };
   var POLITY_JA2 = { tribal: "\u90E8\u65CF", chiefdom: "\u9996\u9577\u5236", kingdom: "\u738B\u56FD", empire: "\u5E1D\u56FD", republic: "\u5171\u548C\u5236", theocracy: "\u795E\u6A29\u5236", city_state: "\u90FD\u5E02\u56FD\u5BB6" };
-  function regionsOf(world) {
+  function leanKeep(civ7) {
+    const pop = { cultures: /* @__PURE__ */ new Map(), languages: /* @__PURE__ */ new Map(), religions: /* @__PURE__ */ new Map() };
+    let total2 = 0, anyone = false;
+    const add = (m, id, v) => {
+      if (id) m.set(id, (m.get(id) ?? 0) + v);
+    };
+    for (const g of Object.values(civ7.groups)) {
+      const gp = g.pop ?? 0;
+      total2 += gp;
+      anyone = true;
+      for (const c of g.cohorts ?? []) {
+        const v = gp * (c.share ?? 0);
+        add(pop.cultures, c.cultureId, v);
+        add(pop.languages, c.languageId, v);
+        add(pop.religions, c.religionId, v);
+      }
+    }
+    const top = (m) => new Set([...m].filter(([, v]) => v >= total2 * 2e-3).sort((x, y) => y[1] - x[1]).slice(0, 60).map(([id]) => id));
+    const out = { cultures: top(pop.cultures), languages: top(pop.languages), religions: top(pop.religions) };
+    if (anyone && total2 <= 0) for (const k of ["cultures", "languages", "religions"]) for (const id of pop[k].keys()) out[k].add(id);
+    const up = (set, table3) => {
+      for (const id of [...set]) {
+        let x = table3[id]?.parent, n3 = 0;
+        while (x && !set.has(x) && n3++ < 1e3) {
+          set.add(x);
+          x = table3[x]?.parent;
+        }
+      }
+    };
+    up(out.cultures, civ7.cultures);
+    up(out.languages, civ7.languages);
+    up(out.religions, civ7.religions);
+    return out;
+  }
+  function regionsOf(world, lean = false) {
     const c = world.cell, n3 = c.continent.length, m = /* @__PURE__ */ new Map();
     for (let i = 0; i < n3; i++) {
       if (c.landWater[i] !== LAND_WATER2.LAND) continue;
@@ -15311,9 +15382,18 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       r.sumLat += c.lat[i];
       r.sumLon += c.lon[i];
     }
-    return [...m.values()].sort((a, b) => b.area - a.area).map((r, i) => ({ ...r, name: `\u5927\u9678${i + 1}`, order: i }));
+    return [...m.values()].sort((a, b) => b.area - a.area).map((r, i) => ({ ...r, name: `\u5927\u9678${i + 1}`, order: i })).filter((r, i, all) => !lean || i < 12 && r.area >= all[0].area * 0.02);
   }
   async function* obsidianFiles(world, civ7, worldName, opts = {}) {
+    const lean = !!opts.lean, evs = opts.evs ?? evList(civ7);
+    opts = { ...opts, evs };
+    const byEnt = /* @__PURE__ */ new Map();
+    for (const e of evs) for (const p of e.participants ?? []) {
+      const a = byEnt.get(p.entityId);
+      if (a) a.push(e);
+      else byEnt.set(p.entityId, [e]);
+    }
+    const recsOf = (id) => (byEnt.get(id) ?? []).slice().sort((x, y) => evMonth(x) - evMonth(y));
     const root2 = safe(worldName || "\u4E16\u754C"), P3 = planPaths(world, civ7, opts), ix = graphIndex(civ7), stats = { files: 0, unresolved: 0, outOfScope: 0, missing: [] }, counts = {};
     const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi) => mi >= from && mi <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false || opts.eventNotes === false;
     const link2 = (id, label) => {
@@ -15323,6 +15403,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
         stats.outOfScope++;
         return String(label ?? id).replace(/[\]|\u0001\u0002]/g, " ");
       }
+      if (!p && P3.dropped?.has(id)) return String(label ?? nameOfSafe(id)).replace(/[\]|\u0001\u0002]/g, " ");
       if (!p && /^(pop|settle)_/.test(String(id))) return label == null || label === id ? "\u6D88\u6EC5\u3057\u305F\u96C6\u56E3\u30FB\u96C6\u843D" : String(label);
       if (!p && /^(treaty|person|house)_/.test(String(id))) return label == null || label === id ? "\u6574\u7406\u3055\u308C\u305F\u53E4\u3044\u8A18\u9332" : String(label);
       if (!p) {
@@ -15332,6 +15413,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
       }
       return `${p}|${String(label ?? id).replace(/[\]|\u0001\u0002]/g, " ")}`;
     };
+    const nameOfSafe = (id) => civ7.cultures[id]?.name ?? civ7.languages[id]?.name ?? civ7.religions[id]?.name ?? String(id);
     const nameOf = (id) => civ7.states[id]?.name ?? civ7.persons[id]?.name ?? civ7.cultures[id]?.name ?? civ7.languages[id]?.name ?? civ7.religions[id]?.name ?? civ7.magic.orgs[id]?.name ?? id;
     const L = (id) => link2(id, nameOf(id)), cellLoc = (c) => c == null ? "\u4E0D\u660E" : `\u30BB\u30EB ${c}\uFF08\u7DEF\u5EA6 ${r12(world.cell.lat[c] * 180 / Math.PI)}\xB0\u30FB\u7D4C\u5EA6 ${r12(world.cell.lon[c] * 180 / Math.PI)}\xB0\uFF09`;
     const fin5 = (c) => c.replace(/\[\[/g, "\uFF3B\uFF3B").replace(/\]\]/g, "\uFF3D\uFF3D").replace(/\u0001/g, "[[").replace(/\u0002/g, "]]");
@@ -15380,7 +15462,7 @@ ${N2.acked.slice(-100).map((id) => `- ${link2(id, id)}`).join("\n") || "\uFF08\u
 `);
     }
     for (const s of Object.values(civ7.states)) {
-      const evs = recordsOf(civ7, s.id, { limit: 1e6 }).reverse().filter((e) => inRange(evMonth(e))), wars = Object.values(civ7.wars).filter((w) => w.sides.a.includes(s.id) || w.sides.d.includes(s.id)), trs = Object.values(civ7.treaties).filter((t) => t.a === s.id || t.b === s.id);
+      const sevs = recsOf(s.id).filter((e) => inRange(evMonth(e)) && !(lean && MINOR_SET.has(e.kind))), wars = Object.values(civ7.wars).filter((w) => w.sides.a.includes(s.id) || w.sides.d.includes(s.id)), trs = Object.values(civ7.treaties).filter((t) => t.a === s.id || t.b === s.id);
       const cap = civ7.groups[s.capitalGroupId], comp = s.alive ? compositionAt(civ7, s.id, civ7.monthIndex) : null;
       yield out("state", P3.get(s.id), fm({ id: s.id, type: "\u56FD\u5BB6", name: s.name, \u6210\u7ACB: mi2s(s.formedAt), \u6EC5\u4EA1: s.alive ? null : mi2s(s.dissolvedAt), \u5B58\u7D9A\u4E2D: s.alive, \u6210\u7ACB\u7D4C\u8DEF: s.via, \u653F\u4F53: POLITY_JA2[s.polity] ?? s.polity, \u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u5BB6: !!s.player, \u524D\u8EAB: s.predecessor ?? null, tags: ["\u56FD\u5BB6"] }) + `# ${s.name}
 
@@ -15410,14 +15492,14 @@ ${comp ? `\u6587\u5316: ${Object.entries(comp.culture).map(([k, v]) => `${link2(
 
 \u7A2E\u65CF: ${Object.entries(comp.species).map(([k, v]) => `${link2(k, SPECIES[k]?.ja ?? k)} ${Math.round(v)}`).join("\u3001")}
 ` : "\uFF08\u6EC5\u4EA1\uFF09\n"}
-## \u51FA\u6765\u4E8B\uFF08\u65B0\u3057\u3044\u9806\u306B\u6700\u5927200\u4EF6\uFF09
-${evs.slice(-200).reverse().map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
+## \u51FA\u6765\u4E8B\uFF08\u65B0\u3057\u3044\u9806\u306B\u6700\u5927${lean ? 80 : 200}\u4EF6${lean ? "\u3002\u65E5\u5E38\u7684\u306A\u3082\u306E\u306F\u9664\u304F" : ""}\uFF09
+${sevs.slice(lean ? -80 : -200).reverse().map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 
 ## \u6B74\u53F2\u8A8D\u8B58
 ${civ7.interpretations.filter((x) => x.ownerId === s.id).slice(-30).map((x) => `- ${link2(x.interpId, STANCE[x.stance] ?? x.stance)}\uFF08${mi2s(x.since)}${x.until != null ? `\u301C${mi2s(x.until)}` : ""}\uFF09`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 
-\u8A73\u7D30\u30ED\u30B0: ${logFiles(civ7, s).map((f2) => `${f2.p}|${f2.label}`).join("\u3001")}
-`);
+${lean ? "" : `\u8A73\u7D30\u30ED\u30B0: ${logFiles(civ7, s).map((f2) => `${f2.p}|${f2.label}`).join("\u3001")}
+`}`);
     }
     for (const p of Object.values(civ7.persons)) yield out("person", P3.get(p.id), fm({ id: p.id, type: "\u4EBA\u7269", name: p.name, \u7A2E\u65CF: p.speciesId, \u80FD\u529B: p.ability, \u5F37\u5EA6: p.power, \u51FA\u73FE: mi2s(p.emergedAt), \u6CA1: p.diedAt == null ? null : mi2s(p.diedAt), tags: ["\u4EBA\u7269", "\u9B54\u6CD5"] }) + `# ${p.name}
 
@@ -15443,7 +15525,7 @@ ${(ix.byEntity.get(p.id) ?? []).map((i) => civ7.events[i]).slice(0, 50).map((e) 
 ${H.map((x) => `- ${mi2s(x.at)} ${KIND3[x.kind] ?? x.kind}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 `);
     }
-    for (const a of Object.values(ABILITIES)) yield out("ability", P3.get(`ability:${a.id}`), fm({ id: a.id, type: "\u9B54\u6CD5\u306E\u80FD\u529B", name: a.ja, tags: ["\u9B54\u6CD5"] }) + `# ${a.ja}
+    for (const a of Object.values(ABILITIES)) if (P3.has(`ability:${a.id}`)) yield out("ability", P3.get(`ability:${a.id}`), fm({ id: a.id, type: "\u9B54\u6CD5\u306E\u80FD\u529B", name: a.ja, tags: ["\u9B54\u6CD5"] }) + `# ${a.ja}
 
 - \u4EE3\u511F: ${a.cost}
 - \u66B4\u767A\u306E\u5371\u967A: ${a.risk}
@@ -15478,7 +15560,7 @@ ${(ix.byEntity.get(w.id) ?? []).map((i) => civ7.events[i]).map((e) => `- ${d2s(e
 - \u5F53\u4E8B\u56FD: ${L(t.a)}\u3001${L(t.b)}
 - \u7DE0\u7D50: ${mi2s(t.signedAt)}\uFF0F${t.active ? `\u671F\u9650: ${mi2s(t.expiresAt)}` : `\u7D42\u4E86: ${mi2s(t.endedAt)}`}
 `);
-    if (opts.eventNotes !== false) for (const e of evList(civ7)) {
+    if (opts.eventNotes !== false) for (const e of evs) {
       const m = evMonth(e);
       if (!inRange(m)) continue;
       const cons = consequencesOf(civ7, e.eventId);
@@ -15513,7 +15595,7 @@ ${Object.entries(d.observations).map(([k, v]) => `- ${k}: ${typeof v === "number
 ## \u5019\u88DC
 ${table2(["\u884C\u52D5", "\u5BFE\u8C61", "\u9078\u629E\u80A2", "\u5F97\u70B9", "\u8CC7\u683C", "\u7406\u7531", "\u8981\u56E0"], x.candidates.map((c) => [c.key, c.target ? L(c.target) : "", c.opt ?? "", c.total, c.eligible ? "\u53EF" : "\u4E0D\u53EF", c.reason ?? "", Object.entries(c.factors ?? {}).map(([k, v]) => `${k} ${v}`).join("\u3001")]))}`);
     }
-    for (const s of Object.values(civ7.settlements)) yield out("settlement", P3.get(s.id), fm({ id: s.id, type: "\u96C6\u843D", \u6BB5\u968E: s.stage, \u5275\u8A2D: mi2s(s.foundedAt), tags: ["\u96C6\u843D"] }) + `# \u96C6\u843D\uFF08${STAGE_JA2[s.stage] ?? s.stage}\uFF09
+    if (!lean) for (const s of Object.values(civ7.settlements)) yield out("settlement", P3.get(s.id), fm({ id: s.id, type: "\u96C6\u843D", \u6BB5\u968E: s.stage, \u5275\u8A2D: mi2s(s.foundedAt), tags: ["\u96C6\u843D"] }) + `# \u96C6\u843D\uFF08${STAGE_JA2[s.stage] ?? s.stage}\uFF09
 
 - \u96C6\u56E3: ${civ7.groups[s.groupId] ? link2(s.groupId, "\u96C6\u56E3") : "\uFF08\u6D88\u6EC5\uFF09"}
 - \u5834\u6240: ${cellLoc(s.cell)}
@@ -15522,7 +15604,7 @@ ${table2(["\u884C\u52D5", "\u5BFE\u8C61", "\u9078\u629E\u80A2", "\u5F97\u70B9", 
 ## \u51FA\u6765\u4E8B
 ${(ix.byEntity.get(s.id) ?? []).map((i) => civ7.events[i]).slice(0, 50).map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 `);
-    for (const g of Object.values(civ7.groups)) yield out("group", P3.get(g.id), fm({ id: g.id, type: "\u4EBA\u53E3\u96C6\u56E3", \u7A2E\u65CF: g.speciesId, \u751F\u696D: g.subsistence, \u56FD\u5BB6: g.stateId ?? null, tags: ["\u96C6\u56E3"] }) + `# \u96C6\u56E3 ${g.id}
+    if (!lean) for (const g of Object.values(civ7.groups)) yield out("group", P3.get(g.id), fm({ id: g.id, type: "\u4EBA\u53E3\u96C6\u56E3", \u7A2E\u65CF: g.speciesId, \u751F\u696D: g.subsistence, \u56FD\u5BB6: g.stateId ?? null, tags: ["\u96C6\u56E3"] }) + `# \u96C6\u56E3 ${g.id}
 
 - \u5834\u6240: ${cellLoc(g.cell)}\uFF0F\u751F\u696D: ${g.subsistence}\uFF0F\u4EBA\u53E3 ${Math.round(g.pop)}\uFF0F\u56FD\u5BB6: ${g.stateId ? L(g.stateId) : "\u306A\u3057"}\uFF0F\u7A2E\u65CF: ${link2(g.speciesId, SPECIES[g.speciesId]?.ja ?? g.speciesId)}
 - \u7531\u6765: ${g.parent ? link2(g.parent, "\u89AA\u306E\u96C6\u56E3") : "\u6700\u521D\u304B\u3089"}
@@ -15532,7 +15614,7 @@ ${table2(["\u6587\u5316", "\u8A00\u8A9E", "\u5B97\u6559", "\u7A2E\u65CF", "\u527
 ## \u77E5\u3063\u3066\u3044\u308B\u6280\u8853
 ${Object.entries(g.tech.known).map(([k, mi]) => `${link2(`tech:${k}`, TECHS.find((t) => t.key === k)?.name ?? k)}\uFF08${mi2s(mi)}\uFF09`).join("\u3001") || "\uFF08\u306A\u3057\uFF09"}
 `);
-    for (const r of regionsOf(world)) {
+    for (const r of regionsOf(world, lean)) {
       const inReg = Object.values(civ7.groups).filter((g) => world.cell.continent[g.cell] === r.id);
       yield out("region", P3.get(`region:${r.id}`), fm({ id: `region_${r.id}`, type: "\u5730\u57DF", \u9678\u5730\u30BB\u30EB: r.cells, \u9762\u7A4Dkm2: Math.round(r.area), tags: ["\u5730\u57DF"] }) + `# ${r.name}
 
@@ -15542,24 +15624,30 @@ ${Object.entries(g.tech.known).map(([k, mi]) => `${link2(`tech:${k}`, TECHS.find
 - \u56FD\u5BB6: ${[...new Set(inReg.map((g) => g.stateId).filter(Boolean))].map(L).join("\u3001") || "\u306A\u3057"}
 `);
     }
-    for (const c of Object.values(civ7.cultures)) yield out("culture", P3.get(c.id), fm({ id: c.id, type: "\u6587\u5316", name: c.name, \u8D77\u6E90: mi2s(c.bornAt), tags: ["\u6587\u5316"] }) + `# ${c.name}
+    const kids = (table3) => {
+      const m = /* @__PURE__ */ new Map();
+      for (const x of Object.values(table3)) if (x.parent) (m.get(x.parent) ?? m.set(x.parent, []).get(x.parent)).push(x.id);
+      return m;
+    }, cKids = kids(civ7.cultures), lKids = kids(civ7.languages), rKids = kids(civ7.religions), langsOfCulture = /* @__PURE__ */ new Map();
+    for (const l of Object.values(civ7.languages)) (langsOfCulture.get(l.cultureId) ?? langsOfCulture.set(l.cultureId, []).get(l.cultureId)).push(l.id);
+    for (const c of Object.values(civ7.cultures)) if (P3.has(c.id)) yield out("culture", P3.get(c.id), fm({ id: c.id, type: "\u6587\u5316", name: c.name, \u8D77\u6E90: mi2s(c.bornAt), tags: ["\u6587\u5316"] }) + `# ${c.name}
 
 - \u8D77\u6E90: ${mi2s(c.bornAt)}\uFF0F${cellLoc(c.cell)}
 - \u89AA: ${c.parent ? L(c.parent) : "\u306A\u3057"}
-- \u5B50: ${Object.values(civ7.cultures).filter((x) => x.parent === c.id).map((x) => L(x.id)).join("\u3001") || "\u306A\u3057"}
-- \u8A00\u8A9E: ${Object.values(civ7.languages).filter((l) => l.cultureId === c.id).map((l) => L(l.id)).join("\u3001") || "\u306A\u3057"}
+- \u5B50: ${(cKids.get(c.id) ?? []).filter((x) => P3.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
+- \u8A00\u8A9E: ${(langsOfCulture.get(c.id) ?? []).filter((x) => P3.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
 `);
-    for (const l of Object.values(civ7.languages)) yield out("language", P3.get(l.id), fm({ id: l.id, type: "\u8A00\u8A9E", name: l.name, \u8D77\u6E90: mi2s(l.bornAt), tags: ["\u8A00\u8A9E"] }) + `# ${l.name}
+    for (const l of Object.values(civ7.languages)) if (P3.has(l.id)) yield out("language", P3.get(l.id), fm({ id: l.id, type: "\u8A00\u8A9E", name: l.name, \u8D77\u6E90: mi2s(l.bornAt), tags: ["\u8A00\u8A9E"] }) + `# ${l.name}
 
 - \u8D77\u6E90: ${mi2s(l.bornAt)}\uFF0F\u6587\u5316: ${civ7.cultures[l.cultureId] ? L(l.cultureId) : "\u2014"}
-- \u89AA: ${l.parent ? L(l.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${Object.values(civ7.languages).filter((x) => x.parent === l.id).map((x) => L(x.id)).join("\u3001") || "\u306A\u3057"}
+- \u89AA: ${l.parent ? L(l.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${(lKids.get(l.id) ?? []).filter((x) => P3.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
 `);
-    for (const r of Object.values(civ7.religions)) yield out("religion", P3.get(r.id), fm({ id: r.id, type: "\u5B97\u6559", name: r.name, \u7A2E\u985E: r.kind, \u8D77\u6E90: mi2s(r.bornAt), tags: ["\u5B97\u6559"] }) + `# ${r.name}
+    for (const r of Object.values(civ7.religions)) if (P3.has(r.id)) yield out("religion", P3.get(r.id), fm({ id: r.id, type: "\u5B97\u6559", name: r.name, \u7A2E\u985E: r.kind, \u8D77\u6E90: mi2s(r.bornAt), tags: ["\u5B97\u6559"] }) + `# ${r.name}
 
 - \u7A2E\u985E: ${r.kind}\uFF0F\u8D77\u6E90: ${mi2s(r.bornAt)}
-- \u89AA: ${r.parent ? L(r.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${Object.values(civ7.religions).filter((x) => x.parent === r.id).map((x) => L(x.id)).join("\u3001") || "\u306A\u3057"}
+- \u89AA: ${r.parent ? L(r.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${(rKids.get(r.id) ?? []).filter((x) => P3.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
 `);
-    for (const t of TECHS) {
+    if (!lean) for (const t of TECHS) {
       const w = civ7.techWorld[t.key];
       const adopters = Object.values(civ7.states).filter((s) => s.techAdopted[t.key] != null);
       yield out("tech", P3.get(`tech:${t.key}`), fm({ id: t.key, type: "\u6280\u8853", name: t.name, \u5206\u91CE: t.field, \u6BB5\u968E: t.tier, tags: ["\u6280\u8853"] }) + `# ${t.name}
@@ -15592,9 +15680,9 @@ ${w.text}
 ${table2(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [c.property, c.claimed, c.actual]))}`);
     if (opts.eventNotes === false) {
       const byDecade = /* @__PURE__ */ new Map();
-      for (const e of evList(civ7)) {
+      for (const e of evs) {
         const m = evMonth(e);
-        if (!inRange(m)) continue;
+        if (!inRange(m) || lean && MINOR_SET.has(e.kind)) continue;
         const k = Math.floor(e.date.year / 10);
         (byDecade.get(k) ?? byDecade.set(k, []).get(k)).push(e);
       }
@@ -15604,14 +15692,14 @@ ${table2(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [
         const y0 = k * 10, c0 = Math.floor(y0 / 100) * 100;
         yield out("timeline", `${FOLDERS.timeline}/${c0}\u5E74\u4EE3/${y0}\u301C${y0 + 9}\u5E74`, fm({ type: "\u5E74\u8868", \u671F\u9593: `${y0}\u5E74\u301C${y0 + 9}\u5E74`, \u4EF6\u6570: es.length, tags: ["\u5E74\u8868"] }) + `# ${y0}\u301C${y0 + 9}\u5E74\u306E\u5E74\u8868
 
-\u5168\u3066\u306E\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u7701\u7565\u306A\u3057\uFF09\u3002
+${lean ? "\u4E3B\u8981\u306A\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u6280\u8853\u306E\u4F1D\u64AD\u30FB\u4E0D\u6E80\u30FB\u6587\u5316\u306E\u63A5\u89E6\u306A\u3069\u65E5\u5E38\u7684\u306A\u3082\u306E\u306F\u9664\u304F\uFF09\u3002" : "\u5168\u3066\u306E\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u7701\u7565\u306A\u3057\uFF09\u3002"}
 
 ` + es.map((e) => `- **${d2s(e.date)}** \u3014${KIND_LABEL(e)}\u3015 ${String(e.title ?? "").replace(/\n/g, " ")}${e.participants?.length ? `\uFF08${e.participants.map((p) => L(p.entityId)).join("\u3001")}\uFF09` : ""}${e.location?.cell != null ? ` @${cellLoc(e.location.cell).replace(/（.*$/, "")}` : ""}`).join("\n") + "\n");
       }
     }
     const byCentury = /* @__PURE__ */ new Map();
-    for (const e of evList(civ7)) {
-      if (!inRange(evMonth(e)) || ["tech_transferred", "demand_raised", "cohort_formed", "cohort_assimilated", "culture_contact", "settlement_stage", "settlement_founded", "state_action", "group_split", "language_diverged"].includes(e.kind)) continue;
+    for (const e of evs) {
+      if (!inRange(evMonth(e)) || MINOR_SET.has(e.kind)) continue;
       const k = Math.floor(e.date.year / 100);
       (byCentury.get(k) ?? byCentury.set(k, []).get(k)).push(e);
     }
@@ -15621,20 +15709,20 @@ ${table2(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [
 
 ${es.map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n")}
 `);
-    for (const s of Object.values(civ7.states)) {
+    if (!lean) for (const s of Object.values(civ7.states)) {
       for (const f2 of logFiles(civ7, s)) {
         if (f2.kind === "state") yield out("logState", f2.path, stateLog(civ7, s, f2, link2));
         else yield out("logAi", f2.path, aiLog(civ7, s, f2, link2, d2mi));
       }
     }
     yield out("graph", `${FOLDERS.graph}/\u56FD\u5BB6\u306E\u7CFB\u8B5C`, graphNote("\u56FD\u5BB6\u306E\u7CFB\u8B5C", "\u524D\u8EAB\u306E\u56FD\u5BB6\u304B\u3089\u5206\u96E2\u30FB\u7D99\u627F\u3057\u305F\u95A2\u4FC2", Object.values(civ7.states).filter((s) => s.predecessor && civ7.states[s.predecessor]).map((s) => [s.predecessor, s.id]), (id) => civ7.states[id].name));
-    yield out("graph", `${FOLDERS.graph}/\u6587\u5316\u306E\u7CFB\u7D71`, graphNote("\u6587\u5316\u306E\u7CFB\u7D71", "\u89AA\u306E\u6587\u5316\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ7.cultures).filter((c) => c.parent).map((c) => [c.parent, c.id]), (id) => civ7.cultures[id].name));
-    yield out("graph", `${FOLDERS.graph}/\u8A00\u8A9E\u306E\u7CFB\u7D71`, graphNote("\u8A00\u8A9E\u306E\u7CFB\u7D71", "\u89AA\u306E\u8A00\u8A9E\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ7.languages).filter((c) => c.parent).map((c) => [c.parent, c.id]), (id) => civ7.languages[id].name));
-    yield out("graph", `${FOLDERS.graph}/\u5B97\u6559\u306E\u7CFB\u7D71`, graphNote("\u5B97\u6559\u306E\u7CFB\u7D71", "\u89AA\u306E\u5B97\u6559\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ7.religions).filter((c) => c.parent).map((c) => [c.parent, c.id]), (id) => civ7.religions[id].name));
+    yield out("graph", `${FOLDERS.graph}/\u6587\u5316\u306E\u7CFB\u7D71`, graphNote("\u6587\u5316\u306E\u7CFB\u7D71", "\u89AA\u306E\u6587\u5316\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ7.cultures).filter((c) => c.parent && P3.has(c.id) && P3.has(c.parent)).map((c) => [c.parent, c.id]), (id) => civ7.cultures[id].name));
+    yield out("graph", `${FOLDERS.graph}/\u8A00\u8A9E\u306E\u7CFB\u7D71`, graphNote("\u8A00\u8A9E\u306E\u7CFB\u7D71", "\u89AA\u306E\u8A00\u8A9E\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ7.languages).filter((c) => c.parent && P3.has(c.id) && P3.has(c.parent)).map((c) => [c.parent, c.id]), (id) => civ7.languages[id].name));
+    yield out("graph", `${FOLDERS.graph}/\u5B97\u6559\u306E\u7CFB\u7D71`, graphNote("\u5B97\u6559\u306E\u7CFB\u7D71", "\u89AA\u306E\u5B97\u6559\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ7.religions).filter((c) => c.parent && P3.has(c.id) && P3.has(c.parent)).map((c) => [c.parent, c.id]), (id) => civ7.religions[id].name));
     yield out("graph", `${FOLDERS.graph}/\u6226\u4E89\u306E\u95A2\u4FC2`, graphNote("\u6226\u4E89\u306E\u95A2\u4FC2", "\u653B\u6483\u5074 \u2192 \u9632\u885B\u5074", Object.values(civ7.wars).map((w) => [w.aggressor, w.defender]), (id) => civ7.states[id]?.name ?? id));
     if (opts.maps !== false && opts.cellRaster) for (const f2 of await mapImages(world, civ7, opts)) yield outRaw("map", `${FOLDERS.map}/${f2.name}`, f2.png);
     yield out("readme", "README", readme(root2, world, civ7, counts, stats, opts));
-    yield { path: `${root2}/manifest.json`, data: JSON.stringify({ format: "alterhistory-obsidian", version: OBSIDIAN_VERSION, world: worldName, month: civ7.monthIndex, date: civ7.date, counts, unresolvedLinks: stats.unresolved, outOfScopeLinks: stats.outOfScope, unresolvedSamples: stats.missing, scope: { fromMonth: Number.isFinite(from) ? from : null, toMonth: Number.isFinite(to) ? to : null, decisionNotes: opts.decisionNotes !== false, maps: opts.maps !== false && !!opts.cellRaster } }, null, 1), kind: "manifest" };
+    yield { path: `${root2}/manifest.json`, data: JSON.stringify({ format: "alterhistory-obsidian", version: OBSIDIAN_VERSION, world: worldName, month: civ7.monthIndex, date: civ7.date, counts, unresolvedLinks: stats.unresolved, outOfScopeLinks: stats.outOfScope, unresolvedSamples: stats.missing, scope: { fromMonth: Number.isFinite(from) ? from : null, toMonth: Number.isFinite(to) ? to : null, lean, decisionNotes: opts.decisionNotes !== false, maps: opts.maps !== false && !!opts.cellRaster } }, null, 1), kind: "manifest" };
   }
   function logFiles(civ7, s) {
     const a = s.formedAt, b = s.alive ? civ7.monthIndex : s.dissolvedAt, out = [];
@@ -15748,7 +15836,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
 ## \u66F8\u304D\u51FA\u3057\u306E\u7BC4\u56F2
 - ${opts.decisionNotes === false ? "AI\u5224\u65AD\u306E\u500B\u5225\u30CE\u30FC\u30C8\u306F\u51FA\u3057\u3066\u3044\u307E\u305B\u3093\uFF08\u4E00\u89A7\u3068\u8A73\u7D30\u30ED\u30B0\u306E\u307F\uFF09" : "\u5168\u3066\u306EAI\u5224\u65AD\u3092\u500B\u5225\u30CE\u30FC\u30C8\u306B\u3057\u3066\u3044\u307E\u3059"}
 - ${Number.isFinite(opts.fromMonth ?? -Infinity) || Number.isFinite(opts.toMonth ?? Infinity) ? `\u30A4\u30D9\u30F3\u30C8\u30FBAI\u5224\u65AD\u306F ${opts.fromMonth != null ? mi2s(opts.fromMonth) : "\u6700\u521D"}\u301C${opts.toMonth != null ? mi2s(opts.toMonth) : "\u73FE\u5728"} \u306B\u7D5E\u3063\u3066\u3044\u307E\u3059` : "\u5168\u671F\u9593\u306E\u30A4\u30D9\u30F3\u30C8\u3092\u500B\u5225\u30CE\u30FC\u30C8\u306B\u3057\u3066\u3044\u307E\u3059"}
-- \u300C\u601D\u60F3\u300D\u306E\u30AB\u30C6\u30B4\u30EA\u306F\u3001v5.0.0 \u306E\u6587\u660E\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u306B\u8A72\u5F53\u3059\u308B\u30C7\u30FC\u30BF\u304C\u7121\u3044\u305F\u3081\u4F5C\u3063\u3066\u3044\u307E\u305B\u3093
+${opts.lean ? "- \u5275\u4F5C\u5411\u3051\u306E\u8EFD\u91CF\u51FA\u529B\u3067\u3059\u3002\u4EBA\u53E3\u96C6\u56E3\u30FB\u96C6\u843D\u30FB\u6280\u8853\u306E\u500B\u5225\u30CE\u30FC\u30C8\u30FB\u8A73\u7D30\u30ED\u30B0\u30FB\u3054\u304F\u5C0F\u3055\u306A\u6587\u5316/\u8A00\u8A9E/\u5B97\u6559\u306E\u679D\u30FB\u5C0F\u3055\u306A\u5CF6\u306E\u5730\u57DF\u306F\u3001\u30CE\u30FC\u30C8\u306B\u3057\u3066\u3044\u307E\u305B\u3093\uFF08\u56FD\u5BB6\u30FB\u6226\u4E89\u30FB\u6761\u7D04\u30FB\u4EBA\u7269\u30FB\u6587\u5316\u30FB\u8A00\u8A9E\u30FB\u5B97\u6559\u30FB\u707D\u5BB3\u30FB\u5E74\u8868\u30FB\u5E74\u4EE3\u8A18\u30FB\u95A2\u4FC2\u30B0\u30E9\u30D5\u306F\u5168\u3066\u51FA\u3057\u3066\u3044\u307E\u3059\uFF09\n" : ""}- \u300C\u601D\u60F3\u300D\u306E\u30AB\u30C6\u30B4\u30EA\u306F\u3001v5.0.0 \u306E\u6587\u660E\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u306B\u8A72\u5F53\u3059\u308B\u30C7\u30FC\u30BF\u304C\u7121\u3044\u305F\u3081\u4F5C\u3063\u3066\u3044\u307E\u305B\u3093
 - \u6708\u6B21\u72B6\u614B\u306F\u300E\u72B6\u614B\u304C\u5909\u308F\u3063\u305F\u6708\u300F\u3060\u3051\u3092\u884C\u306B\u3057\u3066\u3044\u307E\u3059\uFF08\u5909\u5316\u306E\u306A\u3044\u6708\u306F\u76F4\u524D\u306E\u884C\u304C\u7D9A\u304D\u307E\u3059\u3002\u6B20\u843D\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF09
 
 ## \u518D\u51FA\u529B\u30FB\u4E0A\u66F8\u304D
@@ -15758,55 +15846,82 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
 `;
   }
 
+  // js/io/zip.js
+  var enc3 = new TextEncoder();
+  async function deflateRaw(bytes) {
+    const out = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
+    return new Uint8Array(out);
+  }
+  var u16 = (n3) => [n3 & 255, n3 >>> 8 & 255];
+  var u32 = (n3) => [n3 & 255, n3 >>> 8 & 255, n3 >>> 16 & 255, n3 >>> 24 & 255];
+  function dosTime(d) {
+    return [(d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1) & 65535, (d.getFullYear() - 1980 << 9 | d.getMonth() + 1 << 5 | d.getDate()) & 65535];
+  }
+  async function zipFiles2(files, { compress = true, date: date5 = /* @__PURE__ */ new Date(), onProgress = null, concurrency = 12 } = {}) {
+    const parts = [], central = [], [dt, dd] = dosTime(date5);
+    let offset = 0, n3 = 0;
+    const names = /* @__PURE__ */ new Set(), pend = [];
+    const emit2 = async ({ raw, name, crc, z }) => {
+      let method = 0, body = raw;
+      if (z) {
+        const zz = await z;
+        if (zz.length < raw.length) {
+          method = 8;
+          body = zz;
+        }
+      }
+      const head2 = Uint8Array.from([80, 75, 3, 4, ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0)]);
+      if (offset + head2.length + name.length + body.length > 4294967280) throw new Error("ZIP \u304C 4GB \u3092\u8D85\u3048\u307E\u3059\uFF08\u5206\u5272\u3057\u3066\u66F8\u304D\u51FA\u3057\u3066\u304F\u3060\u3055\u3044\uFF09");
+      central.push(Uint8Array.from([80, 75, 1, 2, ...u16(20), ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
+      parts.push(head2, name, body);
+      offset += head2.length + name.length + body.length;
+      n3++;
+      if (onProgress && n3 % 500 === 0) await onProgress(n3);
+    };
+    for await (const f2 of files) {
+      if (names.has(f2.path)) throw new Error(`ZIP \u306E\u30D1\u30B9\u304C\u91CD\u8907: ${f2.path}`);
+      names.add(f2.path);
+      const raw = typeof f2.data === "string" ? enc3.encode(f2.data) : f2.data, name = enc3.encode(f2.path), crc = crc32(raw);
+      const z = compress && raw.length > 256 ? deflateRaw(raw) : null;
+      if (z) z.catch(() => {
+      });
+      pend.push({ raw, name, crc, z });
+      while (pend.length >= concurrency) await emit2(pend.shift());
+    }
+    while (pend.length) await emit2(pend.shift());
+    let csize = 0;
+    for (const c of central) csize += c.length;
+    const big = n3 > 65534, tail2 = [];
+    if (big) {
+      const u64 = (x) => [...u32(x >>> 0), ...u32(Math.floor(x / 4294967296))];
+      tail2.push(Uint8Array.from([80, 75, 6, 6, ...u64(44), ...u16(45), ...u16(45), ...u32(0), ...u32(0), ...u64(n3), ...u64(n3), ...u64(csize), ...u64(offset)]), Uint8Array.from([80, 75, 6, 7, ...u32(0), ...u64(offset + csize), ...u32(1)]));
+    }
+    tail2.push(Uint8Array.from([80, 75, 5, 6, 0, 0, 0, 0, ...u16(big ? 65535 : n3), ...u16(big ? 65535 : n3), ...u32(csize), ...u32(offset), 0, 0]));
+    let total2 = offset + csize;
+    for (const t of tail2) total2 += t.length;
+    const out = new Uint8Array(total2);
+    let o = 0;
+    for (const p of [...parts, ...central, ...tail2]) {
+      out.set(p, o);
+      o += p.length;
+    }
+    return out;
+  }
+
   // js/io/vault-writer.js
-  var LIGHT = Object.freeze({ eventNotes: false, decisionNotes: false, maps: false });
+  var LIGHT = Object.freeze({ eventNotes: false, decisionNotes: false, maps: false, lean: true });
+  var SINGLE_ZIP_MAX_BYTES = 1024 * 1024 * 1024;
   var PART_BYTES = 12 * 1024 * 1024;
   var PART_FILES = 3e3;
   var enc4 = new TextEncoder();
   var rawOf = (d) => typeof d === "string" ? enc4.encode(d) : d;
   var tick = () => new Promise((r) => setTimeout(r, 0));
-  function splitPath(path) {
-    const parts = String(path).split("/");
-    if (!parts.length || parts.some((p) => !p || p === "." || p === ".." || p.includes("\\"))) throw new Error(`\u66F8\u304D\u51FA\u305B\u306A\u3044\u30D1\u30B9: ${path}`);
-    return { dirs: parts.slice(0, -1), name: parts.at(-1) };
-  }
-  async function writeToDirectory(dirHandle, files, { onProgress = null, yieldEvery = 50, signal = null } = {}) {
-    const cache = /* @__PURE__ */ new Map([["", dirHandle]]);
-    let n3 = 0, bytes = 0;
-    const dirOf = async (dirs) => {
-      let key = "", h2 = dirHandle;
-      for (const d of dirs) {
-        key += "/" + d;
-        if (!cache.has(key)) cache.set(key, await h2.getDirectoryHandle(d, { create: true }));
-        h2 = cache.get(key);
-      }
-      return h2;
-    };
-    for await (const f2 of files) {
-      if (signal?.aborted) {
-        const e = new Error("\u4E2D\u65AD\u3057\u307E\u3057\u305F");
-        e.name = "AbortError";
-        throw e;
-      }
-      const { dirs, name } = splitPath(f2.path), dir = await dirOf(dirs), fh = await dir.getFileHandle(name, { create: true }), w = await fh.createWritable(), raw = rawOf(f2.data);
-      await w.write(raw);
-      await w.close();
-      n3++;
-      bytes += raw.length;
-      if (n3 % yieldEvery === 0) {
-        onProgress?.({ files: n3, bytes });
-        await tick();
-      }
-    }
-    onProgress?.({ files: n3, bytes });
-    return { files: n3, bytes };
-  }
   async function* zipParts(files, { root: root2 = "\u4E16\u754C", maxBytes = PART_BYTES, maxFiles = PART_FILES, compress = true, onProgress = null, signal = null } = {}) {
     let cur = [], curBytes = 0, index = 0, total2 = 0, totalBytes = 0;
     const pad = (n3) => String(n3).padStart(3, "0");
     const flush = async (final) => {
       index++;
-      const bytes = await zipFiles(cur, { compress });
+      const bytes = await zipFiles2(cur, { compress });
       const part = { index, name: `${root2}_${pad(index)}.zip`, bytes, fileCount: cur.length, final };
       cur = [];
       curBytes = 0;
@@ -15838,6 +15953,44 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     yield await flush(true);
     onProgress?.({ files: total2, bytes: totalBytes, parts: index });
   }
+  async function exportVaultZip(world, civ7, name, { onProgress = null, signal = null, maxSingleBytes = SINGLE_ZIP_MAX_BYTES, partBytes = PART_BYTES, ...opts } = {}) {
+    const root2 = rootName(name);
+    let files = 0, rawBytes = 0, tooBig = false;
+    async function* gen() {
+      for await (const f2 of vaultFiles(world, civ7, name, opts)) {
+        if (signal?.aborted) {
+          const e = new Error("\u4E2D\u65AD\u3057\u307E\u3057\u305F");
+          e.name = "AbortError";
+          throw e;
+        }
+        const raw = rawOf(f2.data);
+        rawBytes += raw.length;
+        files++;
+        if (rawBytes > maxSingleBytes) {
+          tooBig = true;
+          return;
+        }
+        if (files % 100 === 0) {
+          onProgress?.({ files, bytes: rawBytes });
+          await tick();
+        }
+        yield { path: f2.path, data: raw };
+      }
+    }
+    const bytes = await zipFiles2(gen(), { compress: true });
+    if (!tooBig) {
+      onProgress?.({ files, bytes: rawBytes });
+      return { root: root2, parts: [{ name: `${root2}.zip`, bytes, fileCount: files }], files, rawBytes };
+    }
+    const parts = [];
+    let total2 = 0;
+    for await (const p of zipParts(vaultFiles(world, civ7, name, opts), { root: root2, maxBytes: partBytes, onProgress, signal })) {
+      parts.push({ name: p.name, bytes: p.bytes, fileCount: p.fileCount });
+      total2 += p.fileCount;
+    }
+    return { root: root2, parts, files: total2, rawBytes };
+  }
+  var rootName = (name) => String(name ?? "").replace(/[\\/:*?"<>|#^\[\]\n\r\t]/g, "_").trim().slice(0, 48) || "\u4E16\u754C";
   function vaultFiles(world, civ7, name, opts = {}) {
     return obsidianFiles(world, civ7, name, { ...LIGHT, ...opts });
   }
@@ -15939,22 +16092,17 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   function catastropheBox() {
     const c = civ6(), nm = h("input", { id: "cat-name", placeholder: "\u707D\u5384\u306E\u540D\u524D\uFF08\u4EFB\u610F\uFF09", style: "width:100%" }), why2 = h("input", { id: "cat-why", placeholder: "\u7406\u7531\u306E\u6CE8\u91C8\uFF08\u4EFB\u610F\u30FB\u539F\u56E0\u3092\u8AAC\u660E\u3057\u306A\u304F\u3066\u3088\u3044\uFF09", style: "width:100%" });
     const scope = h("select", { id: "cat-scope" }, h("option", { value: "world" }, "\u4E16\u754C\u898F\u6A21"), h("option", { value: "region" }, "\u5730\u57DF\u898F\u6A21\uFF08\u56FD\u306E\u9996\u90FD\u3092\u4E2D\u5FC3\u306B\uFF09")), at2 = h("select", { id: "cat-at", style: "display:none" }, ...aliveStates2().sort((a, b) => b.pop - a.pop).slice(0, 80).map((s) => h("option", { value: s.id }, s.name)));
-    const rad = h("input", { id: "cat-radius", type: "number", value: 1500, min: 1, style: "width:80px;display:none" }), mor = h("input", { id: "cat-mort", type: "number", value: 30, min: 0, step: 1, style: "width:70px" }), rec = h("input", { id: "cat-rec", type: "number", value: 60, min: 1, style: "width:70px" }), ok2 = h("input", { type: "checkbox", id: "cat-ok" });
+    const rad = h("input", { id: "cat-radius", type: "number", value: 1500, min: 1, style: "width:80px;display:none" }), mor = h("input", { id: "cat-mort", type: "number", value: 30, min: 0, step: 1, style: "width:70px" }), rec = h("input", { id: "cat-rec", type: "number", value: 60, min: 1, style: "width:70px" });
     scope.addEventListener("change", () => {
       const r = scope.value === "region";
       at2.style.display = rad.style.display = r ? "" : "none";
     });
     const go = () => {
-      if (!ok2.checked) {
-        S2.notice = "\u53D6\u308A\u6D88\u305B\u306A\u3044\u64CD\u4F5C\u3067\u3059\u3002\u78BA\u8A8D\u306E\u6B04\u306B\u30C1\u30A7\u30C3\u30AF\u3057\u3066\u304F\u3060\u3055\u3044";
-        S2.hooks.render();
-        return;
-      }
       const cell = scope.value === "region" ? c.groups[c.states[at2.value]?.capitalGroupId]?.cell : null;
       creator({ type: "creator.catastrophe", name: nm.value, reason: why2.value, scope: scope.value, center: cell ?? null, radiusKm: Number(rad.value), mortality: Number(mor.value) / 100, recoveryMonths: Number(rec.value) });
     };
     const log3 = (c.wcde.catastrophes ?? []).slice(-4).reverse();
-    return h("div", {}, lb("\u5275\u9020\u4E3B\u306E\u707D\u5384", "CATASTROPHE"), note3("\u5927\u304D\u306A\u707D\u5384\u3092\u8D77\u3053\u3057\u307E\u3059\u3002\u4EBA\u53E3\u30FB\u8ECD\u30FB\u5B89\u5B9A\u306B\u3059\u3050\u53CD\u6620\u3055\u308C\u3001\u767A\u751F\u524D\u3078\u306F\u623B\u308A\u307E\u305B\u3093\u3002"), nm, why2, h("div", { class: "rowb" }, scope, at2), h("div", { class: "rowb" }, h("small", {}, "\u534A\u5F84(km)"), rad, h("small", {}, "\u4EBA\u53E3\u306E\u640D\u5931 %"), mor, h("small", {}, "\u56DE\u5FA9\u306E\u76EE\u5B89(\u6708)"), rec), h("div", { class: "rowb" }, h("label", {}, ok2, " \u53D6\u308A\u6D88\u305B\u306A\u3044\u3053\u3068\u3092\u7406\u89E3\u3057\u305F"), btn("\u707D\u5384\u3092\u8D77\u3053\u3059", go, "p", { id: "cat-go" })), ...log3.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `\u300C${r.name}\u300D${r.scope === "world" ? "\u4E16\u754C\u898F\u6A21" : "\u5730\u57DF\u898F\u6A21"}`, h("br"), h("small", {}, `${date4(r.at)}\u30FB\u5B9F\u969B\u306E\u640D\u5931 ${Math.round(r.result.share * 100)}%\uFF08\u7D04 ${n0(r.result.dead)} \u4EBA\uFF09`)))));
+    return h("div", {}, lb("\u5275\u9020\u4E3B\u306E\u707D\u5384", "CATASTROPHE"), nm, why2, h("div", { class: "rowb" }, scope, at2), h("div", { class: "rowb" }, h("small", {}, "\u534A\u5F84(km)"), rad, h("small", {}, "\u4EBA\u53E3\u306E\u640D\u5931 %"), mor, h("small", {}, "\u56DE\u5FA9\u306E\u76EE\u5B89(\u6708)"), rec), h("div", { class: "rowb" }, holdBtn("\u707D\u5384\u3092\u8D77\u3053\u3059", go, "p", { id: "cat-go" })), ...log3.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `\u300C${r.name}\u300D${r.scope === "world" ? "\u4E16\u754C\u898F\u6A21" : "\u5730\u57DF\u898F\u6A21"}`, h("br"), h("small", {}, `${date4(r.at)}\u30FB\u5B9F\u969B\u306E\u640D\u5931 ${Math.round(r.result.share * 100)}%\uFF08\u7D04 ${n0(r.result.dead)} \u4EBA\uFF09`)))));
   }
   function pSettings() {
     const c = civ6(), cf = c.wcde.config, T4 = timeOf(c), errs = checkWcdeIntegrity(S2.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
@@ -15971,65 +16119,51 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       msg.textContent = `\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F\uFF08\u5727\u7E2E ${(p.bytes.length / 1048576).toFixed(1)} MB\uFF0F\u5143 ${(p.rawBytes / 1048576).toFixed(1)} MB\uFF09`;
     };
     const obs = async () => {
-      const nm = String(cf.name || cf.worldSeed), root2 = nm.replace(/[\\/:*?"<>|#^\[\]\n\r\t]/g, "_").trim().slice(0, 48) || "\u4E16\u754C", mb = (b) => (b / 1048576).toFixed(1);
-      let dir = null;
-      if (typeof window.showDirectoryPicker === "function") {
-        try {
-          dir = await window.showDirectoryPicker({ mode: "readwrite" });
-        } catch (e) {
-          if (e?.name === "AbortError") {
-            msg.textContent = "\u30D5\u30A9\u30EB\u30C0\u306E\u9078\u629E\u3092\u53D6\u308A\u6D88\u3057\u307E\u3057\u305F";
-            return;
-          }
-          dir = null;
-        }
-      }
-      const prog = (p) => {
-        msg.textContent = `\u66F8\u304D\u51FA\u3057\u4E2D\u2026 ${p.files} \u30D5\u30A1\u30A4\u30EB\uFF08${mb(p.bytes)} MB\uFF09`;
+      const nm = String(cf.name || cf.worldSeed), mb = (b) => (b / 1048576).toFixed(1), t02 = performance.now(), prog = (p) => {
+        msg.textContent = `ZIP \u3092\u4F5C\u3063\u3066\u3044\u307E\u3059\u2026 ${p.files} \u30D5\u30A1\u30A4\u30EB\uFF08${mb(p.bytes)} MB\uFF09`;
       };
-      msg.textContent = dir ? "\u9078\u3093\u3060\u30D5\u30A9\u30EB\u30C0\u3078\u66F8\u304D\u51FA\u3057\u3066\u3044\u307E\u3059\u2026" : "\u8907\u6570\u306E ZIP \u306B\u5206\u3051\u3066\u4F5C\u3063\u3066\u3044\u307E\u3059\u2026";
+      msg.textContent = "ZIP \u3092\u4F5C\u3063\u3066\u3044\u307E\u3059\u2026";
       try {
-        if (dir) {
-          const r = await writeToDirectory(dir, vaultFiles(S2.w.world, c, nm), { onProgress: prog });
-          msg.textContent = `\u66F8\u304D\u51FA\u3057\u307E\u3057\u305F: ${r.files} \u30D5\u30A1\u30A4\u30EB\uFF08${mb(r.bytes)} MB\uFF09\u3002\u9078\u3093\u3060\u30D5\u30A9\u30EB\u30C0\u306E\u4E2D\u306E\u300C${root2}\u300D\u30D5\u30A9\u30EB\u30C0\u3092\u3001Obsidian \u306E vault \u3068\u3057\u3066\u958B\u3044\u3066\u304F\u3060\u3055\u3044`;
-        } else {
-          let n3 = 0;
-          for await (const part of zipParts(vaultFiles(S2.w.world, c, nm), { root: root2, onProgress: prog })) {
-            dl(new Blob([part.bytes], { type: "application/zip" }), part.name);
-            n3++;
-            msg.textContent = `${n3} \u500B\u76EE\u306E ZIP \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F\uFF08${part.fileCount} \u30D5\u30A1\u30A4\u30EB\uFF09\u2026`;
-            await new Promise((r) => setTimeout(r, 800));
-          }
-          msg.textContent = `${n3} \u500B\u306E ZIP \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F\u3002\u3059\u3079\u3066\u540C\u3058\u30D5\u30A9\u30EB\u30C0\u3078\u5C55\u958B\u3059\u308B\u3068\u30011 \u3064\u306E vault \u306B\u306A\u308A\u307E\u3059`;
+        const r = await exportVaultZip(S2.w.world, c, nm, { onProgress: prog });
+        let n3 = 0;
+        for (const part of r.parts) {
+          dl(new Blob([part.bytes], { type: "application/zip" }), part.name);
+          n3++;
+          if (r.parts.length > 1) await new Promise((res) => setTimeout(res, 800));
         }
+        const sec = ((performance.now() - t02) / 1e3).toFixed(1);
+        msg.textContent = n3 === 1 ? `ZIP \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F: ${r.files} \u30D5\u30A1\u30A4\u30EB\uFF08${mb(r.parts[0].bytes.length)} MB\u30FB${sec} \u79D2\uFF09\u3002\u5C55\u958B\u3057\u3066\u3067\u304D\u305F\u300C${r.root}\u300D\u30D5\u30A9\u30EB\u30C0\u3092\u3001Obsidian \u306E vault \u3068\u3057\u3066\u958B\u3044\u3066\u304F\u3060\u3055\u3044` : `${n3} \u500B\u306E ZIP \u3092\u4FDD\u5B58\u3057\u307E\u3057\u305F\uFF08${r.files} \u30D5\u30A1\u30A4\u30EB\uFF09\u3002\u3059\u3079\u3066\u540C\u3058\u30D5\u30A9\u30EB\u30C0\u3078\u5C55\u958B\u3059\u308B\u3068\u30011 \u3064\u306E vault \u306B\u306A\u308A\u307E\u3059`;
       } catch (e) {
         msg.textContent = "\u66F8\u304D\u51FA\u305B\u307E\u305B\u3093\u3067\u3057\u305F: " + e.message;
       }
     };
-    const en = h("input", { id: "epoch-name", value: cal.epochName ?? "", style: "width:120px" });
+    const eraY = h("input", { id: "era-year", type: "number", min: 0, placeholder: "\u958B\u59CB\u304B\u3089\u4F55\u5E74", style: "width:130px" }), eraN = h("input", { id: "era-name", placeholder: "\u6642\u4EE3\u306E\u540D\u524D", style: "width:170px", maxlength: 12 });
+    const eraRows = (cal.eras ?? []).map((e) => {
+      const inp = h("input", { value: e.name, style: "width:150px", class: "eranm" });
+      return h("div", { class: "rowb" }, h("small", {}, `${e.startYear}\u5E74\u304B\u3089`), inp, btn("\u6539\u540D", () => {
+        run({ type: "calendar.edit", edit: { eraNames: { [e.id]: inp.value } } });
+        S2.hooks.render();
+      }), btn("\u6D88\u3059", () => {
+        run({ type: "calendar.edit", edit: { removeEra: e.id } });
+        S2.hooks.render();
+      }));
+    });
     return h(
       "div",
       {},
       ...head("SETTINGS", "\u4E16\u754C\u8A2D\u5B9A\u30FB\u51FA\u529B"),
-      table(["\u9805\u76EE", "\u5024"], [["\u4E16\u754C\u306E\u540D\u524D", cf.name ?? "\u2014"], ["\u4E16\u754C\u306E\u7A2E", cf.worldSeed], ["\u89E3\u50CF\u5EA6\uFF08\u30BB\u30EB\uFF09", S2.w.world.mesh.cellCount], ["\u7A2E\u65CF", (cf.species ?? []).map((s) => s.name ?? s.id ?? s).join("\u30FB") || "\u2014"], ["\u5148\u53F2\u306E\u9577\u3055", `${n0(cf.prehistory?.years ?? 0)} \u5E74`], ["\u73FE\u5728", formatWorldDate(S2.w)], ["\u66A6\u306E\u8D77\u70B9\u540D", cal.epochName || "\uFF08\u306A\u3057\uFF09"], ["\u6642\u4EE3\u533A\u5206", (cal.eras ?? []).map((e) => `${e.startYear}\u5E74\u301C ${e.name}`).join(" \u2192 ") || "\uFF08\u306A\u3057\uFF09"]]),
-      lb("\u66A6\u306E\u8868\u793A\u540D\uFF08\u8868\u793A\u7528\u306E\u307F\uFF09", "CALENDAR"),
-      h("div", { class: "rowb" }, en, btn("\u5909\u66F4", () => {
-        const r = run({ type: "calendar.edit", edit: { epochName: en.value } });
+      table(["\u9805\u76EE", "\u5024"], [["\u4E16\u754C\u306E\u540D\u524D", cf.name ?? "\u2014"], ["\u73FE\u5728", formatWorldDate(S2.w)], ["\u5148\u53F2\u306E\u9577\u3055", `${n0(cf.prehistory?.years ?? 0)} \u5E74`], ["\u6642\u9593\u306E\u901F\u5EA6", SPEEDS.find((s) => s.id === T4.speed)?.label], ["\u30A2\u30D7\u30EA\u306E\u7248", APP_VERSION_LABEL], ...errs.length ? [["\u6574\u5408\u6027\u306E\u691C\u67FB", `${errs.length} \u4EF6\u306E\u554F\u984C`]] : []]),
+      lb("\u6642\u4EE3", "ERAS"),
+      ...eraRows,
+      h("div", { class: "rowb" }, eraY, eraN, btn("\u6642\u4EE3\u3092\u8DB3\u3059", () => {
+        run({ type: "calendar.edit", edit: { addEra: { name: eraN.value, startYear: Math.round(Number(eraY.value)) } } });
         S2.hooks.render();
-      })),
-      ...(cal.eras ?? []).map((e) => {
-        const inp = h("input", { value: e.name, style: "width:140px", class: "eranm" });
-        return h("div", { class: "rowb" }, h("small", {}, `${e.startYear}\u5E74\u301C`), inp, btn("\u6539\u540D", () => {
-          run({ type: "calendar.edit", edit: { eraNames: { [e.id]: inp.value } } });
-          S2.hooks.render();
-        }));
-      }),
+      }, "", { id: "era-add" })),
       lb("\u4FDD\u5B58\u30FB\u8AAD\u307F\u8FBC\u307F\u30FB\u51FA\u529B", "SAVE / EXPORT"),
-      h("div", { class: "rowb" }, btn("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3059", save, "p", { id: "save" }), fileLoader(), btn("Obsidian \u7528 Markdown \u3092\u66F8\u304D\u51FA\u3059", obs, "", { id: "obs" })),
+      h("div", { class: "rowb" }, btn("\u4FDD\u5B58\u30D5\u30A1\u30A4\u30EB\u3092\u66F8\u304D\u51FA\u3059", save, "p", { id: "save" }), fileLoader(), btn("Obsidian \u7528 Markdown \u3092 ZIP \u3067\u66F8\u304D\u51FA\u3059", obs, "", { id: "obs" })),
       msg,
       ...S2.fileWarn.map((x) => h("p", { class: "warn" }, x)),
-      lb("\u30D0\u30FC\u30B8\u30E7\u30F3\u60C5\u5831", "VERSION"),
-      table(["\u9805\u76EE", "\u5024"], [["\u30A2\u30D7\u30EA\u306E\u7248", APP_VERSION_LABEL], ["\u4FDD\u5B58\u5F62\u5F0F\u306E\u7248\uFF08\u30A2\u30D7\u30EA\u306E\u7248\u3068\u306F\u5225\uFF09", SAVE_SCHEMA], ["\u6574\u5408\u6027\u306E\u691C\u67FB", errs.length ? `${errs.length} \u4EF6\u306E\u554F\u984C` : "\u554F\u984C\u306A\u3057"], ["\u6642\u9593\u306E\u901F\u5EA6", SPEEDS.find((s) => s.id === T4.speed)?.label]])
+      null
     );
   }
   function fileLoader(done2) {
@@ -16067,7 +16201,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   }
   function founding() {
     const c = run({ type: "founding.refresh" }).candidates ?? S2.w.civ.wcde.candidates ?? [], civ7 = S2.w.civ, pre2 = civ7.wcde.prehistory ?? {}, ce = S2.w.world.cell, ja = new Proxy({}, { get: (_, k) => polityJa(k) });
-    const nowTxt = formatWorldDate(S2.w), era = eraLabel(civ7.wcde.config.calendar, civ7.monthIndex), msg = h("div", {}, h("p", { class: "n" }, `${civ7.wcde.config.name}\u3000\u73FE\u5728 ${nowTxt}${era ? "\uFF08" + era + "\uFF09" : ""}\u3000\u2014 \u4E16\u754C\u306E\u6642\u8A08\u306F\u3001\u3042\u306A\u305F\u304C\u5165\u308B\u524D\u304B\u3089\u9032\u3093\u3067\u3044\u307E\u3059\u3002`), h("p", { class: "n" }, "\u56FD\u3092\u5EFA\u3066\u3066\u62C5\u5F53\u3059\u308B\u304B\u3001\u4E16\u754C\u306B\u4EFB\u305B\u3066\u898B\u5B88\u308A\u307E\u3059\u3002\u56FD\u540D\u30FB\u653F\u4F53\u30FB\u5F79\u8077\u30FB\u70BA\u653F\u8005\u30FB\u9996\u90FD\u30FB\u6280\u8853\u3092\u3001\u9806\u306B\u6C7A\u3081\u307E\u3059\u3002")), list = h("div", {});
+    const nowTxt = formatWorldDate(S2.w), era = eraLabel(civ7.wcde.config.calendar, civ7.monthIndex), msg = h("div", {}, h("p", { class: "n" }, `${civ7.wcde.config.name}\u3000${nowTxt}`)), list = h("div", {});
     void list;
     void c;
     const yrsAgo = (m) => Math.round(((civ7.wcde.foundedAt ?? civ7.monthIndex) - m) / 12);
@@ -16078,7 +16212,7 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     const obs = h(
       "details",
       { class: "dt" },
-      h("summary", {}, "\u5148\u53F2\u306E\u89B3\u5BDF\uFF08\u8AAD\u307F\u53D6\u308A\u5C02\u7528\uFF09"),
+      h("summary", {}, "\u5148\u53F2\u306E\u89B3\u5BDF"),
       sp.archaic ? `\u53E4\u4EE3\u578B\u4EBA\u985E\u306E\u96C6\u56E3\u304C\u73FE\u308C\u308B: ${fmtYears(yrsAgo(sp.archaic.at))}` : "",
       h("br"),
       sp.human ? `\u73FE\u751F\u4EBA\u985E\u304C\u73FE\u308C\u308B: ${fmtYears(yrsAgo(sp.human.at))}\uFF08\u7F6E\u304D\u63DB\u308F\u308A\u30FB\u6DF7\u8840: ${n0(pre2.assimilated ?? 0)} \u96C6\u56E3\uFF09` : "",
@@ -16236,10 +16370,10 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
   function renderRight() {
     const w = S2.w, T4 = timeOf(w.civ), cs = controlled();
     const eraNow = eraLabel(w.civ.wcde.config.calendar, w.civ.monthIndex);
-    $2("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T4.hold ? T4.resumeSpeed : T4.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} \u304B\u6708\uFF0F\u79D2` : "\u505C\u6B62", onclick: () => {
+    $2("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow && !eraOf(w.civ.wcde.config.calendar, w.civ.monthIndex)?.restart ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T4.hold ? T4.resumeSpeed : T4.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} \u304B\u6708\uFF0F\u79D2` : "\u505C\u6B62", onclick: () => {
       run({ type: "clock.setSpeed", speed: s.id });
       renderRight();
-    } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `\u62C5\u5F53: ${stateName(cs)}` : "\u62C5\u5F53\u56FD\u306A\u3057\uFF08\u898B\u5B88\u308A\uFF09", T4.hold ? "\u30FB\u30CB\u30E5\u30FC\u30B9\u306E\u78BA\u8A8D\u5F85\u3061" : T4.speed ? "" : "\u30FB\u505C\u6B62\u4E2D"));
+    } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `\u62C5\u5F53: ${stateName(cs)}` : "\u62C5\u5F53\u56FD\u306A\u3057\uFF08\u898B\u5B88\u308A\uFF09", overlayOpen() || T4.hold ? "\u30FB\u4E00\u6642\u505C\u6B62" : T4.speed ? "" : "\u30FB\u505C\u6B62\u4E2D"));
     announce();
   }
   function announce() {
@@ -16252,7 +16386,6 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
     feed.forEach((n3) => S2.newsSeen.add(key(n3)));
     if (!fresh.length) return;
     const shown = fresh.slice(-3);
-    for (const n3 of shown) notify("ok", `${n3.date.year}\u5E74${n3.date.month}\u6708\u3000${n3.title}`);
     const last = shown[shown.length - 1], sid = (last.entityIds ?? []).find((i) => c.states[i]), g = sid ? c.groups[c.states[sid].capitalGroupId] : null, el = $2("#newscall"), M = S2.map;
     if (!g || !el || !M) return;
     const [x, y] = M.proj(M.geo.cen[g.cell * 2], M.geo.cen[g.cell * 2 + 1], M.cv.width, M.cv.height), r = M.cv.clientWidth / (M.cv.width || 1), px = (x * M.view.k + M.view.x) * r, py = (y * M.view.k + M.view.y) * r;
@@ -16279,9 +16412,16 @@ ${table2(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u657
       S2.map.draw();
     }, "p", { id: "ack" }))));
   }
+  var overlayOpen = () => {
+    const on = (id) => {
+      const e = document.getElementById(id);
+      return !!e && !e.hidden;
+    };
+    return !!document.querySelector("#fulltab, .wiz, .fullmodal") || on("decmodal") || on("newsmodal");
+  };
   function tick2() {
     const w = S2.w;
-    if (!w || w.viewPast != null || !isRunning(w.civ)) return;
+    if (!w || w.viewPast != null || !isRunning(w.civ) || overlayOpen()) return;
     const T4 = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T4.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) });
     if (!r.ok && r.code !== "news_hold" && r.code !== "decision_hold") run({ type: "clock.setSpeed", speed: 0 });
     live();

@@ -6,18 +6,24 @@ async function deflateRaw(bytes) { const out = await new Response(new Blob([byte
 const u16 = (n) => [n & 255, (n >>> 8) & 255], u32 = (n) => [n & 255, (n >>> 8) & 255, (n >>> 16) & 255, (n >>> 24) & 255];
 function dosTime(d) { return [((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff, (((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff]; }
 /** @param {AsyncIterable|Iterable<{path:string, data:string|Uint8Array}>} files */
-export async function zipFiles(files, { compress = true, date = new Date(), onProgress = null } = {}) {
-  const parts = [], central = [], [dt, dd] = dosTime(date); let offset = 0, n = 0; const names = new Set();
-  for await (const f of files) {
-    if (names.has(f.path)) throw new Error(`ZIP のパスが重複: ${f.path}`); names.add(f.path);
-    const raw = typeof f.data === "string" ? enc.encode(f.data) : f.data, name = enc.encode(f.path), crc = crc32(raw);
-    let method = 0, body = raw; if (compress && raw.length > 128) { const z = await deflateRaw(raw); if (z.length < raw.length) { method = 8; body = z; } }
+export async function zipFiles(files, { compress = true, date = new Date(), onProgress = null, concurrency = 12 } = {}) {
+  const parts = [], central = [], [dt, dd] = dosTime(date); let offset = 0, n = 0; const names = new Set(), pend = [];
+  // 圧縮は別スレッドで走るので、数件を同時に始めて、並び順どおりに書き込む（1 件ずつ待つより大幅に速い）
+  const emit = async ({ raw, name, crc, z }) => {
+    let method = 0, body = raw; if (z) { const zz = await z; if (zz.length < raw.length) { method = 8; body = zz; } }
     const head = Uint8Array.from([0x50, 0x4b, 3, 4, ...u16(20), ...u16(0x0800), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0)]);
     if (offset + head.length + name.length + body.length > 0xfffffff0) throw new Error("ZIP が 4GB を超えます（分割して書き出してください）");
     central.push(Uint8Array.from([0x50, 0x4b, 1, 2, ...u16(20), ...u16(20), ...u16(0x0800), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
     parts.push(head, name, body); offset += head.length + name.length + body.length; n++;
     if (onProgress && n % 500 === 0) await onProgress(n);
+  };
+  for await (const f of files) {
+    if (names.has(f.path)) throw new Error(`ZIP のパスが重複: ${f.path}`); names.add(f.path);
+    const raw = typeof f.data === "string" ? enc.encode(f.data) : f.data, name = enc.encode(f.path), crc = crc32(raw);
+    const z = compress && raw.length > 256 ? deflateRaw(raw) : null; if (z) z.catch(() => {}); // 待つ前に失敗しても、未処理の拒否にしない（emit で拾う）
+    pend.push({ raw, name, crc, z }); while (pend.length >= concurrency) await emit(pend.shift());
   }
+  while (pend.length) await emit(pend.shift());
   let csize = 0; for (const c of central) csize += c.length;
   const big = n > 0xfffe, tail = []; // 65535 件以上は ZIP64 の終端レコードを付ける（各ファイルのサイズ・位置は 4GB 未満のまま）
   if (big) { const u64 = (x) => [...u32(x >>> 0), ...u32(Math.floor(x / 4294967296))]; tail.push(Uint8Array.from([0x50, 0x4b, 6, 6, ...u64(44), ...u16(45), ...u16(45), ...u32(0), ...u32(0), ...u64(n), ...u64(n), ...u64(csize), ...u64(offset)]), Uint8Array.from([0x50, 0x4b, 6, 7, ...u32(0), ...u64(offset + csize), ...u32(1)])); }

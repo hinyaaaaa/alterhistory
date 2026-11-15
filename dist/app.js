@@ -226,12 +226,6 @@
     for (const k in a.chunks) for (const r of chunkRecords(a, k)) if (r.eventId === id) return survives(civ, r) ? r : null;
     return null;
   }
-  function recordsOf(civ, entityId, { limit = 50 } = {}) {
-    const out = [];
-    for (const r of iterRecords(civ)) if (r.participants.some((p) => p.entityId === entityId)) out.push(r);
-    out.sort((x, y) => y.t - x.t);
-    return out.slice(0, limit);
-  }
   var ARCHIVE_VERSION, LIVE_MONTHS, CHUNK_YEARS, COLD_AFTER_YEARS, P, KIND_POLICY, policyOf, MEDIA, IMP_TAU, IMP_FLOOR, GRACE_YEARS, survives, emptyArchive, archiveOf, monthOfEvent, bucketOf, hot, evAsRecord;
   var init_archive = __esm({
     "js/core/civ/archive.js"() {
@@ -4374,66 +4368,6 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     }
   });
 
-  // js/io/zip.js
-  async function deflateRaw(bytes) {
-    const out = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
-    return new Uint8Array(out);
-  }
-  function dosTime(d) {
-    return [(d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1) & 65535, (d.getFullYear() - 1980 << 9 | d.getMonth() + 1 << 5 | d.getDate()) & 65535];
-  }
-  async function zipFiles(files, { compress = true, date = /* @__PURE__ */ new Date(), onProgress = null } = {}) {
-    const parts = [], central = [], [dt, dd] = dosTime(date);
-    let offset = 0, n2 = 0;
-    const names2 = /* @__PURE__ */ new Set();
-    for await (const f of files) {
-      if (names2.has(f.path)) throw new Error(`ZIP \u306E\u30D1\u30B9\u304C\u91CD\u8907: ${f.path}`);
-      names2.add(f.path);
-      const raw = typeof f.data === "string" ? enc5.encode(f.data) : f.data, name = enc5.encode(f.path), crc = crc322(raw);
-      let method = 0, body = raw;
-      if (compress && raw.length > 128) {
-        const z = await deflateRaw(raw);
-        if (z.length < raw.length) {
-          method = 8;
-          body = z;
-        }
-      }
-      const head = Uint8Array.from([80, 75, 3, 4, ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0)]);
-      if (offset + head.length + name.length + body.length > 4294967280) throw new Error("ZIP \u304C 4GB \u3092\u8D85\u3048\u307E\u3059\uFF08\u5206\u5272\u3057\u3066\u66F8\u304D\u51FA\u3057\u3066\u304F\u3060\u3055\u3044\uFF09");
-      central.push(Uint8Array.from([80, 75, 1, 2, ...u16(20), ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
-      parts.push(head, name, body);
-      offset += head.length + name.length + body.length;
-      n2++;
-      if (onProgress && n2 % 500 === 0) await onProgress(n2);
-    }
-    let csize = 0;
-    for (const c of central) csize += c.length;
-    const big = n2 > 65534, tail2 = [];
-    if (big) {
-      const u64 = (x) => [...u32(x >>> 0), ...u32(Math.floor(x / 4294967296))];
-      tail2.push(Uint8Array.from([80, 75, 6, 6, ...u64(44), ...u16(45), ...u16(45), ...u32(0), ...u32(0), ...u64(n2), ...u64(n2), ...u64(csize), ...u64(offset)]), Uint8Array.from([80, 75, 6, 7, ...u32(0), ...u64(offset + csize), ...u32(1)]));
-    }
-    tail2.push(Uint8Array.from([80, 75, 5, 6, 0, 0, 0, 0, ...u16(big ? 65535 : n2), ...u16(big ? 65535 : n2), ...u32(csize), ...u32(offset), 0, 0]));
-    let total3 = offset + csize;
-    for (const t of tail2) total3 += t.length;
-    const out = new Uint8Array(total3);
-    let o = 0;
-    for (const p of [...parts, ...central, ...tail2]) {
-      out.set(p, o);
-      o += p.length;
-    }
-    return out;
-  }
-  var enc5, u16, u32;
-  var init_zip = __esm({
-    "js/io/zip.js"() {
-      init_crc32();
-      enc5 = new TextEncoder();
-      u16 = (n2) => [n2 & 255, n2 >>> 8 & 255];
-      u32 = (n2) => [n2 & 255, n2 >>> 8 & 255, n2 >>> 16 & 255, n2 >>> 24 & 255];
-    }
-  });
-
   // js/io/png.js
   function chunk(type, data) {
     const t = new TextEncoder().encode(type), body = new Uint8Array(t.length + data.length);
@@ -4462,6 +4396,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
   var obsidian_exports = {};
   __export(obsidian_exports, {
     FOLDERS: () => FOLDERS,
+    MINOR_KINDS: () => MINOR_KINDS,
     OBSIDIAN_VERSION: () => OBSIDIAN_VERSION,
     estimateVault: () => estimateVault,
     exportObsidianZip: () => exportObsidianZip,
@@ -4470,14 +4405,14 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
     validateVault: () => validateVault
   });
   function planPaths(world, civ, opts = {}) {
-    const P5 = /* @__PURE__ */ new Map(), add2 = (id, folder, name) => P5.set(id, `${folder}/${safe(name)}__${id}`);
+    const P5 = /* @__PURE__ */ new Map(), add2 = (id, folder, name) => P5.set(id, `${folder}/${safe(name)}__${id}`), lean = !!opts.lean, drop = P5.dropped = /* @__PURE__ */ new Set(), evs = opts.evs ?? evList(civ);
     for (const s of Object.values(civ.states)) add2(s.id, FOLDERS.state, s.name);
     for (const p of Object.values(civ.persons)) add2(p.id, FOLDERS.person, p.name);
     for (const f of Object.values(civ.figures ?? {})) if (!P5.has(f.id)) add2(f.id, FOLDERS.person, f.name);
     for (const w of Object.values(civ.wars)) add2(w.id, FOLDERS.war, `${civ.states[w.aggressor]?.name ?? "?"}\u5BFE${civ.states[w.defender]?.name ?? "?"}\u306E\u6226\u4E89`);
     for (const t of Object.values(civ.treaties)) add2(t.id, FOLDERS.treaty, `${civ.states[t.a]?.name ?? "?"}\u3068${civ.states[t.b]?.name ?? "?"}\u306E${TREATY_JA[t.type] ?? t.type}`);
     const lo = opts.fromMonth ?? -Infinity, hi = opts.toMonth ?? Infinity;
-    if (opts.eventNotes !== false) for (const e of evList(civ)) {
+    if (opts.eventNotes !== false) for (const e of evs) {
       const m = evMonth(e);
       if (m >= lo && m <= hi) add2(e.eventId, e.kind === "battle_fought" ? FOLDERS.battle : FOLDERS.event, e.title);
     }
@@ -4485,22 +4420,65 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       const m = d2mi(d.date);
       if (m >= lo && m <= hi) add2(d.decisionId, FOLDERS.decision, `${civ.states[d.actorId]?.name ?? d.actorId}\u306E\u5224\u65AD`);
     }
-    for (const s of Object.values(civ.settlements)) add2(s.id, FOLDERS.settlement, `\u96C6\u843D ${STAGE_JA2[s.stage] ?? s.stage}`);
-    for (const g of Object.values(civ.groups)) add2(g.id, FOLDERS.group, `\u96C6\u56E3 ${g.subsistence}`);
-    for (const c of Object.values(civ.cultures)) add2(c.id, FOLDERS.culture, c.name);
-    for (const l of Object.values(civ.languages)) add2(l.id, FOLDERS.language, l.name);
-    for (const r of Object.values(civ.religions)) add2(r.id, FOLDERS.religion, r.name);
-    for (const t of TECHS) P5.set(`tech:${t.key}`, `${FOLDERS.tech}/${safe(t.name)}__${t.key}`);
+    const keep = lean ? leanKeep(civ) : null;
+    for (const s of Object.values(civ.settlements)) if (lean) drop.add(s.id);
+    else add2(s.id, FOLDERS.settlement, `\u96C6\u843D ${STAGE_JA2[s.stage] ?? s.stage}`);
+    for (const g of Object.values(civ.groups)) if (lean) drop.add(g.id);
+    else add2(g.id, FOLDERS.group, `\u96C6\u56E3 ${g.subsistence}`);
+    for (const c of Object.values(civ.cultures)) if (!lean || keep.cultures.has(c.id)) add2(c.id, FOLDERS.culture, c.name);
+    else drop.add(c.id);
+    for (const l of Object.values(civ.languages)) if (!lean || keep.languages.has(l.id)) add2(l.id, FOLDERS.language, l.name);
+    else drop.add(l.id);
+    for (const r of Object.values(civ.religions)) if (!lean || keep.religions.has(r.id)) add2(r.id, FOLDERS.religion, r.name);
+    else drop.add(r.id);
+    for (const t of TECHS) if (lean) drop.add(`tech:${t.key}`);
+    else P5.set(`tech:${t.key}`, `${FOLDERS.tech}/${safe(t.name)}__${t.key}`);
     for (const s of Object.keys(civ.species)) P5.set(s, `${FOLDERS.species}/${safe(SPECIES[s]?.ja ?? s)}__${s}`);
-    for (const a of Object.values(ABILITIES)) P5.set(`ability:${a.id}`, `${FOLDERS.ability}/${safe(a.ja)}__${a.id}`);
+    const hasMagic = !lean || Object.keys(civ.persons).length > 0 || Object.keys(civ.magic.orgs).length > 0;
+    for (const a of Object.values(ABILITIES)) if (hasMagic) P5.set(`ability:${a.id}`, `${FOLDERS.ability}/${safe(a.ja)}__${a.id}`);
+    else drop.add(`ability:${a.id}`);
     for (const o of Object.values(civ.magic.orgs)) add2(o.id, FOLDERS.org, o.name);
     for (const d of Object.values(civ.disasters)) add2(d.id, FOLDERS.disaster, `${KIND_JA[d.kind]}\uFF08${mi2s(d.startedAt)}\uFF09`);
     for (const x of civ.interpretations) add2(x.interpId, FOLDERS.interp, `${civ.states[x.ownerId]?.name ?? "?"}\u306E\u8A8D\u8B58 ${STANCE[x.stance] ?? x.stance}`);
     for (const w of civ.works) add2(w.workId, FOLDERS.work, `${civ.states[w.authorId]?.name ?? "?"}\u306E\u5E74\u4EE3\u8A18`);
-    for (const c of regionsOf(world)) P5.set(`region:${c.id}`, `${FOLDERS.region}/${safe(c.name)}__region_${c.id}`);
+    for (const c of regionsOf(world, lean)) P5.set(`region:${c.id}`, `${FOLDERS.region}/${safe(c.name)}__region_${c.id}`);
     return P5;
   }
-  function regionsOf(world) {
+  function leanKeep(civ) {
+    const pop = { cultures: /* @__PURE__ */ new Map(), languages: /* @__PURE__ */ new Map(), religions: /* @__PURE__ */ new Map() };
+    let total3 = 0, anyone = false;
+    const add2 = (m, id, v) => {
+      if (id) m.set(id, (m.get(id) ?? 0) + v);
+    };
+    for (const g of Object.values(civ.groups)) {
+      const gp = g.pop ?? 0;
+      total3 += gp;
+      anyone = true;
+      for (const c of g.cohorts ?? []) {
+        const v = gp * (c.share ?? 0);
+        add2(pop.cultures, c.cultureId, v);
+        add2(pop.languages, c.languageId, v);
+        add2(pop.religions, c.religionId, v);
+      }
+    }
+    const top = (m) => new Set([...m].filter(([, v]) => v >= total3 * 2e-3).sort((x, y) => y[1] - x[1]).slice(0, 60).map(([id]) => id));
+    const out = { cultures: top(pop.cultures), languages: top(pop.languages), religions: top(pop.religions) };
+    if (anyone && total3 <= 0) for (const k of ["cultures", "languages", "religions"]) for (const id of pop[k].keys()) out[k].add(id);
+    const up = (set, table2) => {
+      for (const id of [...set]) {
+        let x = table2[id]?.parent, n2 = 0;
+        while (x && !set.has(x) && n2++ < 1e3) {
+          set.add(x);
+          x = table2[x]?.parent;
+        }
+      }
+    };
+    up(out.cultures, civ.cultures);
+    up(out.languages, civ.languages);
+    up(out.religions, civ.religions);
+    return out;
+  }
+  function regionsOf(world, lean = false) {
     const c = world.cell, n2 = c.continent.length, m = /* @__PURE__ */ new Map();
     for (let i = 0; i < n2; i++) {
       if (c.landWater[i] !== LAND_WATER2.LAND) continue;
@@ -4512,9 +4490,18 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       r.sumLat += c.lat[i];
       r.sumLon += c.lon[i];
     }
-    return [...m.values()].sort((a, b) => b.area - a.area).map((r, i) => ({ ...r, name: `\u5927\u9678${i + 1}`, order: i }));
+    return [...m.values()].sort((a, b) => b.area - a.area).map((r, i) => ({ ...r, name: `\u5927\u9678${i + 1}`, order: i })).filter((r, i, all) => !lean || i < 12 && r.area >= all[0].area * 0.02);
   }
   async function* obsidianFiles(world, civ, worldName, opts = {}) {
+    const lean = !!opts.lean, evs = opts.evs ?? evList(civ);
+    opts = { ...opts, evs };
+    const byEnt = /* @__PURE__ */ new Map();
+    for (const e of evs) for (const p of e.participants ?? []) {
+      const a = byEnt.get(p.entityId);
+      if (a) a.push(e);
+      else byEnt.set(p.entityId, [e]);
+    }
+    const recsOf = (id) => (byEnt.get(id) ?? []).slice().sort((x, y) => evMonth(x) - evMonth(y));
     const root = safe(worldName || "\u4E16\u754C"), P5 = planPaths(world, civ, opts), ix = graphIndex(civ), stats = { files: 0, unresolved: 0, outOfScope: 0, missing: [] }, counts = {};
     const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity, inRange = (mi2) => mi2 >= from && mi2 <= to, scoped = Number.isFinite(from) || Number.isFinite(to) || opts.decisionNotes === false || opts.eventNotes === false;
     const link2 = (id, label3) => {
@@ -4524,6 +4511,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
         stats.outOfScope++;
         return String(label3 ?? id).replace(/[\]|\u0001\u0002]/g, " ");
       }
+      if (!p && P5.dropped?.has(id)) return String(label3 ?? nameOfSafe(id)).replace(/[\]|\u0001\u0002]/g, " ");
       if (!p && /^(pop|settle)_/.test(String(id))) return label3 == null || label3 === id ? "\u6D88\u6EC5\u3057\u305F\u96C6\u56E3\u30FB\u96C6\u843D" : String(label3);
       if (!p && /^(treaty|person|house)_/.test(String(id))) return label3 == null || label3 === id ? "\u6574\u7406\u3055\u308C\u305F\u53E4\u3044\u8A18\u9332" : String(label3);
       if (!p) {
@@ -4533,6 +4521,7 @@ I \u9023\u90A6\u60C5\u5831\u5B98 \u90A6\u306E\u6CBB\u5B89\u306E\u9023\u7D61\u5B9
       }
       return `${p}|${String(label3 ?? id).replace(/[\]|\u0001\u0002]/g, " ")}`;
     };
+    const nameOfSafe = (id) => civ.cultures[id]?.name ?? civ.languages[id]?.name ?? civ.religions[id]?.name ?? String(id);
     const nameOf5 = (id) => civ.states[id]?.name ?? civ.persons[id]?.name ?? civ.cultures[id]?.name ?? civ.languages[id]?.name ?? civ.religions[id]?.name ?? civ.magic.orgs[id]?.name ?? id;
     const L = (id) => link2(id, nameOf5(id)), cellLoc = (c) => c == null ? "\u4E0D\u660E" : `\u30BB\u30EB ${c}\uFF08\u7DEF\u5EA6 ${r12(world.cell.lat[c] * 180 / Math.PI)}\xB0\u30FB\u7D4C\u5EA6 ${r12(world.cell.lon[c] * 180 / Math.PI)}\xB0\uFF09`;
     const fin = (c) => c.replace(/\[\[/g, "\uFF3B\uFF3B").replace(/\]\]/g, "\uFF3D\uFF3D").replace(/\u0001/g, "[[").replace(/\u0002/g, "]]");
@@ -4581,7 +4570,7 @@ ${N2.acked.slice(-100).map((id) => `- ${link2(id, id)}`).join("\n") || "\uFF08\u
 `);
     }
     for (const s of Object.values(civ.states)) {
-      const evs = recordsOf(civ, s.id, { limit: 1e6 }).reverse().filter((e) => inRange(evMonth(e))), wars = Object.values(civ.wars).filter((w) => w.sides.a.includes(s.id) || w.sides.d.includes(s.id)), trs = Object.values(civ.treaties).filter((t) => t.a === s.id || t.b === s.id);
+      const sevs = recsOf(s.id).filter((e) => inRange(evMonth(e)) && !(lean && MINOR_SET.has(e.kind))), wars = Object.values(civ.wars).filter((w) => w.sides.a.includes(s.id) || w.sides.d.includes(s.id)), trs = Object.values(civ.treaties).filter((t) => t.a === s.id || t.b === s.id);
       const cap = civ.groups[s.capitalGroupId], comp = s.alive ? compositionAt(civ, s.id, civ.monthIndex) : null;
       yield out("state", P5.get(s.id), fm({ id: s.id, type: "\u56FD\u5BB6", name: s.name, \u6210\u7ACB: mi2s(s.formedAt), \u6EC5\u4EA1: s.alive ? null : mi2s(s.dissolvedAt), \u5B58\u7D9A\u4E2D: s.alive, \u6210\u7ACB\u7D4C\u8DEF: s.via, \u653F\u4F53: POLITY_JA[s.polity] ?? s.polity, \u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u5BB6: !!s.player, \u524D\u8EAB: s.predecessor ?? null, tags: ["\u56FD\u5BB6"] }) + `# ${s.name}
 
@@ -4611,14 +4600,14 @@ ${comp ? `\u6587\u5316: ${Object.entries(comp.culture).map(([k, v]) => `${link2(
 
 \u7A2E\u65CF: ${Object.entries(comp.species).map(([k, v]) => `${link2(k, SPECIES[k]?.ja ?? k)} ${Math.round(v)}`).join("\u3001")}
 ` : "\uFF08\u6EC5\u4EA1\uFF09\n"}
-## \u51FA\u6765\u4E8B\uFF08\u65B0\u3057\u3044\u9806\u306B\u6700\u5927200\u4EF6\uFF09
-${evs.slice(-200).reverse().map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
+## \u51FA\u6765\u4E8B\uFF08\u65B0\u3057\u3044\u9806\u306B\u6700\u5927${lean ? 80 : 200}\u4EF6${lean ? "\u3002\u65E5\u5E38\u7684\u306A\u3082\u306E\u306F\u9664\u304F" : ""}\uFF09
+${sevs.slice(lean ? -80 : -200).reverse().map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 
 ## \u6B74\u53F2\u8A8D\u8B58
 ${civ.interpretations.filter((x) => x.ownerId === s.id).slice(-30).map((x) => `- ${link2(x.interpId, STANCE[x.stance] ?? x.stance)}\uFF08${mi2s(x.since)}${x.until != null ? `\u301C${mi2s(x.until)}` : ""}\uFF09`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 
-\u8A73\u7D30\u30ED\u30B0: ${logFiles(civ, s).map((f) => `${f.p}|${f.label}`).join("\u3001")}
-`);
+${lean ? "" : `\u8A73\u7D30\u30ED\u30B0: ${logFiles(civ, s).map((f) => `${f.p}|${f.label}`).join("\u3001")}
+`}`);
     }
     for (const p of Object.values(civ.persons)) yield out("person", P5.get(p.id), fm({ id: p.id, type: "\u4EBA\u7269", name: p.name, \u7A2E\u65CF: p.speciesId, \u80FD\u529B: p.ability, \u5F37\u5EA6: p.power, \u51FA\u73FE: mi2s(p.emergedAt), \u6CA1: p.diedAt == null ? null : mi2s(p.diedAt), tags: ["\u4EBA\u7269", "\u9B54\u6CD5"] }) + `# ${p.name}
 
@@ -4644,7 +4633,7 @@ ${(ix.byEntity.get(p.id) ?? []).map((i) => civ.events[i]).slice(0, 50).map((e) =
 ${H.map((x) => `- ${mi2s(x.at)} ${KIND[x.kind] ?? x.kind}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 `);
     }
-    for (const a of Object.values(ABILITIES)) yield out("ability", P5.get(`ability:${a.id}`), fm({ id: a.id, type: "\u9B54\u6CD5\u306E\u80FD\u529B", name: a.ja, tags: ["\u9B54\u6CD5"] }) + `# ${a.ja}
+    for (const a of Object.values(ABILITIES)) if (P5.has(`ability:${a.id}`)) yield out("ability", P5.get(`ability:${a.id}`), fm({ id: a.id, type: "\u9B54\u6CD5\u306E\u80FD\u529B", name: a.ja, tags: ["\u9B54\u6CD5"] }) + `# ${a.ja}
 
 - \u4EE3\u511F: ${a.cost}
 - \u66B4\u767A\u306E\u5371\u967A: ${a.risk}
@@ -4679,7 +4668,7 @@ ${(ix.byEntity.get(w.id) ?? []).map((i) => civ.events[i]).map((e) => `- ${d2s(e.
 - \u5F53\u4E8B\u56FD: ${L(t.a)}\u3001${L(t.b)}
 - \u7DE0\u7D50: ${mi2s(t.signedAt)}\uFF0F${t.active ? `\u671F\u9650: ${mi2s(t.expiresAt)}` : `\u7D42\u4E86: ${mi2s(t.endedAt)}`}
 `);
-    if (opts.eventNotes !== false) for (const e of evList(civ)) {
+    if (opts.eventNotes !== false) for (const e of evs) {
       const m = evMonth(e);
       if (!inRange(m)) continue;
       const cons = consequencesOf(civ, e.eventId);
@@ -4714,7 +4703,7 @@ ${Object.entries(d.observations).map(([k, v]) => `- ${k}: ${typeof v === "number
 ## \u5019\u88DC
 ${table(["\u884C\u52D5", "\u5BFE\u8C61", "\u9078\u629E\u80A2", "\u5F97\u70B9", "\u8CC7\u683C", "\u7406\u7531", "\u8981\u56E0"], x.candidates.map((c) => [c.key, c.target ? L(c.target) : "", c.opt ?? "", c.total, c.eligible ? "\u53EF" : "\u4E0D\u53EF", c.reason ?? "", Object.entries(c.factors ?? {}).map(([k, v]) => `${k} ${v}`).join("\u3001")]))}`);
     }
-    for (const s of Object.values(civ.settlements)) yield out("settlement", P5.get(s.id), fm({ id: s.id, type: "\u96C6\u843D", \u6BB5\u968E: s.stage, \u5275\u8A2D: mi2s(s.foundedAt), tags: ["\u96C6\u843D"] }) + `# \u96C6\u843D\uFF08${STAGE_JA2[s.stage] ?? s.stage}\uFF09
+    if (!lean) for (const s of Object.values(civ.settlements)) yield out("settlement", P5.get(s.id), fm({ id: s.id, type: "\u96C6\u843D", \u6BB5\u968E: s.stage, \u5275\u8A2D: mi2s(s.foundedAt), tags: ["\u96C6\u843D"] }) + `# \u96C6\u843D\uFF08${STAGE_JA2[s.stage] ?? s.stage}\uFF09
 
 - \u96C6\u56E3: ${civ.groups[s.groupId] ? link2(s.groupId, "\u96C6\u56E3") : "\uFF08\u6D88\u6EC5\uFF09"}
 - \u5834\u6240: ${cellLoc(s.cell)}
@@ -4723,7 +4712,7 @@ ${table(["\u884C\u52D5", "\u5BFE\u8C61", "\u9078\u629E\u80A2", "\u5F97\u70B9", "
 ## \u51FA\u6765\u4E8B
 ${(ix.byEntity.get(s.id) ?? []).map((i) => civ.events[i]).slice(0, 50).map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n") || "\uFF08\u306A\u3057\uFF09"}
 `);
-    for (const g of Object.values(civ.groups)) yield out("group", P5.get(g.id), fm({ id: g.id, type: "\u4EBA\u53E3\u96C6\u56E3", \u7A2E\u65CF: g.speciesId, \u751F\u696D: g.subsistence, \u56FD\u5BB6: g.stateId ?? null, tags: ["\u96C6\u56E3"] }) + `# \u96C6\u56E3 ${g.id}
+    if (!lean) for (const g of Object.values(civ.groups)) yield out("group", P5.get(g.id), fm({ id: g.id, type: "\u4EBA\u53E3\u96C6\u56E3", \u7A2E\u65CF: g.speciesId, \u751F\u696D: g.subsistence, \u56FD\u5BB6: g.stateId ?? null, tags: ["\u96C6\u56E3"] }) + `# \u96C6\u56E3 ${g.id}
 
 - \u5834\u6240: ${cellLoc(g.cell)}\uFF0F\u751F\u696D: ${g.subsistence}\uFF0F\u4EBA\u53E3 ${Math.round(g.pop)}\uFF0F\u56FD\u5BB6: ${g.stateId ? L(g.stateId) : "\u306A\u3057"}\uFF0F\u7A2E\u65CF: ${link2(g.speciesId, SPECIES[g.speciesId]?.ja ?? g.speciesId)}
 - \u7531\u6765: ${g.parent ? link2(g.parent, "\u89AA\u306E\u96C6\u56E3") : "\u6700\u521D\u304B\u3089"}
@@ -4733,7 +4722,7 @@ ${table(["\u6587\u5316", "\u8A00\u8A9E", "\u5B97\u6559", "\u7A2E\u65CF", "\u5272
 ## \u77E5\u3063\u3066\u3044\u308B\u6280\u8853
 ${Object.entries(g.tech.known).map(([k, mi2]) => `${link2(`tech:${k}`, TECHS.find((t) => t.key === k)?.name ?? k)}\uFF08${mi2s(mi2)}\uFF09`).join("\u3001") || "\uFF08\u306A\u3057\uFF09"}
 `);
-    for (const r of regionsOf(world)) {
+    for (const r of regionsOf(world, lean)) {
       const inReg = Object.values(civ.groups).filter((g) => world.cell.continent[g.cell] === r.id);
       yield out("region", P5.get(`region:${r.id}`), fm({ id: `region_${r.id}`, type: "\u5730\u57DF", \u9678\u5730\u30BB\u30EB: r.cells, \u9762\u7A4Dkm2: Math.round(r.area), tags: ["\u5730\u57DF"] }) + `# ${r.name}
 
@@ -4743,24 +4732,30 @@ ${Object.entries(g.tech.known).map(([k, mi2]) => `${link2(`tech:${k}`, TECHS.fin
 - \u56FD\u5BB6: ${[...new Set(inReg.map((g) => g.stateId).filter(Boolean))].map(L).join("\u3001") || "\u306A\u3057"}
 `);
     }
-    for (const c of Object.values(civ.cultures)) yield out("culture", P5.get(c.id), fm({ id: c.id, type: "\u6587\u5316", name: c.name, \u8D77\u6E90: mi2s(c.bornAt), tags: ["\u6587\u5316"] }) + `# ${c.name}
+    const kids = (table2) => {
+      const m = /* @__PURE__ */ new Map();
+      for (const x of Object.values(table2)) if (x.parent) (m.get(x.parent) ?? m.set(x.parent, []).get(x.parent)).push(x.id);
+      return m;
+    }, cKids = kids(civ.cultures), lKids = kids(civ.languages), rKids = kids(civ.religions), langsOfCulture = /* @__PURE__ */ new Map();
+    for (const l of Object.values(civ.languages)) (langsOfCulture.get(l.cultureId) ?? langsOfCulture.set(l.cultureId, []).get(l.cultureId)).push(l.id);
+    for (const c of Object.values(civ.cultures)) if (P5.has(c.id)) yield out("culture", P5.get(c.id), fm({ id: c.id, type: "\u6587\u5316", name: c.name, \u8D77\u6E90: mi2s(c.bornAt), tags: ["\u6587\u5316"] }) + `# ${c.name}
 
 - \u8D77\u6E90: ${mi2s(c.bornAt)}\uFF0F${cellLoc(c.cell)}
 - \u89AA: ${c.parent ? L(c.parent) : "\u306A\u3057"}
-- \u5B50: ${Object.values(civ.cultures).filter((x) => x.parent === c.id).map((x) => L(x.id)).join("\u3001") || "\u306A\u3057"}
-- \u8A00\u8A9E: ${Object.values(civ.languages).filter((l) => l.cultureId === c.id).map((l) => L(l.id)).join("\u3001") || "\u306A\u3057"}
+- \u5B50: ${(cKids.get(c.id) ?? []).filter((x) => P5.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
+- \u8A00\u8A9E: ${(langsOfCulture.get(c.id) ?? []).filter((x) => P5.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
 `);
-    for (const l of Object.values(civ.languages)) yield out("language", P5.get(l.id), fm({ id: l.id, type: "\u8A00\u8A9E", name: l.name, \u8D77\u6E90: mi2s(l.bornAt), tags: ["\u8A00\u8A9E"] }) + `# ${l.name}
+    for (const l of Object.values(civ.languages)) if (P5.has(l.id)) yield out("language", P5.get(l.id), fm({ id: l.id, type: "\u8A00\u8A9E", name: l.name, \u8D77\u6E90: mi2s(l.bornAt), tags: ["\u8A00\u8A9E"] }) + `# ${l.name}
 
 - \u8D77\u6E90: ${mi2s(l.bornAt)}\uFF0F\u6587\u5316: ${civ.cultures[l.cultureId] ? L(l.cultureId) : "\u2014"}
-- \u89AA: ${l.parent ? L(l.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${Object.values(civ.languages).filter((x) => x.parent === l.id).map((x) => L(x.id)).join("\u3001") || "\u306A\u3057"}
+- \u89AA: ${l.parent ? L(l.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${(lKids.get(l.id) ?? []).filter((x) => P5.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
 `);
-    for (const r of Object.values(civ.religions)) yield out("religion", P5.get(r.id), fm({ id: r.id, type: "\u5B97\u6559", name: r.name, \u7A2E\u985E: r.kind, \u8D77\u6E90: mi2s(r.bornAt), tags: ["\u5B97\u6559"] }) + `# ${r.name}
+    for (const r of Object.values(civ.religions)) if (P5.has(r.id)) yield out("religion", P5.get(r.id), fm({ id: r.id, type: "\u5B97\u6559", name: r.name, \u7A2E\u985E: r.kind, \u8D77\u6E90: mi2s(r.bornAt), tags: ["\u5B97\u6559"] }) + `# ${r.name}
 
 - \u7A2E\u985E: ${r.kind}\uFF0F\u8D77\u6E90: ${mi2s(r.bornAt)}
-- \u89AA: ${r.parent ? L(r.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${Object.values(civ.religions).filter((x) => x.parent === r.id).map((x) => L(x.id)).join("\u3001") || "\u306A\u3057"}
+- \u89AA: ${r.parent ? L(r.parent) : "\u306A\u3057"}\uFF0F\u5B50: ${(rKids.get(r.id) ?? []).filter((x) => P5.has(x)).map(L).join("\u3001") || "\u306A\u3057"}
 `);
-    for (const t of TECHS) {
+    if (!lean) for (const t of TECHS) {
       const w = civ.techWorld[t.key];
       const adopters = Object.values(civ.states).filter((s) => s.techAdopted[t.key] != null);
       yield out("tech", P5.get(`tech:${t.key}`), fm({ id: t.key, type: "\u6280\u8853", name: t.name, \u5206\u91CE: t.field, \u6BB5\u968E: t.tier, tags: ["\u6280\u8853"] }) + `# ${t.name}
@@ -4793,9 +4788,9 @@ ${w.text}
 ${table(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [c.property, c.claimed, c.actual]))}`);
     if (opts.eventNotes === false) {
       const byDecade = /* @__PURE__ */ new Map();
-      for (const e of evList(civ)) {
+      for (const e of evs) {
         const m = evMonth(e);
-        if (!inRange(m)) continue;
+        if (!inRange(m) || lean && MINOR_SET.has(e.kind)) continue;
         const k = Math.floor(e.date.year / 10);
         (byDecade.get(k) ?? byDecade.set(k, []).get(k)).push(e);
       }
@@ -4805,14 +4800,14 @@ ${table(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [c
         const y0 = k * 10, c0 = Math.floor(y0 / 100) * 100;
         yield out("timeline", `${FOLDERS.timeline}/${c0}\u5E74\u4EE3/${y0}\u301C${y0 + 9}\u5E74`, fm({ type: "\u5E74\u8868", \u671F\u9593: `${y0}\u5E74\u301C${y0 + 9}\u5E74`, \u4EF6\u6570: es.length, tags: ["\u5E74\u8868"] }) + `# ${y0}\u301C${y0 + 9}\u5E74\u306E\u5E74\u8868
 
-\u5168\u3066\u306E\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u7701\u7565\u306A\u3057\uFF09\u3002
+${lean ? "\u4E3B\u8981\u306A\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u6280\u8853\u306E\u4F1D\u64AD\u30FB\u4E0D\u6E80\u30FB\u6587\u5316\u306E\u63A5\u89E6\u306A\u3069\u65E5\u5E38\u7684\u306A\u3082\u306E\u306F\u9664\u304F\uFF09\u3002" : "\u5168\u3066\u306E\u51FA\u6765\u4E8B\u3092\u6642\u7CFB\u5217\u3067\u8A18\u9332\u3059\u308B\uFF08\u7701\u7565\u306A\u3057\uFF09\u3002"}
 
 ` + es.map((e) => `- **${d2s(e.date)}** \u3014${KIND_LABEL6(e)}\u3015 ${String(e.title ?? "").replace(/\n/g, " ")}${e.participants?.length ? `\uFF08${e.participants.map((p) => L(p.entityId)).join("\u3001")}\uFF09` : ""}${e.location?.cell != null ? ` @${cellLoc(e.location.cell).replace(/（.*$/, "")}` : ""}`).join("\n") + "\n");
       }
     }
     const byCentury = /* @__PURE__ */ new Map();
-    for (const e of evList(civ)) {
-      if (!inRange(evMonth(e)) || ["tech_transferred", "demand_raised", "cohort_formed", "cohort_assimilated", "culture_contact", "settlement_stage", "settlement_founded", "state_action", "group_split", "language_diverged"].includes(e.kind)) continue;
+    for (const e of evs) {
+      if (!inRange(evMonth(e)) || MINOR_SET.has(e.kind)) continue;
       const k = Math.floor(e.date.year / 100);
       (byCentury.get(k) ?? byCentury.set(k, []).get(k)).push(e);
     }
@@ -4822,20 +4817,20 @@ ${table(["\u9805\u76EE", "\u8A18\u8FF0", "\u4E8B\u5B9F"], w.claims.map((c) => [c
 
 ${es.map((e) => `- ${d2s(e.date)} ${link2(e.eventId, e.title)}`).join("\n")}
 `);
-    for (const s of Object.values(civ.states)) {
+    if (!lean) for (const s of Object.values(civ.states)) {
       for (const f of logFiles(civ, s)) {
         if (f.kind === "state") yield out("logState", f.path, stateLog(civ, s, f, link2));
         else yield out("logAi", f.path, aiLog(civ, s, f, link2, d2mi));
       }
     }
     yield out("graph", `${FOLDERS.graph}/\u56FD\u5BB6\u306E\u7CFB\u8B5C`, graphNote("\u56FD\u5BB6\u306E\u7CFB\u8B5C", "\u524D\u8EAB\u306E\u56FD\u5BB6\u304B\u3089\u5206\u96E2\u30FB\u7D99\u627F\u3057\u305F\u95A2\u4FC2", Object.values(civ.states).filter((s) => s.predecessor && civ.states[s.predecessor]).map((s) => [s.predecessor, s.id]), (id) => civ.states[id].name));
-    yield out("graph", `${FOLDERS.graph}/\u6587\u5316\u306E\u7CFB\u7D71`, graphNote("\u6587\u5316\u306E\u7CFB\u7D71", "\u89AA\u306E\u6587\u5316\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ.cultures).filter((c) => c.parent).map((c) => [c.parent, c.id]), (id) => civ.cultures[id].name));
-    yield out("graph", `${FOLDERS.graph}/\u8A00\u8A9E\u306E\u7CFB\u7D71`, graphNote("\u8A00\u8A9E\u306E\u7CFB\u7D71", "\u89AA\u306E\u8A00\u8A9E\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ.languages).filter((c) => c.parent).map((c) => [c.parent, c.id]), (id) => civ.languages[id].name));
-    yield out("graph", `${FOLDERS.graph}/\u5B97\u6559\u306E\u7CFB\u7D71`, graphNote("\u5B97\u6559\u306E\u7CFB\u7D71", "\u89AA\u306E\u5B97\u6559\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ.religions).filter((c) => c.parent).map((c) => [c.parent, c.id]), (id) => civ.religions[id].name));
+    yield out("graph", `${FOLDERS.graph}/\u6587\u5316\u306E\u7CFB\u7D71`, graphNote("\u6587\u5316\u306E\u7CFB\u7D71", "\u89AA\u306E\u6587\u5316\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ.cultures).filter((c) => c.parent && P5.has(c.id) && P5.has(c.parent)).map((c) => [c.parent, c.id]), (id) => civ.cultures[id].name));
+    yield out("graph", `${FOLDERS.graph}/\u8A00\u8A9E\u306E\u7CFB\u7D71`, graphNote("\u8A00\u8A9E\u306E\u7CFB\u7D71", "\u89AA\u306E\u8A00\u8A9E\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ.languages).filter((c) => c.parent && P5.has(c.id) && P5.has(c.parent)).map((c) => [c.parent, c.id]), (id) => civ.languages[id].name));
+    yield out("graph", `${FOLDERS.graph}/\u5B97\u6559\u306E\u7CFB\u7D71`, graphNote("\u5B97\u6559\u306E\u7CFB\u7D71", "\u89AA\u306E\u5B97\u6559\u304B\u3089\u5206\u304B\u308C\u305F\u95A2\u4FC2", Object.values(civ.religions).filter((c) => c.parent && P5.has(c.id) && P5.has(c.parent)).map((c) => [c.parent, c.id]), (id) => civ.religions[id].name));
     yield out("graph", `${FOLDERS.graph}/\u6226\u4E89\u306E\u95A2\u4FC2`, graphNote("\u6226\u4E89\u306E\u95A2\u4FC2", "\u653B\u6483\u5074 \u2192 \u9632\u885B\u5074", Object.values(civ.wars).map((w) => [w.aggressor, w.defender]), (id) => civ.states[id]?.name ?? id));
     if (opts.maps !== false && opts.cellRaster) for (const f of await mapImages(world, civ, opts)) yield outRaw("map", `${FOLDERS.map}/${f.name}`, f.png);
     yield out("readme", "README", readme(root, world, civ, counts, stats, opts));
-    yield { path: `${root}/manifest.json`, data: JSON.stringify({ format: "alterhistory-obsidian", version: OBSIDIAN_VERSION, world: worldName, month: civ.monthIndex, date: civ.date, counts, unresolvedLinks: stats.unresolved, outOfScopeLinks: stats.outOfScope, unresolvedSamples: stats.missing, scope: { fromMonth: Number.isFinite(from) ? from : null, toMonth: Number.isFinite(to) ? to : null, decisionNotes: opts.decisionNotes !== false, maps: opts.maps !== false && !!opts.cellRaster } }, null, 1), kind: "manifest" };
+    yield { path: `${root}/manifest.json`, data: JSON.stringify({ format: "alterhistory-obsidian", version: OBSIDIAN_VERSION, world: worldName, month: civ.monthIndex, date: civ.date, counts, unresolvedLinks: stats.unresolved, outOfScopeLinks: stats.outOfScope, unresolvedSamples: stats.missing, scope: { fromMonth: Number.isFinite(from) ? from : null, toMonth: Number.isFinite(to) ? to : null, lean, decisionNotes: opts.decisionNotes !== false, maps: opts.maps !== false && !!opts.cellRaster } }, null, 1), kind: "manifest" };
   }
   function logFiles(civ, s) {
     const a = s.formedAt, b = s.alive ? civ.monthIndex : s.dissolvedAt, out = [];
@@ -4949,7 +4944,7 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
 ## \u66F8\u304D\u51FA\u3057\u306E\u7BC4\u56F2
 - ${opts.decisionNotes === false ? "AI\u5224\u65AD\u306E\u500B\u5225\u30CE\u30FC\u30C8\u306F\u51FA\u3057\u3066\u3044\u307E\u305B\u3093\uFF08\u4E00\u89A7\u3068\u8A73\u7D30\u30ED\u30B0\u306E\u307F\uFF09" : "\u5168\u3066\u306EAI\u5224\u65AD\u3092\u500B\u5225\u30CE\u30FC\u30C8\u306B\u3057\u3066\u3044\u307E\u3059"}
 - ${Number.isFinite(opts.fromMonth ?? -Infinity) || Number.isFinite(opts.toMonth ?? Infinity) ? `\u30A4\u30D9\u30F3\u30C8\u30FBAI\u5224\u65AD\u306F ${opts.fromMonth != null ? mi2s(opts.fromMonth) : "\u6700\u521D"}\u301C${opts.toMonth != null ? mi2s(opts.toMonth) : "\u73FE\u5728"} \u306B\u7D5E\u3063\u3066\u3044\u307E\u3059` : "\u5168\u671F\u9593\u306E\u30A4\u30D9\u30F3\u30C8\u3092\u500B\u5225\u30CE\u30FC\u30C8\u306B\u3057\u3066\u3044\u307E\u3059"}
-- \u300C\u601D\u60F3\u300D\u306E\u30AB\u30C6\u30B4\u30EA\u306F\u3001v5.0.0 \u306E\u6587\u660E\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u306B\u8A72\u5F53\u3059\u308B\u30C7\u30FC\u30BF\u304C\u7121\u3044\u305F\u3081\u4F5C\u3063\u3066\u3044\u307E\u305B\u3093
+${opts.lean ? "- \u5275\u4F5C\u5411\u3051\u306E\u8EFD\u91CF\u51FA\u529B\u3067\u3059\u3002\u4EBA\u53E3\u96C6\u56E3\u30FB\u96C6\u843D\u30FB\u6280\u8853\u306E\u500B\u5225\u30CE\u30FC\u30C8\u30FB\u8A73\u7D30\u30ED\u30B0\u30FB\u3054\u304F\u5C0F\u3055\u306A\u6587\u5316/\u8A00\u8A9E/\u5B97\u6559\u306E\u679D\u30FB\u5C0F\u3055\u306A\u5CF6\u306E\u5730\u57DF\u306F\u3001\u30CE\u30FC\u30C8\u306B\u3057\u3066\u3044\u307E\u305B\u3093\uFF08\u56FD\u5BB6\u30FB\u6226\u4E89\u30FB\u6761\u7D04\u30FB\u4EBA\u7269\u30FB\u6587\u5316\u30FB\u8A00\u8A9E\u30FB\u5B97\u6559\u30FB\u707D\u5BB3\u30FB\u5E74\u8868\u30FB\u5E74\u4EE3\u8A18\u30FB\u95A2\u4FC2\u30B0\u30E9\u30D5\u306F\u5168\u3066\u51FA\u3057\u3066\u3044\u307E\u3059\uFF09\n" : ""}- \u300C\u601D\u60F3\u300D\u306E\u30AB\u30C6\u30B4\u30EA\u306F\u3001v5.0.0 \u306E\u6587\u660E\u30B7\u30DF\u30E5\u30EC\u30FC\u30B7\u30E7\u30F3\u306B\u8A72\u5F53\u3059\u308B\u30C7\u30FC\u30BF\u304C\u7121\u3044\u305F\u3081\u4F5C\u3063\u3066\u3044\u307E\u305B\u3093
 - \u6708\u6B21\u72B6\u614B\u306F\u300E\u72B6\u614B\u304C\u5909\u308F\u3063\u305F\u6708\u300F\u3060\u3051\u3092\u884C\u306B\u3057\u3066\u3044\u307E\u3059\uFF08\u5909\u5316\u306E\u306A\u3044\u6708\u306F\u76F4\u524D\u306E\u884C\u304C\u7D9A\u304D\u307E\u3059\u3002\u6B20\u843D\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF09
 
 ## \u518D\u51FA\u529B\u30FB\u4E0A\u66F8\u304D
@@ -4959,6 +4954,19 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
 `;
   }
   function estimateVault(world, civ, opts = {}) {
+    if (opts.lean) {
+      const evs = [...evList(civ)], from2 = opts.fromMonth ?? -Infinity, to2 = opts.toMonth ?? Infinity, P5 = planPaths(world, civ, { ...opts, evs, eventNotes: false, decisionNotes: false });
+      let ev2 = 0;
+      const dec4 = /* @__PURE__ */ new Set(), cent = /* @__PURE__ */ new Set();
+      for (const e of evs) {
+        const m = evMonth(e);
+        if (m < from2 || m > to2 || MINOR_SET.has(e.kind)) continue;
+        ev2++;
+        dec4.add(Math.floor(e.date.year / 10));
+        cent.add(Math.floor(e.date.year / 100));
+      }
+      return { events: ev2, decisions: 0, logs: 0, files: P5.size + dec4.size + cent.size + 8, maps: opts.maps !== false && !!opts.cellRaster ? 1 + 5 : 0 };
+    }
     const from = opts.fromMonth ?? -Infinity, to = opts.toMonth ?? Infinity;
     let ev = 0, dc = 0;
     for (const e of evList(civ)) {
@@ -5011,10 +5019,9 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
     const bytes = await zipFiles(gen(), { compress: opts.compress !== false, onProgress: opts.onProgress });
     return { bytes, root, counts: manifest.counts, files: index.length + 1, unresolvedLinks: manifest.unresolvedLinks };
   }
-  var evList, OBSIDIAN_VERSION, FOLDERS, mi2s, d2s, d2mi, safe, q, yamlVal, fm, table, r12, r34, colorOf2, TREATY_JA, STAGE_JA2, OUTCOME_JA, POLITY_JA;
+  var evList, OBSIDIAN_VERSION, MINOR_KINDS, MINOR_SET, FOLDERS, mi2s, d2s, d2mi, safe, q, yamlVal, fm, table, r12, r34, colorOf2, TREATY_JA, STAGE_JA2, OUTCOME_JA, POLITY_JA;
   var init_obsidian = __esm({
     "js/io/obsidian.js"() {
-      init_zip();
       init_png();
       init_graph();
       init_ai();
@@ -5029,6 +5036,8 @@ ${table(["\u30D5\u30A9\u30EB\u30C0\u30FB\u7A2E\u985E", "\u30CE\u30FC\u30C8\u6570
       init_world_consts();
       evList = (civ) => [...iterRecords(civ)];
       OBSIDIAN_VERSION = 1;
+      MINOR_KINDS = Object.freeze(["tech_transferred", "demand_raised", "cohort_formed", "cohort_assimilated", "culture_contact", "settlement_stage", "settlement_founded", "state_action", "group_split", "language_diverged"]);
+      MINOR_SET = new Set(MINOR_KINDS);
       FOLDERS = Object.freeze({ timeline: "\u5E74\u8868", state: "\u56FD\u5BB6", person: "\u4EBA\u7269", war: "\u6226\u4E89", battle: "\u6226\u95D8", treaty: "\u6761\u7D04", event: "\u51FA\u6765\u4E8B", decision: "AI\u5224\u65AD", settlement: "\u90FD\u5E02\u30FB\u96C6\u843D", group: "\u96C6\u56E3", region: "\u5730\u57DF", culture: "\u6587\u5316", language: "\u8A00\u8A9E", religion: "\u5B97\u6559", tech: "\u6280\u8853", species: "\u7A2E\u65CF", ability: "\u9B54\u6CD5/\u80FD\u529B", org: "\u9B54\u6CD5/\u7D44\u7E54", disaster: "\u707D\u5BB3", interp: "\u6B74\u53F2\u8A8D\u8B58", work: "\u8868\u73FE\u7269", chronicle: "\u5E74\u4EE3\u8A18", graph: "\u95A2\u4FC2\u30B0\u30E9\u30D5", logState: "\u8A73\u7D30\u30ED\u30B0/\u56FD\u5BB6\u6708\u6B21\u72B6\u614B", logAi: "\u8A73\u7D30\u30ED\u30B0/AI\u5224\u65AD", map: "\u5730\u56F3" });
       mi2s = (mi2) => `${Math.floor(mi2 / 12)}\u5E74${(mi2 % 12 + 12) % 12 + 1}\u6708`;
       d2s = (d) => `${d.year}\u5E74${d.month}\u6708`;
@@ -18425,10 +18434,10 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   }
 
   // js/version.js
-  var APP_VERSION = "6.13.0";
-  var APP_VERSION_NAME = "\u8ECD\u3068\u6226\u4E89\u3092\u73FE\u4EE3\u307E\u3067\u30FB\u5730\u5F62\u3068\u8EFD\u3055";
+  var APP_VERSION = "6.14.0";
+  var APP_VERSION_NAME = "Obsidian\u51FA\u529B\u306E\u8EFD\u91CF\u5316\u30FBZIP\u5316";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "f198d1bc40f3" : "dev";
+  var APP_BUILD_ID = true ? "4dee5c4fb80b" : "dev";
 
   // js/ui/icons.js
   var P3 = {
@@ -32566,8 +32575,8 @@ ${shown}${more}`;
   // js/ui/v53/export/obsidian-split.js
   var DEFAULT_PART_BYTES = 64 * 1024 * 1024;
   var DEFAULT_PART_FILES = 2e4;
-  var enc6 = new TextEncoder();
-  var rawBytes = (d) => typeof d === "string" ? enc6.encode(d) : d;
+  var enc5 = new TextEncoder();
+  var rawBytes = (d) => typeof d === "string" ? enc5.encode(d) : d;
   var pad = (n2, w = 3) => String(n2).padStart(w, "0");
   async function* splitIntoParts(files, { root = "\u4E16\u754C", zip, maxPartBytes = DEFAULT_PART_BYTES, maxPartFiles = DEFAULT_PART_FILES, hash: hash2 = null, signal = null, onProgress = null } = {}) {
     if (typeof zip !== "function") throw new Error("splitIntoParts: zip \u304C\u5FC5\u8981\u3067\u3059");
@@ -33637,7 +33646,69 @@ ${shown}${more}`;
   init_population();
   init_graph();
   init_obsidian();
-  init_zip();
+
+  // js/io/zip.js
+  init_crc32();
+  var enc6 = new TextEncoder();
+  async function deflateRaw(bytes) {
+    const out = await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"))).arrayBuffer();
+    return new Uint8Array(out);
+  }
+  var u16 = (n2) => [n2 & 255, n2 >>> 8 & 255];
+  var u32 = (n2) => [n2 & 255, n2 >>> 8 & 255, n2 >>> 16 & 255, n2 >>> 24 & 255];
+  function dosTime(d) {
+    return [(d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1) & 65535, (d.getFullYear() - 1980 << 9 | d.getMonth() + 1 << 5 | d.getDate()) & 65535];
+  }
+  async function zipFiles2(files, { compress = true, date = /* @__PURE__ */ new Date(), onProgress = null, concurrency = 12 } = {}) {
+    const parts = [], central = [], [dt, dd] = dosTime(date);
+    let offset = 0, n2 = 0;
+    const names2 = /* @__PURE__ */ new Set(), pend = [];
+    const emit = async ({ raw, name, crc, z }) => {
+      let method = 0, body = raw;
+      if (z) {
+        const zz = await z;
+        if (zz.length < raw.length) {
+          method = 8;
+          body = zz;
+        }
+      }
+      const head = Uint8Array.from([80, 75, 3, 4, ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0)]);
+      if (offset + head.length + name.length + body.length > 4294967280) throw new Error("ZIP \u304C 4GB \u3092\u8D85\u3048\u307E\u3059\uFF08\u5206\u5272\u3057\u3066\u66F8\u304D\u51FA\u3057\u3066\u304F\u3060\u3055\u3044\uFF09");
+      central.push(Uint8Array.from([80, 75, 1, 2, ...u16(20), ...u16(20), ...u16(2048), ...u16(method), ...u16(dt), ...u16(dd), ...u32(crc), ...u32(body.length), ...u32(raw.length), ...u16(name.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(offset)]), name);
+      parts.push(head, name, body);
+      offset += head.length + name.length + body.length;
+      n2++;
+      if (onProgress && n2 % 500 === 0) await onProgress(n2);
+    };
+    for await (const f of files) {
+      if (names2.has(f.path)) throw new Error(`ZIP \u306E\u30D1\u30B9\u304C\u91CD\u8907: ${f.path}`);
+      names2.add(f.path);
+      const raw = typeof f.data === "string" ? enc6.encode(f.data) : f.data, name = enc6.encode(f.path), crc = crc322(raw);
+      const z = compress && raw.length > 256 ? deflateRaw(raw) : null;
+      if (z) z.catch(() => {
+      });
+      pend.push({ raw, name, crc, z });
+      while (pend.length >= concurrency) await emit(pend.shift());
+    }
+    while (pend.length) await emit(pend.shift());
+    let csize = 0;
+    for (const c of central) csize += c.length;
+    const big = n2 > 65534, tail2 = [];
+    if (big) {
+      const u64 = (x) => [...u32(x >>> 0), ...u32(Math.floor(x / 4294967296))];
+      tail2.push(Uint8Array.from([80, 75, 6, 6, ...u64(44), ...u16(45), ...u16(45), ...u32(0), ...u32(0), ...u64(n2), ...u64(n2), ...u64(csize), ...u64(offset)]), Uint8Array.from([80, 75, 6, 7, ...u32(0), ...u64(offset + csize), ...u32(1)]));
+    }
+    tail2.push(Uint8Array.from([80, 75, 5, 6, 0, 0, 0, 0, ...u16(big ? 65535 : n2), ...u16(big ? 65535 : n2), ...u32(csize), ...u32(offset), 0, 0]));
+    let total3 = offset + csize;
+    for (const t of tail2) total3 += t.length;
+    const out = new Uint8Array(total3);
+    let o = 0;
+    for (const p of [...parts, ...central, ...tail2]) {
+      out.set(p, o);
+      o += p.length;
+    }
+    return out;
+  }
 
   // js/ui/v53/export/civ-chronicle.js
   var mi = (d) => d.year * 12 + (d.month - 1);
@@ -34341,7 +34412,7 @@ ${shown}${more}`;
         const m = mapOf(), name = meta().name || "\u4E16\u754C", root = String(name).replace(/[\\/:*?"<>|]/g, "_"), enc7 = new TextEncoder(), index = [];
         let manifest = null;
         const sha = async (b) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", b))].map((x) => x.toString(16).padStart(2, "0")).join("");
-        const opts = { cellRaster };
+        const opts = { cellRaster, lean: true, eventNotes: false, decisionNotes: false, maps: false };
         if (fromMonth != null && Number.isFinite(fromMonth)) opts.fromMonth = fromMonth;
         if (toMonth != null && Number.isFinite(toMonth)) opts.toMonth = toMonth;
         async function* gen() {
@@ -34351,14 +34422,14 @@ ${shown}${more}`;
               continue;
             }
             const raw = typeof f.data === "string" ? enc7.encode(f.data) : f.data;
-            index.push([f.path.slice(root.length + 1), raw.length, await sha(raw)]);
+            index.push([f.path.slice(root.length + 1), raw.length]);
             yield f;
           }
           manifest.files = index;
           manifest.split = true;
           yield { path: `${root}/manifest.json`, data: JSON.stringify(manifest, null, 1) };
         }
-        yield* splitIntoParts(gen(), { root, maxPartBytes, maxPartFiles, signal, onProgress, zip: (files) => zipFiles(files, { compress: true }) });
+        yield* splitIntoParts(gen(), { root, maxPartBytes, maxPartFiles, signal, onProgress, zip: (files) => zipFiles2(files, { compress: true }) });
       },
       async png({ kind, month }) {
         if (!createCanvas) throw new Error("PNG \u306E\u66F8\u304D\u51FA\u3057\u306B\u5FC5\u8981\u306A\u63CF\u753B\u6A5F\u80FD\u304C\u63A5\u7D9A\u3055\u308C\u3066\u3044\u307E\u305B\u3093");

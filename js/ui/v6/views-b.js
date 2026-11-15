@@ -1,5 +1,5 @@
 // v6 UI: 戦争・世界の外交・文化/言語/宗教・年表・統計・検索・世界設定。
-import { h, lb, stat, btn, table, pct, n0, r2, colorOf, polityJa, vlist, sv } from "./common.js";
+import { h, lb, stat, btn, holdBtn, table, pct, n0, r2, colorOf, polityJa, vlist, sv } from "./common.js";
 import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
 import { lineageTree, nestedLineage, miniLineage } from "./trees.js";
 import { pWar, warTitle } from "./war.js";
@@ -22,7 +22,7 @@ import { iterRecords, coverage, findRecord, causesOfRecord } from "../../core/ci
 import { packSave, packSaveGz, unpackSaveAny, SAVE_SCHEMA } from "../../core/wcde/savefile.js";
 import { checkWcdeIntegrity } from "../../core/wcde/integrity.js";
 import { timeOf, SPEEDS } from "../../core/wcde/clock.js";
-import { vaultFiles, writeToDirectory, zipParts } from "../../io/vault-writer.js";
+import { exportVaultZip } from "../../io/vault-writer.js";
 import { APP_VERSION_LABEL } from "../../version.js";
 const civ = () => S.w.civ, date = (mi) => formatWorldDate(S.w, mi), note = (t) => h("p", { class: "n" }, t), head = (code, ja) => [h("div", { class: "code" }, code), h("h2", {}, ja)];
 const OUT = { aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: "講和", state_dissolved: "国家の消滅" };
@@ -74,33 +74,34 @@ export function pCreator() {
 export function catastropheBox() {
   const c = civ(), nm = h("input", { id: "cat-name", placeholder: "災厄の名前（任意）", style: "width:100%" }), why = h("input", { id: "cat-why", placeholder: "理由の注釈（任意・原因を説明しなくてよい）", style: "width:100%" });
   const scope = h("select", { id: "cat-scope" }, h("option", { value: "world" }, "世界規模"), h("option", { value: "region" }, "地域規模（国の首都を中心に）")), at = h("select", { id: "cat-at", style: "display:none" }, ...aliveStates().sort((a, b) => b.pop - a.pop).slice(0, 80).map((s) => h("option", { value: s.id }, s.name)));
-  const rad = h("input", { id: "cat-radius", type: "number", value: 1500, min: 1, style: "width:80px;display:none" }), mor = h("input", { id: "cat-mort", type: "number", value: 30, min: 0, step: 1, style: "width:70px" }), rec = h("input", { id: "cat-rec", type: "number", value: 60, min: 1, style: "width:70px" }), ok = h("input", { type: "checkbox", id: "cat-ok" });
+  const rad = h("input", { id: "cat-radius", type: "number", value: 1500, min: 1, style: "width:80px;display:none" }), mor = h("input", { id: "cat-mort", type: "number", value: 30, min: 0, step: 1, style: "width:70px" }), rec = h("input", { id: "cat-rec", type: "number", value: 60, min: 1, style: "width:70px" });
   scope.addEventListener("change", () => { const r = scope.value === "region"; at.style.display = rad.style.display = r ? "" : "none"; });
-  const go = () => { if (!ok.checked) { S.notice = "取り消せない操作です。確認の欄にチェックしてください"; S.hooks.render(); return; } const cell = scope.value === "region" ? c.groups[c.states[at.value]?.capitalGroupId]?.cell : null; creator({ type: "creator.catastrophe", name: nm.value, reason: why.value, scope: scope.value, center: cell ?? null, radiusKm: Number(rad.value), mortality: Number(mor.value) / 100, recoveryMonths: Number(rec.value) }); };
+  const go = () => { const cell = scope.value === "region" ? c.groups[c.states[at.value]?.capitalGroupId]?.cell : null; creator({ type: "creator.catastrophe", name: nm.value, reason: why.value, scope: scope.value, center: cell ?? null, radiusKm: Number(rad.value), mortality: Number(mor.value) / 100, recoveryMonths: Number(rec.value) }); };
   const log = (c.wcde.catastrophes ?? []).slice(-4).reverse();
-  return h("div", {}, lb("創造主の災厄", "CATASTROPHE"), note("大きな災厄を起こします。人口・軍・安定にすぐ反映され、発生前へは戻りません。"), nm, why, h("div", { class: "rowb" }, scope, at), h("div", { class: "rowb" }, h("small", {}, "半径(km)"), rad, h("small", {}, "人口の損失 %"), mor, h("small", {}, "回復の目安(月)"), rec), h("div", { class: "rowb" }, h("label", {}, ok, " 取り消せないことを理解した"), btn("災厄を起こす", go, "p", { id: "cat-go" })), ...log.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `「${r.name}」${r.scope === "world" ? "世界規模" : "地域規模"}`, h("br"), h("small", {}, `${date(r.at)}・実際の損失 ${Math.round(r.result.share * 100)}%（約 ${n0(r.result.dead)} 人）`)))));
+  return h("div", {}, lb("創造主の災厄", "CATASTROPHE"), nm, why, h("div", { class: "rowb" }, scope, at), h("div", { class: "rowb" }, h("small", {}, "半径(km)"), rad, h("small", {}, "人口の損失 %"), mor, h("small", {}, "回復の目安(月)"), rec), h("div", { class: "rowb" }, holdBtn("災厄を起こす", go, "p", { id: "cat-go" })), ...log.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `「${r.name}」${r.scope === "world" ? "世界規模" : "地域規模"}`, h("br"), h("small", {}, `${date(r.at)}・実際の損失 ${Math.round(r.result.share * 100)}%（約 ${n0(r.result.dead)} 人）`)))));
 }
 /* ---------- 世界設定・出力・バージョン ---------- */
 export function pSettings() {
   const c = civ(), cf = c.wcde.config, T = timeOf(c), errs = checkWcdeIntegrity(S.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
   const dl = (blob, name) => { const a = h("a", { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); };
   const save = async () => { msg.textContent = "圧縮して書き出しています…"; const p = await packSaveGz(S.w); dl(new Blob([p.bytes], { type: "application/gzip" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw`); msg.textContent = `保存ファイルを書き出しました（圧縮 ${(p.bytes.length / 1048576).toFixed(1)} MB／元 ${(p.rawBytes / 1048576).toFixed(1)} MB）`; };
-  // v6.3.2: 全体を 1 つの ZIP にせず、フォルダへ直接書く（Edge・Chrome）か、無理なら複数の ZIP に分ける。出来事は 10 年ごとの年表ファイルにまとめる
+  // v6.14.0: フォルダへ直接書かず、常に ZIP（.md の束）にして保存する。創作に要らない内部データは出さない軽量モード。展開して vault として開く
   const obs = async () => {
-    const nm = String(cf.name || cf.worldSeed), root = nm.replace(/[\\/:*?"<>|#^\[\]\n\r\t]/g, "_").trim().slice(0, 48) || "世界", mb = (b) => (b / 1048576).toFixed(1);
-    let dir = null; if (typeof window.showDirectoryPicker === "function") { try { dir = await window.showDirectoryPicker({ mode: "readwrite" }); } catch (e) { if (e?.name === "AbortError") { msg.textContent = "フォルダの選択を取り消しました"; return; } dir = null; } }
-    const prog = (p) => { msg.textContent = `書き出し中… ${p.files} ファイル（${mb(p.bytes)} MB）`; };
-    msg.textContent = dir ? "選んだフォルダへ書き出しています…" : "複数の ZIP に分けて作っています…";
+    const nm = String(cf.name || cf.worldSeed), mb = (b) => (b / 1048576).toFixed(1), t0 = performance.now(), prog = (p) => { msg.textContent = `ZIP を作っています… ${p.files} ファイル（${mb(p.bytes)} MB）`; };
+    msg.textContent = "ZIP を作っています…";
     try {
-      if (dir) { const r = await writeToDirectory(dir, vaultFiles(S.w.world, c, nm), { onProgress: prog }); msg.textContent = `書き出しました: ${r.files} ファイル（${mb(r.bytes)} MB）。選んだフォルダの中の「${root}」フォルダを、Obsidian の vault として開いてください`; }
-      else { let n = 0; for await (const part of zipParts(vaultFiles(S.w.world, c, nm), { root, onProgress: prog })) { dl(new Blob([part.bytes], { type: "application/zip" }), part.name); n++; msg.textContent = `${n} 個目の ZIP を保存しました（${part.fileCount} ファイル）…`; await new Promise((r) => setTimeout(r, 800)); } msg.textContent = `${n} 個の ZIP を保存しました。すべて同じフォルダへ展開すると、1 つの vault になります`; }
+      const r = await exportVaultZip(S.w.world, c, nm, { onProgress: prog }); let n = 0;
+      for (const part of r.parts) { dl(new Blob([part.bytes], { type: "application/zip" }), part.name); n++; if (r.parts.length > 1) await new Promise((res) => setTimeout(res, 800)); }
+      const sec = ((performance.now() - t0) / 1000).toFixed(1);
+      msg.textContent = n === 1 ? `ZIP を保存しました: ${r.files} ファイル（${mb(r.parts[0].bytes.length)} MB・${sec} 秒）。展開してできた「${r.root}」フォルダを、Obsidian の vault として開いてください` : `${n} 個の ZIP を保存しました（${r.files} ファイル）。すべて同じフォルダへ展開すると、1 つの vault になります`;
     } catch (e) { msg.textContent = "書き出せませんでした: " + e.message; }
   };
-  const en = h("input", { id: "epoch-name", value: cal.epochName ?? "", style: "width:120px" });
-    return h("div", {}, ...head("SETTINGS", "世界設定・出力"), table(["項目", "値"], [["世界の名前", cf.name ?? "—"], ["世界の種", cf.worldSeed], ["解像度（セル）", S.w.world.mesh.cellCount], ["種族", (cf.species ?? []).map((s) => s.name ?? s.id ?? s).join("・") || "—"], ["先史の長さ", `${n0(cf.prehistory?.years ?? 0)} 年`], ["現在", formatWorldDate(S.w)], ["暦の起点名", cal.epochName || "（なし）"], ["時代区分", (cal.eras ?? []).map((e) => `${e.startYear}年〜 ${e.name}`).join(" → ") || "（なし）"]]),
-    lb("暦の表示名（表示用のみ）", "CALENDAR"), h("div", { class: "rowb" }, en, btn("変更", () => { const r = run({ type: "calendar.edit", edit: { epochName: en.value } }); S.hooks.render(); })), ...(cal.eras ?? []).map((e) => { const inp = h("input", { value: e.name, style: "width:140px", class: "eranm" }); return h("div", { class: "rowb" }, h("small", {}, `${e.startYear}年〜`), inp, btn("改名", () => { run({ type: "calendar.edit", edit: { eraNames: { [e.id]: inp.value } } }); S.hooks.render(); })); }), 
-    lb("保存・読み込み・出力", "SAVE / EXPORT"), h("div", { class: "rowb" }, btn("保存ファイルを書き出す", save, "p", { id: "save" }), fileLoader(), btn("Obsidian 用 Markdown を書き出す", obs, "", { id: "obs" })), msg, ...S.fileWarn.map((x) => h("p", { class: "warn" }, x)),
-    lb("バージョン情報", "VERSION"), table(["項目", "値"], [["アプリの版", APP_VERSION_LABEL], ["保存形式の版（アプリの版とは別）", SAVE_SCHEMA], ["整合性の検査", errs.length ? `${errs.length} 件の問題` : "問題なし"], ["時間の速度", SPEEDS.find((s) => s.id === T.speed)?.label]]));
+  const eraY = h("input", { id: "era-year", type: "number", min: 0, placeholder: "開始から何年", style: "width:130px" }), eraN = h("input", { id: "era-name", placeholder: "時代の名前", style: "width:170px", maxlength: 12 });
+  const eraRows = (cal.eras ?? []).map((e) => { const inp = h("input", { value: e.name, style: "width:150px", class: "eranm" }); return h("div", { class: "rowb" }, h("small", {}, `${e.startYear}年から`), inp, btn("改名", () => { run({ type: "calendar.edit", edit: { eraNames: { [e.id]: inp.value } } }); S.hooks.render(); }), btn("消す", () => { run({ type: "calendar.edit", edit: { removeEra: e.id } }); S.hooks.render(); })); });
+  return h("div", {}, ...head("SETTINGS", "世界設定・出力"), table(["項目", "値"], [["世界の名前", cf.name ?? "—"], ["現在", formatWorldDate(S.w)], ["先史の長さ", `${n0(cf.prehistory?.years ?? 0)} 年`], ["時間の速度", SPEEDS.find((s) => s.id === T.speed)?.label], ["アプリの版", APP_VERSION_LABEL], ...(errs.length ? [["整合性の検査", `${errs.length} 件の問題`]] : [])]),
+    lb("時代", "ERAS"), ...eraRows, h("div", { class: "rowb" }, eraY, eraN, btn("時代を足す", () => { run({ type: "calendar.edit", edit: { addEra: { name: eraN.value, startYear: Math.round(Number(eraY.value)) } } }); S.hooks.render(); }, "", { id: "era-add" })),
+    lb("保存・読み込み・出力", "SAVE / EXPORT"), h("div", { class: "rowb" }, btn("保存ファイルを書き出す", save, "p", { id: "save" }), fileLoader(), btn("Obsidian 用 Markdown を ZIP で書き出す", obs, "", { id: "obs" })), msg, ...S.fileWarn.map((x) => h("p", { class: "warn" }, x)),
+    null);
 }
 export function fileLoader(done) {
   const inp = h("input", { type: "file", accept: ".ahw", id: "loadfile", hidden: true, onchange: async (e) => { const f = e.target.files[0]; if (!f) return; const r = await unpackSaveAny(new Uint8Array(await f.arrayBuffer())); if (!r.ok) { alert("読み込めません:\n" + r.errors.join("\n")); return; } (done ?? S.hooks.loaded)(r.w, r.warnings); } });

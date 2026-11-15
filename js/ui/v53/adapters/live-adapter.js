@@ -321,11 +321,11 @@ export function createLiveAdapter({ store, civActions, history, timeActions, act
     async *obsidian({ fromMonth, toMonth, maxPartBytes = DEFAULT_PART_BYTES, maxPartFiles = DEFAULT_PART_FILES, signal = null, onProgress = null } = {}) {
       const m = mapOf(), name = meta().name || "世界", root = String(name).replace(/[\\/:*?"<>|]/g, "_"), enc = new TextEncoder(), index = []; let manifest = null;
       const sha = async (b) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", b))].map((x) => x.toString(16).padStart(2, "0")).join("");
-      const opts = { cellRaster }; if (fromMonth != null && Number.isFinite(fromMonth)) opts.fromMonth = fromMonth; if (toMonth != null && Number.isFinite(toMonth)) opts.toMonth = toMonth;
+      const opts = { cellRaster, lean: true, eventNotes: false, decisionNotes: false, maps: false }; if (fromMonth != null && Number.isFinite(fromMonth)) opts.fromMonth = fromMonth; if (toMonth != null && Number.isFinite(toMonth)) opts.toMonth = toMonth;
       async function* gen() {
         for await (const f of obsidianFiles(m.world, m.civ, name, opts)) {
           if (f.kind === "manifest") { manifest = JSON.parse(f.data); continue; }
-          const raw = typeof f.data === "string" ? enc.encode(f.data) : f.data; index.push([f.path.slice(root.length + 1), raw.length, await sha(raw)]); yield f;
+          const raw = typeof f.data === "string" ? enc.encode(f.data) : f.data; index.push([f.path.slice(root.length + 1), raw.length]); yield f; /* v6.14.0: 全ファイルの SHA-256 は計算しない（遅い。サイズと件数だけ残す） */
         }
         manifest.files = index; manifest.split = true; yield { path: `${root}/manifest.json`, data: JSON.stringify(manifest, null, 1) };
       }

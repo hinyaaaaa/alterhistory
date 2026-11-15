@@ -5,7 +5,7 @@ import { S } from "./store.js";
 import { sceneSvg, sceneName, logoSvg, SCENE_COUNT } from "./scenes.js";
 import { createNewWorld } from "../../core/wcde/world.js";
 import { advanceEntryStep } from "../../core/wcde/world.js";
-import { APP_VERSION_LABEL } from "../../version.js";
+import { APP_VERSION } from "../../version.js";
 
 export const SPLASH_MS = 5000, SLIDE_MS = 5000;
 const reduced = () => typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -38,7 +38,7 @@ export const randomWorldName = () => { const n = 3 + Math.floor(Math.random() * 
 /** タイトル画面。onNew: 世界の設定へ／onLoad は読み込みボタン（fileLoader の部品を渡す） */
 export function showTitle(root, { onNew, loader }) {
   const bg = h("div", { class: "titlebg" }); slideshow(bg);
-  const screen = h("div", { class: "titlescreen" }, bg, h("div", { class: "vig" }), h("div", { class: "titlebox" }, h("div", { class: "logo big" }), h("div", { class: "menu" }, btn("新しい世界", () => { bg.__stop?.(); onNew(); }, "p big", { id: "new" }), loader), h("div", { class: "ver" }, APP_VERSION_LABEL)));
+  const screen = h("div", { class: "titlescreen" }, bg, h("div", { class: "vig" }), h("div", { class: "titlebox" }, h("div", { class: "logo big" }), h("div", { class: "menu" }, btn("新しい世界", () => { bg.__stop?.(); onNew(); }, "p big", { id: "new" }), loader), h("div", { class: "ver" }, "v" + APP_VERSION)));
   screen.querySelector(".logo").replaceChildren(html(logoSvg()));
   root.replaceChildren(screen); return () => bg.__stop?.();
 }
@@ -47,16 +47,16 @@ export function showTitle(root, { onNew, loader }) {
 export function showWorldConfig(root, { onBack, onStart }) {
   const bg = h("div", { class: "titlebg dim" }); slideshow(bg);
   const name = h("input", { id: "wname", value: randomWorldName(), maxlength: 24 }), seed = h("input", { id: "seed", value: "alter-" + Math.floor(Math.random() * 9999) }), cells = h("select", { id: "cells" }, ...[3000, 6000].map((n) => h("option", { value: n, selected: n === 3000 }, n === 3000 ? "3,000 セル（標準）" : "6,000 セル（細かい・遅い）")));
-  const epoch = h("input", { id: "epoch", placeholder: "空白のまま（名づけない）", maxlength: 12 }), eras = [], list = h("div", { class: "erarows", id: "eras" }), msg = h("p", { class: "err", id: "setup-msg" });
-  const paint = () => list.replaceChildren(...eras.map((e, i) => h("div", { class: "eraRow" }, h("span", {}, "紀年"), h("input", { type: "number", class: "ey", value: e.year, onchange: (ev) => { e.year = +ev.target.value; } }), h("span", {}, "年から"), h("input", { class: "en", value: e.name, placeholder: "〇〇時代", maxlength: 14, oninput: (ev) => { e.name = ev.target.value; } }), btn("削除", () => { eras.splice(i, 1); paint(); }))));
+  const eras = [], list = h("div", { class: "erarows", id: "eras" }), msg = h("p", { class: "err", id: "setup-msg" });
+  const paint = () => list.replaceChildren(...eras.map((e, i) => h("div", { class: "eraRow" }, h("span", {}, "開始から"), h("input", { type: "number", class: "ey", value: e.year, onchange: (ev) => { e.year = +ev.target.value; } }), h("span", {}, "年から"), h("input", { class: "en", value: e.name, placeholder: "〇〇時代", maxlength: 14, oninput: (ev) => { e.name = ev.target.value; } }), btn("削除", () => { eras.splice(i, 1); paint(); }))));
   const add = () => { const last = eras.length ? Math.max(...eras.map((e) => e.year)) : -1; eras.push({ year: last + 100, name: "" }); paint(); };
-  const calendarOf = () => { const list = eras.filter((e) => e.name.trim()).map((e) => ({ name: e.name.trim(), startYear: Math.round(e.year) })).sort((a, b) => a.startYear - b.startYear); return { epochName: epoch.value.trim(), eras: list }; };
+  const calendarOf = () => { const list = eras.filter((e) => e.name.trim()).map((e) => ({ name: e.name.trim(), startYear: Math.round(e.year), restart: true })).sort((a, b) => a.startYear - b.startYear); return { eras: list }; };
   const go = () => { const cfg = { name: name.value.trim() || "名もなき世界", worldSeed: seed.value || "alter", spec: { resolution: { targetCells: +cells.value } }, calendar: calendarOf() }; const chk = createCheck(cfg); if (chk) { msg.textContent = chk; return; } bg.__stop?.(); onStart(cfg); };
   const form = h("div", { class: "cfgbox" }, h("div", { class: "code" }, "NEW WORLD"), h("h1", {}, "世界を作る"),
     h("label", { class: "fld" }, h("span", {}, "世界の名前"), h("div", { class: "rowb" }, name, btn("振り直す", () => { name.value = randomWorldName(); }))),
     h("label", { class: "fld" }, h("span", {}, "世界の種"), seed), h("label", { class: "fld" }, h("span", {}, "解像度"), cells),
-    h("div", { class: "lb" }, "暦"), h("label", { class: "fld" }, h("span", {}, "年号・紀元の名前（空白なら、年の数字だけを表示）"), epoch),
-    h("span", { class: "n" }, "時代区分（「何年から〇〇時代」）。いくつでも。なくてもよい"), list, h("div", { class: "rowb" }, btn("時代区分を足す", add, "", { id: "addera" })),
+    h("div", { class: "lb" }, "時代"),
+    list, h("div", { class: "rowb" }, btn("時代を足す", add, "", { id: "addera" })),
     msg, h("div", { class: "rowb" }, btn("世界を生成", go, "p big", { id: "gen" }), btn("← 戻る", () => { bg.__stop?.(); onBack(); }, "", { id: "cfgback" })));
   root.replaceChildren(h("div", { class: "titlescreen" }, bg, h("div", { class: "vig" }), form)); return calendarOf;
 }

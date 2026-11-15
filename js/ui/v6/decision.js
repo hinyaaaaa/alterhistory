@@ -12,7 +12,7 @@ const SEAL = { treaty_offer: "約", peace_offer: "和", war_incoming: "戦", all
 
 function resolve(d, option) {
   const r = act({ type: "decision.resolve", decisionId: d.id, option }); if (!r.ok) return;
-  const res = r.result ?? {}; if (res.step) notify("ok", res.step.text); else if (res.note) notify("ok", res.note); S.decFocus = null;
+  const res = r.result ?? {}; S.decFocus = null;
 }
 const optBtn = (d, o, extra = "") => h("button", { class: "decopt" + extra, "data-opt": o.id, disabled: !!o.disabled, title: o.disabled ?? o.hint ?? "", onclick: () => resolve(d, o.id) }, h("b", {}, o.ja), o.hint ? h("small", {}, o.disabled ? o.disabled : o.hint) : null);
 
@@ -39,6 +39,6 @@ export function renderDecision() {
   const d = q[0], battle = d.kind === "battle"; m.hidden = false; m.classList.toggle("battle", battle);
   if (battle && S.decFocus !== d.id) { S.decFocus = d.id; const g = civ.groups[d.payload.siteId]; if (g) S.hooks.focusCell?.(g.cell); }
   const body = d.kind === "succession" ? successionCards(d) : battle ? battleBox(d) : h("div", { class: "decopts" }, ...d.options.map((o) => optBtn(d, o)));
-  m.replaceChildren(h("div", { class: "decbox k-" + d.kind }, h("div", { class: "decseal" }, SEAL[d.kind] ?? "決"), h("div", { class: "code" }, `${DECISION_JA[d.kind] ?? "決断"}（未決 ${q.length} 件）`), h("div", { class: "n" }, `${d.date.year}年${d.date.month}月　時間は止まっています`), h("h2", {}, d.title), h("p", { class: "decbody" }, d.body), body));
+  m.replaceChildren(h("div", { class: "decbox k-" + d.kind }, h("div", { class: "decseal" }, SEAL[d.kind] ?? "決"), h("div", { class: "code" }, `${DECISION_JA[d.kind] ?? "決断"}（未決 ${q.length} 件）`), h("div", { class: "n" }, `${d.date.year}年${d.date.month}月`), h("h2", {}, d.title), h("p", { class: "decbody" }, d.body), body));
 }
 void pct;

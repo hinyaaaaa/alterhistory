@@ -1,6 +1,6 @@
-// v6.6.0: スタート画面の背景（絵）。実写・外部画像は使わず、SVG を seed から作る。seed 0〜999 の 1000 通り（10 の情景 × 10 の配色 × 10 の変化）。
+// v6.6.0: スタート画面の背景（絵）。実写・外部画像は使わず、SVG を seed から作る。seed 0〜499 の 500 通り（10 の情景 × 10 の配色 × 5 の変化）。
 //   同じ seed は同じ絵（決定的）。異なる seed は異なる絵。戦争・農耕・砂漠・海・森・草原・都市・雪山・大河など、歴史の舞台を描く。
-export const SCENE_COUNT = 1000;
+export const SCENE_COUNT = 500;
 export const SCENE_KINDS = Object.freeze(["山の夜明け", "棚田と農耕", "砂漠の隊商", "海と帆船", "深い森", "草原の騎馬", "城市の遠景", "戦野の旗", "雪嶺と星", "大河のほとり"]);
 const PALETTES = [
   { n: "暁", sky: ["#2b2f4a", "#e0905a"], sun: "#ffd89a", far: "#59486a", mid: "#38384f", near: "#1a1c28" },
@@ -82,12 +82,24 @@ export function sceneSvg(seed) {
       for (let i = 0; i < 26; i++) { const rx = r() * 1600, ry = 800 + r() * 90; o += `<path d="M${f(rx)},${f(ry)} q${f(-4)},${f(-30)} ${f(-10)},${f(-44)} M${f(rx)},${f(ry)} q${f(5)},${f(-24)} ${f(11)},${f(-38)}" stroke="${pal.mid}" stroke-width="2" fill="none"/>`; } break;
     }
   }
-  return o + `<rect width="1600" height="900" fill="#000" opacity=".16"/></svg>`;
+  // v6.14.0: 遠景の霞・鳥・周辺の減光で、奥行きと静けさを出す
+  o += `<defs><linearGradient id="f${s}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${pal.sky[1]}" stop-opacity="0"/><stop offset=".5" stop-color="${pal.sky[1]}" stop-opacity=".2"/><stop offset="1" stop-color="${pal.sky[0]}" stop-opacity=".08"/></linearGradient><radialGradient id="v${s}" cx=".5" cy=".46" r=".78"><stop offset=".5" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".55"/></radialGradient></defs><rect y="440" width="1600" height="460" fill="url(#f${s})"/>`;
+  if (pal.n !== "夜" && kind !== 8 && kind !== 7) for (let i = 0, n = 3 + (s % 5); i < n; i++) { const bx = 160 + r() * 1200, by = 110 + r() * 200, bw = 9 + r() * 9; o += `<path d="M${f(bx)},${f(by)} q${f(bw / 2)},${f(-bw / 2)} ${f(bw)},0 q${f(bw / 2)},${f(-bw / 2)} ${f(bw)},0" stroke="${pal.near}" stroke-width="2" fill="none" opacity=".55"/>`; }
+  return o + `<rect width="1600" height="900" fill="url(#v${s})"/></svg>`;
 }
 export const sceneName = (seed) => { const s = ((seed % SCENE_COUNT) + SCENE_COUNT) % SCENE_COUNT; return `${PALETTES[Math.floor(s / 10) % 10].n}の${SCENE_KINDS[s % 10]}`; };
 
-/** ロゴ（仮の SVG）。円環の中で、1 本の時の流れが 2 本に分かれる（もしも、の歴史）。withText で ALTERHISTORY の文字も */
-export function logoSvg({ withText = true } = {}) {
-  const emblem = `<g fill="none" stroke="#d8b45a" stroke-linecap="round"><circle cx="100" cy="100" r="86" stroke-width="3"/><circle cx="100" cy="100" r="76" stroke-width="1" opacity=".6"/><ellipse cx="100" cy="100" rx="34" ry="76" stroke-width="1" opacity=".5"/><path d="M24 100H176" stroke-width="1" opacity=".5"/><path d="M100 168V118Q100 100 80 80Q64 62 64 36M100 118Q100 100 120 80Q136 62 136 36" stroke-width="5"/></g><circle cx="64" cy="34" r="6" fill="#d8b45a"/><circle cx="136" cy="34" r="6" fill="#6fa8c9"/><circle cx="100" cy="170" r="5" fill="#e8e2d0"/>`;
-  return withText ? `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 220" role="img" aria-label="ALTERHISTORY"><g transform="translate(10,10)">${emblem}</g><text x="232" y="112" font-family="'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif" font-size="58" letter-spacing="9" fill="#e8e2d0">ALTER</text><text x="232" y="172" font-family="'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif" font-size="58" letter-spacing="9" fill="#d8b45a">HISTORY</text></svg>` : `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="ALTERHISTORY">${emblem}</svg>`;
+/** ロゴ。細い明朝体の ALTERHISTORY と、中心の羅針盤（v6.14.0）。variant: a=文字の間に羅針盤／b=羅針盤を上に重ねる／c=羅針盤を文字の後ろに大きく敷く。withText=false は羅針盤だけ */
+export function compassSvgPart(cx, cy, r, { gold = "#d8b45a", blue = "#6fa8c9" } = {}) {
+  const pts = []; for (let k = 0; k < 16; k++) { const a = (k * Math.PI) / 8 - Math.PI / 2, rr = k % 4 === 0 ? r * 0.98 : k % 2 === 0 ? r * 0.62 : r * 0.2; pts.push(`${f(cx + rr * Math.cos(a))},${f(cy + rr * Math.sin(a))}`); }
+  let ticks = ""; for (let k = 0; k < 72; k++) { const a = (k * Math.PI) / 36, r1 = r * (k % 6 === 0 ? 1.1 : 1.06), r2 = r * 1.14; ticks += `M${f(cx + r1 * Math.cos(a))},${f(cy + r1 * Math.sin(a))} L${f(cx + r2 * Math.cos(a))},${f(cy + r2 * Math.sin(a))} `; }
+  return `<g fill="none" stroke="${gold}" stroke-linecap="round"><circle cx="${cx}" cy="${cy}" r="${f(r * 1.18)}" stroke-width="1.2"/><circle cx="${cx}" cy="${cy}" r="${f(r * 1.04)}" stroke-width=".8" opacity=".6"/><path d="${ticks}" stroke-width=".8" opacity=".7"/><polygon points="${pts.join(" ")}" fill="${gold}" fill-opacity=".14" stroke-width="1.4" stroke-linejoin="round"/></g><polygon points="${f(cx)},${f(cy - r * 1.02)} ${f(cx - r * 0.1)},${f(cy - r * 0.55)} ${f(cx + r * 0.1)},${f(cy - r * 0.55)}" fill="${blue}"/><circle cx="${cx}" cy="${cy}" r="${f(r * 0.07)}" fill="${gold}"/>`;
+}
+export function logoSvg({ withText = true, variant = "a" } = {}) {
+  const ff = "'Shippori Mincho','Yu Mincho','Hiragino Mincho ProN',serif", T = (x, y, t, sz, anchor, col, ls) => `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="${ff}" font-weight="300" font-size="${sz}" letter-spacing="${ls}" fill="${col}">${t}</text>`;
+  if (!withText) return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="ALTERHISTORY">${compassSvgPart(100, 100, 74)}</svg>`;
+  const head = `<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ALTERHISTORY" `;
+  if (variant === "b") return head + `viewBox="0 0 640 300">${compassSvgPart(320, 100, 62)}${T(326, 250, "ALTERHISTORY", 50, "middle", "#e8e2d0", 16)}</svg>`;
+  if (variant === "c") return head + `viewBox="0 0 760 270"><g opacity=".38">${compassSvgPart(380, 135, 90)}</g>${T(386, 155, "ALTERHISTORY", 58, "middle", "#e8e2d0", 20)}</svg>`;
+  return head + `viewBox="0 0 800 180">${T(330, 106, "ALTER", 54, "end", "#e8e2d0", 14)}${compassSvgPart(400, 90, 52)}${T(470, 106, "HISTORY", 54, "start", "#d8b45a", 14)}</svg>`;
 }

@@ -26,7 +26,18 @@ export const lb = (ja, en) => h("div", { class: "lb" }, ja, en ? h("em", {}, en)
 export const stat = (label, value, unit = "") => h("div", {}, h("small", {}, label), h("b", {}, value), unit ? h("i", {}, unit) : null);
 export const bar = (v, col = "var(--blue)") => h("span", { class: "barv" }, h("i", { style: `width:${Math.max(0, Math.min(1, v)) * 100}%;background:${col}` }));
 export const btn = (label, onclick, cls = "", props = {}) => h("button", { class: "b " + cls, onclick, ...props }, label);
-export const table = (head, rows, cls = "") => h("table", { class: "tb " + cls, style: "width:100%;border-collapse:collapse;font-size:12px" }, h("thead", {}, h("tr", {}, ...head.map((x) => h("th", { style: "text-align:left;font-weight:400;color:var(--dim);border-bottom:1px solid var(--line);padding:3px 4px" }, x)))), h("tbody", {}, ...rows.map((r) => h("tr", {}, ...r.map((c) => h("td", { style: "border-bottom:1px solid #262a31;padding:3px 4px" }, c))))));
+/** 長押しで実行するボタン（押している間、帯が満ちる）。確認の文や確認欄を出さずに、誤操作を防ぐ */
+export function holdBtn(label, onDone, cls = "", props = {}, ms = 1100) {
+  let t = null, fired = false; const fill = h("i", { class: "holdfill" }), b = h("button", { class: "b hold " + cls, ...props }, fill, h("span", {}, label));
+  const reset = () => { clearTimeout(t); t = null; fill.style.transition = "width .15s"; fill.style.width = "0"; };
+  const start = () => { if (t) return; fired = false; fill.style.transition = `width ${ms}ms linear`; fill.style.width = "100%"; t = setTimeout(() => { fired = true; reset(); onDone(); }, ms); };
+  b.addEventListener("pointerdown", (e) => { if (e.button === 0 || e.button === undefined) start(); });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) b.addEventListener(ev, () => { if (t && !fired) reset(); });
+  b.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && !e.repeat) { e.preventDefault(); start(); } });
+  b.addEventListener("keyup", () => { if (t && !fired) reset(); });
+  return b;
+}
+export const table = (head, rows, cls = "") => h("table", { class: "tb " + cls, style: "width:100%;border-collapse:collapse;font-size:14px" }, h("thead", {}, h("tr", {}, ...head.map((x) => h("th", { style: "text-align:left;font-weight:400;color:var(--dim);border-bottom:1px solid var(--line);padding:3px 4px" }, x)))), h("tbody", {}, ...rows.map((r) => h("tr", {}, ...r.map((c) => h("td", { style: "border-bottom:1px solid #262a31;padding:3px 4px" }, c))))));
 /** 為政者の顔: 名前・国の ID から決まる（実在データを変えない読み取り専用の肖像。モックの顔の描き方を踏襲） */
 export function face(name, stateId, look = null) {
   const k = look != null ? hash("look" + look) : hash(name + stateId), /* v6.4.0: 建国で選んだ顔（look）があれば、それで決める */ sk = ["#e0b79a", "#c99a76", "#a87654", "#f0cfb5"][k % 4], hr = ["#2a2420", "#6b4a2f", "#9a9a9a", "#4a3020"][(k >> 3) % 4], st = (k >> 6) % 4, c = colorOf(stateId, 45);
