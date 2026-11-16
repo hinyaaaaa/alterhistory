@@ -3,7 +3,7 @@
 // プレイヤー集団は自動で国家に組み込まれない（形成は提案→命令。NPC 集団だけが自動で形成・吸収される）。
 import { makeEvent } from "./events.js";
 import { makeNameJa } from "./culture.js";
-import { leaderName, leaderRng } from "../wcde/domains/naming.js";
+import { regnalOf, leaderRng, epithetGen } from "../wcde/domains/naming.js";
 import { dominant } from "./cohorts.js";
 import { neighborGroups, byState, spatialOf } from "./spatial.js";
 import { reachable, addProposal } from "./population.js";
@@ -28,10 +28,10 @@ export function formState(ctx, { via, groupIds, predecessor = null, player = fal
   if (!gs.length) return null;
   const cap = (capitalGroupId && gs.find((g) => g.id === capitalGroupId)) || gs.reduce((a, b) => (b.pop > a.pop ? b : a)), id = ids.next("state"), h = hashSeed(id);
   const pol = gatedPolity(civ, cap, polity ?? (via === "religious_polity" ? "theocracy" : via === "city_state" ? "chiefdom" : "tribal")), np = name ? null : ctx.nameGen?.stateParts?.(civ, cap, via, rng, pol) ?? null;
-  const st = { id, name: name ?? np?.name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix, nameBase: np?.base ?? null, titleYear: np?.year ?? null, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, nameLang: name ? null : (ctx.nameLangOf?.(cap) ?? null), /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */ alive: true, player, dissolvedAt: null, predecessor, polity: pol, stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
+  const st = { id, name: name ?? np?.name ?? ctx.nameGen?.state(civ, cap, via, rng) ?? makeNameJa(rng) + VIA[via].suffix, nameBase: np?.base ?? null, nameSfx: np?.sfx ?? "", titleYear: np?.year ?? null, via, formedAt: civ.monthIndex, capitalGroupId: cap.id, nameLang: name ? null : (ctx.nameLangOf?.(cap) ?? null), /* 国名の由来の言語（建国時。首都はのちに変わるので、現在の首都の言語とは別に残す） */ alive: true, player, dissolvedAt: null, predecessor, polity: pol, stability: 0.7, pop: 0, settlements: 0, treasury: 50, army: 0,
     policy: { tax: 0.1, mobilization: 0, assimilation: 0, tolerance: 0.5, autonomy: 0 }, techAdopted: {}, strategy: null, campaign: null, defense: 0, boostUntil: -1, sanctions: {}, relations: {}, warIds: [], leader: { name: ctx.nameGen?.person(civ, cap, rng) ?? makeNameJa(rng), bornAt: civ.monthIndex - Math.round((300 + Math.floor(rng() * 200)) * lifeScale(civ, { capitalGroupId: cap.id })), heir: false }, lastCrisis: -999,
     personality: { security: 0.6 + (h % 100) / 125, prosperity: 0.6 + ((h >> 7) % 100) / 125, expansion: 0.6 + ((h >> 14) % 100) / 125, stability: 0.6 + ((h >> 21) % 100) / 125, culture: 0.6 + ((h >> 4) % 100) / 125, tech: 0.6 + ((h >> 11) % 100) / 125, prestige: 0.6 + ((h >> 18) % 100) / 125 } };
-  st.leader.name = leaderName(st, st.leader.name, leaderRng(civ, st, "found")); // 君主は「〇〇1世」
+  { const rg = regnalOf(st, st.leader.name, leaderRng(civ, st, "found"), epithetGen(ctx, st, cap)); st.leader.name = rg.name; st.leader.birthName = rg.birth; } // 君主は、本名と即位名を分ける（文化ごとの名乗りの型）
   civ.states[id] = st; for (const g of gs) g.stateId = id; if (gs.some((g) => g.player)) st.player = true;
   const causes = []; if (cause) causes.push({ targetId: cause, relation: "caused_by", basis: "plausible" }); if (threat) causes.push({ targetId: threat, relation: "reaction_to", basis: "strong" });
   if (predecessor) causes.push({ targetId: predecessor, relation: "succeeded_by", basis: "direct" });
@@ -107,7 +107,7 @@ export function stepUnification(ctx, groupsByState) {
 export function enthrone(ctx, st, o = {}) {
   const { civ, ids, rng } = ctx, mi = civ.monthIndex, ls = lifeScale(civ, st), cap = civ.groups[st.capitalGroupId], heir = st.leader.heir; st.interpDirty = true;
   const nm = o.name ?? (ctx.nameGen?.person(civ, cap, rng) ?? makeNameJa(rng));
-  st.leader = { name: leaderName(st, nm, leaderRng(civ, st, "succ")), bornAt: o.bornAt ?? mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, kin: o.kin ?? (heir || rng() < 0.8), ...(st.leader.title ? { title: st.leader.title } : {}) }; /* v6.9.0: 継承者がいなくても、多くは同じ家系の親族が立つ（王朝交代は少数） */
+  const rg = regnalOf(st, nm, leaderRng(civ, st, "succ"), epithetGen(ctx, st, cap)); st.leader = { name: rg.name, birthName: rg.birth, bornAt: o.bornAt ?? mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, kin: o.kin ?? (heir || rng() < 0.8), ...(st.leader.title ? { title: st.leader.title } : {}) }; /* v6.9.0: 継承者がいなくても、多くは同じ家系の親族が立つ（王朝交代は少数） */
   if (st.offices) { const ro = st.offices.find((x) => x.id === OFFICE_RULER(st)); if (ro) ro.holder = { name: st.leader.name, look: null }; /* v6.4.0: 元首の役職の担当者は為政者と同じ人 */ }
   st.stability = Math.max(0, st.stability - (o.hit ?? (heir ? 0.03 : 0.12)));
   makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${o.how ? `（${o.how}）` : heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: cap ? { cell: cap.cell } : null, ...(o.how ? { provenance: "player" } : {}) });

@@ -22,7 +22,7 @@ import { decisionsOf, pendingOf, isLive, coolUntil, setCool } from "./decision-s
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v), r3 = (x) => Math.round(x * 1000) / 1000;
 const U = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
 const HANDLERS = {}; export const registerDecision = (kind, fn) => { HANDLERS[kind] = fn; };
-export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦" });
+export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", pact_invite: "盟約への誘い", pact_merge: "統合の提案" });
 
 // ---- 出す・止める・解く
 function hold(civ) { const T = timeOf(civ); if (!T.hold) { T.hold = true; T.resumeSpeed = T.speed; } }
@@ -61,9 +61,9 @@ function offerTreaty(ctx, from, to, type) {
   const { civ } = ctx; if (!isLive(civ) || !to.player || from.player) return null; if (treatyFeasible(civ, from, to, type) || treatyBetween(civ, from, to, type)) return null;
   const key = `t|${from.id}|${to.id}|${type}`, pend = { ok: true, silent: true, pending: true, targetId: to.id };
   if (openKey(civ, key) || coolUntil(civ, key) > civ.monthIndex) return pend;
-  const options = [{ id: "accept", ja: `${TREATY[type].ja}を結ぶ`, hint: "関係が良くなる" }, { id: "decline", ja: "断る", hint: "関係がわずかに悪化" }];
+  const options = [{ id: "accept", ja: `${TREATY[type].ja}を結ぶ`, hint: `${TREATY[type].merit}。ただし${TREATY[type].cost}` }, { id: "decline", ja: "断る", hint: "関係がわずかに悪化" }];
   if (type === "alliance") options.splice(1, 0, { id: "counter_na", ja: "不可侵条約なら結ぶ", hint: "同盟の代わりの提案", disabled: treatyFeasible(civ, from, to, "nonaggression") || (treatyBetween(civ, from, to, "nonaggression") ? "すでに結んでいる" : null) });
-  raise(ctx, { kind: "treaty_offer", key, stateId: to.id, title: `${from.name}が${TREATY[type].ja}を申し出た`, body: `関係値 ${Math.round(to.relations[from.id] ?? 0)}。${TREATY[type].ja}（${Math.round(TREATY[type].months / 12)}年）。`, options, payload: { type, from: from.id, to: to.id } });
+  raise(ctx, { kind: "treaty_offer", key, stateId: to.id, title: TREATY[type].cat === "dep" ? `${from.name}が${TREATY[type].ja}を求めている（あなたの国が従う側）` : `${from.name}が${TREATY[type].ja}を申し出た`, body: `関係値 ${Math.round(to.relations[from.id] ?? 0)}。${TREATY[type].ja}（${Math.round(TREATY[type].months / 12)}年）。`, options, payload: { type, from: from.id, to: to.id } });
   setCool(civ, key, civ.monthIndex + 60); return pend;
 }
 registerDecision("treaty_offer", (ctx, d, opt) => {

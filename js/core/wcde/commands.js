@@ -8,7 +8,9 @@ import { applyDisplayEdit } from "./calendar.js";
 import { clockRun, ackNews, setSpeed, skipNews, timeOf } from "./clock.js";
 import { createCatastrophe, planCatastrophe } from "./catastrophe.js";
 import { createIntervention, cancelIntervention, planIntervention } from "./intervention.js";
-import { negotiatePeace } from "./negotiation.js";
+import { negotiatePeace, negotiateTreaty } from "./negotiation.js";
+import { createPact, leavePact, joinPact, pactAccepts, pactsOf, PACT_PURPOSES } from "./pacts.js";
+import { atWarWith, endTreaty, declareWar } from "../civ/diplomacy.js";
 import { directWar } from "./warfare.js";
 import { resolveDecision } from "./decisions.js";
 import { setPolicy } from "./policies.js";
@@ -44,6 +46,22 @@ export function registerCommands() {
   defineCommand("state.act", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const r = w.sim.command({ type: "stateAction", stateId: c.stateId, action: c.action, target: c.target ?? null, opt: c.opt ?? null }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   // 講和は一般条約の行動ではなく、戦争ごとの専用の手続き（担当国だけが申し入れられる。受諾されたときだけ戦争が終わる）
   defineCommand("diplomacy.peace", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId], war = w.civ.wars[c.warId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = negotiatePeace(w.sim.ctx, st, war, { terms: c.terms }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
+  // v6.16.0: 条約の提案（候補の一覧を経由しない専用の入口）。相手は国を問わない。従属・同君連合では reverse で「従う側として申し出る」
+  defineCommand("diplomacy.propose", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId], to = w.civ.states[c.target]; if (!st?.alive || !st.player) return { ok: false, error: "その国家は担当国ではありません" }; if (!to?.alive || to.id === st.id) return { ok: false, error: "相手の国が見つかりません" }; const r = negotiateTreaty(w.sim.ctx, st, to, String(c.treaty), { reverse: !!c.reverse, provenance: "player" }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
+  // 従属の解消（宗主が解く）／独立（従う側が破棄して宣戦）
+  defineCommand("diplomacy.dependency", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const { civ } = w, ctx = w.sim.ctx, st = civ.states[c.stateId]; if (!st?.alive || !st.player) return { ok: false, error: "その国家は担当国ではありません" };
+    const d = c.target ? civ.states[c.target] : st, dep = d?.dependency; if (!dep || !civ.treaties[dep.treaty]?.active) return { ok: false, error: "従属関係がありません" };
+    if (c.mode === "release") { if (dep.overlord !== st.id) return { ok: false, error: "宗主だけが解消できます" }; endTreaty(ctx, civ.treaties[dep.treaty], "解消された", st.id); return { ok: true, result: {} }; }
+    if (c.mode === "independence") { if (d.id !== st.id) return { ok: false, error: "従う側だけが独立を求められます" }; const o = civ.states[dep.overlord]; endTreaty(ctx, civ.treaties[dep.treaty], "従う側が破棄した", st.id); if (o?.alive && !atWarWith(civ, st, o)) declareWar(ctx, st, o, { reason: "independence", provenance: "player" }); return { ok: true, result: {} }; }
+    return { ok: false, error: "不明な操作です" }; } });
+  // 盟約（3 か国以上）。結成は、誘った国が受けたものだけで成立（3 か国未満なら成立しない）
+  defineCommand("diplomacy.pactCreate", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const { civ } = w, ctx = w.sim.ctx, st = civ.states[c.stateId]; if (!st?.alive || !st.player) return { ok: false, error: "その国家は担当国ではありません" }; if (!PACT_PURPOSES[c.purpose]) return { ok: false, error: "盟約の目的が不明です" };
+    const target = c.purpose === "counter" ? c.target : null; if (c.purpose === "counter" && !civ.states[target]?.alive) return { ok: false, error: "対抗する国を選んでください" };
+    const asked = [...new Set(c.members ?? [])].filter((i) => i !== st.id && civ.states[i]?.alive && i !== target), res = asked.map((i) => ({ id: i, ...pactAccepts(ctx, civ.states[i], st, c.purpose, target) })), ok = res.filter((r) => r.ok).map((r) => r.id);
+    if (ok.length < 2) return { ok: false, error: `3 か国以上が必要です（応じた国 ${ok.length}。断られた理由: ${res.filter((r) => !r.ok).map((r) => `${civ.states[r.id].name}は${r.why}`).slice(0, 3).join("、") || "—"}）` };
+    const p = createPact(ctx, { purpose: c.purpose, leaderId: st.id, memberIds: ok, target, name: c.name || null }); return p ? { ok: true, result: { pactId: p.id } } : { ok: false, error: "結成できませんでした" }; } });
+  defineCommand("diplomacy.pactJoin", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const { civ } = w, ctx = w.sim.ctx, st = civ.states[c.stateId], p = pactsOf(civ).items[c.pactId]; if (!st?.alive || !st.player || !p?.active) return { ok: false, error: "盟約が見つかりません" }; if (p.members.includes(st.id)) return { ok: false, error: "すでに加盟しています" }; const L = civ.states[p.leaderId], r = pactAccepts(ctx, st, L, p.purpose, p.target); if (!r.ok) return { ok: false, error: `盟主に受け入れられなかった（${r.why}）` }; return joinPact(ctx, p, st) ? { ok: true, result: {} } : { ok: false, error: "加盟できませんでした" }; } });
+  defineCommand("diplomacy.pactLeave", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const { civ } = w, ctx = w.sim.ctx, st = civ.states[c.stateId], p = pactsOf(civ).items[c.pactId]; if (!st?.alive || !st.player || !p?.active || !p.members.includes(st.id)) return { ok: false, error: "盟約が見つかりません" }; leavePact(ctx, p, st); return { ok: true, result: {} }; } });
   // v6.12.0: 決断（条約の申し出・宣戦・継承・反乱・会戦）。担当国だけが答えられる。時間は、すべての決断に答えるまで止まったまま
   defineCommand("decision.resolve", { authorities: [A.PLAYER], control: true, checkpoint: true, validate: (w, c) => (typeof c.decisionId === "string" && typeof c.option === "string" ? null : { ok: false, error: "decisionId と option が必要です" }), apply: (w, c) => resolveDecision(w, { id: c.decisionId, option: c.option, extra: c.extra ?? null }) });
   // v6.12.0: 軍団（名前・兵力・指揮官を持つ部隊）の編成・人事・作戦命令。担当国家だけ。検証は corps.js（失敗したら何も変えない）

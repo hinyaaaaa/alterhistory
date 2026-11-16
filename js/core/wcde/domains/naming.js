@@ -14,8 +14,8 @@ const byBase = (base, arr) => arr[hashSeed(String(base), "form") % arr.length];
 /** 時代の区切り（v6.11.0）。年 0 は紀元前 3100 年ごろ（エジプト第一王朝の頃）。初期の国は王国・首長国・同盟で、共和国・連邦・汗国は、それが史実で現れる時代から */
 export const NAME_ERA = Object.freeze({ republicFrom: 2300, federationFrom: 4300, khanateFrom: 2900, leagueFrom: 1500 });
 /** 政体（と成立の経路）に合う称号。base は国号の語根（称号を選ぶ手がかり）。year は世界の年（省略すると現代の称号。古い時代は下の置き換えが入る） */
-export function stateForm(polity, via = null, base = "", year = null) {
-  const f = rawForm(polity, via, base);
+export function stateForm(polity, via = null, base = "", year = null, { sfx = "", dep = null, small = false } = {}) {
+  const f = rawForm(polity, via, base, sfx, dep, small);
   if (year == null) return f;
   if (year < NAME_ERA.leagueFrom && /連邦|連合|同盟|連盟|共和国|教団国|汗国/.test(f)) return polity === "republic" || polity === "federation" || via === "defense_league" ? "同盟" : byBase(base, ["王国", "首長国"]); // 紀元前 1600 年より前: 都市の同盟か、王国・首長国
   if (year < NAME_ERA.republicFrom && f === "共和国") return "同盟";
@@ -23,15 +23,18 @@ export function stateForm(polity, via = null, base = "", year = null) {
   if (year < NAME_ERA.khanateFrom && f === "汗国") return "部族連合";
   return f;
 }
-function rawForm(polity, via, base) {
+/** 称号（v6.15.0）。公国・侯国は、宗主に従属する国か、独立した小さな君主国のときだけ。称号のない国もある（"" を返す。言語固有の語尾 sfx があるときだけ） */
+function rawForm(polity, via, base, sfx = "", dep = null, small = false) {
+  if (dep === "vassal" && (polity === "kingdom" || polity === "chiefdom" || polity === "empire")) return byBase(base, ["公国", "公国", "王国"]);
+  const none = sfx ? hashSeed(String(base), "notitle") % 100 < 38 : false;
   switch (polity) {
-    case "kingdom": return byBase(base, ["王国", "王国", "王国", "朝"]);
-    case "empire": return byBase(base, ["帝国", "帝国", "帝国", "朝"]);
-    case "republic": return "共和国";
+    case "kingdom": return none ? "" : small && hashSeed(String(base), "duchy") % 3 === 0 ? "公国" : byBase(base, ["王国", "王国", "王国", "朝", "国"]);
+    case "empire": return none ? "" : byBase(base, ["帝国", "帝国", "帝国", "朝"]);
+    case "republic": return none ? "" : byBase(base, ["共和国", "共和国", "国"]);
     case "federation": return "連邦";
-    case "theocracy": return via === "religious_polity" ? "教国" : byBase(base, ["神聖王国", "教国"]);
-    case "chiefdom": return via === "city_state" ? byBase(base, ["公国", "王国"]) : byBase(base, ["公国", "侯国", "王国"]);
-    default: return via === "nomad_confederation" ? "汗国" : via === "agri_union" ? byBase(base, ["王国", "連邦"]) : via === "defense_league" ? "連盟" : byBase(base, ["王国", "公国"]);
+    case "theocracy": return via === "religious_polity" ? "教国" : byBase(base, ["神聖王国", "教国", "国"]);
+    case "chiefdom": return none ? "" : byBase(base, ["首長国", "国", "王国"]);
+    default: return via === "nomad_confederation" ? "汗国" : via === "defense_league" ? "連盟" : none ? "" : byBase(base, ["部族連合", "国", "連合"]);
   }
 }
 /** 国号から称号を除いた語根（建国時に st.nameBase に残す。古いデータは称号を剥がして求める） */
@@ -40,31 +43,53 @@ export function baseOfState(st) {
   const n = String(st.name ?? ""); for (const f of FORMS) if (n.length > f.length && n.endsWith(f)) return n.slice(0, -f.length);
   return n;
 }
-export const composeStateName = (base, polity, via, year = null) => base + stateForm(polity, via, base, year);
+export const composeStateName = (base, polity, via, year = null, sfx = "", opt = {}) => { const f = stateForm(polity, via, base, year, { sfx, ...opt }); return f === "" ? base + sfx : base + f; };
 /** 政体が変わったときの国号の改称。変わらなければ null */
 export function retitle(st, polity, year = null) {
   if (!st.nameBase && !FORMS.some((f) => String(st.name).endsWith(f))) return null; // 創造主が付けた名前など、称号のない名前は改めない
-  const base = baseOfState(st), next = composeStateName(base, polity, st.via, year); return next !== st.name ? (year == null ? { base, name: next } : { base, name: next, year }) : null;
+  const base = baseOfState(st), next = composeStateName(base, polity, st.via, year, st.nameSfx ?? "", { dep: st.dependency?.kind ?? null, small: (st.pop ?? 0) > 0 && st.pop < 20000 });
+  return next !== st.name ? (year == null ? { base, name: next } : { base, name: next, year }) : null;
 }
 
-// ---- 君主名（〇〇1世） ----
+// ---- 君主名（v6.15.0）----
+//   本名（生まれたときの名）と即位名を分ける。文化（言語）ごとに名乗りの型が決まる:
+//     own    : 本名のまま即位する（欧州の多数派）。同じ名の君主が続いたときだけ世数が付く
+//     throne : 即位名に改名する（教皇・英国王のジョージ 6 世の型）。フィリップがアルベルト 1 世、ジョンがアルベルト 2 世として立つ
+//     titled : 本名に称号・通称を添える（〇〇・ヴァーラ。インドなどの型）。世数は付けない
+//   王朝が替わったとき、世数を数え直すか続けるかも文化で決まる。
 const REGNAL = new Set(["chiefdom", "kingdom", "empire", "theocracy"]);
 const stripOrd = (n) => String(n).replace(/[0-9０-９]+世$/, "");
-export const baseOfLeader = stripOrd;
-/** 君主の名。世襲の政体では「語根＋世数」。祖先の名を継ぐことがある（同じ国で同じ語根を使うと 2世・3世と数える） */
-export function leaderName(st, fresh, rnd) {
-  const raw = stripOrd(fresh); if (!REGNAL.has(st.polity)) return raw;
-  const reg = (st.regnal ??= {}), keys = Object.keys(reg);
-  const base = keys.length && rnd() < 0.4 ? keys[Math.floor(rnd() * keys.length)] : raw;
-  reg[base] = (reg[base] ?? 0) + 1; return `${base}${reg[base]}世`;
+export const baseOfLeader = (n) => stripOrd(n).replace(/・.+$/, "");
+export const regnalTypeOf = (st) => { const k = hashSeed(String(st.nameLang ?? st.id), "regnal") % 100; return k < 55 ? "own" : k < 82 ? "throne" : "titled"; };
+export const restartsOnDynasty = (st) => hashSeed(String(st.nameLang ?? st.id), "dynrestart") % 100 < 35;
+/** 君主の名乗り。fresh は本名。gen は新しい名を作る関数（即位名・通称の素材。無ければ本名から）。返り値: { name（呼び名）, birth（本名）, type } */
+export function regnalOf(st, fresh, rnd, gen = null) {
+  const birth = baseOfLeader(fresh); if (!REGNAL.has(st.polity)) return { name: birth, birth, type: "none" };
+  const type = regnalTypeOf(st), reg = (st.regnal ??= {});
+  if (type === "titled") { const pool = (st.epithets ??= []); if (!pool.length && gen) for (let i = 0; i < 3; i++) { const e = gen(); if (e && !pool.includes(e)) pool.push(e); } const e = pool.length ? pool[Math.floor(rnd() * pool.length)] : ""; return { name: e && e !== birth ? `${birth}・${e}` : birth, birth, type }; }
+  if (type === "throne") {
+    const pool = (st.throneNames ??= []); if (pool.length < 4 && gen) for (let i = 0; i < 4 && pool.length < 4; i++) { const e = gen(); if (e && !pool.includes(e)) pool.push(e); } if (!pool.length) pool.push(birth);
+    const used = Object.keys(reg), pick = used.length && rnd() < 0.6 ? used[Math.floor(rnd() * used.length)] : pool[Math.floor(rnd() * pool.length)];
+    reg[pick] = (reg[pick] ?? 0) + 1; return { name: `${pick}${reg[pick]}世`, birth, type };
+  }
+  reg[birth] = (reg[birth] ?? 0) + 1; return { name: reg[birth] > 1 ? `${birth}${reg[birth]}世` : birth, birth, type };
 }
+/** 即位名・通称の素材を作る関数（その国の首都の言語から。決定的） */
+export const epithetGen = (ctx, st, cap) => { if (!ctx.nameGen?.person || !cap) return null; const r = rngOf(hashSeed(ctx.civ.historySeed, "regnalpool", st.id, ctx.civ.monthIndex)); return () => ctx.nameGen.person(ctx.civ, cap, r); };
+/** 互換: 呼び名だけを返す */
+export const leaderName = (st, fresh, rnd, gen = null) => regnalOf(st, fresh, rnd, gen).name;
 export const leaderRng = (civ, st, ...p) => rngOf(hashSeed(civ.historySeed, "leader", st.id, civ.monthIndex, ...p));
 
-// ---- 王朝 ----
-const DYN = { kingdom: "王朝", empire: "王朝", chiefdom: "首長家", theocracy: "教統", republic: "政権" };
-/** 国ごとの通し番号の王朝名（第2王朝）。n は 1 から */
-/** 部族は氏族（〇〇氏）、それ以外は第n王朝・第n政権。founder は創始者の名 */
-export const dynastyName = (polity, n, founder = "") => (polity === "tribal" ? `${stripOrd(founder)}氏` : `第${kanjiNum(n)}${DYN[polity] ?? "政権"}`);
+// ---- 王朝・家名 ----
+/** 王政は「〇〇家」、部族は「〇〇氏」、共和制は「第n代」、独裁・軍政・一党制は「〇〇政権」。family は家名（言語から作る）。n は国ごとの通し番号（1 から） */
+const DICTATOR = /junta|military|totalit|party|fascis|authoritarian/;
+export function dynastyName(polity, n, founder = "", family = "", regime = "") {
+  const fam = family || stripOrd(baseOfLeader(founder));
+  if (polity === "tribal") return `${fam}氏`;
+  if (DICTATOR.test(String(regime))) return `${fam}政権`;
+  if (polity === "republic") return `第${kanjiNum(n)}代`;
+  return REGNAL.has(polity) ? `${fam}家` : `${fam}政権`;
+}
 
 // ---- 戦争名 ----
 /** 同じ組の戦争が 100 年以内に続くと「第二次〇〇戦争」 */

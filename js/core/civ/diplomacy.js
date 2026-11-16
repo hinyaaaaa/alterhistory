@@ -6,15 +6,39 @@ import { dominant } from "./cohorts.js";
 import { hashSeed } from "./civ-state.js";
 import { milMult } from "./techfx.js";
 import { distKm } from "./states.js";
+import { onTreatySigned, onTreatyEnded, callDependents, submitAfterWar } from "../wcde/dependency.js";
+import { callPacts } from "../wcde/pacts.js";
 import { recentEventsFor, asCauses, getEvent } from "./graph.js";
 
 /** 戦争の理由の表示名（v6.9.0）。旧版は AI の戦争がすべて「conquest」だった */
-export const WAR_REASON_JA = Object.freeze({ conquest: "領土の征服", succession: "王位継承をめぐる争い", religion: "宗教的な対立", trade_route: "交易路・資源をめぐる争い", revenge: "報復・失地の回復", independence: "独立・自治を求める戦争", civil_war: "内戦・反乱", alliance: "同盟に基づく参戦", defense: "防衛" });
+export const WAR_REASON_JA = Object.freeze({ conquest: "領土の征服", succession: "王位継承をめぐる争い", religion: "宗教的な対立", trade_route: "交易路・資源をめぐる争い", revenge: "報復・失地の回復", independence: "独立・自治を求める戦争", ideology: "体制・イデオロギーの対立", subjugation: "従属の強制",  civil_war: "内戦・反乱", alliance: "同盟に基づく参戦", defense: "防衛" });
 /** 同じ 2 国の再戦までの冷却（月）。古代ほど長く、近代は短い（疲弊・同盟の再編を挟む）。世界の年は 0=紀元前 3000 年ごろ */
 export const rematchCooldown = (year) => (year < 3000 ? 480 : year < 4500 ? 300 : year < 4850 ? 180 : 120);
 /** 戦争の最長（月）。古代 50 年・中世 25 年・近世 10 年・近代 6 年。参戦国が多い大戦（近代）は 20 年まで */
 export const warMaxMonths = (year, nStates = 2) => (year < 3000 ? 600 : year < 4500 ? 300 : year < 4850 ? 120 : nStates >= 6 ? 240 : 72);
-export const TREATY = Object.freeze({ nonaggression: { ja: "不可侵条約", months: 240 }, alliance: { ja: "同盟", months: 480 }, trade: { ja: "通商協定", months: 240 } });
+/** 条約の型（v6.16.0: 軍事・従属・経済・領土・王家の 5 分類。講和は戦争ごとの専用の手続き）。months: 既定の期間／needs: 双方が採用している技術／dep: 従属の種類（a が宗主、b が従う側） */
+export const TREATY_CATS = Object.freeze({ mil: "軍事", dep: "従属", eco: "経済", land: "領土", dyn: "王家" });
+export const TREATY = Object.freeze({
+  alliance: { ja: "攻守同盟", cat: "mil", months: 480, merit: "参戦を頼める", cost: "相手の戦争に巻き込まれる" },
+  defensive: { ja: "防衛同盟", cat: "mil", months: 360, needs: ["diplomacy"], merit: "攻められたとき助けが来る", cost: "守りの戦争にだけ参戦する" },
+  nonaggression: { ja: "不可侵条約", cat: "mil", months: 240, merit: "隣国に攻められにくくなる", cost: "こちらも宣戦しにくい" },
+  passage: { ja: "軍事通過権", cat: "mil", months: 240, needs: ["roads"], merit: "相手の領内を軍が通れる", cost: "相手が強いと内政が脅かされる" },
+  garrison: { ja: "駐留協定", cat: "mil", months: 360, needs: ["standing_army"], merit: "守りが固くなる", cost: "駐留国の影響が強まる" },
+  feudal: { ja: "封建契約", cat: "dep", dep: "vassal", months: 1200, needs: ["administration"], merit: "宗主は軍役と貢納を得る", cost: "従う側は自由を失う" },
+  tribute: { ja: "朝貢", cat: "dep", dep: "tributary", months: 1200, needs: ["diplomacy"], merit: "名目の服属で、攻められにくい", cost: "貢ぎ物を納める" },
+  protectorate: { ja: "保護条約", cat: "dep", dep: "protectorate", months: 1200, needs: ["diplomacy"], merit: "宗主が守ってくれる", cost: "外交権を失う" },
+  trade: { ja: "通商条約", cat: "eco", months: 240, merit: "交易の収入が増える", cost: "相手への依存が深まる" },
+  tariff: { ja: "関税協定", cat: "eco", months: 240, needs: ["coinage"], merit: "関税が下がる", cost: "自国の産業が競争にさらされる" },
+  unequal: { ja: "不平等条約", cat: "eco", months: 480, needs: ["coinage", "diplomacy"], merit: "強い側が一方的に有利になる", cost: "弱い側は関税と裁判の権利を失う" },
+  border: { ja: "国境画定", cat: "land", months: 600, needs: ["surveying"], merit: "国境の紛争が減る", cost: "主張を諦める" },
+  sphere: { ja: "勢力圏協定", cat: "land", months: 360, needs: ["diplomacy"], merit: "互いの縄張りを認める", cost: "圏内の国は強国に従いやすい" },
+  purchase: { ja: "領土の買収", cat: "land", months: 12, needs: ["coinage"], merit: "戦わずに土地を得る", cost: "国庫を失う" },
+  cession: { ja: "領土の割譲", cat: "land", months: 12, merit: "相手の歓心を買う", cost: "土地と民を失う" },
+  exchange: { ja: "領土の交換", cat: "land", months: 12, needs: ["surveying"], merit: "国境がすっきりする", cost: "手放す土地の民が不満を持つ" },
+  marriage: { ja: "婚姻同盟", cat: "dyn", months: 600, needs: ["diplomacy"], merit: "王家が結ばれ、関係が深まる", cost: "継承をめぐる争いの火種になる" },
+  union: { ja: "同君連合", cat: "dyn", dep: "union", months: 1200, needs: ["diplomacy"], merit: "一人の君主を戴き、一体で動く", cost: "従う側の独立性が薄れる" },
+  succession_pact: { ja: "王位継承協定", cat: "dyn", months: 600, needs: ["law"], merit: "継承の争いが減る", cost: "継承権を認める" },
+});
 export const adjustRel = (a, b, d) => { const c = (v) => Math.max(-100, Math.min(100, v)); a.relations[b.id] = c((a.relations[b.id] ?? 0) + d); b.relations[a.id] = c((b.relations[a.id] ?? 0) + d); };
 export const treatyBetween = (civ, a, b, type) => civ.activeTreatyIds.map((i) => civ.treaties[i]).find((t) => t.active && (!type || t.type === type) && ((t.a === a.id && t.b === b.id) || (t.a === b.id && t.b === a.id)));
 export const atWarWith = (civ, a, b) => a.warIds.map((i) => civ.wars[i]).some((w) => w.sides.a.includes(b.id) || w.sides.d.includes(b.id));
@@ -26,13 +50,16 @@ export function neighborStates(ctx, st) {
   const out = new Set(); for (const g of byState(ctx).get(st.id) ?? []) for (const o of neighborGroups(ctx, g)) { const s = ctx.civ.groups[o]?.stateId; if (s && s !== st.id && ctx.civ.states[s].alive) out.add(s); }
   const r = [...out].sort(); cache.set(st.id, r); return r;
 }
-export function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "simulation" } = {}) {
-  const { civ, ids } = ctx, id = ids.next("treaty"), t = { id, type, a: a.id, b: b.id, signedAt: civ.monthIndex, expiresAt: civ.monthIndex + TREATY[type].months, active: true };
-  civ.treaties[id] = t; civ.activeTreatyIds.push(id); adjustRel(a, b, type === "alliance" ? 25 : 15);
-  makeEvent(civ, ids, { kind: "treaty_signed", title: `${a.name}と${b.name}が${TREATY[type].ja}を結んだ`, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance }); return t;
+export function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "simulation", reverse = false, extra = null } = {}) {
+  if (reverse) [a, b] = [b, a]; // 従属の条約は a が宗主・b が従う側（reverse: 提案した側が従う側になる）
+  const { civ, ids } = ctx, T = TREATY[type], id = ids.next("treaty"), t = { id, type, a: a.id, b: b.id, signedAt: civ.monthIndex, expiresAt: civ.monthIndex + T.months, active: true }; if (extra) t.terms = extra;
+  civ.treaties[id] = t; civ.activeTreatyIds.push(id); adjustRel(a, b, T.cat === "dep" ? 5 : type === "alliance" || type === "union" || type === "marriage" ? 25 : T.cat === "land" ? 5 : 15);
+  const title = T.dep ? `${b.name}が${a.name}の${{ vassal: "封臣", tributary: "朝貢国", protectorate: "保護国", union: "同君連合の一員" }[T.dep]}となった（${T.ja}）` : `${a.name}と${b.name}が${T.ja}を結んだ`;
+  const ev = makeEvent(civ, ids, { kind: "treaty_signed", title, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance });
+  t.event = ev.eventId; onTreatySigned(ctx, t, a, b); return t;
 }
 export function endTreaty(ctx, t, why, byId = null) {
-  const { civ, ids } = ctx; t.active = false; t.endedAt = civ.monthIndex; if (t.type === "nonaggression") for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
+  const { civ, ids } = ctx; t.active = false; onTreatyEnded(ctx, t); t.endedAt = civ.monthIndex; if (t.type === "nonaggression") for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
   makeEvent(civ, ids, { kind: "treaty_ended", title: `${TREATY[t.type].ja}が${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId === t.b ? "breaker" : "party" }], location: null, effects: byId ? [{ targetId: t.id, property: "broken_by", before: null, after: byId }] : [] });
 }
 /** 過去の同じ相手との戦争が、今回の宣戦の理由になっていれば「反応」として結ぶ（負けた側が仕掛けるなら根拠は strong） */
@@ -60,6 +87,7 @@ export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = nu
     if (ally.player && ctx.decisions?.allyCall(ctx, w, side, host, foe, ally)) continue; // v6.12.0: 担当国の参戦は、自動で決まらず決断する
     if (rng() < 0.6) { w.sides[side].push(ally.id); ally.warIds.push(id); adjustRel(ally, foe, -25); makeEvent(civ, ids, { kind: "ally_joined", title: `${ally.name}が${host.name}側で参戦した`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: id, role: "war" }], location: null, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] }); }
   }
+  callDependents(ctx, w, atk, def); callPacts(ctx, w, atk, def); // v6.16.0: 従属国・盟約の参戦
   ctx.warOps?.init(ctx, w); // v6.1.0 M6: WCDE の世界では、戦域・部隊・作戦を持つ戦争の記録にする
   return w;
 }
@@ -69,6 +97,7 @@ export function endWar(ctx, w, outcome, terms = null) {
   const atk = civ.states[w.aggressor], def = civ.states[w.defender]; const lead = outcome === "aggressor_victory" || (outcome === "negotiated" && w.score > 0);
   const gained = [], moved = []; const settled = ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null; // v6.1.0 M7: WCDE の世界では、占領した国家ごとに領土を移す
   if (settled) for (const x of settled) { gained.push(x.gid); moved.push(x); } else if (lead && atk?.alive) for (const gid of w.occupied) { const g = civ.groups[gid]; if (g && g.stateId === w.defender) { g.stateId = atk.id; gained.push(gid); } }
+  submitAfterWar(ctx, w, outcome); // v6.16.0: 敗戦国が従属することがある
   for (const x of w.sides.a) for (const y of w.sides.d) { const X = civ.states[x], Y = civ.states[y]; if (X && Y) { (X.lastWarWith ??= {})[y] = civ.monthIndex; (Y.lastWarWith ??= {})[x] = civ.monthIndex; } } // v6.9.0: 同じ 2 国の再戦を抑える
   for (const s of all) { s.lastWarEnd = civ.monthIndex; s.stability = Math.max(0, s.stability - 0.04); if (s.campaign?.warId === w.id) s.campaign = null; }
   if (atk && def) adjustRel(atk, def, -10);

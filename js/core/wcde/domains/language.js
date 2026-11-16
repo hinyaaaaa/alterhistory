@@ -6,7 +6,7 @@ import { VIA } from "../../civ/states.js";
 import { composeStateName } from "./naming.js";
 
 // 子音ごとの仮名（ア行〜）。母音は a i u e o の順。w・y は使えない母音がある
-const KANA = Object.freeze({ "": "アイウエオ", k: "カキクケコ", g: "ガギグゲゴ", s: "サシスセソ", z: "ザジズゼゾ", t: "タチツテト", d: "ダヂヅデド", n: "ナニヌネノ", h: "ハヒフヘホ", b: "バビブベボ", p: "パピプペポ", m: "マミムメモ", r: "ラリルレロ", y: "ヤ・ユ・ヨ", w: "ワ····" });
+const KANA = Object.freeze({ "": "アイウエオ", k: "カキクケコ", g: "ガギグゲゴ", s: "サシスセソ", z: "ザジズゼゾ", t: "タチツテト", d: "ダ··デド", n: "ナニヌネノ", h: "ハヒフヘホ", b: "バビブベボ", p: "パピプペポ", m: "マミムメモ", r: "ラリルレロ", y: "ヤ・ユ・ヨ", w: "ワ····" });
 const VOWELS = ["a", "i", "u", "e", "o"], CONS = ["k", "g", "s", "z", "t", "d", "n", "h", "b", "p", "m", "r", "w", "y"];
 const ok = (c, v) => { const k = KANA[c]; if (!k) return false; const ch = k[VOWELS.indexOf(v)]; return !!ch && ch !== "・" && ch !== "·"; };
 const kanaOf = (c, v) => KANA[c][VOWELS.indexOf(v)];
@@ -19,7 +19,9 @@ export function syllablesOf(phon) {
   for (const c of phon.c) for (const v of phon.v) if (ok(c, v)) out.push({ c, v, kana: kanaOf(c, v) });
   return out;
 }
-const rootPhon = (id) => { const r = rngOf(hashSeed(id, "phon")); const c = shuffle(r, CONS).slice(0, 6 + Math.floor(r() * 5)), v = shuffle(r, VOWELS).slice(0, 3 + Math.floor(r() * 3)); return { c, v, coda: r() < 0.5, geminate: r() < 0.3, endV: shuffle(r, v).slice(0, 1 + Math.floor(r() * 2)), vowelInitial: Math.round(r() * 25) / 100, changes: [] }; };
+// 子音は、日本語として自然に読める基本の子音（k s t n m r h）を必ず入れ、濁音・半濁音・半母音は少数だけ足す（v6.15.0）
+const CORE = ["k", "s", "t", "n", "m", "r", "h"], EXTRA = ["g", "d", "z", "b", "y", "w", "p"];
+const rootPhon = (id) => { const r = rngOf(hashSeed(id, "phon")); const c = [...shuffle(r, CORE).slice(0, 4 + Math.floor(r() * 3)), ...shuffle(r, EXTRA).slice(0, 1 + Math.floor(r() * 3))], v = ["a", ...shuffle(r, ["i", "u", "e", "o"]).slice(0, 2 + Math.floor(r() * 3))]; return { c, v, coda: r() < 0.4, geminate: r() < 0.12, endV: shuffle(r, v).slice(0, 1 + Math.floor(r() * 2)), vowelInitial: Math.round(r() * 12) / 100, changes: [] }; };
 /** 子言語: 親を受け継ぎ、音変化を1〜2回 */
 const childPhon = (id, parent) => {
   const r = rngOf(hashSeed(id, "change")), p = { ...parent, c: [...parent.c], v: [...parent.v], endV: [...parent.endV], changes: [...parent.changes] }, n = 1 + Math.floor(r() * 2);
@@ -43,20 +45,31 @@ export function ensureProfile(civ, langId) {
 }
 /** 音節列から語を作る。同じ音節の連続は避ける。語末に母音の傾向・撥音・促音 */
 function word(rng, phon, n, endBias = 0.6) {
-  const syl = syllablesOf(phon), parts = []; let prev = null;
+  const syl0 = syllablesOf(phon), syl = syl0.flatMap((x) => (CORE.includes(x.c) ? [x, x, x] : [x])), parts = []; let prev = null; // 基本の子音の音節を 3 倍の重みで（濁音・半濁音・半母音は少なめ）
   for (let i = 0; i < n; i++) {
-    let s, tries = 0; do { s = (i === 0 && rng() >= phon.vowelInitial) ? pick(rng, syl.filter((x) => x.c)) : (rng() < (i === 0 ? phon.vowelInitial : 0.06) ? pick(rng, syl.filter((x) => !x.c)) : pick(rng, syl)); } while (prev && s.kana === prev.kana && ++tries < 6);
+    let s, tries = 0; do { s = (i === 0 && rng() >= phon.vowelInitial) ? pick(rng, syl.filter((x) => x.c)) : (rng() < (i === 0 ? phon.vowelInitial : 0.02) && !(prev && !prev.c) ? pick(rng, syl.filter((x) => !x.c)) : pick(rng, syl)); } while (prev && s.kana === prev.kana && ++tries < 6);
     parts.push(s); prev = s;
   }
   if (rng() < endBias) { const last = parts[parts.length - 1], v = pick(rng, phon.endV), c = last.c; if (ok(c, v)) parts[parts.length - 1] = { c, v, kana: kanaOf(c, v) }; }
   let w = parts.map((p) => p.kana).join(""); if (phon.coda && rng() < 0.25) w += "ン"; if (phon.geminate && n >= 3 && rng() < 0.2) w = w.slice(0, 1) + "ッ" + w.slice(1);
   return w;
 }
-/** 名前を作る。v6.7.0: 長めに。person（3〜4 音節、まれに 5）/ place・state（3〜4 音節、まれに 5）。2〜3 文字の短い名は出さない */
-export function nameFor(civ, rng, langId, kind = "person") {
-  const phon = ensureProfile(civ, langId); if (!phon) return null;
-  const n = 3 + (rng() < (kind === "person" ? 0.4 : 0.45) ? 1 : 0) + (rng() < 0.08 ? 1 : 0);
-  return word(rng, phon, n);
+/** 読みの自然さ（v6.15.0）。促音・撥音の並び、同じ仮名の繰り返し、同じ 2 文字の反復などの「音の羅列」を除く */
+export function naturalKana(w, min = 3, max = 6) {
+  if (w.length < min || w.length > max) return false;
+  if (/^[ッンー]|ッ$|ッッ|ンン|ンッ|ッン|(.)\1\1/.test(w) || /(..)\1/.test(w)) return false;
+  if ((w.match(/ン/g) ?? []).length > 1 || (w.match(/ッ/g) ?? []).length > 1) return false;
+  const cnt = {}; for (const ch of w) { cnt[ch] = (cnt[ch] ?? 0) + 1; if (cnt[ch] > 2) return false; } // 同じ仮名は 2 回まで
+  return true;
+}
+/** 名前を作る。person（2〜4 音節）/ place・state（3〜4 音節、まれに 5）。読みが不自然なものは作り直す */
+export function nameFor(civ, rng, langId, kind = "person", { max = kind === "person" ? 6 : 6 } = {}) {
+  const phon = ensureProfile(civ, langId); if (!phon) return null; let last = "";
+  for (let k = 0; k < 40; k++) {
+    const r = rng(), n = kind === "person" ? (r < 0.3 ? 2 : r < 0.85 ? 3 : 4) : (r < 0.12 ? 2 : r < 0.72 ? 3 : r < 0.96 ? 4 : 5), w = word(rng, phon, n); last = w;
+    if (naturalKana(w, 3, max)) return w;
+  }
+  return last;
 }
 /** 集団の主な言語（共有の最大の層） */
 export const languageOfGroup = (g) => g?.cohorts?.length ? g.cohorts.reduce((b, c) => (c.share > b.share ? c : b)).languageId : null;
@@ -70,11 +83,35 @@ function landSuffix(civ, langId) {
   if (h % 100 < 60) { const phon = ensureProfile(civ, L.id); return phon ? word(rngOf(h), phon, 1 + ((h >>> 8) % 2), 0.7) : ""; }
   return L.parent && civ.languages[L.parent] ? landSuffix(civ, L.parent) : "";
 }
+/** 言語の語根（v6.15.0）。概念ごとの語は言語から決まる（保存しない。系統の祖先の種で作るので、近縁の言語は語の並びが似る）。国名・地名の素材 */
+export const ROOT_KEYS = Object.freeze(["river", "mountain", "hill", "sea", "lake", "forest", "plain", "island", "valley", "stone", "sun", "moon", "star", "fire", "wind", "wolf", "horse", "salt", "iron", "gold", "white", "black", "red", "great", "new", "old", "people", "king"]);
+const ancestorOf = (civ, langId) => { let cur = civ.languages[langId], guard = 0; while (cur?.parent && civ.languages[cur.parent] && guard++ < 30) cur = civ.languages[cur.parent]; return cur?.id ?? langId; };
+export function rootWord(civ, langId, key) {
+  const phon = ensureProfile(civ, langId); if (!phon) return null;
+  const rng = rngOf(hashSeed(ancestorOf(civ, langId), "root", key)); let w = "";
+  for (let k = 0; k < 20; k++) { w = word(rng, phon, 2); if (naturalKana(w, 2, 4)) break; }
+  return w;
+}
+const QUAL = new Set(["white", "black", "red", "great", "new", "old"]);
+/** 国号の語根の作り方 3 通り: 固有の語（地名・人名から）／自然・地形の語＋固有の語／質を表す語＋地形の語（白い川、など）。同じ言語の国は同じ響きになる */
+function stateBase(civ, rng, langId, cap) {
+  const r = rng(), settle = cap?.settlementId ? civ.settlements?.[cap.settlementId]?.name : null;
+  if (settle && naturalKana(settle, 2, 6) && r < 0.4) return settle; // 首都の都市の名から（ローマ帝国のように）
+  if (r < 0.62) return nameFor(civ, rng, langId, "state");
+  const geo = ROOT_KEYS.filter((k) => !QUAL.has(k));
+  if (r < 0.84) { const a = rootWord(civ, langId, geo[Math.floor(rng() * geo.length)]), b = nameFor(civ, rng, langId, "place", { max: 4 }); const w = rng() < 0.5 ? a + b : b + a; return naturalKana(w, 3, 7) ? w : nameFor(civ, rng, langId, "state"); }
+  const q = rootWord(civ, langId, [...QUAL][Math.floor(rng() * QUAL.size)]), g = rootWord(civ, langId, geo[Math.floor(rng() * geo.length)]), w = q + g;
+  return naturalKana(w, 3, 7) ? w : nameFor(civ, rng, langId, "state");
+}
 export const nameGen = {
-  /** 国号と語根。語根は言語の音から（＋系統の語尾）、称号は政体から（王国・帝国・共和国…） */
-  stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const nm = nameFor(civ, rng, l, "state"), sfx = landSuffix(civ, l), base = nm.length + sfx.length <= 8 ? nm + sfx : nm; return { base, name: composeStateName(base, polity, via, civ.date.year), year: civ.date.year }; },
+  /** 国号と語根。語根は言語の語から、称号は政体から（王国・帝国・朝・共和国…。称号のない国もある。称号がないときは言語固有の語尾が付く） */
+  stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const base = stateBase(civ, rng, l, cap), sfx = landSuffix(civ, l); return { base, sfx, name: composeStateName(base, polity, via, civ.date.year, sfx), year: civ.date.year }; },
   state: (civ, cap, via, rng) => { const l = languageOfGroup(cap); return l ? nameFor(civ, rng, l, "state") + VIA[via].suffix : null; },
   person: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "person") : null; },
+  /** 家名（〇〇家）。人名と同じ言語の音から */
+  family: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "place", { max: 5 }) : null; },
+  /** 称号に添える語（「〇〇・ヴァーラ」のような通称） */
+  epithet: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "person", { max: 5 }) : null; },
 };
 
 /** 月次（culture フェーズ）: 新しい言語に音素表を与え、文化に言語由来の名前を付ける。言語・文化の数が変わった月だけ作業する（毎月の全走査はしない） */

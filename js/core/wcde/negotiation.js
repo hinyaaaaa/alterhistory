@@ -4,6 +4,10 @@
 //   ・プレイヤーの行動も AI の行動も、同じ入口（civ の sign_treaty / sue_for_peace の実行）を通って、ここの評価を受ける。
 //   ・提案の記録は civ.wcde.diplomacy.proposals に残す（拒否も残す）。履歴は消さない。
 import { stateFx } from "./statefx.js";
+import { TECH } from "../civ/tech.js";
+import { hashSeed } from "../civ/civ-state.js";
+import { REGIMES, regimeOf } from "./regimes.js";
+import { depFeasible, pickBorderGroup } from "./dependency.js";
 import { TREATY, treatyBetween, atWarWith, signTreaty, endWar, strength } from "../civ/diplomacy.js";
 import { grievance } from "../civ/interpret.js";
 import { effective } from "./domains/effective.js";
@@ -15,30 +19,65 @@ const r2 = (x) => Math.round(x * 100) / 100;
 export const initDiplomacy = () => ({ proposals: [] });
 const ledger = (civ) => (civ.wcde.diplomacy ??= initDiplomacy());
 export const proposalsOf = (civ) => ledger(civ).proposals;
-export const TREATY_THRESHOLD = { nonaggression: -20, trade: -20, alliance: 10 }; // 相手との関係の最低線（v5 から引き継ぐ基準。ここを 0 点とする）
+export const TREATY_THRESHOLD = { nonaggression: -20, trade: -20, alliance: 10, defensive: 0, passage: 5, garrison: 20, tariff: -10, unequal: -40, border: -30, sphere: -10, marriage: 10, union: 20, succession_pact: 10, purchase: -30, cession: -30, exchange: -30, feudal: 0, tribute: 0, protectorate: 0 }; // 相手との関係の最低線（v5 から引き継ぐ基準。ここを 0 点とする）
+/** 君主の気質（個性）。条約の受け入れやすさが、種類ごとに変わる。決定的（指導者の名前から決まる） */
+export const TEMPERS = Object.freeze([
+  { ja: "好戦的", mil: -0.3, eco: 0, land: -0.1, dyn: 0, over: 0.3, sub: -0.4 }, { ja: "慎重", mil: -0.2, eco: 0.2, land: 0, dyn: 0.1, over: -0.2, sub: -0.1 }, { ja: "外交的", mil: 0.25, eco: 0.25, land: 0.2, dyn: 0.25, over: 0.1, sub: 0.1 },
+  { ja: "野心的", mil: 0, eco: 0, land: -0.2, dyn: 0.1, over: 0.4, sub: -0.6 }, { ja: "商人肌", mil: -0.1, eco: 0.5, land: 0, dyn: 0, over: 0, sub: 0 }, { ja: "誇り高い", mil: 0, eco: -0.1, land: -0.2, dyn: 0, over: 0.2, sub: -0.9 }, { ja: "温厚", mil: 0.1, eco: 0.1, land: 0.1, dyn: 0.2, over: -0.3, sub: 0.1 },
+]);
+export const temperOf = (st) => TEMPERS[hashSeed(st.id, st.leader?.name ?? "", "temper") % TEMPERS.length];
+const heredityOf = (st) => !!REGIMES[regimeOf(st)]?.heredity || regimeOf(st) === "elective_monarchy";
+const activeOf = (civ, a, b, type) => treatyBetween(civ, a, b, type);
 
-/** 条約を結べる状況か（技術・経済・外交の実行条件。AI もプレイヤーも同じ検査）。理由があれば文字列、無ければ null */
-export function treatyFeasible(civ, from, to, type) {
-  const mi = civ.monthIndex;
+/** 条約を結べる状況か（技術・経済・外交の実行条件。AI もプレイヤーも同じ検査）。理由があれば文字列、無ければ null。o.reverse: 提案した側が従う側（従属・同君連合） */
+export function treatyFeasible(civ, from, to, type, o = {}) {
+  const mi = civ.monthIndex, T = TREATY[type]; if (!T) return "その種類の条約はない";
   if (!from.alive || !to.alive) return "相手が存在しない"; if (atWarWith(civ, from, to)) return "交戦中の相手とは結べない";
-  if (type === "trade") { if ((from.blockade ?? 0) > mi || (to.blockade ?? 0) > mi) return "封鎖中は通商協定を結べない"; if ((to.sanctions?.[from.id] ?? 0) > mi || (from.sanctions?.[to.id] ?? 0) > mi) return "制裁中は通商協定を結べない"; if (!(from.econ && to.econ)) return "経済の算出が済んでいない"; }
+  for (const k of T.needs ?? []) for (const s of [from, to]) if (s.techAdopted?.[k] == null) return `技術「${TECH[k]?.ja ?? k}」が要る（${s.name}）`;
+  const dep = (x, y) => depFeasible(civ, x, y); if (T.cat === "dep" && T.dep !== "union") { const w = dep(o.reverse ? to : from, o.reverse ? from : to); if (w) return w; }
+  if ((type === "alliance" || type === "defensive") && (from.dependency?.overlord === to.id || to.dependency?.overlord === from.id)) return "従属関係にある国とは結べない";
+  if (type === "trade" || type === "tariff") { if ((from.blockade ?? 0) > mi || (to.blockade ?? 0) > mi) return "封鎖中は結べない"; if ((to.sanctions?.[from.id] ?? 0) > mi || (from.sanctions?.[to.id] ?? 0) > mi) return "制裁中は結べない"; if (!(from.econ && to.econ)) return "経済の算出が済んでいない"; }
   if (type === "nonaggression") { const n = (st) => civ.activeTreatyIds.reduce((c, i) => { const t = civ.treaties[i]; return c + (t.active && t.type === "nonaggression" && (t.a === st.id || t.b === st.id) ? 1 : 0); }, 0); if (n(from) >= 2 || n(to) >= 2) return "不可侵条約はすでに多く、これ以上は結べない"; if ((from.lastNapEnd ?? -9999) + 240 > mi || (to.lastNapEnd ?? -9999) + 240 > mi) return "不可侵条約が切れて間もない"; } // v6.9.0: 不可侵条約は国あたり 2 件まで、失効後 20 年は再締結しない
-  if (type === "alliance" && (from.polity === "tribal" || to.polity === "tribal") && !(from.techAdopted?.record_keeping != null || from.techAdopted?.writing != null)) return "部族の連合には、約束を記す仕組み（記録）が要る";
+  if ((type === "alliance" || type === "defensive") && (from.polity === "tribal" || to.polity === "tribal") && !(from.techAdopted?.record_keeping != null || from.techAdopted?.writing != null)) return "部族の連合には、約束を記す仕組み（記録）が要る";
+  if (T.cat === "dyn") { if (!heredityOf(from) || !heredityOf(to)) return "王家のない国とは結べない"; if (type === "union") { if (o.reverse ? depFeasible(civ, to, from) : depFeasible(civ, from, to)) return depFeasible(civ, o.reverse ? to : from, o.reverse ? from : to); if (!activeOf(civ, from, to, "marriage")) return "先に婚姻同盟が要る"; } if (type === "succession_pact" && !(activeOf(civ, from, to, "marriage") || activeOf(civ, from, to, "union"))) return "婚姻か同君連合の結びつきが要る"; }
+  if (type === "sphere" && strength(civ, from) < strength(civ, to) * 0.5 && strength(civ, to) < strength(civ, from) * 0.5) return "力が近い国どうしでは結べない";
   return null;
 }
-/** 条約提案の評価（何も変えない）。{ accept, score, factors, counter, hard } */
-export function evaluateTreaty(civ, from, to, type) {
-  const f = [], add = (ja, v) => { f.push({ ja, v: r2(v) }); return v; }; const T = TREATY[type]; { const nf = T ? treatyFeasible(civ, from, to, type) : null; if (nf) return { accept: false, score: -9, factors: [{ ja: nf, v: -9 }], hard: true, counter: null }; } if (!T) return { accept: false, score: -9, factors: [{ ja: "その種類の条約はない", v: -9 }], hard: true, counter: null };
-  const rel = effective(civ, to, "relation", from.id); let s = add("相手から見た関係", (rel - TREATY_THRESHOLD[type]) / 20);
-  const gr = grievance(civ, to, from.id); if (gr > 0.5) return { accept: false, score: -9, factors: [{ ja: "歴史的な恨みが深い", v: -9 }], hard: true, counter: null };
-  if (gr > 0) s += add("過去の恨み", -3 * gr);
-  { const dp = stateFx(from).dipl; if (dp) s += add("使節・外交の働き", dp); } // v6.12.0: 役職・国策の外交
-  const sf = strength(civ, from), st = strength(civ, to), rf = (sf + 1) / (st + 1);
-  if (type === "nonaggression") s += add(rf > 1 ? "相手が強いので不可侵を受け入れたい" : "こちらが強いので不可侵を受け入れにくい", clamp(Math.log(rf), -1, 1) * 0.5);
-  if (type === "alliance") { const hot = to.warIds.length > 0 ? 0.6 : 0; if (hot) s += add("交戦中で味方がほしい", hot); s += add("戦力の釣り合い", clamp(Math.log(rf), -1, 1) * 0.3); }
-  if (type === "trade") { const ratio = (from.econ?.industry ?? 1) / ((to.econ?.industry ?? 1) + 1); s += add("交易の見込み", clamp(Math.log1p(Math.min(ratio, 1 / Math.max(ratio, 0.01))), 0, 1) * 0.5); }
+/** 領土の条約の対象（国境で接した、渡せる土地）。ctx が要る。{ terms } か { error } */
+export function territorialPlan(ctx, from, to, type) {
+  if (!["purchase", "cession", "exchange"].includes(type)) return { terms: null }; const civ = ctx.civ;
+  if (type === "purchase") { const g = pickBorderGroup(ctx, to, from); if (!g) return { error: "売ってもらえる土地がない（国境に接した、首都以外の土地が要る）" }; const price = Math.round(Math.max(1, from.treasury * 0.25)); if (from.treasury < price || price < 1) return { error: "国庫が足りない" }; return { terms: { groupId: g.id, price } }; }
+  if (type === "cession") { const g = pickBorderGroup(ctx, from, to); return g ? { terms: { groupId: g.id } } : { error: "渡せる土地がない（国境に接した、首都以外の土地が要る）" }; }
+  const g1 = pickBorderGroup(ctx, from, to), g2 = pickBorderGroup(ctx, to, from); void civ; return g1 && g2 ? { terms: { groupId: g1.id, groupId2: g2.id } } : { error: "交換できる土地がない" };
+}
+/** 条約提案の評価（何も変えない）。{ accept, score, factors, counter, hard } o: { reverse, terms } */
+export function evaluateTreaty(civ, from, to, type, o = {}) {
+  const f = [], add = (ja, v) => { f.push({ ja, v: r2(v) }); return v; }, T = TREATY[type], hard = (ja) => ({ accept: false, score: -9, factors: [{ ja, v: -9 }], hard: true, counter: null });
+  if (!T) return hard("その種類の条約はない"); { const nf = treatyFeasible(civ, from, to, type, o); if (nf) return hard(nf); }
+  const rel = effective(civ, to, "relation", from.id), isDep = T.cat === "dep" && type !== "union", over = o.reverse ? to : from, sub = o.reverse ? from : to, rf = (strength(civ, over) + 1) / (strength(civ, sub) + 1), lg = Math.log(rf);
+  const gr = grievance(civ, to, from.id); if (gr > 0.5 && !(isDep && !o.reverse)) return hard("歴史的な恨みが深い");
+  const tp = temperOf(to), catKey = isDep ? (o.reverse ? "over" : "sub") : T.cat === "mil" ? "mil" : T.cat === "eco" ? "eco" : T.cat === "land" ? "land" : "dyn";
+  let s = 0; if (isDep) s += add("相手から見た関係", rel / 60); else s = add("相手から見た関係", (rel - (TREATY_THRESHOLD[type] ?? -20)) / 20);
+  if (gr > 0 && !isDep) s += add("過去の恨み", -3 * gr); { const dp = stateFx(from).dipl; if (dp) s += add("使節・外交の働き", dp); }
+  if (tp[catKey]) s += add(`君主の気質（${tp.ja}）`, tp[catKey]);
+  const sf = strength(civ, from), st = strength(civ, to), rft = (sf + 1) / (st + 1);
+  if (type === "nonaggression") s += add(rft > 1 ? "相手が強いので不可侵を受け入れたい" : "こちらが強いので不可侵を受け入れにくい", clamp(Math.log(rft), -1, 1) * 0.5);
+  if (type === "alliance" || type === "defensive") { const hot = to.warIds.length > 0 ? 0.6 : 0; if (hot) s += add("交戦中で味方がほしい", hot); s += add("戦力の釣り合い", clamp(Math.log(rft), -1, 1) * 0.3); }
+  if (type === "trade" || type === "tariff") { const ratio = (from.econ?.industry ?? 1) / ((to.econ?.industry ?? 1) + 1); s += add("交易の見込み", clamp(Math.log1p(Math.min(ratio, 1 / Math.max(ratio, 0.01))), 0, 1) * 0.5); }
+  if (type === "passage") s += add("相手の軍が入ってくる不安", clamp(-Math.log(rft), -1, 1) * 0.3);
+  if (type === "garrison") s += add(to.warIds.length ? "戦時の守りがほしい" : "外国の軍を置きたくない", to.warIds.length ? 0.6 : -0.3);
+  if (type === "unequal") s += add("力の差による圧力", clamp(lg - 0.7, -1.5, 1.5) * 0.9 - 0.3);
+  if (type === "sphere") s += add("力の差", clamp(Math.log(rft), -1, 1) * 0.4 - 0.1);
+  if (type === "border") s += add("国境を安定させたい", 0.5);
+  if (type === "marriage") s += add("王家の結びつき", 0.3);
+  if (type === "union") s += add("力の差（従う側になる）", o.reverse ? 0.3 : clamp(lg, 0, 1.5) * 0.5 - 0.5);
+  if (type === "succession_pact") s += add("継承の安定", 0.2);
+  if (isDep) { const k = { feudal: [0.9, 1.1], tribute: [0.8, 0.8], protectorate: [0.7, 0.9] }[type]; if (o.reverse) s += add("宗主になる利益", 0.5 + 0.2 * clamp(lg, -2, 2) + (lg < 0 ? -1 : 0)); else { s += add("力の差（逆らえない）", k[0] * clamp(lg, -1, 2.5) - k[1]); if (to.warIds.length && type === "protectorate") s += add("戦時の守りがほしい", 0.8); } }
+  if (type === "purchase" && o.terms) { const g = civ.groups[o.terms.groupId]; s += add("代価の見返り", clamp(Math.log(Math.max(1, o.terms.price) / Math.max(1, (g?.pop ?? 1) * 0.004)), -1.5, 1.5)); }
+  if (type === "cession") s += add("贈り物と受け取る", 0.8);
+  if (type === "exchange" && o.terms) { const g1 = civ.groups[o.terms.groupId], g2 = civ.groups[o.terms.groupId2]; s += add("交換の釣り合い", (g1?.pop ?? 0) >= (g2?.pop ?? 0) ? 0.4 : -0.4); }
   if (to.stability < 0.3) s += add("国内が不安定", -0.5);
-  for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) if (t.active && t.type === "alliance") { const ally = t.a === to.id ? t.b : t.b === to.id ? t.a : null; if (ally && civ.states[ally]?.alive && atWarWith(civ, from, civ.states[ally])) return { accept: false, score: -9, factors: [{ ja: "相手の同盟国と交戦中", v: -9 }], hard: true, counter: null }; }
+  for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) if (t.active && t.type === "alliance") { const ally = t.a === to.id ? t.b : t.b === to.id ? t.a : null; if (ally && civ.states[ally]?.alive && atWarWith(civ, from, civ.states[ally])) return hard("相手の同盟国と交戦中"); }
   const accept = s >= 0; let counter = null; if (!accept && type === "alliance" && s > -1) { const alt = evaluateTreaty(civ, from, to, "nonaggression"); if (alt.accept) counter = { type: "nonaggression", note: "同盟は難しいが、不可侵ならば受け入れる" }; }
   return { accept, score: r2(s), factors: f, counter, hard: false };
 }
@@ -78,14 +117,15 @@ const record = (ctx, rec) => { const id = ctx.ids.next("proposal"), { factors, s
 export const factorsOf = () => [];
 const failure = (error, extra = {}) => ({ ok: false, error, diplomacyFailure: true, ...extra });
 
-/** 条約の提案（civ の sign_treaty の実行から呼ばれる）。受諾なら直前に再検証して締結する */
+/** 条約の提案（civ の sign_treaty の実行や、外交画面の提案から呼ばれる）。受諾なら直前に再検証して締結する。c: { reverse, decisionId, provenance } */
 export function negotiateTreaty(ctx, from, to, type, c = {}) {
-  { const r = ctx.decisions?.offerTreaty(ctx, from, to, type); if (r) return r; } // v6.12.0: 担当国への申し出は、勝手に結ばず決断にする
-  const civ = ctx.civ, ev = evaluateTreaty(civ, from, to, type), base = { kind: "treaty", type, from: from.id, to: to.id, counter: ev.counter ? { type: ev.counter.type } : null };
-  if (!ev.accept) { record(ctx, { ...base, status: ev.counter ? "countered" : "rejected" }); return failure(ev.counter ? `別の条件ならば受け入れる（${TREATY[ev.counter.type].ja}）` : "相手に受け入れられなかった", { targetId: to.id, counter: ev.counter }); }
+  if (!c.reverse) { const r = ctx.decisions?.offerTreaty(ctx, from, to, type); if (r) return r; } // v6.12.0: 担当国への申し出は、勝手に結ばず決断にする
+  const civ = ctx.civ, plan = territorialPlan(ctx, from, to, type), base = { kind: "treaty", type, from: from.id, to: to.id, counter: null }; if (plan.error) return failure(plan.error, { targetId: to.id });
+  const o = { reverse: !!c.reverse, terms: plan.terms }, ev = evaluateTreaty(civ, from, to, type, o); base.counter = ev.counter ? { type: ev.counter.type } : null;
+  if (!ev.accept) { record(ctx, { ...base, status: ev.counter ? "countered" : "rejected" }); return failure(ev.counter ? `別の条件ならば受け入れる（${TREATY[ev.counter.type].ja}）` : ev.hard ? ev.factors[0].ja : "相手に受け入れられなかった", { targetId: to.id, counter: ev.counter }); }
   // 直前の再検証（評価から適用までの間に条件が変わっていないか）
-  if (treatyFeasible(civ, from, to, type) || treatyBetween(civ, from, to, type)) { record(ctx, { ...base, status: "failed_recheck" }); return failure("条件が変わり、締結できなかった", { targetId: to.id }); }
-  signTreaty(ctx, type, from, to, { decisionId: c.decisionId, provenance: c.provenance }); record(ctx, { ...base, status: "accepted" }); return { ok: true, effects: [], silent: true, targetId: to.id };
+  if (treatyFeasible(civ, from, to, type, o) || treatyBetween(civ, from, to, type)) { record(ctx, { ...base, status: "failed_recheck" }); return failure("条件が変わり、締結できなかった", { targetId: to.id }); }
+  signTreaty(ctx, type, from, to, { decisionId: c.decisionId, provenance: c.provenance, reverse: !!c.reverse, extra: plan.terms }); record(ctx, { ...base, status: "accepted" }); return { ok: true, effects: [], silent: true, targetId: to.id };
 }
 
 /** 状況に応じた講和条件（条件を指定しないとき。AI もこれを使う）: 占領で優位なら割譲、劣勢で国庫に余裕があれば賠償、そのほかは白紙 */

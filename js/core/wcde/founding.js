@@ -7,7 +7,9 @@ import { evaluateFormation, formState, VIA } from "../civ/states.js";
 import { spatialOf, invalidateMonthCaches } from "../civ/spatial.js";
 import { reachable, spawnGroup, foundSettlement } from "../civ/population.js";
 import { makeEvent } from "../civ/events.js";
-import { leaderRng } from "./domains/naming.js";
+import { leaderRng, regnalOf, epithetGen, composeStateName } from "./domains/naming.js";
+import { normalizeFlag } from "../names/flag.js";
+import { lifeScale } from "../civ/species.js";
 import { languageOfGroup } from "./domains/language.js";
 import { takeControl } from "./control.js";
 import { initMilitary, nodesOf, canAdopt, adoptDoctrine } from "./domains/military.js";
@@ -15,6 +17,8 @@ import { REGIMES, DEFAULT_REGIME, regimeGate, checkOffices, defaultOffices, offi
 
 const POLITY_CHOICES = { city_state: ["chiefdom", "tribal"], religious_polity: ["theocracy", "tribal"], agri_union: ["tribal", "chiefdom"], nomad_confederation: ["tribal", "chiefdom"] };
 const dominant = (g) => g.cohorts.reduce((b, c) => (c.share > b.share ? c : b));
+/** 為政者の特性（建国の候補者に付く。効果は出来事・継承・戦争の側が読む） */
+export const LEADER_TRAITS = Object.freeze({ valiant: "勇猛", wise: "賢明", merciful: "慈悲深い", ambitious: "野心家", devout: "敬虔", frugal: "倹約", diplomat: "外交家", strategist: "戦略家", popular: "人望", sickly: "病弱" });
 const MAX_SEEDS = 600, REALM_REACH = 8, REALM_MAX_GROUPS = 16, LOOKS = 12, NEW_CITY_REACH = 4;
 const fail = (error) => ({ ok: false, error });
 const isSea = (w, c) => w.cell.landWater[c] === 0 || w.cell.elevation[c] <= 0, isLake = (w, c) => w.cell.landWater[c] === 2;
@@ -117,7 +121,7 @@ export function ensureOffices(ctx, st) { if (!st.offices?.length) assignOffices(
 /* ---------- 検証と共通の建国 ---------- */
 function checkSpec(w, s) {
   const { civ } = w;
-  const auto = !!s.auto, nm = String(s.name ?? "").trim(); if ((!nm && !auto) || nm.length > 30) return fail("国名は 1〜30 文字で決めてください"); if (nm && Object.values(civ.states).some((x) => x.alive && x.name === nm)) return fail("同じ名前の国がすでにあります");
+  const auto = !!s.auto, nm = String(s.name ?? "").trim(); if ((!nm && !auto && !s.nameParts?.base) || nm.length > 30) return fail("国名は 1〜30 文字で決めてください"); if (nm && Object.values(civ.states).some((x) => x.alive && x.name === nm)) return fail("同じ名前の国がすでにあります");
   if (!REGIMES[s.regime]) return fail("政体を選んでください");
   const oe = checkOffices(s.regime, s.offices); if (oe) return fail(oe);
   const ln = String(s.leader?.name ?? "").trim(); if ((!ln && !auto) || ln.length > 30) return fail("為政者の名前は 1〜30 文字で決めてください");
@@ -137,8 +141,14 @@ export function foundNation(w, spec, { mode = "player", predecessor = null, caus
   if (spec.doctrine != null && !doctrineChoices(w, techs).some((d) => d.id === spec.doctrine)) return fail("そのドクトリンは、選んだ技術では取れません");
   const cap = commitCapital(ctx, plan); const realm = (spec.groupIds ?? planRealm(w, cap.id).groupIds).slice(); if (!realm.includes(cap.id)) realm.unshift(cap.id);
   ctx._spatial = null; const f = evaluateFormation(ctx, cap), via = viaIn ?? (f?.via ?? viaFallback(civ, cap));
-  const st = formState(ctx, { via, groupIds: realm, player: mode === "player", name: c.name || null, polity: REGIMES[spec.regime].core, predecessor, cause, capitalGroupId: cap.id }); if (!st) return fail("国家の形成に失敗しました");
-  st.regime = spec.regime; if (c.leaderName) st.leader.name = c.leaderName; st.leader.look = spec.leader?.look ?? Math.floor(leaderRng(civ, st, "look")() * LOOKS); st.leader.title = officeJa(REGIMES[spec.regime].ruler);
+  let nm = c.name; const np = spec.nameParts?.base ? spec.nameParts : null; if (np) { nm = composeStateName(np.base, REGIMES[spec.regime].core, via, civ.date.year, np.sfx ?? ""); if (Object.values(civ.states).some((x) => x.alive && x.name === nm)) return fail("同じ名前の国がすでにあります"); }
+  const st = formState(ctx, { via, groupIds: realm, player: mode === "player", name: nm || null, polity: REGIMES[spec.regime].core, predecessor, cause, capitalGroupId: cap.id }); if (!st) return fail("国家の形成に失敗しました");
+  st.regime = spec.regime; if (np) { st.nameBase = np.base; st.nameSfx = np.sfx ?? ""; st.titleYear = civ.date.year; }
+  st.nameLang ??= ctx.nameLangOf?.(cap) ?? null; st.regnal = {}; delete st.throneNames; delete st.epithets; // 国の言語が決まったので、名乗りの型を決め直す
+  if (c.leaderName) { const rg = regnalOf(st, c.leaderName, leaderRng(civ, st, "found2"), epithetGen(ctx, st, cap)); st.leader.name = rg.name; st.leader.birthName = rg.birth; }
+  const ld = spec.leader ?? {}; if (Number.isFinite(ld.age) && ld.age >= 14 && ld.age <= 90) st.leader.bornAt = civ.monthIndex - Math.round(ld.age * 12 * lifeScale(civ, st)); if (Array.isArray(ld.traits)) st.leader.traits = ld.traits.filter((k) => LEADER_TRAITS[k]).slice(0, 3);
+  if (spec.flag) st.flag = normalizeFlag(spec.flag);
+  st.leader.look = spec.leader?.look ?? Math.floor(leaderRng(civ, st, "look")() * LOOKS); st.leader.title = officeJa(REGIMES[spec.regime].ruler);
   assignOffices(ctx, st, spec.offices);
   st.techAdopted = st.techAdopted ?? {}; for (const k of techs) st.techAdopted[k] = civ.monthIndex;
   if (spec.doctrine != null) { const pay = (nodesOf(st).find((d) => d.id === spec.doctrine)?.cost ?? 0); st.treasury += pay; const r = adoptDoctrine(ctx, st, spec.doctrine, { provenance: mode === "creator" ? "creator" : "player" }); if (!r.ok) st.treasury -= pay; }

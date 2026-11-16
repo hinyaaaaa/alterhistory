@@ -1,3 +1,22 @@
+# v6.16.0（最新）: 政体 24 種と進化・従属・条約・盟約・外交タブ
+
+- 中身は `docs/CHANGELOG.md` の v6.16.0。要件の正本は `docs/REQUIREMENTS.md`（v6.17.0 以降は、これを最初に読む）。
+- 新規: `wcde/regime-evolution.js`（政体の進化）・`wcde/dependency.js`（従属）・`wcde/pacts.js`（盟約・統合）・`wcde/treaty-ai.js`（アルゴリズム国家の新しい条約）・`tests/v616-core.test.mjs`。大きく変えたもの: `wcde/regimes.js`・`wcde/offices-data.js`・`wcde/negotiation.js`（`treatyFeasible`／`evaluateTreaty` が新しい条約と君主の気質に対応。`territorialPlan` を追加）・`civ/diplomacy.js`（`TREATY` が 18 種・5 分類）・`wcde/commands.js`（`diplomacy.propose`／`dependency`／`pactCreate`／`pactJoin`／`pactLeave`）・`ui/v6/diplo.js`（3 タブに作り直し）。
+- 注意: 内部の政体 `st.polity` は 6 値のまま。`st.regime`（24 種）が表示と進化の単位で、`regimeOf` が `core` の一致を見る。進化で核が変わるときは `reformPolity` を通す（国号が組み直る）。担当国の政体は進化させない。
+- 注意: 従属の条約では `t.a` が宗主、`t.b` が従う側。`signTreaty(..., { reverse: true })` は提案した側が従う側になる。`onTreatyEnded` が `st.dependency` を解く。
+- 注意: 盟約は `civ.wcde.pacts = { items, seq }`。担当国への誘い・統合は決断（`pact_invite`／`pact_merge`）。決断の登録は `registerPactDecisions()`（循環 import を避けて、拡張の登録時に 1 回呼ぶ）。
+- 未着手（次の版以降）: 戦争理由の 8 分類（v6.19.0）・継承法（v6.19.0）・国家タブの 6 サブタブ（v6.17.0）。従属・盟約の画面は「国家タブ」の外交サブタブへの移設を v6.17.0 で。
+- 未確認: 実機・画面での見え方（外交タブは撮影していない）。長期の世界の較正（政体の分布・従属と盟約の数）は v6.20.0。試験は v6.20.0 にまとめる。
+- 既知: `tests/v612-core.test.mjs` の「軍団が部隊になる」「会戦」の 2 件は v6.15.0 から失敗（無関係）。
+
+# v6.15.0（最新）: 命名と言語・建国の流れ
+
+- 中身は `docs/CHANGELOG.md` の v6.15.0。要件の正本は `docs/REQUIREMENTS.md`（v6.16.0 以降は、これを最初に読む）。
+- 新規: `js/core/names/flag.js`・`js/ui/v6/flagview.js`。大きく変えたもの: `wcde/domains/{language,naming,people,politics}.js`・`civ/states.js`・`wcde/founding.js`・`ui/v6/wizard.js`。
+- 注意: 国号は `nameBase`（語根）＋`nameSfx`（言語固有の語尾）＋称号で組み立てる。政体が変わると `retitle` が組み直す。従属（`st.dependency`）を v6.16.0 で入れるとき、公国は `dependency.kind === "vassal"` で付く。
+- 注意: 君主の `name` は即位名（呼び名）、`birthName` が本名。人物（`civ.figures`）にも `birthName`。
+- 未確認: 実機・画面での見え方（建国画面は撮影していない）。テストは v6.20.0。
+
 # v6.13.0（最新）: 軍と戦争を現代まで・地形と軽さ
 
 同じ v6.12.0 から別々に作られた 2 つの v6.13.0 を統合した版（実装の中身は `docs/CHANGELOG.md` の v6.13.0）。

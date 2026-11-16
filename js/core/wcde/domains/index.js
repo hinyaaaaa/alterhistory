@@ -19,10 +19,14 @@ import { DECISION_HOOKS, autoCivilWar } from "../decisions.js";
 import { syncCorps, defectCorps } from "../corps.js";
 import { stateFx } from "../statefx.js";
 import { officeUpkeep } from "../regimes.js";
+import { stepRegimeEvolution } from "../regime-evolution.js";
+import { stepDependencies } from "../dependency.js";
+import { stepPacts, registerPactDecisions } from "../pacts.js";
+import { stepTreatyAI } from "../treaty-ai.js";
 import { initWar, stepWar, finalize, monthly, canReach, seaTargets, settle } from "../warfare.js";
 
 export function wcdeExtension(ticker, ctx) {
-  registerWcdeActions(); ctx.nameGen = nameGen; ctx.nameLangOf = nameLangOf;
+  registerWcdeActions(); registerPactDecisions(); ctx.nameGen = nameGen; ctx.nameLangOf = nameLangOf;
   ctx.warForecast = (a, b) => (ctx.civ.options.wcde ? predictWar(ctx.civ, a.id, b.id, ctx) : null); // 戦争研究所の予測を AI も使う
   ctx.decisions = ctx.civ.options.wcde ? DECISION_HOOKS : null; ctx.autoCivilWar = ctx.civ.options.wcde ? (ns, st) => autoCivilWar(ctx, ns, st) : null; ctx.corpsDefect = ctx.civ.options.wcde ? (ns, st, ids) => { const r = defectCorps(ctx, st, ns, ids); for (const d of r) makeEvent(ctx.civ, ctx.ids, { kind: "state_action", title: `${st.name}の${d.name}が反乱側（${ns.name}）に寝返った`, participants: [{ entityId: st.id, role: "state" }, { entityId: ns.id, role: "target" }], location: null, provenance: "simulation" }); return r; } : null; // v6.12.0: 決断（担当国の条約・宣戦・継承・反乱・会戦）と、反乱の自動の内戦
   ctx.negotiate = { treaty: (c, a, b, t, x) => (c.civ.options.wcde ? negotiateTreaty(c, a, b, t, x) : null), peace: (c, a, w, x) => (c.civ.options.wcde ? negotiatePeace(c, a, w, x) : null) };
@@ -36,6 +40,10 @@ export function wcdeExtension(ticker, ctx) {
   ticker.register("culture", stepReligion, "stepReligion");
   ticker.register("economy", stepEconomy, "stepEconomy", { every: 3 });
   ticker.register("politics", stepPolitics, "stepPolitics", { every: 3 });
+  ticker.register("politics", stepRegimeEvolution, "stepRegimeEvolution");
+  ticker.register("conflict", stepDependencies, "stepDependencies");
+  ticker.register("conflict", stepPacts, "stepPacts");
+  ticker.register("conflict", stepTreatyAI, "stepTreatyAI");
   ticker.register("military", stepMilitary, "stepMilitary", { every: 3 });
   ticker.register("military", (c) => { for (const st of Object.values(c.civ.states)) if (st.alive && st.player) syncCorps(c, st); }, "stepCorps"); // v6.12.0: 担当国の軍団の兵力を毎月そろえる
   ticker.register("economy", (c) => { if (c.civ.monthIndex % 3 !== 0) return; for (const st of Object.values(c.civ.states)) if (st.alive && st.offices?.length) st.treasury -= officeUpkeep(st) * 3; }, "stepOfficeUpkeep"); // v6.12.0: 役職の維持費（3 か月ごと）

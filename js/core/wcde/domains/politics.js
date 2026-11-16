@@ -11,7 +11,7 @@ import { makeEvent } from "../../civ/events.js";
 import { hashSeed } from "../../civ/civ-state.js";
 import { lifeScale } from "../../civ/species.js";
 import { effective } from "./effective.js";
-import { retitle, leaderName, leaderRng } from "./naming.js";
+import { retitle, regnalOf, epithetGen, leaderRng } from "./naming.js";
 
 export const FACTIONS = Object.freeze({ nobility: "貴族・有力者", clergy: "聖職者", merchants: "商人", military: "軍", commoners: "民衆", bureaucrats: "官僚・書記", artisans: "職人・工房", clans: "遊牧氏族" });
 export const CORE_FACTIONS = Object.freeze(["nobility", "military", "commoners"]);
@@ -161,7 +161,7 @@ export function reformPolity(ctx, st, P, to, how) {
   const war = civ.events.slice(-80).reverse().find((e) => (e.kind === "war_declared" || e.kind === "war_ended" || e.kind === "uprising" || e.kind === "famine") && e.participants.some((p) => p.entityId === st.id));
   st.polity = to; P.lastRegimeChange = mi; st.stability = clamp(st.stability + (how === "revolution" || how === "military_takeover" ? -0.2 : how === "decline" ? -0.1 : 0.02)); P.fatigue = Math.max(0, (P.fatigue ?? 0) - 0.2);
   const rt = before !== to ? retitle(st, to, civ.date.year) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; st.titleYear = rt.year; }
-  if (how === "revolution" || how === "military_takeover") st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: how };
+  if (how === "revolution" || how === "military_takeover") { const rg = regnalOf(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime"), epithetGen(ctx, st, civ.groups[st.capitalGroupId])); st.leader = { name: rg.name, birthName: rg.birth, bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: how }; }
   makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}で${HOW_JA[how]}が起き、政体が変わった${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...(rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : [])], causes: war ? [{ targetId: war.eventId ?? war.id, relation: "caused_by", basis: "plausible" }] : [], facts: { stateId: st.id, polity: to, name: st.name, by: how }, provenance: "simulation" });
 }
 
@@ -178,5 +178,5 @@ export function regimeChange(ctx, st) {
   const oldName = st.name, rt = before !== to ? retitle(st, to, civ.date.year) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; st.titleYear = rt.year; } // 政体が変わると、国号の称号も改まる（王国→帝国・共和国など）
   makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}で政変が起きた（${how}）${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...(rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : []), { targetId: st.id, property: "stability", before: null, after: Math.round(st.stability * 100) / 100 }], causes, facts: { stateId: st.id, polity: to, name: st.name, by: who }, provenance: "simulation" });
   // 政変で指導者が代わる（新しい指導者は別の家系。出自の勢力を記録する。人物の記録は people.js が事実として残す）
-  st.leader = { name: leaderName(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime")), bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: who };
+  const rg = regnalOf(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime"), epithetGen(ctx, st, civ.groups[st.capitalGroupId])); st.leader = { name: rg.name, birthName: rg.birth, bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: who };
 }
