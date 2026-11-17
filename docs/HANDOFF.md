@@ -1,3 +1,14 @@
+# v6.18.0（最新）: ドクトリン 5 系統・軍団・戦場・核／隠密作戦・戦争の画面
+
+- 中身は `docs/CHANGELOG.md` の v6.18.0。要件の正本は `docs/REQUIREMENTS.md`（v6.19.0 以降は、これを最初に読む）。
+- 新規: `wcde/battlefield.js`（戦場）・`wcde/special-ops.js`（核・隠密）・`ui/v6/battle.js`・`ui/v6/doctrine.js`・`tests/v618-core.test.mjs`。大きく変えた: `domains/doctrine.js`（5 系統 × 15 段）・`decisions.js`（会戦＝戦場、指揮官の戦死）・`warfare.js`（渡海・記録・世界大戦）・`ui/v6/war.js`。
+- 注意: 戦場の状態は決断（kind=battle）の `payload.field`。UI が `battle.tick` を速度に合わせて呼ぶ（取り消し点なし）。`BF`（battle.js）が同じ決断の間は要素を使い回す。
+- 注意: 空・宇宙の戦いは `skirmish`（3 か月に 1 度、双方が 30/20 人以上のとき）。結果は `ops.dom`。
+- 注意: ドクトリンの `military.doc.line`（選んだ系統）と `confusion`。旧い保存データは `migrateDoctrine`（`M.v6180` で一度だけ）。
+- 注意: `finalize` が戦争の記録（`battles`・`snap`・`civ`・`mil`・`occHist`）を残す。戦争の画面は `ops.snap` が無い古い戦争では 3 点表示を出さない。
+- 未着手: イベント 200 種・継承・反乱を戦争と同じ処理に・災厄と世界の再創造（v6.19.0）。国境・国数・文化／宗教／言語・性能（v6.20.0）。特殊部隊の作戦を戦場の画面で扱う拡張。核の抑止を AI の宣戦判断に入れる。
+- 未確認: 実機・画面での見え方（撮影なし）。テストは v6.20.0（旧い系統・STANCES を前提にした既存テストは、この版で落ちる）。
+
 # v6.17.0（最新）: 国家ページの 6 サブタブ・情報・内政・政策バッジ
 
 - 中身は `docs/CHANGELOG.md` の v6.17.0。要件の正本は `docs/REQUIREMENTS.md`（v6.18.0 以降は、これを最初に読む）。

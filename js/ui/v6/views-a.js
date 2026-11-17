@@ -19,6 +19,7 @@ import { formatWorldDate } from "../../core/wcde/world.js";
 import { UPRISING_KINDS } from "../../core/wcde/uprising.js";
 import { openWizard } from "./wizard.js";
 import { notify } from "./notify.js";
+import { doctrineBoard } from "./doctrine.js";
 import { officeSummary, officeChips } from "./policy.js";
 import { regimeJa, regimeOf, REGIMES, OFFICES, OFFICE_DOMAIN_JA, officeJa, defaultOffices, MIN_OFFICES, MAX_OFFICES } from "../../core/wcde/regimes.js";
 import { pastView } from "../../core/civ/archive.js";
@@ -143,12 +144,4 @@ function tTech(st, mine) {
     h("div", { class: "lg" }, ...Object.entries({ adopted: "制度化", available: "採用できる", known: "保有", lost: "失われた", locked: "未発見" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "locked" ? "dashed" : "solid"} ${COL[k][0]}` }), `${SYM[k]} ${t}`))));
 }
 const COND_JA = (k) => COND[k]?.ja ?? k;
-function tDoctrine(st, mine) {
-  const M = st.military, taken = M?.doctrine?.taken ?? {}, nodes = nodesOf(st), branches = branchesOf(st), status = (d) => (taken[d.id] != null ? "taken" : canAdopt(st, d.id).ok ? "available" : "blocked"), sel = nodeOf(st, S.doc) ?? null, dt = doctrineTree({ nodes, branches, status, selected: S.doc, vb0: DOC_VB, onView: (v) => { DOC_VB = v; }, onPick: (d) => { S.doc = d.id; S.hooks.panel(); } }), { svg, COL } = dt;
-  const fxText = (d) => Object.entries(d.fx).map(([k, v]) => `${DOC_FX_JA[k] ?? k} +${pct(v)}`).join("・");
-  const fx = M?.fx ?? {}, now = Object.entries(fx).filter(([, v]) => v > 0).map(([k, v]) => `${DOC_FX_JA[k] ?? k} +${pct(v)}`).join("・") || "なし";
-  const sc = M?.school ?? {}, routes = `陸 ${SCHOOL_BY_ID[sc.land]?.ja ?? "未選択"}／海 ${SCHOOL_BY_ID[sc.sea]?.ja ?? "未選択"}／空 ${SCHOOL_BY_ID[sc.air]?.ja ?? "未選択"}`;
-  return h("div", {}, h("div", { class: "dt" }, `いまの効果: ${now}`), h("div", { class: "dt" }, `選んだ路線: ${routes}（各軍で 1 つ。6 段そろえると熟達の加算）`), h("div", { class: "docwrap" }, svg, h("div", { class: "rowb" }, btn("全体", dt.fit, "", { id: "doc-fit" }), btn("選んだ方針へ", () => S.doc && dt.focus(S.doc), "", { id: "doc-goto", disabled: !S.doc }))),
-    h("div", { class: "lg" }, ...Object.entries({ taken: "■ 取得済み", available: "◆ 取得できる", blocked: "○ 条件が足りない（点線）" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "blocked" ? "dashed" : "solid"} ${COL[k][0]}` }), t))),
-    sel ? (() => { const ca = canAdopt(st, sel.id), br = branches.find((b) => b.id === sel.branch); return h("div", { class: "dt" }, h("b", {}, sel.ja), `（${br?.ja ?? ""}・段階 ${sel.tier}${sel.special ? "・固有" : sel.school ? "・路線" : "・基幹"}）`, h("br"), `効果: ${fxText(sel)}・費用 ${sel.cost}`, h("br"), `前提: ${sel.prereq.length ? sel.prereq.map((p) => nodeOf(st, p)?.ja ?? p).join("、") : "なし"}${sel.tech.length ? "　技術: " + sel.tech.map((t) => TECH[t]?.name ?? t).join("、") : ""}`, h("br"), taken[sel.id] != null ? "取得済み" : ca.ok ? "取得できます" : `取得できない理由: ${ca.reason}`, h("small", { style: "color:var(--dim)" }, "取得は、世界の仕組みが自動で行います")); })() : note("木のノードを選ぶと、効果と前提が出ます。"));
-}
+function tDoctrine(st, mine) { return doctrineBoard(st, mine); }

@@ -15,8 +15,9 @@ export const SERVICES = Object.freeze({
   land: { ja: "陸軍", formation: "軍団", chief: "陸軍総司令官", color: "#9fbf8a", ranks: ["隊長", "将軍", "大将", "元帥"] },
   sea: { ja: "海軍", formation: "艦隊", chief: "海軍総司令官", color: "#6fa8c9", ranks: ["艦長", "提督", "大提督", "元帥提督"] },
   air: { ja: "空軍", formation: "航空軍", chief: "空軍総司令官", color: "#c9b36f", ranks: ["航空隊長", "空将", "空軍大将", "空軍元帥"] },
+  space: { ja: "宇宙軍", formation: "軌道軍", chief: "宇宙軍総司令官", color: "#b58bd0", ranks: ["管制官", "宙将", "宙軍大将", "宙軍元帥"] },
 });
-export const SERVICE_KEYS = Object.freeze(["land", "sea", "air"]);
+export const SERVICE_KEYS = Object.freeze(["land", "sea", "air", "space"]);
 
 const T = (id, service, ja, need, terms, o = {}) => [id, { id, service, ja, need, terms, item: o.item ?? null, per: o.per ?? 0, hint: o.hint ?? "" }];
 /** 兵種。terms=[[技術のキー, 名前]...]（上から最初に当てはまるものが名前になる。null は常に当てはまる） */
@@ -49,7 +50,9 @@ export const UNIT_TYPES = Object.freeze(Object.fromEntries([
   T("missile", "air", "ミサイル", (st) => has(st, "guided_missiles"), [[null, "ミサイル旅団"]], { item: "基", per: 30, hint: "遠距離の精密打撃" }),
   T("strategic", "air", "戦略ロケット", (st) => has(st, "ballistic_missile"), [["nuclear_arsenal", "戦略核ロケット軍"], [null, "戦略ロケット軍"]], { item: "基", per: 45, hint: "抑止。国の守りを固める" }),
   T("cyber", "air", "サイバー", (st) => has(st, "cyber_warfare"), [["cognitive_warfare", "情報・認知戦軍"], [null, "サイバー軍"]], { hint: "情報網の防御と撹乱" }),
-  T("orbital", "air", "宇宙", (st) => has(st, "orbital_warfare"), [[null, "宇宙軍"]], { hint: "軌道上の偵察・攻撃・防衛" }),
+  // ---- 宇宙軍（v6.18.0。人数＝運用要員）
+  T("satellite", "space", "衛星網", (st) => has(st, "satellites"), [[null, "衛星運用軍"]], { item: "基", per: 12, hint: "偵察・通信・測位。陸海空の戦いを支える" }),
+  T("orbital", "space", "軌道戦力", (st) => has(st, "orbital_warfare"), [[null, "軌道軍"]], { item: "基", per: 40, hint: "軌道上の攻撃・防衛・迎撃" }),
 ]));
 export const serviceOf = (kind) => UNIT_TYPES[kind]?.service ?? "land";
 const KEYS = Object.keys(UNIT_TYPES);
@@ -74,7 +77,7 @@ const sat = (x, k = 1) => Math.max(0, Math.min(1, x / k));
 /** 自動配分の重み。古い時代（陸の歩兵・騎兵・守備兵・銃兵、水軍）は従来の配分と同じ。新しい兵種は、解禁されたときだけ重みを持つ。
  *  学派（陸・海・空のドクトリンの選択）は、その傾きの兵種の重みを上げる（HoI4 のドクトリンと同じく、選んだ路線が編成に出る） */
 export function autoWeights(ctx, st) {
-  const gs = byState(ctx).get(st.id) ?? [], pastoral = gs.length ? gs.filter((g) => g.subsistence === "pastoral").length / gs.length : 0, M = st.military ?? {}, sch = M.school ?? {}, w = {};
+  const gs = byState(ctx).get(st.id) ?? [], pastoral = gs.length ? gs.filter((g) => g.subsistence === "pastoral").length / gs.length : 0, M = st.military ?? {}, w = {};
   for (const k of KEYS) if (UNIT_TYPES[k].need(st, ctx)) w[k] = 0;
   const set = (k, v) => { if (k in w) w[k] = v; };
   set("infantry", 1); set("ranged", 0.25); set("cavalry", 0.2 + 0.5 * pastoral); set("navy", 0.15); set("garrison", 0.1); set("firearms", 0.4);
@@ -82,17 +85,18 @@ export function autoWeights(ctx, st) {
   set("artillery", 0.2 + (has(st, "howitzer") ? 0.1 : 0)); set("armor", 0.3); set("mechanized", 0.28); set("special", 0.04); set("marine", 0.05); set("powered", 0.06); set("autonomous", 0.1);
   set("levy", has(st, "conscription") ? 0.3 : 0);
   set("capital_ship", has(st, "dreadnought") ? 0.1 : 0.07); set("submarine", 0.05); set("carrier", 0.04);
-  set("air_corps", 0.08); set("fighter", 0.14); set("bomber", 0.1); set("helicopter", 0.06); set("drone", 0.05); set("missile", 0.05); set("strategic", 0.02); set("cyber", 0.02); set("orbital", 0.01);
+  set("air_corps", 0.08); set("fighter", 0.14); set("bomber", 0.1); set("helicopter", 0.06); set("drone", 0.05); set("missile", 0.05); set("strategic", 0.02); set("cyber", 0.02); set("satellite", 0.012); set("orbital", 0.01);
   if (w.infantry != null && has(st, "tank")) w.infantry *= 0.9; // 現代戦でも歩兵は主力のまま（機甲・砲兵・空が混ざる）
-  // 学派の傾き
-  const bias = (k, f) => { if (k in w) w[k] *= f; };
-  const L = sch.land, S = sch.sea, A = sch.air;
-  if (L === "mass") { bias("infantry", 1.5); bias("levy", 2); bias("artillery", 0.8); bias("armor", 0.7); } else if (L === "firepower") { bias("artillery", 2); bias("firearms", 1.3); } else if (L === "mobile") { bias("armor", 2); bias("mechanized", 1.8); bias("cavalry", 1.3); bias("infantry", 0.8); } else if (L === "battle_plan") { bias("special", 2); bias("infantry", 1.1); bias("artillery", 1.2); }
-  if (S === "decisive") { bias("capital_ship", 2); } else if (S === "interdiction") { bias("submarine", 3); bias("navy", 1.2); } else if (S === "base_strike") { bias("carrier", 3); bias("marine", 1.5); }
-  if (A === "superiority") { bias("fighter", 2); } else if (A === "strategic") { bias("bomber", 2); bias("strategic", 2); bias("missile", 1.5); } else if (A === "support") { bias("helicopter", 2); bias("drone", 1.6); bias("bomber", 0.8); }
+  // 系統（優先火力・高機動戦・人海戦術・陣地戦略・特殊作戦）の傾き。同じ系統が、軍ごとに違う形で編成に出る
+  const bias = (k, f) => { if (k in w) w[k] *= f; }, line = M.doc?.line ?? null;
+  if (line === "firepower") { bias("artillery", 2); bias("firearms", 1.3); bias("capital_ship", 1.6); bias("missile", 1.8); bias("bomber", 1.5); bias("strategic", 1.5); bias("orbital", 1.5); }
+  else if (line === "mobile") { bias("armor", 2); bias("mechanized", 1.8); bias("cavalry", 1.5); bias("infantry", 0.8); bias("carrier", 1.8); bias("navy", 1.3); bias("fighter", 1.4); bias("helicopter", 1.8); }
+  else if (line === "mass") { bias("infantry", 1.5); bias("levy", 2.2); bias("artillery", 0.8); bias("armor", 0.7); bias("navy", 1.8); bias("drone", 2); bias("air_corps", 1.5); bias("satellite", 1.6); }
+  else if (line === "position") { bias("garrison", 2.2); bias("artillery", 1.2); bias("infantry", 0.9); bias("navy", 0.8); bias("fighter", 1.4); bias("missile", 1.3); bias("satellite", 1.4); }
+  else if (line === "special") { bias("special", 4); bias("marine", 2.2); bias("submarine", 2.4); bias("cyber", 3); bias("drone", 1.6); bias("powered", 1.5); bias("orbital", 1.4); bias("infantry", 0.85); }
   // 地理・経済: 海に面していなければ海軍は小さい（使える兵種に海軍が出ないので自然に 0）。産業が小さい国は、高価な兵種（空・機甲）を控える
   const ind = sat(st.econ?.perCapita ?? 0.5, 1.6); // 1 人あたりの産出（recompute の装備水準と同じ尺度）
-  for (const k of KEYS) if (k in w && w[k] > 0 && (serviceOf(k) === "air" || k === "armor" || k === "carrier" || k === "capital_ship")) w[k] *= 0.5 + 0.7 * ind;
+  for (const k of KEYS) if (k in w && w[k] > 0 && (serviceOf(k) === "air" || serviceOf(k) === "space" || k === "armor" || k === "carrier" || k === "capital_ship")) w[k] *= 0.5 + 0.7 * ind;
   return w;
 }
 /** 自動の人数（total を重みで割る）。小数のまま返す（合計が total に一致） */

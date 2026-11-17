@@ -12,9 +12,11 @@ import { leaderName, leaderRng } from "./domains/naming.js";
 import { enthrone, runSecession } from "../civ/states.js";
 import { treatyFeasible, recordProposal, negotiatePeace } from "./negotiation.js";
 import { OFFICES } from "./regimes.js";
-import { fieldEngage, battleOdds, placeName, warHelpers } from "./warfare.js";
-import { corpsById, corpsFx } from "./corps.js";
-import { landShare } from "./power.js";
+import { fieldEngage, navalEngage, placeName, warHelpers } from "./warfare.js";
+import { corpsById, serviceLoss, leadCorps, installCommander } from "./corps.js";
+import { landShare, navyShare } from "./power.js";
+import { headsOf } from "./orbat.js";
+import { createField, fieldOutcome, DOMAINS } from "./battlefield.js";
 import { stateFx } from "./statefx.js";
 import { timeOf, newsOf, DEFAULT_SPEED } from "./clock.js";
 import { decisionsOf, pendingOf, isLive, coolUntil, setCool } from "./decision-state.js";
@@ -22,7 +24,7 @@ import { decisionsOf, pendingOf, isLive, coolUntil, setCool } from "./decision-s
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v), r3 = (x) => Math.round(x * 1000) / 1000;
 const U = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
 const HANDLERS = {}; export const registerDecision = (kind, fn) => { HANDLERS[kind] = fn; };
-export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", pact_invite: "盟約への誘い", pact_merge: "統合の提案" });
+export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", commander_death: "指揮官の戦死", pact_invite: "盟約への誘い", pact_merge: "統合の提案" });
 
 // ---- 出す・止める・解く
 function hold(civ) { const T = timeOf(civ); if (!T.hold) { T.hold = true; T.resumeSpeed = T.speed; } }
@@ -53,7 +55,7 @@ export function dropStaleDecisions(civ) {
 export function scoutLevel(civ, st) {
   let intel = 0; for (const o of st.offices ?? []) if (OFFICES[o.id]?.[1] === "intel" || o.domain === "intel") intel++;
   const a = (k) => (st.techAdopted?.[k] != null ? 1 : 0);
-  return clamp(0.3 + 0.12 * Math.min(3, intel) + 0.1 * a("writing") + 0.1 * a("administration") + (st.scoutBonus ?? 0) + stateFx(st).scout, 0.2, 0.92);
+  return clamp(0.3 + 0.12 * Math.min(3, intel) + 0.1 * a("writing") + 0.1 * a("administration") + (st.scoutBonus ?? 0) + stateFx(st).scout + (Object.values(st.intel ?? {}).some((t) => t > civ.monthIndex) ? 0.15 : 0), 0.2, 0.92);
 }
 
 // ---- 条約の申し出（アルゴリズム国家 → 担当国）
@@ -185,39 +187,53 @@ registerDecision("omen", (ctx, d, opt) => { const st = ctx.civ.states[d.stateId]
 export function autoCivilWar(ctx, ns, st) { const { civ } = ctx; if (!ns?.alive || !st?.alive || atWarWith(civ, ns, st)) return null; return declareWar(ctx, ns, st, { reason: "independence", provenance: "simulation" }); }
 
 
-// ---- 会戦（大きな戦い）: 担当国の軍団が関わる大きな戦いは、3 手番の選択肢で進める。突撃は機動を止め、機動は堅守を破り、堅守は突撃を受け止める（三すくみ）
-export const STANCES = Object.freeze({ assault: { ja: "突撃", hint: "正面から押し込む。勝てば大きいが、損害も大きい" }, hold: { ja: "堅守", hint: "陣を固めて受ける。損害が少ない" }, flank: { ja: "包囲機動", hint: "側面・後方へ回る。堅守を破るが、突撃に止められる" }, withdraw: { ja: "退却", hint: "戦いを避ける。損害は小さいが、敗北として扱われる" } });
-const BEATS = { assault: "flank", flank: "hold", hold: "assault" }, BATTLE_ROUNDS = 3;
-const aiStance = (civ, d, round, enemyAttacks) => { const u = U(civ, d.id, round, "ai"), t = enemyAttacks ? [["assault", 0.5], ["flank", 0.35], ["hold", 0.15]] : [["hold", 0.5], ["flank", 0.3], ["assault", 0.2]]; let a = 0; for (const [k, v] of t) { a += v; if (u < a) return k; } return t[0][0]; };
-const hintFor = (civ, st, d, round, truth) => { const sc = scoutLevel(civ, st); if (U(civ, d.id, round, "hint") < sc) return truth; const o = ["assault", "hold", "flank"].filter((k) => k !== truth); return o[Math.floor(U(civ, d.id, round, "hint2") * o.length)]; };
-const logLabel = (e) => (e >= 0.2 ? "押している" : e >= 0.05 ? "やや有利" : e > -0.05 ? "互角" : e > -0.2 ? "やや不利" : "押されている");
-function isMajor(ctx, w, { camp, A, D, g }) {
+// ---- 会戦（大きな戦い）: 担当国の部隊が関わる大きな戦いは、専用の戦場（battlefield.js）で、日ごとにリアルタイムで進める。
+//   決断が開いている間、戦場の画面が tick（命令 battle.tick）で日を進め、翼ごとの命令・予備の投入・自動を受けつける。一時停止できる。解決（戦いを終える）で結果が戦争へ反映される。
+//   陸・海・空・宇宙は同じ作り。空・宇宙の戦いは独立した戦場で、結果は制空・制宙（ops.dom）として以後の戦闘に効く。
+const scoutK = (civ, mine, key) => { const sc = scoutLevel(civ, mine); return { exact: sc >= 0.85, k: 1 + (U(civ, key, "fogs") - 0.5) * 2 * (1 - sc) * 0.4 }; };
+function isMajor(ctx, w, { camp, A, D, g, domain = "land" }) {
   const { civ } = ctx, ops = w.ops, mi = civ.monthIndex, sA = civ.states[A.stateId], sD = civ.states[D.stateId], me = sA.player ? A : sD.player ? D : null; if (!me?.corpsId || !isLive(civ)) return false; if ((ops.lastBattleDecision ?? -99) > mi - 2) return false;
-  const mine = civ.states[me.stateId], land = Math.max(1, mine.army * landShare(mine)), stage = warHelpers.stageOf(civ, g), cap = civ.states[g.stateId]?.capitalGroupId === g.id;
-  return (A.size + D.size >= 600 && Math.min(A.size, D.size) >= 0.25 * land) || stage === "city" || cap || Math.abs(w.score) >= 50 || ops.broken.a > 0 || ops.broken.d > 0;
+  const mine = civ.states[me.stateId], share = domain === "sea" ? navyShare(mine) : landShare(mine), land = Math.max(1, mine.army * share), stage = warHelpers.stageOf(civ, g), cap = civ.states[g.stateId]?.capitalGroupId === g.id;
+  return (A.size + D.size >= 600 && Math.min(A.size, D.size) >= 0.25 * land) || (domain === "land" && (stage === "city" || cap)) || Math.abs(w.score) >= 50 || ops.broken.a > 0 || ops.broken.d > 0;
 }
-function battle(ctx, w, { camp, A, D, g, site }) {
-  const { civ } = ctx; if (!w.ops || !isMajor(ctx, w, { camp, A, D, g })) return null; const sA = civ.states[A.stateId], sD = civ.states[D.stateId], mine = sA.player ? sA : sD, side = sA.player ? "A" : "D", me = side === "A" ? A : D, foe = side === "A" ? D : A, foeSt = civ.states[foe.stateId];
-  const key = `b|${w.id}|${camp.id}`; if (openKey(civ, key)) return pendingOf(civ).find((x) => x.key === key).id; const cp = corpsById(mine, me.corpsId), sc = scoutLevel(civ, mine), od = battleOdds(ctx, w, { camp, A, D, g: site }), ratioMine = side === "A" ? od.pA / (od.pD + 1e-9) : od.pD / (od.pA + 1e-9);
-  const seen = ratioMine * (1 + (U(civ, key, "fog") - 0.5) * 2 * (1 - sc) * 0.5), estSize = Math.round(foe.size * (1 + (U(civ, key, "fogs") - 0.5) * 2 * (1 - sc) * 0.4)), cmdLine = cp?.commander ? `${cp.commander.name}（能力${Math.round(cp.commander.skill * 100)}）` : "指揮官なし";
-  const next = aiStance(civ, { id: key }, 1, side === "D"), payload = { warId: w.id, campId: camp.id, forceA: A.id, forceD: D.id, gid: g.id, siteId: site.id, side, round: 0, rounds: BATTLE_ROUNDS, momentum: 0, log: [], lossMine: 0, lossFoe: 0, next, hint: hintFor(civ, mine, { id: key }, 1, next), place: placeName(ctx, site), mine: { corps: cp?.name ?? "—", commander: cmdLine, size: Math.round(me.size), morale: Math.round(me.morale * 100), supply: Math.round(me.supply * 100) }, foe: { state: foeSt.name, estSize, exact: sc >= 0.85, morale: Math.round(foe.morale * 100) }, odds: logLabel(Math.log(Math.max(0.05, seen)) * 0.6), role: side === "A" ? "攻め" : "守り" };
-  const options = Object.entries(STANCES).map(([id, v]) => ({ id, ja: v.ja, hint: v.hint }));
-  const d = raise(ctx, { kind: "battle", key, stateId: mine.id, title: `${payload.place}の戦い（${w.name ?? "戦争"}）`, body: `${mine.name}の${payload.mine.corps}（${payload.role}）が、${foeSt.name}の軍と激突する。第 1 手番の構えを選ぶ。`, options, payload }); if (!d) return null; w.ops.lastBattleDecision = civ.monthIndex; return d.id;
+function battle(ctx, w, { camp, A, D, g, site, domain = "land" }) {
+  const { civ } = ctx; if (!w.ops || !isMajor(ctx, w, { camp, A, D, g, domain })) return null; const sA = civ.states[A.stateId], sD = civ.states[D.stateId], mine = sA.player ? sA : sD, side = sA.player ? "A" : "D", me = side === "A" ? A : D, foe = side === "A" ? D : A, foeSt = civ.states[foe.stateId];
+  const key = `b|${w.id}|${camp.id}`; if (openKey(civ, key)) return pendingOf(civ).find((x) => x.key === key).id;
+  const stage = warHelpers.stageOf(civ, g), fort = domain === "sea" ? 1 : 1 + ((civ.states[D.stateId].defense ?? 0) + (stage === "city" ? 0.3 : stage === "town" ? 0.15 : 0.05) * (stage ? 1 : 0));
+  const field = createField(ctx, { domain, place: placeName(ctx, site), seed: `${key}|${civ.monthIndex}`, terr: domain === "sea" ? 0 : warHelpers.terrainBonus(ctx.world, site.cell), fort, meDefends: side === "D", long: domain === "land" && stage === "city" ? 1 : 0,
+    me: { st: mine, size: me.size, corps: corpsById(mine, me.corpsId), morale: me.morale, supply: me.supply }, foe: { st: foeSt, size: foe.size, corps: corpsById(foeSt, foe.corpsId ?? foe.lead), morale: foe.morale, supply: foe.supply, label: foeSt.name } });
+  field.fog = scoutK(civ, mine, key); field.war = w.name ?? "戦争";
+  const d = raise(ctx, { kind: "battle", key, stateId: mine.id, title: `${field.place}の${DOMAINS[domain].ja}`, body: "", options: [{ id: "end", ja: "戦いを終える" }], payload: { warId: w.id, campId: camp.id, forceA: A.id, forceD: D.id, gid: g.id, siteId: site.id, side, domain, field } }); if (!d) return null; w.ops.lastBattleDecision = civ.monthIndex; return d.id;
+}
+/** 空・宇宙の独立した戦い（担当国が両軍とも持つとき、数か月に 1 度）。陸海の戦いとは別の戦場で、結果は制空・制宙として効く */
+function skirmish(ctx, w, domain) {
+  const { civ } = ctx, ops = w.ops; if (!ops || !isLive(civ)) return null; const me = [...w.sides.a, ...w.sides.d].map((i) => civ.states[i]).find((x) => x?.player); if (!me) return null;
+  const mySide = w.sides.a.includes(me.id) ? "a" : "d", foes = w.sides[mySide === "a" ? "d" : "a"].map((i) => civ.states[i]).filter((x) => x?.alive).sort((x, y) => headsOf(y, domain) - headsOf(x, domain)), foeSt = foes[0]; if (!foeSt) return null;
+  const mh = headsOf(me, domain), fh = headsOf(foeSt, domain); if (mh < 30 || fh < 20) return null; const key = `s|${w.id}|${domain}`; if (openKey(civ, key) || (ops.lastSkirm?.[domain] ?? -99) > civ.monthIndex - 5) return null;
+  const commit = Math.min(1, 0.7), field = createField(ctx, { domain, place: DOMAINS[domain].ja === "空戦" ? "戦域の空" : "軌道上", seed: `${key}|${civ.monthIndex}`, terr: 0, fort: 1, meDefends: false, me: { st: me, size: mh * commit, corps: leadCorps(me, domain), morale: 0.85, supply: 1 }, foe: { st: foeSt, size: fh * commit, corps: leadCorps(foeSt, domain), morale: 0.8, supply: 1, label: foeSt.name } }); field.fog = scoutK(civ, me, key); field.war = w.name ?? "戦争";
+  (ops.lastSkirm ??= {})[domain] = civ.monthIndex; const d = raise(ctx, { kind: "battle", key, stateId: me.id, title: `${field.place}の${DOMAINS[domain].ja}`, body: "", options: [{ id: "end", ja: "戦いを終える" }], payload: { warId: w.id, domain, skirmish: true, mySide, foeId: foeSt.id, field } }); return d?.id ?? null;
 }
 registerDecision("battle", (ctx, d, opt) => {
-  const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], ops = w?.ops, A = ops?.forces?.[p.forceA], D = ops?.forces?.[p.forceD], camp = ops?.campaigns?.[p.campId], g = civ.groups[p.gid], site = civ.groups[p.siteId];
+  const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], ops = w?.ops;
+  if (p.skirmish) { if (!w || w.status !== "active" || ops?.ended) return { ok: true, note: "戦況が変わり、戦いは起きなかった" }; const me = civ.states[d.stateId], foe = civ.states[p.foeId], o = fieldOutcome(p.field, true), dom = (ops.dom ??= { air: 0, space: 0, nuke: 0 }), sg = p.mySide === "a" ? 1 : -1;
+    for (const [st, heads, lm] of [[me, headsOf(me, p.domain), o.lossMine], [foe, headsOf(foe, p.domain), o.lossFoe]]) if (st?.alive) { const dead = Math.min(st.army, heads * 0.1 * lm * 0.7); st.army = Math.max(0, st.army - dead); serviceLoss(st, p.domain, dead); w.casualties += dead; ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + dead; }
+    dom[p.domain] = clamp((dom[p.domain] ?? 0) + sg * (o.win ? 1 : -1) * 0.6, -1, 1); (ops.battles ??= []).push({ id: `b${++ops.seq}`, at: civ.monthIndex, kind: p.domain, name: `${p.field.place}の${DOMAINS[p.domain].ja}`, cell: civ.groups[civ.states[d.stateId].capitalGroupId]?.cell ?? 0, a: me.id, d: foe.id, winner: o.win ? me.id : foe.id, deadA: o.result.lossMe, deadD: o.result.lossFoe, win: o.win ? "A" : "D", notable: true, domain: p.domain });
+    return { ok: true, note: `${DOMAINS[p.domain].ja}: ${o.win ? "勝利" : "敗北"}（${p.domain === "air" ? "制空" : "制宙"}に響く）` }; }
+  const A = ops?.forces?.[p.forceA], D = ops?.forces?.[p.forceD], camp = ops?.campaigns?.[p.campId], g = civ.groups[p.gid], site = civ.groups[p.siteId];
   if (!w || w.status !== "active" || ops?.ended || !A || !D || !camp || !g || !site) { if (camp) camp.waiting = null; return { ok: true, note: "戦況が変わり、会戦は起きなかった" }; }
-  const mineSt = civ.states[p.side === "A" ? A.stateId : D.stateId], cp = corpsById(mineSt, (p.side === "A" ? A : D).corpsId), cf = cp ? corpsFx(cp, mineSt) : { off: 0, def: 0, skill: 0, siege: 0 };
-  const finish = (bias, lossMine, lossFoe, note0) => {
-    const lossA = p.side === "A" ? lossMine : lossFoe, lossD = p.side === "A" ? lossFoe : lossMine; ops.lastBattleDecision = civ.monthIndex; camp.waiting = null;
-    const r = fieldEngage(ctx, w, camp, A, D, g, { site, bias, lossA, lossD }), won = r.win === "A" ? p.side === "A" : p.side === "D"; return { ok: true, note: `${r.rec.name}: ${won ? "勝利" : "敗北"}（${note0}）` };
-  };
-  if (opt === "withdraw") return finish(p.side === "A" ? 0.15 : 6, 0.4, 0.8, "退却した");
-  const es = p.next, mine = opt, tri = BEATS[mine] === es ? 1 : BEATS[es] === mine ? -1 : 0, bonus = mine === "assault" ? cf.off * 1.2 : mine === "hold" ? cf.def * 1.2 : cf.skill * 1.6, edge = r3(0.28 * tri + (U(civ, d.id, p.round, "n") - 0.5) * 0.3 + bonus);
-  p.momentum = r3(p.momentum + edge); p.lossMine = r3(p.lossMine + (mine === "assault" ? 1.25 : mine === "hold" ? 0.85 : 1)); p.lossFoe = r3(p.lossFoe + (mine === "assault" ? 1.15 : mine === "hold" ? 0.9 : 1.05) * (tri > 0 ? 1.1 : 1));
-  const line = { round: p.round + 1, mine, theirs: es, edge, text: `${STANCES[mine].ja}対${STANCES[es].ja}: ${tri > 0 ? "相手の構えを破った" : tri < 0 ? "読まれて押し返された" : "互角にぶつかった"}（${logLabel(edge)}）` }; p.log.push(line); p.round++;
-  if (p.round < p.rounds) { p.next = aiStance(civ, { id: d.key }, p.round + 1, p.side === "D"); p.hint = hintFor(civ, mineSt, { id: d.key }, p.round + 1, p.next); d.body = `第 ${p.round} 手番の結果: ${line.text}。戦いはつづく。第 ${p.round + 1} 手番の構えを選ぶ。`; d.fresh = true; return { ok: true, keep: true, step: line }; }
-  const n = p.rounds, bias = Math.exp(p.side === "A" ? p.momentum : -p.momentum); return finish(bias, p.lossMine / n, p.lossFoe / n, `${n} 手番の流れ: ${logLabel(p.momentum / n)}`);
+  const o = fieldOutcome(p.field, p.side === "A"), lossA = p.side === "A" ? o.lossMine : o.lossFoe, lossD = p.side === "A" ? o.lossFoe : o.lossMine; ops.lastBattleDecision = civ.monthIndex; camp.waiting = null;
+  const force = o.winA ? "A" : "D", r = p.domain === "sea" ? navalEngage(ctx, w, camp, A, D, g, { site, bias: o.bias, lossA, lossD, force }) : fieldEngage(ctx, w, camp, A, D, g, { site, bias: o.bias, lossA, lossD, force });
+  return { ok: true, note: `${r.rec.name}: ${o.win ? "勝利" : "敗北"}（${o.result.days} 日）` };
+});
+
+// ---- 指揮官の戦死（後任を選ぶ）
+function commanderDeath(ctx, st, cp, cands, cause) {
+  const key = `cd|${cp.id}|${ctx.civ.monthIndex}`; if (openKey(ctx.civ, key)) return null; const old = cp.commander;
+  const d = raise(ctx, { kind: "commander_death", key, stateId: st.id, title: `${cp.name}の指揮官 ${old.name} が${cause}`, body: "", options: cands.map((c) => ({ id: c.p.id, ja: c.p.name, hint: `${c.from}・能力 ${Math.round(c.p.skill * 100)}` })), payload: { corpsId: cp.id, fallen: { name: old.name, skill: old.skill, traits: old.traits ?? [] }, cause, cands: Object.fromEntries(cands.map((c) => [c.p.id, { p: JSON.parse(JSON.stringify(c.p)), from: c.from, slot: c.slot ?? null, fresh: !!c.fresh }])) } }); return d?.id ?? null;
+}
+registerDecision("commander_death", (ctx, d, opt) => {
+  const st = ctx.civ.states[d.stateId], cp = st ? corpsById(st, d.payload.corpsId) : null, c = d.payload.cands[opt]; if (!cp || !c) return { ok: true, note: "軍団がすでにない" };
+  installCommander(st, cp, c.p, c.slot); return { ok: true, note: `${c.p.name}が後任に就いた` };
 });
 
 /** 構造の検査: 未決の決断は、担当国家のもので、選択肢を持ち、重複しない */
@@ -226,5 +242,5 @@ export function checkDecisions(civ) {
   for (const d of D.queue) { if (seen.has(d.id)) errs.push(`決断 ${d.id} が重複`); seen.add(d.id); if (d.stateId !== cs) errs.push(`決断 ${d.id} が担当国家のものでない`); if (!Array.isArray(d.options) || !d.options.length) errs.push(`決断 ${d.id} に選択肢がない`); if (!HANDLERS[d.kind]) errs.push(`決断 ${d.id} の種類 ${d.kind} が未対応`); }
   return errs;
 }
-export const DECISION_HOOKS = Object.freeze({ offerTreaty, offerPeace, warIncoming, allyCall, succession, rebellion, omen, battle, raise, scoutLevel });
+export const DECISION_HOOKS = Object.freeze({ offerTreaty, offerPeace, warIncoming, allyCall, succession, rebellion, omen, battle, skirmish, commanderDeath, raise, scoutLevel });
 void enthrone; void leaderName;

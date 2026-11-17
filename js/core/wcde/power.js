@@ -9,7 +9,8 @@ const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 /** v6.13.0: 軍ごとの割合（海軍・空軍の人数 ÷ 総兵力）。陸はその残り */
 export const navyShare = (st) => (st.army > 0 ? clamp(headsOf(st, "sea") / Math.max(1, st.army)) : 0);
 export const airShare = (st) => (st.army > 0 ? clamp(headsOf(st, "air") / Math.max(1, st.army)) : 0);
-export const landShare = (st) => Math.max(0, 1 - navyShare(st) - airShare(st));
+export const spaceShare = (st) => (st.army > 0 ? clamp(headsOf(st, "space") / Math.max(1, st.army)) : 0);
+export const landShare = (st) => Math.max(0, 1 - navyShare(st) - airShare(st) - spaceShare(st));
 export const fx = (st) => st.military?.fx ?? {};
 
 /** 編成（陸軍の兵種の人数）が陸の戦力に効く。歩兵だけの軍より、騎兵・銃兵・砲兵・機甲などが適度に混ざった軍のほうが強い（諸兵科連合 最大 +12%）。
@@ -26,7 +27,7 @@ export function armsMult(st, defending = false) {
   return m;
 }
 /** 航空支援（0〜0.45）。空軍の人数（兵種ごとの重み）÷ 陸の人数 の比と、ドクトリンの航空運用。戦闘では、両軍の差が地上戦の戦力に掛かる（制空権） */
-const AIR_W = Object.freeze({ air_corps: 0.6, fighter: 1.0, bomber: 0.9, helicopter: 0.8, drone: 0.7, missile: 0.9, strategic: 0.3, cyber: 0.4, orbital: 0.6 });
+const AIR_W = Object.freeze({ air_corps: 0.6, fighter: 1.0, bomber: 0.9, helicopter: 0.8, drone: 0.7, missile: 0.9, strategic: 0.3, cyber: 0.4, orbital: 0.6, satellite: 0.5 });
 export function airPower(st) { let p = 0; for (const u of st.military?.units ?? []) if (AIR_W[u.kind]) p += u.size * AIR_W[u.kind]; return p; }
 export function airSupport(st) {
   const ap = airPower(st); if (!(ap > 0)) return 0; const land = Math.max(1, st.army * landShare(st));
@@ -45,13 +46,13 @@ export function landPower(civ, st, size = null, { defending = false } = {}) {
   const n = size ?? st.army * landShare(st);
   const attack = milMult(st, civ) * armsMult(st, defending) * (0.85 + 0.3 * effective(civ, st, "readiness"));
   const guard = defending ? 1 + ((st.defense ?? 0) + (st.milDef ?? 0)) * 0.5 + deterrence(st) : 1;
-  return n * attack * guard;
+  return n * attack * guard * (1 + (fx(st).mob ?? 0)); // v6.18.0: 人海戦術は、同じ兵力でも多く動員して戦う
 }
 /** 海の戦力。海戦術（war:naval）が無い水軍は弱い（沿岸の護衛程度） */
 export function navalPower(civ, st, size = null) {
   const n = size ?? st.army * navyShare(st); if (!(n > 0)) return 0;
   const tech = stateCan(civ, st, "war:naval") ? 1.3 : stateCan(civ, st, "unit:navy") ? 1 : 0.4;
-  return n * milMult(st, civ) * (1 + 1.2 * (fx(st).naval ?? 0)) * tech * navalMix(st) * (0.85 + 0.3 * effective(civ, st, "readiness"));
+  return n * milMult(st, civ) * (1 + 1.2 * (fx(st).naval ?? 0)) * tech * navalMix(st) * (1 + 0.9 * (fx(st).mob ?? 0)) * (0.85 + 0.3 * effective(civ, st, "readiness")); // v6.18.0: 人海戦術の海軍は、艦を多く動員する
 }
 /** 補給の届く範囲（km）。技術（war:far）・兵站のドクトリン・政体で伸びる */
 export const supplyRange = (civ, st) => 650 * (1 + 2.2 * (fx(st).logi ?? 0)) * (stateCan(civ, st, "war:far") ? 1.7 : 1) * (st.polity === "empire" ? 1.15 : 1);

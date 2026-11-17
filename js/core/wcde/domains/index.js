@@ -7,6 +7,7 @@ import { stepReligion } from "./religion.js";
 import { stepEconomy } from "./economy.js";
 import { stepPolitics } from "./politics.js";
 import { stepMilitary } from "./military.js";
+import { stepFallout } from "../special-ops.js";
 import { stepPeople, stepCities } from "./people.js";
 import { registerWcdeActions } from "./actions.js";
 import { checkWcdeIntegrity } from "../integrity.js";
@@ -44,7 +45,7 @@ export function wcdeExtension(ticker, ctx) {
   ticker.register("conflict", stepDependencies, "stepDependencies");
   ticker.register("conflict", stepPacts, "stepPacts");
   ticker.register("conflict", stepTreatyAI, "stepTreatyAI");
-  ticker.register("military", stepMilitary, "stepMilitary", { every: 3 });
+  ticker.register("military", (c) => { stepMilitary(c); stepFallout(c); }, "stepMilitary", { every: 3 });
   ticker.register("military", (c) => { for (const st of Object.values(c.civ.states)) if (st.alive && st.player) syncCorps(c, st); }, "stepCorps"); // v6.12.0: 担当国の軍団の兵力を毎月そろえる
   ticker.register("economy", (c) => { if (c.civ.monthIndex % 3 !== 0) return; for (const st of Object.values(c.civ.states)) if (st.alive && st.offices?.length) st.treasury -= officeUpkeep(st) * 3; }, "stepOfficeUpkeep"); // v6.12.0: 役職の維持費（3 か月ごと）
   ticker.register("people", stepPeople, "stepPeople");

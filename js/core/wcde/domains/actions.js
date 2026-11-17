@@ -3,7 +3,8 @@
 //   WCDE の世界（civ.options.wcde）でだけ候補を出す。
 import { registerAction } from "../../civ/actions.js";
 import { byState } from "../../civ/spatial.js";
-import { nodesOf, canAdopt, adoptDoctrine } from "./military.js";
+import { nodesOf, canAdopt, adoptDoctrine, bestLine } from "./military.js";
+import { doctrineInfo } from "./doctrine.js";
 import { hashSeed } from "../../civ/civ-state.js";
 import { CAP } from "./doctrine.js";
 import { FACTIONS, recomputeLegitimacy } from "./politics.js";
@@ -21,8 +22,8 @@ export function registerWcdeActions() {
     candidates(ctx, st, e) {
       if (!ctx.civ.options.wcde) return []; const out = [];
       const coastal = (byState(ctx).get(st.id) ?? []).some((g) => ctx.world.cell.coastDist[g.cell] <= 1), at = st.warIds.length > 0, f = (d) => d.fx; // 候補の評価は結果の値だけで決める（理由・採点は保存しない）
-      for (const d of nodesOf(st)) { const c = canAdopt(st, d.id); if (!c.ok) continue; if (d.service === "sea" && !coastal) continue; const x = f(d), taste = d.school ? 0.5 * ((hashSeed(ctx.civ.historySeed, "school", st.id, d.school) % 1000) / 1000) + (st.military?.school?.[d.service] === d.school ? 0.4 : 0) : 0, /* v6.13.0: 学派は国ごとの好み（固定）と、すでに選んだ路線への継続で選ぶ */
-      sec0 = 0.5 * (x.armor ?? 0) + 0.8 * (x.air ?? 0) + 0.6 * (x.subs ?? 0) + 0.6 * (x.strike ?? 0) + taste, sec = 0.15 + 2.2 * (x.def ?? 0) + 0.8 * (x.off ?? 0) + (at ? 0.2 : 0) + 1.2 * (x.attr ?? 0) + 0.8 * (x.coh ?? 0) + (coastal ? 1.5 * (x.naval ?? 0) : -0.5 * (x.naval ?? 0)) + 0.6 * (x.logi ?? 0) + sec0; out.push(cand("adopt_doctrine", { security: sec, expansion: 3 * (x.off ?? 0) + 1.2 * (x.siege ?? 0) + 0.8 * (x.landing ?? 0) - d.cost / 2000 }, { opt: d.id, label: `${d.ja}を取り入れる` })); }
+      const line = st.military?.doc?.line ?? bestLine(doctrineInfo(ctx, st)); const next = nodesOf(st).filter((d) => d.branch === line && canAdopt(st, d.id).ok).slice(0, 1);
+      for (const d of next) { const x = d.fx; out.push(cand("adopt_doctrine", { security: 0.5 + 2.2 * (x.def ?? 0) + 0.8 * (x.off ?? 0) + (at ? 0.2 : 0) + 0.8 * (x.coh ?? 0) + 0.6 * (x.logi ?? 0) + (coastal ? 1.5 * (x.naval ?? 0) : 0), expansion: 3 * (x.off ?? 0) + 1.2 * (x.siege ?? 0) - d.cost / 2000 }, { opt: d.id, label: `${d.ja}を取り入れる` })); }
       return out.sort((a, b) => (b.factors.security + b.factors.expansion) - (a.factors.security + a.factors.expansion) || (a.opt < b.opt ? -1 : 1)).slice(0, 3);
     },
     execute(ctx, st, c) { const r = adoptDoctrine(ctx, st, c.opt, { provenance: c.provenance ?? "ai", decisionId: c.decisionId ?? null }); return r.ok ? { ok: true, silent: true, effects: [] } : { ok: false, error: r.reason }; } });

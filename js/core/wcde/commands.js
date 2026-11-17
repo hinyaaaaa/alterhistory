@@ -16,6 +16,11 @@ import { resolveDecision } from "./decisions.js";
 import { setPolicy } from "./policies.js";
 import { changeName, changeRegime, changeFlag, changeLeader, setFinance } from "./identity.js";
 import { ensureCorps, renameCorps, renameUnit, splitCorps, mergeCorps, transferUnits, convertUnit, appoint, dismiss, setOrder, commitWar, setComposition, appointChief, dismissChief } from "./corps.js";
+import { tickField, orderWing, orderAll, reinforce, setAuto } from "./battlefield.js";
+import { covertOp, nuclearStrike, nukeTargets } from "./special-ops.js";
+import { switchLine, switchCost } from "./domains/military.js";
+import { createCorps } from "./corps.js";
+import { pendingOf } from "./decision-state.js";
 import { planTechEdit, techEdit, techEditReset, techGrant } from "./techedit.js";
 
 const ALL = ["prehistory", "founding", "running"];
@@ -64,6 +69,19 @@ export function registerCommands() {
   defineCommand("diplomacy.pactJoin", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const { civ } = w, ctx = w.sim.ctx, st = civ.states[c.stateId], p = pactsOf(civ).items[c.pactId]; if (!st?.alive || !st.player || !p?.active) return { ok: false, error: "盟約が見つかりません" }; if (p.members.includes(st.id)) return { ok: false, error: "すでに加盟しています" }; const L = civ.states[p.leaderId], r = pactAccepts(ctx, st, L, p.purpose, p.target); if (!r.ok) return { ok: false, error: `盟主に受け入れられなかった（${r.why}）` }; return joinPact(ctx, p, st) ? { ok: true, result: {} } : { ok: false, error: "加盟できませんでした" }; } });
   defineCommand("diplomacy.pactLeave", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const { civ } = w, ctx = w.sim.ctx, st = civ.states[c.stateId], p = pactsOf(civ).items[c.pactId]; if (!st?.alive || !st.player || !p?.active || !p.members.includes(st.id)) return { ok: false, error: "盟約が見つかりません" }; leavePact(ctx, p, st); return { ok: true, result: {} }; } });
   // v6.12.0: 決断（条約の申し出・宣戦・継承・反乱・会戦）。担当国だけが答えられる。時間は、すべての決断に答えるまで止まったまま
+  // v6.18.0: 戦場（リアルタイムの会戦）。決断（kind=battle）の戦場を日ごとに進め、翼へ命令する。取り消し点は取らない
+  const fieldOf = (w, c) => { const d = pendingOf(w.civ).find((x) => x.id === c.decisionId && x.kind === "battle"); return d ? d.payload.field : null; };
+  const fcmd = (name, fn) => defineCommand(name, { authorities: [A.PLAYER], control: true, checkpoint: false, apply: (w, c) => { const f = fieldOf(w, c); if (!f) return { ok: false, error: "その戦いは、すでに終わっています" }; return fn(f, c); } });
+  fcmd("battle.tick", (f, c) => { tickField(f, Math.max(1, Math.min(3, Number(c.days) || 1))); return { ok: true, done: f.done }; });
+  fcmd("battle.order", (f, c) => (c.lane === "all" ? orderAll(f, c.order) : orderWing(f, Number(c.lane), c.order)));
+  fcmd("battle.reinforce", (f, c) => reinforce(f, Number(c.lane)));
+  fcmd("battle.auto", (f, c) => setAuto(f, c.on));
+  // v6.18.0: 系統の切り替え・軍団の新設・核作戦・隠密作戦
+  defineCommand("doctrine.switch", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = switchLine(w.sim.ctx, st, c.line, { provenance: "player" }); return r.ok ? r : { ok: false, error: r.reason }; } });
+  defineCommand("doctrine.switchCost", { authorities: [A.PLAYER, A.ADMIN], mutates: false, phases: ALL, apply: (w, c) => ({ ok: true, cost: switchCost(w.civ.states[c.stateId] ?? {}) }) });
+  defineCommand("ops.covert", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive || !st.player) return { ok: false, error: "その国家は担当国ではありません" }; return covertOp(w.sim.ctx, st, { kind: c.kind, target: c.target }); } });
+  defineCommand("ops.nuclear", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive || !st.player) return { ok: false, error: "その国家は担当国ではありません" }; return nuclearStrike(w.sim.ctx, st, { target: c.target, group: c.group ?? null, scale: c.scale ?? "tactical" }); } });
+  defineCommand("ops.nukeTargets", { authorities: [A.PLAYER], control: true, mutates: false, apply: (w, c) => ({ ok: true, list: nukeTargets(w.sim.ctx, w.civ.states[c.stateId], c.target, c.scale ?? "tactical") }) });
   defineCommand("decision.resolve", { authorities: [A.PLAYER], control: true, checkpoint: true, validate: (w, c) => (typeof c.decisionId === "string" && typeof c.option === "string" ? null : { ok: false, error: "decisionId と option が必要です" }), apply: (w, c) => resolveDecision(w, { id: c.decisionId, option: c.option, extra: c.extra ?? null }) });
   // v6.12.0: 軍団（名前・兵力・指揮官を持つ部隊）の編成・人事・作戦命令。担当国家だけ。検証は corps.js（失敗したら何も変えない）
   const cs = (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return null; ensureCorps(w.sim.ctx, st); return st; };
@@ -71,7 +89,8 @@ export function registerCommands() {
   corpsCmd("corps.refresh", () => ({ ok: true })); // 担当国の軍団を、まだ作っていなければ作る（画面が最初に開いたとき）
   corpsCmd("corps.rename", (ctx, st, c) => renameCorps(st, c));
   corpsCmd("corps.renameUnit", (ctx, st, c) => renameUnit(st, c));
-  corpsCmd("corps.split", (ctx, st, c) => splitCorps(ctx, st, c));
+  corpsCmd("corps.create", (ctx, st, c) => createCorps(ctx, st, c));
+corpsCmd("corps.split", (ctx, st, c) => splitCorps(ctx, st, c));
   corpsCmd("corps.merge", (ctx, st, c) => mergeCorps(st, c));
   corpsCmd("corps.transfer", (ctx, st, c) => transferUnits(st, c));
   corpsCmd("corps.convert", (ctx, st, c) => convertUnit(ctx, st, c));

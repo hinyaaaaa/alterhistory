@@ -21,20 +21,19 @@ export function formationsOf(st, u) {
 }
 
 // v6.1.0 M6: ドクトリンは doctrine.js（共通 5 系統 × 5 段 ＋ 国家固有 3 系統）。ここは取得の検証・適用・軍事能力の更新だけを持つ
-import { COMMON_NODES, COMMON_BY_ID, CAP, FX_KEYS, SCHOOLS, SCHOOL_BY_ID, SERVICE_JA, nodeOf, nodesOf, branchesOf, doctrineFx, doctrineInfo, chooseSpecial } from "./doctrine.js";
-export { SCHOOLS, SCHOOL_BY_ID, SERVICE_JA };
+import { COMMON_NODES, COMMON_BY_ID, CAP, FX_KEYS, SCHOOLS, SCHOOL_BY_ID, SERVICE_JA, LINES, LINE_BY_ID, TIERS, nodeOf, nodesOf, branchesOf, doctrineFx, doctrineInfo, lineOf, tierOf, bestLine, migrateDoctrine, serviceFx } from "./doctrine.js";
+export { SCHOOLS, SCHOOL_BY_ID, SERVICE_JA, LINES, LINE_BY_ID, TIERS, lineOf, tierOf, bestLine, serviceFx };
 export const DOCTRINES = COMMON_NODES;     // 互換: 共通ノードの一覧（国家固有のノードは国家ごとに st.military.special にある。nodesOf(st) で全体）
 export const DOCTRINE = COMMON_BY_ID;
 export const OFF_CAP = CAP.off, DEF_CAP = CAP.def;
 export { nodesOf, nodeOf, branchesOf, doctrineFx };
 
-export const initMilitary = () => ({ units: [], equipLevel: 0.3, readiness: 0.5, doctrine: { taken: {} }, shares: null, orbat: { mode: "auto" }, school: { land: null, sea: null, air: null }, special: [], fx: Object.fromEntries(FX_KEYS.map((k) => [k, 0])), exp: { won: 0, lost: 0, defended: 0, sieges: 0, sea: 0, wars: 0 } });
+export const initMilitary = () => ({ units: [], equipLevel: 0.3, readiness: 0.5, doctrine: { taken: {} }, doc: { line: null, since: 0 }, confusion: 0, shares: null, orbat: { mode: "auto" }, school: { land: null, sea: null, air: null }, special: [], fx: Object.fromEntries(FX_KEYS.map((k) => [k, 0])), exp: { won: 0, lost: 0, defended: 0, sieges: 0, sea: 0, wars: 0 } });
 /** 取れるか。理由つき（UI の表示条件と AI の候補・命令の検証は、この同じ関数を通る） */
 export function canAdopt(st, id) {
   const d = nodeOf(st, id); if (!d) return { ok: false, reason: "そのドクトリンはありません" }; const M = st.military;
   if (M?.doctrine.taken[id] != null) return { ok: false, reason: "すでに取得済み" };
-  if (d.special && !(M?.special ?? []).some((b) => `sp:${b.key}` === d.branch)) return { ok: false, reason: `${d.ja}は、今のこの国の固有の系統ではない` };
-  if (d.school) { const cur = M?.school?.[d.service]; if (cur && cur !== d.school) return { ok: false, reason: `${SERVICE_JA[d.service]}は、すでに「${SCHOOL_BY_ID[cur]?.ja}」の路線を選んでいる（1 つの軍につき路線は 1 つ）` }; }
+  const cur = M?.doc?.line ?? null; if (cur && cur !== d.branch) return { ok: false, reason: `いまの系統は「${LINE_BY_ID[cur]?.ja}」。系統は 1 つだけ（切り替えると、取得した段を失う）` };
   for (const p of d.prereq) if (M?.doctrine.taken[p] == null) return { ok: false, reason: `前提のドクトリン「${nodeOf(st, p)?.ja ?? p}」が未取得` };
   for (const t of d.tech) if (!has(st, t)) return { ok: false, reason: `技術「${t}」が必要` };
   if (st.treasury < d.cost) return { ok: false, reason: `財政が足りない（${d.cost}）` };
@@ -42,14 +41,20 @@ export function canAdopt(st, id) {
 }
 export function adoptDoctrine(ctx, st, id, { provenance = "simulation", decisionId = null } = {}) {
   const c = canAdopt(st, id); if (!c.ok) return c; const { civ, ids } = ctx, d = nodeOf(st, id); const M = (st.military ??= initMilitary());
-  st.treasury -= d.cost; M.doctrine.taken[id] = civ.monthIndex; if (d.school) (M.school ??= { land: null, sea: null, air: null })[d.service] ??= d.school;
+  st.treasury -= d.cost; M.doctrine.taken[id] = civ.monthIndex; M.doc = { line: d.branch, since: M.doc?.since ?? civ.monthIndex };
   const ev = makeEvent(civ, ids, { kind: "doctrine_adopted", title: `${st.name}が「${d.ja}」を取り入れた`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "military.doctrine", before: null, after: id }], provenance, decisionId });
   recompute(ctx, st); return { ok: true, eventId: ev?.eventId ?? null };
 }
-/** 固有の系統の見直し（年 1 回）。得点の高い 3 本。系統が変わると、前の系統のノードは休眠する（取得の記録は残る） */
-export function refreshSpecial(ctx, st) {
-  const M = st.military, next = chooseSpecial(doctrineInfo(ctx, st), M.special); const same = M.special.length === 3 && next.every((b, i) => M.special.some((o) => o.key === b.key));
-  if (!same) M.special = next;
+/** 系統の切り替え費用（いまの段が高いほど重い。まだ何も取っていなければ無料） */
+export const switchCost = (st) => { const t = tierOf(st); return t ? 40 + 25 * t : 0; };
+/** 系統を切り替える: 取得した段をすべて失い、約 1 年の混乱（効果が最大 6 割落ちる）。担当国・AI・創造主が同じ関数を通る */
+export function switchLine(ctx, st, line, { provenance = "simulation", free = false } = {}) {
+  const l = LINE_BY_ID[line]; if (!l) return { ok: false, reason: "その系統はありません" }; const M = (st.military ??= initMilitary());
+  if (M.doc?.line === line) return { ok: false, reason: "すでにその系統です" };
+  const cost = free ? 0 : switchCost(st); if (st.treasury < cost) return { ok: false, reason: `財政が足りない（${cost}）` };
+  const from = M.doc?.line ? LINE_BY_ID[M.doc.line]?.ja : null, lost = tierOf(st); st.treasury -= cost; M.doctrine = { taken: {} }; M.doc = { line, since: ctx.civ.monthIndex }; if (from) M.confusion = 12;
+  const ev = makeEvent(ctx.civ, ctx.ids, { kind: "doctrine_switched", title: from ? `${st.name}が戦い方を「${from}」から「${l.ja}」へ改めた` : `${st.name}が戦い方を「${l.ja}」と定めた`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "military.doc", before: M.doc?.line ?? null, after: line }], facts: { lostTiers: lost }, provenance });
+  recompute(ctx, st); return { ok: true, cost, lost, eventId: ev?.eventId ?? null };
 }
 function recompute(ctx, st) {
   const M = st.military, ind = effective(ctx.civ, st, "perCapita"), wTech = (has(st, "bronze_weapons") ? 0.08 : 0) + (has(st, "iron_weapons") ? 0.12 : 0) + (has(st, "steel") ? 0.05 : 0) + (has(st, "gunpowder") ? 0.1 : 0);
@@ -63,7 +68,9 @@ function recompute(ctx, st) {
 export function stepMilitary(ctx) {
   const { civ, ids } = ctx, mi = civ.monthIndex; if (!civ.options.wcde || mi % 3 !== 0) return;
   for (const st of Object.values(civ.states)) {
-    if (!st.alive) continue; const M = (st.military ??= initMilitary()); M.school ??= { land: null, sea: null, air: null }; M.orbat ??= { mode: "auto" }; if (!M.special?.length || mi % 12 === 0) refreshSpecial(ctx, st); recompute(ctx, st);
+    if (!st.alive) continue; const M = (st.military ??= initMilitary()); M.orbat ??= { mode: "auto" }; if (!M.doc || M.special?.length || M.v6180 == null) { migrateDoctrine(st, M.doc?.line ? null : doctrineInfo(ctx, st)); M.v6180 = 1; } if (M.confusion > 0) M.confusion = Math.max(0, M.confusion - 3);
+    if (!st.player && M.doc?.line && mi % 36 === 0 && tierOf(st) <= 3 && st.warIds.length === 0) { const b = bestLine(doctrineInfo(ctx, st), M.doc.line); if (b !== M.doc.line) switchLine(ctx, st, b, { free: true }); }
+    recompute(ctx, st);
     if (M.shares) { M.shares = null; } // 旧版の配分（比率）は使わない
     if (M.orbat.mode === "manual") { const keep = Object.fromEntries(Object.entries(M.orbat.target ?? {}).filter(([k]) => UNIT_TYPES[k]?.need(st, ctx))); if (!Object.keys(keep).length) M.orbat = { mode: "auto" }; else M.orbat.target = keep; } // 使えなくなった兵種は、指定から外れる
     const roster = rosterOf(ctx, st), old = new Map(M.units.map((u) => [u.kind, u])), next = [];

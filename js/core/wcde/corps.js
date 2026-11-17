@@ -9,7 +9,7 @@ import { SERVICES, SERVICE_KEYS, UNIT_TYPES, serviceOf, unitName, autoRoster } f
 import { navyShare, landShare } from "./power.js";
 
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v), r1 = (x) => Math.round(x * 10) / 10, r2 = (x) => Math.round(x * 100) / 100;
-export const CORPS_MAX = 12, POOL_MAX = 12, SERVICE_CAP = Object.freeze({ land: 6, sea: 3, air: 3 }), AI_CAP = Object.freeze({ land: 4, sea: 2, air: 2 }), OFFICER_SLOTS = Object.freeze({ vanguard: "先鋒", quartermaster: "兵站", strategist: "参謀" });
+export const CORPS_MAX = 12, POOL_MAX = 12, SERVICE_CAP = Object.freeze({ land: 6, sea: 3, air: 3, space: 2 }), AI_CAP = Object.freeze({ land: 4, sea: 2, air: 2, space: 1 }), OFFICER_SLOTS = Object.freeze({ vanguard: "先鋒", quartermaster: "兵站", strategist: "参謀" });
 export const ORDER_KINDS = Object.freeze({ auto: "お任せ（自動の作戦）", hold: "待機", march: "進軍", siege: "包囲", defend: "守備", retreat: "撤退", reserve: "予備（戦争に出さない）" });
 /** 特性: 小さなバフ・デバフ。off 攻め／def 守り／siege 包囲／logi 補給／coh 士気 */
 export const TRAITS = Object.freeze({
@@ -19,6 +19,9 @@ export const TRAITS = Object.freeze({
   armored_thinker: { ja: "機甲の閃き", off: 0.07, svc: "land" }, logistician: { ja: "兵站の鬼", logi: 0.1, svc: "land" },
   storm_wise: { ja: "荒海の将", logi: 0.08, coh: 0.05, svc: "sea" }, gunnery: { ja: "砲術の名手", off: 0.07, svc: "sea" }, convoy: { ja: "護衛の達人", def: 0.06, logi: 0.04, svc: "sea" },
   air_ace: { ja: "撃墜王", off: 0.08, svc: "air" }, air_strategist: { ja: "戦略眼", siege: 0.12, svc: "air" }, air_defender: { ja: "防空の名手", def: 0.08, svc: "air" },
+  // v6.18.0: 系統（ドクトリン）との相性。いまの系統と一致すると、攻め +4%・士気 +3% が加わる（line）。宇宙軍の特性もここ
+  gunner: { ja: "砲兵の鬼", off: 0.03, siege: 0.08, line: "firepower" }, maneuverist: { ja: "機動の達人", off: 0.03, logi: 0.05, line: "mobile" }, mass_mobilizer: { ja: "動員の名人", coh: 0.05, logi: 0.03, line: "mass" },
+  fortifier: { ja: "築城の名手", def: 0.05, coh: 0.03, line: "position" }, raider: { ja: "奇襲の達人", off: 0.04, line: "special" }, orbital_mind: { ja: "軌道の目", off: 0.05, svc: "space" }, uplink: { ja: "通信の達人", coh: 0.06, svc: "space" },
 });
 const TRAIT_KEYS = Object.keys(TRAITS), traitsFor = (svc) => TRAIT_KEYS.filter((k) => !TRAITS[k].svc || TRAITS[k].svc === svc);
 const ORD = ["第一", "第二", "第三", "第四", "第五", "第六", "第七", "第八", "第九", "第十", "第十一", "第十二"];
@@ -46,8 +49,8 @@ export function refreshPool(ctx, st, force = false) {
 
 // ---- 能力（小さなバフ・デバフ。上限 ±0.2）
 export function corpsFx(cp, st = null) {
-  const fx = { off: 0, def: 0, siege: 0, logi: 0, coh: 0, skill: 0 }, add = (p, wt) => { if (!p) return; fx.skill += (p.skill - 0.5) * 0.2 * wt; for (const t of p.traits ?? []) { const T = TRAITS[t]; if (!T) continue; for (const k of ["off", "def", "siege", "logi", "coh"]) if (T[k]) fx[k] += T[k] * wt; } };
-  add(cp.commander, 1); for (const o of Object.values(cp.officers ?? {})) add(o, 0.4); add(st?.corps?.chiefs?.[cp.service ?? "land"], 0.35); // v6.13.0: その軍の総司令官が、全部隊に効く
+  const fx = { off: 0, def: 0, siege: 0, logi: 0, coh: 0, skill: 0 }, add = (p, wt) => { if (!p) return; fx.skill += (p.skill - 0.5) * 0.2 * wt; for (const t of p.traits ?? []) { const T = TRAITS[t]; if (!T) continue; for (const k of ["off", "def", "siege", "logi", "coh"]) if (T[k]) fx[k] += T[k] * wt; if (T.line && T.line === st?.military?.doc?.line) { fx.off += 0.04 * wt; fx.coh += 0.03 * wt; } } };
+  add(cp.commander?.dead ? null : cp.commander, 1); for (const o of Object.values(cp.officers ?? {})) add(o, 0.4); add(st?.corps?.chiefs?.[cp.service ?? "land"], 0.35); // v6.13.0: その軍の総司令官が、全部隊に効く
   for (const k of Object.keys(fx)) fx[k] = r2(clamp(fx[k], -0.2, 0.2)); return fx;
 }
 /** 戦闘の指揮の倍率（攻め role=atk／守り role=def）。軍団でない部隊は 1。アルゴリズム国家の部隊は、その軍の主力の部隊（F.lead）の指揮官が効く */
@@ -73,10 +76,10 @@ function newFormation(ctx, st, svc) {
 }
 /** 国家の軍を、陸・海・空の部隊に分ける（まだ無ければ作る）。担当国もアルゴリズム国家も同じ。指揮官は自動で任命する（アルゴリズム国家は総司令官も） */
 export function ensureCorps(ctx, st) {
-  if (!st?.alive) return st?.corps ?? null; let S = st.corps;
+  if (!st?.alive) return st?.corps ?? null; let S = st.corps; if (S?.chiefs && !("space" in S.chiefs)) S.chiefs.space = null;
   if (S && S.v >= 2) { const cur = S.list.reduce((a, c) => a + c.size, 0); if (Math.abs(cur - st.army) > Math.max(1, st.army * 0.01)) assignRoster(ctx, st); if (st.player && (S.pool?.length ?? 0) < 3) refreshPool(ctx, st, true); /* アルゴリズム国家から担当国になった直後は、候補がいない */ return S; } // 国家の兵力と部隊の合計がずれていたら、割り当て直す
   if (S) { S.v = 2; S.chiefs ??= { land: null, sea: null, air: null }; for (const cp of S.list) { cp.service ??= "land"; if (!cp.comp) { cp.comp = "manual"; cp.manual = Object.fromEntries(cp.units.map((u) => [u.kind, u.size])); } cp.weight ??= 1; } for (const p of S.pool ?? []) p.service ??= "land"; return S; }
-  S = st.corps = { v: 2, seq: 0, list: [], pool: [], poolAt: -999, chiefs: { land: null, sea: null, air: null } };
+  S = st.corps = { v: 2, seq: 0, list: [], pool: [], poolAt: -999, chiefs: { land: null, sea: null, air: null, space: null } };
   refreshPool(ctx, st, true); growFormations(ctx, st); assignRoster(ctx, st); staffAll(ctx, st, true); refreshPool(ctx, st, true); return S;
 }
 function growFormations(ctx, st) {
@@ -140,8 +143,9 @@ export function serviceLoss(st, svc, dead) { const fs = corpsOf(st).filter((c) =
 /** その軍の主力の部隊（いちばん大きい部隊）。アルゴリズム国家の部隊の指揮官になる */
 export const leadCorps = (st, svc) => corpsOf(st).filter((c) => c.service === svc && c.size > 0.5).reduce((b, c) => (!b || c.size > b.size ? c : b), null);
 /** 戦闘のあと: 指揮官・副官・総司令官の経験（勝てば多く）。経験が積もると能力が育つ（上限 0.95） */
-export function corpsAfterBattle(ctx, st, F, won, name = null) {
-  const cp = corpsById(st, F?.corpsId ?? F?.lead); if (!cp) return; const chief = st.corps?.chiefs?.[cp.service ?? "land"];
+export function corpsAfterBattle(ctx, st, F, won, name = null, big = false) {
+  const cp = corpsById(st, F?.corpsId ?? F?.lead); if (!cp) return;
+  if (cp.commander && !cp.commander.dead) { const p = (won ? 0.02 : 0.09) * (big ? 1.6 : 1) * (1.2 - 0.4 * (cp.commander.skill ?? 0.5)); if (hashSeed(ctx.civ.historySeed, "fall", cp.id, ctx.civ.monthIndex, name ?? "") / 4294967296 < p) commanderFalls(ctx, st, cp, won ? "戦場で倒れた" : "敗戦のなかで戦死した"); } const chief = st.corps?.chiefs?.[cp.service ?? "land"];
   for (const p of [cp.commander, ...Object.values(cp.officers), chief]) { if (!p) continue; p.xp = r2((p.xp ?? 0) + (won ? 1 : 0.4)); if (p.xp >= 3) { p.xp = r2(p.xp - 3); p.skill = r2(Math.min(0.95, p.skill + 0.02)); if (!p.traits.includes("veteran") && p.skill >= 0.7 && p.traits.length < 3 && hashSeed(ctx.civ.historySeed, "vet", p.id, ctx.civ.monthIndex) % 4 === 0) p.traits.push("veteran"); } }
   cp.history.push({ at: ctx.civ.monthIndex, won, name }); if (cp.history.length > 12) cp.history.shift();
 }
@@ -250,3 +254,34 @@ export function corpsView(ctx, st) {
   return { list: S.list.map((cp) => ({ ...cp, fx: corpsFx(cp, st), atName: name(cp.at), rank: cp.commander ? rankOf(cp.commander) : null })), pool: S.pool.map((p) => ({ ...p, rank: rankOf(p) })), chiefs: Object.fromEntries(SERVICE_KEYS.map((k) => [k, S.chiefs?.[k] ? { ...S.chiefs[k], rank: rankOf(S.chiefs[k]) } : null])), heads, usable: Object.fromEntries(SERVICE_KEYS.map((k) => [k, serviceUsable(ctx, st, k)])), max: CORPS_MAX };
 }
 void navyShare; void landShare; void byState;
+
+// ---- v6.18.0: 指揮官の戦死と後任
+/** 後任の候補（3〜5 人）: その軍団の副官・同じ軍の予備の人物・下級の将校。能力の低い者しかいないときは、そのとおりに出す */
+export function successorCandidates(ctx, st, cp) {
+  const S = st.corps, svc = cp.service ?? "land", out = [];
+  for (const [slot, p] of Object.entries(cp.officers ?? {})) if (p && !p.dead) out.push({ p, from: `副官（${OFFICER_SLOTS[slot] ?? slot}）`, slot });
+  for (const p of S.pool ?? []) if ((p.service ?? "land") === svc && out.length < 5) out.push({ p, from: "控えの将" });
+  let k = 0; while (out.length < 3) { out.push({ p: genPerson(ctx, st, `succ${ctx.civ.monthIndex}_${k++}`, { minSkill: 0.12, spread: 0.3, service: svc }), from: "下級の将校", fresh: true }); }
+  return out.slice(0, 5);
+}
+/** 後任を据える（副官・予備・新任のいずれも）。前任は戦没者の記録に残る */
+export function installCommander(st, cp, person, slot = null) {
+  const S = st.corps; S.pool = (S.pool ?? []).filter((x) => x.id !== person.id); if (slot && cp.officers[slot]?.id === person.id) delete cp.officers[slot]; else for (const k of Object.keys(cp.officers)) if (cp.officers[k]?.id === person.id) delete cp.officers[k];
+  const old = cp.commander; if (old) { (S.fallen ??= []).push({ name: old.name, corps: cp.name, at: old.fellAt ?? null, cause: old.cause ?? "" }); if (S.fallen.length > 30) S.fallen.shift(); }
+  person.role = "commander"; person.service ??= cp.service ?? "land"; cp.commander = person; cp.vacant = false; return person;
+}
+/** 指揮官の戦死。担当国は専用の決断（後任の選択）、そうでなければ最も有能な後任を自動で据える */
+export function commanderFalls(ctx, st, cp, cause = "戦死した") {
+  const old = cp.commander; if (!old || old.dead) return null; old.dead = true; old.fellAt = ctx.civ.monthIndex; old.cause = cause; cp.vacant = true;
+  const cands = successorCandidates(ctx, st, cp), hook = st.player ? ctx.decisions?.commanderDeath : null, id = hook ? hook(ctx, st, cp, cands, cause) : null;
+  if (!id) { const best = cands.slice().sort((a, b) => b.p.skill - a.p.skill)[0]; installCommander(st, cp, best.p, best.slot ?? null); }
+  return id ?? true;
+}
+/** 新しい軍団を編成する（担当国）。指揮官を予備の人物から選び、国家の人数を自動の配分で分け直す。費用 25 */
+export function createCorps(ctx, st, { service = "land", name, commanderId }) {
+  const S = st.corps; if (!S) return fail("軍団のデータがありません"); if (!SERVICES[service]) return fail("未知の軍です"); if (!serviceUsable(ctx, st, service)) return fail(`${SERVICES[service].ja}は、まだ編成できません`);
+  if (S.list.length >= CORPS_MAX) return fail(`軍団は ${CORPS_MAX} まで`); if (S.list.filter((c) => c.service === service).length >= SERVICE_CAP[service]) return fail(`${SERVICES[service].ja}の軍団は ${SERVICE_CAP[service]} まで`);
+  const nm = typeof name === "string" ? name.trim() : ""; if (nm.length > 20) return fail("名前は 20 文字まで"); const cmd = S.pool.find((p) => p.id === commanderId); if (!cmd || (cmd.service ?? "land") !== service) return fail("指揮官を選んでください");
+  if (st.treasury < 25) return fail("編成の費用 25 が足りない"); st.treasury -= 25;
+  const cp = newFormation(ctx, st, service); if (nm) cp.name = nm; S.pool = S.pool.filter((p) => p.id !== cmd.id); cmd.role = "commander"; cp.commander = cmd; assignRoster(ctx, st); return { ok: true, corpsId: cp.id, cost: 25 };
+}

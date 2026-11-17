@@ -1,6 +1,9 @@
 // v6.12.0: 軍。担当国の軍団（名前のある部隊）を一覧し、指揮官・副官の人事、部隊の編成（改名・分割・統合・兵の移動・再訓練）、作戦の命令（進軍・包囲・守備・撤退・待機）を出す。
 //   軍団の位置と行軍ルートは地図に出る。命令は担当国だけ。実際の移動と戦闘は戦争エンジンが毎月進める。
-import { h, btn, pct, n0, lb, bar, face, FACTION_JA } from "./common.js";
+import { h, btn, holdBtn, pct, n0, lb, bar, face, FACTION_JA } from "./common.js";
+import { notify } from "./notify.js";
+import { covertChance, COVERT, NUKE, canNuke } from "../../core/wcde/special-ops.js";
+import { LINE_BY_ID } from "../../core/wcde/domains/doctrine.js";
 import { S, act, controlled } from "./store.js";
 import { colorOf } from "./common.js";
 import { corpsView, ORDER_KINDS, OFFICER_SLOTS, TRAITS, marchSteps, rankOf } from "../../core/wcde/corps.js";
@@ -67,14 +70,15 @@ export function pMilitary() {
   const st = c.states[cs]; const view = corpsView(ctx(), st); if (!view) { box.append(n("軍団を編成しています…")); setTimeout(() => { if (controlled() === cs && !c.states[cs].corps) act({ type: "corps.refresh", stateId: cs }); }, 0); return box; }
   const sel = view.list.find((x) => x.id === S.corpsSel); if (sel) S.full = { key: "corps", title: sel.name, build: () => corpsDetail(sel, corpsView(ctx(), c.states[cs]), c.states[cs]), onClose: () => { S.corpsSel = null; S.map?.draw(); } };
   const wars = myWars(st), H = view.heads;
-  box.append(n(`陸 ${n0(H.land)}・海 ${n0(H.sea)}・空 ${n0(H.air)} 人（部隊 ${view.list.length} / ${view.max}）・戦争中 ${wars.length} 件`), n("陸・海・空の 3 軍。部隊を選ぶと、指揮官の人事・構成（兵種ごとの人数）・作戦の命令ができます。命令がなければ、部隊は自動で動きます。空軍の部隊は、陸と海の戦いを支えます（制空権）。"));
+  const dl = LINE_BY_ID[st.military?.doc?.line]; box.append(h("div", { class: "milhead" }, ...["land", "sea", "air", "space"].filter((k) => view.usable[k]).map((k) => h("div", { class: "mh", style: `border-color:${SERVICES[k].color}` }, h("small", {}, SERVICES[k].ja), h("b", {}, n0(H[k] ?? 0)))), dl ? h("div", { class: "mh", style: `border-color:${dl.color}` }, h("small", {}, "系統"), h("b", {}, dl.ja)) : null), btn("＋ 新しい軍団を編成する", () => { S.full = { key: "corpsnew", title: "軍団の編成", build: () => newCorpsForm(st, view), onClose: () => {} }; S.hooks.panel(); }, "p", { id: "cp-new" }));
   // 総司令官（各軍に 1 人）
+  if (S.full?.key === "corpsnew" && S.corpsNew) S.full = { key: "corpsnew", title: "軍団の編成", build: () => newCorpsForm(st, view), onClose: () => { S.corpsNew = null; } };
   box.append(lb("総司令官", "COMMANDERS-IN-CHIEF"), ...SERVICE_KEYS.filter((k) => view.usable[k]).map((k) => { const ch = view.chiefs[k], pool = view.pool.filter((q) => (q.service ?? "land") === k), sel = h("select", { "data-chief": k }, h("option", { value: "" }, pool.length ? "候補から任命…" : "候補はいません"), ...pool.map((q) => h("option", { value: q.id }, personLine(q))));
     return h("div", { class: "pbox" }, h("small", { style: `color:${SERVICES[k].color}` }, SERVICES[k].chief), ch ? h("div", {}, h("b", {}, `${ch.rank} ${ch.name}`), h("div", { class: "chips" }, ...traitChips(ch), h("span", { class: "chip" }, `能力 ${Math.round(ch.skill * 100)}`))) : n("（空き）　総司令官は、その軍の全部隊に小さく効きます。"), h("div", { class: "rowb" }, sel, btn("任命", () => { if (sel.value) act({ type: "corps.appointChief", stateId: st.id, service: k, personId: sel.value }); }, "", { "data-appoint-chief": k }), ch ? btn("解任", () => act({ type: "corps.dismissChief", stateId: st.id, service: k }), "") : null)); }));
   for (const svc of SERVICE_KEYS) { const fl = view.list.filter((x) => x.service === svc); if (!fl.length) continue;
     box.append(lb(SERVICES[svc].ja, SERVICES[svc].formation.toUpperCase()), h("div", { class: "corpslist" }, ...fl.map((cp) => h("button", { class: "corpsrow" + (S.corpsSel === cp.id ? " on" : ""), "data-corps": cp.id, onclick: () => { S.corpsSel = cp.id; S.hooks.panel(); S.hooks.mapOnly?.(); const g = c.groups[cp.at]; if (g) S.hooks.focusCell?.(g.cell); } },
-      h("div", { class: "cr1" }, h("b", {}, cp.name), h("span", {}, `${n0(cp.size)} 人`)), h("div", { class: "cr2" }, `${cp.rank ?? ""} ${cp.commander.name}（能力${Math.round(cp.commander.skill * 100)}）・${placeOf(cp.at)}`), h("div", { class: "cr3" }, orderText(cp)), h("div", { class: "chips" }, ...traitChips(cp.commander)))))); }
-  void pct; return box;
+      face(cp.commander.name, st.id), h("div", { class: "crb" }, h("div", { class: "cr1" }, h("b", {}, cp.name), h("span", {}, `${n0(cp.size)} 人`)), h("div", { class: "cr2" }, `${cp.rank ?? ""} ${cp.commander.name}${cp.commander.dead ? "（戦死）" : ""}・${placeOf(cp.at)}`), h("div", { class: "bar2" }, bar(cp.commander.skill, "#6fa8c9"), h("span", { class: "chip" }, cp.order.kind === "auto" ? "自動" : ORDER_KINDS[cp.order.kind] ?? cp.order.kind)), h("div", { class: "chips" }, ...traitChips(cp.commander))))))); }
+  box.append(lb("特殊な作戦", "OPERATIONS"), opsBox(st)); void pct; return box;
 }
 
 /** 地図の軍団の印（担当国の軍団。選んだ軍団は行軍ルートつき） */
@@ -82,3 +86,23 @@ export function corpsMarkers() {
   const cs = controlled(); if (!cs) return []; const st = civ().states[cs], view = st ? corpsView(ctx(), st) : null; if (!view) return []; const col = colorOf(cs, 60);
   return view.list.map((cp, i) => { const g = civ().groups[cp.at]; if (!g) return null; const sel = S.corpsSel === cp.id; return { cell: g.cell, label: String(i + 1), color: col, sel, route: sel ? (cp.order.route ?? []).map((id) => civ().groups[id]?.cell).filter((x) => x != null) : [], target: sel && cp.order.targetGroupId ? civ().groups[cp.order.targetGroupId]?.cell : null }; }).filter(Boolean);
 }
+
+/** v6.18.0: 新しい軍団の編成（軍・名前・指揮官を選ぶ。顔つきの候補から選ぶ） */
+function newCorpsForm(st, view) {
+  const F = (S.corpsNew ??= { svc: "land", name: "", cmd: null }), out = h("div", { class: "corpsdetail" }), svcs = ["land", "sea", "air", "space"].filter((k) => view.usable[k]);
+  const pool = view.pool.filter((q) => (q.service ?? "land") === F.svc), nm = h("input", { id: "cn-name", value: F.name, maxlength: 20, placeholder: "名前（空なら自動）", oninput: (e) => { F.name = e.target.value; } });
+  out.append(h("div", { class: "whead" }, h("h2", {}, "軍団の編成")), h("div", { class: "rowb" }, ...svcs.map((k) => h("button", { class: "b" + (F.svc === k ? " on" : ""), style: `border-color:${SERVICES[k].color}`, onclick: () => { F.svc = k; F.cmd = null; S.hooks.panel(); } }, SERVICES[k].ja))), h("div", { class: "rowb" }, nm),
+    h("div", { class: "cands" }, ...pool.map((q) => h("button", { class: "cand" + (F.cmd === q.id ? " sel" : ""), "data-cand": q.id, onclick: () => { F.cmd = q.id; S.hooks.panel(); } }, face(q.name, st.id), h("div", { class: "ci" }, h("b", {}, q.name), h("small", {}, q.rank), h("div", { class: "cb" }, bar(q.skill, "#6fa8c9")), h("div", { class: "chips" }, ...traitChips(q)))))), pool.length ? null : n("候補はいません"),
+    h("div", { class: "rowb" }, btn("編成する（25）", () => { const r = act({ type: "corps.create", stateId: st.id, service: F.svc, name: F.name, commanderId: F.cmd }); if (r.ok) { S.corpsSel = r.result?.corpsId ?? null; S.corpsNew = null; S.full = null; S.hooks.panel(); } }, "p", { id: "cn-go", disabled: !F.cmd })));
+  return out;
+}
+/** 核作戦・隠密作戦。使うかどうかはプレイヤーが決める。核は長押し、結果は通知と戦争の記録（地図の印）に残る */
+function opsBox(st) {
+  const c = civ(), O = (S.ops ??= { foe: null, scale: "tactical" }), foes = Object.values(c.states).filter((x) => x.alive && x.id !== st.id).sort((a, b) => (st.relations?.[a.id] ?? 0) - (st.relations?.[b.id] ?? 0)).slice(0, 14), atWar = (x) => myWars(st).some((w) => w.sides.a.includes(x.id) || w.sides.d.includes(x.id));
+  if (!O.foe || !c.states[O.foe]?.alive) O.foe = (foes.find(atWar) ?? foes[0])?.id ?? null; const foe = c.states[O.foe], box = h("div", { class: "opsb" });
+  const sel = h("select", { id: "ops-foe", onchange: (e) => { O.foe = e.target.value; S.hooks.panel(); } }, ...foes.map((x) => h("option", { value: x.id, selected: x.id === O.foe }, `${x.name}${atWar(x) ? "（交戦中）" : ""}`))); box.append(h("div", { class: "rowb" }, sel));
+  if (foe) box.append(h("div", { class: "opsk" }, ...Object.entries(COVERT).map(([k, K]) => { const p = covertChance(ctx(), st, foe, k), dis = k === "rescue" && !atWar(foe); return h("button", { class: "opk", "data-covert": k, disabled: dis, title: K.hint, onclick: () => { const r = act({ type: "ops.covert", stateId: st.id, kind: k, target: foe.id }); if (r.ok) notifyOp(r.result ?? r); } }, h("b", {}, K.ja), h("small", {}, `成功 ${Math.round(p * 100)}%・費用 ${K.cost}`)); })));
+  if (foe && canNuke(st) && atWar(foe)) { const N = NUKE[O.scale]; box.append(h("div", { class: "nuke" }, h("div", { class: "rowb" }, ...Object.entries(NUKE).map(([k, v]) => h("button", { class: "b" + (O.scale === k ? " on" : ""), onclick: () => { O.scale = k; S.hooks.panel(); } }, v.ja))), holdBtn(`${N.ja}を使う（${N.cost}）`, () => { const r = act({ type: "ops.nuclear", stateId: st.id, target: foe.id, scale: O.scale }); if (r.ok) notifyOp(r.result ?? r); }, "danger", { id: "ops-nuke" }, 1800))); }
+  return box;
+}
+function notifyOp(r) { let t2 = r.text ?? (r.dead != null ? `${r.where}で ${n0(r.dead)} 人が失われた${r.retaliation ? `。報復: ${r.retaliation.where}で ${n0(r.retaliation.dead)} 人` : ""}` : ""); if (r.note) t2 += `（${r.note}）`; notify(r.success === false ? "warn" : "ok", t2); }
