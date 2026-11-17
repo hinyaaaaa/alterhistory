@@ -14,6 +14,7 @@ import { atWarWith, endTreaty, declareWar } from "../civ/diplomacy.js";
 import { directWar } from "./warfare.js";
 import { resolveDecision } from "./decisions.js";
 import { setPolicy } from "./policies.js";
+import { changeName, changeRegime, changeFlag, changeLeader, setFinance } from "./identity.js";
 import { ensureCorps, renameCorps, renameUnit, splitCorps, mergeCorps, transferUnits, convertUnit, appoint, dismiss, setOrder, commitWar, setComposition, appointChief, dismissChief } from "./corps.js";
 import { planTechEdit, techEdit, techEditReset, techGrant } from "./techedit.js";
 
@@ -88,6 +89,10 @@ corpsCmd("corps.order", (ctx, st, c) => setOrder(ctx, st, c));
   defineCommand("state.reorganize", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; return reorganize(w.sim.ctx, st, c.shares); } });
   defineCommand("state.setOrbat", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = setOrbat(w.sim.ctx, st, c); return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason }; } }); // v6.13.0: 兵種ごとの人数（自動／手動）
   defineCommand("state.adoptDoctrine", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = adoptDoctrine(w.sim.ctx, st, c.doctrineId ?? c.id, { provenance: "player" }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason }; } });
+  // v6.17.0: 国名・政体・国旗・指導者・財政値（代償つき。identity.js）
+  const idCmd = (name, fn) => defineCommand(name, { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = fn(w.sim.ctx, st, c); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
+  idCmd("state.rename", (ctx, st, c) => changeName(ctx, st, c.name)); idCmd("state.setRegime", (ctx, st, c) => changeRegime(ctx, st, c.regime)); idCmd("state.setFlag", (ctx, st, c) => changeFlag(ctx, st, c.flag));
+  idCmd("state.changeLeader", (ctx, st, c) => changeLeader(ctx, st, { mode: c.mode, cand: c.cand })); idCmd("state.setFinance", (ctx, st, c) => setFinance(ctx, st, { key: c.key, value: c.value }));
   // 創造主の直接編集（担当の有無に依らない）
   defineCommand("creator.editState", { authorities: [A.CREATOR], apply: (w, c) => creatorEditState(w, c) });
   defineCommand("creator.rename", { authorities: [A.CREATOR], phases: ["founding", "running"], apply: (w, c) => creatorRename(w, c) });

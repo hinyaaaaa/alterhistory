@@ -4892,7 +4892,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   // js/core/wcde/policies.js
   var clamp6 = (v, a, b) => v < a ? a : v > b ? b : v;
   var r42 = (x) => Math.round(x * 1e4) / 1e4;
-  var POLICY_CATS = Object.freeze({ econ: "\u7D4C\u6E08", mil: "\u8ECD\u4E8B", home: "\u5185\u653F", dipl: "\u5916\u4EA4", cult: "\u6587\u5316" });
+  var POLICY_CATS = Object.freeze({ econ: "\u7D4C\u6E08", mil: "\u8ECD\u4E8B", relig: "\u5B97\u6559", cult: "\u6587\u5316", dipl: "\u5916\u4EA4", home: "\u7D71\u6CBB" });
   var SLOT_COOLDOWN = 24;
   var P2 = (cat, ja, desc, need2, cost, fx3 = {}, fac = {}) => ({ cat, ja, desc, need: need2, cost, fx: fx3, fac });
   var POLICIES = Object.freeze({
@@ -4914,12 +4914,17 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     veterans: P2("mil", "\u9000\u5F79\u5175\u306E\u512A\u9047", "\u6226\u3063\u305F\u8005\u306B\u5831\u3044\u308B", "standing_army", 1, { stab: 8e-3, tax: -0.01 }, { military: 0.03 }),
     centralize: P2("home", "\u4E2D\u592E\u96C6\u6A29", "\u5730\u65B9\u306E\u6A29\u9650\u3092\u738B\u306E\u3082\u3068\u3078\u96C6\u3081\u308B", "bureaucracy", 1.4, { tax: 0.04, stab: 0.01 }, { nobility: -0.04, bureaucrats: 0.03 }),
     autonomy: P2("home", "\u5730\u65B9\u81EA\u6CBB", "\u5730\u65B9\u306E\u81EA\u6CBB\u3092\u8A8D\u3081\u308B", null, 0.8, { stab: 0.01, tax: -0.02 }, { nobility: 0.03, clans: 0.03 }),
-    tolerance: P2("home", "\u5B97\u6559\u7684\u5BDB\u5BB9", "\u7570\u306A\u308B\u4FE1\u4EF0\u3092\u8A8D\u3081\u308B", null, 0.8, { stab: 0.01 }, { clergy: -0.02, merchants: 0.01 }),
-    state_religion: P2("home", "\u56FD\u6559\u5316", "\u4E00\u3064\u306E\u4FE1\u4EF0\u3092\u56FD\u306E\u67F1\u306B\u3059\u308B", "writing", 1, { stab: 0.01 }, { clergy: 0.04, merchants: -0.01 }),
+    tolerance: P2("relig", "\u5B97\u6559\u7684\u5BDB\u5BB9", "\u7570\u306A\u308B\u4FE1\u4EF0\u3092\u8A8D\u3081\u308B", null, 0.8, { stab: 0.01 }, { clergy: -0.02, merchants: 0.01 }),
+    state_religion: P2("relig", "\u56FD\u6559\u5316", "\u4E00\u3064\u306E\u4FE1\u4EF0\u3092\u56FD\u306E\u67F1\u306B\u3059\u308B", "writing", 1, { stab: 0.01 }, { clergy: 0.04, merchants: -0.01 }),
     martial_law: P2("home", "\u6CBB\u5B89\u306E\u5F37\u5316", "\u53D6\u308A\u7DE0\u307E\u308A\u3068\u76E3\u8996\u3092\u5F37\u3081\u308B", "law", 1.1, { stab: 0.02, scout: 0.05 }, { commoners: -0.03 }),
     relief: P2("home", "\u6551\u8CA7\u3068\u798F\u7949", "\u56F0\u7AAE\u3057\u305F\u6C11\u3092\u52A9\u3051\u308B", "census", 1.2, { stab: 0.015, tax: -0.02 }, { commoners: 0.03 }),
     admin_reform: P2("home", "\u884C\u653F\u6539\u9769", "\u5F79\u6240\u306E\u4ED5\u7D44\u307F\u3092\u6574\u3048\u308B", "administration", 1.2, { tax: 0.02 }, { bureaucrats: 0.03 }),
     exam: P2("home", "\u5B98\u50DA\u306E\u767B\u7528\u8A66\u9A13", "\u5BB6\u67C4\u3067\u306A\u304F\u624D\u3067\u5B98\u3092\u9078\u3076", "civil_service", 1.4, { tax: 0.025, stab: 5e-3 }, { nobility: -0.02, bureaucrats: 0.03 }),
+    clergy_patronage: P2("relig", "\u8056\u8077\u8005\u306E\u4FDD\u8B77", "\u8056\u8077\u8005\u306B\u571F\u5730\u3068\u7279\u6A29\u3092\u4E0E\u3048\u308B", null, 1, { stab: 8e-3 }, { clergy: 0.04, merchants: -0.01 }),
+    inquisition: P2("relig", "\u7570\u7AEF\u306E\u53D6\u308A\u7DE0\u307E\u308A", "\u6559\u3048\u306B\u80CC\u304F\u8005\u3092\u88C1\u304F", "law", 1.1, { stab: 0.015, scout: 0.04 }, { clergy: 0.03, commoners: -0.03, merchants: -0.02 }),
+    pilgrimage: P2("relig", "\u8056\u5730\u5DE1\u793C\u306E\u5968\u52B1", "\u8056\u5730\u3078\u306E\u9053\u3092\u6574\u3048\u3001\u5DE1\u793C\u8005\u3092\u8FCE\u3048\u308B", null, 0.9, { stab: 8e-3, dipl: 0.03, tax: 5e-3 }, { clergy: 0.02, merchants: 0.01 }),
+    secular: P2("relig", "\u653F\u6559\u5206\u96E2", "\u56FD\u306E\u653F\u3068\u4FE1\u4EF0\u306E\u52D9\u3081\u3092\u5206\u3051\u308B", "administration", 1.2, { tax: 0.015, stab: 6e-3 }, { clergy: -0.05, bureaucrats: 0.03 }),
+    scripture_ed: P2("relig", "\u8056\u5178\u306E\u666E\u53CA", "\u6559\u3048\u3092\u66F8\u306B\u3057\u3066\u5E83\u304F\u8AAD\u307E\u305B\u308B", "writing", 1, { tech: 0.02, stab: 6e-3 }, { clergy: 0.02 }),
     marriage: P2("dipl", "\u5A5A\u59FB\u5916\u4EA4", "\u7E01\u7D44\u3067\u7D50\u3073\u3064\u304D\u3092\u4F5C\u308B", null, 0.8, { dipl: 0.1 }, { nobility: 0.01 }),
     trade_diplomacy: P2("dipl", "\u901A\u5546\u5916\u4EA4", "\u4EA4\u6613\u3067\u95A2\u4FC2\u3092\u6DF1\u3081\u308B", "trade_routes", 1, { dipl: 0.06, tax: 0.01 }, { merchants: 0.02 }),
     isolation: P2("dipl", "\u5B64\u7ACB\u4E3B\u7FA9", "\u4ED6\u56FD\u3068\u6DF1\u304F\u95A2\u308F\u3089\u306A\u3044", null, 0.6, { stab: 0.01, dipl: -0.1, mil: -0.01 }),
@@ -4943,13 +4948,22 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     const n3 = Object.keys(st2.techAdopted ?? {}).length;
     return 1 + (n3 >= 12) + (n3 >= 30) + (n3 >= 55);
   };
-  var initFocus = () => ({ econ: [], mil: [], home: [], dipl: [], cult: [] });
+  var initFocus = () => ({ econ: [], mil: [], relig: [], cult: [], dipl: [], home: [] });
   function focusOf(st2) {
     const F = st2.focus ?? (st2.focus = initFocus()), n3 = slotCount(st2);
     for (const c of Object.keys(POLICY_CATS)) {
       F[c] ?? (F[c] = []);
       while (F[c].length < n3) F[c].push(null);
     }
+    for (const c of Object.keys(POLICY_CATS)) F[c].forEach((x, i) => {
+      const p = x && POLICIES[x.id];
+      if (!p || p.cat === c) return;
+      const j = F[p.cat].findIndex((y) => !y);
+      if (j >= 0) {
+        F[p.cat][j] = x;
+        F[c][i] = null;
+      }
+    });
     return F;
   }
   var policyCost = (st2, id) => Math.round((POLICIES[id]?.cost ?? 1) * (15 + (st2.pop ?? 0) * 3e-4));
@@ -4962,7 +4976,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   }
   function setPolicy(ctx2, st2, { category, slot, policyId }) {
     const { civ: civ7 } = ctx2, F = focusOf(st2), mi = civ7.monthIndex;
-    if (!POLICY_CATS[category]) return { ok: false, error: "\u5206\u91CE\u306F econ / mil / home / dipl / cult" };
+    if (!POLICY_CATS[category]) return { ok: false, error: "\u5206\u91CE\u306F econ / mil / relig / cult / dipl / home" };
     if (!Number.isInteger(slot) || slot < 0 || slot >= F[category].length) return { ok: false, error: "\u305D\u306E\u67A0\u306F\u307E\u3060\u3042\u308A\u307E\u305B\u3093\uFF08\u6642\u4EE3\u304C\u9032\u3080\u3068\u5897\u3048\u308B\uFF09" };
     const cur = F[category][slot];
     if (cur && mi - cur.since < SLOT_COOLDOWN) return { ok: false, error: `\u3053\u306E\u67A0\u306F\u3001\u3042\u3068 ${SLOT_COOLDOWN - (mi - cur.since)} \u304B\u6708\u306F\u66FF\u3048\u3089\u308C\u306A\u3044` };
@@ -5850,6 +5864,25 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
   }
 
+  // js/core/wcde/shocks.js
+  var SHOCK_MAX = 12;
+  var shockLegit = (st2, mi) => {
+    let s = 0;
+    for (const x of st2?.shocks ?? []) {
+      const d = (mi - x.at) / Math.max(1, x.years * 12);
+      if (d < 1) s += x.legit * (1 - Math.max(0, d));
+    }
+    return s;
+  };
+  var recentShocks = (st2, kind, mi, years = 60) => (st2?.shocks ?? []).filter((x) => x.kind === kind && mi - x.at < years * 12).length;
+  function addShock(st2, mi, kind, legit, years) {
+    const a = st2.shocks ?? (st2.shocks = []);
+    a.push({ kind, at: mi, legit: Math.round(legit * 1e3) / 1e3, years });
+    while (a.length > SHOCK_MAX) a.shift();
+    return a[a.length - 1];
+  }
+  var shockLeft = (st2, mi) => (st2?.shocks ?? []).filter((x) => mi - x.at < x.years * 12).map((x) => ({ kind: x.kind, legit: x.legit * (1 - (mi - x.at) / (x.years * 12)), left: Math.ceil((x.years * 12 - (mi - x.at)) / 12) }));
+
   // js/core/wcde/domains/effective.js
   var FIELDS = Object.freeze({
     industry: { ja: "\u7523\u696D\u529B", mode: "add", min: 0, max: 1e12, half: 36, eps: 1, nominal: (c, s) => s.econ?.industry },
@@ -5859,7 +5892,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     taxRevenue: { ja: "\u8CA1\u653F\uFF08\u7A0E\u53CE\u306E\u500D\u7387\uFF09", mode: "add", min: 0, max: 3, half: 24, eps: 2e-3, nominal: () => 1 },
     equipLevel: { ja: "\u88C5\u5099\u6C34\u6E96", mode: "add", min: 0, max: 1, half: 24, eps: 2e-3, nominal: (c, s) => s.military?.equipLevel },
     readiness: { ja: "\u7DF4\u5EA6\u30FB\u5373\u5FDC", mode: "add", min: 0, max: 1, half: 12, eps: 2e-3, nominal: (c, s) => s.military?.readiness },
-    legitimacy: { ja: "\u6B63\u7D71\u6027", mode: "add", min: 0, max: 1, half: 24, eps: 2e-3, nominal: (c, s) => s.politics?.legitimacy },
+    legitimacy: { ja: "\u6B63\u7D71\u6027", mode: "add", min: 0, max: 1, half: 24, eps: 2e-3, nominal: (c, s) => s.politics?.legitimacy == null ? void 0 : Math.max(0, s.politics.legitimacy - shockLegit(s, c.monthIndex)) },
     fatigue: { ja: "\u75B2\u52B4\u5EA6", mode: "add", min: 0, max: 1, half: 12, eps: 2e-3, nominal: (c, s) => s.politics?.fatigue },
     // v6.1.0 M7: 複数ドメインへの拡張（国家・人口・外交）。domain は領域の台帳の ID
     stability: { ja: "\u5B89\u5B9A\u5EA6", mode: "add", min: 0, max: 1, half: 18, eps: 2e-3, domain: "states", nominal: (c, s) => s.stability },
@@ -10294,7 +10327,6 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       }
     }
   }
-  var ideasOf = (st2) => Object.entries(st2.politics?.ideas ?? {}).sort((a, b) => b[1] - a[1]).map(([id, v]) => ({ id, ja: IDEAS[id]?.ja ?? id, v }));
   var treatiesOf = (civ7, st2) => {
     const o = { trade: 0, alliance: 0, nonaggression: 0 };
     for (const i of civ7.activeTreatyIds) {
@@ -10989,25 +11021,25 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     for (const r of ledger2(civ7).records) if (r.status === "active") (adj[_b = r.targetId] ?? (adj[_b] = {}))[adjKey(r.field, r.otherId)] = { add: r.residual };
   }
   function planIntervention(w, { stateId, field, value, reason = "", halfLifeMonths = null, otherId = null }) {
-    const { civ: civ7 } = w, fail7 = (error) => ({ ok: false, error }), f2 = FIELDS[field];
-    if (!f2) return fail7(`\u300C${field}\u300D\u306F\u4ECB\u5165\u3067\u304D\u308B\u9805\u76EE\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08${Object.keys(FIELDS).join("\u30FB")}\uFF09`);
+    const { civ: civ7 } = w, fail8 = (error) => ({ ok: false, error }), f2 = FIELDS[field];
+    if (!f2) return fail8(`\u300C${field}\u300D\u306F\u4ECB\u5165\u3067\u304D\u308B\u9805\u76EE\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08${Object.keys(FIELDS).join("\u30FB")}\uFF09`);
     const st2 = civ7.states[stateId];
-    if (!st2?.alive) return fail7("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!st2?.alive) return fail8("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
     if (f2.pair) {
-      if (!otherId || otherId === stateId || !civ7.states[otherId]?.alive) return fail7("\u95A2\u4FC2\u5024\u306E\u4ECB\u5165\u306B\u306F\u3001\u76F8\u624B\u306E\u56FD\u5BB6\uFF08\u5B58\u547D\uFF09\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044");
-    } else if (otherId != null) return fail7(`${f2.ja}\u306B\u306F\u76F8\u624B\u306E\u6307\u5B9A\u306F\u4E0D\u8981\u3067\u3059`);
-    if (!fin(value)) return fail7("\u5024\u304C\u6570\u5024\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08NaN\u30FBInfinity\u30FB\u578B\u306E\u4E0D\u4E00\u81F4\u306F\u4ECB\u5165\u3067\u304D\u307E\u305B\u3093\uFF09");
-    if (value < f2.min || value > f2.max) return fail7(`${f2.ja}\u306F ${f2.min}\u301C${f2.max} \u306E\u7BC4\u56F2\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`);
-    if (typeof reason !== "string" || reason.length > MAX_REASON) return fail7(`\u7406\u7531\u306E\u6CE8\u91C8\u306F ${MAX_REASON} \u6587\u5B57\u307E\u3067\u306E\u6587\u5B57\u5217\u3067\u3059`);
+      if (!otherId || otherId === stateId || !civ7.states[otherId]?.alive) return fail8("\u95A2\u4FC2\u5024\u306E\u4ECB\u5165\u306B\u306F\u3001\u76F8\u624B\u306E\u56FD\u5BB6\uFF08\u5B58\u547D\uFF09\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044");
+    } else if (otherId != null) return fail8(`${f2.ja}\u306B\u306F\u76F8\u624B\u306E\u6307\u5B9A\u306F\u4E0D\u8981\u3067\u3059`);
+    if (!fin(value)) return fail8("\u5024\u304C\u6570\u5024\u3067\u306F\u3042\u308A\u307E\u305B\u3093\uFF08NaN\u30FBInfinity\u30FB\u578B\u306E\u4E0D\u4E00\u81F4\u306F\u4ECB\u5165\u3067\u304D\u307E\u305B\u3093\uFF09");
+    if (value < f2.min || value > f2.max) return fail8(`${f2.ja}\u306F ${f2.min}\u301C${f2.max} \u306E\u7BC4\u56F2\u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`);
+    if (typeof reason !== "string" || reason.length > MAX_REASON) return fail8(`\u7406\u7531\u306E\u6CE8\u91C8\u306F ${MAX_REASON} \u6587\u5B57\u307E\u3067\u306E\u6587\u5B57\u5217\u3067\u3059`);
     let half = f2.half;
     if (halfLifeMonths != null) {
-      if (!fin(halfLifeMonths) || halfLifeMonths < 1 || halfLifeMonths > 1200) return fail7("\u6E1B\u8870\u306E\u534A\u6E1B\u671F\u306F 1\u301C1200 \u304B\u6708");
+      if (!fin(halfLifeMonths) || halfLifeMonths < 1 || halfLifeMonths > 1200) return fail8("\u6E1B\u8870\u306E\u534A\u6E1B\u671F\u306F 1\u301C1200 \u304B\u6708");
       half = halfLifeMonths;
     }
     const nominal = nominalOf(civ7, st2, field, otherId);
-    if (!fin(nominal)) return fail7(`${f2.ja}\u306F\u307E\u3060\u7B97\u51FA\u3055\u308C\u3066\u3044\u307E\u305B\u3093\uFF08\u6B21\u306E\u6708\u6B21\u51E6\u7406\u306E\u3042\u3068\u3067\u4ECB\u5165\u3067\u304D\u307E\u3059\uFF09`);
+    if (!fin(nominal)) return fail8(`${f2.ja}\u306F\u307E\u3060\u7B97\u51FA\u3055\u308C\u3066\u3044\u307E\u305B\u3093\uFF08\u6B21\u306E\u6708\u6B21\u51E6\u7406\u306E\u3042\u3068\u3067\u4ECB\u5165\u3067\u304D\u307E\u3059\uFF09`);
     const residual0 = value - nominal;
-    if (Math.abs(residual0) < f2.eps) return fail7(`\u6307\u5B9A\u5024\u304C\u901A\u5E38\u8A08\u7B97\u5024\uFF08${Math.round(nominal * 1e3) / 1e3}\uFF09\u3068\u307B\u307C\u540C\u3058\u3067\u3059`);
+    if (Math.abs(residual0) < f2.eps) return fail8(`\u6307\u5B9A\u5024\u304C\u901A\u5E38\u8A08\u7B97\u5024\uFF08${Math.round(nominal * 1e3) / 1e3}\uFF09\u3068\u307B\u307C\u540C\u3058\u3067\u3059`);
     return { ok: true, plan: { st: st2, f: f2, nominal, residual0, half, reason: reason.trim(), otherId: f2.pair ? otherId : null } };
   }
   function createIntervention(w, args, authority = "creator_intervention") {
@@ -11096,18 +11128,18 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   };
   var U3 = (civ7, ...p) => hashSeed(civ7.historySeed, "catastrophe", ...p) / 4294967296;
   function planCatastrophe(w, { name = "", reason = "", scope = "world", center = null, radiusKm = null, mortality, recoveryMonths = 60 }) {
-    const fail7 = (error) => ({ ok: false, error }), { civ: civ7, world } = w;
-    if (typeof name !== "string" || name.trim().length > NAME_MAX) return fail7(`\u707D\u5384\u306E\u540D\u524D\u306F ${NAME_MAX} \u6587\u5B57\u307E\u3067\u306E\u6587\u5B57\u5217\u3067\u3059`);
-    if (typeof reason !== "string" || reason.length > REASON_MAX) return fail7(`\u7406\u7531\u306E\u6CE8\u91C8\u306F ${REASON_MAX} \u6587\u5B57\u307E\u3067\u306E\u6587\u5B57\u5217\u3067\u3059`);
-    if (scope !== "world" && scope !== "region") return fail7("\u7BC4\u56F2\u306F world\uFF08\u4E16\u754C\u898F\u6A21\uFF09\u304B region\uFF08\u5730\u57DF\u898F\u6A21\uFF09");
-    if (!fin2(mortality) || mortality < MIN_MORTALITY || mortality > MAX_MORTALITY) return fail7(`\u4EBA\u53E3\u306E\u640D\u5931\u306E\u5272\u5408\u306F ${MIN_MORTALITY * 100}\u301C${MAX_MORTALITY * 100}% \u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`);
-    if (!fin2(recoveryMonths) || recoveryMonths < 1) return fail7("\u56DE\u5FA9\u307E\u3067\u306E\u76EE\u5B89\u306F 1 \u304B\u6708\u4EE5\u4E0A\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
+    const fail8 = (error) => ({ ok: false, error }), { civ: civ7, world } = w;
+    if (typeof name !== "string" || name.trim().length > NAME_MAX) return fail8(`\u707D\u5384\u306E\u540D\u524D\u306F ${NAME_MAX} \u6587\u5B57\u307E\u3067\u306E\u6587\u5B57\u5217\u3067\u3059`);
+    if (typeof reason !== "string" || reason.length > REASON_MAX) return fail8(`\u7406\u7531\u306E\u6CE8\u91C8\u306F ${REASON_MAX} \u6587\u5B57\u307E\u3067\u306E\u6587\u5B57\u5217\u3067\u3059`);
+    if (scope !== "world" && scope !== "region") return fail8("\u7BC4\u56F2\u306F world\uFF08\u4E16\u754C\u898F\u6A21\uFF09\u304B region\uFF08\u5730\u57DF\u898F\u6A21\uFF09");
+    if (!fin2(mortality) || mortality < MIN_MORTALITY || mortality > MAX_MORTALITY) return fail8(`\u4EBA\u53E3\u306E\u640D\u5931\u306E\u5272\u5408\u306F ${MIN_MORTALITY * 100}\u301C${MAX_MORTALITY * 100}% \u3067\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044`);
+    if (!fin2(recoveryMonths) || recoveryMonths < 1) return fail8("\u56DE\u5FA9\u307E\u3067\u306E\u76EE\u5B89\u306F 1 \u304B\u6708\u4EE5\u4E0A\u306B\u3057\u3066\u304F\u3060\u3055\u3044");
     let cell = null, radius = null;
     if (scope === "region") {
       cell = center;
-      if (!Number.isInteger(cell) || cell < 0 || cell >= world.mesh.cellCount) return fail7("\u5730\u57DF\u898F\u6A21\u306E\u707D\u5384\u306B\u306F\u3001\u4E2D\u5FC3\u306E\u533A\u753B\uFF080\u301C\u533A\u753B\u6570\u22121 \u306E\u6574\u6570\uFF09\u304C\u5FC5\u8981\u3067\u3059");
+      if (!Number.isInteger(cell) || cell < 0 || cell >= world.mesh.cellCount) return fail8("\u5730\u57DF\u898F\u6A21\u306E\u707D\u5384\u306B\u306F\u3001\u4E2D\u5FC3\u306E\u533A\u753B\uFF080\u301C\u533A\u753B\u6570\u22121 \u306E\u6574\u6570\uFF09\u304C\u5FC5\u8981\u3067\u3059");
       radius = radiusKm ?? 1500;
-      if (!fin2(radius) || radius < 100 || radius > 2e4) return fail7("\u534A\u5F84\u306F 100\u301C20000 km");
+      if (!fin2(radius) || radius < 100 || radius > 2e4) return fail8("\u534A\u5F84\u306F 100\u301C20000 km");
     }
     return { ok: true, plan: { name: name.trim(), reason: reason.trim(), scope, cell, radius, mortality: r36(mortality), recoveryMonths: Math.round(recoveryMonths) } };
   }
@@ -11501,12 +11533,19 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
     return { field, charge };
   }
+  var flagFor = (id, bias = 0) => randomFlag(rngOf(hashSeed(String(id), "flag")), bias);
+  var flagOfState = (st2) => st2?.flag && st2.flag.field ? normalizeFlag(st2.flag) : flagFor(st2?.id ?? "x", hashSeed(String(st2?.nameLang ?? st2?.id ?? "x"), "bias"));
   function normalizeFlag(spec) {
     const kind = FLAG_FIELDS.some((f2) => f2.kind === spec?.field?.kind) ? spec.field.kind : "plain", n3 = fieldInfo(kind).n, ok2 = (k) => FLAG_COLORS[k] ? k : "red";
     const c = Array.from({ length: n3 }, (_, i) => ok2(spec?.field?.c?.[i] ?? (i === 0 ? "red" : i === 1 ? "white" : spec?.field?.c?.[0] ?? "red")));
     const ch = spec?.charge && FLAG_CHARGES.some((x) => x.kind === spec.charge.kind && x.kind !== "none") ? { kind: spec.charge.kind, c: ok2(spec.charge.c ?? "white"), size: Math.max(0.6, Math.min(1.4, Number(spec.charge.size) || 1)) } : null;
     return { field: { kind, c }, charge: ch };
   }
+  var flagRuleOk = (spec) => {
+    const f2 = normalizeFlag(spec);
+    if (!f2.charge) return true;
+    return isMetal(f2.charge.c) !== isMetal(groundKey(f2.field));
+  };
   var pts = (a) => a.map((p) => p.map((v) => Math.round(v * 100) / 100).join(",")).join(" ");
   var star = (n3, cx, cy, R, ratio) => {
     const out = [];
@@ -11928,6 +11967,10 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
     return out;
   }
+  function playerRegimeOptions(ctx2, st2) {
+    const cur = regimeOf(st2);
+    return REGIME_IDS.filter((id) => id !== cur && !REGIMES[id].crisisOnly && !gateFor(ctx2, st2, id)).map((id) => ({ id, scale: changeScale(cur, id), tier: tierOf2(id) }));
+  }
   function pressureOf(ctx2, st2) {
     const civ7 = ctx2.civ, P3 = st2.politics ?? {}, legE = effective(civ7, st2, "legitimacy"), nbs = neighborStates(ctx2, st2);
     let stronger = 0;
@@ -12178,24 +12221,24 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   }
   function dispatch(w, cmd) {
     const { civ: civ7 } = w, W3 = civ7.wcde, spec = COMMANDS[cmd?.type];
-    const fail7 = (error, code = "rejected") => {
+    const fail8 = (error, code = "rejected") => {
       log(civ7, { at: civ7.monthIndex, type: cmd?.type, authority: cmd?.authority, ok: false, error, code });
       return { ok: false, error, code };
     };
-    if (!spec) return fail7(`\u672A\u77E5\u306E\u547D\u4EE4: ${cmd?.type}`, "unknown");
-    if (!Object.values(AUTHORITY).includes(cmd.authority)) return fail7(`\u672A\u77E5\u306E\u6A29\u9650: ${cmd.authority}`, "authority");
-    if (!spec.authorities.includes(cmd.authority)) return fail7(`\u3053\u306E\u547D\u4EE4\u306F ${cmd.authority} \u3067\u306F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\uFF08\u8A31\u53EF: ${spec.authorities.join("\u30FB")}\uFF09`, "authority");
+    if (!spec) return fail8(`\u672A\u77E5\u306E\u547D\u4EE4: ${cmd?.type}`, "unknown");
+    if (!Object.values(AUTHORITY).includes(cmd.authority)) return fail8(`\u672A\u77E5\u306E\u6A29\u9650: ${cmd.authority}`, "authority");
+    if (!spec.authorities.includes(cmd.authority)) return fail8(`\u3053\u306E\u547D\u4EE4\u306F ${cmd.authority} \u3067\u306F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\uFF08\u8A31\u53EF: ${spec.authorities.join("\u30FB")}\uFF09`, "authority");
     if (cmd.commandId != null && W3.cmdIds.includes(cmd.commandId)) return { ok: true, duplicate: true };
-    if (spec.mutates && w.viewPast != null) return fail7("\u904E\u53BB\u306E\u95B2\u89A7\u4E2D\u306F\u3001\u4E16\u754C\u3092\u5909\u3048\u308B\u547D\u4EE4\u3092\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\uFF08\u73FE\u5728\u3078\u623B\u3057\u3066\u304F\u3060\u3055\u3044\uFF09", "past_view");
-    if (!spec.phases.includes(W3.phase)) return fail7(`\u3053\u306E\u547D\u4EE4\u306F\u6BB5\u968E\u300C${spec.phases.join("\u30FB")}\u300D\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059\uFF08\u73FE\u5728: ${W3.phase}\uFF09`, "phase");
+    if (spec.mutates && w.viewPast != null) return fail8("\u904E\u53BB\u306E\u95B2\u89A7\u4E2D\u306F\u3001\u4E16\u754C\u3092\u5909\u3048\u308B\u547D\u4EE4\u3092\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093\uFF08\u73FE\u5728\u3078\u623B\u3057\u3066\u304F\u3060\u3055\u3044\uFF09", "past_view");
+    if (!spec.phases.includes(W3.phase)) return fail8(`\u3053\u306E\u547D\u4EE4\u306F\u6BB5\u968E\u300C${spec.phases.join("\u30FB")}\u300D\u3067\u306E\u307F\u5B9F\u884C\u3067\u304D\u307E\u3059\uFF08\u73FE\u5728: ${W3.phase}\uFF09`, "phase");
     if (spec.control && cmd.authority === A.PLAYER) {
       const cs = W3.control.stateId;
-      if (!cs) return fail7("\u62C5\u5F53\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u56FD\u5BB6\u3092\u62C5\u5F53\u3057\u3066\u304B\u3089\u547D\u4EE4\u3057\u3066\u304F\u3060\u3055\u3044\uFF09", "no_control");
+      if (!cs) return fail8("\u62C5\u5F53\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\uFF08\u56FD\u5BB6\u3092\u62C5\u5F53\u3057\u3066\u304B\u3089\u547D\u4EE4\u3057\u3066\u304F\u3060\u3055\u3044\uFF09", "no_control");
       if (cmd.stateId == null) cmd = { ...cmd, stateId: cs };
-      if (cmd.stateId !== cs) return fail7("\u62C5\u5F53\u56FD\u5BB6\u4EE5\u5916\u306B\u306F\u547D\u4EE4\u3067\u304D\u307E\u305B\u3093", "not_controlled");
+      if (cmd.stateId !== cs) return fail8("\u62C5\u5F53\u56FD\u5BB6\u4EE5\u5916\u306B\u306F\u547D\u4EE4\u3067\u304D\u307E\u305B\u3093", "not_controlled");
     }
     const v = spec.validate?.(w, cmd);
-    if (v && v.ok === false) return fail7(v.error);
+    if (v && v.ok === false) return fail8(v.error);
     const cp = spec.mutates && spec.checkpoint !== false ? checkpoint(civ7) : null;
     let r;
     try {
@@ -12205,7 +12248,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       log(civ7, { at: civ7.monthIndex, type: cmd.type, authority: cmd.authority, ok: false, error: String(err?.message ?? err), code: "exception" });
       return { ok: false, error: `\u547D\u4EE4\u306E\u9014\u4E2D\u3067\u5931\u6557\u3057\u305F\u305F\u3081\u3001\u3059\u3079\u3066\u53D6\u308A\u6D88\u3057\u307E\u3057\u305F: ${err?.message ?? err}`, code: "rolled_back" };
     }
-    if (!r || r.ok === false) return fail7(r?.error ?? "\u5931\u6557", "rejected");
+    if (!r || r.ok === false) return fail8(r?.error ?? "\u5931\u6557", "rejected");
     if (cmd.commandId != null) {
       W3.cmdIds.push(cmd.commandId);
       if (W3.cmdIds.length > ID_MAX) W3.cmdIds.splice(0, W3.cmdIds.length - ID_MAX);
@@ -12381,8 +12424,143 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     return { ok: true, changed: true, added, removed };
   }
 
+  // js/core/wcde/identity.js
+  var clamp26 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+  var r38 = (x) => Math.round(x * 1e3) / 1e3;
+  var fail6 = (error) => ({ ok: false, error });
+  var ORIGINS_HEREDITARY = Object.freeze(["\u738B\u306E\u5B50\uFF08\u5AE1\u51FA\uFF09", "\u738B\u306E\u5B50\uFF08\u5EB6\u5B50\uFF09", "\u738B\u306E\u5F1F", "\u738B\u306E\u7525", "\u5C06\u8ECD", "\u5BB0\u76F8", "\u990A\u5B50", "\u8056\u8077\u8005"]);
+  var ORIGINS_OTHER = Object.freeze(["\u5C06\u8ECD", "\u9577\u8001", "\u5546\u4EBA", "\u66F8\u8A18\u5B98", "\u5F01\u8AD6\u5BB6", "\u795E\u5B98", "\u6C11\u4F1A\u306E\u63A8\u6319"]);
+  var LEADER_MODES = Object.freeze({ abdicate: "\u9000\u4F4D\u3092\u4FC3\u3059", depose: "\u5F37\u5236\u7684\u306B\u9000\u3051\u308B", assassinated: "\u6697\u6BBA\u3055\u308C\u305F" });
+  var cum = (n3) => 1 + 0.6 * Math.min(n3, 5);
+  function changeCost(st2, mi, kind, opt = {}) {
+    const n3 = recentShocks(st2, kind, mi, 60);
+    if (kind === "name") return { count: n3, legit: r38(clamp26(0.05 * cum(n3), 0, 0.3)), years: Math.min(40, 8 + 4 * n3), stab: 0, fac: 0 };
+    if (kind === "flag") return { count: n3, legit: r38(clamp26(0.02 * cum(n3), 0, 0.12)), years: 4, stab: 0, fac: 0 };
+    if (kind === "regime") {
+      const sc = opt.scale ?? 0.2;
+      return { count: n3, scale: sc, legit: r38(clamp26((0.04 + 0.3 * sc) * cum(n3), 0, 0.6)), years: Math.round(6 + 30 * sc), stab: r38(clamp26(0.02 + 0.16 * sc + 0.03 * Math.min(n3, 4), 0, 0.4)), fac: r38((0.04 + 0.12 * sc) * (opt.crossFamily ? 1 : 0.4)) };
+    }
+    const T4 = { abdicate: [0.03, 3, 0.01, 0.02], depose: [0.12, 8, 0.06, 0.06], assassinated: [0.15, 10, 0.1, 0.05] }[opt.mode ?? "abdicate"] ?? [0.03, 3, 0.01, 0.02];
+    return { count: n3, legit: r38(clamp26(T4[0] * cum(n3), 0, 0.5)), years: T4[1], stab: r38(clamp26(T4[2] * cum(n3), 0, 0.3)), fac: r38(T4[3] * cum(n3)) };
+  }
+  var eventOf = (ctx2, st2, kind, title, facts) => makeEvent(ctx2.civ, ctx2.ids, { kind, title, participants: [{ entityId: st2.id, role: "state" }], facts: { stateId: st2.id, ...facts }, provenance: "simulation" });
+  var shakeFactions = (st2, k, heavy = ["nobility", "clergy"]) => {
+    const f2 = st2.politics?.factions;
+    if (!f2) return;
+    for (const x of Object.keys(f2)) f2[x].support = clamp26((f2[x].support ?? 0.5) - (heavy.includes(x) ? k * 1.4 : k * 0.6));
+  };
+  function changeName(ctx2, st2, name) {
+    const { civ: civ7 } = ctx2, mi = civ7.monthIndex, nm = typeof name === "string" ? name.trim() : "";
+    if (!st2?.alive) return fail6("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!nm || nm.length > 30) return fail6("\u56FD\u540D\u306F 1\u301C30 \u6587\u5B57");
+    if (nm === st2.name) return fail6("\u3044\u307E\u306E\u56FD\u540D\u3068\u540C\u3058\u3067\u3059");
+    if (Object.values(civ7.states).some((x) => x.alive && x.id !== st2.id && x.name === nm)) return fail6("\u540C\u3058\u540D\u524D\u306E\u56FD\u304C\u3059\u3067\u306B\u3042\u308A\u307E\u3059");
+    const old = st2.name, cost = changeCost(st2, mi, "name");
+    st2.name = nm;
+    st2.nameBase = null;
+    st2.nameChangedAt = mi;
+    addShock(st2, mi, "name", cost.legit, cost.years);
+    eventOf(ctx2, st2, "state_renamed", `${old}\u306F\u56FD\u540D\u3092${nm}\u3068\u6539\u3081\u305F`, { from: old, to: nm });
+    ctx2._byState = null;
+    st2.interpDirty = true;
+    return { ok: true, cost };
+  }
+  function changeRegime(ctx2, st2, to) {
+    const { civ: civ7 } = ctx2, mi = civ7.monthIndex;
+    if (!st2?.alive) return fail6("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    const opt = playerRegimeOptions(ctx2, st2).find((x) => x.id === to);
+    if (!opt) return fail6("\u305D\u306E\u653F\u4F53\u3078\u306F\u3001\u3044\u307E\u306F\u79FB\u308C\u307E\u305B\u3093");
+    const from = regimeOf(st2), cross3 = REGIMES[from].core !== REGIMES[to].core, cost = changeCost(st2, mi, "regime", { scale: opt.scale, crossFamily: opt.scale > 0.3 }), how = opt.scale > 0.5 ? "revolution" : "reform";
+    const r = switchRegime(ctx2, st2, to, how);
+    if (!r) return fail6("\u653F\u4F53\u3092\u79FB\u305B\u307E\u305B\u3093\u3067\u3057\u305F");
+    st2.stability = clamp26(st2.stability - 0.03 * Math.min(cost.count, 4));
+    addShock(st2, mi, "regime", cost.legit, cost.years);
+    st2.leader.title = officeJa(REGIMES[to].ruler);
+    void cross3;
+    ctx2._byState = null;
+    return { ok: true, cost, from, to };
+  }
+  function changeFlag(ctx2, st2, spec) {
+    const mi = ctx2.civ.monthIndex;
+    if (!st2?.alive) return fail6("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!spec?.field) return fail6("\u56FD\u65D7\u306E\u6307\u5B9A\u304C\u3042\u308A\u307E\u305B\u3093");
+    const f2 = normalizeFlag(spec), cost = changeCost(st2, mi, "flag");
+    st2.flag = f2;
+    addShock(st2, mi, "flag", cost.legit, cost.years);
+    eventOf(ctx2, st2, "state_flag_changed", `${st2.name}\u306F\u56FD\u65D7\u3092\u6539\u3081\u305F`, {});
+    return { ok: true, cost };
+  }
+  function leaderCandidates(ctx2, st2, n3 = 4, salt = "") {
+    const { civ: civ7 } = ctx2, mi = civ7.monthIndex, rnd2 = rngOf(hashSeed(st2.id, mi, "lcand", salt)), pick3 = (a) => a[Math.floor(rnd2() * a.length)], g = civ7.groups[st2.capitalGroupId], her = REGIMES[regimeOf(st2)].heredity, origins = her ? ORIGINS_HEREDITARY : ORIGINS_OTHER, keys = Object.keys(LEADER_TRAITS), out = [];
+    const heir = st2.heirFigureId ? civ7.figures?.[st2.heirFigureId] : null;
+    if (heir && heir.diedAt == null) out.push({ name: heir.name, look: Math.floor(rnd2() * 12), age: Math.max(14, Math.round((mi - heir.bornAt) / 12)), traits: [pick3(keys)], origin: "\u7D99\u627F\u8005", heir: true });
+    const lang = languageOfGroup(g);
+    while (out.length < n3) {
+      const tr = [];
+      while (tr.length < 2) {
+        const k = pick3(keys);
+        if (!tr.includes(k)) tr.push(k);
+      }
+      const nm = ctx2.nameGen?.person?.(civ7, g, rnd2) ?? (lang && civ7.languages[lang] ? nameFor(civ7, rnd2, lang, "person") : null) ?? "\u540D\u3082\u306A\u304D\u4EBA";
+      out.push({ name: nm, look: Math.floor(rnd2() * 12), age: 18 + Math.floor(rnd2() * 36), traits: tr, origin: pick3(origins) });
+    }
+    return out;
+  }
+  function changeLeader(ctx2, st2, { mode = "abdicate", cand: cand3 }) {
+    const { civ: civ7 } = ctx2, mi = civ7.monthIndex, L = st2?.leader;
+    if (!st2?.alive || !L) return fail6("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!LEADER_MODES[mode]) return fail6("\u4EA4\u4EE3\u306E\u65B9\u6CD5\u304C\u4E0D\u6B63\u3067\u3059");
+    if (!cand3 || typeof cand3.name !== "string" || !cand3.name.trim() || cand3.name.length > 30) return fail6("\u5F8C\u7D99\u8005\u3092\u9078\u3093\u3067\u304F\u3060\u3055\u3044");
+    const cost = changeCost(st2, mi, "leader", { mode }), cap = civ7.groups[st2.capitalGroupId], old = L.name, heirOk = cand3.heir && st2.heirFigureId && civ7.figures?.[st2.heirFigureId]?.diedAt == null;
+    if (heirOk && mode !== "depose") {
+      L.bornAt -= 1;
+    } else {
+      st2.heirFigureId = null;
+      const rg = regnalOf(st2, cand3.name.trim(), leaderRng(civ7, st2, "swap"), epithetGen(ctx2, st2, cap));
+      L.name = rg.name;
+      L.birthName = rg.birth;
+      L.bornAt = mi - Math.round(clamp26(Number(cand3.age) || 30, 14, 90) * 12 * lifeScale(civ7, st2));
+      L.traits = (cand3.traits ?? []).filter((k) => LEADER_TRAITS[k]).slice(0, 3);
+      if (Number.isFinite(cand3.look)) L.look = cand3.look;
+      L.deposed = mode !== "abdicate";
+      L.kin = mode === "abdicate";
+    }
+    st2.stability = clamp26(st2.stability - cost.stab);
+    shakeFactions(st2, cost.fac);
+    addShock(st2, mi, "leader", cost.legit, cost.years);
+    if (mode === "depose") eventOf(ctx2, st2, "leader_deposed", `${st2.name}\u3067\u3001${old}\u304C\u9000\u3051\u3089\u308C\u305F`, { by: "player" });
+    ctx2._byState = null;
+    return { ok: true, cost, mode };
+  }
+  var FINANCE = Object.freeze({
+    tax: { ja: "\u7A0E\u7387", min: 0.02, max: 0.4, step: 0.01, steps: [0.06, 0.1, 0.16, 0.26] },
+    mobilization: { ja: "\u5FB4\u5175\u7387", min: 0, max: 0.15, step: 0.01, steps: [0, 0.03, 0.07, 0.12] },
+    tolerance: { ja: "\u5BDB\u5BB9", min: 0, max: 1, step: 0.05, steps: [0.1, 0.4, 0.7, 1] },
+    assimilation: { ja: "\u540C\u5316", min: 0, max: 1, step: 0.05, steps: [0, 0.3, 0.6, 0.9] },
+    autonomy: { ja: "\u81EA\u6CBB", min: 0, max: 1, step: 0.05, steps: [0, 0.25, 0.5, 0.8] }
+  });
+  var FINANCE_COOLDOWN = 3;
+  function setFinance(ctx2, st2, { key, value }) {
+    const F = FINANCE[key], mi = ctx2.civ.monthIndex;
+    if (!st2?.alive) return fail6("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+    if (!F) return fail6("\u8CA1\u653F\u306E\u9805\u76EE\u304C\u4E0D\u6B63\u3067\u3059");
+    const v = Number(value);
+    if (!Number.isFinite(v)) return fail6("\u6570\u5024\u3092\u5165\u308C\u3066\u304F\u3060\u3055\u3044");
+    const nv = r38(clamp26(Math.round(v / F.step) * F.step, F.min, F.max)), cur = st2.policy[key];
+    if (Math.abs(nv - cur) < 1e-9) return { ok: true, changed: false };
+    const last = st2.finLast?.[key];
+    if (last != null && mi - last < FINANCE_COOLDOWN) return fail6(`${F.ja}\u306F\u3001\u3042\u3068 ${FINANCE_COOLDOWN - (mi - last)} \u304B\u6708\u306F\u5909\u3048\u3089\u308C\u307E\u305B\u3093`);
+    const cost = key === "tolerance" || key === "assimilation" || key === "autonomy" ? Math.round(Math.abs(nv - cur) * (10 + (st2.pop ?? 0) * 4e-4)) : 0;
+    if (cost > st2.treasury) return fail6(`\u8CBB\u7528 ${cost} \u304C\u8DB3\u308A\u307E\u305B\u3093`);
+    st2.treasury -= cost;
+    st2.policy[key] = nv;
+    (st2.finLast ?? (st2.finLast = {}))[key] = mi;
+    ctx2._byState = null;
+    return { ok: true, changed: true, before: cur, after: nv, cost };
+  }
+
   // js/core/wcde/techedit.js
-  var fail6 = (error, extra = {}) => ({ ok: false, error, ...extra });
+  var fail7 = (error, extra = {}) => ({ ok: false, error, ...extra });
   var log2 = (civ7, e) => {
     var _a;
     return ((_a = civ7.wcde).edits ?? (_a.edits = [])).push({ at: civ7.monthIndex, authority: "creator_intervention", ...e });
@@ -12392,21 +12570,21 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   };
   function planTechEdit(w, c) {
     const { civ: civ7 } = w, t = TECH[c.key];
-    if (!t) return fail6("\u672A\u77E5\u306E\u6280\u8853");
+    if (!t) return fail7("\u672A\u77E5\u306E\u6280\u8853");
     if (c.prereq !== void 0) {
-      if (!Array.isArray(c.prereq) || c.prereq.some((p) => !TECH[p])) return fail6("\u524D\u63D0\u306B\u672A\u77E5\u306E\u6280\u8853\u304C\u3042\u308B");
-      if (c.prereq.includes(c.key)) return fail6("\u81EA\u5206\u81EA\u8EAB\u3092\u524D\u63D0\u306B\u3067\u304D\u306A\u3044");
+      if (!Array.isArray(c.prereq) || c.prereq.some((p) => !TECH[p])) return fail7("\u524D\u63D0\u306B\u672A\u77E5\u306E\u6280\u8853\u304C\u3042\u308B");
+      if (c.prereq.includes(c.key)) return fail7("\u81EA\u5206\u81EA\u8EAB\u3092\u524D\u63D0\u306B\u3067\u304D\u306A\u3044");
       const seen = /* @__PURE__ */ new Set(), stack = [...c.prereq];
       while (stack.length) {
         const k = stack.pop();
-        if (k === c.key) return fail6("\u524D\u63D0\u304C\u5FAA\u74B0\u3059\u308B");
+        if (k === c.key) return fail7("\u524D\u63D0\u304C\u5FAA\u74B0\u3059\u308B");
         if (seen.has(k)) continue;
         seen.add(k);
         stack.push(...prereqOf(civ7, TECH[k]));
       }
     }
-    if (c.fx !== void 0 && (typeof c.fx !== "object" || Object.values(c.fx).some((v) => !Number.isFinite(v) || v < -1 || v > 3))) return fail6("\u52B9\u679C\u306F -1\u301C3 \u306E\u6570");
-    if (c.caps !== void 0 && (!Array.isArray(c.caps) || c.caps.some((x) => typeof x !== "string"))) return fail6("\u89E3\u7981\u306F\u6587\u5B57\u5217\u306E\u914D\u5217");
+    if (c.fx !== void 0 && (typeof c.fx !== "object" || Object.values(c.fx).some((v) => !Number.isFinite(v) || v < -1 || v > 3))) return fail7("\u52B9\u679C\u306F -1\u301C3 \u306E\u6570");
+    if (c.caps !== void 0 && (!Array.isArray(c.caps) || c.caps.some((x) => typeof x !== "string"))) return fail7("\u89E3\u7981\u306F\u6587\u5B57\u5217\u306E\u914D\u5217");
     return { ok: true, impact: impactOf(civ7, c.key) };
   }
   function techEdit(w, c) {
@@ -12414,7 +12592,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     const { civ: civ7 } = w, p = planTechEdit(w, c);
     if (!p.ok) return p;
     const i = p.impact;
-    if ((i.holders || i.adopters || i.dependents.length) && !c.acknowledge) return fail6(`\u3053\u306E\u7DE8\u96C6\u306F\u3001\u4F9D\u5B58\u3059\u308B\u6280\u8853 ${i.dependents.length} \u4EF6\u30FB\u4FDD\u6709\u3059\u308B\u96C6\u56E3 ${i.holders}\u30FB\u63A1\u7528\u3059\u308B\u56FD\u5BB6 ${i.adopters} \u306B\u5F71\u97FF\u3057\u307E\u3059\u3002\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`, { needsAck: true, impact: i });
+    if ((i.holders || i.adopters || i.dependents.length) && !c.acknowledge) return fail7(`\u3053\u306E\u7DE8\u96C6\u306F\u3001\u4F9D\u5B58\u3059\u308B\u6280\u8853 ${i.dependents.length} \u4EF6\u30FB\u4FDD\u6709\u3059\u308B\u96C6\u56E3 ${i.holders}\u30FB\u63A1\u7528\u3059\u308B\u56FD\u5BB6 ${i.adopters} \u306B\u5F71\u97FF\u3057\u307E\u3059\u3002\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`, { needsAck: true, impact: i });
     const o = (_a = civ7.techOverrides ?? (civ7.techOverrides = {}))[_b = c.key] ?? (_a[_b] = {});
     const before = { prereq: o.prereq ?? t0(c.key).prereq, fx: o.fx ?? t0(c.key).fx, caps: o.caps ?? t0(c.key).caps };
     if (c.prereq !== void 0) o.prereq = [...c.prereq];
@@ -12427,7 +12605,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   var t0 = (k) => TECH[k];
   function techEditReset(w, { key }) {
     const { civ: civ7 } = w;
-    if (!civ7.techOverrides?.[key]) return fail6("\u7DE8\u96C6\u3055\u308C\u3066\u3044\u306A\u3044");
+    if (!civ7.techOverrides?.[key]) return fail7("\u7DE8\u96C6\u3055\u308C\u3066\u3044\u306A\u3044");
     delete civ7.techOverrides[key];
     if (!Object.keys(civ7.techOverrides).length) delete civ7.techOverrides;
     refreshAll(civ7);
@@ -12437,20 +12615,20 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   function techGrant(w, c) {
     var _a, _b, _c, _d;
     const { civ: civ7 } = w, t = TECH[c.key];
-    if (!t) return fail6("\u672A\u77E5\u306E\u6280\u8853");
+    if (!t) return fail7("\u672A\u77E5\u306E\u6280\u8853");
     const mode = c.mode === "revoke" ? "revoke" : "grant";
     const groups = c.stateId ? Object.values(civ7.groups).filter((g) => g.stateId === c.stateId) : (c.groupIds ?? []).map((id) => civ7.groups[id]).filter(Boolean);
-    if (!groups.length) return fail6("\u5BFE\u8C61\u306E\u96C6\u56E3\u304C\u306A\u3044");
+    if (!groups.length) return fail7("\u5BFE\u8C61\u306E\u96C6\u56E3\u304C\u306A\u3044");
     const mi = civ7.monthIndex;
     let n3 = 0;
     if (mode === "grant") {
       for (const g of groups) if (g.tech.known[t.key] == null) {
         const miss = prereqOf(civ7, t).filter((p) => g.tech.known[p] == null);
-        if (miss.length) return fail6(`\u524D\u63D0\u306E\u6280\u8853\u304C\u8DB3\u308A\u306A\u3044\u96C6\u56E3\u304C\u3042\u308B: ${miss.map((p) => TECH[p].name).join("\u30FB")}\uFF08\u524D\u63D0\u304B\u3089\u4ED8\u4E0E\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
+        if (miss.length) return fail7(`\u524D\u63D0\u306E\u6280\u8853\u304C\u8DB3\u308A\u306A\u3044\u96C6\u56E3\u304C\u3042\u308B: ${miss.map((p) => TECH[p].name).join("\u30FB")}\uFF08\u524D\u63D0\u304B\u3089\u4ED8\u4E0E\u3057\u3066\u304F\u3060\u3055\u3044\uFF09`);
       }
     } else {
       const deps = TECHS.filter((u) => prereqOf(civ7, u).includes(t.key) && groups.some((g) => g.tech.known[u.key] != null));
-      if (deps.length && !c.acknowledge) return fail6(`${deps.map((u) => u.name).join("\u30FB")}\u3092\u4FDD\u6709\u3059\u308B\u96C6\u56E3\u304C\u3042\u308B\u3002\u524D\u63D0\u3092\u5265\u596A\u3059\u308B\u3068\u3001\u305D\u308C\u3089\u306E\u6A5F\u80FD\u304C\u52A3\u5316\u3057\u307E\u3059\u3002\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`, { needsAck: true, impact: { dependents: deps.map((u) => u.key) } });
+      if (deps.length && !c.acknowledge) return fail7(`${deps.map((u) => u.name).join("\u30FB")}\u3092\u4FDD\u6709\u3059\u308B\u96C6\u56E3\u304C\u3042\u308B\u3002\u524D\u63D0\u3092\u5265\u596A\u3059\u308B\u3068\u3001\u305D\u308C\u3089\u306E\u6A5F\u80FD\u304C\u52A3\u5316\u3057\u307E\u3059\u3002\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044`, { needsAck: true, impact: { dependents: deps.map((u) => u.key) } });
     }
     for (const g of groups) {
       if (mode === "grant" && g.tech.known[t.key] == null) {
@@ -12633,6 +12811,17 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       const r = adoptDoctrine(w.sim.ctx, st2, c.doctrineId ?? c.id, { provenance: "player" });
       return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason };
     } });
+    const idCmd = (name, fn) => defineCommand(name, { authorities: [AUTHORITY.PLAYER, AUTHORITY.CREATOR], control: true, apply: (w, c) => {
+      const st2 = w.civ.states[c.stateId];
+      if (!st2?.alive) return { ok: false, error: "\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093" };
+      const r = fn(w.sim.ctx, st2, c);
+      return r.ok ? { ok: true, result: r } : { ok: false, error: r.error };
+    } });
+    idCmd("state.rename", (ctx2, st2, c) => changeName(ctx2, st2, c.name));
+    idCmd("state.setRegime", (ctx2, st2, c) => changeRegime(ctx2, st2, c.regime));
+    idCmd("state.setFlag", (ctx2, st2, c) => changeFlag(ctx2, st2, c.flag));
+    idCmd("state.changeLeader", (ctx2, st2, c) => changeLeader(ctx2, st2, { mode: c.mode, cand: c.cand }));
+    idCmd("state.setFinance", (ctx2, st2, c) => setFinance(ctx2, st2, { key: c.key, value: c.value }));
     defineCommand("creator.editState", { authorities: [AUTHORITY.CREATOR], apply: (w, c) => creatorEditState(w, c) });
     defineCommand("creator.rename", { authorities: [AUTHORITY.CREATOR], phases: ["founding", "running"], apply: (w, c) => creatorRename(w, c) });
     defineCommand("creator.intervene", { authorities: [AUTHORITY.CREATOR], validate: (w, c) => {
@@ -12825,18 +13014,6 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     e.innerHTML = g;
     return e;
   }
-  function donut(items, cols) {
-    const tot = items.reduce((a, x) => a + x[1], 0) || 1, r = 36, C = 2 * Math.PI * r;
-    let o = 0;
-    const e = sv("svg", { viewBox: "0 0 120 120", width: 116, height: 116 });
-    items.forEach((v, i) => {
-      const l = v[1] / tot * C;
-      e.append(sv("circle", { cx: 60, cy: 60, r, fill: "none", stroke: cols[i % cols.length], "stroke-width": 20, "stroke-dasharray": `${l} ${C - l}`, "stroke-dashoffset": -o, transform: "rotate(-90 60 60)" }));
-      o += l;
-    });
-    e.append(sv("text", { x: 60, y: 65, "text-anchor": "middle", "font-size": 14, fill: "#d9d6cc" }, n0(tot)));
-    return e;
-  }
   function hemi(factions, cols) {
     const rows = [8, 12, 16, 20, 24, 20], pts2 = [];
     rows.forEach((c, i) => {
@@ -12962,7 +13139,7 @@ ${shown}${more}`;
   }
 
   // js/ui/v6/store.js
-  var S2 = { w: null, hub: null, sel: null, tab: "politics", map: null, timer: null, notice: "", q: "", fileWarn: [], layerOpen: null, war: null, entity: { culture: null, language: null, religion: null }, tech: null, doc: null, fin: false, hooks: {} };
+  var S2 = { w: null, hub: null, sel: null, tab: "info", map: null, timer: null, notice: "", q: "", fileWarn: [], layerOpen: null, war: null, entity: { culture: null, language: null, religion: null }, tech: null, doc: null, fin: false, hooks: {} };
   var LABEL = { "state.act": "\u56FD\u5BB6\u306E\u884C\u52D5", "state.reorganize": "\u7DE8\u5236\u306E\u5909\u66F4", "state.adoptDoctrine": "\u30C9\u30AF\u30C8\u30EA\u30F3\u306E\u53D6\u5F97", "diplomacy.peace": "\u8B1B\u548C\u306E\u7533\u3057\u5165\u308C", "war.direct": "\u6226\u4E89\u306E\u65B9\u91DD\u306E\u6307\u793A", "creator.intervene": "\u4ECB\u5165", "creator.catastrophe": "\u707D\u5384", "creator.editState": "\u56FD\u5BB6\u306E\u7DE8\u96C6", "creator.rename": "\u540D\u524D\u306E\u7DE8\u96C6", "creator.cancelIntervention": "\u4ECB\u5165\u306E\u53D6\u308A\u6D88\u3057", "control.take": "\u56FD\u5BB6\u306E\u62C5\u5F53", "control.release": "\u62C5\u5F53\u306E\u89E3\u9664", "calendar.edit": "\u66A6\u306E\u8868\u793A\u540D\u306E\u5909\u66F4", "creator.techGrant": "\u6280\u8853\u306E\u4ED8\u4E0E" };
   var tell = (c, r, quiet) => {
     const n3 = LABEL[c.type] ?? c.type;
@@ -12995,7 +13172,7 @@ ${shown}${more}`;
 
   // js/ui/v6/terrain.js
   var TAU3 = Math.PI * 2;
-  var clamp26 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
+  var clamp27 = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
   var hex = (s) => [parseInt(s.slice(1, 3), 16), parseInt(s.slice(3, 5), 16), parseInt(s.slice(5, 7), 16)];
   var css = (c) => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
   function ramp(stops) {
@@ -13042,14 +13219,14 @@ ${shown}${more}`;
       const X = mesh.vertexXYZ, vlon = new Float32Array(T4), vlat = new Float32Array(T4);
       for (let v = 0; v < T4; v++) {
         vlon[v] = Math.atan2(X[3 * v + 1], X[3 * v]);
-        vlat[v] = Math.asin(clamp26(X[3 * v + 2], -1, 1));
+        vlat[v] = Math.asin(clamp27(X[3 * v + 2], -1, 1));
       }
       this.vlon = vlon;
       this.vlat = vlat;
       const C = mesh.centerXYZ, cen = new Float32Array(N2 * 2);
       for (let c = 0; c < N2; c++) {
         cen[2 * c] = Math.atan2(C[3 * c + 1], C[3 * c]);
-        cen[2 * c + 1] = Math.asin(clamp26(C[3 * c + 2], -1, 1));
+        cen[2 * c + 1] = Math.asin(clamp27(C[3 * c + 2], -1, 1));
       }
       this.cen = cen;
       this.W = 0;
@@ -13211,7 +13388,7 @@ ${shown}${more}`;
         syz += dy * dz;
       }
       const det = sxx * syy - sxy * sxy || 1, gx = (sxz * syy - syz * sxy) / det, gy = (syz * sxx - sxz * sxy) / det, nx = -gx * 1.25, ny = -gy * 1.25, len = Math.hypot(nx, ny, 1);
-      sh[c] = clamp26((nx * Lx + ny * Ly + Lz) / len - Lz, -1, 1);
+      sh[c] = clamp27((nx * Lx + ny * Ly + Lz) / len - Lz, -1, 1);
     }
     const out = new Float32Array(N2);
     for (let c = 0; c < N2; c++) {
@@ -13232,8 +13409,8 @@ ${shown}${more}`;
       const e = elevation[c];
       if (e < 700) continue;
       const [px, py] = geo.proj(geo.cen[2 * c], geo.cen[2 * c + 1]), jx = (hash01(c, 7) - 0.5) * cp * 0.45, jy = (hash01(c, 8) - 0.5) * cp * 0.35;
-      if (e >= 2200) marks.push([px + jx, py + jy, 1, cp * (0.5 + 0.28 * clamp26((e - 2200) / 3200, 0, 1))]);
-      else marks.push([px + jx, py + jy, 0, cp * (0.3 + 0.16 * clamp26((e - 700) / 1500, 0, 1))]);
+      if (e >= 2200) marks.push([px + jx, py + jy, 1, cp * (0.5 + 0.28 * clamp27((e - 2200) / 3200, 0, 1))]);
+      else marks.push([px + jx, py + jy, 0, cp * (0.3 + 0.16 * clamp27((e - 700) / 1500, 0, 1))]);
     }
     return marks.sort((a, b) => a[1] - b[1]);
   }
@@ -13409,7 +13586,7 @@ ${shown}${more}`;
       cv.addEventListener("pointerleave", up);
       cv.addEventListener("wheel", (e) => {
         e.preventDefault();
-        const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k0 = this.view.k, k1 = clamp26(k0 * (e.deltaY < 0 ? 1.2 : 1 / 1.2), 1, 16);
+        const r = cv.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k0 = this.view.k, k1 = clamp27(k0 * (e.deltaY < 0 ? 1.2 : 1 / 1.2), 1, 16);
         this.view.x = mx - (mx - this.view.x) / k0 * k1;
         this.view.y = my - (my - this.view.y) / k0 * k1;
         this.view.k = k1;
@@ -13572,7 +13749,7 @@ ${shown}${more}`;
     }
     idColor(type, g, maxDen) {
       if (type === "population") {
-        const n3 = g.cells?.length || 1, d = g.pop / n3, t = clamp26(Math.log1p(d) / Math.log1p(maxDen), 0, 1);
+        const n3 = g.cells?.length || 1, d = g.pop / n3, t = clamp27(Math.log1p(d) / Math.log1p(maxDen), 0, 1);
         return RAMPS.pop(t);
       }
       const id = idOf2[type](g);
@@ -14003,7 +14180,7 @@ ${shown}${more}`;
         }
         rank++;
         shown++;
-        const big = Math.max(0.35, 1 - rank / 40), fs = clamp26((8 + 2.6 * Math.sqrt(e.n)) * (0.8 + 0.4 * big), 9, 30) / Math.pow(k, 0.55);
+        const big = Math.max(0.35, 1 - rank / 40), fs = clamp27((8 + 2.6 * Math.sqrt(e.n)) * (0.8 + 0.4 * big), 9, 30) / Math.pow(k, 0.55);
         ctx2.font = `600 ${fs}px "Shippori Mincho","Noto Serif JP","Yu Mincho",serif`;
         ctx2.lineWidth = fs * 0.24;
         ctx2.strokeStyle = "rgba(16,18,24,.78)";
@@ -14047,8 +14224,8 @@ ${shown}${more}`;
   var STEP_TITLE = { capital: "\u9996\u90FD\u3092\u9078\u3076", name: "\u56FD\u306E\u540D", flag: "\u56FD\u306E\u65D7", regime: "\u56FD\u306E\u5F62", offices: "\u5F79\u8077\u3092\u7F6E\u304F", leader: "\u70BA\u653F\u8005\u3092\u7ACB\u3066\u308B", doctrine: "\u8ECD\u306E\u6D41\u5100", confirm: "\u3053\u306E\u56FD\u3067\u59CB\u3081\u308B" };
   var LOOKS2 = 12;
   var TRAIT_KEYS2 = Object.keys(LEADER_TRAITS);
-  var ORIGINS_HEREDITARY = ["\u738B\u306E\u5B50\uFF08\u5AE1\u51FA\uFF09", "\u738B\u306E\u5B50\uFF08\u5EB6\u5B50\uFF09", "\u738B\u306E\u5F1F", "\u738B\u306E\u7525", "\u5C06\u8ECD", "\u5BB0\u76F8", "\u990A\u5B50", "\u8056\u8077\u8005"];
-  var ORIGINS_OTHER = ["\u5C06\u8ECD", "\u9577\u8001", "\u5546\u4EBA", "\u66F8\u8A18\u5B98", "\u5F01\u8AD6\u5BB6", "\u795E\u5B98", "\u6C11\u4F1A\u306E\u63A8\u6319"];
+  var ORIGINS_HEREDITARY2 = ["\u738B\u306E\u5B50\uFF08\u5AE1\u51FA\uFF09", "\u738B\u306E\u5B50\uFF08\u5EB6\u5B50\uFF09", "\u738B\u306E\u5F1F", "\u738B\u306E\u7525", "\u5C06\u8ECD", "\u5BB0\u76F8", "\u990A\u5B50", "\u8056\u8077\u8005"];
+  var ORIGINS_OTHER2 = ["\u5C06\u8ECD", "\u9577\u8001", "\u5546\u4EBA", "\u66F8\u8A18\u5B98", "\u5F01\u8AD6\u5BB6", "\u795E\u5B98", "\u6C11\u4F1A\u306E\u63A8\u6319"];
   var rnd = Math.random;
   var pickOf = (a) => a[Math.floor(rnd() * a.length)];
   function dieIcon() {
@@ -14114,7 +14291,7 @@ ${shown}${more}`;
       D2.flag = randomFlag(rnd, (l?.id ? [...String(l.id)].reduce((a, c) => a + c.charCodeAt(0), 0) : Math.floor(rnd() * 99)) % FLAG_BIAS_COUNT);
     };
     const rollCands = () => {
-      const g = langGroup(), her = D2.regime ? REGIMES[D2.regime].heredity : true, origins = her ? ORIGINS_HEREDITARY : ORIGINS_OTHER;
+      const g = langGroup(), her = D2.regime ? REGIMES[D2.regime].heredity : true, origins = her ? ORIGINS_HEREDITARY2 : ORIGINS_OTHER2;
       D2.cands = Array.from({ length: 5 }, () => {
         const tr = [];
         while (tr.length < 2) {
@@ -14607,8 +14784,8 @@ ${shown}${more}`;
   }
 
   // js/version.js
-  var APP_VERSION = "6.15.0";
-  var APP_VERSION_NAME = "\u547D\u540D\u3068\u8A00\u8A9E\u30FB\u5EFA\u56FD\u306E\u6D41\u308C";
+  var APP_VERSION = "6.17.0";
+  var APP_VERSION_NAME = "\u56FD\u5BB6\u30DA\u30FC\u30B8";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
 
   // js/ui/v6/title.js
@@ -14991,6 +15168,102 @@ ${shown}${more}`;
     return svg;
   }
 
+  // js/ui/v6/badges.js
+  var NS = "http://www.w3.org/2000/svg";
+  var CAT_STYLE = { econ: ["#d8b45a", "hex"], mil: ["#d0605a", "shield"], relig: ["#a58bd0", "round"], cult: ["#6fa8c9", "diamond"], dipl: ["#8fb3b0", "oct"], home: ["#9fbf8a", "penta"] };
+  var G = {
+    wheat: "M12 21V9M12 9c-3-1-4-3-4-5 3 0 4 2 4 5M12 9c3-1 4-3 4-5-3 0-4 2-4 5M12 14c-3-1-4-3-4-5M12 14c3-1 4-3 4-5",
+    coin: "M12 4a8 8 0 100 16 8 8 0 000-16zM9.5 12h5M12 9v6",
+    anvil: "M4 8h12l4 2-3 3H7l-3-3zM9 13v5h6v-2",
+    wall: "M4 20V9h3V6h3v3h4V6h3v3h3v11zM10 20v-5h4v5",
+    sword: "M5 19l9-9M14 10l5-5V4h-1l-5 5M8 16l-2 2M7 14l3 3",
+    bow: "M6 4c8 2 8 14 0 16M6 12h14M17 9l3 3-3 3",
+    ship: "M3 15h18l-3 5H6zM12 15V4l6 8h-6M12 6L7 12h5",
+    flag: "M6 21V4M6 5h12l-3 4 3 4H6",
+    temple: "M3 20h18M5 20V10M19 20V10M12 4l9 5H3zM9 20v-6h6v6",
+    book: "M4 5h7a2 2 0 012 2v13a2 2 0 00-2-2H4zM20 5h-7M20 5v13h-7",
+    scroll: "M7 4h11v14a2 2 0 01-2 2H6a2 2 0 002-2V6a2 2 0 00-1-2zM10 9h6M10 13h6",
+    eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z",
+    hands: "M3 12l5-5 4 2 4-2 5 5-6 6-3-3-3 3z",
+    scale: "M12 4v16M6 20h12M4 8h16M4 8l-2 6a3 3 0 006 0zM20 8l-2 6a3 3 0 006 0z",
+    crown: "M3 8l4 4 5-7 5 7 4-4-2 11H5z",
+    torch: "M12 3c3 3 4 5 2 8-1 1-3 1-4 0-2-3-1-5 2-8zM10 14h4l-1 7h-2z",
+    star: "M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z",
+    road: "M8 3l-3 18M16 3l3 18M12 5v3M12 11v3M12 17v3",
+    gear: "M12 9a3 3 0 100 6 3 3 0 000-6zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2",
+    people: "M9 11a3 3 0 100-6 3 3 0 000 6zM3 20c0-4 3-6 6-6s6 2 6 6M17 10a2.5 2.5 0 100-5M16 14c3 0 5 2 5 6",
+    gun: "M3 10h13l2-2h3v4h-3l-1 2h-4l-1 3H8l1-3H3z",
+    heart: "M12 20s-7-4.5-7-10a4 4 0 017-2 4 4 0 017 2c0 5.500-7 10-7 10z",
+    lock: "M7 11V8a5 5 0 0110 0v3M5 11h14v9H5z",
+    mask: "M4 6c5 1 11 1 16 0 0 8-3 13-8 13S4 14 4 6zM8 11h2M14 11h2",
+    quill: "M20 4c-8 0-13 5-14 14M20 4c0 8-5 13-13 14M6 18l-2 2",
+    cross: "M12 3v18M6 9h12",
+    moon: "M16 4a8 8 0 100 16 6 6 0 010-16z",
+    mail: "M3 6h18v12H3zM3 6l9 7 9-7",
+    cup: "M6 4h12v6a6 6 0 01-12 0zM12 16v4M8 20h8",
+    plus: "M12 5v14M5 12h14",
+    fort: "M5 20V8l3 2 4-4 4 4 3-2v12zM10 20v-5h4v5"
+  };
+  var OF = {
+    agrarian: "wheat",
+    mercantile: "coin",
+    monopoly: "lock",
+    public_works: "road",
+    free_market: "scale",
+    planned: "gear",
+    currency: "coin",
+    thrift: "coin",
+    standing_army: "sword",
+    conscription: "people",
+    elite_corps: "star",
+    fortress: "fort",
+    logistics: "road",
+    naval: "ship",
+    gun_reform: "gun",
+    veterans: "heart",
+    centralize: "crown",
+    autonomy: "flag",
+    martial_law: "lock",
+    relief: "heart",
+    admin_reform: "gear",
+    exam: "scroll",
+    tolerance: "hands",
+    state_religion: "temple",
+    clergy_patronage: "cross",
+    inquisition: "eye",
+    pilgrimage: "moon",
+    secular: "scale",
+    scripture_ed: "book",
+    marriage: "heart",
+    trade_diplomacy: "ship",
+    isolation: "wall",
+    balance: "scale",
+    espionage: "mask",
+    coercion: "sword",
+    embassies: "flag",
+    courier: "mail",
+    scholarship: "book",
+    libraries: "book",
+    arts: "quill",
+    festivals: "torch",
+    national_myth: "torch",
+    language: "quill",
+    printing: "book",
+    public_ed: "book",
+    medicine: "cup"
+  };
+  var SHAPE = { hex: "M32 4l24 14v28L32 60 8 46V18z", shield: "M10 8h44v24c0 14-10 22-22 26C20 54 10 46 10 32z", round: "M32 5a27 27 0 100 54 27 27 0 000-54z", diamond: "M32 3l28 29-28 29L4 32z", oct: "M20 5h24l15 15v24L44 59H20L5 44V20z", penta: "M32 4l27 20-10 32H15L5 24z" };
+  function policyBadge(id, cat, { size = 56, on = false, empty = false } = {}) {
+    const [col, shape] = CAT_STYLE[cat] ?? CAT_STYLE.home, s = document.createElementNS(NS, "svg");
+    s.setAttribute("viewBox", "0 0 64 64");
+    s.setAttribute("width", size);
+    s.setAttribute("height", size);
+    s.setAttribute("class", "pbadge" + (on ? " on" : "") + (empty ? " empty" : ""));
+    const gid = "g" + Math.abs([...cat + id].reduce((a, c) => (a << 5) - a + c.charCodeAt(0) | 0, 7));
+    s.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity="${empty ? 0.06 : on ? 0.55 : 0.32}"/><stop offset="1" stop-color="#101419" stop-opacity=".95"/></linearGradient></defs><path d="${SHAPE[shape]}" fill="url(#${gid})" stroke="${col}" stroke-width="${on ? 3 : 2}" ${empty ? 'stroke-dasharray="4 4" stroke-opacity=".55"' : ""} stroke-linejoin="round"/>` + (empty ? `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${col}" stroke-opacity=".6" stroke-width="1.6" stroke-linecap="round"><path d="${G.plus}"/></g>` : `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${on ? "#fff" : col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${G[OF[id]] ?? G.star}"/></g>`);
+    return s;
+  }
+
   // js/ui/v6/policy.js
   var sg = (x, d = 1) => (x >= 0 ? "+" : "") + (Math.round(x * 100 * 10 ** (d - 1)) / 10 ** (d - 1)).toFixed(d - 1 > 0 ? d - 1 : 0) + "%";
   var KEYS2 = { tax: "\u7A0E\u53CE", mil: "\u8ECD\u4E8B", def: "\u9632\u885B", stab: "\u5B89\u5B9A", dipl: "\u5916\u4EA4", scout: "\u5075\u5BDF", tech: "\u6280\u8853", cult: "\u6587\u5316" };
@@ -15008,19 +15281,34 @@ ${shown}${more}`;
     return [...fxChips(i.fx, i.fac), i.debuff ? h("span", { class: "chip bad", title: "\u6B20\u70B9" }, DEBUFF_JA[i.debuff]) : null, h("span", { class: "chip", title: "\u7DAD\u6301\u8CBB\u306E\u91CD\u3055" }, "\u7DAD\u6301" + "\u25CF".repeat(Math.min(4, i.tier)))].filter(Boolean);
   };
   function policyBox(st2, mine) {
-    const F = focusOf(st2), c = S2.w.civ, mi = c.monthIndex, box = h("div", { id: "policybox" }, lb("\u56FD\u7B56", "NATIONAL FOCUS"), h("p", { class: "n" }, `\u5206\u91CE\u3054\u3068\u306E\u67A0\u306B\u3001\u56FD\u306E\u65B9\u91DD\u3092\u5165\u308C\u307E\u3059\u3002\u67A0\u306F\u6642\u4EE3\uFF08\u5236\u5EA6\u5316\u3057\u305F\u6280\u8853\uFF09\u3067\u5897\u3048\u307E\u3059\u3002\u53D6\u308A\u5165\u308C\u308B\u3068\u8CBB\u7528\u304C\u304B\u304B\u308A\u3001\u540C\u3058\u67A0\u306F ${SLOT_COOLDOWN} \u304B\u6708\u306F\u66FF\u3048\u3089\u308C\u307E\u305B\u3093\u3002`));
+    const F = focusOf(st2), c = S2.w.civ, mi = c.monthIndex, box = h("div", { id: "policybox", class: "pbox" }, lb("\u653F\u7B56", "POLICY"));
     const fx3 = stateFx(st2);
     if (fx3.policy?.count || fx3.office?.count) box.append(h("div", { class: "chips" }, ...fxChips({ tax: fx3.tax, mil: fx3.mil, def: fx3.def, stab: fx3.stab, dipl: fx3.dipl, scout: fx3.scout, tech: fx3.tech }, fx3.fac)));
+    const open = S2.polPick?.id === st2.id ? S2.polPick : null, tip = (id, p) => `${p.ja}
+${p.desc}
+\u8CBB\u7528 ${policyCost(st2, id)}`;
     for (const [cat, ja] of Object.entries(POLICY_CATS)) {
-      box.append(h("div", { class: "pcat" }, h("b", {}, ja), ...F[cat].map((slot, i) => {
-        const cur = slot ? POLICIES[slot.id] : null, left = slot ? Math.max(0, SLOT_COOLDOWN - (mi - slot.since)) : 0;
-        const opts = Object.entries(POLICIES).filter(([, p]) => p.cat === cat).map(([id, p]) => {
-          const why2 = policyGate(st2, id, cat), taken = F[cat].some((x, j) => j !== i && x?.id === id) || Object.values(F).some((a) => a.some((x) => x?.id === id && x !== slot));
-          return h("option", { value: id, selected: slot?.id === id, disabled: !!why2 || taken }, `${p.ja}\uFF08\u8CBB\u7528 ${policyCost(st2, id)}\uFF09${why2 ? "\u30FB" + why2 : taken ? "\u30FB\u53D6\u308A\u5165\u308C\u6E08\u307F" : ""}`);
-        });
-        const sel = h("select", { "data-cat": cat, "data-slot": i, disabled: !mine || slot && left > 0, title: slot && left > 0 ? `\u3042\u3068 ${left} \u304B\u6708\u306F\u66FF\u3048\u3089\u308C\u306A\u3044` : "" }, h("option", { value: "" }, cur ? "\uFF08\u53D6\u308A\u4E0B\u3052\u308B\uFF09" : "\uFF08\u7A7A\u304D\uFF09"), ...opts);
-        return h("div", { class: "pslot" }, sel, btn("\u6C7A\u3081\u308B", () => act({ type: "focus.set", stateId: st2.id, category: cat, slot: i, policyId: sel.value || null }), "", { disabled: !mine, "data-set": cat + i }), cur ? h("div", { class: "pdesc" }, h("small", {}, cur.desc), h("div", { class: "chips" }, ...fxChips(cur.fx, cur.fac))) : h("small", { class: "dim" }, "\u7A7A\u3044\u3066\u3044\u308B\u67A0"));
+      const row = h("div", { class: "pcat prow", "data-cat": cat }, h("b", { class: "pcn", style: `color:${CAT_STYLE[cat][0]}` }, ja), h("div", { class: "pslots" }, ...F[cat].map((slot, i) => {
+        const cur = slot ? POLICIES[slot.id] : null, left = slot ? Math.max(0, SLOT_COOLDOWN - (mi - slot.since)) : 0, isOpen = open && open.cat === cat && open.slot === i;
+        const b = h("button", { class: "pslot" + (cur ? " has" : "") + (isOpen ? " sel" : ""), "data-set": cat + i, title: cur ? `${tip(slot.id, cur)}${left ? `
+\u3042\u3068 ${left} \u304B\u6708\u306F\u66FF\u3048\u3089\u308C\u306A\u3044` : "\n\u62BC\u3059\u3068\u53D6\u308A\u4E0B\u3052\u308B"}` : "\u53D6\u308A\u5165\u308C\u308B", disabled: !mine || cur && left > 0, onclick: () => {
+          if (cur) act({ type: "focus.set", stateId: st2.id, category: cat, slot: i, policyId: null });
+          else {
+            S2.polPick = isOpen ? null : { id: st2.id, cat, slot: i };
+            S2.hooks.panel();
+          }
+        } }, policyBadge(slot?.id ?? "", cat, { on: !!cur, empty: !cur, size: 58 }), cur && left ? h("i", { class: "lock" }, left) : null);
+        return b;
       })));
+      box.append(row);
+      if (open && open.cat === cat) {
+        const cands = Object.entries(POLICIES).filter(([id, p]) => p.cat === cat && !policyGate(st2, id, cat) && !Object.values(F).some((a) => a.some((x) => x?.id === id)));
+        box.append(h("div", { class: "ppick" }, ...cands.length ? cands.map(([id, p]) => h("button", { class: "pcand", "data-pol": id, title: tip(id, p), onclick: () => {
+          const r = act({ type: "focus.set", stateId: st2.id, category: cat, slot: open.slot, policyId: id });
+          if (r.ok) S2.polPick = null;
+          S2.hooks.panel();
+        } }, policyBadge(id, cat, { size: 52 }), h("small", {}, `${policyCost(st2, id)}`), h("div", { class: "chips" }, ...fxChips(p.fx, p.fac).slice(0, 3)))) : [h("small", { class: "dim" }, "\u3044\u307E\u53D6\u308A\u5165\u308C\u3089\u308C\u308B\u653F\u7B56\u306F\u3042\u308A\u307E\u305B\u3093")]));
+      }
     }
     void pct;
     return box;
@@ -15049,38 +15337,9 @@ ${shown}${more}`;
   };
   var icon = (name, size = 16, color = "currentColor") => sv("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: color, "stroke-width": 1.7, "stroke-linecap": "round", "stroke-linejoin": "round", class: "ico" }, sv("path", { d: ICON[name] ?? ICON.flag }));
   function flag(stateId, w = 66) {
-    const k = hash("flag" + stateId), base = colorOf(stateId, 46), alt = colorOf(stateId, 78), dark = colorOf(stateId, 24), pale = "#efe7d2", type = k % 7, W3 = 66, H2 = 44;
-    const el = sv("svg", { viewBox: `0 0 ${W3} ${H2}`, width: w, height: Math.round(w * H2 / W3), class: "flag" });
-    const r = (x, y, ww, hh2, f2) => el.append(sv("rect", { x, y, width: ww, height: hh2, fill: f2 }));
-    if (type === 0) {
-      r(0, 0, W3, H2, base);
-      r(0, H2 / 3, W3, H2 / 3, pale);
-    } else if (type === 1) {
-      r(0, 0, W3 / 3, H2, base);
-      r(W3 / 3, 0, W3 / 3, H2, pale);
-      r(2 * W3 / 3, 0, W3 / 3, H2, alt);
-    } else if (type === 2) {
-      r(0, 0, W3, H2, base);
-      r(W3 * 0.3, 0, W3 * 0.14, H2, pale);
-      r(0, H2 * 0.43, W3, H2 * 0.14, pale);
-    } else if (type === 3) {
-      r(0, 0, W3, H2, base);
-      r(0, 0, W3 * 0.42, H2 * 0.55, dark);
-      el.append(sv("circle", { cx: W3 * 0.21, cy: H2 * 0.27, r: 6, fill: pale }));
-    } else if (type === 4) {
-      r(0, 0, W3, H2, base);
-      el.append(sv("polygon", { points: `0,0 ${W3},0 0,${H2}`, fill: dark }));
-    } else if (type === 5) {
-      r(0, 0, W3, H2, pale);
-      el.append(sv("circle", { cx: W3 / 2, cy: H2 / 2, r: H2 * 0.3, fill: base }));
-    } else {
-      r(0, 0, W3, H2, dark);
-      r(0, H2 * 0.18, W3, H2 * 0.12, alt);
-      r(0, H2 * 0.7, W3, H2 * 0.12, alt);
-      el.append(sv("circle", { cx: W3 / 2, cy: H2 / 2, r: 6, fill: pale }));
-    }
-    el.append(sv("rect", { x: 0.5, y: 0.5, width: W3 - 1, height: H2 - 1, fill: "none", stroke: "rgba(255,255,255,.28)" }));
-    return el;
+    const st2 = S2.w?.civ.states[stateId];
+    if (st2) return flagEl(flagOfState(st2), w);
+    return flagEl(flagFor(stateId), w);
   }
   function metric(ic, label, value, { bar: bar2 = null, color = "var(--blue)", title = "" } = {}) {
     return h("div", { class: "metric", title: title || label }, icon(ic, 18), h("div", { class: "mt" }, h("small", {}, label), h("b", {}, value), bar2 != null ? h("span", { class: "barv" }, h("i", { style: `width:${Math.max(0, Math.min(1, bar2)) * 100}%;background:${color}` })) : null));
@@ -15190,738 +15449,6 @@ ${shown}${more}`;
     ));
     document.body.append(box);
     void colorOf;
-  }
-
-  // js/ui/v6/nation.js
-  var civ = () => S2.w.civ;
-  var KIND_COL = { infantry: "#9fbf8a", ranged: "#d8b45a", cavalry: "#c99a6f", navy: "#6fa8c9", garrison: "#8fb3b0", firearms: "#d0605a" };
-  var KIND_ICON = { infantry: "shield", ranged: "bow", cavalry: "horse", navy: "ship", garrison: "tower", firearms: "gun" };
-  function nationHero(st2, mine) {
-    const c = civ(), L = st2.leader, P3 = st2.politics, mil = st2.military, leg = P3 ? effective(c, st2, "legitimacy") : 0, fat = P3 ? effective(c, st2, "fatigue") : 0;
-    const date5 = formatWorldDate(S2.w, st2.formedAt).split("\u6708")[0] + "\u6708";
-    return h(
-      "div",
-      { class: "hero" },
-      h(
-        "div",
-        { class: "hrow" },
-        flag(st2.id, 78),
-        h(
-          "div",
-          { class: "hname" },
-          h("h3", {}, st2.name),
-          h("div", { class: "sub" }, `${regimeJa(st2)}${st2.alive ? "" : "\u30FB\u6EC5\u4EA1"}\u30FB\u6210\u7ACB ${date5}`),
-          h("div", { class: "rowb" }, mine ? btn("\u62C5\u5F53\u3092\u89E3\u9664", () => {
-            run({ type: "control.release" });
-            S2.hooks.render();
-          }, "p", { id: "release" }) : btn("\u3053\u306E\u56FD\u3092\u62C5\u5F53\u3059\u308B", () => {
-            run({ type: "control.take", stateId: st2.id });
-            S2.hooks.render();
-          }, "p", { id: "take", disabled: !st2.alive }), mine ? h("small", { style: "color:var(--purple)" }, "\u62C5\u5F53\u4E2D") : null)
-        ),
-        h("div", { class: "hface" }, face(L?.name ?? "\u2014", st2.id, L?.look ?? null), h("small", {}, L?.title ?? "\u70BA\u653F\u8005"), h("b", {}, L?.name ?? "\u2014"))
-      ),
-      h(
-        "div",
-        { class: "metrics" },
-        metric("pop", "\u4EBA\u53E3", n0(st2.pop)),
-        metric("coin", "\u56FD\u5EAB", n0(st2.treasury), { color: "#d8b45a" }),
-        metric("gear", "\u7523\u696D\u529B", n0(effective(c, st2, "industry"))),
-        metric("sword", "\u5175\u529B", n0(st2.army), { color: "#d0605a" }),
-        metric("shield", "\u5B89\u5B9A\u5EA6", pct(st2.stability), { bar: st2.stability, color: st2.stability < 0.35 ? "#d0605a" : "#9fbf8a" }),
-        metric("crown", "\u6B63\u7D71\u6027", pct(leg), { bar: leg, color: "#a58bd0" }),
-        metric("hourglass", "\u75B2\u52B4", pct(fat), { bar: fat, color: fat > 0.5 ? "#d0605a" : "#6a6f78" }),
-        mil ? metric("flag", "\u8ECD\u4E8B\u80FD\u529B", (st2.milBonus >= 0 ? "+" : "") + pct(st2.milBonus)) : null
-      )
-    );
-  }
-  function tPoliticsV(st2, mine) {
-    const c = civ(), P3 = st2.politics, out = h("div", {});
-    if (P3) {
-      const rows = Object.entries(P3.factions ?? {});
-      out.append(
-        lb("\u652F\u6301\u52E2\u529B", "FACTIONS"),
-        stackbar(rows.map(([k, v]) => ({ label: FACTION_JA[k] ?? k, value: v.influence, color: FACTION_COL[k] ?? "#6fa8c9" })), { height: 14 }),
-        h("div", { class: "facs" }, ...rows.map(([k, v]) => h("div", { class: "fac", title: `\u5F71\u97FF\u529B ${pct(v.influence)}` }, h("i", { style: `background:${FACTION_COL[k] ?? "#6fa8c9"}` }), h("span", {}, FACTION_JA[k] ?? k), h("span", { class: "barv" }, h("i", { style: `width:${v.support * 100}%;background:${FACTION_COL[k] ?? "#6fa8c9"}` })), h("small", {}, pct(v.support))))),
-        P3.assembly ? h("div", {}, hemi(rows.map(([k, v]) => [k, v.influence]), rows.map(([k]) => FACTION_COL[k] ?? "#6fa8c9"))) : null
-      );
-    }
-    const tax = st2.pop * st2.policy.tax * 12e-4 * taxMult(st2), trade = effective(c, st2, "tradeIncome"), cols = ["#d8b45a", "#6fa8c9"];
-    out.append(lb("\u8CA1\u653F", "FINANCE"), h(
-      "div",
-      { class: "row" },
-      donut([["\u7A0E\u53CE", tax], ["\u4EA4\u6613", trade]], cols),
-      h("span", { class: "g" }, h("div", {}, h("i", { class: "dotc", style: `background:${cols[0]}` }), `\u7A0E\u53CE ${n0(tax)}`), h("div", {}, h("i", { class: "dotc", style: `background:${cols[1]}` }), `\u4EA4\u6613 ${n0(trade)}`), h("div", { class: "n" }, `\u7A0E\u7387 ${pct(st2.policy.tax)}`)),
-      h("div", { class: "rowb" }, btn("\u5897\u7A0E", () => act({ type: "state.act", stateId: st2.id, action: "set_tax", opt: "up" }), "", { id: "tax-up", disabled: !mine, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" }), btn("\u6E1B\u7A0E", () => act({ type: "state.act", stateId: st2.id, action: "set_tax", opt: "down" }), "", { id: "tax-down", disabled: !mine }))
-    ));
-    out.append(officesBox(st2, mine));
-    if (st2.alive && (mine || st2.focus)) out.append(policyBox(st2, mine));
-    const ideas = ideasOf(st2).slice(0, 6);
-    if (ideas.length) out.append(lb("\u601D\u60F3", "IDEAS"), h("div", { class: "chips" }, ...ideas.map((x) => h("span", { class: "chip", title: pct(x.v) }, x.ja, h("i", { style: `width:${x.v * 100}%` })))));
-    if (mine && st2.alive) out.append(uprisingBox(st2));
-    out.append(h("details", { class: "dt cbox" }, h("summary", {}, "\u5275\u9020\u4E3B\u306E\u7DE8\u96C6\u30FB\u4ECB\u5165"), creatorBox(st2)));
-    return out;
-  }
-  function tMilitaryV(st2, mine) {
-    const c = civ(), M = st2.military;
-    if (!M) return h("p", { class: "n" }, "\u8ECD\u4E8B\u306E\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3002");
-    const can2 = st2.alive && (mine || !controlled()), units = M.units ?? [], tot = units.reduce((a, u) => a + u.size, 0) || 1, out = h("div", {}), ctx2 = S2.w.sim.ctx, colOf = (k) => KIND_COL[k] ?? SERVICES[serviceOf(k)].color, manual = M.orbat?.mode === "manual";
-    out.append(h("div", { class: "rings" }, ring(effective(c, st2, "equipLevel"), "\u88C5\u5099", "#d8b45a"), ring(effective(c, st2, "readiness"), "\u7DF4\u5EA6", "#9fbf8a"), ring(Math.min(1, Math.max(0, 0.5 + st2.milBonus)), "\u8ECD\u4E8B\u80FD\u529B", "#d0605a"), ring(Math.min(1, st2.defense ?? 0), "\u8981\u585E", "#8fb3b0")));
-    const sch = M.school ?? {}, schName = (s) => SCHOOL_BY_ID[sch[s]]?.ja ?? "\u672A\u9078\u629E";
-    out.append(lb("\u7DE8\u6210", "ORGANIZATION"), stackbar(units.map((u) => ({ label: u.name, value: u.size, color: colOf(u.kind) })), { height: 16 }), h("small", { class: "n" }, `\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA\u30FB${manual ? "\u624B\u52D5\u306E\u7DE8\u6210" : "\u81EA\u52D5\u306E\u7DE8\u6210\uFF08\u6280\u8853\u30FB\u5730\u7406\u30FB\u30C9\u30AF\u30C8\u30EA\u30F3\u304B\u3089\u6C7A\u307E\u308B\uFF09"}\u3000\u8DEF\u7DDA\uFF1A\u9678 ${schName("land")}\uFF0F\u6D77 ${schName("sea")}\uFF0F\u7A7A ${schName("air")}`));
-    for (const svc of SERVICE_KEYS) {
-      const us = units.filter((u) => serviceOf(u.kind) === svc);
-      if (!us.length) continue;
-      const sum = us.reduce((a, u) => a + u.size, 0);
-      out.append(h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja), h("small", {}, `${n0(sum)} \u4EBA\uFF08${pct(sum / tot)}\uFF09`)));
-      out.append(h("div", { class: "forms" }, ...us.flatMap((u) => {
-        const it = itemsOf(u.kind, u.size);
-        return [h("div", { class: "uhead" }, h("span", { style: `color:${colOf(u.kind)}` }, icon(KIND_ICON[u.kind] ?? "flag", 16)), h("b", {}, u.name), h("small", {}, `${n0(u.size)} \u4EBA${it ? `\uFF08\u7D04 ${n0(it)} ${UNIT_KINDS[u.kind].item}\uFF09` : ""}`), h("span", { class: "barv", title: `\u88C5\u5099 ${pct(u.equip)}` }, h("i", { style: `width:${u.equip * 100}%;background:#d8b45a` })), h("span", { class: "barv", title: `\u7DF4\u5EA6 ${pct(u.readiness)}` }, h("i", { style: `width:${u.readiness * 100}%;background:#9fbf8a` }))), svc === "land" ? h("div", { class: "fcards" }, ...formationsOf(st2, u).map((f2) => h("div", { class: "fcard", style: `border-color:${colOf(u.kind)}` }, h("b", {}, f2.name), h("small", {}, n0(f2.size))))) : null];
-      })));
-    }
-    if (can2) {
-      const avail = Object.entries(UNIT_KINDS).filter(([k, d]) => d.need(st2, ctx2)), cur = Object.fromEntries(avail.map(([k]) => [k, Math.round(units.find((u) => u.kind === k)?.size ?? 0)])), val = { ...cur }, inp = {};
-      const sum = () => Object.values(val).reduce((a, b) => a + b, 0), info = h("small", {}), paint = () => {
-        const s = sum();
-        info.textContent = `\u6307\u5B9A\u306E\u5408\u8A08 ${n0(s)} \u4EBA\uFF0F\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA${s > st2.army ? "\uFF08\u8D85\u3048\u305F\u5206\u306F\u6BD4\u4F8B\u3057\u3066\u7E2E\u3080\uFF09" : s < st2.army ? `\uFF08\u8DB3\u308A\u306A\u3044 ${n0(st2.army - s)} \u4EBA\u306F\u4E88\u5099\u5F79\u306B\u306A\u308B\uFF09` : ""}`;
-        info.style.color = s > st2.army ? "#d0605a" : "var(--dim)";
-        for (const k in inp) inp[k].value = val[k];
-      };
-      const rows = SERVICE_KEYS.flatMap((svc) => {
-        const list = avail.filter(([k, d]) => d.service === svc);
-        if (!list.length) return [];
-        return [h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja)), ...list.map(([k, d]) => {
-          const i = h("input", { type: "number", min: 0, step: 100, value: val[k], "data-kind": k, style: "width:110px", oninput: (e) => {
-            val[k] = Math.max(0, Math.round(Number(e.target.value) || 0));
-            info.textContent = "";
-            paint1();
-          } });
-          inp[k] = i;
-          return h("div", { class: "slrow" }, h("span", { style: `color:${colOf(k)}` }, icon(KIND_ICON[k] ?? "flag", 15)), h("span", { class: "nm", title: d.hint }, d.ja), i, h("small", {}, d.per ? `1${d.item}\u2252${d.per}\u4EBA` : ""));
-        })];
-      });
-      const paint1 = () => {
-        const s = sum();
-        info.textContent = `\u6307\u5B9A\u306E\u5408\u8A08 ${n0(s)} \u4EBA\uFF0F\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA${s > st2.army ? "\uFF08\u8D85\u3048\u305F\u5206\u306F\u6BD4\u4F8B\u3057\u3066\u7E2E\u3080\uFF09" : s < st2.army ? `\uFF08\u8DB3\u308A\u306A\u3044 ${n0(st2.army - s)} \u4EBA\u306F\u4E88\u5099\u5F79\u306B\u306A\u308B\uFF09` : ""}`;
-        info.style.color = s > st2.army ? "#d0605a" : "var(--dim)";
-      };
-      out.append(h("details", { class: "dt", id: "reorg-box" }, h("summary", {}, "\u7DE8\u6210\u3092\u7DE8\u96C6\u3059\u308B\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09"), h("small", { class: "n" }, "\u4EBA\u6570\u3092\u6307\u5B9A\u3059\u308B\u3068\u624B\u52D5\u306E\u7DE8\u6210\u306B\u306A\u308A\u307E\u3059\u3002\u7DCF\u5175\u529B\u306F\u56FD\u306E\u4EBA\u53E3\u30FB\u7D4C\u6E08\u3067\u6C7A\u307E\u308B\u306E\u3067\u3001\u6307\u5B9A\u306E\u5408\u8A08\u304C\u591A\u3059\u304E\u308C\u3070\u6BD4\u4F8B\u3057\u3066\u7E2E\u307F\u3001\u8DB3\u308A\u306A\u3044\u5206\u306F\u4E88\u5099\u5F79\uFF08\u5FB4\u96C6\u6C11\u5175\uFF09\u306B\u306A\u308A\u307E\u3059\u3002"), ...rows, h("div", { class: "rowb" }, info, btn("\u4ECA\u306E\u4EBA\u6570\u3092\u5165\u308C\u76F4\u3059", () => {
-        for (const k in cur) val[k] = cur[k];
-        paint();
-      }), btn("\u3053\u306E\u7DE8\u6210\u306B\u3059\u308B\uFF08\u624B\u52D5\uFF09", () => {
-        const hs = {};
-        for (const k in val) if (val[k] > 0) hs[k] = val[k];
-        (mine ? act : creator)({ type: "state.setOrbat", stateId: st2.id, mode: "manual", heads: hs });
-      }, "p", { id: "reorg" }), btn("\u81EA\u52D5\u306B\u623B\u3059", () => (mine ? act : creator)({ type: "state.setOrbat", stateId: st2.id, mode: "auto" }), "", { id: "reorg-auto" }))));
-      setTimeout(paint, 0);
-    }
-    const c0 = S2.w.civ, foes = aliveStates2().filter((x) => x.id !== st2.id && !atWarWith(c0, st2, x) && !treatyBetween(c0, st2, x, "alliance") && !treatyBetween(c0, st2, x, "nonaggression")).sort((a, b) => b.pop - a.pop);
-    const sel = h("select", { id: "wl-target", size: 7, class: "wlsel" }), cnt = h("small", { id: "wl-count" }), find = h("input", { id: "wl-search", type: "search", placeholder: "\u56FD\u540D\u3067\u691C\u7D22", autocomplete: "off" });
-    const fill = () => {
-      const q2 = find.value.trim(), keep = sel.value, list = q2 ? foes.filter((x) => x.name.includes(q2)) : foes;
-      sel.replaceChildren(...list.map((x) => h("option", { value: x.id }, x.name)));
-      if (list.some((x) => x.id === keep)) sel.value = keep;
-      else if (list.length) sel.value = list[0].id;
-      cnt.textContent = `\u5BA3\u6226\u3067\u304D\u308B\u56FD ${foes.length} \u56FD${q2 ? `\uFF08${list.length} \u56FD\u306B\u7D5E\u308A\u8FBC\u307F\uFF09` : ""}`;
-      goBtn.disabled = !mine || !list.length;
-    };
-    const goBtn = btn("\u5BA3\u6226\u3059\u308B", () => {
-      if (sel.value) confirmWar(st2.id, sel.value, () => S2.hooks.render());
-    }, "", { id: "declare", disabled: true, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" });
-    find.addEventListener("input", fill);
-    fill();
-    out.append(lb("\u5BA3\u6226", "WAR"), h("div", { class: "wlbox" }, find, sel, cnt, h("div", { class: "rowb" }, goBtn)));
-    void r24;
-    void colorOf;
-    return out;
-  }
-  function tDiplomacyV(st2, mine) {
-    const c = civ(), tr = c.activeTreatyIds.map((i) => c.treaties[i]).filter((t) => t.a === st2.id || t.b === st2.id), other2 = (t) => t.a === st2.id ? t.b : t.a, TJ = { alliance: "\u540C\u76DF", nonaggression: "\u4E0D\u53EF\u4FB5", trade: "\u901A\u5546" };
-    const wars = st2.warIds.map((i) => c.wars[i]).filter(Boolean), rel = aliveStates2().filter((x) => x.id !== st2.id).map((x) => ({ x, v: Math.round(st2.relations[x.id] ?? 0) })).sort((a, b) => b.v - a.v);
-    const chip = (id, txt) => h("span", { class: "fchip", onclick: () => S2.hooks.select(id), title: c.states[id]?.name }, flag(id, 28), h("small", {}, txt ?? c.states[id]?.name ?? id));
-    const out = h(
-      "div",
-      {},
-      lb("\u540C\u76DF", "ALLIES"),
-      h("div", { class: "flagrow" }, ...tr.filter((t) => t.type === "alliance").map((t) => chip(other2(t))) || [], tr.some((t) => t.type === "alliance") ? null : h("small", { class: "n" }, "\u306A\u3057")),
-      lb("\u4EA4\u6226\u4E2D", "AT WAR"),
-      h("div", { class: "flagrow" }, ...wars.map((w) => h("span", { class: "fchip", onclick: () => {
-        S2.war = w.id;
-        S2.hub = "war";
-        S2.hooks.render();
-      } }, flag(w.aggressor === st2.id ? w.defender : w.aggressor, 28), h("small", {}, w.name ?? "\u6226\u4E89"))), wars.length ? null : h("small", { class: "n" }, "\u306A\u3057")),
-      lb("\u95A2\u4FC2\u306E\u826F\u3044\u56FD", "FRIENDS"),
-      ...rel.slice(0, 4).map(({ x, v }) => h("div", { class: "drow static" }, flag(x.id, 26), h("span", { class: "nm" }, x.name), h("span", { class: "relbar" }, h("i", { style: `left:${50 + v / 2}%;background:#6fa8c9` })))),
-      lb("\u95A2\u4FC2\u306E\u60AA\u3044\u56FD", "RIVALS"),
-      ...rel.slice(-3).reverse().map(({ x, v }) => h("div", { class: "drow static" }, flag(x.id, 26), h("span", { class: "nm" }, x.name), h("span", { class: "relbar" }, h("i", { style: `left:${50 + v / 2}%;background:#d0605a` })))),
-      lb("\u6761\u7D04", "TREATIES"),
-      ...tr.length ? tr.map((t) => h("div", { class: "drow static" }, flag(other2(t), 26), h("span", { class: "nm" }, `${TJ[t.type] ?? t.type}\u30FB${c.states[other2(t)]?.name}`), btn("\u7834\u68C4", () => act({ type: "state.act", stateId: st2.id, action: "break_treaty", target: t.id }), "", { disabled: !mine, title: mine ? "\u7834\u68C4\u3059\u308B\u3068\u76F8\u624B\u3068\u306E\u95A2\u4FC2\u304C\u60AA\u5316\u3059\u308B" : "\u62C5\u5F53\u56FD\u306E\u307F" }))) : [h("small", { class: "n" }, "\u306A\u3057")]
-    );
-    const me = controlled();
-    if (me && me !== st2.id) out.append(h("div", { class: "rowb" }, btn("\u3053\u306E\u56FD\u3068\u306E\u5916\u4EA4\u3092\u884C\u3046", () => {
-      S2.hub = "diplo";
-      S2.dtab = "rel";
-      S2.dip = { a: me, b: st2.id };
-      S2.hooks.render();
-    }, "p", { id: "to-diplo" })));
-    return out;
-  }
-
-  // js/ui/v6/views-a.js
-  var DOMAIN_JA = { economy: "\u7D4C\u6E08", military: "\u8ECD\u4E8B", politics: "\u653F\u6CBB", states: "\u56FD\u5BB6", population: "\u4EBA\u53E3", war_diplomacy: "\u5916\u4EA4" };
-  var civ2 = () => S2.w.civ;
-  var date = (mi) => formatWorldDate(S2.w, mi);
-  var link = (id) => civ2().states[id] ? h("a", { class: "lk", href: "#", onclick: (e) => {
-    e.preventDefault();
-    S2.hooks.select(id);
-  } }, stateName(id)) : String(id);
-  var note2 = (t) => h("p", { class: "n" }, t);
-  var why = (t) => h("p", { class: "n err", id: "why" }, t);
-  function pGeo() {
-    const M = S2.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "\u5730\u7406"), note2("\u5404\u30EC\u30A4\u30E4\u30FC\u3092\u81EA\u7531\u306B\u91CD\u306D\u3089\u308C\u307E\u3059\u3002\u5857\u308A\u306E\u5C64\u306F\u4E0D\u900F\u660E\u5EA6\u3082\u5909\u3048\u3089\u308C\u307E\u3059\u3002"));
-    const done2 = () => {
-      S2.hooks.mapOnly();
-      S2.hooks.panel();
-    };
-    for (const [gid, ja, en] of GROUPS) {
-      box.append(lb(ja, en));
-      for (const [id, name] of LAYERS.filter((l) => l[2] === gid).reverse()) {
-        const fill = FILL_IDS.includes(id), on = M.isOn(id);
-        box.append(h("div", {}, h("div", { class: "layrow" }, h("input", { type: "checkbox", id: "ly-" + id, checked: on, onchange: () => {
-          M.toggle(id);
-          done2();
-        } }), h("span", { class: "g" }, name), fill && on ? h("input", { type: "range", class: "opa", min: 20, max: 100, value: Math.round(M.alpha[id] * 100), title: "\u4E0D\u900F\u660E\u5EA6", oninput: (e) => {
-          M.alpha[id] = e.target.value / 100;
-          M.interact();
-        } }) : null)));
-      }
-    }
-    return box.append(note2("\u5730\u5F62\u30FB\u6C17\u5019\u30FB\u8CC7\u6E90\u3092\u751F\u6210\u5F8C\u306B\u624B\u3067\u7DE8\u96C6\u3059\u308B\u6A5F\u80FD\u306F\u8A2D\u3051\u3066\u3044\u307E\u305B\u3093\u3002"), h("div", { class: "rowb" }, btn("\u8868\u793A\u3092\u521D\u671F\u4F4D\u7F6E\u3078", () => {
-      M.view = { x: 0, y: 0, k: 1 };
-      M.draw();
-    }))) || box;
-  }
-  function listRow(hl, kids, onclick, cls = "") {
-    return h("div", { class: "lrow " + cls, onmouseenter: () => {
-      if (S2.map && hl) {
-        S2.map.hl = hl;
-        S2.map.draw();
-      }
-    }, onmouseleave: () => {
-      if (S2.map) {
-        S2.map.hl = null;
-        S2.map.draw();
-      }
-    }, onclick }, ...kids);
-  }
-  function sectioned(sections, rowH, renderRow) {
-    const rows = [];
-    for (const sec of sections) {
-      if (!sec.rows.length) continue;
-      rows.push({ hdr: `${sec.title}\uFF08${sec.rows.length}\uFF09` });
-      if (!sec.fold || !S2.fold?.[sec.fold]) for (const r of sec.rows) rows.push(r);
-    }
-    return vlist(rows, rowH, (r) => r.hdr ? h("div", { class: "grp", style: "cursor:default" }, r.hdr) : renderRow(r));
-  }
-  var clearHl = () => {
-    if (S2.map) {
-      S2.map.hl = null;
-    }
-  };
-  var back = (label, on) => h("div", { class: "back", onclick: () => {
-    clearHl();
-    on();
-  } }, "\u2190 " + label);
-  function pNations() {
-    const c = civ2(), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "\u56FD\u5BB6"));
-    if (S2.detail && S2.sel && c.states[S2.sel]) {
-      box.append(back("\u56FD\u5BB6\u4E00\u89A7", () => {
-        S2.detail = false;
-        S2.hooks.panel();
-      }), stateDetail(c.states[S2.sel]));
-      return box;
-    }
-    const mine = controlled(), all = Object.values(c.states).sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), me = all.filter((s) => s.id === mine), alive2 = all.filter((s) => s.alive && s.id !== mine), dead = all.filter((s) => !s.alive);
-    box.append(h("p", { class: "n" }, `\u5B58\u7D9A\u4E2D ${alive2.length + me.length}\u30FB\u6EC5\u4EA1 ${dead.length}`), sectioned([{ title: "\u3042\u306A\u305F\u306E\u56FD", rows: me }, { title: "\u5B58\u7D9A\u4E2D\u306E\u56FD\u5BB6", rows: alive2 }, { title: "\u6EC5\u4EA1\u3057\u305F\u56FD\u5BB6", rows: dead, fold: "deadStates" }], 34, (s) => listRow({ type: "states", id: s.id }, [h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", {}, s.alive ? `\u4EBA\u53E3 ${n0(s.pop)}\u30FB${regimeJa(s)}` : `\u6EC5\u4EA1\u30FB\u6210\u7ACB ${date(s.formedAt).split("\u6708")[0]}\u6708`)], () => S2.hooks.select(s.id), (s.id === mine ? "mine " : "") + (s.alive ? "" : "dead"))));
-    return box;
-  }
-  function stateDetail(st2) {
-    const c = civ2(), mine = controlled() === st2.id, tabs2 = [["politics", "\u5185\u653F"], ["military", "\u8ECD\u4E8B"], ["diplomacy", "\u5916\u4EA4"], ["tech", "\u6280\u8853\u30C4\u30EA\u30FC"], ["doctrine", "\u8ECD\u4E8B\u30C9\u30AF\u30C8\u30EA\u30F3"]];
-    const body = { politics: tPoliticsV, military: tMilitaryV, diplomacy: tDiplomacyV, tech: tTech, doctrine: tDoctrine }[S2.tab](st2, mine);
-    return h(
-      "div",
-      { class: "rs" },
-      nationHero(c.states[st2.id], mine),
-      h("div", { class: "tabs" }, ...tabs2.map(([k, ja]) => h("b", { class: S2.tab === k ? "on" : "", "data-tab": k, onclick: () => {
-        S2.tab = k;
-        S2.hooks.panel();
-      } }, ja))),
-      S2.notice ? why(S2.notice) : null,
-      body
-    );
-  }
-  function officesBox(st2, mine) {
-    const rg = regimeOf(st2), R = REGIMES[rg], offs = st2.offices ?? [], can2 = st2.alive && (mine || !controlled()), box = h("div", {}, lb("\u5B98\u5236\u30FB\u5F79\u8077", "OFFICES"), note2(`${R.ja}\u30FB\u5143\u9996\u306F${officeJa(R.ruler)}`));
-    box.append(offs.length ? h("div", { class: "offs" }, ...offs.map((o) => h("div", { class: "off" }, face(o.holder.name, st2.id, o.holder.look), h("div", {}, h("b", {}, officeJa(o.id)), h("small", {}, o.holder.name), h("div", { class: "chips sm" }, ...officeChips(o.id)))))) : note2("\u5F79\u8077\u306F\u307E\u3060\u5B9A\u3081\u3089\u308C\u3066\u3044\u307E\u305B\u3093\uFF08\u6A19\u6E96\u306E\u5F79\u8077\u3092\u7F6E\u3051\u307E\u3059\uFF09\u3002"));
-    {
-      const sm = officeSummary(st2);
-      if (sm) box.append(sm);
-    }
-    if (!can2) return box;
-    const cur = new Set(offs.length ? offs.map((o) => o.id) : defaultOffices(rg)), set = S2.offEdit?.id === st2.id ? S2.offEdit.set : cur;
-    S2.offEdit = { id: st2.id, set };
-    box.append(h("details", { class: "dt", id: "off-edit" }, h("summary", {}, "\u5F79\u8077\u3092\u7D44\u307F\u66FF\u3048\u308B\uFF08\u3044\u3064\u3067\u3082\u30FB\u8CBB\u7528\u306A\u3057\uFF09"), h("p", { class: "n" }, "\u5F79\u8077\u306F\u597D\u304D\u306A\u3060\u3051\u7F6E\u3051\u307E\u3059\u3002\u7F6E\u304F\u307B\u3069\u7DAD\u6301\u8CBB\u304C\u304B\u304B\u308A\u3001\u591A\u3059\u304E\u308B\u3068\u5B98\u50DA\u304C\u80A5\u5927\u3057\u3066\u5B89\u5B9A\u3068\u6C11\u8846\u306E\u652F\u6301\u304C\u4E0B\u304C\u308A\u307E\u3059\u3002"), ...Object.entries(OFFICE_DOMAIN_JA).map(([dom, dja]) => {
-      const ids = R.offices.filter((id) => OFFICES[id][1] === dom);
-      return ids.length ? h("div", { class: "odom" }, h("small", {}, dja), h("div", { class: "wchips" }, ...ids.map((id) => h("label", { class: "b", style: "display:flex;gap:4px;align-items:center", title: officeChips(id).map((x) => x.textContent).join(" ") }, h("input", { type: "checkbox", "data-office": id, checked: set.has(id), disabled: id === R.ruler, onchange: (e) => {
-        e.target.checked ? set.add(id) : set.delete(id);
-      } }), officeJa(id))))) : null;
-    }), btn("\u3053\u306E\u5F79\u8077\u306B\u6539\u3081\u308B", () => {
-      const list = R.offices.filter((x) => set.has(x));
-      if (list.length < MIN_OFFICES || list.length > MAX_OFFICES) {
-        S2.notice = `\u5F79\u8077\u306F ${MIN_OFFICES}\u301C${MAX_OFFICES} \u4EF6\u306B\u3057\u3066\u304F\u3060\u3055\u3044`;
-        S2.hooks.panel();
-        return;
-      }
-      if (mine) act({ type: "state.setOffices", offices: list });
-      else creator({ type: "state.setOffices", stateId: st2.id, offices: list });
-      S2.offEdit = null;
-      S2.hooks.render();
-    }, "p", { id: "off-apply" })));
-    return box;
-  }
-  function uprisingBox(st2) {
-    return h("div", {}, lb("\u53CD\u4E71\u30FB\u9769\u547D", "UPRISING"), h("div", { class: "rowb" }, btn("\u53CD\u4E71\u30FB\u9769\u547D\u3092\u8D77\u3053\u3059", () => {
-      S2.upr = { stateId: st2.id, kind: S2.upr?.kind ?? Object.keys(UPRISING_KINDS)[0], open: true };
-      S2.hooks.panel();
-    }, "", { id: "upr-open" })));
-  }
-  function uprisingFull(st2) {
-    const U4 = S2.upr, box = h("div", { class: "uprfull" }), sel = h("select", { id: "upr-kind", onchange: (e) => {
-      U4.kind = e.target.value;
-      U4.plan = null;
-      S2.hooks.panel();
-    } }, ...Object.entries(UPRISING_KINDS).map(([k, K]) => h("option", { value: k, selected: U4.kind === k }, K.ja)));
-    box.append(h("div", { class: "kcards" }, ...Object.entries(UPRISING_KINDS).map(([k, K]) => h("div", { class: "kcard" + (U4.kind === k ? " on" : ""), onclick: () => {
-      U4.kind = k;
-      U4.plan = null;
-      S2.hooks.panel();
-    } }, h("b", {}, K.ja), h("small", {}, K.blurb)))), h("div", { class: "rowb" }, sel, btn("\u4E2D\u5FC3\u5730\u3092\u5730\u56F3\u304B\u3089\u9078\u3076", () => {
-      U4.kind = sel.value;
-      U4.picking = true;
-      U4.open = false;
-      S2.map.pins = null;
-      notify("ok", "\u5730\u56F3\u3067\u3001\u53CD\u4E71\u306E\u4E2D\u5FC3\u5730\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u9996\u90FD\u4EE5\u5916\uFF09");
-      S2.hooks.panel();
-    }, "p", { id: "upr-pick" })));
-    if (U4.plan) {
-      const p = U4.plan, K = UPRISING_KINDS[p.kind], opt = K.state === "optional", st$ = K.state === "required" || opt && U4.asState;
-      box.append(h(
-        "div",
-        { class: "card", id: "upr-plan" },
-        h("b", {}, K.ja),
-        h("div", { class: "pcols" }, h("div", {}, h("small", {}, "\u898F\u6A21"), h("b", {}, p.scaleLabel), h("small", {}, `\u53CD\u4E71\u5074 ${n0(p.rebelPop)}\uFF08\u56FD\u306E ${Math.round(p.share * 100)}%\uFF09`)), h("div", {}, h("small", {}, "\u898B\u901A\u3057"), h("b", {}, p.oddsLabel))),
-        opt ? h("label", { class: "n" }, h("input", { type: "checkbox", id: "upr-state", checked: !!U4.asState, onchange: (e) => {
-          U4.asState = e.target.checked;
-          S2.hooks.panel();
-        } }), " \u72EC\u7ACB\u3057\u305F\u56FD\u3092\u3064\u304F\u308B") : null,
-        h("div", { class: "rowb" }, btn(st$ ? "\u56FD\u540D\u30FB\u653F\u4F53\u3092\u6C7A\u3081\u3066\u6C7A\u884C\u3059\u308B" : "\u65B0\u3057\u3044\u4F53\u5236\u3092\u6C7A\u3081\u3066\u6C7A\u884C\u3059\u308B", () => openWizard({ mode: st$ ? "rebel" : "reform", rebel: st$ ? { stateId: st2.id, kind: p.kind, cell: p.center.cell, plan: p } : null, reform: st$ ? null : { stateId: st2.id, kind: p.kind, cell: p.center.cell }, onDone: (r) => {
-          S2.upr = null;
-          if (S2.map) S2.map.pins = null;
-          notify("ok", r.outcome === "new_state" ? "\u65B0\u3057\u3044\u56FD\u304C\u72EC\u7ACB\u3092\u5BA3\u8A00\u3057\u3001\u6226\u4E89\u306B\u306A\u308A\u307E\u3057\u305F" : r.outcome === "success" ? "\u9769\u547D\u304C\u6210\u529F\u3057\u3001\u65B0\u3057\u3044\u4F53\u5236\u306B\u306A\u308A\u307E\u3057\u305F" : "\u53CD\u4E71\u306F\u93AE\u5727\u3055\u308C\u307E\u3057\u305F");
-          S2.hooks.render();
-        } }), "p", { id: "upr-go" }))
-      ));
-    }
-    return box;
-  }
-  function creatorBox(st2) {
-    const c = civ2(), field = h("select", { id: "iv-field" }, ...Object.entries(FIELDS).map(([k, f2]) => h("option", { value: k }, `${DOMAIN_JA[f2.domain ?? { industry: "economy", perCapita: "economy", tradeIncome: "economy", foodBalance: "economy", taxRevenue: "economy", equipLevel: "military", readiness: "military", legitimacy: "politics", fatigue: "politics" }[k]] ?? ""}\u30FB${f2.ja}`))), other2 = h("select", { id: "iv-other", style: "display:none" }, ...aliveStates2().filter((x) => x.id !== st2.id).sort((a, b) => b.pop - a.pop).slice(0, 60).map((x) => h("option", { value: x.id }, x.name))), val = h("input", { id: "iv-val", type: "number", step: "any", style: "width:90px" }), half = h("input", { id: "iv-half", type: "number", placeholder: "\u534A\u6E1B\u671F(\u6708)", style: "width:90px" }), rsn = h("input", { id: "iv-why", placeholder: "\u7406\u7531\u306E\u6CE8\u91C8" }), info = h("p", { class: "n", id: "iv-info" });
-    const upd = () => {
-      const k = field.value, pair = !!FIELDS[k].pair;
-      other2.style.display = pair ? "" : "none";
-      const o = pair ? other2.value : null, nm = nominalOf(c, st2, k, o);
-      info.textContent = nm == null ? "\u307E\u3060\u7B97\u51FA\u3055\u308C\u3066\u3044\u307E\u305B\u3093" : `\u901A\u5E38\u8A08\u7B97\u5024 ${r24(nm)}\u30FB\u6709\u52B9\u5024 ${r24(effective(c, st2, k, o))}\u30FB\u7BC4\u56F2 ${FIELDS[k].min}\u301C${FIELDS[k].max}\u30FB\u65E2\u5B9A\u306E\u534A\u6E1B\u671F ${FIELDS[k].half}\u304B\u6708`;
-    };
-    field.addEventListener("change", upd);
-    other2.addEventListener("change", upd);
-    setTimeout(upd, 0);
-    const mineIv = interventionsOf(c).filter((r) => r.targetId === st2.id).slice(-6).reverse();
-    return h(
-      "div",
-      {},
-      lb("\u5275\u9020\u4E3B\u306E\u4ECB\u5165", "INTERVENTION"),
-      note2("\u8A08\u7B97\u3055\u308C\u308B\u5024\u306B\u4E00\u6642\u7684\u306A\u88DC\u6B63\u3092\u5165\u308C\u307E\u3059\u3002\u88DC\u6B63\u306F\u6642\u9593\u3068\u3068\u3082\u306B\u901A\u5E38\u5024\u3078\u623B\u308A\u307E\u3059\u304C\u3001\u4ECB\u5165\u4E2D\u306B\u8D77\u304D\u305F\u7D50\u679C\u306F\u623B\u308A\u307E\u305B\u3093\u3002"),
-      h("div", { class: "rowb" }, field, other2, val, half),
-      rsn,
-      h("div", { class: "rowb" }, btn("\u4ECB\u5165\u3059\u308B", () => creator({ type: "creator.intervene", stateId: st2.id, field: field.value, otherId: FIELDS[field.value].pair ? other2.value : null, value: Number(val.value), halfLifeMonths: half.value ? Number(half.value) : null, reason: rsn.value }), "p", { id: "iv-go" })),
-      info,
-      ...mineIv.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `${FIELDS[r.field]?.ja ?? r.field}${r.otherId ? "\uFF08\u2192" + stateName(r.otherId) + "\uFF09" : ""} \u2192 ${r24(r.target)}`, h("br"), h("small", {}, `${{ active: "\u6709\u52B9\uFF08\u6B8B\u308A " + r24(r.residual) + "\uFF09", converged: "\u53CE\u675F", superseded: "\u7F6E\u304D\u63DB\u3048", cancelled: "\u53D6\u308A\u6D88\u3057", target_gone: "\u5BFE\u8C61\u6D88\u6EC5" }[r.status]}\u30FB${date(r.startMonth)}${r.reason ? "\u30FB" + r.reason : ""}`)), r.status === "active" ? btn("\u53D6\u308A\u6D88\u3059", () => creator({ type: "creator.cancelIntervention", id: r.id })) : null))
-    );
-  }
-  function techStatus(st2) {
-    const c = civ2(), groups = Object.values(c.groups).filter((g) => g.stateId === st2.id), total2 = groups.reduce((a, g) => a + g.pop, 0) || 1, have = {}, lostHere = /* @__PURE__ */ new Set();
-    for (const g of groups) {
-      for (const k in g.tech?.known ?? {}) have[k] = (have[k] ?? 0) + g.pop;
-      for (const k in g.tech?.lost ?? {}) lostHere.add(k);
-    }
-    const cov = (k) => (have[k] ?? 0) / total2, f2 = (t) => st2.techAdopted?.[t.key] != null ? "adopted" : cov(t.key) >= 0.3 ? "available" : cov(t.key) > 0 ? "known" : lostHere.has(t.key) ? "lost" : "locked";
-    f2.cov = cov;
-    return f2;
-  }
-  var CAP_JA = { "polity:chiefdom": "\u9996\u9577\u5236\u3078", "polity:kingdom": "\u738B\u56FD\u3078", "polity:republic": "\u5171\u548C\u653F\u3078", "polity:empire": "\u5E1D\u56FD\u3078", "action:found_city": "\u90FD\u5E02\u3092\u5EFA\u8A2D\u3067\u304D\u308B", "action:build_fortification": "\u8981\u585E\u3092\u6574\u5099\u3067\u304D\u308B", "action:covert_op": "\u79D8\u5BC6\u5DE5\u4F5C", "action:impose_sanctions": "\u7D4C\u6E08\u5236\u88C1", "action:nuclear_program": "\u6838\u8A08\u753B", "treaty:nonaggression": "\u4E0D\u53EF\u4FB5\u6761\u7D04", "treaty:alliance": "\u540C\u76DF", "treaty:trade": "\u4EA4\u6613\u6761\u7D04", "unit:ranged": "\u5F13\u30FB\u6295\u5C04\u5175", "unit:cavalry": "\u9A0E\u5175", "unit:navy": "\u6C34\u8ECD", "unit:garrison": "\u5B88\u5099\u5175", "unit:firearms": "\u9283\u5175", "unit:armor": "\u6A5F\u7532", "unit:air": "\u822A\u7A7A", "econ:coinage": "\u8CA8\u5E63\u7D4C\u6E08", "econ:credit": "\u4FE1\u7528\u30FB\u91D1\u878D", "subsist:agriculture": "\u8FB2\u8015", "subsist:pastoral": "\u7267\u755C", "subsist:fishing": "\u6F01\u6488", "move:sea": "\u6D77\u3092\u6E21\u308B", "move:ocean": "\u5916\u6D0B\u822A\u6D77", "trade:land_long": "\u9678\u306E\u9060\u8DDD\u96E2\u4EA4\u6613", "trade:sea_long": "\u6D77\u306E\u9060\u8DDD\u96E2\u4EA4\u6613", "trade:rail": "\u9244\u9053\u8F38\u9001", "admin:records": "\u8A18\u9332", "admin:officials": "\u5B98\u8077", "admin:courier": "\u516C\u306E\u901A\u4FE1\u7DB2", "admin:land_survey": "\u571F\u5730\u306E\u6E2C\u91CF", "war:far": "\u9060\u5F81\u306E\u88DC\u7D66", "war:naval": "\u6D77\u6226", "pop:cold": "\u5BD2\u51B7\u5730\u306B\u4F4F\u3081\u308B", "pop:steppe": "\u8349\u539F\u3067\u751F\u304D\u308B", "storage:pottery": "\u8CAF\u8535", "policy:tax_high": "\u9AD8\u3044\u7A0E\u7387", "policy:parliament": "\u8B70\u4F1A\u5236" };
-  var FX_JA2 = { cap: "\u53CE\u5BB9\u529B", tax: "\u7A0E\u53CE", trade: "\u4EA4\u6613", ind: "\u7523\u696D\u529B", off: "\u653B\u6483", def: "\u9632\u5FA1", health: "\u885B\u751F", learn: "\u5B66\u7FD2\u30FB\u4F1D\u64AD" };
-  var TECH_LANE = null;
-  var TECH_Q = "";
-  var TECH_FULL = false;
-  var TECH_VB = null;
-  var DOC_VB = null;
-  function tTech(st2, mine) {
-    const c = civ2(), status = techStatus(st2), sel = TECH[S2.tech] ?? null, q2 = TECH_Q.trim(), hit = q2 ? new Set(TECHS.filter((t) => t.name.includes(q2) || t.key.includes(q2) || t.field.includes(q2)).map((t) => t.key)) : null;
-    const tree = techTree({ techs: TECHS, status, selected: S2.tech, lane: TECH_LANE, hit, vb0: TECH_VB, onView: (v) => {
-      TECH_VB = v;
-    }, onPick: (t) => {
-      S2.tech = t.key;
-      S2.hooks.panel();
-    } }), { svg, COL, SYM } = tree, s = sel && status(sel);
-    const lab = { adopted: "\u5236\u5EA6\u5316\u6E08\u307F\uFF08\u3053\u306E\u56FD\u304C\u63A1\u7528\uFF09", available: "\u63A1\u7528\u3067\u304D\u308B\uFF08\u56FD\u5185\u306E\u4EBA\u53E3\u306E 3 \u5272\u4EE5\u4E0A\u304C\u77E5\u3063\u3066\u3044\u308B\uFF09", known: "\u4FDD\u6709\uFF08\u4E00\u90E8\u306E\u96C6\u56E3\u3060\u3051\u304C\u77E5\u308B\u3002\u56FD\u3068\u3057\u3066\u306F\u307E\u3060\u63A1\u7528\u3067\u304D\u306A\u3044\uFF09", lost: "\u5931\u308F\u308C\u305F\uFF08\u304B\u3064\u3066\u77E5\u3063\u3066\u3044\u305F\u304C\u3001\u4ECA\u306F\u8AB0\u3082\u77E5\u3089\u306A\u3044\uFF09", locked: "\u672A\u767A\u898B" };
-    const laneBtns = [btn("\u3059\u3079\u3066", () => {
-      TECH_LANE = null;
-      S2.hooks.panel();
-    }, TECH_LANE ? "" : "p"), ...LANES.map((l) => btn(l.ja.slice(0, 5), () => {
-      TECH_LANE = l.id;
-      S2.hooks.panel();
-    }, TECH_LANE === l.id ? "p" : ""))];
-    const search = h("input", { type: "search", placeholder: "\u6280\u8853\u540D\u30FB\u5206\u91CE\u3067\u63A2\u3059", value: TECH_Q, style: "width:100%", oninput: (e) => {
-      TECH_Q = e.target.value;
-      clearTimeout(search._t);
-      search._t = setTimeout(() => {
-        S2.hooks.panel();
-        document.querySelector("#tech-q")?.focus();
-      }, 250);
-    }, id: "tech-q" });
-    let detail = note2("\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u524D\u63D0\u30FB\u6210\u7ACB\u306E\u6761\u4EF6\u30FB\u89E3\u7981\u3055\u308C\u308B\u3053\u3068\u30FB\u52B9\u679C\u30FB\u4E16\u754C\u3067\u306E\u5E83\u304C\u308A\u304C\u51FA\u307E\u3059\u3002");
-    if (sel) {
-      const gs = Object.values(c.groups).filter((g) => g.stateId === st2.id), cov = Math.round(status.cov(sel.key) * 100), w = c.techWorld[sel.key], deps = TECHS.filter((t) => t.prereq.includes(sel.key)), gate = actionGate(c, st2, "adopt_tech");
-      const needs = sel.prereq.map((p) => {
-        const t = TECH[p];
-        return `${st2.techAdopted?.[p] != null ? "\u25A0" : status.cov(p) > 0 ? "\u25C7" : "\u25CB"} ${t?.name ?? p}`;
-      }).join("\u3000");
-      const unl = sel.caps.map((x) => CAP_JA[x] ?? x), fx3 = Object.entries(sel.fx).map(([k, v]) => `${FX_JA2[k] ?? k} +${Math.round(v * 100)}%`);
-      detail = h(
-        "div",
-        { class: "dt" },
-        h("b", {}, sel.name),
-        `\u3000${sel.field}`,
-        h("br"),
-        `${SYM[s]} ${lab[s]}`,
-        h("br"),
-        `\u56FD\u5185\u306E\u666E\u53CA ${cov}%\uFF08\u63A1\u7528\u306B\u306F 30% \u4EE5\u4E0A\uFF09`,
-        h("br"),
-        `\u524D\u63D0: ${needs || "\u306A\u3057"}`,
-        h("br"),
-        sel.minPop || sel.settled || sel.condKey ? `\u6210\u7ACB\u306E\u6761\u4EF6: ${[sel.minPop ? `\u96C6\u56E3\u306E\u898F\u6A21 ${n0(sel.minPop)} \u4EBA\u4EE5\u4E0A` : null, sel.settled ? "\u5B9A\u4F4F" : null, sel.condKey ? COND_JA(sel.condKey) : null].filter(Boolean).join("\u30FB")}` : "\u6210\u7ACB\u306E\u6761\u4EF6: \u7279\u306B\u306A\u3057",
-        h("br"),
-        sel.why ? `\u80CC\u666F: ${sel.why}` : "",
-        sel.why ? h("br") : "",
-        unl.length ? `\u89E3\u7981: ${unl.join("\u30FB")}` : "",
-        unl.length ? h("br") : "",
-        fx3.length ? `\u52B9\u679C: ${fx3.join("\u30FB")}` : "",
-        fx3.length ? h("br") : "",
-        `\u8AAC\u660E: ${sel.desc}`,
-        h("br"),
-        w ? `\u4E16\u754C: ${w.first != null ? formatDate(civ2().wcde.config.calendar, w.first) + "\u306B\u521D\u51FA" : ""}\u30FB\u72EC\u7ACB\u306E\u767A\u898B ${w.independent ?? 0} \u56DE\u30FB\u4F1D\u64AD ${w.spread ?? 0} \u4EF6${Object.keys(w.byChannel ?? {}).length ? "\uFF08" + Object.entries(w.byChannel).map(([k, v]) => `${{ contact: "\u63A5\u89E6", trade: "\u4EA4\u6613", teaching: "\u6559\u80B2", conquest: "\u4F75\u5408" }[k] ?? k} ${v}`).join("\u30FB") + "\uFF09" : ""}` : "\u4E16\u754C: \u307E\u3060\u8AB0\u3082\u767A\u898B\u3057\u3066\u3044\u306A\u3044",
-        h("br"),
-        deps.length ? `\u3053\u306E\u6280\u8853\u3092\u524D\u63D0\u3068\u3059\u308B: ${deps.map((t) => t.name).join("\u30FB")}` : "\u5F8C\u7D9A\u306E\u6280\u8853\u306F\u306A\u3044",
-        h("br"),
-        h("small", { style: "color:var(--dim)" }, "\u6280\u8853\u306E\u63A1\u7528\u306F\u3001\u4E16\u754C\u306E\u4ED5\u7D44\u307F\u304C\u81EA\u52D5\u3067\u884C\u3044\u307E\u3059")
-      );
-    }
-    document.querySelectorAll(".techwrap.full").forEach((e) => e.remove());
-    const wrap = h("div", { class: "techwrap" + (TECH_FULL ? " full" : "") }), big = btn(TECH_FULL ? "\u9589\u3058\u308B" : "\u62E1\u5927\u8868\u793A", () => {
-      TECH_FULL = !TECH_FULL;
-      S2.hooks.panel();
-    });
-    wrap.append(svg, h("div", { class: "rowb" }, big, btn("\u5168\u4F53", tree.fit), btn("\u5DE6\u7AEF", tree.left), btn("\u6700\u524D\u7DDA", tree.frontier), btn("\u9078\u3093\u3060\u6280\u8853\u3078", () => S2.tech && tree.focus(S2.tech), "", { id: "tech-goto", disabled: !S2.tech }), q2 && hit?.size ? btn(`\u691C\u7D22\u7D50\u679C\u3078\uFF08${hit.size} \u4EF6\uFF09`, () => tree.focus([...hit][0]), "", { id: "tech-goto-hit" }) : null), detail);
-    if (TECH_FULL) {
-      document.body.append(wrap);
-      tree.frontier();
-    }
-    return h(
-      "div",
-      {},
-      search,
-      h("div", { class: "rowb", style: "flex-wrap:wrap" }, ...laneBtns),
-      TECH_FULL ? note2("\u62E1\u5927\u8868\u793A\u4E2D\u3067\u3059\uFF08\u753B\u9762\u3044\u3063\u3071\u3044\uFF09\u3002\u53F3\u306E\u300C\u9589\u3058\u308B\u300D\u3067\u623B\u308C\u307E\u3059\u3002") : wrap,
-      h("div", { class: "lg" }, ...Object.entries({ adopted: "\u5236\u5EA6\u5316", available: "\u63A1\u7528\u3067\u304D\u308B", known: "\u4FDD\u6709", lost: "\u5931\u308F\u308C\u305F", locked: "\u672A\u767A\u898B" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "locked" ? "dashed" : "solid"} ${COL[k][0]}` }), `${SYM[k]} ${t}`)))
-    );
-  }
-  var COND_JA = (k) => COND[k]?.ja ?? k;
-  function tDoctrine(st2, mine) {
-    const M = st2.military, taken = M?.doctrine?.taken ?? {}, nodes2 = nodesOf(st2), branches = branchesOf(st2), status = (d) => taken[d.id] != null ? "taken" : canAdopt(st2, d.id).ok ? "available" : "blocked", sel = nodeOf(st2, S2.doc) ?? null, dt = doctrineTree({ nodes: nodes2, branches, status, selected: S2.doc, vb0: DOC_VB, onView: (v) => {
-      DOC_VB = v;
-    }, onPick: (d) => {
-      S2.doc = d.id;
-      S2.hooks.panel();
-    } }), { svg, COL } = dt;
-    const fxText = (d) => Object.entries(d.fx).map(([k, v]) => `${FX_JA[k] ?? k} +${pct(v)}`).join("\u30FB");
-    const fx3 = M?.fx ?? {}, now = Object.entries(fx3).filter(([, v]) => v > 0).map(([k, v]) => `${FX_JA[k] ?? k} +${pct(v)}`).join("\u30FB") || "\u306A\u3057";
-    const sc = M?.school ?? {}, routes = `\u9678 ${SCHOOL_BY_ID[sc.land]?.ja ?? "\u672A\u9078\u629E"}\uFF0F\u6D77 ${SCHOOL_BY_ID[sc.sea]?.ja ?? "\u672A\u9078\u629E"}\uFF0F\u7A7A ${SCHOOL_BY_ID[sc.air]?.ja ?? "\u672A\u9078\u629E"}`;
-    return h(
-      "div",
-      {},
-      h("div", { class: "dt" }, `\u3044\u307E\u306E\u52B9\u679C: ${now}`),
-      h("div", { class: "dt" }, `\u9078\u3093\u3060\u8DEF\u7DDA: ${routes}\uFF08\u5404\u8ECD\u3067 1 \u3064\u30026 \u6BB5\u305D\u308D\u3048\u308B\u3068\u719F\u9054\u306E\u52A0\u7B97\uFF09`),
-      h("div", { class: "docwrap" }, svg, h("div", { class: "rowb" }, btn("\u5168\u4F53", dt.fit, "", { id: "doc-fit" }), btn("\u9078\u3093\u3060\u65B9\u91DD\u3078", () => S2.doc && dt.focus(S2.doc), "", { id: "doc-goto", disabled: !S2.doc }))),
-      h("div", { class: "lg" }, ...Object.entries({ taken: "\u25A0 \u53D6\u5F97\u6E08\u307F", available: "\u25C6 \u53D6\u5F97\u3067\u304D\u308B", blocked: "\u25CB \u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\uFF08\u70B9\u7DDA\uFF09" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "blocked" ? "dashed" : "solid"} ${COL[k][0]}` }), t))),
-      sel ? (() => {
-        const ca = canAdopt(st2, sel.id), br = branches.find((b) => b.id === sel.branch);
-        return h("div", { class: "dt" }, h("b", {}, sel.ja), `\uFF08${br?.ja ?? ""}\u30FB\u6BB5\u968E ${sel.tier}${sel.special ? "\u30FB\u56FA\u6709" : sel.school ? "\u30FB\u8DEF\u7DDA" : "\u30FB\u57FA\u5E79"}\uFF09`, h("br"), `\u52B9\u679C: ${fxText(sel)}\u30FB\u8CBB\u7528 ${sel.cost}`, h("br"), `\u524D\u63D0: ${sel.prereq.length ? sel.prereq.map((p) => nodeOf(st2, p)?.ja ?? p).join("\u3001") : "\u306A\u3057"}${sel.tech.length ? "\u3000\u6280\u8853: " + sel.tech.map((t) => TECH[t]?.name ?? t).join("\u3001") : ""}`, h("br"), taken[sel.id] != null ? "\u53D6\u5F97\u6E08\u307F" : ca.ok ? "\u53D6\u5F97\u3067\u304D\u307E\u3059" : `\u53D6\u5F97\u3067\u304D\u306A\u3044\u7406\u7531: ${ca.reason}`, h("small", { style: "color:var(--dim)" }, "\u53D6\u5F97\u306F\u3001\u4E16\u754C\u306E\u4ED5\u7D44\u307F\u304C\u81EA\u52D5\u3067\u884C\u3044\u307E\u3059"));
-      })() : note2("\u6728\u306E\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u52B9\u679C\u3068\u524D\u63D0\u304C\u51FA\u307E\u3059\u3002")
-    );
-  }
-
-  // js/ui/v6/decision.js
-  var $ = (s) => document.querySelector(s);
-  var GLYPH = { assault: "\u7A81", hold: "\u5B88", flank: "\u56DE", withdraw: "\u9000" };
-  var SEAL = { treaty_offer: "\u7D04", peace_offer: "\u548C", war_incoming: "\u6226", ally_call: "\u76DF", succession: "\u7D99", rebellion: "\u4E71", omen: "\u5146", battle: "\u9663" };
-  function resolve2(d, option) {
-    const r = act({ type: "decision.resolve", decisionId: d.id, option });
-    if (!r.ok) return;
-    const res = r.result ?? {};
-    S2.decFocus = null;
-  }
-  var optBtn = (d, o, extra = "") => h("button", { class: "decopt" + extra, "data-opt": o.id, disabled: !!o.disabled, title: o.disabled ?? o.hint ?? "", onclick: () => resolve2(d, o.id) }, h("b", {}, o.ja), o.hint ? h("small", {}, o.disabled ? o.disabled : o.hint) : null);
-  function successionCards(d) {
-    const st2 = S2.w.civ.states[d.stateId];
-    return h("div", { class: "cands" }, ...d.options.map((o) => {
-      const pl = d.payload[o.id], c = pl?.cand, rg = pl?.regent;
-      if (!c) return optBtn(d, o);
-      const col = FACTION_COL[c.backer] ?? "#6fa8c9";
-      return h("button", { class: "cand", "data-opt": o.id, onclick: () => resolve2(d, o.id) }, face(c.name, st2?.id ?? "x"), h(
-        "div",
-        { class: "ci" },
-        h("b", {}, c.name),
-        h("small", {}, `${c.relation}\u30FB${c.ageYears}\u6B73${c.kin ? "" : "\u30FB\u738B\u671D\u304C\u4EE3\u308F\u308B"}`),
-        h("div", { class: "cb" }, h("span", {}, "\u80FD\u529B"), bar(c.skill, "#6fa8c9"), h("span", {}, "\u6B63\u7D71\u6027"), bar(c.legit, "#d8b45a")),
-        h("small", { style: `color:${col}` }, `${FACTION_JA[c.backer] ?? c.backer}\u304C\u652F\u6301`),
-        rg ? h("small", { class: "rg" }, `\u6442\u653F\uFF1A${rg.relation} ${rg.name}\uFF08\u80FD\u529B${Math.round(rg.skill * 100)}\u30FB${FACTION_JA[rg.backer] ?? rg.backer}\uFF09`) : null
-      ));
-    }));
-  }
-  function battleBox(d) {
-    const p = d.payload, st2 = S2.w.civ.states[d.stateId], dots = h("div", { class: "rounds" }, ...Array.from({ length: p.rounds }, (_, i) => h("i", { class: i < p.round ? "done" : i === p.round ? "now" : "" })));
-    const me = h("div", { class: "bside a" }, h("small", {}, p.role), h("b", {}, p.mine.corps), h("div", {}, p.mine.commander), h("div", { class: "bm" }, `\u5175\u529B ${n0(p.mine.size)}\u3000\u58EB\u6C17 ${p.mine.morale}%\u3000\u88DC\u7D66 ${p.mine.supply}%`));
-    const foe = h("div", { class: "bside d" }, h("small", {}, p.role === "\u653B\u3081" ? "\u5B88\u308A" : "\u653B\u3081"), h("b", {}, p.foe.state), h("div", {}, `\u5175\u529B ${p.foe.exact ? "" : "\u7D04 "}${n0(p.foe.estSize)}${p.foe.exact ? "" : "\uFF08\u5075\u5BDF\u306E\u898B\u7ACB\u3066\uFF09"}`), h("div", { class: "bm" }, `\u58EB\u6C17 ${p.foe.morale}%`));
-    const log3 = p.log.length ? h("div", { class: "blog" }, ...p.log.map((l) => h("div", {}, h("em", {}, `\u7B2C${l.round}\u624B\u756A`), l.text))) : null;
-    const hint = p.hint ? h("div", { class: "bhint" }, `\u65A5\u5019\u306E\u898B\u7ACB\u3066\uFF08\u5916\u308C\u308B\u3053\u3068\u3082\u3042\u308B\uFF09: \u6575\u306F\u300C${STANCES[p.hint]?.ja ?? p.hint}\u300D\u306E\u69CB\u3048\u3068\u898B\u3048\u308B`) : null;
-    const stance = h("div", { class: "stances" }, ...Object.entries(STANCES).map(([id, v]) => h("button", { class: "stance st-" + id, "data-opt": id, title: v.hint, onclick: () => resolve2(d, id) }, h("i", { class: "gl" }, GLYPH[id]), h("b", {}, v.ja), h("small", {}, v.hint))));
-    return h("div", {}, dots, h("div", { class: "bgrid" }, me, h("div", { class: "vs" }, "\u5BFE", h("small", {}, `\u6226\u6CC1 ${p.odds}`)), foe), hint, log3, h("p", { class: "n" }, "\u7A81\u6483\u306F\u6A5F\u52D5\u3092\u6B62\u3081\u3001\u6A5F\u52D5\u306F\u5805\u5B88\u3092\u7834\u308A\u3001\u5805\u5B88\u306F\u7A81\u6483\u3092\u53D7\u3051\u6B62\u3081\u308B\u3002"), stance, h("div", { class: "rowb" }, btn("\u6226\u5834\u3092\u5730\u56F3\u3067\u898B\u308B", () => {
-      const g = S2.w.civ.groups[p.siteId];
-      if (g) S2.hooks.focusCell?.(g.cell);
-    }, "", { id: "dec-map" })));
-  }
-  function renderDecision() {
-    const m = $("#decmodal");
-    if (!m) return;
-    const civ7 = S2.w?.civ, cs = civ7?.wcde.control.stateId, q2 = cs ? pendingOf(civ7) : [];
-    if (!q2.length || newsOf(civ7).queue.length) {
-      m.hidden = true;
-      m.replaceChildren();
-      m.classList.remove("battle");
-      return;
-    }
-    const d = q2[0], battle2 = d.kind === "battle";
-    m.hidden = false;
-    m.classList.toggle("battle", battle2);
-    if (battle2 && S2.decFocus !== d.id) {
-      S2.decFocus = d.id;
-      const g = civ7.groups[d.payload.siteId];
-      if (g) S2.hooks.focusCell?.(g.cell);
-    }
-    const body = d.kind === "succession" ? successionCards(d) : battle2 ? battleBox(d) : h("div", { class: "decopts" }, ...d.options.map((o) => optBtn(d, o)));
-    m.replaceChildren(h("div", { class: "decbox k-" + d.kind }, h("div", { class: "decseal" }, SEAL[d.kind] ?? "\u6C7A"), h("div", { class: "code" }, `${DECISION_JA[d.kind] ?? "\u6C7A\u65AD"}\uFF08\u672A\u6C7A ${q2.length} \u4EF6\uFF09`), h("div", { class: "n" }, `${d.date.year}\u5E74${d.date.month}\u6708`), h("h2", {}, d.title), h("p", { class: "decbody" }, d.body), body));
-  }
-
-  // js/ui/v6/military.js
-  var civ3 = () => S2.w.civ;
-  var ctx = () => S2.w.sim.ctx;
-  var n2 = (t) => h("p", { class: "n" }, t);
-  var sgn = (x) => (x >= 0 ? "+" : "") + Math.round(x * 100) + "%";
-  var placeOf = (gid) => {
-    const g = civ3().groups[gid];
-    if (!g) return "\u2014";
-    const s = civ3().settlements[g.settlementId];
-    return s?.name ?? `${civ3().states[g.stateId]?.name ?? "\u7121\u4E3B"}\u306E\u5730`;
-  };
-  var traitChips = (p) => (p.traits ?? []).map((t) => {
-    const T4 = TRAITS[t];
-    if (!T4) return null;
-    const fx3 = ["off", "def", "siege", "logi", "coh"].map((k) => T4[k] ? `${{ off: "\u653B", def: "\u5B88", siege: "\u5305\u56F2", logi: "\u88DC\u7D66", coh: "\u58EB\u6C17" }[k]}${sgn(T4[k])}` : "").filter(Boolean).join(" ");
-    const bad3 = Object.values(T4).some((v) => typeof v === "number" && v < 0);
-    return h("span", { class: "chip trait" + (bad3 ? " bad" : ""), title: fx3 }, T4.ja);
-  });
-  var personLine = (p) => `${rankOf(p)} ${p.name}\uFF08\u80FD\u529B ${Math.round(p.skill * 100)}\u30FB${(p.traits ?? []).map((t) => TRAITS[t]?.ja ?? t).join("\u30FB") || "\u7279\u6027\u306A\u3057"}\u30FB${FACTION_JA[p.backer] ?? p.backer}\uFF09`;
-  var orderText = (cp) => {
-    const o = cp.order, k = ORDER_KINDS[o.kind] ?? o.kind;
-    if (!o.targetGroupId) return k;
-    const left = o.route?.length ?? 0;
-    return `${k}\uFF1A${placeOf(o.targetGroupId)}${left ? `\uFF08\u3042\u3068 ${left} \u533A\u753B\u30FB\u7D04 ${Math.max(1, Math.ceil(left / marchSteps(ctx(), civ3().states[S2.w.civ.wcde.control.stateId])))} \u304B\u6708\uFF09` : "\uFF08\u5230\u7740\uFF09"}`;
-  };
-  var myWars = (st2) => st2.warIds.map((i) => civ3().wars[i]).filter((w) => w?.status === "active");
-  var sideOf2 = (w, id) => w.sides.a.includes(id) ? "a" : w.sides.d.includes(id) ? "d" : null;
-  function targets(st2, cp, kind, war) {
-    const c = civ3(), here = c.groups[cp.at], out = [], foe = war ? new Set(war.sides[sideOf2(war, st2.id) === "a" ? "d" : "a"]) : /* @__PURE__ */ new Set(), mine = new Set(war ? war.sides[sideOf2(war, st2.id)] : [st2.id]);
-    for (const g of Object.values(c.groups)) {
-      if (!g.stateId) continue;
-      const ok2 = kind === "march" || kind === "siege" ? foe.has(g.stateId) : mine.has(g.stateId);
-      if (ok2) out.push({ id: g.id, d: here ? distKm(S2.w.world, here.cell, g.cell) : 0, label: `${placeOf(g.id)}\uFF08${c.states[g.stateId]?.name ?? ""}\uFF09` });
-    }
-    return out.sort((a, b) => a.d - b.d).slice(0, 40);
-  }
-  function personBox(cp, slot, st2, pool) {
-    pool = pool.filter((q2) => (q2.service ?? "land") === (cp.service ?? "land"));
-    const p = slot === "commander" ? cp.commander : cp.officers[slot], title = slot === "commander" ? `${SERVICES[cp.service ?? "land"].formation}\u306E\u6700\u9AD8\u6307\u63EE\u5B98` : OFFICER_SLOTS[slot];
-    const sel = h("select", { "data-slot": slot }, h("option", { value: "" }, pool.length ? "\u5019\u88DC\u304B\u3089\u4EFB\u547D\u2026" : "\u5019\u88DC\u306F\u3044\u307E\u305B\u3093"), ...pool.map((q2) => h("option", { value: q2.id }, personLine(q2))));
-    return h(
-      "div",
-      { class: "pbox" },
-      h("small", {}, title),
-      p ? h("div", { class: "prow" }, face(p.name, st2.id), h("div", {}, h("b", {}, p.name), h("div", { class: "bar2" }, "\u80FD\u529B", bar(p.skill, "#6fa8c9"), h("small", {}, `\u7D4C\u9A13 ${p.xp ?? 0}`)), h("div", { class: "chips" }, ...traitChips(p), h("span", { class: "chip" }, `${FACTION_JA[p.backer] ?? p.backer}\u304C\u652F\u6301`)))) : n2("\uFF08\u7A7A\u304D\uFF09"),
-      h("div", { class: "rowb" }, sel, btn("\u4EFB\u547D", () => {
-        if (sel.value) act({ type: "corps.appoint", stateId: st2.id, corpsId: cp.id, slot, personId: sel.value });
-      }, "", { "data-appoint": slot }), slot !== "commander" && p ? btn("\u89E3\u4EFB", () => act({ type: "corps.dismiss", stateId: st2.id, corpsId: cp.id, slot }), "") : null)
-    );
-  }
-  function corpsDetail(cp, view2, st2) {
-    const c = civ3(), wars = myWars(st2), war = c.wars[cp.warId] ?? wars[0] ?? null, out = h("div", { class: "corpsdetail" });
-    const nm = h("input", { id: "cp-name", value: cp.name, maxlength: 20 });
-    out.append(h("div", { class: "whead" }, h("h2", {}, cp.name), h("div", { class: "sub" }, `\u5175\u529B ${n0(cp.size)}\u30FB\u73FE\u5728\u5730 ${placeOf(cp.at)}\u30FB${orderText(cp)}`)), h("div", { class: "rowb" }, nm, btn("\u6539\u540D", () => act({ type: "corps.rename", stateId: st2.id, corpsId: cp.id, name: nm.value }), "", { id: "cp-rename" })));
-    out.append(h("div", { class: "sub" }, `${SERVICES[cp.service ?? "land"].ja}\u30FB${cp.commander ? rankOf(cp.commander) : ""}\u30FB${cp.comp === "manual" ? "\u624B\u52D5\u306E\u69CB\u6210" : "\u81EA\u52D5\u306E\u69CB\u6210"}`));
-    const fx3 = cp.fx;
-    out.append(h("div", { class: "chips fxs" }, ...[["\u653B\u3081", fx3.off + fx3.skill], ["\u5B88\u308A", fx3.def + fx3.skill], ["\u5305\u56F2", fx3.siege], ["\u88DC\u7D66", fx3.logi], ["\u58EB\u6C17", fx3.coh]].map(([k, v]) => h("span", { class: "chip" + (v < 0 ? " bad" : v > 0 ? " good" : "") }, `${k} ${sgn(v)}`))));
-    out.append(lb("\u6307\u63EE\u5B98\u3068\u526F\u5B98", "COMMAND"), personBox(cp, "commander", st2, view2.pool), ...Object.keys(OFFICER_SLOTS).map((s) => personBox(cp, s, st2, view2.pool)));
-    const kind = h("select", { id: "cp-kind" }, ...Object.entries(ORDER_KINDS).filter(([k]) => cp.service === "air" ? ["auto", "hold", "reserve"].includes(k) : cp.service === "sea" ? ["auto", "hold", "reserve", "defend"].includes(k) : true).map(([k, ja]) => h("option", { value: k, selected: cp.order.kind === k }, ja))), tgt = h("select", { id: "cp-target" }), wsel = h("select", { id: "cp-war" }, ...wars.map((x) => h("option", { value: x.id, selected: x.id === war?.id }, x.name ?? x.id)));
-    const fill = () => {
-      const k = kind.value;
-      tgt.replaceChildren();
-      tgt.disabled = !["march", "siege", "defend", "retreat"].includes(k);
-      if (tgt.disabled) return;
-      const w2 = c.wars[wsel.value] ?? war;
-      const list = targets(st2, cp, k, w2);
-      tgt.append(h("option", { value: "" }, list.length ? "\u76EE\u6A19\u3092\u9078\u3076\u2026" : "\u76EE\u6A19\u306B\u3067\u304D\u308B\u571F\u5730\u304C\u3042\u308A\u307E\u305B\u3093"), ...list.map((t) => h("option", { value: t.id, selected: cp.order.targetGroupId === t.id }, `${t.label}\u30FB\u7D04 ${n0(t.d)} km`)));
-    };
-    kind.addEventListener("change", fill);
-    wsel.addEventListener("change", fill);
-    fill();
-    out.append(
-      lb("\u4F5C\u6226\u306E\u547D\u4EE4", "ORDERS"),
-      n2("\u9032\u8ECD\u306F\u6575\u306E\u571F\u5730\u3078\u3002\u7740\u304F\u3068\u4F5C\u6226\u304C\u59CB\u307E\u308B\u3002\u5305\u56F2\u306F\u57CE\u3084\u90FD\u5E02\u3092\u653B\u3081\u3001\u8907\u6570\u306E\u8ECD\u56E3\u3067\u540C\u3058\u76EE\u6A19\u3092\u5305\u56F2\u3059\u308B\u3068\u901F\u304F\u843D\u3068\u305B\u308B\u3002\u5B88\u5099\u306F\u5473\u65B9\u306E\u571F\u5730\u3067\u8FCE\u3048\u6483\u3064\u3002\u64A4\u9000\u306F\u6226\u308F\u305A\u9000\u304F\u3002\u304A\u4EFB\u305B\u306F\u5F93\u6765\u3069\u304A\u308A\u81EA\u52D5\u3067\u52D5\u304F\u3002"),
-      h("div", { class: "rowb" }, kind, tgt, wars.length ? wsel : null, btn("\u547D\u4EE4\u3059\u308B", () => act({ type: "corps.order", stateId: st2.id, corpsId: cp.id, kind: kind.value, targetGroupId: tgt.disabled ? null : tgt.value || null, warId: wars.length ? wsel.value : null }), "p", { id: "cp-order" }))
-    );
-    const others = view2.list.filter((x) => x.id !== cp.id && x.at === cp.at && x.service === cp.service);
-    out.append(lb("\u90E8\u968A", "UNITS"), ...cp.units.map((u) => {
-      const inp = h("input", { value: u.name, maxlength: 20, "data-unit": u.id }), kinds = Object.entries(UNIT_KINDS).filter(([k, K]) => K.service === cp.service && K.need(st2, ctx())), ks = h("select", {}, h("option", { value: "" }, "\u5175\u7A2E\u3092\u5909\u3048\u308B\u2026"), ...kinds.map(([k, K]) => h("option", { value: k }, K.ja))), to = h("select", {}, h("option", { value: "" }, others.length ? "\u79FB\u3059\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name))), sz = h("input", { type: "number", min: 1, max: Math.floor(u.size), value: Math.max(1, Math.floor(u.size / 2)), style: "width:80px" });
-      return h("div", { class: "unit" }, h("div", { class: "rowb" }, inp, h("b", {}, `${UNIT_KINDS[u.kind]?.ja ?? u.kind} ${n0(u.size)}`), btn("\u6539\u540D", () => act({ type: "corps.renameUnit", stateId: st2.id, corpsId: cp.id, unitId: u.id, name: inp.value }))), h("div", { class: "rowb" }, ks, btn("\u518D\u8A13\u7DF4", () => {
-        if (ks.value) act({ type: "corps.convert", stateId: st2.id, corpsId: cp.id, unitId: u.id, toKind: ks.value });
-      }), to, sz, btn("\u5175\u3092\u79FB\u3059", () => {
-        if (to.value) act({ type: "corps.transfer", stateId: st2.id, from: cp.id, to: to.value, unitId: u.id, size: Number(sz.value) });
-      })));
-    }));
-    {
-      const avail = Object.entries(UNIT_KINDS).filter(([k, K]) => K.service === cp.service && K.need(st2, ctx())), val = Object.fromEntries(avail.map(([k]) => [k, Math.round(cp.units.find((u) => u.kind === k)?.size ?? 0)])), inps = {}, wt = h("input", { id: "cp-weight", type: "number", min: 0.2, max: 5, step: 0.1, value: cp.weight ?? 1, style: "width:70px" });
-      out.append(
-        lb("\u69CB\u6210\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09", "COMPOSITION"),
-        n2(cp.comp === "manual" ? "\u624B\u52D5\u3067\u3059\u3002\u56FD\u5BB6\u306E\u4EBA\u6570\uFF08\u8ECD\u5236\uFF09\u3092\u8D85\u3048\u308B\u5175\u7A2E\u306F\u3001\u6BD4\u4F8B\u3057\u3066\u7E2E\u307F\u307E\u3059\u3002" : "\u81EA\u52D5\u3067\u3059\u3002\u56FD\u5BB6\u306E\u4EBA\u6570\u3092\u3001\u3053\u306E\u8ECD\u306E\u81EA\u52D5\u306E\u90E8\u968A\u306B\u91CD\u307F\u3067\u5206\u3051\u3066\u3044\u307E\u3059\u3002"),
-        ...avail.map(([k, K]) => {
-          const i = h("input", { type: "number", min: 0, step: 50, value: val[k], "data-comp": k, style: "width:100px", oninput: (e) => {
-            val[k] = Math.max(0, Math.round(Number(e.target.value) || 0));
-          } });
-          inps[k] = i;
-          const it = itemsOf(k, val[k]);
-          return h("div", { class: "slrow" }, h("span", { class: "nm", title: K.hint }, K.ja), i, h("small", {}, K.per ? `1${K.item}\u2252${K.per}\u4EBA${it ? `\u30FB\u4ECA \u7D04${it}${K.item}` : ""}` : ""));
-        }),
-        h("div", { class: "rowb" }, btn("\u3053\u306E\u69CB\u6210\u306B\u3059\u308B\uFF08\u624B\u52D5\uFF09", () => {
-          const hs = {};
-          for (const k in val) if (val[k] > 0) hs[k] = val[k];
-          act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: "manual", heads: hs });
-        }, "p", { id: "cp-comp" }), btn("\u81EA\u52D5\u306B\u623B\u3059", () => act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: "auto" }), "", { id: "cp-comp-auto" }), h("small", {}, "\u81EA\u52D5\u306E\u3068\u304D\u306E\u91CD\u307F"), wt, btn("\u91CD\u307F\u3092\u5909\u3048\u308B", () => act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: cp.comp === "manual" ? "manual" : "auto", heads: cp.comp === "manual" ? cp.manual : void 0, weight: Number(wt.value) }), "", { id: "cp-weight-set" }))
-      );
-    }
-    const sname = h("input", { id: "cp-split-name", placeholder: "\u65B0\u3057\u3044\u90E8\u968A\u306E\u540D\u524D", maxlength: 20 }), frac = h("input", { id: "cp-split-frac", type: "range", min: 0.1, max: 0.9, step: 0.05, value: 0.4 }), pc = h("select", { id: "cp-split-cmd" }, h("option", { value: "" }, "\u6307\u63EE\u5B98\u306E\u5019\u88DC\u2026"), ...view2.pool.filter((q2) => (q2.service ?? "land") === (cp.service ?? "land")).map((q2) => h("option", { value: q2.id }, personLine(q2)))), into = h("select", { id: "cp-merge-into" }, h("option", { value: "" }, others.length ? "\u7D71\u5408\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name)));
-    out.append(
-      lb("\u7DE8\u6210", "ORGANIZE"),
-      n2(`\u8ECD\u56E3\u306F ${view2.max} \u307E\u3067\u3002\u5206\u3051\u308B\u3068\u304D\u306F\u3001\u65B0\u3057\u3044\u8ECD\u56E3\u306E\u6307\u63EE\u5B98\u3092\u5019\u88DC\u304B\u3089\u9078\u3076\uFF08\u8CBB\u7528\uFF1A\u5175\u529B\u306E 0.1% \xD7 \u5272\u5408\uFF09\u3002`),
-      h("div", { class: "rowb" }, sname, h("small", {}, "\u5272\u5408"), frac, pc, btn("\u8ECD\u56E3\u3092\u5206\u3051\u308B", () => act({ type: "corps.split", stateId: st2.id, corpsId: cp.id, name: sname.value, fraction: Number(frac.value), commanderId: pc.value }), "", { id: "cp-split" })),
-      h("div", { class: "rowb" }, into, btn("\u3053\u306E\u8ECD\u56E3\u3092\u7D71\u5408\u3059\u308B", () => {
-        if (into.value) {
-          S2.corpsSel = into.value;
-          act({ type: "corps.merge", stateId: st2.id, from: cp.id, into: into.value });
-        }
-      }, "", { id: "cp-merge" }))
-    );
-    return out;
-  }
-  function pMilitary() {
-    const c = civ3(), cs = controlled(), box = h("div", {}, h("div", { class: "code" }, "MILITARY"), h("h2", {}, "\u8ECD"));
-    if (!cs) {
-      box.append(n2("\u62C5\u5F53\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u56FD\u5BB6\u3092\u62C5\u5F53\u3059\u308B\u3068\u3001\u8ECD\u56E3\u3092\u7387\u3044\u3066\u6226\u3048\u307E\u3059\u3002"));
-      return box;
-    }
-    const st2 = c.states[cs];
-    const view2 = corpsView(ctx(), st2);
-    if (!view2) {
-      box.append(n2("\u8ECD\u56E3\u3092\u7DE8\u6210\u3057\u3066\u3044\u307E\u3059\u2026"));
-      setTimeout(() => {
-        if (controlled() === cs && !c.states[cs].corps) act({ type: "corps.refresh", stateId: cs });
-      }, 0);
-      return box;
-    }
-    const sel = view2.list.find((x) => x.id === S2.corpsSel);
-    if (sel) S2.full = { key: "corps", title: sel.name, build: () => corpsDetail(sel, corpsView(ctx(), c.states[cs]), c.states[cs]), onClose: () => {
-      S2.corpsSel = null;
-      S2.map?.draw();
-    } };
-    const wars = myWars(st2), H2 = view2.heads;
-    box.append(n2(`\u9678 ${n0(H2.land)}\u30FB\u6D77 ${n0(H2.sea)}\u30FB\u7A7A ${n0(H2.air)} \u4EBA\uFF08\u90E8\u968A ${view2.list.length} / ${view2.max}\uFF09\u30FB\u6226\u4E89\u4E2D ${wars.length} \u4EF6`), n2("\u9678\u30FB\u6D77\u30FB\u7A7A\u306E 3 \u8ECD\u3002\u90E8\u968A\u3092\u9078\u3076\u3068\u3001\u6307\u63EE\u5B98\u306E\u4EBA\u4E8B\u30FB\u69CB\u6210\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09\u30FB\u4F5C\u6226\u306E\u547D\u4EE4\u304C\u3067\u304D\u307E\u3059\u3002\u547D\u4EE4\u304C\u306A\u3051\u308C\u3070\u3001\u90E8\u968A\u306F\u81EA\u52D5\u3067\u52D5\u304D\u307E\u3059\u3002\u7A7A\u8ECD\u306E\u90E8\u968A\u306F\u3001\u9678\u3068\u6D77\u306E\u6226\u3044\u3092\u652F\u3048\u307E\u3059\uFF08\u5236\u7A7A\u6A29\uFF09\u3002"));
-    box.append(lb("\u7DCF\u53F8\u4EE4\u5B98", "COMMANDERS-IN-CHIEF"), ...SERVICE_KEYS.filter((k) => view2.usable[k]).map((k) => {
-      const ch = view2.chiefs[k], pool = view2.pool.filter((q2) => (q2.service ?? "land") === k), sel2 = h("select", { "data-chief": k }, h("option", { value: "" }, pool.length ? "\u5019\u88DC\u304B\u3089\u4EFB\u547D\u2026" : "\u5019\u88DC\u306F\u3044\u307E\u305B\u3093"), ...pool.map((q2) => h("option", { value: q2.id }, personLine(q2))));
-      return h("div", { class: "pbox" }, h("small", { style: `color:${SERVICES[k].color}` }, SERVICES[k].chief), ch ? h("div", {}, h("b", {}, `${ch.rank} ${ch.name}`), h("div", { class: "chips" }, ...traitChips(ch), h("span", { class: "chip" }, `\u80FD\u529B ${Math.round(ch.skill * 100)}`))) : n2("\uFF08\u7A7A\u304D\uFF09\u3000\u7DCF\u53F8\u4EE4\u5B98\u306F\u3001\u305D\u306E\u8ECD\u306E\u5168\u90E8\u968A\u306B\u5C0F\u3055\u304F\u52B9\u304D\u307E\u3059\u3002"), h("div", { class: "rowb" }, sel2, btn("\u4EFB\u547D", () => {
-        if (sel2.value) act({ type: "corps.appointChief", stateId: st2.id, service: k, personId: sel2.value });
-      }, "", { "data-appoint-chief": k }), ch ? btn("\u89E3\u4EFB", () => act({ type: "corps.dismissChief", stateId: st2.id, service: k }), "") : null));
-    }));
-    for (const svc of SERVICE_KEYS) {
-      const fl = view2.list.filter((x) => x.service === svc);
-      if (!fl.length) continue;
-      box.append(lb(SERVICES[svc].ja, SERVICES[svc].formation.toUpperCase()), h("div", { class: "corpslist" }, ...fl.map((cp) => h(
-        "button",
-        { class: "corpsrow" + (S2.corpsSel === cp.id ? " on" : ""), "data-corps": cp.id, onclick: () => {
-          S2.corpsSel = cp.id;
-          S2.hooks.panel();
-          S2.hooks.mapOnly?.();
-          const g = c.groups[cp.at];
-          if (g) S2.hooks.focusCell?.(g.cell);
-        } },
-        h("div", { class: "cr1" }, h("b", {}, cp.name), h("span", {}, `${n0(cp.size)} \u4EBA`)),
-        h("div", { class: "cr2" }, `${cp.rank ?? ""} ${cp.commander.name}\uFF08\u80FD\u529B${Math.round(cp.commander.skill * 100)}\uFF09\u30FB${placeOf(cp.at)}`),
-        h("div", { class: "cr3" }, orderText(cp)),
-        h("div", { class: "chips" }, ...traitChips(cp.commander))
-      ))));
-    }
-    void pct;
-    return box;
-  }
-  function corpsMarkers() {
-    const cs = controlled();
-    if (!cs) return [];
-    const st2 = civ3().states[cs], view2 = st2 ? corpsView(ctx(), st2) : null;
-    if (!view2) return [];
-    const col = colorOf(cs, 60);
-    return view2.list.map((cp, i) => {
-      const g = civ3().groups[cp.at];
-      if (!g) return null;
-      const sel = S2.corpsSel === cp.id;
-      return { cell: g.cell, label: String(i + 1), color: col, sel, route: sel ? (cp.order.route ?? []).map((id) => civ3().groups[id]?.cell).filter((x) => x != null) : [], target: sel && cp.order.targetGroupId ? civ3().groups[cp.order.targetGroupId]?.cell : null };
-    }).filter(Boolean);
   }
 
   // js/ui/v6/alliance.js
@@ -16080,9 +15607,9 @@ ${shown}${more}`;
   }
 
   // js/ui/v6/diplo.js
-  var civ4 = () => S2.w.civ;
-  var date2 = (mi) => formatWorldDate(S2.w, mi);
-  var yr = (mi) => date2(mi).split("\u6708")[0] + "\u6708";
+  var civ = () => S2.w.civ;
+  var date = (mi) => formatWorldDate(S2.w, mi);
+  var yr = (mi) => date(mi).split("\u6708")[0] + "\u6708";
   var CATC = { mil: "#6fa8c9", dep: "#a58bd0", eco: "#d8b45a", land: "#7fc4b0", dyn: "#d68fa8" };
   var WARC = "#d0605a";
   var SANC = "#a58bd0";
@@ -16090,7 +15617,7 @@ ${shown}${more}`;
   var tja = (type) => TREATY[type]?.ja ?? type;
   var relCol = (v) => v >= 40 ? "#6fa8c9" : v >= 10 ? "#9fbf8a" : v > -10 ? "#6a6f78" : v > -40 ? "#d8b45a" : "#d0605a";
   var peaceKey = (p) => `${p.warId}|${p.at}|${p.from}`;
-  var peacesOf = () => proposalsOf(civ4()).filter((p) => p.kind === "peace" && p.status === "accepted").sort((x, y) => y.at - x.at);
+  var peacesOf = () => proposalsOf(civ()).filter((p) => p.kind === "peace" && p.status === "accepted").sort((x, y) => y.at - x.at);
   var peaceName = (p) => p.name ?? "\u8B1B\u548C\u6761\u7D04";
   var tabs = () => [["rel", "\u95A2\u4FC2"], ["pact", "\u76DF\u7D04"], ["peace", "\u8B1B\u548C\u6761\u7D04"]];
   var hov = (id) => ({ onmouseenter: () => {
@@ -16131,7 +15658,7 @@ ${shown}${more}`;
     return sec;
   }
   function relTab() {
-    const c = civ4(), me = controlled(), pick3 = S2.dip?.b;
+    const c = civ(), me = controlled(), pick3 = S2.dip?.b;
     if (pick3 && c.states[pick3]) return pairView(me ?? S2.dip.a ?? aliveStates2().sort((a, b) => b.pop - a.pop)[0]?.id, pick3);
     const base = c.states[me] ?? aliveStates2().sort((a, b) => b.pop - a.pop)[0];
     if (!base) return h("p", { class: "n" }, "\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093");
@@ -16191,7 +15718,7 @@ ${shown}${more}`;
     return box;
   }
   function pairView(aId, bId) {
-    const c = civ4(), A2 = c.states[aId], B = c.states[bId], me = controlled() === aId, v = Math.round(A2.relations[bId] ?? 0), war = atWarWith(c, A2, B), mi = c.monthIndex;
+    const c = civ(), A2 = c.states[aId], B = c.states[bId], me = controlled() === aId, v = Math.round(A2.relations[bId] ?? 0), war = atWarWith(c, A2, B), mi = c.monthIndex;
     const act0 = Object.values(c.treaties).filter((t) => t.active && (t.a === A2.id && t.b === B.id || t.a === B.id && t.b === A2.id));
     const out = h(
       "div",
@@ -16239,7 +15766,7 @@ ${shown}${more}`;
   }
   function pactTab() {
     var _a;
-    const c = civ4(), me = controlled(), list = listPacts(c).sort((a, b) => b.members.length - a.members.length), root2 = h("div", {});
+    const c = civ(), me = controlled(), list = listPacts(c).sort((a, b) => b.members.length - a.members.length), root2 = h("div", {});
     const S22 = (_a = S2).pact ?? (_a.pact = { purpose: "defense", members: [], target: "" });
     if (me && c.states[me]) {
       const base = c.states[me], cand3 = aliveStates2().filter((s) => s.id !== me).sort((a, b) => (base.relations[b.id] ?? 0) - (base.relations[a.id] ?? 0)).slice(0, 36);
@@ -16279,7 +15806,7 @@ ${shown}${more}`;
     return root2;
   }
   function peaceTab() {
-    const c = civ4(), list = peacesOf(), sel = list.find((p) => peaceKey(p) === S2.peaceSel);
+    const c = civ(), list = peacesOf(), sel = list.find((p) => peaceKey(p) === S2.peaceSel);
     if (sel) {
       const w = c.wars[sel.warId], terms = sel.terms?.kind === "reparations" ? `\u8CE0\u511F\u91D1 ${n0(sel.terms.paid ?? sel.terms.amount)}` : sel.terms?.kind === "cession" ? "\u5360\u9818\u5730\u306E\u5272\u8B72" : "\u767D\u7D19\u8B1B\u548C\uFF08\u4E92\u3044\u306B\u9818\u571F\u306F\u52D5\u304B\u306A\u3044\uFF09";
       return h(
@@ -16304,6 +15831,962 @@ ${shown}${more}`;
       S2.peaceSel = peaceKey(p);
       S2.hooks.panel();
     } }, icon("scroll", 18), h("span", { class: "nm" }, peaceName(p)), h("small", {}, yr(p.at)))));
+  }
+
+  // js/ui/v6/nation.js
+  var civ2 = () => S2.w.civ;
+  var KIND_COL = { infantry: "#9fbf8a", ranged: "#d8b45a", cavalry: "#c99a6f", navy: "#6fa8c9", garrison: "#8fb3b0", firearms: "#d0605a" };
+  var KIND_ICON = { infantry: "shield", ranged: "bow", cavalry: "horse", navy: "ship", garrison: "tower", firearms: "gun" };
+  var can$ = (st2, mine) => st2.alive && (mine || !controlled());
+  var doit = (mine, c) => mine ? act(c) : creator(c);
+  var yearOf = (mi) => formatWorldDate(S2.w, mi).split("\u5E74")[0] + "\u5E74";
+  var hashCol = (s, l = 58) => {
+    let k = 7;
+    for (const ch of String(s)) k = k * 31 + ch.charCodeAt(0) | 0;
+    return `hsl(${Math.abs(k) % 360} 45% ${l}%)`;
+  };
+  function nationHero(st2, mine) {
+    return h("div", { class: "hero slim" }, h(
+      "div",
+      { class: "hrow" },
+      flag(st2.id, 48),
+      h("div", { class: "hname" }, h("h3", {}, st2.name), h("div", { class: "sub" }, `${regimeJa(st2)}${st2.alive ? "" : "\u30FB\u6EC5\u4EA1"}`)),
+      mine ? btn("\u62C5\u5F53\u3092\u89E3\u9664", () => {
+        run({ type: "control.release" });
+        S2.hooks.render();
+      }, "p", { id: "release" }) : btn("\u3053\u306E\u56FD\u3092\u62C5\u5F53\u3059\u308B", () => {
+        run({ type: "control.take", stateId: st2.id });
+        S2.hooks.render();
+      }, "p", { id: "take", disabled: !st2.alive })
+    ));
+  }
+  var pips = (n3, max = 4, col = "#d0605a") => h("span", { class: "pips" }, ...Array.from({ length: max }, (_, i) => h("i", { class: i < n3 ? "on" : "", style: i < n3 ? `background:${col}` : "" })));
+  var costChips = (cost) => h("div", { class: "costs" }, cost.legit ? h("span", { class: "cc", title: "\u6B63\u7D71\u6027\u304C\u4E0B\u304C\u308B\uFF08\u6642\u9593\u3068\u3068\u3082\u306B\u623B\u308B\uFF09" }, icon("crown", 16, "#a58bd0"), `\u2212${Math.round(cost.legit * 100)}%`, h("small", {}, `${cost.years}\u5E74\u3067\u623B\u308B`)) : null, cost.stab ? h("span", { class: "cc", title: "\u5B89\u5B9A\u5EA6\u304C\u4E0B\u304C\u308B" }, icon("shield", 16, "#d0605a"), `\u2212${Math.round(cost.stab * 100)}%`) : null, cost.fac ? h("span", { class: "cc", title: "\u52E2\u529B\u306E\u652F\u6301\u304C\u4E0B\u304C\u308B" }, icon("pop", 16, "#d8b45a"), `\u2212${Math.round(cost.fac * 100)}%`) : null, cost.count ? h("span", { class: "cc rep", title: "\u76F4\u8FD1 60 \u5E74\u306E\u540C\u3058\u7A2E\u985E\u306E\u5909\u66F4" }, `${cost.count}\u56DE\u76EE`) : null);
+  var edBtn = (st2, kind, can2, label) => can2 ? h("button", { class: "ed", title: label, "data-edit": kind, onclick: () => {
+    S2.edit = { id: st2.id, kind, salt: 0 };
+    S2.hooks.panel();
+  } }, "\u270E") : null;
+  function compOf(st2) {
+    const c = civ2(), out = { culture: {}, religion: {}, language: {} };
+    let tot = 0;
+    for (const id in c.groups) {
+      const g = c.groups[id];
+      if (g.stateId !== st2.id) continue;
+      for (const co of g.cohorts ?? []) {
+        const n3 = g.pop * co.share;
+        tot += n3;
+        out.culture[co.cultureId] = (out.culture[co.cultureId] ?? 0) + n3;
+        const r = co.religionId ?? "none";
+        out.religion[r] = (out.religion[r] ?? 0) + n3;
+        out.language[co.languageId] = (out.language[co.languageId] ?? 0) + n3;
+      }
+    }
+    return { out, tot: tot || 1 };
+  }
+  function compBlock(ic, ja, map, tot, nameOf) {
+    const rows = Object.entries(map).map(([id, n3]) => ({ id, n: n3, f: n3 / tot })).sort((a, b) => b.n - a.n), top = rows.slice(0, 3), rest = rows.slice(3), small = rest.filter((x) => x.f >= 0.01).slice(0, 6), other2 = rest.reduce((a, x) => a + x.f, 0) - small.reduce((a, x) => a + x.f, 0);
+    return h(
+      "div",
+      { class: "comp", "data-comp": ja },
+      h("div", { class: "comph" }, icon(ic, 18), h("b", {}, ja)),
+      h("div", { class: "ccards" }, ...top.map((x) => h("div", { class: "ccard", title: `${nameOf(x.id)} ${(x.f * 100).toFixed(1)}%`, style: `--c:${hashCol(x.id)}` }, h("i", { class: "cfill", style: `height:${Math.max(6, x.f * 100)}%` }), h("b", {}, nameOf(x.id)), h("span", {}, Math.round(x.f * 100) + "%")))),
+      small.length || other2 > 5e-3 ? h("div", { class: "cbadges" }, ...small.map((x) => h("span", { class: "cbadge", title: `${nameOf(x.id)} ${(x.f * 100).toFixed(1)}%`, style: `--c:${hashCol(x.id)}` }, nameOf(x.id))), other2 > 5e-3 ? h("span", { class: "cbadge o", title: "\u305D\u306E\u4ED6" }, `\u305D\u306E\u4ED6 ${Math.round(other2 * 100)}%`) : null) : null
+    );
+  }
+  var mood = (s, col, r) => {
+    const mouth = s > 0.6 ? `M${-r * 0.4} ${r * 0.25}Q0 ${r * 0.6} ${r * 0.4} ${r * 0.25}` : s < 0.35 ? `M${-r * 0.4} ${r * 0.5}Q0 ${r * 0.1} ${r * 0.4} ${r * 0.5}` : `M${-r * 0.35} ${r * 0.38}H${r * 0.35}`;
+    return `<circle r="${r}" fill="${col}" fill-opacity=".92" stroke="#0d1214" stroke-width="1.5"/><circle cx="${-r * 0.33}" cy="${-r * 0.22}" r="${r * 0.1}" fill="#14181d"/><circle cx="${r * 0.33}" cy="${-r * 0.22}" r="${r * 0.1}" fill="#14181d"/><path d="${mouth}" stroke="#14181d" stroke-width="${Math.max(1.2, r * 0.1)}" fill="none" stroke-linecap="round"/>`;
+  };
+  function roundtable(rows) {
+    const n3 = rows.length || 1, svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 260 260");
+    svg.setAttribute("class", "rtable");
+    let g = `<circle cx="130" cy="130" r="112" fill="#141a20" stroke="#2c343d"/><circle cx="130" cy="130" r="70" fill="none" stroke="#2c343d" stroke-dasharray="3 5"/><circle cx="130" cy="130" r="30" fill="#2a2418" stroke="#d8b45a" stroke-width="2"/><g transform="translate(118 118) scale(1)" fill="none" stroke="#d8b45a" stroke-width="1.6" stroke-linejoin="round"><path d="M3 8l4 4 5-7 5 7 4-4-2 11H5z" transform="scale(.9)"/></g>`;
+    rows.forEach(([k, v], i) => {
+      const a = i / n3 * Math.PI * 2 - Math.PI / 2, d = 52 + (1 - v.support) * 52, r = 11 + Math.min(1, v.influence * 2.2) * 11, x = 130 + Math.cos(a) * d, y = 130 + Math.sin(a) * d;
+      g += `<g transform="translate(${x.toFixed(1)} ${y.toFixed(1)})"><title>${FACTION_JA[k] ?? k}\u3000\u5F71\u97FF ${Math.round(v.influence * 100)}%\u3000\u652F\u6301 ${Math.round(v.support * 100)}%</title>${mood(v.support, FACTION_COL[k] ?? "#6fa8c9", r)}<text y="${r + 11}" text-anchor="middle" font-size="11" fill="#c9cfd6">${FACTION_JA[k] ?? k}</text></g>`;
+    });
+    svg.innerHTML = g;
+    return svg;
+  }
+  function factionsView(st2) {
+    const P3 = st2.politics;
+    if (!P3) return null;
+    const rows = Object.entries(P3.factions ?? {}), her = REGIMES[regimeOf(st2)].heredity;
+    const legend = h("div", { class: "facs" }, ...rows.map(([k, v]) => h("div", { class: "fac", title: `\u5F71\u97FF ${pct(v.influence)}\u30FB\u652F\u6301 ${pct(v.support)}` }, h("i", { style: `background:${FACTION_COL[k] ?? "#6fa8c9"}` }), h("span", {}, FACTION_JA[k] ?? k), h("span", { class: "barv" }, h("i", { style: `width:${v.support * 100}%;background:${v.support < 0.35 ? "#d0605a" : FACTION_COL[k] ?? "#6fa8c9"}` })))));
+    const wrap = h("div", { class: "facview", id: "factions" }, lb("\u652F\u6301\u52E2\u529B", "FACTIONS"));
+    if (her) wrap.append(h("div", { class: "rtw" }, roundtable(rows), legend));
+    else {
+      const hm = hemi(rows.map(([k, v]) => [k, v.influence]), rows.map(([k]) => FACTION_COL[k] ?? "#6fa8c9"));
+      wrap.append(h("div", { class: "rtw" }, hm, legend));
+    }
+    return wrap;
+  }
+  function tInfoV(st2, mine) {
+    const c = civ2(), L = st2.leader, P3 = st2.politics, can2 = can$(st2, mine), leg = P3 ? effective(c, st2, "legitimacy") : 0, out = h("div", { class: "info" });
+    if (S2.edit?.id === st2.id) openEditor(st2, mine);
+    const sh = shockLeft(st2, c.monthIndex);
+    out.append(h(
+      "div",
+      { class: "idcard" },
+      h("div", { class: "idflag" }, can2 ? h("button", { class: "flagbtn", "data-edit": "flag", title: "\u56FD\u65D7\u3092\u5909\u3048\u308B", onclick: () => {
+        S2.edit = { id: st2.id, kind: "flag", spec: normalizeFlag(flagOfState(st2)) };
+        S2.hooks.panel();
+      } }, flag(st2.id, 120)) : flag(st2.id, 120)),
+      h("div", { class: "idtxt" }, h("div", { class: "idn" }, h("h3", {}, st2.name), edBtn(st2, "name", can2, "\u56FD\u540D\u3092\u5909\u3048\u308B")), h("div", { class: "idr" }, icon("crown", 16), h("b", {}, regimeJa(st2)), edBtn(st2, "regime", can2, "\u653F\u4F53\u3092\u5909\u3048\u308B")), h("small", { class: "dim" }, `\u6210\u7ACB ${yearOf(st2.formedAt)}`)),
+      h("div", { class: "idleader" }, face(L?.name ?? "\u2014", st2.id, L?.look ?? null), h("div", {}, h("small", {}, L?.title ?? "\u70BA\u653F\u8005"), h("b", {}, L?.name ?? "\u2014"), edBtn(st2, "leader", can2, "\u6307\u5C0E\u8005\u3092\u66FF\u3048\u308B")))
+    ));
+    if (sh.length) out.append(h("div", { class: "shocks", title: "\u56FD\u540D\u30FB\u653F\u4F53\u30FB\u6307\u5C0E\u8005\u30FB\u56FD\u65D7\u306E\u5909\u66F4\u306E\u4EE3\u511F" }, icon("crown", 16, "#a58bd0"), ...sh.map((x) => h("span", { class: "chip bad" }, `\u6B63\u7D71\u6027 \u2212${Math.max(1, Math.round(x.legit * 100))}%\u30FB\u3042\u3068${x.left}\u5E74`))));
+    out.append(h(
+      "div",
+      { class: "metrics" },
+      metric("pop", "\u4EBA\u53E3", n0(st2.pop)),
+      metric("coin", "\u56FD\u5EAB", n0(st2.treasury), { color: "#d8b45a" }),
+      metric("gear", "\u7523\u696D\u529B", n0(effective(c, st2, "industry"))),
+      metric("sword", "\u8ECD\u4E8B\u529B", n0(st2.army), { color: "#d0605a", title: `\u8ECD\u4E8B\u80FD\u529B ${(st2.milBonus >= 0 ? "+" : "") + pct(st2.milBonus ?? 0)}` }),
+      metric("shield", "\u5B89\u5B9A\u5EA6", pct(st2.stability), { bar: st2.stability, color: st2.stability < 0.35 ? "#d0605a" : "#9fbf8a" }),
+      metric("crown", "\u6B63\u7D71\u6027", pct(leg), { bar: leg, color: "#a58bd0" })
+    ));
+    const { out: cp, tot } = compOf(st2);
+    out.append(h("div", { class: "comps" }, compBlock("book", "\u6587\u5316", cp.culture, tot, (id) => c.cultures[id]?.name ?? "\u2014"), compBlock("temple", "\u5B97\u6559", cp.religion, tot, (id) => id === "none" ? "\u7121\u5B97\u6559" : c.religions[id]?.name ?? "\u2014"), compBlock("scroll", "\u8A00\u8A9E", cp.language, tot, (id) => c.languages[id]?.name ?? "\u2014")));
+    const fv = factionsView(st2);
+    if (fv) out.append(fv);
+    return out;
+  }
+  function openEditor(st2, mine) {
+    const E = S2.edit, ctx2 = S2.w.sim.ctx, mi = civ2().monthIndex, titles = { name: "\u56FD\u540D\u3092\u5909\u3048\u308B", regime: "\u653F\u4F53\u3092\u5909\u3048\u308B", leader: "\u6307\u5C0E\u8005\u3092\u66FF\u3048\u308B", flag: "\u56FD\u65D7\u3092\u5909\u3048\u308B" };
+    const build = () => ({ name: nameEd, regime: regimeEd, leader: leaderEd, flag: flagEd })[E.kind](st2, mine, ctx2, mi, E);
+    S2.full = { key: "nedit", title: `${st2.name} \u30FB ${titles[E.kind]}`, build, onClose: () => {
+      S2.edit = null;
+    } };
+  }
+  var redo = () => S2.hooks.panel();
+  function nameEd(st2, mine, ctx2, mi, E) {
+    const cost = changeCost(st2, mi, "name"), inp = h("input", { id: "ed-name", class: "bigin", value: E.name ?? st2.name, maxlength: 30, oninput: (e) => {
+      E.name = e.target.value;
+    } });
+    const roll = () => {
+      const g = civ2().groups[st2.capitalGroupId] ?? Object.values(civ2().groups)[0], core = REGIMES[regimeOf(st2)].core;
+      for (let k = 0; k < 14; k++) {
+        try {
+          const p = ctx2.nameGen?.stateParts?.(civ2(), g, "city_state", Math.random, core);
+          if (p?.base) {
+            const nm = composeStateName(p.base, core, "city_state", civ2().date.year, p.sfx ?? "");
+            if (nm !== st2.name && !Object.values(civ2().states).some((x) => x.alive && x.name === nm)) {
+              E.name = nm;
+              inp.value = nm;
+              return;
+            }
+          }
+        } catch {
+        }
+      }
+    };
+    return h("div", { class: "edpage" }, h("div", { class: "dicefield big" }, inp, dieBtn(roll, { id: "ed-dice-name" })), costChips(cost), h("div", { class: "rowb" }, btn("\u56FD\u540D\u3092\u6539\u3081\u308B", () => {
+      const r = doit(mine, { type: "state.rename", stateId: st2.id, name: (E.name ?? st2.name).trim() });
+      if (r.ok) {
+        S2.edit = null;
+        S2.full = null;
+        S2.hooks.render();
+      }
+    }, "p", { id: "ed-go" })));
+  }
+  function regimeEd(st2, mine, ctx2, mi, E) {
+    const opts = playerRegimeOptions(ctx2, st2).sort((a, b) => a.scale - b.scale);
+    if (!opts.length) return h("div", { class: "edpage" }, h("small", { class: "dim" }, "\u3044\u307E\u79FB\u308C\u308B\u653F\u4F53\u306F\u3042\u308A\u307E\u305B\u3093"));
+    const sel = opts.find((x) => x.id === E.to) ?? null, cost = sel ? changeCost(st2, mi, "regime", { scale: sel.scale, crossFamily: sel.scale > 0.3 }) : null;
+    return h(
+      "div",
+      { class: "edpage" },
+      h("div", { class: "rgrid" }, ...opts.map((o) => h("button", { class: "rcard" + (sel?.id === o.id ? " on" : ""), "data-regime": o.id, onclick: () => {
+        E.to = o.id;
+        redo();
+      } }, h("b", {}, REGIMES[o.id].ja), pips(o.scale < 0.2 ? 1 : o.scale < 0.45 ? 2 : o.scale < 0.7 ? 3 : 4), h("small", {}, `\u5143\u9996 ${REGIMES[o.id].heredity ? "\u4E16\u8972" : "\u9078\u51FA"}`)))),
+      cost ? costChips(cost) : null,
+      h("div", { class: "rowb" }, btn("\u653F\u4F53\u3092\u79FB\u3059", () => {
+        const r = doit(mine, { type: "state.setRegime", stateId: st2.id, regime: sel.id });
+        if (r.ok) {
+          S2.edit = null;
+          S2.full = null;
+          S2.hooks.render();
+        }
+      }, "p", { id: "ed-go", disabled: !sel }))
+    );
+  }
+  function leaderEd(st2, mine, ctx2, mi, E) {
+    E.mode ?? (E.mode = "abdicate");
+    const cands = leaderCandidates(ctx2, st2, 4, String(E.salt ?? 0)), cur = E.pick != null ? cands[E.pick] : null, cost = changeCost(st2, mi, "leader", { mode: E.mode });
+    return h(
+      "div",
+      { class: "edpage" },
+      h("div", { class: "modes" }, ...["abdicate", "depose"].map((m) => h("button", { class: "mode" + (E.mode === m ? " on" : ""), "data-mode": m, onclick: () => {
+        E.mode = m;
+        redo();
+      } }, LEADER_MODES[m]))),
+      h("div", { class: "wcands" }, ...cands.map((cd, i) => h("button", { class: "wcand" + (E.pick === i ? " on" : ""), "data-cand": i, onclick: () => {
+        E.pick = i;
+        redo();
+      } }, face(cd.name, st2.id, cd.look), h("b", {}, cd.name), h("small", {}, `${cd.age}\u6B73\u30FB${cd.origin}`), h("div", { class: "chips" }, ...cd.traits.map((k) => h("span", { class: "chip" }, LEADER_TRAITS[k] ?? k))))), dieBtn(() => {
+        E.salt = (E.salt ?? 0) + 1;
+        E.pick = null;
+        redo();
+      }, { id: "ed-dice-cands", class: "die big" })),
+      costChips(cost),
+      h("div", { class: "rowb" }, btn("\u66FF\u3048\u308B", () => {
+        const r = doit(mine, { type: "state.changeLeader", stateId: st2.id, mode: E.mode, cand: cur });
+        if (r.ok) {
+          S2.edit = null;
+          S2.full = null;
+          S2.hooks.render();
+        }
+      }, "p", { id: "ed-go", disabled: !cur }))
+    );
+  }
+  var COLS2 = Object.keys(FLAG_COLORS);
+  function flagEd(st2, mine, ctx2, mi, E) {
+    const spec = E.spec = normalizeFlag(E.spec ?? flagOfState(st2)), cost = changeCost(st2, mi, "flag"), set = (fn) => {
+      fn(spec);
+      E.spec = normalizeFlag(spec);
+      redo();
+    };
+    const sw = (cur, on, id) => h("div", { class: "swrow", id }, ...COLS2.map((k) => h("button", { class: "sw2" + (cur === k ? " on" : ""), style: `background:${FLAG_COLORS[k]}`, title: k, onclick: () => on(k) })));
+    const kinds = h("div", { class: "kgrid" }, ...FLAG_FIELDS.map((f2) => h("button", { class: "kc" + (spec.field.kind === f2.kind ? " on" : ""), title: f2.ja, onclick: () => set((s) => {
+      s.field = { kind: f2.kind, c: s.field.c };
+    }) }, flagEl({ field: { kind: f2.kind, c: ["blue", "white", "red"].slice(0, f2.n) }, charge: null }, 54))));
+    const charges = h("div", { class: "kgrid" }, ...FLAG_CHARGES.map((f2) => h("button", { class: "kc" + ((spec.charge?.kind ?? "none") === f2.kind ? " on" : ""), title: f2.ja, onclick: () => set((s) => {
+      s.charge = f2.kind === "none" ? null : { kind: f2.kind, c: s.charge?.c ?? "white", size: s.charge?.size ?? 1 };
+    }) }, f2.kind === "none" ? h("small", {}, "\u306A\u3057") : flagEl({ field: { kind: "plain", c: ["blue"] }, charge: { kind: f2.kind, c: "white", size: 1 } }, 54))));
+    return h(
+      "div",
+      { class: "edpage flagpage" },
+      h("div", { class: "fbig" }, flagEl(spec, 360), dieBtn(() => {
+        E.spec = normalizeFlag(randomFlag(Math.random, Math.floor(Math.random() * FLAG_BIAS_COUNT)));
+        redo();
+      }, { id: "ed-dice-flag", class: "die big" })),
+      h(
+        "div",
+        { class: "fctl" },
+        h("div", { class: "lb" }, "\u56F3\u5F62"),
+        kinds,
+        h("div", { class: "lb" }, "\u5730\u306E\u8272"),
+        ...spec.field.c.map((cl, i) => sw(cl, (k) => set((s) => {
+          s.field.c[i] = k;
+        }), "fc" + i)),
+        h("div", { class: "lb" }, "\u610F\u5320"),
+        charges,
+        spec.charge ? h("div", {}, h("div", { class: "lb" }, "\u610F\u5320\u306E\u8272"), sw(spec.charge.c, (k) => set((s) => {
+          s.charge.c = k;
+        }), "fcc"), h("input", { type: "range", min: 0.6, max: 1.4, step: 0.05, value: spec.charge.size, oninput: (e) => {
+          spec.charge.size = Number(e.target.value);
+          E.spec = normalizeFlag(spec);
+        }, onchange: redo })) : null,
+        flagRuleOk(spec) ? null : h("small", { class: "dim" }, "\u660E\u6697\u304C\u8FD1\u304F\u3001\u898B\u5206\u3051\u306B\u304F\u3044\u914D\u8272"),
+        costChips(cost),
+        h("div", { class: "rowb" }, btn("\u3053\u306E\u56FD\u65D7\u306B\u3059\u308B", () => {
+          const r = doit(mine, { type: "state.setFlag", stateId: st2.id, flag: spec });
+          if (r.ok) {
+            S2.edit = null;
+            S2.full = null;
+            S2.hooks.render();
+          }
+        }, "p", { id: "ed-go" }))
+      )
+    );
+  }
+  var LEVEL_COL = ["#6fa8c9", "#9fbf8a", "#d8b45a", "#d0605a"];
+  function financeRow(st2, mine, key, ic) {
+    const F = FINANCE[key], cur = st2.policy[key], can2 = can$(st2, mine), near = F.steps.reduce((b, v, i) => Math.abs(v - cur) < Math.abs(F.steps[b] - cur) ? i : b, 0), set = (v) => {
+      const r = doit(mine, { type: "state.setFinance", stateId: st2.id, key, value: v });
+      S2.hooks.panel();
+      return r;
+    };
+    const num2 = h("input", { type: "number", class: "num", id: "fin-" + key, min: Math.round(F.min * 100), max: Math.round(F.max * 100), step: Math.round(F.step * 100), value: Math.round(cur * 100), disabled: !can2, onchange: (e) => set(Number(e.target.value) / 100) });
+    const rng = h("input", { type: "range", class: "rng", min: F.min, max: F.max, step: F.step, value: cur, disabled: !can2, oninput: (e) => {
+      num2.value = Math.round(e.target.value * 100);
+    }, onchange: (e) => set(Number(e.target.value)) });
+    return h("div", { class: "frow", "data-fin": key }, h("div", { class: "fh" }, icon(ic, 20), h("b", {}, F.ja)), h("div", { class: "lvls" }, ...F.steps.map((v, i) => h("button", { class: "lvl" + (i === near && Math.abs(F.steps[near] - cur) < F.step * 1.01 ? " on" : ""), style: `--c:${LEVEL_COL[i]}`, disabled: !can2, onclick: () => set(v), title: `${Math.round(v * 100)}%` }, pips(i + 1, 4, LEVEL_COL[i])))), h("div", { class: "fnum" }, num2, h("small", {}, "%")), rng);
+  }
+  function tDomesticV(st2, mine) {
+    const c = civ2(), out = h("div", { class: "domestic" }), tax = st2.pop * st2.policy.tax * 12e-4 * taxMult(st2), trade = effective(c, st2, "tradeIncome"), tot = Math.max(1e-9, tax + trade);
+    out.append(
+      lb("\u8CA1\u653F", "FINANCE"),
+      h("div", { class: "revbar", title: `\u7A0E\u53CE ${n0(tax)}\u30FB\u4EA4\u6613 ${n0(trade)}` }, h("i", { style: `width:${tax / tot * 100}%;background:#d8b45a` }), h("i", { style: `width:${trade / tot * 100}%;background:#6fa8c9` })),
+      h("div", { class: "fin" }, financeRow(st2, mine, "tax", "coin"), financeRow(st2, mine, "mobilization", "sword"), financeRow(st2, mine, "tolerance", "handshake"), financeRow(st2, mine, "assimilation", "pop"), financeRow(st2, mine, "autonomy", "flag"))
+    );
+    void FINANCE_COOLDOWN;
+    out.append(officesBox(st2, mine));
+    if (st2.alive && (mine || st2.focus)) out.append(policyBox(st2, mine));
+    return out;
+  }
+  function tMilitaryV(st2, mine) {
+    const c = civ2(), M = st2.military;
+    if (!M) return h("p", { class: "n" }, "\u8ECD\u4E8B\u306E\u30C7\u30FC\u30BF\u304C\u3042\u308A\u307E\u305B\u3093\u3002");
+    const can2 = st2.alive && (mine || !controlled()), units = M.units ?? [], tot = units.reduce((a, u) => a + u.size, 0) || 1, out = h("div", {}), ctx2 = S2.w.sim.ctx, colOf = (k) => KIND_COL[k] ?? SERVICES[serviceOf(k)].color, manual = M.orbat?.mode === "manual";
+    out.append(h("div", { class: "rings" }, ring(effective(c, st2, "equipLevel"), "\u88C5\u5099", "#d8b45a"), ring(effective(c, st2, "readiness"), "\u7DF4\u5EA6", "#9fbf8a"), ring(Math.min(1, Math.max(0, 0.5 + st2.milBonus)), "\u8ECD\u4E8B\u80FD\u529B", "#d0605a"), ring(Math.min(1, st2.defense ?? 0), "\u8981\u585E", "#8fb3b0")));
+    const sch = M.school ?? {}, schName = (s) => SCHOOL_BY_ID[sch[s]]?.ja ?? "\u672A\u9078\u629E";
+    out.append(lb("\u7DE8\u6210", "ORGANIZATION"), stackbar(units.map((u) => ({ label: u.name, value: u.size, color: colOf(u.kind) })), { height: 16 }), h("small", { class: "n" }, `\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA\u30FB${manual ? "\u624B\u52D5\u306E\u7DE8\u6210" : "\u81EA\u52D5\u306E\u7DE8\u6210\uFF08\u6280\u8853\u30FB\u5730\u7406\u30FB\u30C9\u30AF\u30C8\u30EA\u30F3\u304B\u3089\u6C7A\u307E\u308B\uFF09"}\u3000\u8DEF\u7DDA\uFF1A\u9678 ${schName("land")}\uFF0F\u6D77 ${schName("sea")}\uFF0F\u7A7A ${schName("air")}`));
+    for (const svc of SERVICE_KEYS) {
+      const us = units.filter((u) => serviceOf(u.kind) === svc);
+      if (!us.length) continue;
+      const sum = us.reduce((a, u) => a + u.size, 0);
+      out.append(h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja), h("small", {}, `${n0(sum)} \u4EBA\uFF08${pct(sum / tot)}\uFF09`)));
+      out.append(h("div", { class: "forms" }, ...us.flatMap((u) => {
+        const it = itemsOf(u.kind, u.size);
+        return [h("div", { class: "uhead" }, h("span", { style: `color:${colOf(u.kind)}` }, icon(KIND_ICON[u.kind] ?? "flag", 16)), h("b", {}, u.name), h("small", {}, `${n0(u.size)} \u4EBA${it ? `\uFF08\u7D04 ${n0(it)} ${UNIT_KINDS[u.kind].item}\uFF09` : ""}`), h("span", { class: "barv", title: `\u88C5\u5099 ${pct(u.equip)}` }, h("i", { style: `width:${u.equip * 100}%;background:#d8b45a` })), h("span", { class: "barv", title: `\u7DF4\u5EA6 ${pct(u.readiness)}` }, h("i", { style: `width:${u.readiness * 100}%;background:#9fbf8a` }))), svc === "land" ? h("div", { class: "fcards" }, ...formationsOf(st2, u).map((f2) => h("div", { class: "fcard", style: `border-color:${colOf(u.kind)}` }, h("b", {}, f2.name), h("small", {}, n0(f2.size))))) : null];
+      })));
+    }
+    if (can2) {
+      const avail = Object.entries(UNIT_KINDS).filter(([k, d]) => d.need(st2, ctx2)), cur = Object.fromEntries(avail.map(([k]) => [k, Math.round(units.find((u) => u.kind === k)?.size ?? 0)])), val = { ...cur }, inp = {};
+      const sum = () => Object.values(val).reduce((a, b) => a + b, 0), info = h("small", {}), paint = () => {
+        const s = sum();
+        info.textContent = `\u6307\u5B9A\u306E\u5408\u8A08 ${n0(s)} \u4EBA\uFF0F\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA${s > st2.army ? "\uFF08\u8D85\u3048\u305F\u5206\u306F\u6BD4\u4F8B\u3057\u3066\u7E2E\u3080\uFF09" : s < st2.army ? `\uFF08\u8DB3\u308A\u306A\u3044 ${n0(st2.army - s)} \u4EBA\u306F\u4E88\u5099\u5F79\u306B\u306A\u308B\uFF09` : ""}`;
+        info.style.color = s > st2.army ? "#d0605a" : "var(--dim)";
+        for (const k in inp) inp[k].value = val[k];
+      };
+      const rows = SERVICE_KEYS.flatMap((svc) => {
+        const list = avail.filter(([k, d]) => d.service === svc);
+        if (!list.length) return [];
+        return [h("div", { class: "uhead" }, h("b", { style: `color:${SERVICES[svc].color}` }, SERVICES[svc].ja)), ...list.map(([k, d]) => {
+          const i = h("input", { type: "number", min: 0, step: 100, value: val[k], "data-kind": k, style: "width:110px", oninput: (e) => {
+            val[k] = Math.max(0, Math.round(Number(e.target.value) || 0));
+            info.textContent = "";
+            paint1();
+          } });
+          inp[k] = i;
+          return h("div", { class: "slrow" }, h("span", { style: `color:${colOf(k)}` }, icon(KIND_ICON[k] ?? "flag", 15)), h("span", { class: "nm", title: d.hint }, d.ja), i, h("small", {}, d.per ? `1${d.item}\u2252${d.per}\u4EBA` : ""));
+        })];
+      });
+      const paint1 = () => {
+        const s = sum();
+        info.textContent = `\u6307\u5B9A\u306E\u5408\u8A08 ${n0(s)} \u4EBA\uFF0F\u7DCF\u5175\u529B ${n0(st2.army)} \u4EBA${s > st2.army ? "\uFF08\u8D85\u3048\u305F\u5206\u306F\u6BD4\u4F8B\u3057\u3066\u7E2E\u3080\uFF09" : s < st2.army ? `\uFF08\u8DB3\u308A\u306A\u3044 ${n0(st2.army - s)} \u4EBA\u306F\u4E88\u5099\u5F79\u306B\u306A\u308B\uFF09` : ""}`;
+        info.style.color = s > st2.army ? "#d0605a" : "var(--dim)";
+      };
+      out.append(h("details", { class: "dt", id: "reorg-box" }, h("summary", {}, "\u7DE8\u6210\u3092\u7DE8\u96C6\u3059\u308B\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09"), h("small", { class: "n" }, "\u4EBA\u6570\u3092\u6307\u5B9A\u3059\u308B\u3068\u624B\u52D5\u306E\u7DE8\u6210\u306B\u306A\u308A\u307E\u3059\u3002\u7DCF\u5175\u529B\u306F\u56FD\u306E\u4EBA\u53E3\u30FB\u7D4C\u6E08\u3067\u6C7A\u307E\u308B\u306E\u3067\u3001\u6307\u5B9A\u306E\u5408\u8A08\u304C\u591A\u3059\u304E\u308C\u3070\u6BD4\u4F8B\u3057\u3066\u7E2E\u307F\u3001\u8DB3\u308A\u306A\u3044\u5206\u306F\u4E88\u5099\u5F79\uFF08\u5FB4\u96C6\u6C11\u5175\uFF09\u306B\u306A\u308A\u307E\u3059\u3002"), ...rows, h("div", { class: "rowb" }, info, btn("\u4ECA\u306E\u4EBA\u6570\u3092\u5165\u308C\u76F4\u3059", () => {
+        for (const k in cur) val[k] = cur[k];
+        paint();
+      }), btn("\u3053\u306E\u7DE8\u6210\u306B\u3059\u308B\uFF08\u624B\u52D5\uFF09", () => {
+        const hs = {};
+        for (const k in val) if (val[k] > 0) hs[k] = val[k];
+        (mine ? act : creator)({ type: "state.setOrbat", stateId: st2.id, mode: "manual", heads: hs });
+      }, "p", { id: "reorg" }), btn("\u81EA\u52D5\u306B\u623B\u3059", () => (mine ? act : creator)({ type: "state.setOrbat", stateId: st2.id, mode: "auto" }), "", { id: "reorg-auto" }))));
+      setTimeout(paint, 0);
+    }
+    const c0 = S2.w.civ, foes = aliveStates2().filter((x) => x.id !== st2.id && !atWarWith(c0, st2, x) && !treatyBetween(c0, st2, x, "alliance") && !treatyBetween(c0, st2, x, "nonaggression")).sort((a, b) => b.pop - a.pop);
+    const sel = h("select", { id: "wl-target", size: 7, class: "wlsel" }), cnt = h("small", { id: "wl-count" }), find = h("input", { id: "wl-search", type: "search", placeholder: "\u56FD\u540D\u3067\u691C\u7D22", autocomplete: "off" });
+    const fill = () => {
+      const q2 = find.value.trim(), keep = sel.value, list = q2 ? foes.filter((x) => x.name.includes(q2)) : foes;
+      sel.replaceChildren(...list.map((x) => h("option", { value: x.id }, x.name)));
+      if (list.some((x) => x.id === keep)) sel.value = keep;
+      else if (list.length) sel.value = list[0].id;
+      cnt.textContent = `\u5BA3\u6226\u3067\u304D\u308B\u56FD ${foes.length} \u56FD${q2 ? `\uFF08${list.length} \u56FD\u306B\u7D5E\u308A\u8FBC\u307F\uFF09` : ""}`;
+      goBtn.disabled = !mine || !list.length;
+    };
+    const goBtn = btn("\u5BA3\u6226\u3059\u308B", () => {
+      if (sel.value) confirmWar(st2.id, sel.value, () => S2.hooks.render());
+    }, "", { id: "declare", disabled: true, title: mine ? "" : "\u62C5\u5F53\u56FD\u306E\u307F" });
+    find.addEventListener("input", fill);
+    fill();
+    out.append(lb("\u5BA3\u6226", "WAR"), h("div", { class: "wlbox" }, find, sel, cnt, h("div", { class: "rowb" }, goBtn)));
+    void r24;
+    void colorOf;
+    return out;
+  }
+  function tDiplomacyV(st2, mine) {
+    const c = civ2(), sec = ties(c, st2), go = (id) => {
+      const me2 = controlled() ?? st2.id;
+      S2.hub = "diplo";
+      S2.dtab = "rel";
+      S2.dip = { a: me2, b: id === me2 ? st2.id : id };
+      S2.prop = null;
+      S2.hooks.render();
+    };
+    const card2 = (id, tags, col) => h("div", { class: "fc", style: `border-color:${col}`, onmouseenter: () => {
+      if (S2.map) {
+        S2.map.hl = { type: "state", id };
+        S2.map.draw();
+      }
+    }, onmouseleave: () => {
+      if (S2.map) {
+        S2.map.hl = null;
+        S2.map.draw();
+      }
+    }, onclick: () => go(id) }, flag(id, 40), h("b", {}, c.states[id].name), h("small", {}, tags.join("\u30FB")));
+    const group = (title, col, map) => map.size ? [h("div", { class: "lb" }, title, h("em", {}, map.size)), h("div", { class: "fgrid" }, ...[...map].map(([id, tags]) => card2(id, tags, col)))] : [];
+    const wars = st2.warIds.map((i) => c.wars[i]).filter(Boolean), any = Object.values(sec).some((m) => m.size) || wars.length;
+    const out = h("div", { class: "dipl" }, ...group("\u5B97\u4E3B", "#a58bd0", sec.over), ...group("\u5C5E\u56FD\u30FB\u5F93\u3046\u56FD", "#a58bd0", sec.subj), ...group("\u540C\u76DF\u56FD", "#6fa8c9", sec.ally), ...group("\u4E0D\u53EF\u4FB5\u6761\u7D04\u7DE0\u7D50\u56FD", "#9fbf8a", sec.nap), ...group("\u901A\u5546\u6761\u7D04\u7DE0\u7D50\u56FD", "#d8b45a", sec.trade), ...group("\u305D\u306E\u4ED6\u306E\u6761\u7D04", "#8fb3b0", sec.other), ...group("\u6575\u5BFE\u56FD", "#d0605a", sec.enemy));
+    if (wars.length) out.append(h("div", { class: "lb" }, "\u4EA4\u6226\u4E2D", h("em", {}, wars.length)), h("div", { class: "flagrow" }, ...wars.map((w) => h("span", { class: "fchip", onclick: () => {
+      S2.war = w.id;
+      S2.hub = "war";
+      S2.hooks.render();
+    } }, flag(w.aggressor === st2.id ? w.defender : w.aggressor, 28), h("small", {}, w.name ?? "\u6226\u4E89")))));
+    if (!any) out.append(h("small", { class: "dim" }, "\u7D50\u3073\u3064\u304D\u306E\u3042\u308B\u56FD\u306F\u3042\u308A\u307E\u305B\u3093"));
+    const me = controlled();
+    out.append(h("div", { class: "rowb" }, btn("\u5916\u4EA4\u30DA\u30FC\u30B8\u3092\u958B\u304F", () => {
+      S2.hub = "diplo";
+      S2.dtab = "rel";
+      S2.dip = me && me !== st2.id ? { a: me, b: st2.id } : null;
+      S2.hooks.render();
+    }, "p", { id: "to-diplo" })));
+    void mine;
+    return out;
+  }
+
+  // js/ui/v6/views-a.js
+  var DOMAIN_JA = { economy: "\u7D4C\u6E08", military: "\u8ECD\u4E8B", politics: "\u653F\u6CBB", states: "\u56FD\u5BB6", population: "\u4EBA\u53E3", war_diplomacy: "\u5916\u4EA4" };
+  var civ3 = () => S2.w.civ;
+  var date2 = (mi) => formatWorldDate(S2.w, mi);
+  var link = (id) => civ3().states[id] ? h("a", { class: "lk", href: "#", onclick: (e) => {
+    e.preventDefault();
+    S2.hooks.select(id);
+  } }, stateName(id)) : String(id);
+  var note2 = (t) => h("p", { class: "n" }, t);
+  var why = (t) => h("p", { class: "n err", id: "why" }, t);
+  function pGeo() {
+    const M = S2.map, box = h("div", {}, h("div", { class: "code" }, "GEOGRAPHY"), h("h2", {}, "\u5730\u7406"), note2("\u5404\u30EC\u30A4\u30E4\u30FC\u3092\u81EA\u7531\u306B\u91CD\u306D\u3089\u308C\u307E\u3059\u3002\u5857\u308A\u306E\u5C64\u306F\u4E0D\u900F\u660E\u5EA6\u3082\u5909\u3048\u3089\u308C\u307E\u3059\u3002"));
+    const done2 = () => {
+      S2.hooks.mapOnly();
+      S2.hooks.panel();
+    };
+    for (const [gid, ja, en] of GROUPS) {
+      box.append(lb(ja, en));
+      for (const [id, name] of LAYERS.filter((l) => l[2] === gid).reverse()) {
+        const fill = FILL_IDS.includes(id), on = M.isOn(id);
+        box.append(h("div", {}, h("div", { class: "layrow" }, h("input", { type: "checkbox", id: "ly-" + id, checked: on, onchange: () => {
+          M.toggle(id);
+          done2();
+        } }), h("span", { class: "g" }, name), fill && on ? h("input", { type: "range", class: "opa", min: 20, max: 100, value: Math.round(M.alpha[id] * 100), title: "\u4E0D\u900F\u660E\u5EA6", oninput: (e) => {
+          M.alpha[id] = e.target.value / 100;
+          M.interact();
+        } }) : null)));
+      }
+    }
+    return box.append(note2("\u5730\u5F62\u30FB\u6C17\u5019\u30FB\u8CC7\u6E90\u3092\u751F\u6210\u5F8C\u306B\u624B\u3067\u7DE8\u96C6\u3059\u308B\u6A5F\u80FD\u306F\u8A2D\u3051\u3066\u3044\u307E\u305B\u3093\u3002"), h("div", { class: "rowb" }, btn("\u8868\u793A\u3092\u521D\u671F\u4F4D\u7F6E\u3078", () => {
+      M.view = { x: 0, y: 0, k: 1 };
+      M.draw();
+    }))) || box;
+  }
+  function listRow(hl, kids, onclick, cls = "") {
+    return h("div", { class: "lrow " + cls, onmouseenter: () => {
+      if (S2.map && hl) {
+        S2.map.hl = hl;
+        S2.map.draw();
+      }
+    }, onmouseleave: () => {
+      if (S2.map) {
+        S2.map.hl = null;
+        S2.map.draw();
+      }
+    }, onclick }, ...kids);
+  }
+  function sectioned(sections, rowH, renderRow) {
+    const rows = [];
+    for (const sec of sections) {
+      if (!sec.rows.length) continue;
+      rows.push({ hdr: `${sec.title}\uFF08${sec.rows.length}\uFF09` });
+      if (!sec.fold || !S2.fold?.[sec.fold]) for (const r of sec.rows) rows.push(r);
+    }
+    return vlist(rows, rowH, (r) => r.hdr ? h("div", { class: "grp", style: "cursor:default" }, r.hdr) : renderRow(r));
+  }
+  var clearHl = () => {
+    if (S2.map) {
+      S2.map.hl = null;
+    }
+  };
+  var back = (label, on) => h("div", { class: "back", onclick: () => {
+    clearHl();
+    on();
+  } }, "\u2190 " + label);
+  function pNations() {
+    const c = civ3(), box = h("div", {}, h("div", { class: "code" }, "NATIONS"), h("h2", {}, "\u56FD\u5BB6"));
+    if (S2.detail && S2.sel && c.states[S2.sel]) {
+      box.append(back("\u56FD\u5BB6\u4E00\u89A7", () => {
+        S2.detail = false;
+        S2.hooks.panel();
+      }), stateDetail(c.states[S2.sel]));
+      return box;
+    }
+    const mine = controlled(), all = Object.values(c.states).sort((a, b) => b.formedAt - a.formedAt || (a.id < b.id ? -1 : 1)), me = all.filter((s) => s.id === mine), alive2 = all.filter((s) => s.alive && s.id !== mine), dead = all.filter((s) => !s.alive);
+    box.append(h("p", { class: "n" }, `\u5B58\u7D9A\u4E2D ${alive2.length + me.length}\u30FB\u6EC5\u4EA1 ${dead.length}`), sectioned([{ title: "\u3042\u306A\u305F\u306E\u56FD", rows: me }, { title: "\u5B58\u7D9A\u4E2D\u306E\u56FD\u5BB6", rows: alive2 }, { title: "\u6EC5\u4EA1\u3057\u305F\u56FD\u5BB6", rows: dead, fold: "deadStates" }], 34, (s) => listRow({ type: "states", id: s.id }, [h("span", { class: "sw", style: `background:${colorOf(s.id)}` }), s.name, h("small", {}, s.alive ? `\u4EBA\u53E3 ${n0(s.pop)}\u30FB${regimeJa(s)}` : `\u6EC5\u4EA1\u30FB\u6210\u7ACB ${date2(s.formedAt).split("\u6708")[0]}\u6708`)], () => S2.hooks.select(s.id), (s.id === mine ? "mine " : "") + (s.alive ? "" : "dead"))));
+    return box;
+  }
+  function stateDetail(st2) {
+    const c = civ3(), mine = controlled() === st2.id, tabs2 = [["info", "\u60C5\u5831"], ["domestic", "\u5185\u653F"], ["military", "\u8ECD\u4E8B"], ["diplomacy", "\u5916\u4EA4"], ["tech", "\u6280\u8853\u30C4\u30EA\u30FC"], ["doctrine", "\u8ECD\u4E8B\u30C9\u30AF\u30C8\u30EA\u30F3"]];
+    if (!["info", "domestic", "military", "diplomacy", "tech", "doctrine"].includes(S2.tab)) S2.tab = "info";
+    const body = { info: tInfoV, domestic: tDomesticV, military: tMilitaryV, diplomacy: tDiplomacyV, tech: tTech, doctrine: tDoctrine }[S2.tab](st2, mine);
+    return h(
+      "div",
+      { class: "rs" },
+      nationHero(c.states[st2.id], mine),
+      h("div", { class: "tabs" }, ...tabs2.map(([k, ja]) => h("b", { class: S2.tab === k ? "on" : "", "data-tab": k, onclick: () => {
+        S2.tab = k;
+        S2.hooks.panel();
+      } }, ja))),
+      S2.notice ? why(S2.notice) : null,
+      body
+    );
+  }
+  function officesBox(st2, mine) {
+    const rg = regimeOf(st2), R = REGIMES[rg], offs = st2.offices ?? [], can2 = st2.alive && (mine || !controlled()), box = h("div", {}, lb("\u5B98\u5236\u30FB\u5F79\u8077", "OFFICES"), note2(`${R.ja}\u30FB\u5143\u9996\u306F${officeJa(R.ruler)}`));
+    box.append(offs.length ? h("div", { class: "offs" }, ...offs.map((o) => h("div", { class: "off" }, face(o.holder.name, st2.id, o.holder.look), h("div", {}, h("b", {}, officeJa(o.id)), h("small", {}, o.holder.name), h("div", { class: "chips sm" }, ...officeChips(o.id)))))) : note2("\u5F79\u8077\u306F\u307E\u3060\u5B9A\u3081\u3089\u308C\u3066\u3044\u307E\u305B\u3093\uFF08\u6A19\u6E96\u306E\u5F79\u8077\u3092\u7F6E\u3051\u307E\u3059\uFF09\u3002"));
+    {
+      const sm = officeSummary(st2);
+      if (sm) box.append(sm);
+    }
+    if (!can2) return box;
+    const cur = new Set(offs.length ? offs.map((o) => o.id) : defaultOffices(rg)), set = S2.offEdit?.id === st2.id ? S2.offEdit.set : cur;
+    S2.offEdit = { id: st2.id, set };
+    box.append(h("details", { class: "dt", id: "off-edit" }, h("summary", {}, "\u5F79\u8077\u3092\u7D44\u307F\u66FF\u3048\u308B\uFF08\u3044\u3064\u3067\u3082\u30FB\u8CBB\u7528\u306A\u3057\uFF09"), h("p", { class: "n" }, "\u5F79\u8077\u306F\u597D\u304D\u306A\u3060\u3051\u7F6E\u3051\u307E\u3059\u3002\u7F6E\u304F\u307B\u3069\u7DAD\u6301\u8CBB\u304C\u304B\u304B\u308A\u3001\u591A\u3059\u304E\u308B\u3068\u5B98\u50DA\u304C\u80A5\u5927\u3057\u3066\u5B89\u5B9A\u3068\u6C11\u8846\u306E\u652F\u6301\u304C\u4E0B\u304C\u308A\u307E\u3059\u3002"), ...Object.entries(OFFICE_DOMAIN_JA).map(([dom, dja]) => {
+      const ids = R.offices.filter((id) => OFFICES[id][1] === dom);
+      return ids.length ? h("div", { class: "odom" }, h("small", {}, dja), h("div", { class: "wchips" }, ...ids.map((id) => h("label", { class: "b", style: "display:flex;gap:4px;align-items:center", title: officeChips(id).map((x) => x.textContent).join(" ") }, h("input", { type: "checkbox", "data-office": id, checked: set.has(id), disabled: id === R.ruler, onchange: (e) => {
+        e.target.checked ? set.add(id) : set.delete(id);
+      } }), officeJa(id))))) : null;
+    }), btn("\u3053\u306E\u5F79\u8077\u306B\u6539\u3081\u308B", () => {
+      const list = R.offices.filter((x) => set.has(x));
+      if (list.length < MIN_OFFICES || list.length > MAX_OFFICES) {
+        S2.notice = `\u5F79\u8077\u306F ${MIN_OFFICES}\u301C${MAX_OFFICES} \u4EF6\u306B\u3057\u3066\u304F\u3060\u3055\u3044`;
+        S2.hooks.panel();
+        return;
+      }
+      if (mine) act({ type: "state.setOffices", offices: list });
+      else creator({ type: "state.setOffices", stateId: st2.id, offices: list });
+      S2.offEdit = null;
+      S2.hooks.render();
+    }, "p", { id: "off-apply" })));
+    return box;
+  }
+  function uprisingBox(st2) {
+    return h("div", {}, lb("\u53CD\u4E71\u30FB\u9769\u547D", "UPRISING"), h("div", { class: "rowb" }, btn("\u53CD\u4E71\u30FB\u9769\u547D\u3092\u8D77\u3053\u3059", () => {
+      S2.upr = { stateId: st2.id, kind: S2.upr?.kind ?? Object.keys(UPRISING_KINDS)[0], open: true };
+      S2.hooks.panel();
+    }, "", { id: "upr-open" })));
+  }
+  function uprisingFull(st2) {
+    const U4 = S2.upr, box = h("div", { class: "uprfull" }), sel = h("select", { id: "upr-kind", onchange: (e) => {
+      U4.kind = e.target.value;
+      U4.plan = null;
+      S2.hooks.panel();
+    } }, ...Object.entries(UPRISING_KINDS).map(([k, K]) => h("option", { value: k, selected: U4.kind === k }, K.ja)));
+    box.append(h("div", { class: "kcards" }, ...Object.entries(UPRISING_KINDS).map(([k, K]) => h("div", { class: "kcard" + (U4.kind === k ? " on" : ""), onclick: () => {
+      U4.kind = k;
+      U4.plan = null;
+      S2.hooks.panel();
+    } }, h("b", {}, K.ja), h("small", {}, K.blurb)))), h("div", { class: "rowb" }, sel, btn("\u4E2D\u5FC3\u5730\u3092\u5730\u56F3\u304B\u3089\u9078\u3076", () => {
+      U4.kind = sel.value;
+      U4.picking = true;
+      U4.open = false;
+      S2.map.pins = null;
+      notify("ok", "\u5730\u56F3\u3067\u3001\u53CD\u4E71\u306E\u4E2D\u5FC3\u5730\u3092\u30AF\u30EA\u30C3\u30AF\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u9996\u90FD\u4EE5\u5916\uFF09");
+      S2.hooks.panel();
+    }, "p", { id: "upr-pick" })));
+    if (U4.plan) {
+      const p = U4.plan, K = UPRISING_KINDS[p.kind], opt = K.state === "optional", st$ = K.state === "required" || opt && U4.asState;
+      box.append(h(
+        "div",
+        { class: "card", id: "upr-plan" },
+        h("b", {}, K.ja),
+        h("div", { class: "pcols" }, h("div", {}, h("small", {}, "\u898F\u6A21"), h("b", {}, p.scaleLabel), h("small", {}, `\u53CD\u4E71\u5074 ${n0(p.rebelPop)}\uFF08\u56FD\u306E ${Math.round(p.share * 100)}%\uFF09`)), h("div", {}, h("small", {}, "\u898B\u901A\u3057"), h("b", {}, p.oddsLabel))),
+        opt ? h("label", { class: "n" }, h("input", { type: "checkbox", id: "upr-state", checked: !!U4.asState, onchange: (e) => {
+          U4.asState = e.target.checked;
+          S2.hooks.panel();
+        } }), " \u72EC\u7ACB\u3057\u305F\u56FD\u3092\u3064\u304F\u308B") : null,
+        h("div", { class: "rowb" }, btn(st$ ? "\u56FD\u540D\u30FB\u653F\u4F53\u3092\u6C7A\u3081\u3066\u6C7A\u884C\u3059\u308B" : "\u65B0\u3057\u3044\u4F53\u5236\u3092\u6C7A\u3081\u3066\u6C7A\u884C\u3059\u308B", () => openWizard({ mode: st$ ? "rebel" : "reform", rebel: st$ ? { stateId: st2.id, kind: p.kind, cell: p.center.cell, plan: p } : null, reform: st$ ? null : { stateId: st2.id, kind: p.kind, cell: p.center.cell }, onDone: (r) => {
+          S2.upr = null;
+          if (S2.map) S2.map.pins = null;
+          notify("ok", r.outcome === "new_state" ? "\u65B0\u3057\u3044\u56FD\u304C\u72EC\u7ACB\u3092\u5BA3\u8A00\u3057\u3001\u6226\u4E89\u306B\u306A\u308A\u307E\u3057\u305F" : r.outcome === "success" ? "\u9769\u547D\u304C\u6210\u529F\u3057\u3001\u65B0\u3057\u3044\u4F53\u5236\u306B\u306A\u308A\u307E\u3057\u305F" : "\u53CD\u4E71\u306F\u93AE\u5727\u3055\u308C\u307E\u3057\u305F");
+          S2.hooks.render();
+        } }), "p", { id: "upr-go" }))
+      ));
+    }
+    return box;
+  }
+  function creatorBox(st2) {
+    const c = civ3(), field = h("select", { id: "iv-field" }, ...Object.entries(FIELDS).map(([k, f2]) => h("option", { value: k }, `${DOMAIN_JA[f2.domain ?? { industry: "economy", perCapita: "economy", tradeIncome: "economy", foodBalance: "economy", taxRevenue: "economy", equipLevel: "military", readiness: "military", legitimacy: "politics", fatigue: "politics" }[k]] ?? ""}\u30FB${f2.ja}`))), other2 = h("select", { id: "iv-other", style: "display:none" }, ...aliveStates2().filter((x) => x.id !== st2.id).sort((a, b) => b.pop - a.pop).slice(0, 60).map((x) => h("option", { value: x.id }, x.name))), val = h("input", { id: "iv-val", type: "number", step: "any", style: "width:90px" }), half = h("input", { id: "iv-half", type: "number", placeholder: "\u534A\u6E1B\u671F(\u6708)", style: "width:90px" }), rsn = h("input", { id: "iv-why", placeholder: "\u7406\u7531\u306E\u6CE8\u91C8" }), info = h("p", { class: "n", id: "iv-info" });
+    const upd = () => {
+      const k = field.value, pair = !!FIELDS[k].pair;
+      other2.style.display = pair ? "" : "none";
+      const o = pair ? other2.value : null, nm = nominalOf(c, st2, k, o);
+      info.textContent = nm == null ? "\u307E\u3060\u7B97\u51FA\u3055\u308C\u3066\u3044\u307E\u305B\u3093" : `\u901A\u5E38\u8A08\u7B97\u5024 ${r24(nm)}\u30FB\u6709\u52B9\u5024 ${r24(effective(c, st2, k, o))}\u30FB\u7BC4\u56F2 ${FIELDS[k].min}\u301C${FIELDS[k].max}\u30FB\u65E2\u5B9A\u306E\u534A\u6E1B\u671F ${FIELDS[k].half}\u304B\u6708`;
+    };
+    field.addEventListener("change", upd);
+    other2.addEventListener("change", upd);
+    setTimeout(upd, 0);
+    const mineIv = interventionsOf(c).filter((r) => r.targetId === st2.id).slice(-6).reverse();
+    return h(
+      "div",
+      {},
+      lb("\u5275\u9020\u4E3B\u306E\u4ECB\u5165", "INTERVENTION"),
+      note2("\u8A08\u7B97\u3055\u308C\u308B\u5024\u306B\u4E00\u6642\u7684\u306A\u88DC\u6B63\u3092\u5165\u308C\u307E\u3059\u3002\u88DC\u6B63\u306F\u6642\u9593\u3068\u3068\u3082\u306B\u901A\u5E38\u5024\u3078\u623B\u308A\u307E\u3059\u304C\u3001\u4ECB\u5165\u4E2D\u306B\u8D77\u304D\u305F\u7D50\u679C\u306F\u623B\u308A\u307E\u305B\u3093\u3002"),
+      h("div", { class: "rowb" }, field, other2, val, half),
+      rsn,
+      h("div", { class: "rowb" }, btn("\u4ECB\u5165\u3059\u308B", () => creator({ type: "creator.intervene", stateId: st2.id, field: field.value, otherId: FIELDS[field.value].pair ? other2.value : null, value: Number(val.value), halfLifeMonths: half.value ? Number(half.value) : null, reason: rsn.value }), "p", { id: "iv-go" })),
+      info,
+      ...mineIv.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `${FIELDS[r.field]?.ja ?? r.field}${r.otherId ? "\uFF08\u2192" + stateName(r.otherId) + "\uFF09" : ""} \u2192 ${r24(r.target)}`, h("br"), h("small", {}, `${{ active: "\u6709\u52B9\uFF08\u6B8B\u308A " + r24(r.residual) + "\uFF09", converged: "\u53CE\u675F", superseded: "\u7F6E\u304D\u63DB\u3048", cancelled: "\u53D6\u308A\u6D88\u3057", target_gone: "\u5BFE\u8C61\u6D88\u6EC5" }[r.status]}\u30FB${date2(r.startMonth)}${r.reason ? "\u30FB" + r.reason : ""}`)), r.status === "active" ? btn("\u53D6\u308A\u6D88\u3059", () => creator({ type: "creator.cancelIntervention", id: r.id })) : null))
+    );
+  }
+  function techStatus(st2) {
+    const c = civ3(), groups = Object.values(c.groups).filter((g) => g.stateId === st2.id), total2 = groups.reduce((a, g) => a + g.pop, 0) || 1, have = {}, lostHere = /* @__PURE__ */ new Set();
+    for (const g of groups) {
+      for (const k in g.tech?.known ?? {}) have[k] = (have[k] ?? 0) + g.pop;
+      for (const k in g.tech?.lost ?? {}) lostHere.add(k);
+    }
+    const cov = (k) => (have[k] ?? 0) / total2, f2 = (t) => st2.techAdopted?.[t.key] != null ? "adopted" : cov(t.key) >= 0.3 ? "available" : cov(t.key) > 0 ? "known" : lostHere.has(t.key) ? "lost" : "locked";
+    f2.cov = cov;
+    return f2;
+  }
+  var CAP_JA = { "polity:chiefdom": "\u9996\u9577\u5236\u3078", "polity:kingdom": "\u738B\u56FD\u3078", "polity:republic": "\u5171\u548C\u653F\u3078", "polity:empire": "\u5E1D\u56FD\u3078", "action:found_city": "\u90FD\u5E02\u3092\u5EFA\u8A2D\u3067\u304D\u308B", "action:build_fortification": "\u8981\u585E\u3092\u6574\u5099\u3067\u304D\u308B", "action:covert_op": "\u79D8\u5BC6\u5DE5\u4F5C", "action:impose_sanctions": "\u7D4C\u6E08\u5236\u88C1", "action:nuclear_program": "\u6838\u8A08\u753B", "treaty:nonaggression": "\u4E0D\u53EF\u4FB5\u6761\u7D04", "treaty:alliance": "\u540C\u76DF", "treaty:trade": "\u4EA4\u6613\u6761\u7D04", "unit:ranged": "\u5F13\u30FB\u6295\u5C04\u5175", "unit:cavalry": "\u9A0E\u5175", "unit:navy": "\u6C34\u8ECD", "unit:garrison": "\u5B88\u5099\u5175", "unit:firearms": "\u9283\u5175", "unit:armor": "\u6A5F\u7532", "unit:air": "\u822A\u7A7A", "econ:coinage": "\u8CA8\u5E63\u7D4C\u6E08", "econ:credit": "\u4FE1\u7528\u30FB\u91D1\u878D", "subsist:agriculture": "\u8FB2\u8015", "subsist:pastoral": "\u7267\u755C", "subsist:fishing": "\u6F01\u6488", "move:sea": "\u6D77\u3092\u6E21\u308B", "move:ocean": "\u5916\u6D0B\u822A\u6D77", "trade:land_long": "\u9678\u306E\u9060\u8DDD\u96E2\u4EA4\u6613", "trade:sea_long": "\u6D77\u306E\u9060\u8DDD\u96E2\u4EA4\u6613", "trade:rail": "\u9244\u9053\u8F38\u9001", "admin:records": "\u8A18\u9332", "admin:officials": "\u5B98\u8077", "admin:courier": "\u516C\u306E\u901A\u4FE1\u7DB2", "admin:land_survey": "\u571F\u5730\u306E\u6E2C\u91CF", "war:far": "\u9060\u5F81\u306E\u88DC\u7D66", "war:naval": "\u6D77\u6226", "pop:cold": "\u5BD2\u51B7\u5730\u306B\u4F4F\u3081\u308B", "pop:steppe": "\u8349\u539F\u3067\u751F\u304D\u308B", "storage:pottery": "\u8CAF\u8535", "policy:tax_high": "\u9AD8\u3044\u7A0E\u7387", "policy:parliament": "\u8B70\u4F1A\u5236" };
+  var FX_JA2 = { cap: "\u53CE\u5BB9\u529B", tax: "\u7A0E\u53CE", trade: "\u4EA4\u6613", ind: "\u7523\u696D\u529B", off: "\u653B\u6483", def: "\u9632\u5FA1", health: "\u885B\u751F", learn: "\u5B66\u7FD2\u30FB\u4F1D\u64AD" };
+  var TECH_LANE = null;
+  var TECH_Q = "";
+  var TECH_FULL = false;
+  var TECH_VB = null;
+  var DOC_VB = null;
+  function tTech(st2, mine) {
+    const c = civ3(), status = techStatus(st2), sel = TECH[S2.tech] ?? null, q2 = TECH_Q.trim(), hit = q2 ? new Set(TECHS.filter((t) => t.name.includes(q2) || t.key.includes(q2) || t.field.includes(q2)).map((t) => t.key)) : null;
+    const tree = techTree({ techs: TECHS, status, selected: S2.tech, lane: TECH_LANE, hit, vb0: TECH_VB, onView: (v) => {
+      TECH_VB = v;
+    }, onPick: (t) => {
+      S2.tech = t.key;
+      S2.hooks.panel();
+    } }), { svg, COL, SYM } = tree, s = sel && status(sel);
+    const lab = { adopted: "\u5236\u5EA6\u5316\u6E08\u307F\uFF08\u3053\u306E\u56FD\u304C\u63A1\u7528\uFF09", available: "\u63A1\u7528\u3067\u304D\u308B\uFF08\u56FD\u5185\u306E\u4EBA\u53E3\u306E 3 \u5272\u4EE5\u4E0A\u304C\u77E5\u3063\u3066\u3044\u308B\uFF09", known: "\u4FDD\u6709\uFF08\u4E00\u90E8\u306E\u96C6\u56E3\u3060\u3051\u304C\u77E5\u308B\u3002\u56FD\u3068\u3057\u3066\u306F\u307E\u3060\u63A1\u7528\u3067\u304D\u306A\u3044\uFF09", lost: "\u5931\u308F\u308C\u305F\uFF08\u304B\u3064\u3066\u77E5\u3063\u3066\u3044\u305F\u304C\u3001\u4ECA\u306F\u8AB0\u3082\u77E5\u3089\u306A\u3044\uFF09", locked: "\u672A\u767A\u898B" };
+    const laneBtns = [btn("\u3059\u3079\u3066", () => {
+      TECH_LANE = null;
+      S2.hooks.panel();
+    }, TECH_LANE ? "" : "p"), ...LANES.map((l) => btn(l.ja.slice(0, 5), () => {
+      TECH_LANE = l.id;
+      S2.hooks.panel();
+    }, TECH_LANE === l.id ? "p" : ""))];
+    const search = h("input", { type: "search", placeholder: "\u6280\u8853\u540D\u30FB\u5206\u91CE\u3067\u63A2\u3059", value: TECH_Q, style: "width:100%", oninput: (e) => {
+      TECH_Q = e.target.value;
+      clearTimeout(search._t);
+      search._t = setTimeout(() => {
+        S2.hooks.panel();
+        document.querySelector("#tech-q")?.focus();
+      }, 250);
+    }, id: "tech-q" });
+    let detail = note2("\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u524D\u63D0\u30FB\u6210\u7ACB\u306E\u6761\u4EF6\u30FB\u89E3\u7981\u3055\u308C\u308B\u3053\u3068\u30FB\u52B9\u679C\u30FB\u4E16\u754C\u3067\u306E\u5E83\u304C\u308A\u304C\u51FA\u307E\u3059\u3002");
+    if (sel) {
+      const gs = Object.values(c.groups).filter((g) => g.stateId === st2.id), cov = Math.round(status.cov(sel.key) * 100), w = c.techWorld[sel.key], deps = TECHS.filter((t) => t.prereq.includes(sel.key)), gate = actionGate(c, st2, "adopt_tech");
+      const needs = sel.prereq.map((p) => {
+        const t = TECH[p];
+        return `${st2.techAdopted?.[p] != null ? "\u25A0" : status.cov(p) > 0 ? "\u25C7" : "\u25CB"} ${t?.name ?? p}`;
+      }).join("\u3000");
+      const unl = sel.caps.map((x) => CAP_JA[x] ?? x), fx3 = Object.entries(sel.fx).map(([k, v]) => `${FX_JA2[k] ?? k} +${Math.round(v * 100)}%`);
+      detail = h(
+        "div",
+        { class: "dt" },
+        h("b", {}, sel.name),
+        `\u3000${sel.field}`,
+        h("br"),
+        `${SYM[s]} ${lab[s]}`,
+        h("br"),
+        `\u56FD\u5185\u306E\u666E\u53CA ${cov}%\uFF08\u63A1\u7528\u306B\u306F 30% \u4EE5\u4E0A\uFF09`,
+        h("br"),
+        `\u524D\u63D0: ${needs || "\u306A\u3057"}`,
+        h("br"),
+        sel.minPop || sel.settled || sel.condKey ? `\u6210\u7ACB\u306E\u6761\u4EF6: ${[sel.minPop ? `\u96C6\u56E3\u306E\u898F\u6A21 ${n0(sel.minPop)} \u4EBA\u4EE5\u4E0A` : null, sel.settled ? "\u5B9A\u4F4F" : null, sel.condKey ? COND_JA(sel.condKey) : null].filter(Boolean).join("\u30FB")}` : "\u6210\u7ACB\u306E\u6761\u4EF6: \u7279\u306B\u306A\u3057",
+        h("br"),
+        sel.why ? `\u80CC\u666F: ${sel.why}` : "",
+        sel.why ? h("br") : "",
+        unl.length ? `\u89E3\u7981: ${unl.join("\u30FB")}` : "",
+        unl.length ? h("br") : "",
+        fx3.length ? `\u52B9\u679C: ${fx3.join("\u30FB")}` : "",
+        fx3.length ? h("br") : "",
+        `\u8AAC\u660E: ${sel.desc}`,
+        h("br"),
+        w ? `\u4E16\u754C: ${w.first != null ? formatDate(civ3().wcde.config.calendar, w.first) + "\u306B\u521D\u51FA" : ""}\u30FB\u72EC\u7ACB\u306E\u767A\u898B ${w.independent ?? 0} \u56DE\u30FB\u4F1D\u64AD ${w.spread ?? 0} \u4EF6${Object.keys(w.byChannel ?? {}).length ? "\uFF08" + Object.entries(w.byChannel).map(([k, v]) => `${{ contact: "\u63A5\u89E6", trade: "\u4EA4\u6613", teaching: "\u6559\u80B2", conquest: "\u4F75\u5408" }[k] ?? k} ${v}`).join("\u30FB") + "\uFF09" : ""}` : "\u4E16\u754C: \u307E\u3060\u8AB0\u3082\u767A\u898B\u3057\u3066\u3044\u306A\u3044",
+        h("br"),
+        deps.length ? `\u3053\u306E\u6280\u8853\u3092\u524D\u63D0\u3068\u3059\u308B: ${deps.map((t) => t.name).join("\u30FB")}` : "\u5F8C\u7D9A\u306E\u6280\u8853\u306F\u306A\u3044",
+        h("br"),
+        h("small", { style: "color:var(--dim)" }, "\u6280\u8853\u306E\u63A1\u7528\u306F\u3001\u4E16\u754C\u306E\u4ED5\u7D44\u307F\u304C\u81EA\u52D5\u3067\u884C\u3044\u307E\u3059")
+      );
+    }
+    document.querySelectorAll(".techwrap.full").forEach((e) => e.remove());
+    const wrap = h("div", { class: "techwrap" + (TECH_FULL ? " full" : "") }), big = btn(TECH_FULL ? "\u9589\u3058\u308B" : "\u62E1\u5927\u8868\u793A", () => {
+      TECH_FULL = !TECH_FULL;
+      S2.hooks.panel();
+    });
+    wrap.append(svg, h("div", { class: "rowb" }, big, btn("\u5168\u4F53", tree.fit), btn("\u5DE6\u7AEF", tree.left), btn("\u6700\u524D\u7DDA", tree.frontier), btn("\u9078\u3093\u3060\u6280\u8853\u3078", () => S2.tech && tree.focus(S2.tech), "", { id: "tech-goto", disabled: !S2.tech }), q2 && hit?.size ? btn(`\u691C\u7D22\u7D50\u679C\u3078\uFF08${hit.size} \u4EF6\uFF09`, () => tree.focus([...hit][0]), "", { id: "tech-goto-hit" }) : null), detail);
+    if (TECH_FULL) {
+      document.body.append(wrap);
+      tree.frontier();
+    }
+    return h(
+      "div",
+      {},
+      search,
+      h("div", { class: "rowb", style: "flex-wrap:wrap" }, ...laneBtns),
+      TECH_FULL ? note2("\u62E1\u5927\u8868\u793A\u4E2D\u3067\u3059\uFF08\u753B\u9762\u3044\u3063\u3071\u3044\uFF09\u3002\u53F3\u306E\u300C\u9589\u3058\u308B\u300D\u3067\u623B\u308C\u307E\u3059\u3002") : wrap,
+      h("div", { class: "lg" }, ...Object.entries({ adopted: "\u5236\u5EA6\u5316", available: "\u63A1\u7528\u3067\u304D\u308B", known: "\u4FDD\u6709", lost: "\u5931\u308F\u308C\u305F", locked: "\u672A\u767A\u898B" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "locked" ? "dashed" : "solid"} ${COL[k][0]}` }), `${SYM[k]} ${t}`)))
+    );
+  }
+  var COND_JA = (k) => COND[k]?.ja ?? k;
+  function tDoctrine(st2, mine) {
+    const M = st2.military, taken = M?.doctrine?.taken ?? {}, nodes2 = nodesOf(st2), branches = branchesOf(st2), status = (d) => taken[d.id] != null ? "taken" : canAdopt(st2, d.id).ok ? "available" : "blocked", sel = nodeOf(st2, S2.doc) ?? null, dt = doctrineTree({ nodes: nodes2, branches, status, selected: S2.doc, vb0: DOC_VB, onView: (v) => {
+      DOC_VB = v;
+    }, onPick: (d) => {
+      S2.doc = d.id;
+      S2.hooks.panel();
+    } }), { svg, COL } = dt;
+    const fxText = (d) => Object.entries(d.fx).map(([k, v]) => `${FX_JA[k] ?? k} +${pct(v)}`).join("\u30FB");
+    const fx3 = M?.fx ?? {}, now = Object.entries(fx3).filter(([, v]) => v > 0).map(([k, v]) => `${FX_JA[k] ?? k} +${pct(v)}`).join("\u30FB") || "\u306A\u3057";
+    const sc = M?.school ?? {}, routes = `\u9678 ${SCHOOL_BY_ID[sc.land]?.ja ?? "\u672A\u9078\u629E"}\uFF0F\u6D77 ${SCHOOL_BY_ID[sc.sea]?.ja ?? "\u672A\u9078\u629E"}\uFF0F\u7A7A ${SCHOOL_BY_ID[sc.air]?.ja ?? "\u672A\u9078\u629E"}`;
+    return h(
+      "div",
+      {},
+      h("div", { class: "dt" }, `\u3044\u307E\u306E\u52B9\u679C: ${now}`),
+      h("div", { class: "dt" }, `\u9078\u3093\u3060\u8DEF\u7DDA: ${routes}\uFF08\u5404\u8ECD\u3067 1 \u3064\u30026 \u6BB5\u305D\u308D\u3048\u308B\u3068\u719F\u9054\u306E\u52A0\u7B97\uFF09`),
+      h("div", { class: "docwrap" }, svg, h("div", { class: "rowb" }, btn("\u5168\u4F53", dt.fit, "", { id: "doc-fit" }), btn("\u9078\u3093\u3060\u65B9\u91DD\u3078", () => S2.doc && dt.focus(S2.doc), "", { id: "doc-goto", disabled: !S2.doc }))),
+      h("div", { class: "lg" }, ...Object.entries({ taken: "\u25A0 \u53D6\u5F97\u6E08\u307F", available: "\u25C6 \u53D6\u5F97\u3067\u304D\u308B", blocked: "\u25CB \u6761\u4EF6\u304C\u8DB3\u308A\u306A\u3044\uFF08\u70B9\u7DDA\uFF09" }).map(([k, t]) => h("span", {}, h("i", { style: `background:${COL[k][1]};border:1px ${k === "blocked" ? "dashed" : "solid"} ${COL[k][0]}` }), t))),
+      sel ? (() => {
+        const ca = canAdopt(st2, sel.id), br = branches.find((b) => b.id === sel.branch);
+        return h("div", { class: "dt" }, h("b", {}, sel.ja), `\uFF08${br?.ja ?? ""}\u30FB\u6BB5\u968E ${sel.tier}${sel.special ? "\u30FB\u56FA\u6709" : sel.school ? "\u30FB\u8DEF\u7DDA" : "\u30FB\u57FA\u5E79"}\uFF09`, h("br"), `\u52B9\u679C: ${fxText(sel)}\u30FB\u8CBB\u7528 ${sel.cost}`, h("br"), `\u524D\u63D0: ${sel.prereq.length ? sel.prereq.map((p) => nodeOf(st2, p)?.ja ?? p).join("\u3001") : "\u306A\u3057"}${sel.tech.length ? "\u3000\u6280\u8853: " + sel.tech.map((t) => TECH[t]?.name ?? t).join("\u3001") : ""}`, h("br"), taken[sel.id] != null ? "\u53D6\u5F97\u6E08\u307F" : ca.ok ? "\u53D6\u5F97\u3067\u304D\u307E\u3059" : `\u53D6\u5F97\u3067\u304D\u306A\u3044\u7406\u7531: ${ca.reason}`, h("small", { style: "color:var(--dim)" }, "\u53D6\u5F97\u306F\u3001\u4E16\u754C\u306E\u4ED5\u7D44\u307F\u304C\u81EA\u52D5\u3067\u884C\u3044\u307E\u3059"));
+      })() : note2("\u6728\u306E\u30CE\u30FC\u30C9\u3092\u9078\u3076\u3068\u3001\u52B9\u679C\u3068\u524D\u63D0\u304C\u51FA\u307E\u3059\u3002")
+    );
+  }
+
+  // js/ui/v6/decision.js
+  var $ = (s) => document.querySelector(s);
+  var GLYPH = { assault: "\u7A81", hold: "\u5B88", flank: "\u56DE", withdraw: "\u9000" };
+  var SEAL = { treaty_offer: "\u7D04", peace_offer: "\u548C", war_incoming: "\u6226", ally_call: "\u76DF", succession: "\u7D99", rebellion: "\u4E71", omen: "\u5146", battle: "\u9663" };
+  function resolve2(d, option) {
+    const r = act({ type: "decision.resolve", decisionId: d.id, option });
+    if (!r.ok) return;
+    const res = r.result ?? {};
+    S2.decFocus = null;
+  }
+  var optBtn = (d, o, extra = "") => h("button", { class: "decopt" + extra, "data-opt": o.id, disabled: !!o.disabled, title: o.disabled ?? o.hint ?? "", onclick: () => resolve2(d, o.id) }, h("b", {}, o.ja), o.hint ? h("small", {}, o.disabled ? o.disabled : o.hint) : null);
+  function successionCards(d) {
+    const st2 = S2.w.civ.states[d.stateId];
+    return h("div", { class: "cands" }, ...d.options.map((o) => {
+      const pl = d.payload[o.id], c = pl?.cand, rg = pl?.regent;
+      if (!c) return optBtn(d, o);
+      const col = FACTION_COL[c.backer] ?? "#6fa8c9";
+      return h("button", { class: "cand", "data-opt": o.id, onclick: () => resolve2(d, o.id) }, face(c.name, st2?.id ?? "x"), h(
+        "div",
+        { class: "ci" },
+        h("b", {}, c.name),
+        h("small", {}, `${c.relation}\u30FB${c.ageYears}\u6B73${c.kin ? "" : "\u30FB\u738B\u671D\u304C\u4EE3\u308F\u308B"}`),
+        h("div", { class: "cb" }, h("span", {}, "\u80FD\u529B"), bar(c.skill, "#6fa8c9"), h("span", {}, "\u6B63\u7D71\u6027"), bar(c.legit, "#d8b45a")),
+        h("small", { style: `color:${col}` }, `${FACTION_JA[c.backer] ?? c.backer}\u304C\u652F\u6301`),
+        rg ? h("small", { class: "rg" }, `\u6442\u653F\uFF1A${rg.relation} ${rg.name}\uFF08\u80FD\u529B${Math.round(rg.skill * 100)}\u30FB${FACTION_JA[rg.backer] ?? rg.backer}\uFF09`) : null
+      ));
+    }));
+  }
+  function battleBox(d) {
+    const p = d.payload, st2 = S2.w.civ.states[d.stateId], dots = h("div", { class: "rounds" }, ...Array.from({ length: p.rounds }, (_, i) => h("i", { class: i < p.round ? "done" : i === p.round ? "now" : "" })));
+    const me = h("div", { class: "bside a" }, h("small", {}, p.role), h("b", {}, p.mine.corps), h("div", {}, p.mine.commander), h("div", { class: "bm" }, `\u5175\u529B ${n0(p.mine.size)}\u3000\u58EB\u6C17 ${p.mine.morale}%\u3000\u88DC\u7D66 ${p.mine.supply}%`));
+    const foe = h("div", { class: "bside d" }, h("small", {}, p.role === "\u653B\u3081" ? "\u5B88\u308A" : "\u653B\u3081"), h("b", {}, p.foe.state), h("div", {}, `\u5175\u529B ${p.foe.exact ? "" : "\u7D04 "}${n0(p.foe.estSize)}${p.foe.exact ? "" : "\uFF08\u5075\u5BDF\u306E\u898B\u7ACB\u3066\uFF09"}`), h("div", { class: "bm" }, `\u58EB\u6C17 ${p.foe.morale}%`));
+    const log3 = p.log.length ? h("div", { class: "blog" }, ...p.log.map((l) => h("div", {}, h("em", {}, `\u7B2C${l.round}\u624B\u756A`), l.text))) : null;
+    const hint = p.hint ? h("div", { class: "bhint" }, `\u65A5\u5019\u306E\u898B\u7ACB\u3066\uFF08\u5916\u308C\u308B\u3053\u3068\u3082\u3042\u308B\uFF09: \u6575\u306F\u300C${STANCES[p.hint]?.ja ?? p.hint}\u300D\u306E\u69CB\u3048\u3068\u898B\u3048\u308B`) : null;
+    const stance = h("div", { class: "stances" }, ...Object.entries(STANCES).map(([id, v]) => h("button", { class: "stance st-" + id, "data-opt": id, title: v.hint, onclick: () => resolve2(d, id) }, h("i", { class: "gl" }, GLYPH[id]), h("b", {}, v.ja), h("small", {}, v.hint))));
+    return h("div", {}, dots, h("div", { class: "bgrid" }, me, h("div", { class: "vs" }, "\u5BFE", h("small", {}, `\u6226\u6CC1 ${p.odds}`)), foe), hint, log3, h("p", { class: "n" }, "\u7A81\u6483\u306F\u6A5F\u52D5\u3092\u6B62\u3081\u3001\u6A5F\u52D5\u306F\u5805\u5B88\u3092\u7834\u308A\u3001\u5805\u5B88\u306F\u7A81\u6483\u3092\u53D7\u3051\u6B62\u3081\u308B\u3002"), stance, h("div", { class: "rowb" }, btn("\u6226\u5834\u3092\u5730\u56F3\u3067\u898B\u308B", () => {
+      const g = S2.w.civ.groups[p.siteId];
+      if (g) S2.hooks.focusCell?.(g.cell);
+    }, "", { id: "dec-map" })));
+  }
+  function renderDecision() {
+    const m = $("#decmodal");
+    if (!m) return;
+    const civ7 = S2.w?.civ, cs = civ7?.wcde.control.stateId, q2 = cs ? pendingOf(civ7) : [];
+    if (!q2.length || newsOf(civ7).queue.length) {
+      m.hidden = true;
+      m.replaceChildren();
+      m.classList.remove("battle");
+      return;
+    }
+    const d = q2[0], battle2 = d.kind === "battle";
+    m.hidden = false;
+    m.classList.toggle("battle", battle2);
+    if (battle2 && S2.decFocus !== d.id) {
+      S2.decFocus = d.id;
+      const g = civ7.groups[d.payload.siteId];
+      if (g) S2.hooks.focusCell?.(g.cell);
+    }
+    const body = d.kind === "succession" ? successionCards(d) : battle2 ? battleBox(d) : h("div", { class: "decopts" }, ...d.options.map((o) => optBtn(d, o)));
+    m.replaceChildren(h("div", { class: "decbox k-" + d.kind }, h("div", { class: "decseal" }, SEAL[d.kind] ?? "\u6C7A"), h("div", { class: "code" }, `${DECISION_JA[d.kind] ?? "\u6C7A\u65AD"}\uFF08\u672A\u6C7A ${q2.length} \u4EF6\uFF09`), h("div", { class: "n" }, `${d.date.year}\u5E74${d.date.month}\u6708`), h("h2", {}, d.title), h("p", { class: "decbody" }, d.body), body));
+  }
+
+  // js/ui/v6/military.js
+  var civ4 = () => S2.w.civ;
+  var ctx = () => S2.w.sim.ctx;
+  var n2 = (t) => h("p", { class: "n" }, t);
+  var sgn = (x) => (x >= 0 ? "+" : "") + Math.round(x * 100) + "%";
+  var placeOf = (gid) => {
+    const g = civ4().groups[gid];
+    if (!g) return "\u2014";
+    const s = civ4().settlements[g.settlementId];
+    return s?.name ?? `${civ4().states[g.stateId]?.name ?? "\u7121\u4E3B"}\u306E\u5730`;
+  };
+  var traitChips = (p) => (p.traits ?? []).map((t) => {
+    const T4 = TRAITS[t];
+    if (!T4) return null;
+    const fx3 = ["off", "def", "siege", "logi", "coh"].map((k) => T4[k] ? `${{ off: "\u653B", def: "\u5B88", siege: "\u5305\u56F2", logi: "\u88DC\u7D66", coh: "\u58EB\u6C17" }[k]}${sgn(T4[k])}` : "").filter(Boolean).join(" ");
+    const bad3 = Object.values(T4).some((v) => typeof v === "number" && v < 0);
+    return h("span", { class: "chip trait" + (bad3 ? " bad" : ""), title: fx3 }, T4.ja);
+  });
+  var personLine = (p) => `${rankOf(p)} ${p.name}\uFF08\u80FD\u529B ${Math.round(p.skill * 100)}\u30FB${(p.traits ?? []).map((t) => TRAITS[t]?.ja ?? t).join("\u30FB") || "\u7279\u6027\u306A\u3057"}\u30FB${FACTION_JA[p.backer] ?? p.backer}\uFF09`;
+  var orderText = (cp) => {
+    const o = cp.order, k = ORDER_KINDS[o.kind] ?? o.kind;
+    if (!o.targetGroupId) return k;
+    const left = o.route?.length ?? 0;
+    return `${k}\uFF1A${placeOf(o.targetGroupId)}${left ? `\uFF08\u3042\u3068 ${left} \u533A\u753B\u30FB\u7D04 ${Math.max(1, Math.ceil(left / marchSteps(ctx(), civ4().states[S2.w.civ.wcde.control.stateId])))} \u304B\u6708\uFF09` : "\uFF08\u5230\u7740\uFF09"}`;
+  };
+  var myWars = (st2) => st2.warIds.map((i) => civ4().wars[i]).filter((w) => w?.status === "active");
+  var sideOf2 = (w, id) => w.sides.a.includes(id) ? "a" : w.sides.d.includes(id) ? "d" : null;
+  function targets(st2, cp, kind, war) {
+    const c = civ4(), here = c.groups[cp.at], out = [], foe = war ? new Set(war.sides[sideOf2(war, st2.id) === "a" ? "d" : "a"]) : /* @__PURE__ */ new Set(), mine = new Set(war ? war.sides[sideOf2(war, st2.id)] : [st2.id]);
+    for (const g of Object.values(c.groups)) {
+      if (!g.stateId) continue;
+      const ok2 = kind === "march" || kind === "siege" ? foe.has(g.stateId) : mine.has(g.stateId);
+      if (ok2) out.push({ id: g.id, d: here ? distKm(S2.w.world, here.cell, g.cell) : 0, label: `${placeOf(g.id)}\uFF08${c.states[g.stateId]?.name ?? ""}\uFF09` });
+    }
+    return out.sort((a, b) => a.d - b.d).slice(0, 40);
+  }
+  function personBox(cp, slot, st2, pool) {
+    pool = pool.filter((q2) => (q2.service ?? "land") === (cp.service ?? "land"));
+    const p = slot === "commander" ? cp.commander : cp.officers[slot], title = slot === "commander" ? `${SERVICES[cp.service ?? "land"].formation}\u306E\u6700\u9AD8\u6307\u63EE\u5B98` : OFFICER_SLOTS[slot];
+    const sel = h("select", { "data-slot": slot }, h("option", { value: "" }, pool.length ? "\u5019\u88DC\u304B\u3089\u4EFB\u547D\u2026" : "\u5019\u88DC\u306F\u3044\u307E\u305B\u3093"), ...pool.map((q2) => h("option", { value: q2.id }, personLine(q2))));
+    return h(
+      "div",
+      { class: "pbox" },
+      h("small", {}, title),
+      p ? h("div", { class: "prow" }, face(p.name, st2.id), h("div", {}, h("b", {}, p.name), h("div", { class: "bar2" }, "\u80FD\u529B", bar(p.skill, "#6fa8c9"), h("small", {}, `\u7D4C\u9A13 ${p.xp ?? 0}`)), h("div", { class: "chips" }, ...traitChips(p), h("span", { class: "chip" }, `${FACTION_JA[p.backer] ?? p.backer}\u304C\u652F\u6301`)))) : n2("\uFF08\u7A7A\u304D\uFF09"),
+      h("div", { class: "rowb" }, sel, btn("\u4EFB\u547D", () => {
+        if (sel.value) act({ type: "corps.appoint", stateId: st2.id, corpsId: cp.id, slot, personId: sel.value });
+      }, "", { "data-appoint": slot }), slot !== "commander" && p ? btn("\u89E3\u4EFB", () => act({ type: "corps.dismiss", stateId: st2.id, corpsId: cp.id, slot }), "") : null)
+    );
+  }
+  function corpsDetail(cp, view2, st2) {
+    const c = civ4(), wars = myWars(st2), war = c.wars[cp.warId] ?? wars[0] ?? null, out = h("div", { class: "corpsdetail" });
+    const nm = h("input", { id: "cp-name", value: cp.name, maxlength: 20 });
+    out.append(h("div", { class: "whead" }, h("h2", {}, cp.name), h("div", { class: "sub" }, `\u5175\u529B ${n0(cp.size)}\u30FB\u73FE\u5728\u5730 ${placeOf(cp.at)}\u30FB${orderText(cp)}`)), h("div", { class: "rowb" }, nm, btn("\u6539\u540D", () => act({ type: "corps.rename", stateId: st2.id, corpsId: cp.id, name: nm.value }), "", { id: "cp-rename" })));
+    out.append(h("div", { class: "sub" }, `${SERVICES[cp.service ?? "land"].ja}\u30FB${cp.commander ? rankOf(cp.commander) : ""}\u30FB${cp.comp === "manual" ? "\u624B\u52D5\u306E\u69CB\u6210" : "\u81EA\u52D5\u306E\u69CB\u6210"}`));
+    const fx3 = cp.fx;
+    out.append(h("div", { class: "chips fxs" }, ...[["\u653B\u3081", fx3.off + fx3.skill], ["\u5B88\u308A", fx3.def + fx3.skill], ["\u5305\u56F2", fx3.siege], ["\u88DC\u7D66", fx3.logi], ["\u58EB\u6C17", fx3.coh]].map(([k, v]) => h("span", { class: "chip" + (v < 0 ? " bad" : v > 0 ? " good" : "") }, `${k} ${sgn(v)}`))));
+    out.append(lb("\u6307\u63EE\u5B98\u3068\u526F\u5B98", "COMMAND"), personBox(cp, "commander", st2, view2.pool), ...Object.keys(OFFICER_SLOTS).map((s) => personBox(cp, s, st2, view2.pool)));
+    const kind = h("select", { id: "cp-kind" }, ...Object.entries(ORDER_KINDS).filter(([k]) => cp.service === "air" ? ["auto", "hold", "reserve"].includes(k) : cp.service === "sea" ? ["auto", "hold", "reserve", "defend"].includes(k) : true).map(([k, ja]) => h("option", { value: k, selected: cp.order.kind === k }, ja))), tgt = h("select", { id: "cp-target" }), wsel = h("select", { id: "cp-war" }, ...wars.map((x) => h("option", { value: x.id, selected: x.id === war?.id }, x.name ?? x.id)));
+    const fill = () => {
+      const k = kind.value;
+      tgt.replaceChildren();
+      tgt.disabled = !["march", "siege", "defend", "retreat"].includes(k);
+      if (tgt.disabled) return;
+      const w2 = c.wars[wsel.value] ?? war;
+      const list = targets(st2, cp, k, w2);
+      tgt.append(h("option", { value: "" }, list.length ? "\u76EE\u6A19\u3092\u9078\u3076\u2026" : "\u76EE\u6A19\u306B\u3067\u304D\u308B\u571F\u5730\u304C\u3042\u308A\u307E\u305B\u3093"), ...list.map((t) => h("option", { value: t.id, selected: cp.order.targetGroupId === t.id }, `${t.label}\u30FB\u7D04 ${n0(t.d)} km`)));
+    };
+    kind.addEventListener("change", fill);
+    wsel.addEventListener("change", fill);
+    fill();
+    out.append(
+      lb("\u4F5C\u6226\u306E\u547D\u4EE4", "ORDERS"),
+      n2("\u9032\u8ECD\u306F\u6575\u306E\u571F\u5730\u3078\u3002\u7740\u304F\u3068\u4F5C\u6226\u304C\u59CB\u307E\u308B\u3002\u5305\u56F2\u306F\u57CE\u3084\u90FD\u5E02\u3092\u653B\u3081\u3001\u8907\u6570\u306E\u8ECD\u56E3\u3067\u540C\u3058\u76EE\u6A19\u3092\u5305\u56F2\u3059\u308B\u3068\u901F\u304F\u843D\u3068\u305B\u308B\u3002\u5B88\u5099\u306F\u5473\u65B9\u306E\u571F\u5730\u3067\u8FCE\u3048\u6483\u3064\u3002\u64A4\u9000\u306F\u6226\u308F\u305A\u9000\u304F\u3002\u304A\u4EFB\u305B\u306F\u5F93\u6765\u3069\u304A\u308A\u81EA\u52D5\u3067\u52D5\u304F\u3002"),
+      h("div", { class: "rowb" }, kind, tgt, wars.length ? wsel : null, btn("\u547D\u4EE4\u3059\u308B", () => act({ type: "corps.order", stateId: st2.id, corpsId: cp.id, kind: kind.value, targetGroupId: tgt.disabled ? null : tgt.value || null, warId: wars.length ? wsel.value : null }), "p", { id: "cp-order" }))
+    );
+    const others = view2.list.filter((x) => x.id !== cp.id && x.at === cp.at && x.service === cp.service);
+    out.append(lb("\u90E8\u968A", "UNITS"), ...cp.units.map((u) => {
+      const inp = h("input", { value: u.name, maxlength: 20, "data-unit": u.id }), kinds = Object.entries(UNIT_KINDS).filter(([k, K]) => K.service === cp.service && K.need(st2, ctx())), ks = h("select", {}, h("option", { value: "" }, "\u5175\u7A2E\u3092\u5909\u3048\u308B\u2026"), ...kinds.map(([k, K]) => h("option", { value: k }, K.ja))), to = h("select", {}, h("option", { value: "" }, others.length ? "\u79FB\u3059\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name))), sz = h("input", { type: "number", min: 1, max: Math.floor(u.size), value: Math.max(1, Math.floor(u.size / 2)), style: "width:80px" });
+      return h("div", { class: "unit" }, h("div", { class: "rowb" }, inp, h("b", {}, `${UNIT_KINDS[u.kind]?.ja ?? u.kind} ${n0(u.size)}`), btn("\u6539\u540D", () => act({ type: "corps.renameUnit", stateId: st2.id, corpsId: cp.id, unitId: u.id, name: inp.value }))), h("div", { class: "rowb" }, ks, btn("\u518D\u8A13\u7DF4", () => {
+        if (ks.value) act({ type: "corps.convert", stateId: st2.id, corpsId: cp.id, unitId: u.id, toKind: ks.value });
+      }), to, sz, btn("\u5175\u3092\u79FB\u3059", () => {
+        if (to.value) act({ type: "corps.transfer", stateId: st2.id, from: cp.id, to: to.value, unitId: u.id, size: Number(sz.value) });
+      })));
+    }));
+    {
+      const avail = Object.entries(UNIT_KINDS).filter(([k, K]) => K.service === cp.service && K.need(st2, ctx())), val = Object.fromEntries(avail.map(([k]) => [k, Math.round(cp.units.find((u) => u.kind === k)?.size ?? 0)])), inps = {}, wt = h("input", { id: "cp-weight", type: "number", min: 0.2, max: 5, step: 0.1, value: cp.weight ?? 1, style: "width:70px" });
+      out.append(
+        lb("\u69CB\u6210\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09", "COMPOSITION"),
+        n2(cp.comp === "manual" ? "\u624B\u52D5\u3067\u3059\u3002\u56FD\u5BB6\u306E\u4EBA\u6570\uFF08\u8ECD\u5236\uFF09\u3092\u8D85\u3048\u308B\u5175\u7A2E\u306F\u3001\u6BD4\u4F8B\u3057\u3066\u7E2E\u307F\u307E\u3059\u3002" : "\u81EA\u52D5\u3067\u3059\u3002\u56FD\u5BB6\u306E\u4EBA\u6570\u3092\u3001\u3053\u306E\u8ECD\u306E\u81EA\u52D5\u306E\u90E8\u968A\u306B\u91CD\u307F\u3067\u5206\u3051\u3066\u3044\u307E\u3059\u3002"),
+        ...avail.map(([k, K]) => {
+          const i = h("input", { type: "number", min: 0, step: 50, value: val[k], "data-comp": k, style: "width:100px", oninput: (e) => {
+            val[k] = Math.max(0, Math.round(Number(e.target.value) || 0));
+          } });
+          inps[k] = i;
+          const it = itemsOf(k, val[k]);
+          return h("div", { class: "slrow" }, h("span", { class: "nm", title: K.hint }, K.ja), i, h("small", {}, K.per ? `1${K.item}\u2252${K.per}\u4EBA${it ? `\u30FB\u4ECA \u7D04${it}${K.item}` : ""}` : ""));
+        }),
+        h("div", { class: "rowb" }, btn("\u3053\u306E\u69CB\u6210\u306B\u3059\u308B\uFF08\u624B\u52D5\uFF09", () => {
+          const hs = {};
+          for (const k in val) if (val[k] > 0) hs[k] = val[k];
+          act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: "manual", heads: hs });
+        }, "p", { id: "cp-comp" }), btn("\u81EA\u52D5\u306B\u623B\u3059", () => act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: "auto" }), "", { id: "cp-comp-auto" }), h("small", {}, "\u81EA\u52D5\u306E\u3068\u304D\u306E\u91CD\u307F"), wt, btn("\u91CD\u307F\u3092\u5909\u3048\u308B", () => act({ type: "corps.setComposition", stateId: st2.id, corpsId: cp.id, mode: cp.comp === "manual" ? "manual" : "auto", heads: cp.comp === "manual" ? cp.manual : void 0, weight: Number(wt.value) }), "", { id: "cp-weight-set" }))
+      );
+    }
+    const sname = h("input", { id: "cp-split-name", placeholder: "\u65B0\u3057\u3044\u90E8\u968A\u306E\u540D\u524D", maxlength: 20 }), frac = h("input", { id: "cp-split-frac", type: "range", min: 0.1, max: 0.9, step: 0.05, value: 0.4 }), pc = h("select", { id: "cp-split-cmd" }, h("option", { value: "" }, "\u6307\u63EE\u5B98\u306E\u5019\u88DC\u2026"), ...view2.pool.filter((q2) => (q2.service ?? "land") === (cp.service ?? "land")).map((q2) => h("option", { value: q2.id }, personLine(q2)))), into = h("select", { id: "cp-merge-into" }, h("option", { value: "" }, others.length ? "\u7D71\u5408\u5148\u306E\u8ECD\u56E3\u2026" : "\u540C\u3058\u5834\u6240\u306B\u4ED6\u306E\u8ECD\u56E3\u304C\u306A\u3044"), ...others.map((x) => h("option", { value: x.id }, x.name)));
+    out.append(
+      lb("\u7DE8\u6210", "ORGANIZE"),
+      n2(`\u8ECD\u56E3\u306F ${view2.max} \u307E\u3067\u3002\u5206\u3051\u308B\u3068\u304D\u306F\u3001\u65B0\u3057\u3044\u8ECD\u56E3\u306E\u6307\u63EE\u5B98\u3092\u5019\u88DC\u304B\u3089\u9078\u3076\uFF08\u8CBB\u7528\uFF1A\u5175\u529B\u306E 0.1% \xD7 \u5272\u5408\uFF09\u3002`),
+      h("div", { class: "rowb" }, sname, h("small", {}, "\u5272\u5408"), frac, pc, btn("\u8ECD\u56E3\u3092\u5206\u3051\u308B", () => act({ type: "corps.split", stateId: st2.id, corpsId: cp.id, name: sname.value, fraction: Number(frac.value), commanderId: pc.value }), "", { id: "cp-split" })),
+      h("div", { class: "rowb" }, into, btn("\u3053\u306E\u8ECD\u56E3\u3092\u7D71\u5408\u3059\u308B", () => {
+        if (into.value) {
+          S2.corpsSel = into.value;
+          act({ type: "corps.merge", stateId: st2.id, from: cp.id, into: into.value });
+        }
+      }, "", { id: "cp-merge" }))
+    );
+    return out;
+  }
+  function pMilitary() {
+    const c = civ4(), cs = controlled(), box = h("div", {}, h("div", { class: "code" }, "MILITARY"), h("h2", {}, "\u8ECD"));
+    if (!cs) {
+      box.append(n2("\u62C5\u5F53\u56FD\u5BB6\u304C\u3042\u308A\u307E\u305B\u3093\u3002\u56FD\u5BB6\u3092\u62C5\u5F53\u3059\u308B\u3068\u3001\u8ECD\u56E3\u3092\u7387\u3044\u3066\u6226\u3048\u307E\u3059\u3002"));
+      return box;
+    }
+    const st2 = c.states[cs];
+    const view2 = corpsView(ctx(), st2);
+    if (!view2) {
+      box.append(n2("\u8ECD\u56E3\u3092\u7DE8\u6210\u3057\u3066\u3044\u307E\u3059\u2026"));
+      setTimeout(() => {
+        if (controlled() === cs && !c.states[cs].corps) act({ type: "corps.refresh", stateId: cs });
+      }, 0);
+      return box;
+    }
+    const sel = view2.list.find((x) => x.id === S2.corpsSel);
+    if (sel) S2.full = { key: "corps", title: sel.name, build: () => corpsDetail(sel, corpsView(ctx(), c.states[cs]), c.states[cs]), onClose: () => {
+      S2.corpsSel = null;
+      S2.map?.draw();
+    } };
+    const wars = myWars(st2), H2 = view2.heads;
+    box.append(n2(`\u9678 ${n0(H2.land)}\u30FB\u6D77 ${n0(H2.sea)}\u30FB\u7A7A ${n0(H2.air)} \u4EBA\uFF08\u90E8\u968A ${view2.list.length} / ${view2.max}\uFF09\u30FB\u6226\u4E89\u4E2D ${wars.length} \u4EF6`), n2("\u9678\u30FB\u6D77\u30FB\u7A7A\u306E 3 \u8ECD\u3002\u90E8\u968A\u3092\u9078\u3076\u3068\u3001\u6307\u63EE\u5B98\u306E\u4EBA\u4E8B\u30FB\u69CB\u6210\uFF08\u5175\u7A2E\u3054\u3068\u306E\u4EBA\u6570\uFF09\u30FB\u4F5C\u6226\u306E\u547D\u4EE4\u304C\u3067\u304D\u307E\u3059\u3002\u547D\u4EE4\u304C\u306A\u3051\u308C\u3070\u3001\u90E8\u968A\u306F\u81EA\u52D5\u3067\u52D5\u304D\u307E\u3059\u3002\u7A7A\u8ECD\u306E\u90E8\u968A\u306F\u3001\u9678\u3068\u6D77\u306E\u6226\u3044\u3092\u652F\u3048\u307E\u3059\uFF08\u5236\u7A7A\u6A29\uFF09\u3002"));
+    box.append(lb("\u7DCF\u53F8\u4EE4\u5B98", "COMMANDERS-IN-CHIEF"), ...SERVICE_KEYS.filter((k) => view2.usable[k]).map((k) => {
+      const ch = view2.chiefs[k], pool = view2.pool.filter((q2) => (q2.service ?? "land") === k), sel2 = h("select", { "data-chief": k }, h("option", { value: "" }, pool.length ? "\u5019\u88DC\u304B\u3089\u4EFB\u547D\u2026" : "\u5019\u88DC\u306F\u3044\u307E\u305B\u3093"), ...pool.map((q2) => h("option", { value: q2.id }, personLine(q2))));
+      return h("div", { class: "pbox" }, h("small", { style: `color:${SERVICES[k].color}` }, SERVICES[k].chief), ch ? h("div", {}, h("b", {}, `${ch.rank} ${ch.name}`), h("div", { class: "chips" }, ...traitChips(ch), h("span", { class: "chip" }, `\u80FD\u529B ${Math.round(ch.skill * 100)}`))) : n2("\uFF08\u7A7A\u304D\uFF09\u3000\u7DCF\u53F8\u4EE4\u5B98\u306F\u3001\u305D\u306E\u8ECD\u306E\u5168\u90E8\u968A\u306B\u5C0F\u3055\u304F\u52B9\u304D\u307E\u3059\u3002"), h("div", { class: "rowb" }, sel2, btn("\u4EFB\u547D", () => {
+        if (sel2.value) act({ type: "corps.appointChief", stateId: st2.id, service: k, personId: sel2.value });
+      }, "", { "data-appoint-chief": k }), ch ? btn("\u89E3\u4EFB", () => act({ type: "corps.dismissChief", stateId: st2.id, service: k }), "") : null));
+    }));
+    for (const svc of SERVICE_KEYS) {
+      const fl = view2.list.filter((x) => x.service === svc);
+      if (!fl.length) continue;
+      box.append(lb(SERVICES[svc].ja, SERVICES[svc].formation.toUpperCase()), h("div", { class: "corpslist" }, ...fl.map((cp) => h(
+        "button",
+        { class: "corpsrow" + (S2.corpsSel === cp.id ? " on" : ""), "data-corps": cp.id, onclick: () => {
+          S2.corpsSel = cp.id;
+          S2.hooks.panel();
+          S2.hooks.mapOnly?.();
+          const g = c.groups[cp.at];
+          if (g) S2.hooks.focusCell?.(g.cell);
+        } },
+        h("div", { class: "cr1" }, h("b", {}, cp.name), h("span", {}, `${n0(cp.size)} \u4EBA`)),
+        h("div", { class: "cr2" }, `${cp.rank ?? ""} ${cp.commander.name}\uFF08\u80FD\u529B${Math.round(cp.commander.skill * 100)}\uFF09\u30FB${placeOf(cp.at)}`),
+        h("div", { class: "cr3" }, orderText(cp)),
+        h("div", { class: "chips" }, ...traitChips(cp.commander))
+      ))));
+    }
+    void pct;
+    return box;
+  }
+  function corpsMarkers() {
+    const cs = controlled();
+    if (!cs) return [];
+    const st2 = civ4().states[cs], view2 = st2 ? corpsView(ctx(), st2) : null;
+    if (!view2) return [];
+    const col = colorOf(cs, 60);
+    return view2.list.map((cp, i) => {
+      const g = civ4().groups[cp.at];
+      if (!g) return null;
+      const sel = S2.corpsSel === cp.id;
+      return { cell: g.cell, label: String(i + 1), color: col, sel, route: sel ? (cp.order.route ?? []).map((id) => civ4().groups[id]?.cell).filter((x) => x != null) : [], target: sel && cp.order.targetGroupId ? civ4().groups[cp.order.targetGroupId]?.cell : null };
+    }).filter(Boolean);
   }
 
   // js/ui/v6/war.js
@@ -16648,7 +17131,7 @@ ${Object.entries(o).map(([k, v]) => `${k}: ${yamlVal(v)}`).join("\n")}
 ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ")).join(" | ")} |`).join("\n")}
 ` : "\uFF08\u306A\u3057\uFF09\n";
   var r12 = (x) => Math.round(x * 10) / 10;
-  var r38 = (x) => Math.round(x * 1e3) / 1e3;
+  var r39 = (x) => Math.round(x * 1e3) / 1e3;
   var colorOf2 = (id) => {
     let h2 = 2166136261;
     for (const ch of String(id)) h2 = Math.imul(h2 ^ ch.charCodeAt(0), 16777619);
@@ -16801,7 +17284,7 @@ ${rows.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").replac
 
 \u8A08\u7B97\u3055\u308C\u308B\u5024\u3078\u306E\u4E00\u6642\u7684\u306A\u88DC\u6B63\u306E\u8A18\u9332\u3067\u3059\u3002\u4E16\u754C\u306E\u4E8B\u5B9F\uFF08\u51FA\u6765\u4E8B\uFF09\u3067\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u88DC\u6B63\u306F\u534A\u6E1B\u671F\u3067\u901A\u5E38\u5024\u3078\u623B\u308A\u3001\u4ECB\u5165\u4E2D\u306B\u8D77\u304D\u305F\u7D50\u679C\u306F\u623B\u308A\u307E\u305B\u3093\u3002
 
-` + table2(["\u958B\u59CB", "\u5BFE\u8C61", "\u9805\u76EE", "\u958B\u59CB\u6642\u306E\u901A\u5E38\u5024", "\u6307\u5B9A\u5024", "\u534A\u6E1B\u671F\uFF08\u6708\uFF09", "\u72B6\u614B", "\u7406\u7531"], ivs.map((r) => [mi2s(r.startMonth), L(r.targetId), r.field, r38(r.nominalAtStart), r38(r.target), r.halfLife, STATUS[r.status] ?? r.status, r.reason || "\u2014"])));
+` + table2(["\u958B\u59CB", "\u5BFE\u8C61", "\u9805\u76EE", "\u958B\u59CB\u6642\u306E\u901A\u5E38\u5024", "\u6307\u5B9A\u5024", "\u534A\u6E1B\u671F\uFF08\u6708\uFF09", "\u72B6\u614B", "\u7406\u7531"], ivs.map((r) => [mi2s(r.startMonth), L(r.targetId), r.field, r39(r.nominalAtStart), r39(r.target), r.halfLife, STATUS[r.status] ?? r.status, r.reason || "\u2014"])));
       const eds = W6.edits ?? [];
       if (eds.length) yield out("creator", "\u5275\u9020\u4E3B\u306E\u4ECB\u5165/\u76F4\u63A5\u7DE8\u96C6\u306E\u8A18\u9332", fm({ type: "\u5275\u9020\u4E3B\u306E\u76F4\u63A5\u7DE8\u96C6", \u4EF6\u6570: eds.length, tags: ["\u5275\u9020\u4E3B\u306E\u4ECB\u5165"] }) + `# \u5275\u9020\u4E3B\u306E\u76F4\u63A5\u7DE8\u96C6\u306E\u8A18\u9332
 
@@ -16837,7 +17320,7 @@ ${N2.acked.slice(-100).map((id) => `- ${link2(id, id)}`).join("\n") || "\uFF08\u
 - ${s.alive ? "\u5B58\u7D9A\u4E2D" : `\u6EC5\u4EA1: ${mi2s(s.dissolvedAt)}`}
 - \u653F\u4F53: ${POLITY_JA2[s.polity] ?? s.polity}\uFF0F\u6307\u5C0E\u8005: ${s.leader.name}\uFF08${s.leader.heir ? "\u5F8C\u7D99\u8005\u3042\u308A" : "\u5F8C\u7D99\u8005\u672A\u5B9A"}\uFF09
 - \u9996\u90FD\uFF08\u96C6\u56E3\uFF09: ${cap ? link2(cap.id, "\u9996\u90FD\u306E\u96C6\u56E3") : "\u306A\u3057"}
-- \u4EBA\u53E3 ${Math.round(s.pop)}\u30FB\u8CA1\u653F ${r12(s.treasury)}\u30FB\u5B89\u5B9A\u5EA6 ${r38(s.stability)}\u30FB\u5175\u529B ${Math.round(s.army)}\u30FB\u96C6\u843D ${s.settlements}
+- \u4EBA\u53E3 ${Math.round(s.pop)}\u30FB\u8CA1\u653F ${r12(s.treasury)}\u30FB\u5B89\u5B9A\u5EA6 ${r39(s.stability)}\u30FB\u5175\u529B ${Math.round(s.army)}\u30FB\u96C6\u843D ${s.settlements}
 - \u65B9\u91DD: ${s.strategy?.goal ?? "\u2014"}
 - \u653F\u7B56: \u7A0E ${s.policy.tax}\u30FB\u52D5\u54E1 ${s.policy.mobilization}\u30FB\u540C\u5316 ${s.policy.assimilation}\u30FB\u5BDB\u5BB9 ${s.policy.tolerance}\u30FB\u81EA\u6CBB ${s.policy.autonomy}
 ${s.magic ? `- \u9B54\u6CD5\u5236\u5EA6: ${INSTITUTIONS[s.magic.kind].ja}\uFF08\u56FD\u529B ${s.magic.power}\uFF09${s.magic.orgId ? `\uFF0F${L(s.magic.orgId)}` : ""}
@@ -16957,7 +17440,7 @@ ${table2(["\u5BFE\u8C61", "\u9805\u76EE", "\u5909\u66F4\u524D", "\u5909\u66F4\u5
 - \u65B9\u91DD: ${d.strategy ?? "\u2014"}
 
 ## \u89B3\u6E2C
-${Object.entries(d.observations).map(([k, v]) => `- ${k}: ${typeof v === "number" ? r38(v) : v}`).join("\n")}
+${Object.entries(d.observations).map(([k, v]) => `- ${k}: ${typeof v === "number" ? r39(v) : v}`).join("\n")}
 
 ## \u5019\u88DC
 ${table2(["\u884C\u52D5", "\u5BFE\u8C61", "\u9078\u629E\u80A2", "\u5F97\u70B9", "\u8CC7\u683C", "\u7406\u7531", "\u8981\u56E0"], x.candidates.map((c) => [c.key, c.target ? L(c.target) : "", c.opt ?? "", c.total, c.eligible ? "\u53EF" : "\u4E0D\u53EF", c.reason ?? "", Object.entries(c.factors ?? {}).map(([k, v]) => `${k} ${v}`).join("\u3001")]))}`);
@@ -16977,7 +17460,7 @@ ${(ix.byEntity.get(s.id) ?? []).map((i) => civ7.events[i]).slice(0, 50).map((e) 
 - \u7531\u6765: ${g.parent ? link2(g.parent, "\u89AA\u306E\u96C6\u56E3") : "\u6700\u521D\u304B\u3089"}
 
 ## \u69CB\u6210\uFF08\u30B3\u30DB\u30FC\u30C8\uFF09
-${table2(["\u6587\u5316", "\u8A00\u8A9E", "\u5B97\u6559", "\u7A2E\u65CF", "\u5272\u5408", "\u7DCA\u5F35"], g.cohorts.map((c) => [L(c.cultureId), L(c.languageId), c.religionId ? L(c.religionId) : "\u306A\u3057", SPECIES[c.speciesId]?.ja ?? c.speciesId, r38(c.share), r38(c.tension)]))}
+${table2(["\u6587\u5316", "\u8A00\u8A9E", "\u5B97\u6559", "\u7A2E\u65CF", "\u5272\u5408", "\u7DCA\u5F35"], g.cohorts.map((c) => [L(c.cultureId), L(c.languageId), c.religionId ? L(c.religionId) : "\u306A\u3057", SPECIES[c.speciesId]?.ja ?? c.speciesId, r39(c.share), r39(c.tension)]))}
 ## \u77E5\u3063\u3066\u3044\u308B\u6280\u8853
 ${Object.entries(g.tech.known).map(([k, mi]) => `${link2(`tech:${k}`, TECHS.find((t) => t.key === k)?.name ?? k)}\uFF08${mi2s(mi)}\uFF09`).join("\u3001") || "\uFF08\u306A\u3057\uFF09"}
 `);
@@ -17421,6 +17904,11 @@ ${opts.lean ? "- \u5275\u4F5C\u5411\u3051\u306E\u8EFD\u91CF\u51FA\u529B\u3067\u3
     if (kind === "culture") rows.push(["\u767A\u7965\u306E\u533A\u753B", x.cell != null ? `\u533A\u753B ${x.cell}` : "\u2014"], ["\u540D\u524D\u306E\u56FA\u5B9A", x.nameFixed ? "\u56FA\u5B9A\uFF08\u5275\u9020\u4E3B\u306E\u7DE8\u96C6\uFF09" : "\u81EA\u52D5"]);
     return h("div", { class: "dt rs" }, h("b", {}, x.name), table(["\u9805\u76EE", "\u5185\u5BB9"], rows), h("div", { class: "rowb" }, nm, btn("\u540D\u524D\u3092\u7DE8\u96C6\uFF08\u5275\u9020\u4E3B\uFF09", () => creator({ type: "creator.rename", kind, id: x.id, name: nm.value }), "", { id: "ent-rename" })), note3("\u5B9A\u7FA9\u306E\u7DE8\u96C6\u306F\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u3068\u3057\u3066\u8A18\u9332\u3055\u308C\u3001\u904E\u53BB\u306E\u5BA2\u89B3\u30A4\u30D9\u30F3\u30C8\u306F\u66F8\u304D\u63DB\u3048\u307E\u305B\u3093\u3002\u5B9A\u7FA9\u3068\u3001\u96C6\u56E3\u3067\u5B9F\u969B\u306B\u4F7F\u308F\u308C\u3066\u3044\u308B\u72B6\u614B\u306F\u5225\u3067\u3059\u3002"));
   }
+  function crTarget(pick3) {
+    const st2 = civ6().states[S2.crSel ?? pick3.value];
+    if (!st2?.alive) return h("div", {});
+    return h("div", { class: "crtarget" }, creatorBox(st2), uprisingBox(st2));
+  }
   function pCreator() {
     const on = !controlled();
     const box = h("div", {}, ...head("CREATOR", "\u5275\u9020\u4E3B"));
@@ -17429,14 +17917,17 @@ ${opts.lean ? "- \u5275\u4F5C\u5411\u3051\u306E\u8EFD\u91CF\u51FA\u529B\u3067\u3
       S2.hooks.render();
     }, "p", { id: "release" })) || box;
     const names = aliveStates2().sort((a, b) => b.pop - a.pop);
-    const pick3 = h("select", { id: "cr-state" }, ...names.slice(0, 120).map((s) => h("option", { value: s.id }, s.name)));
+    const pick3 = h("select", { id: "cr-state", onchange: (e) => {
+      S2.crSel = e.target.value;
+      S2.hooks.panel();
+    } }, ...names.slice(0, 120).map((s) => h("option", { value: s.id, selected: s.id === S2.crSel }, s.name)));
     box.append(
       note3("\u4E16\u754C\u3092\u898B\u5B88\u308B\u7ACB\u5834\u3067\u3067\u304D\u308B\u3053\u3068\u3092\u3001\u3053\u3053\u306B\u307E\u3068\u3081\u3066\u3044\u307E\u3059\u3002"),
-      lb("\u56FD\u5BB6\u3078\u306E\u4ECB\u5165\u30FB\u7DE8\u96C6", "INTERVENE"),
-      note3("\u56FD\u5BB6\u3092\u9078\u3093\u3067\u3001\u8A73\u7D30\u30DA\u30FC\u30B8\u306E\u300C\u4ECB\u5165\u300D\u300C\u540D\u524D\u306E\u7DE8\u96C6\u300D\u304B\u3089\u884C\u3044\u307E\u3059\u3002"),
+      lb("\u56FD\u5BB6\u3078\u306E\u4ECB\u5165\u30FB\u53CD\u4E71", "INTERVENE"),
       h("div", { class: "rowb" }, pick3, btn("\u305D\u306E\u56FD\u3092\u958B\u304F", () => {
         if (pick3.value) S2.hooks.select(pick3.value);
       })),
+      crTarget(pick3),
       lb("\u56FD\u5BB6\u3092\u3064\u304F\u308B", "CREATE A NATION"),
       note3("\u56FD\u540D\u30FB\u653F\u4F53\u30FB\u5F79\u8077\u30FB\u70BA\u653F\u8005\u30FB\u9996\u90FD\u30FB\u6280\u8853\u3092\u6C7A\u3081\u3066\u3001\u65B0\u3057\u3044\u56FD\u3092\u4E16\u754C\u306B\u751F\u307F\u307E\u3059\uFF08\u62C5\u5F53\u306F\u3057\u307E\u305B\u3093\uFF09\u3002"),
       h("div", { class: "rowb" }, btn("\u56FD\u5BB6\u3092\u3064\u304F\u308B", () => openWizard({ mode: "creator", onDone: (r) => {
@@ -17687,7 +18178,7 @@ ${opts.lean ? "- \u5275\u4F5C\u5411\u3051\u306E\u8EFD\u91CF\u51FA\u529B\u3067\u3
     S2.sel = id;
     S2.detail = true;
     S2.hub = "nations";
-    if (!S2.tab) S2.tab = "politics";
+    if (!S2.tab) S2.tab = "info";
     render();
     $2("#callout").classList.remove("on");
   }

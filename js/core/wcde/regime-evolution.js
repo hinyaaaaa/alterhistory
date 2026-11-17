@@ -51,6 +51,8 @@ export function regimeCandidates(ctx, st, pressure = 0) {
   }
   return out;
 }
+/** 担当国が選べる政体（今の政体・危機限定を除き、解禁条件を満たすもの）と、それぞれの変更の規模 */
+export function playerRegimeOptions(ctx, st) { const cur = regimeOf(st); return REGIME_IDS.filter((id) => id !== cur && !REGIMES[id].crisisOnly && !gateFor(ctx, st, id)).map((id) => ({ id, scale: changeScale(cur, id), tier: tierOf(id) })); }
 /** 変える圧力（0〜1）: 正統性の低さ・戦争の疲弊・財政難・隣国の優位 */
 export function pressureOf(ctx, st) {
   const civ = ctx.civ, P = st.politics ?? {}, legE = effective(civ, st, "legitimacy"), nbs = neighborStates(ctx, st); let stronger = 0;

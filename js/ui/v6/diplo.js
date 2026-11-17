@@ -28,7 +28,7 @@ export function pDiplo() {
 }
 
 /* ---------- 関係: 結びつきごとの国のくくり → その国との関係 ---------- */
-function ties(c, base) {
+export function ties(c, base) {
   const sec = { over: new Map(), subj: new Map(), ally: new Map(), nap: new Map(), trade: new Map(), other: new Map(), enemy: new Map() }, put = (k, id, ja) => { const m = sec[k]; (m.get(id) ?? m.set(id, []).get(id)).push(ja); };
   for (const t of Object.values(c.treaties)) {
     if (!t.active || (t.a !== base.id && t.b !== base.id)) continue; const o = t.a === base.id ? t.b : t.a, T = TREATY[t.type]; if (!c.states[o]?.alive) continue;

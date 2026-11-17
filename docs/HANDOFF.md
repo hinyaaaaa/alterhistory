@@ -1,3 +1,13 @@
+# v6.17.0（最新）: 国家ページの 6 サブタブ・情報・内政・政策バッジ
+
+- 中身は `docs/CHANGELOG.md` の v6.17.0。要件の正本は `docs/REQUIREMENTS.md`（v6.18.0 以降は、これを最初に読む）。
+- 新規: `wcde/identity.js`（国名・政体・指導者・国旗・財政値の変更と代償）・`wcde/shocks.js`（薄れる正統性の低下）・`ui/v6/badges.js`（政策バッジ SVG）・`tests/v617-nation.test.mjs`。大きく変えたもの: `ui/v6/nation.js`（全面）・`ui/v6/policy.js`（バッジ）・`wcde/policies.js`（6 分野）・`ui/v6/views-a.js`（6 タブ）・`ui/v6/views-b.js`（創造主タブに介入・反乱）・`ui/v6/visual.js`（`flag` が実際の旗）。
+- 注意: 編集の全画面は `S.edit = { id, kind: name|regime|leader|flag }`。`tInfoV` が `S.full` を立てる（`renderPanel` が毎回 `S.full` を消すので、国家ページの描画のたびに立て直す）。
+- 注意: 代償は `st.shocks`。`effective` の正統性（nominal）が `shockLegit` を引く。暗殺などの出来事は `changeLeader(ctx, st, { mode: "assassinated", cand })` を呼ぶ（v6.19.0）。
+- 注意: 継承者を選んだ退位は、継承の経路（`people.js`）に任せるため交代は次の月の歩みで起きる。それ以外の候補は即時。
+- 未着手: 軍団一覧・詳細・編成（v6.18.0）。反乱を戦争と同じ処理にする（v6.19.0）。
+- 未確認: 実機・画面での見え方（撮影なし）。テストは v6.20.0。
+
 # v6.16.0（最新）: 政体 24 種と進化・従属・条約・盟約・外交タブ
 
 - 中身は `docs/CHANGELOG.md` の v6.16.0。要件の正本は `docs/REQUIREMENTS.md`（v6.17.0 以降は、これを最初に読む）。

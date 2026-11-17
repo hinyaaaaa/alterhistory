@@ -1,6 +1,9 @@
 // v6.5.0: ビジュアルの共通部品。文字を減らし、旗・アイコン・リング・円グラフ・棒グラフ・ツリーマップで状況をひと目で伝える。
 //   すべて読み取り専用（世界の状態は変えない）。色は国家・文化などの色（colorOf）をそのまま使い、数値と記号も併記する（色覚に依らない）。
 import { h, sv, hash, colorOf, n0, pct } from "./common.js";
+import { S } from "./store.js";
+import { flagEl } from "./flagview.js";
+import { flagOfState, flagFor } from "../../core/names/flag.js";
 
 /* ---------- アイコン（24×24 の線画。意味ごとに 1 つ） ---------- */
 const ICON = {
@@ -26,7 +29,9 @@ const ICON = {
 export const icon = (name, size = 16, color = "currentColor") => sv("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: color, "stroke-width": 1.7, "stroke-linecap": "round", "stroke-linejoin": "round", class: "ico" }, sv("path", { d: ICON[name] ?? ICON.flag }));
 
 /* ---------- 旗: 国家の id から決まる（国の色を地にした 7 つの型）。同じ国は、いつでも同じ旗 ---------- */
-export function flag(stateId, w = 66) {
+/** 国旗。国家に保存された旗（なければ ID と言語から決まる旗）を SVG で描く（v6.17.0: 旧・疑似旗を廃止し、全画面で同じ旗になる） */
+export function flag(stateId, w = 66) { const st = S.w?.civ.states[stateId]; if (st) return flagEl(flagOfState(st), w); return flagEl(flagFor(stateId), w); }
+function flagLegacy(stateId, w = 66) {
   const k = hash("flag" + stateId), base = colorOf(stateId, 46), alt = colorOf(stateId, 78), dark = colorOf(stateId, 24), pale = "#efe7d2", type = k % 7, W = 66, H = 44;
   const el = sv("svg", { viewBox: `0 0 ${W} ${H}`, width: w, height: Math.round((w * H) / W), class: "flag" });
   const r = (x, y, ww, hh, f) => el.append(sv("rect", { x, y, width: ww, height: hh, fill: f }));
@@ -42,6 +47,7 @@ export function flag(stateId, w = 66) {
 }
 
 /* ---------- 指標: アイコン＋数値（＋バー） ---------- */
+void flagLegacy;
 export function metric(ic, label, value, { bar = null, color = "var(--blue)", title = "" } = {}) {
   return h("div", { class: "metric", title: title || label }, icon(ic, 18), h("div", { class: "mt" }, h("small", {}, label), h("b", {}, value), bar != null ? h("span", { class: "barv" }, h("i", { style: `width:${Math.max(0, Math.min(1, bar)) * 100}%;background:${color}` })) : null));
 }

@@ -7,7 +7,7 @@ import { pDiplo } from "./diplo.js";
 import { pStats } from "./stats.js";
 export { pWar, pDiplo, pStats };
 import { notify } from "./notify.js";
-import { link, listRow, sectioned, clearHl } from "./views-a.js";
+import { link, listRow, sectioned, clearHl, creatorBox, uprisingBox } from "./views-a.js";
 import { openWizard } from "./wizard.js";
 const back = (label, on) => h("div", { class: "back", onclick: () => { clearHl(); on(); } }, "← " + label);
 import { allianceDiagram } from "./alliance.js";
@@ -56,15 +56,17 @@ function showEvent(e) {
   d.replaceChildren(h("b", {}, e.title), h("div", {}, `${e.date.year}年${e.date.month}月・種別 ${e.kind}・出典 ${e.provenance}・記録 ${MEDIA_JA[e.m] ?? "不明"}`), h("div", {}, "関係する実体: ", ...ents), ...causes, ...(e.effects ?? []).slice(0, 8).map((f) => h("div", { class: "n" }, `結果: ${f.property} ${f.before ?? "—"} → ${f.after ?? "—"}`)));
 }
 
+/** v6.17.0: 国家ページから移した、創造主の介入と反乱・革命（選んだ国に対して行う） */
+function crTarget(pick) { const st = civ().states[S.crSel ?? pick.value]; if (!st?.alive) return h("div", {}); return h("div", { class: "crtarget" }, creatorBox(st), uprisingBox(st)); }
 /** 創造主ハブ（v6.3.0）: 創造主状態（担当国なし）でできることを一覧にまとめる。担当国があるあいだは無効 */
 export function pCreator() {
   const on = !controlled();
   const box = h("div", {}, ...head("CREATOR", "創造主"));
   if (!on) return box.append(note(`いま ${stateName(controlled())} を担当しています。創造主の操作は、担当を解除すると使えます。`), btn("担当を解除して創造主に戻る", () => { run({ type: "control.release" }); S.hooks.render(); }, "p", { id: "release" })) || box;
   const names = aliveStates().sort((a, b) => b.pop - a.pop);
-  const pick = h("select", { id: "cr-state" }, ...names.slice(0, 120).map((s) => h("option", { value: s.id }, s.name)));
+  const pick = h("select", { id: "cr-state", onchange: (e) => { S.crSel = e.target.value; S.hooks.panel(); } }, ...names.slice(0, 120).map((s) => h("option", { value: s.id, selected: s.id === S.crSel }, s.name)));
   box.append(note("世界を見守る立場でできることを、ここにまとめています。"),
-    lb("国家への介入・編集", "INTERVENE"), note("国家を選んで、詳細ページの「介入」「名前の編集」から行います。"), h("div", { class: "rowb" }, pick, btn("その国を開く", () => { if (pick.value) S.hooks.select(pick.value); })),
+    lb("国家への介入・反乱", "INTERVENE"), h("div", { class: "rowb" }, pick, btn("その国を開く", () => { if (pick.value) S.hooks.select(pick.value); })), crTarget(pick),
     lb("国家をつくる", "CREATE A NATION"), note("国名・政体・役職・為政者・首都・技術を決めて、新しい国を世界に生みます（担当はしません）。"), h("div", { class: "rowb" }, btn("国家をつくる", () => openWizard({ mode: "creator", onDone: (r) => { S.sel = r.stateId; notify("ok", "新しい国が生まれました"); S.hooks.render(); } }), "p", { id: "cr-found" })),
     lb("国家を担当する", "TAKE CONTROL"), h("div", { class: "rowb" }, btn("この国を担当する", () => { if (pick.value) { run({ type: "control.take", stateId: pick.value }); S.sel = pick.value; S.hooks.render(); } })),
     catastropheBox());

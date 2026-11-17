@@ -22,7 +22,7 @@ import { notify } from "./notify.js";
 import { officeSummary, officeChips } from "./policy.js";
 import { regimeJa, regimeOf, REGIMES, OFFICES, OFFICE_DOMAIN_JA, officeJa, defaultOffices, MIN_OFFICES, MAX_OFFICES } from "../../core/wcde/regimes.js";
 import { pastView } from "../../core/civ/archive.js";
-import { tPoliticsV, tMilitaryV, tDiplomacyV, nationHero } from "./nation.js";
+import { tInfoV, tDomesticV, tMilitaryV, tDiplomacyV, nationHero } from "./nation.js";
 import { confirmWar } from "./warconfirm.js";
 const DOMAIN_JA = { economy: "経済", military: "軍事", politics: "政治", states: "国家", population: "人口", war_diplomacy: "外交" };
 const TREATY_EFFECT = { nonaggression: "効果: 互いに宣戦できない。軍の支持がやや下がる。", alliance: "効果: 食料不足の安定低下を和らげ、貴族の支持が上がる。一方が戦うと、他方が参戦することがある。", trade: "効果: 隣接する国の間で交易が成立し、開放度に応じて産業・交易収入・商人の支持が上がる。封鎖・制裁中は成立しない。" };
@@ -66,8 +66,9 @@ export function pNations() {
   return box;
 }
 function stateDetail(st) {
-  const c = civ(), mine = controlled() === st.id, tabs = [["politics", "内政"], ["military", "軍事"], ["diplomacy", "外交"], ["tech", "技術ツリー"], ["doctrine", "軍事ドクトリン"]];
-  const body = { politics: tPoliticsV, military: tMilitaryV, diplomacy: tDiplomacyV, tech: tTech, doctrine: tDoctrine }[S.tab](st, mine);
+  const c = civ(), mine = controlled() === st.id, tabs = [["info", "情報"], ["domestic", "内政"], ["military", "軍事"], ["diplomacy", "外交"], ["tech", "技術ツリー"], ["doctrine", "軍事ドクトリン"]];
+  if (!["info", "domestic", "military", "diplomacy", "tech", "doctrine"].includes(S.tab)) S.tab = "info";
+  const body = { info: tInfoV, domestic: tDomesticV, military: tMilitaryV, diplomacy: tDiplomacyV, tech: tTech, doctrine: tDoctrine }[S.tab](st, mine);
   return h("div", { class: "rs" }, nationHero(c.states[st.id], mine),
     h("div", { class: "tabs" }, ...tabs.map(([k, ja]) => h("b", { class: S.tab === k ? "on" : "", "data-tab": k, onclick: () => { S.tab = k; S.hooks.panel(); } }, ja))), S.notice ? why(S.notice) : null, body);
 }

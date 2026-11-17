@@ -3,7 +3,7 @@
 //   既存の政策（税率・徴兵率・寛容など）はそのまま使う。国策は、それを補う「国の方針」。
 import { makeEvent } from "../civ/events.js";
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v), r4 = (x) => Math.round(x * 10000) / 10000;
-export const POLICY_CATS = Object.freeze({ econ: "経済", mil: "軍事", home: "内政", dipl: "外交", cult: "文化" });
+export const POLICY_CATS = Object.freeze({ econ: "経済", mil: "軍事", relig: "宗教", cult: "文化", dipl: "外交", home: "統治" });
 export const SLOT_COOLDOWN = 24;
 /** 国策: id → { cat, ja, desc, need（制度化した技術。なければ null）, cost（費用の係数）, fx（stab/tax/mil/def/dipl/scout/tech/cult）, fac（勢力の支持の目標への加減） } */
 const P = (cat, ja, desc, need, cost, fx = {}, fac = {}) => ({ cat, ja, desc, need, cost, fx, fac });
@@ -26,12 +26,17 @@ export const POLICIES = Object.freeze({
   veterans: P("mil", "退役兵の優遇", "戦った者に報いる", "standing_army", 1, { stab: 0.008, tax: -0.01 }, { military: 0.03 }),
   centralize: P("home", "中央集権", "地方の権限を王のもとへ集める", "bureaucracy", 1.4, { tax: 0.04, stab: 0.01 }, { nobility: -0.04, bureaucrats: 0.03 }),
   autonomy: P("home", "地方自治", "地方の自治を認める", null, 0.8, { stab: 0.01, tax: -0.02 }, { nobility: 0.03, clans: 0.03 }),
-  tolerance: P("home", "宗教的寛容", "異なる信仰を認める", null, 0.8, { stab: 0.01 }, { clergy: -0.02, merchants: 0.01 }),
-  state_religion: P("home", "国教化", "一つの信仰を国の柱にする", "writing", 1, { stab: 0.01 }, { clergy: 0.04, merchants: -0.01 }),
+  tolerance: P("relig", "宗教的寛容", "異なる信仰を認める", null, 0.8, { stab: 0.01 }, { clergy: -0.02, merchants: 0.01 }),
+  state_religion: P("relig", "国教化", "一つの信仰を国の柱にする", "writing", 1, { stab: 0.01 }, { clergy: 0.04, merchants: -0.01 }),
   martial_law: P("home", "治安の強化", "取り締まりと監視を強める", "law", 1.1, { stab: 0.02, scout: 0.05 }, { commoners: -0.03 }),
   relief: P("home", "救貧と福祉", "困窮した民を助ける", "census", 1.2, { stab: 0.015, tax: -0.02 }, { commoners: 0.03 }),
   admin_reform: P("home", "行政改革", "役所の仕組みを整える", "administration", 1.2, { tax: 0.02 }, { bureaucrats: 0.03 }),
   exam: P("home", "官僚の登用試験", "家柄でなく才で官を選ぶ", "civil_service", 1.4, { tax: 0.025, stab: 0.005 }, { nobility: -0.02, bureaucrats: 0.03 }),
+  clergy_patronage: P("relig", "聖職者の保護", "聖職者に土地と特権を与える", null, 1, { stab: 0.008 }, { clergy: 0.04, merchants: -0.01 }),
+  inquisition: P("relig", "異端の取り締まり", "教えに背く者を裁く", "law", 1.1, { stab: 0.015, scout: 0.04 }, { clergy: 0.03, commoners: -0.03, merchants: -0.02 }),
+  pilgrimage: P("relig", "聖地巡礼の奨励", "聖地への道を整え、巡礼者を迎える", null, 0.9, { stab: 0.008, dipl: 0.03, tax: 0.005 }, { clergy: 0.02, merchants: 0.01 }),
+  secular: P("relig", "政教分離", "国の政と信仰の務めを分ける", "administration", 1.2, { tax: 0.015, stab: 0.006 }, { clergy: -0.05, bureaucrats: 0.03 }),
+  scripture_ed: P("relig", "聖典の普及", "教えを書にして広く読ませる", "writing", 1, { tech: 0.02, stab: 0.006 }, { clergy: 0.02 }),
   marriage: P("dipl", "婚姻外交", "縁組で結びつきを作る", null, 0.8, { dipl: 0.1 }, { nobility: 0.01 }),
   trade_diplomacy: P("dipl", "通商外交", "交易で関係を深める", "trade_routes", 1, { dipl: 0.06, tax: 0.01 }, { merchants: 0.02 }),
   isolation: P("dipl", "孤立主義", "他国と深く関わらない", null, 0.6, { stab: 0.01, dipl: -0.1, mil: -0.01 }),
@@ -53,8 +58,13 @@ export const POLICIES = Object.freeze({
 export const POLICY_IDS = Object.freeze(Object.keys(POLICIES));
 /** 枠の数（分野ごと）: 制度化した技術の数で 1〜4 */
 export const slotCount = (st) => { const n = Object.keys(st.techAdopted ?? {}).length; return 1 + (n >= 12) + (n >= 30) + (n >= 55); };
-export const initFocus = () => ({ econ: [], mil: [], home: [], dipl: [], cult: [] });
-export function focusOf(st) { const F = (st.focus ??= initFocus()), n = slotCount(st); for (const c of Object.keys(POLICY_CATS)) { F[c] ??= []; while (F[c].length < n) F[c].push(null); } return F; }
+export const initFocus = () => ({ econ: [], mil: [], relig: [], cult: [], dipl: [], home: [] });
+export function focusOf(st) {
+  const F = (st.focus ??= initFocus()), n = slotCount(st); for (const c of Object.keys(POLICY_CATS)) { F[c] ??= []; while (F[c].length < n) F[c].push(null); }
+  // v6.17.0: 分野の見直し（寛容・国教化は「宗教」へ）。古い保存データで別の分野に入っている国策を、正しい分野の空き枠へ移す
+  for (const c of Object.keys(POLICY_CATS)) F[c].forEach((x, i) => { const p = x && POLICIES[x.id]; if (!p || p.cat === c) return; const j = F[p.cat].findIndex((y) => !y); if (j >= 0) { F[p.cat][j] = x; F[c][i] = null; } });
+  return F;
+}
 /** 取り入れる費用: 国の規模に比例（小国は安く、大国は高い） */
 export const policyCost = (st, id) => Math.round((POLICIES[id]?.cost ?? 1) * (15 + (st.pop ?? 0) * 0.0003));
 /** 取り入れられない理由（取れるなら null） */
@@ -62,7 +72,7 @@ export function policyGate(st, id, cat = null) {
   const p = POLICIES[id]; if (!p) return "その国策はありません"; if (cat && p.cat !== cat) return "その分野の国策ではありません"; if (p.need && st.techAdopted?.[p.need] == null) return `技術「${p.need}」を制度化していない`; return null;
 }
 export function setPolicy(ctx, st, { category, slot, policyId }) {
-  const { civ } = ctx, F = focusOf(st), mi = civ.monthIndex; if (!POLICY_CATS[category]) return { ok: false, error: "分野は econ / mil / home / dipl / cult" };
+  const { civ } = ctx, F = focusOf(st), mi = civ.monthIndex; if (!POLICY_CATS[category]) return { ok: false, error: "分野は econ / mil / relig / cult / dipl / home" };
   if (!Number.isInteger(slot) || slot < 0 || slot >= F[category].length) return { ok: false, error: "その枠はまだありません（時代が進むと増える）" };
   const cur = F[category][slot]; if (cur && mi - cur.since < SLOT_COOLDOWN) return { ok: false, error: `この枠は、あと ${SLOT_COOLDOWN - (mi - cur.since)} か月は替えられない` };
   if (policyId == null) { if (!cur) return { ok: true, changed: false }; F[category][slot] = null; return { ok: true, changed: true, removed: POLICIES[cur.id]?.ja ?? cur.id }; }

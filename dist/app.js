@@ -2699,7 +2699,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       init_events();
       clamp23 = (v, a, b) => v < a ? a : v > b ? b : v;
       r42 = (x) => Math.round(x * 1e4) / 1e4;
-      POLICY_CATS = Object.freeze({ econ: "\u7D4C\u6E08", mil: "\u8ECD\u4E8B", home: "\u5185\u653F", dipl: "\u5916\u4EA4", cult: "\u6587\u5316" });
+      POLICY_CATS = Object.freeze({ econ: "\u7D4C\u6E08", mil: "\u8ECD\u4E8B", relig: "\u5B97\u6559", cult: "\u6587\u5316", dipl: "\u5916\u4EA4", home: "\u7D71\u6CBB" });
       P4 = (cat, ja, desc, need, cost, fx3 = {}, fac = {}) => ({ cat, ja, desc, need, cost, fx: fx3, fac });
       POLICIES = Object.freeze({
         agrarian: P4("econ", "\u91CD\u8FB2\u653F\u7B56", "\u8FB2\u3092\u56FD\u306E\u672C\u3068\u3057\u3001\u6C11\u306E\u66AE\u3089\u3057\u3092\u652F\u3048\u308B", "agriculture", 1, { tax: 0.03 }, { commoners: 0.02, merchants: -0.01 }),
@@ -2720,12 +2720,17 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
         veterans: P4("mil", "\u9000\u5F79\u5175\u306E\u512A\u9047", "\u6226\u3063\u305F\u8005\u306B\u5831\u3044\u308B", "standing_army", 1, { stab: 8e-3, tax: -0.01 }, { military: 0.03 }),
         centralize: P4("home", "\u4E2D\u592E\u96C6\u6A29", "\u5730\u65B9\u306E\u6A29\u9650\u3092\u738B\u306E\u3082\u3068\u3078\u96C6\u3081\u308B", "bureaucracy", 1.4, { tax: 0.04, stab: 0.01 }, { nobility: -0.04, bureaucrats: 0.03 }),
         autonomy: P4("home", "\u5730\u65B9\u81EA\u6CBB", "\u5730\u65B9\u306E\u81EA\u6CBB\u3092\u8A8D\u3081\u308B", null, 0.8, { stab: 0.01, tax: -0.02 }, { nobility: 0.03, clans: 0.03 }),
-        tolerance: P4("home", "\u5B97\u6559\u7684\u5BDB\u5BB9", "\u7570\u306A\u308B\u4FE1\u4EF0\u3092\u8A8D\u3081\u308B", null, 0.8, { stab: 0.01 }, { clergy: -0.02, merchants: 0.01 }),
-        state_religion: P4("home", "\u56FD\u6559\u5316", "\u4E00\u3064\u306E\u4FE1\u4EF0\u3092\u56FD\u306E\u67F1\u306B\u3059\u308B", "writing", 1, { stab: 0.01 }, { clergy: 0.04, merchants: -0.01 }),
+        tolerance: P4("relig", "\u5B97\u6559\u7684\u5BDB\u5BB9", "\u7570\u306A\u308B\u4FE1\u4EF0\u3092\u8A8D\u3081\u308B", null, 0.8, { stab: 0.01 }, { clergy: -0.02, merchants: 0.01 }),
+        state_religion: P4("relig", "\u56FD\u6559\u5316", "\u4E00\u3064\u306E\u4FE1\u4EF0\u3092\u56FD\u306E\u67F1\u306B\u3059\u308B", "writing", 1, { stab: 0.01 }, { clergy: 0.04, merchants: -0.01 }),
         martial_law: P4("home", "\u6CBB\u5B89\u306E\u5F37\u5316", "\u53D6\u308A\u7DE0\u307E\u308A\u3068\u76E3\u8996\u3092\u5F37\u3081\u308B", "law", 1.1, { stab: 0.02, scout: 0.05 }, { commoners: -0.03 }),
         relief: P4("home", "\u6551\u8CA7\u3068\u798F\u7949", "\u56F0\u7AAE\u3057\u305F\u6C11\u3092\u52A9\u3051\u308B", "census", 1.2, { stab: 0.015, tax: -0.02 }, { commoners: 0.03 }),
         admin_reform: P4("home", "\u884C\u653F\u6539\u9769", "\u5F79\u6240\u306E\u4ED5\u7D44\u307F\u3092\u6574\u3048\u308B", "administration", 1.2, { tax: 0.02 }, { bureaucrats: 0.03 }),
         exam: P4("home", "\u5B98\u50DA\u306E\u767B\u7528\u8A66\u9A13", "\u5BB6\u67C4\u3067\u306A\u304F\u624D\u3067\u5B98\u3092\u9078\u3076", "civil_service", 1.4, { tax: 0.025, stab: 5e-3 }, { nobility: -0.02, bureaucrats: 0.03 }),
+        clergy_patronage: P4("relig", "\u8056\u8077\u8005\u306E\u4FDD\u8B77", "\u8056\u8077\u8005\u306B\u571F\u5730\u3068\u7279\u6A29\u3092\u4E0E\u3048\u308B", null, 1, { stab: 8e-3 }, { clergy: 0.04, merchants: -0.01 }),
+        inquisition: P4("relig", "\u7570\u7AEF\u306E\u53D6\u308A\u7DE0\u307E\u308A", "\u6559\u3048\u306B\u80CC\u304F\u8005\u3092\u88C1\u304F", "law", 1.1, { stab: 0.015, scout: 0.04 }, { clergy: 0.03, commoners: -0.03, merchants: -0.02 }),
+        pilgrimage: P4("relig", "\u8056\u5730\u5DE1\u793C\u306E\u5968\u52B1", "\u8056\u5730\u3078\u306E\u9053\u3092\u6574\u3048\u3001\u5DE1\u793C\u8005\u3092\u8FCE\u3048\u308B", null, 0.9, { stab: 8e-3, dipl: 0.03, tax: 5e-3 }, { clergy: 0.02, merchants: 0.01 }),
+        secular: P4("relig", "\u653F\u6559\u5206\u96E2", "\u56FD\u306E\u653F\u3068\u4FE1\u4EF0\u306E\u52D9\u3081\u3092\u5206\u3051\u308B", "administration", 1.2, { tax: 0.015, stab: 6e-3 }, { clergy: -0.05, bureaucrats: 0.03 }),
+        scripture_ed: P4("relig", "\u8056\u5178\u306E\u666E\u53CA", "\u6559\u3048\u3092\u66F8\u306B\u3057\u3066\u5E83\u304F\u8AAD\u307E\u305B\u308B", "writing", 1, { tech: 0.02, stab: 6e-3 }, { clergy: 0.02 }),
         marriage: P4("dipl", "\u5A5A\u59FB\u5916\u4EA4", "\u7E01\u7D44\u3067\u7D50\u3073\u3064\u304D\u3092\u4F5C\u308B", null, 0.8, { dipl: 0.1 }, { nobility: 0.01 }),
         trade_diplomacy: P4("dipl", "\u901A\u5546\u5916\u4EA4", "\u4EA4\u6613\u3067\u95A2\u4FC2\u3092\u6DF1\u3081\u308B", "trade_routes", 1, { dipl: 0.06, tax: 0.01 }, { merchants: 0.02 }),
         isolation: P4("dipl", "\u5B64\u7ACB\u4E3B\u7FA9", "\u4ED6\u56FD\u3068\u6DF1\u304F\u95A2\u308F\u3089\u306A\u3044", null, 0.6, { stab: 0.01, dipl: -0.1, mil: -0.01 }),
@@ -3315,6 +3320,21 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
   });
 
+  // js/core/wcde/shocks.js
+  var shockLegit;
+  var init_shocks = __esm({
+    "js/core/wcde/shocks.js"() {
+      shockLegit = (st, mi2) => {
+        let s = 0;
+        for (const x of st?.shocks ?? []) {
+          const d = (mi2 - x.at) / Math.max(1, x.years * 12);
+          if (d < 1) s += x.legit * (1 - Math.max(0, d));
+        }
+        return s;
+      };
+    }
+  });
+
   // js/core/wcde/domains/effective.js
   function effective(civ, st, key3, other2 = null) {
     const f = FIELDS[key3];
@@ -3338,6 +3358,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   var FIELDS, FIELD_KEYS, adjKey;
   var init_effective = __esm({
     "js/core/wcde/domains/effective.js"() {
+      init_shocks();
       FIELDS = Object.freeze({
         industry: { ja: "\u7523\u696D\u529B", mode: "add", min: 0, max: 1e12, half: 36, eps: 1, nominal: (c, s) => s.econ?.industry },
         perCapita: { ja: "\u4E00\u4EBA\u3042\u305F\u308A\u7523\u696D\u529B", mode: "add", min: 0, max: 1e3, half: 36, eps: 2e-3, nominal: (c, s) => s.econ?.perCapita },
@@ -3346,7 +3367,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
         taxRevenue: { ja: "\u8CA1\u653F\uFF08\u7A0E\u53CE\u306E\u500D\u7387\uFF09", mode: "add", min: 0, max: 3, half: 24, eps: 2e-3, nominal: () => 1 },
         equipLevel: { ja: "\u88C5\u5099\u6C34\u6E96", mode: "add", min: 0, max: 1, half: 24, eps: 2e-3, nominal: (c, s) => s.military?.equipLevel },
         readiness: { ja: "\u7DF4\u5EA6\u30FB\u5373\u5FDC", mode: "add", min: 0, max: 1, half: 12, eps: 2e-3, nominal: (c, s) => s.military?.readiness },
-        legitimacy: { ja: "\u6B63\u7D71\u6027", mode: "add", min: 0, max: 1, half: 24, eps: 2e-3, nominal: (c, s) => s.politics?.legitimacy },
+        legitimacy: { ja: "\u6B63\u7D71\u6027", mode: "add", min: 0, max: 1, half: 24, eps: 2e-3, nominal: (c, s) => s.politics?.legitimacy == null ? void 0 : Math.max(0, s.politics.legitimacy - shockLegit(s, c.monthIndex)) },
         fatigue: { ja: "\u75B2\u52B4\u5EA6", mode: "add", min: 0, max: 1, half: 12, eps: 2e-3, nominal: (c, s) => s.politics?.fatigue },
         // v6.1.0 M7: 複数ドメインへの拡張（国家・人口・外交）。domain は領域の台帳の ID
         stability: { ja: "\u5B89\u5B9A\u5EA6", mode: "add", min: 0, max: 1, half: 18, eps: 2e-3, domain: "states", nominal: (c, s) => s.stability },
@@ -21122,10 +21143,10 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   }
 
   // js/version.js
-  var APP_VERSION = "6.15.0";
-  var APP_VERSION_NAME = "\u547D\u540D\u3068\u8A00\u8A9E\u30FB\u5EFA\u56FD\u306E\u6D41\u308C";
+  var APP_VERSION = "6.17.0";
+  var APP_VERSION_NAME = "\u56FD\u5BB6\u30DA\u30FC\u30B8";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "8490b43b845e" : "dev";
+  var APP_BUILD_ID = true ? "9d8ecd7c427e" : "dev";
 
   // js/ui/icons.js
   var P3 = {
@@ -32666,6 +32687,30 @@ ${shown}${more}`;
   init_warfare();
   init_decisions();
   init_policies();
+
+  // js/core/wcde/identity.js
+  init_civ_state();
+  init_events();
+  init_species();
+  init_naming();
+  init_language();
+  init_regimes();
+  init_regime_evolution();
+  init_flag();
+  init_founding();
+  init_shocks();
+  var ORIGINS_HEREDITARY = Object.freeze(["\u738B\u306E\u5B50\uFF08\u5AE1\u51FA\uFF09", "\u738B\u306E\u5B50\uFF08\u5EB6\u5B50\uFF09", "\u738B\u306E\u5F1F", "\u738B\u306E\u7525", "\u5C06\u8ECD", "\u5BB0\u76F8", "\u990A\u5B50", "\u8056\u8077\u8005"]);
+  var ORIGINS_OTHER = Object.freeze(["\u5C06\u8ECD", "\u9577\u8001", "\u5546\u4EBA", "\u66F8\u8A18\u5B98", "\u5F01\u8AD6\u5BB6", "\u795E\u5B98", "\u6C11\u4F1A\u306E\u63A8\u6319"]);
+  var LEADER_MODES = Object.freeze({ abdicate: "\u9000\u4F4D\u3092\u4FC3\u3059", depose: "\u5F37\u5236\u7684\u306B\u9000\u3051\u308B", assassinated: "\u6697\u6BBA\u3055\u308C\u305F" });
+  var FINANCE = Object.freeze({
+    tax: { ja: "\u7A0E\u7387", min: 0.02, max: 0.4, step: 0.01, steps: [0.06, 0.1, 0.16, 0.26] },
+    mobilization: { ja: "\u5FB4\u5175\u7387", min: 0, max: 0.15, step: 0.01, steps: [0, 0.03, 0.07, 0.12] },
+    tolerance: { ja: "\u5BDB\u5BB9", min: 0, max: 1, step: 0.05, steps: [0.1, 0.4, 0.7, 1] },
+    assimilation: { ja: "\u540C\u5316", min: 0, max: 1, step: 0.05, steps: [0, 0.3, 0.6, 0.9] },
+    autonomy: { ja: "\u81EA\u6CBB", min: 0, max: 1, step: 0.05, steps: [0, 0.25, 0.5, 0.8] }
+  });
+
+  // js/core/wcde/commands.js
   init_corps();
 
   // js/core/wcde/techedit.js
