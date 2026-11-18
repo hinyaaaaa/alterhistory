@@ -7,6 +7,7 @@
 import { makeEvent } from "../civ/events.js";
 import { hashSeed } from "../civ/civ-state.js";
 import { distKm } from "../civ/states.js";
+import { planRecovery, collapseStates, rebirthWorld } from "./rebirth.js";
 
 export const MAX_MORTALITY = 1, MIN_MORTALITY = 0.01, NAME_MAX = 40, REASON_MAX = 200;
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x), r3 = (x) => Math.round(x * 1000) / 1000, fin = (x) => typeof x === "number" && Number.isFinite(x);
@@ -14,26 +15,26 @@ export const catastrophesOf = (civ) => (civ.wcde.catastrophes ??= []);
 const U = (civ, ...p) => hashSeed(civ.historySeed, "catastrophe", ...p) / 4294967296;
 
 /** 検証だけ（何も変えない）。{ ok, plan } または { ok:false, error } */
-export function planCatastrophe(w, { name = "", reason = "", scope = "world", center = null, radiusKm = null, mortality, recoveryMonths = 60 }) {
-  const fail = (error) => ({ ok: false, error }), { civ, world } = w;
+export function planCatastrophe(w, { name = "", reason = "", mortality, recoveryYears = null, recoveryMonths = null, traces = true }) {
+  // v6.19.0: 災厄は世界全体だけ。復活までは年数で決める（人口は、その年 ±30 年で戻る）。100% なら世界が滅び、先史から再び始まる
+  const fail = (error) => ({ ok: false, error });
   if (typeof name !== "string" || name.trim().length > NAME_MAX) return fail(`災厄の名前は ${NAME_MAX} 文字までの文字列です`);
   if (typeof reason !== "string" || reason.length > REASON_MAX) return fail(`理由の注釈は ${REASON_MAX} 文字までの文字列です`);
-  if (scope !== "world" && scope !== "region") return fail("範囲は world（世界規模）か region（地域規模）");
   if (!fin(mortality) || mortality < MIN_MORTALITY || mortality > MAX_MORTALITY) return fail(`人口の損失の割合は ${MIN_MORTALITY * 100}〜${MAX_MORTALITY * 100}% で指定してください`);
-  if (!fin(recoveryMonths) || recoveryMonths < 1) return fail("回復までの目安は 1 か月以上にしてください");
-  let cell = null, radius = null;
-  if (scope === "region") { cell = center; if (!Number.isInteger(cell) || cell < 0 || cell >= world.mesh.cellCount) return fail("地域規模の災厄には、中心の区画（0〜区画数−1 の整数）が必要です"); radius = radiusKm ?? 1500; if (!fin(radius) || radius < 100 || radius > 20000) return fail("半径は 100〜20000 km"); }
-  return { ok: true, plan: { name: name.trim(), reason: reason.trim(), scope, cell, radius, mortality: r3(mortality), recoveryMonths: Math.round(recoveryMonths) } };
+  const years = fin(recoveryYears) ? recoveryYears : fin(recoveryMonths) ? recoveryMonths / 12 : 100; if (!(years >= 1 && years <= 20000)) return fail("復活までの年数は 1〜20000 年で指定してください");
+  return { ok: true, plan: { name: name.trim(), reason: reason.trim(), scope: "world", cell: null, radius: null, mortality: r3(mortality), recoveryMonths: Math.round(years * 12), recoveryYears: Math.round(years), annihilation: mortality >= 1, traces: traces !== false } };
 }
 
 /** 災厄を起こす。台帳に記録し、人口などへ結果を反映し、世界の事実の出来事を 1 件残す。{ ok, id, dead, groups, states } */
 export function createCatastrophe(w, args) {
   const p = planCatastrophe(w, args); if (!p.ok) return p; const { civ, world } = w, pl = p.plan, ctx = w.sim.ctx, mi = civ.monthIndex, id = ctx.ids.next("catastrophe"), name = pl.name || "名もなき災厄";
-  const hit = [], cs = pl.cell != null ? pl.cell : null;
+  if (pl.annihilation) { const r = rebirthWorld(w, { name, reason: pl.reason }); return { ok: true, id, dead: 0, share: 1, groups: 0, states: 0, reborn: r.reborn }; } // 100%: 世界の再創造（先史から）
+  const base = new Map(Object.entries(civ.groups).map(([k, g]) => [k, g.pop]));
+  const hit = [], cs = null;
   for (const gid of Object.keys(civ.groups).sort()) { const g = civ.groups[gid]; let k = 1; if (pl.scope === "region") { const d = distKm(world, cs, g.cell); if (d > pl.radius) continue; k = 1 - 0.6 * (d / pl.radius); } hit.push([g, k]); }
   const before = Object.values(civ.groups).reduce((a, g) => a + g.pop, 0); let dead = 0; const states = new Map(), effects = [];
   for (const [g, k] of hit) {
-    const jitter = 0.85 + 0.15 * U(civ, id, g.id, "j"), frac = clamp(pl.mortality * k * jitter, 0, MAX_MORTALITY), b = g.pop, a = Math.max(Math.min(b, 5), b * (1 - frac)); /* 5 人未満へは落とさない（集団の消滅は人口の通常の処理に任せ、首都の集団が突然消えて国家の整合が崩れるのを避ける） */ // 集団ごとの損失は指定値を超えない（世界全体で最大 95%）
+    const jitter = 0.98 + 0.02 * U(civ, id, g.id, "j"), frac = clamp(pl.mortality * k * jitter, 0, MAX_MORTALITY), b = g.pop, a = Math.max(Math.min(b, 5), b * (1 - frac)); /* 5 人未満へは落とさない（集団の消滅は人口の通常の処理に任せ、首都の集団が突然消えて国家の整合が崩れるのを避ける） */ // 集団ごとの損失は指定値を超えない（世界全体で最大 95%）
     g.pop = a; dead += b - a; g.capMult = r3(Math.min(g.capUntil > mi ? g.capMult : 1, clamp(1 - 0.7 * frac, 0.25, 1))); g.capUntil = Math.max(g.capUntil ?? 0, mi + pl.recoveryMonths);
     for (const c of g.cohorts ?? []) c.tension = clamp((c.tension ?? 0) + 0.3 * frac);
     if (g.stateId) { const e = states.get(g.stateId) ?? { b: 0, a: 0, frac: 0, n: 0 }; e.b += b; e.a += a; states.set(g.stateId, e); }
@@ -42,11 +43,11 @@ export function createCatastrophe(w, args) {
     const st = civ.states[sid]; if (!st?.alive) continue; const f = e.b ? 1 - e.a / e.b : 0, sb = st.stability; st.pop = Math.max(0, st.pop - (e.b - e.a)); st.army = Math.max(0, st.army * (1 - f)); st.stability = clamp(st.stability - 0.3 * f); st.treasury -= Math.max(0, st.treasury) * 0.15 * f; // 軍・安定・国庫へ。生産・交易は人口から通常の計算で伝播する
     touched.push(sid); effects.push({ targetId: sid, property: "pop", before: Math.round(e.b), after: Math.round(e.a) }, { targetId: sid, property: "stability", before: r3(sb), after: r3(st.stability) });
   }
-  const total = before > 0 ? dead / before : 0;
-  catastrophesOf(civ).push({ id, at: mi, name, reason: pl.reason, scope: pl.scope, center: cs, radiusKm: pl.radius, mortality: pl.mortality, recoveryMonths: pl.recoveryMonths, authority: "creator_intervention", result: { dead: Math.round(dead), share: r3(total), groups: hit.length, states: touched.length } });
+  const total = before > 0 ? dead / before : 0; planRecovery(civ, id, base, pl.recoveryMonths); const collapsed = collapseStates(ctx, id);
+  catastrophesOf(civ).push({ id, at: mi, name, reason: pl.reason, scope: pl.scope, center: cs, radiusKm: pl.radius, mortality: pl.mortality, recoveryMonths: pl.recoveryMonths, authority: "creator_intervention", recoveryYears: pl.recoveryYears, result: { dead: Math.round(dead), share: r3(total), groups: hit.length, states: touched.length, collapsed: collapsed.length } });
   const label = pl.scope === "world" ? "世界を" : "ある地域を";
   makeEvent(civ, ctx.ids, { kind: "catastrophe", title: `大災厄「${name}」が${label}襲った（人口の約 ${Math.round(total * 100)}% が失われた）`, participants: touched.slice(0, 8).map((s) => ({ entityId: s, role: "affected" })), location: cs != null ? { cell: cs } : null, effects: effects.slice(0, 16), facts: { catastropheId: id, scope: pl.scope, mortality: r3(total), dead: Math.round(dead) }, provenance: "creator" });
-  ctx._byState = null; return { ok: true, id, dead: Math.round(dead), share: r3(total), groups: hit.length, states: touched.length };
+  ctx._byState = null; return { ok: true, id, dead: Math.round(dead), share: r3(total), groups: hit.length, states: touched.length, collapsed: collapsed.length };
 }
 
 /** 構造の検査（記録の整合のみ。因果的に奇妙でもよい） */

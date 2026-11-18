@@ -9,11 +9,12 @@ import { hashSeed } from "../civ/civ-state.js";
 import { byState } from "../civ/spatial.js";
 import { lifeScale } from "../civ/species.js";
 import { leaderName, leaderRng } from "./domains/naming.js";
-import { enthrone, runSecession } from "../civ/states.js";
+import { enthrone, runSecession, formState } from "../civ/states.js";
 import { treatyFeasible, recordProposal, negotiatePeace } from "./negotiation.js";
 import { OFFICES } from "./regimes.js";
+import { successionList, lawJa, queueEvent } from "./succession.js";
 import { fieldEngage, navalEngage, placeName, warHelpers } from "./warfare.js";
-import { corpsById, serviceLoss, leadCorps, installCommander } from "./corps.js";
+import { corpsById, serviceLoss, leadCorps, installCommander, ensureCorps } from "./corps.js";
 import { landShare, navyShare } from "./power.js";
 import { headsOf } from "./orbat.js";
 import { createField, fieldOutcome, DOMAINS } from "./battlefield.js";
@@ -24,7 +25,7 @@ import { decisionsOf, pendingOf, isLive, coolUntil, setCool } from "./decision-s
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v), r3 = (x) => Math.round(x * 1000) / 1000;
 const U = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
 const HANDLERS = {}; export const registerDecision = (kind, fn) => { HANDLERS[kind] = fn; };
-export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", commander_death: "指揮官の戦死", pact_invite: "盟約への誘い", pact_merge: "統合の提案" });
+export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", commander_death: "指揮官の戦死", pact_invite: "盟約への誘い", pact_merge: "統合の提案", event: "出来事" });
 
 // ---- 出す・止める・解く
 function hold(civ) { const T = timeOf(civ); if (!T.hold) { T.hold = true; T.resumeSpeed = T.speed; } }
@@ -131,33 +132,30 @@ registerDecision("ally_call", (ctx, d, opt) => {
 const FACT_JA = { nobility: "貴族", military: "軍", clergy: "聖職者", merchants: "商人", commoners: "民衆", bureaucrats: "官僚", artisans: "職人", clans: "氏族" };
 function successionOptions(ctx, st) {
   const { civ } = ctx, mi = civ.monthIndex, ls = lifeScale(civ, st), person = (k) => ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], leaderRng(civ, st, `sc${k}${mi}`)) ?? `${st.name}の人${k}`, u = (k) => U(civ, st.id, mi, "sc", k);
-  const heirFig = st.heirFigureId ? civ.figures?.[st.heirFigureId] : null, fkeys = Object.keys(st.politics?.factions ?? {}), has = (k) => fkeys.includes(k), ageM = (y) => Math.round(y * 12 * ls);
-  const mk = (id, relation, name, ageY, legit, backer, kin, extra = {}) => ({ id, relation, name, bornAt: mi - ageM(ageY), ageYears: ageY, skill: r3(0.3 + 0.55 * u(id)), legit, backer, kin, ...extra });
-  const list = [];
-  if (heirFig) { const age = Math.max(1, Math.round((mi - heirFig.bornAt) / 12 / ls)); list.push({ id: "heir", relation: "指名された継承者", name: heirFig.name, bornAt: heirFig.bornAt, ageYears: age, skill: r3(0.35 + 0.5 * u("heir")), legit: 0.9, backer: "nobility", kin: true, minor: age < 16 }); }
-  else list.push(mk("eldest", "長子", person(1), 22 + Math.round(10 * u("a1")), 0.7, "nobility", true));
-  list.push(mk("brother", "弟・傍流の王族", person(2), 28 + Math.round(15 * u("a2")), 0.5, has("clans") && u("cl") < 0.4 ? "clans" : "nobility", true));
-  list.push(mk("general", "軍が推す将軍", person(3), 35 + Math.round(15 * u("a3")), 0.3, "military", false, { skill: r3(0.5 + 0.4 * u("g")) }));
-  if (has("clergy") || has("bureaucrats") || has("merchants")) { const k = has("clergy") && u("b") < 0.5 ? "clergy" : has("bureaucrats") ? "bureaucrats" : has("merchants") ? "merchants" : "clergy"; list.push(mk("faction", `${FACT_JA[k]}が推す人物`, person(4), 30 + Math.round(15 * u("a4")), 0.35, k, false)); }
-  const opts = [];
+  const fkeys = Object.keys(st.politics?.factions ?? {}), has = (k) => fkeys.includes(k), { law, lawJa: lj, partition, list } = successionList(ctx, st), opts = []; // v6.19.0: 継承法と候補は succession.js
+  const lawNote = (c) => `${c.risk >= 0.3 ? "／争いの火種" : ""}`;
   for (const c of list) {
-    if (c.minor) for (const [rid, rel, bk, k] of [["queen", "母后", "nobility", 5], ["vizier", "宰相", has("bureaucrats") ? "bureaucrats" : "nobility", 6], ["general", "将軍", "military", 7]]) { const reg = { name: person(k), skill: r3(0.35 + 0.5 * u(`r${rid}`)), backer: bk, relation: rel }; opts.push({ id: `${c.id}:${rid}`, ja: `${c.name}（${c.ageYears}歳）を立て、${rel}${reg.name}が摂政`, hint: `能力${Math.round(reg.skill * 100)}・${FACT_JA[bk]}が支持／正統性 高`, payload: { cand: c, regent: reg } });
-    } else opts.push({ id: c.id, ja: `${c.relation}：${c.name}（${c.ageYears}歳）`, hint: `能力${Math.round(c.skill * 100)}・正統性${Math.round(c.legit * 100)}・${FACT_JA[c.backer]}が支持${c.kin ? "" : "／王朝が代わる"}`, payload: { cand: c } });
+    if (c.minor) for (const [rid, rel, bk, k] of [["queen", "母后", "nobility", 5], ["vizier", "宰相", has("bureaucrats") ? "bureaucrats" : "nobility", 6], ["general", "将軍", "military", 7]]) { const reg = { name: person(k), skill: r3(0.35 + 0.5 * u(`r${rid}`)), backer: bk, relation: rel }; opts.push({ id: `${c.id}:${rid}`, ja: `${c.name}（${c.ageYears}歳）を立て、${rel}${reg.name}が摂政`, hint: `能力${Math.round(reg.skill * 100)}・${FACT_JA[bk]}が支持／正統性 高`, payload: { cand: c, regent: reg } }); }
+    else opts.push({ id: c.id, ja: `${c.relation}：${c.name}（${c.ageYears}歳）`, hint: `能力${Math.round(c.skill * 100)}・正統性${Math.round(c.legit * 100)}・${FACT_JA[c.backer]}が支持${c.kin ? "" : "／王朝が代わる"}${lawNote(c)}`, payload: { cand: c } });
   }
-  return opts;
+  const adult = list.find((c) => !c.minor && c.kin);
+  if (partition && adult && (byState(ctx).get(st.id)?.length ?? 0) >= 4) opts.push({ id: "partition", ja: `領土を子らで分ける（${adult.name}が本国を継ぐ）`, hint: "分割相続。新しい国ができる（戦争にはならない）／本国は弱くなる", payload: { cand: adult, partition: true } });
+  opts.law = { law, ja: lj }; return opts;
 }
 function succession(ctx, st) {
   const { civ } = ctx; if (!isLive(civ) || !st.player) return false; const key = `s|${st.id}`; if (openKey(civ, key)) return true;
   const opts = successionOptions(ctx, st); const payload = {}; const options = opts.map((o) => { payload[o.id] = o.payload; return { id: o.id, ja: o.ja, hint: o.hint }; });
-  raise(ctx, { kind: "succession", key, stateId: st.id, title: `${st.leader.name}の跡を継ぐ者を決める`, body: `指導者が世を去ろうとしている。次の王（指導者）を、候補者の中から選ぶ。`, options, payload });
+  raise(ctx, { kind: "succession", key, stateId: st.id, title: `${st.leader.name}の跡を継ぐ者を決める`, body: `継承法: ${opts.law?.ja ?? lawJa(civ, st)}。候補者の中から選ぶ。`, options, payload });
   return true;
 }
 registerDecision("succession", (ctx, d, opt) => {
   const { civ } = ctx, st = civ.states[d.stateId]; if (!st?.alive) return { ok: true, note: "国がすでにない" }; const pl = d.payload[opt]; if (!pl) return { ok: false, error: "その候補はいません" }; const c = pl.cand, reg = pl.regent ?? null;
+  if (pl.partition) { const gs = (byState(ctx).get(st.id) ?? []).filter((g) => g.id !== st.capitalGroupId).sort((a, b) => (a.id < b.id ? -1 : 1)), part = gs.filter((_, i) => i % 2 === 1); if (part.length && part.length < gs.length + 1) { const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id }); if (ns) { ns.relations[st.id] = 20; st.relations[ns.id] = 20; makeEvent(civ, ctx.ids, { kind: "state_action", title: `${st.name}の領土が、${c.name}の継承にともない子らで分けられ、${ns.name}が成立した`, participants: [{ entityId: st.id, role: "actor" }, { entityId: ns.id, role: "target" }], location: null, provenance: "player" }); } } }
   const hit = 0.02 + 0.1 * (1 - (reg ? Math.max(c.legit, 0.8) : c.legit));
   enthrone(ctx, st, { name: c.name, bornAt: c.bornAt, kin: c.kin, hit, how: reg ? `摂政${reg.name}のもと、${c.name}が立った` : `${c.relation}の${c.name}が立った` });
   st.leader.skill = c.skill; st.leader.backer = c.backer; if (reg) st.leader.regent = { name: reg.name, skill: reg.skill, backer: reg.backer, relation: reg.relation, until: civ.monthIndex + Math.max(12, Math.round((16 - c.ageYears) * 12 * lifeScale(civ, st))) };
   const F = st.politics?.factions; if (F) { const bump = (k, v) => { if (F[k]) F[k].support = clamp(F[k].support + v); }; bump(c.backer, 0.1); if (reg) bump(reg.backer, 0.06); for (const k of Object.keys(F)) if (k !== c.backer && k !== reg?.backer && (k === "nobility" || k === "military") && c.kin === false) bump(k, -0.04); }
+  if (c.risk && U(civ, st.id, civ.monthIndex, "sdispute") < c.risk * (reg ? 0.6 : 1)) queueEvent(st, c.id === "usurper" || c.id === "general" ? "succ_coup_after" : "succ_dispute", 3 + Math.floor(9 * U(civ, st.id, "sdd")), civ.monthIndex); // 選ばれなかった者の不満: 継承争いの出来事が後で起きる（v6.19.0）
   return { ok: true, note: reg ? `摂政を置き、${c.name}が即位した` : `${c.name}が即位した` };
 });
 
@@ -184,7 +182,12 @@ function omen(ctx, st) {
 registerDecision("omen", (ctx, d, opt) => { const st = ctx.civ.states[d.stateId]; if (!st?.alive) return { ok: true }; if (opt === "act") { st.treasury -= d.payload.cost; for (const g of byState(ctx).get(st.id) ?? []) for (const co of g.cohorts) co.tension *= 0.88; st.stability = clamp(st.stability + 0.04); return { ok: true, note: "宥和策を講じた" }; } return { ok: true, note: "静観した" }; });
 
 /** 反乱の自動の内戦: 分離でできた国と、元の国は、自動で内戦になる（担当国の決断のあとも、アルゴリズム国家どうしでも同じ） */
-export function autoCivilWar(ctx, ns, st) { const { civ } = ctx; if (!ns?.alive || !st?.alive || atWarWith(civ, ns, st)) return null; return declareWar(ctx, ns, st, { reason: "independence", provenance: "simulation" }); }
+/** 反乱の国の軍団と指揮官（v6.19.0）: 元の国の軍人が寝返った者か、反乱のなかから現れた新しい人物か。戦争と同じ軍団・指揮官の仕組みで戦う */
+export function tagRebelCommanders(ctx, ns) {
+  const { civ } = ctx; if (!ns?.alive) return; const S = ensureCorps(ctx, ns); if (!S) return;
+  for (const cp of S.list ?? []) if (cp.commander && !cp.commander.origin) cp.commander.origin = cp.defected || U(civ, ns.id, cp.id, "orig") < 0.5 ? "元の国の軍人" : "反乱で頭角を現した新人物";
+}
+export function autoCivilWar(ctx, ns, st) { const { civ } = ctx; if (!ns?.alive || !st?.alive || atWarWith(civ, ns, st)) return null; const w = declareWar(ctx, ns, st, { reason: "independence", provenance: "simulation" }); tagRebelCommanders(ctx, ns); return w; }
 
 
 // ---- 会戦（大きな戦い）: 担当国の部隊が関わる大きな戦いは、専用の戦場（battlefield.js）で、日ごとにリアルタイムで進める。

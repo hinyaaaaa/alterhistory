@@ -12,6 +12,7 @@ import { retitle, leaderRng } from "./domains/naming.js";
 import { REGIMES, regimeOf, regimeGate, checkOffices, officeJa } from "./regimes.js";
 import { assignOffices, foundNation } from "./founding.js";
 import { controlledState } from "./control.js";
+import { tagRebelCommanders } from "./decisions.js";
 
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const fail = (error) => ({ ok: false, error });
@@ -79,7 +80,7 @@ export function startUprising(w, { stateId, kind, cell, asState = null, found = 
     const r = foundNation(w, { ...found, capital: { groupId: plan.center.groupId }, groupIds: regionGs.map((g) => g.id) }, { mode: "rebel", predecessor: st.id, cause: ev.eventId, via: "secession" });
     if (!r.ok) { for (const [g, s] of saved) g.stateId = s; invalidateMonthCaches(ctx); ctx._byState = null; civ.events.pop(); return r; }
     const ns = civ.states[r.stateId]; ns.relations[st.id] = -60; st.relations[ns.id] = -60; st.stability = clamp(st.stability - 0.06 - plan.scale * 0.1);
-    const war = declareWar(ctx, ns, st, { reason: kind === "separatist" ? "independence" : kind === "religious_revolt" ? "religion" : "civil_war", provenance: "simulation" });
+    const war = declareWar(ctx, ns, st, { reason: kind === "separatist" ? "independence" : kind === "religious_revolt" ? "religion" : "civil_war", provenance: "simulation" }); tagRebelCommanders(ctx, ns); // v6.19.0: 反乱は戦争と同じ処理（軍団・指揮官）
     return { ok: true, outcome: "new_state", newStateId: ns.id, warId: war.id, plan };
   }
   const roll = leaderRng(civ, st, "uprising", kind, plan.center.cell)();

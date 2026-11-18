@@ -60,6 +60,7 @@ const dissolve = (ctx, st, why) => {
   for (const wid of [...st.warIds]) ctx.endWarHook?.(ctx, civ.wars[wid], "state_dissolved");
   makeEvent(civ, ids, { kind: "state_dissolved", title: `${st.name}が${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, facts: { stateId: st.id }, causes: [...(st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : []), ...asCauses(recentEventsFor(civ, [st.id], ["war_ended"], 24, 1), "contributed_to", "plausible")] });
 };
+export const dissolveState = (ctx, st, why) => dissolve(ctx, st, why);
 export const aliveStates = (civ) => Object.values(civ.states).filter((s) => s.alive);
 
 /** 世界に同時に存在できる国家の数の目安（v6.8.0）。起点の直後は最大 10、時代とともに増え、約 200 に近づく（史実: 初期の国家は少数で、時代とともに増える）。上限に届いたら新しい国家は生まれにくい（分離・自然形成とも） */

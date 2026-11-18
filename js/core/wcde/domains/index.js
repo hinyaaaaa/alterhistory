@@ -24,6 +24,8 @@ import { stepRegimeEvolution } from "../regime-evolution.js";
 import { stepDependencies } from "../dependency.js";
 import { stepPacts, registerPactDecisions } from "../pacts.js";
 import { stepTreatyAI } from "../treaty-ai.js";
+import { stepEvents } from "../events.js";
+import { stepRecovery, stepRuins } from "../rebirth.js";
 import { initWar, stepWar, finalize, monthly, canReach, seaTargets, settle } from "../warfare.js";
 
 export function wcdeExtension(ticker, ctx) {
@@ -49,6 +51,8 @@ export function wcdeExtension(ticker, ctx) {
   ticker.register("military", (c) => { for (const st of Object.values(c.civ.states)) if (st.alive && st.player) syncCorps(c, st); }, "stepCorps"); // v6.12.0: 担当国の軍団の兵力を毎月そろえる
   ticker.register("economy", (c) => { if (c.civ.monthIndex % 3 !== 0) return; for (const st of Object.values(c.civ.states)) if (st.alive && st.offices?.length) st.treasury -= officeUpkeep(st) * 3; }, "stepOfficeUpkeep"); // v6.12.0: 役職の維持費（3 か月ごと）
   ticker.register("people", stepPeople, "stepPeople");
+  ticker.register("people", stepEvents, "stepEvents"); // v6.19.0: 出来事（担当国は決断、アルゴリズム国家は自動）
+  ticker.register("people", stepRecovery, "stepRecovery"); ticker.register("people", stepRuins, "stepRuins", { every: 12, offset: 7 }); // v6.19.0: 災厄からの回復・旧世界の遺跡
   ticker.register("people", stepCities, "stepCities");
   ticker.register("integrity", (c) => syncControl(c.civ), "syncControl"); // 担当国家が滅びたら、担当を外す
   ticker.register("integrity", (c) => { const errs = [...checkWcdeIntegrity(c.world, c.civ), ...(c.civ.monthIndex % 120 === 0 ? checkEco(c.world, c.civ) : [])]; if (errs.length) throw new Error("WCDE 整合性違反: " + errs.slice(0, 3).join(" / ")); }, "checkWcdeIntegrity");

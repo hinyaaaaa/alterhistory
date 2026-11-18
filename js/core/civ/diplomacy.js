@@ -11,7 +11,11 @@ import { callPacts } from "../wcde/pacts.js";
 import { recentEventsFor, asCauses, getEvent } from "./graph.js";
 
 /** 戦争の理由の表示名（v6.9.0）。旧版は AI の戦争がすべて「conquest」だった */
-export const WAR_REASON_JA = Object.freeze({ conquest: "領土の征服", succession: "王位継承をめぐる争い", religion: "宗教的な対立", trade_route: "交易路・資源をめぐる争い", revenge: "報復・失地の回復", independence: "独立・自治を求める戦争", ideology: "体制・イデオロギーの対立", subjugation: "従属の強制",  civil_war: "内戦・反乱", alliance: "同盟に基づく参戦", defense: "防衛" });
+export const WAR_REASON_JA = Object.freeze({ conquest: "領土の征服", plunder: "略奪・遠征", succession: "王位継承をめぐる争い", religion: "宗教的な対立", trade_route: "交易路・資源をめぐる争い", maritime: "海上覇権をめぐる争い", revenge: "報復・失地の回復", independence: "独立・自治を求める戦争", unification: "統一を求める戦争", ideology: "体制・イデオロギーの対立", resource: "資源をめぐる争い", subjugation: "従属の強制", civil_war: "内戦・反乱", alliance: "同盟に基づく参戦", preventive: "予防戦争", defense: "防衛" });
+/** v6.19.0: 戦争の理由の 8 分類（要件 §9）。復讐・領土回復は「口実」（w.pretext）として付き、分類そのものにはならない */
+export const WAR_CLASS = Object.freeze({ conquest: "plunder", plunder: "plunder", revenge: "plunder", succession: "succession", religion: "religion", trade_route: "trade", maritime: "trade", independence: "independence", unification: "independence", civil_war: "independence", subjugation: "subjugation", alliance: "preventive", preventive: "preventive", defense: "preventive", ideology: "ideology", resource: "ideology" });
+export const WAR_CLASS_JA = Object.freeze({ plunder: "略奪・征服", succession: "継承", religion: "宗教", trade: "通商・海上覇権", independence: "独立・統一", subjugation: "従属の強制・離脱", preventive: "同盟義務・予防戦争", ideology: "イデオロギー・資源" });
+export const warClassOf = (reason) => WAR_CLASS[reason] ?? "plunder";
 /** 同じ 2 国の再戦までの冷却（月）。古代ほど長く、近代は短い（疲弊・同盟の再編を挟む）。世界の年は 0=紀元前 3000 年ごろ */
 export const rematchCooldown = (year) => (year < 3000 ? 480 : year < 4500 ? 300 : year < 4850 ? 180 : 120);
 /** 戦争の最長（月）。古代 50 年・中世 25 年・近世 10 年・近代 6 年。参戦国が多い大戦（近代）は 20 年まで */
@@ -67,18 +71,21 @@ function revengeCauses(civ, atk, def) {
   const out = []; for (const ev of recentEventsFor(civ, [atk.id], ["war_ended"], 1200, 6)) { if (!ev.participants.some((p) => p.entityId === def.id)) continue; const w = civ.wars[ev.participants.find((p) => p.role === "war")?.entityId]; const lost = w && ((w.sides.a.includes(atk.id) && w.outcome === "defender_victory") || (w.sides.d.includes(atk.id) && w.outcome === "aggressor_victory")); out.push({ targetId: ev.eventId, relation: "reaction_to", basis: lost ? "strong" : "plausible" }); if (out.length >= 2) break; }
   return out;
 }
-export function warReasonFor(ctx, atk, def) { // v6.9.0: 状況から理由を選ぶ（決定的）
-  const { civ } = ctx, h = hashSeed(atk.id, def.id, civ.monthIndex >> 3) % 100, mi = civ.monthIndex;
-  if (atk.lastWarWith?.[def.id] != null && mi - atk.lastWarWith[def.id] < 1200) return "revenge";
-  const cA = civ.groups[atk.capitalGroupId], cB = civ.groups[def.capitalGroupId];
-  if (def.dynastyChangedAt != null && mi - def.dynastyChangedAt < 240 && h < 70) return "succession"; // 王朝が代わって間もない国への介入
-  if (cA && cB && dominant(cA).religionId && dominant(cB).religionId && dominant(cA).religionId !== dominant(cB).religionId && h < 45) return "religion";
-  if (cA && cB && h >= 45 && h < 75 && (atk.econ?.trade || def.econ?.trade)) return "trade_route";
-  return "conquest";
+export function warReasonFor(ctx, atk, def) { // v6.19.0: 史実の分類（8 分類）で、時代・状況から重みを付けて選ぶ（決定的）。復讐・失地回復は口実（warPretextFor）
+  const { civ } = ctx, mi = civ.monthIndex, h = hashSeed(atk.id, def.id, mi >> 3) % 10007 / 10007, year = civ.date.year;
+  const era = year < 1200 ? 0 : year < 3000 ? 1 : year < 4200 ? 2 : year < 4700 ? 3 : 4, cA = civ.groups[atk.capitalGroupId], cB = civ.groups[def.capitalGroupId];
+  const wt = { conquest: era === 0 ? 3.2 : era === 1 ? 2.6 : era === 2 ? 2.0 : 1.4, plunder: era === 0 ? 1.6 : era === 1 ? 0.8 : 0.1, subjugation: era >= 1 && atk.army > def.army * 1.8 ? 1.2 : 0.3, preventive: def.army > atk.army * 1.2 && (atk.relations?.[def.id] ?? 0) < -10 ? 1.1 : 0.2 };
+  if (def.dynastyChangedAt != null && mi - def.dynastyChangedAt < 240) wt.succession = 3.2; else if (def.leader && def.leader.deposed) wt.succession = 1.2; else wt.succession = era >= 1 ? 0.5 : 0.2;
+  if (cA && cB && dominant(cA).religionId && dominant(cB).religionId && dominant(cA).religionId !== dominant(cB).religionId) wt.religion = era === 0 ? 0.6 : era <= 3 ? 2.6 : 0.8; else wt.religion = 0.2;
+  const coastal = (c) => !!c && (ctx.world?.cell?.coastDist?.[c.cell] ?? 9) <= 1; wt.trade_route = (atk.econ?.trade || def.econ?.trade) && era >= 1 ? 1.8 : 0.3; wt.maritime = coastal(cA) && coastal(cB) && era >= 2 ? 1.6 : 0;
+  wt.unification = era >= 3 && cA && cB && dominant(cA).cultureId && dominant(cA).cultureId === dominant(cB).cultureId ? 1.6 : 0; wt.ideology = era >= 4 ? 2.2 : era === 3 ? 0.4 : 0; wt.resource = era >= 3 ? 1.0 : 0;
+  const ents = Object.entries(wt).filter(([, v]) => v > 0), tot = ents.reduce((a, [, v]) => a + v, 0); let x = h * tot; for (const [k, v] of ents) { x -= v; if (x <= 0) return k; } return "conquest";
 }
+/** 口実（理由とは別）: 近い過去に戦った相手なら報復、国土を失っていれば失地の回復 */
+export function warPretextFor(ctx, atk, def) { const mi = ctx.civ.monthIndex; if (atk.lastWarWith?.[def.id] != null && mi - atk.lastWarWith[def.id] < 1200) return "revenge"; return null; }
 export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation" } = {}) {
   const { civ, ids, rng } = ctx; if (reason === "conquest") reason = warReasonFor(ctx, atk, def);
-  const id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 };
+  const id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 }; { const pt = warPretextFor(ctx, atk, def); if (pt) w.pretext = pt; w.cls = warClassOf(reason); }
   civ.wars[id] = w; civ.activeWarIds.push(id); atk.warIds.push(id); def.warIds.push(id); adjustRel(atk, def, -40);
   const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance });
   w.declaredEvent = ev.eventId;

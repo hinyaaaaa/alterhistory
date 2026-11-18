@@ -10,7 +10,7 @@ import { battleScreen, stopBattle } from "./battle.js";
 import { TRAITS } from "../../core/wcde/corps.js";
 const $ = (s) => document.querySelector(s);
 const GLYPH = { assault: "突", hold: "守", flank: "回", withdraw: "退" };
-const SEAL = { treaty_offer: "約", peace_offer: "和", war_incoming: "戦", ally_call: "盟", succession: "継", rebellion: "乱", omen: "兆", battle: "陣", commander_death: "将" };
+const SEAL = { event: "事", treaty_offer: "約", peace_offer: "和", war_incoming: "戦", ally_call: "盟", succession: "継", rebellion: "乱", omen: "兆", battle: "陣", commander_death: "将" };
 
 function resolve(d, option) {
   const r = act({ type: "decision.resolve", decisionId: d.id, option }); if (!r.ok) return;

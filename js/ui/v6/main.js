@@ -46,7 +46,7 @@ function founding() {
 }
 
 /* ---------- 画面の骨格（モックと同じ構成） ---------- */
-function start() { S.newsSeen = null; S.hub = null; S.sel = controlled() ?? null; S.hooks = { render, panel: renderPanel, mapOnly: () => { S.map.draw(); }, select, focusCell, loaded: (w, warn) => { S.w = w; S.fileWarn = warn; start(); } }; shell(); render(); clearInterval(S.timer); S.timer = setInterval(tick, 250); }
+function start() { S.newsSeen = null; S.hub = null; S.sel = controlled() ?? null; S.hooks = { founding, render, panel: renderPanel, mapOnly: () => { S.map.draw(); }, select, focusCell, loaded: (w, warn) => { S.w = w; S.fileWarn = warn; start(); } }; shell(); render(); clearInterval(S.timer); S.timer = setInterval(tick, 250); }
 function shell() {
   const cv = h("canvas", { id: "map", "aria-label": "世界地図" });
   root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("button", { id: "prefresh", title: "世界が進んだので、このページの内容は古くなっています", onclick: () => renderPanel() }, "↻ 最新の状態に更新"), h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "clock" }), h("div", { id: "callout" }), h("div", { id: "newscall" }), h("div", { id: "pops" }))), h("div", { id: "newsmodal", hidden: true }), h("div", { id: "decmodal", hidden: true }));

@@ -72,15 +72,15 @@ export function pCreator() {
     catastropheBox());
   return box;
 }
-/** 創造主の災厄（世界規模・地域規模）。名前・理由は任意。人口の損失に上限はない。起きた結果は戻らない（介入の台帳に記録され、世界の事実は「大災厄」の出来事として別に残る） */
+/** 創造主の災厄（世界全体だけ）。人口の損失と、復活までの年数を決める。100% なら旧世界が滅び、先史時代から世界が再び始まる。長押しで実行 */
 export function catastropheBox() {
-  const c = civ(), nm = h("input", { id: "cat-name", placeholder: "災厄の名前（任意）", style: "width:100%" }), why = h("input", { id: "cat-why", placeholder: "理由の注釈（任意・原因を説明しなくてよい）", style: "width:100%" });
-  const scope = h("select", { id: "cat-scope" }, h("option", { value: "world" }, "世界規模"), h("option", { value: "region" }, "地域規模（国の首都を中心に）")), at = h("select", { id: "cat-at", style: "display:none" }, ...aliveStates().sort((a, b) => b.pop - a.pop).slice(0, 80).map((s) => h("option", { value: s.id }, s.name)));
-  const rad = h("input", { id: "cat-radius", type: "number", value: 1500, min: 1, style: "width:80px;display:none" }), mor = h("input", { id: "cat-mort", type: "number", value: 30, min: 0, step: 1, style: "width:70px" }), rec = h("input", { id: "cat-rec", type: "number", value: 60, min: 1, style: "width:70px" });
-  scope.addEventListener("change", () => { const r = scope.value === "region"; at.style.display = rad.style.display = r ? "" : "none"; });
-  const go = () => { const cell = scope.value === "region" ? c.groups[c.states[at.value]?.capitalGroupId]?.cell : null; creator({ type: "creator.catastrophe", name: nm.value, reason: why.value, scope: scope.value, center: cell ?? null, radiusKm: Number(rad.value), mortality: Number(mor.value) / 100, recoveryMonths: Number(rec.value) }); };
+  const c = civ(), nm = h("input", { id: "cat-name", placeholder: "災厄の名前（任意）", style: "width:100%" }), why = h("input", { id: "cat-why", placeholder: "理由の注釈（任意）", style: "width:100%" });
+  const mor = h("input", { id: "cat-mort", type: "number", value: 30, min: 1, max: 100, step: 1, style: "width:70px" }), sl = h("input", { type: "range", min: 1, max: 100, value: 30, style: "flex:1" }), rec = h("input", { id: "cat-rec", type: "number", value: 100, min: 1, style: "width:80px" });
+  const warn = h("small", { id: "cat-warn", class: "g" }, ""), sync = (from) => { const v = Math.max(1, Math.min(100, Number(from.value) || 1)); mor.value = sl.value = v; warn.textContent = v >= 100 ? "旧世界は完全に滅び、先史時代から世界が始まり直します" : ""; };
+  mor.addEventListener("input", () => sync(mor)); sl.addEventListener("input", () => sync(sl));
+  const go = () => { const r = creator({ type: "creator.catastrophe", name: nm.value, reason: why.value, mortality: Number(mor.value) / 100, recoveryYears: Number(rec.value) }); if (r.ok && S.w.civ.wcde.phase === "founding") S.hooks.founding?.(); };
   const log = (c.wcde.catastrophes ?? []).slice(-4).reverse();
-  return h("div", {}, lb("創造主の災厄", "CATASTROPHE"), nm, why, h("div", { class: "rowb" }, scope, at), h("div", { class: "rowb" }, h("small", {}, "半径(km)"), rad, h("small", {}, "人口の損失 %"), mor, h("small", {}, "回復の目安(月)"), rec), h("div", { class: "rowb" }, holdBtn("災厄を起こす", go, "p", { id: "cat-go" })), ...log.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `「${r.name}」${r.scope === "world" ? "世界規模" : "地域規模"}`, h("br"), h("small", {}, `${date(r.at)}・実際の損失 ${Math.round(r.result.share * 100)}%（約 ${n0(r.result.dead)} 人）`)))));
+  return h("div", {}, lb("創造主の災厄", "CATASTROPHE"), nm, why, h("div", { class: "rowb" }, h("small", {}, "人口の損失 %"), mor, sl), h("div", { class: "rowb" }, h("small", {}, "復活までの年数"), rec), warn, h("div", { class: "rowb" }, holdBtn("災厄を起こす", go, "p", { id: "cat-go" })), ...log.map((r) => h("div", { class: "row" }, h("span", { class: "g" }, `「${r.name}」`, h("br"), h("small", {}, `${date(r.at)}・実際の損失 ${Math.round(r.result.share * 100)}%（約 ${n0(r.result.dead)} 人）${r.result.collapsed ? `・滅んだ国 ${r.result.collapsed}` : ""}`)))));
 }
 /* ---------- 世界設定・出力・バージョン ---------- */
 export function pSettings() {

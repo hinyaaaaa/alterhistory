@@ -44,7 +44,7 @@ export function newsContext(civ) {
   for (const s of Object.values(civ.states)) rel[s.id] = (s.pop / total) * n; // 相対規模: 1 = 平均的な国。国の数が増えても「大きな国かどうか」で判断する
   return { rel, own: ownIds(civ) };
 }
-const KIND = { state_dissolved: 40, war_declared: 25, war_ended: 30, regime_change: 25, conquest: 35, state_formed: 20, religion_founded: 25, religion_schism: 20, famine: 15, disaster_struck: 15, climate_shift: 20, dynasty_changed: 15, culture_diverged: 10, language_diverged: 10, tech_lost: 20 };
+const KIND = { leader_assassinated: 30, ruin_discovered: 45, world_destroyed: 120, world_reborn: 100, state_dissolved: 40, war_declared: 25, war_ended: 30, regime_change: 25, conquest: 35, state_formed: 20, religion_founded: 25, religion_schism: 20, famine: 15, disaster_struck: 15, climate_shift: 20, dynasty_changed: 15, culture_diverged: 10, language_diverged: 10, tech_lost: 20 };
 const SIZE_K = 15; // 規模の加点: SIZE_K × log2(1 + 相対規模)。相対規模 6（平均の6倍の国どうしの戦争）で +42
 export function classifyEvent(civ, ev, cx = newsContext(civ)) {
   const lv = (score, extra = {}) => ({ level: score >= MAJOR_SCORE ? "major" : "normal", score, ...extra });
