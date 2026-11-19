@@ -19,7 +19,10 @@ import { interventionsOf } from "../../core/wcde/intervention.js";
 import { FIELDS } from "../../core/wcde/domains/effective.js";
 import { formatWorldDate } from "../../core/wcde/world.js";
 import { iterRecords, coverage, findRecord, causesOfRecord } from "../../core/civ/archive.js";
-import { packSave, packSaveGz, unpackSaveAny, SAVE_SCHEMA } from "../../core/wcde/savefile.js";
+import { packSaveGzAsync, unpackSaveAsync, SAVE_SCHEMA } from "../../core/wcde/savefile.js";
+import { perfPanel } from "./perf-panel.js";
+import { ensureStore, linkHistory } from "./history-link.js";
+import { hasExternal, collectRecords } from "../../core/civ/history-store.js";
 import { checkWcdeIntegrity } from "../../core/wcde/integrity.js";
 import { timeOf, SPEEDS } from "../../core/wcde/clock.js";
 import { exportVaultZip } from "../../io/vault-writer.js";
@@ -52,7 +55,7 @@ function entityDetail(kind, x, use) {
 function showEvent(e) {
   const c = civ(), d = document.getElementById("evdetail"); if (!d) return; const MEDIA_JA = { trace: "遺跡・痕跡", oral: "口承", tablet: "刻まれた記録", paper: "紙の記録", print: "印刷物" };
   const ents = e.participants.filter((p) => c.states[p.entityId]).map((p) => [h("a", { class: "lk", href: "#", onclick: (ev) => { ev.preventDefault(); S.hooks.select(p.entityId); } }, stateName(p.entityId)), " "]).flat();
-  const causes = causesOfRecord(c, e).map((x) => x.record ? h("div", { class: "n" }, `原因（直接）: ${x.record.title}（${x.record.date.year}年）`) : h("div", { class: "n" }, x.lost ? "原因（直接）: 資料が失われています。起きなかったという意味ではありません" : "原因（直接）: 記録の範囲外"));
+  const causes = causesOfRecord(c, e).map((x) => x.record ? h("div", { class: "n" }, `原因（直接）: ${x.record.title}（${x.record.date.year}年）`) : h("div", { class: "n" }, x.external ? "原因（直接）: 古い歴史資料（外部に保存）" : x.lost ? "原因（直接）: 資料が失われています。起きなかったという意味ではありません" : "原因（直接）: 記録の範囲外"));
   d.replaceChildren(h("b", {}, e.title), h("div", {}, `${e.date.year}年${e.date.month}月・種別 ${e.kind}・出典 ${e.provenance}・記録 ${MEDIA_JA[e.m] ?? "不明"}`), h("div", {}, "関係する実体: ", ...ents), ...causes, ...(e.effects ?? []).slice(0, 8).map((f) => h("div", { class: "n" }, `結果: ${f.property} ${f.before ?? "—"} → ${f.after ?? "—"}`)));
 }
 
@@ -86,13 +89,13 @@ export function catastropheBox() {
 export function pSettings() {
   const c = civ(), cf = c.wcde.config, T = timeOf(c), errs = checkWcdeIntegrity(S.w.world, c), msg = h("p", { class: "n", id: "exp-msg" }), cal = cf.calendar;
   const dl = (blob, name) => { const a = h("a", { href: URL.createObjectURL(blob), download: name }); document.body.append(a); a.click(); a.remove(); };
-  const save = async () => { msg.textContent = "圧縮して書き出しています…"; const p = await packSaveGz(S.w); dl(new Blob([p.bytes], { type: "application/gzip" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw`); msg.textContent = `保存ファイルを書き出しました（圧縮 ${(p.bytes.length / 1048576).toFixed(1)} MB／元 ${(p.rawBytes / 1048576).toFixed(1)} MB）`; };
+  const save = async () => { msg.textContent = "圧縮して書き出しています…"; const p = await packSaveGzAsync(S.w); /* v6.20.0: 外部保存の履歴を含めて、単体で復元できる形で書き出す */ dl(new Blob([p.bytes], { type: "application/gzip" }), `alterhistory-${cf.worldSeed}-${c.date.year}.ahw`); msg.textContent = `保存ファイルを書き出しました（圧縮 ${(p.bytes.length / 1048576).toFixed(1)} MB／元 ${(p.rawBytes / 1048576).toFixed(1)} MB）`; };
   // v6.14.0: フォルダへ直接書かず、常に ZIP（.md の束）にして保存する。創作に要らない内部データは出さない軽量モード。展開して vault として開く
   const obs = async () => {
     const nm = String(cf.name || cf.worldSeed), mb = (b) => (b / 1048576).toFixed(1), t0 = performance.now(), prog = (p) => { msg.textContent = `ZIP を作っています… ${p.files} ファイル（${mb(p.bytes)} MB）`; };
     msg.textContent = "ZIP を作っています…";
     try {
-      const r = await exportVaultZip(S.w.world, c, nm, { onProgress: prog }); let n = 0;
+      const evs = hasExternal(c) ? await collectRecords(c) : undefined, r = await exportVaultZip(S.w.world, c, nm, { onProgress: prog, ...(evs ? { evs } : {}) }); /* v6.20.0: 外部保存の履歴も出力に含める */ let n = 0;
       for (const part of r.parts) { dl(new Blob([part.bytes], { type: "application/zip" }), part.name); n++; if (r.parts.length > 1) await new Promise((res) => setTimeout(res, 800)); }
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
       msg.textContent = n === 1 ? `ZIP を保存しました: ${r.files} ファイル（${mb(r.parts[0].bytes.length)} MB・${sec} 秒）。展開してできた「${r.root}」フォルダを、Obsidian の vault として開いてください` : `${n} 個の ZIP を保存しました（${r.files} ファイル）。すべて同じフォルダへ展開すると、1 つの vault になります`;
@@ -103,9 +106,10 @@ export function pSettings() {
   return h("div", {}, ...head("SETTINGS", "世界設定・出力"), table(["項目", "値"], [["世界の名前", cf.name ?? "—"], ["現在", formatWorldDate(S.w)], ["先史の長さ", `${n0(cf.prehistory?.years ?? 0)} 年`], ["時間の速度", SPEEDS.find((s) => s.id === T.speed)?.label], ["アプリの版", APP_VERSION_LABEL], ...(errs.length ? [["整合性の検査", `${errs.length} 件の問題`]] : [])]),
     lb("時代", "ERAS"), ...eraRows, h("div", { class: "rowb" }, eraY, eraN, btn("時代を足す", () => { run({ type: "calendar.edit", edit: { addEra: { name: eraN.value, startYear: Math.round(Number(eraY.value)) } } }); S.hooks.render(); }, "", { id: "era-add" })),
     lb("保存・読み込み・出力", "SAVE / EXPORT"), h("div", { class: "rowb" }, btn("保存ファイルを書き出す", save, "p", { id: "save" }), fileLoader(), btn("Obsidian 用 Markdown を ZIP で書き出す", obs, "", { id: "obs" })), msg, ...S.fileWarn.map((x) => h("p", { class: "warn" }, x)),
+    perfPanel(),
     null);
 }
 export function fileLoader(done) {
-  const inp = h("input", { type: "file", accept: ".ahw", id: "loadfile", hidden: true, onchange: async (e) => { const f = e.target.files[0]; if (!f) return; const r = await unpackSaveAny(new Uint8Array(await f.arrayBuffer())); if (!r.ok) { alert("読み込めません:\n" + r.errors.join("\n")); return; } (done ?? S.hooks.loaded)(r.w, r.warnings); } });
+  const inp = h("input", { type: "file", accept: ".ahw", id: "loadfile", hidden: true, onchange: async (e) => { const f = e.target.files[0]; if (!f) return; const r = await unpackSaveAsync(new Uint8Array(await f.arrayBuffer()), {}, { store: await ensureStore() }); if (!r.ok) { alert("読み込めません:\n" + r.errors.join("\n")); return; } (done ?? S.hooks.loaded)(r.w, r.warnings); } });
   return h("span", {}, inp, btn("保存ファイルを読み込む", () => inp.click(), "", { id: "load" }));
 }

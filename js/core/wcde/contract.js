@@ -14,6 +14,7 @@
 //   歴史資料のコミット: 月ごとに積んだ結果（civ.events）を、歴史資料（civ.archive）へ移して整理するのは、安全な境界（safeAdvance の各チャンクが成功したあと）だけ。取り消し点を跨がない。
 import { createCivSim } from "../civ/civ-sim.js";
 import { wcdeExtension } from "./domains/index.js";
+import { takeCheckpoint, restoreCheckpoint, beginMonth, checkpointFull, restoreInto } from "../sim/month-transaction.js";
 
 export const AUTHORITY = Object.freeze({ PLAYER: "player_order", CREATOR: "creator_intervention", AI: "ai_action", SIM: "simulation_transition", ADMIN: "administrative" });
 const A = AUTHORITY;
@@ -36,23 +37,11 @@ export function defineCommand(type, spec) { COMMANDS[type] = { mutates: true, ph
 /** 命令の一覧（権限・段階・領域・変更の有無）。文書・テスト・UI の突き合わせ用 */
 export const commandTable = () => Object.values(COMMANDS).map((c) => ({ type: c.type, authorities: [...c.authorities], phases: [...c.phases], domain: c.domain, mutates: c.mutates, control: c.control }));
 
-const clonePart = (civ) => { const o = {}; for (const k of SNAP_KEYS) if (k in civ) o[k] = structuredClone(civ[k]); return o; };
-/** 命令用の軽い取り消し点（国家・集団・人物など）。events / decisions / history は追記のみなので、長さで戻す */
-function checkpoint(civ) { return { part: clonePart(civ), ev: civ.events.length }; }
+/** 命令用の軽い取り消し点（国家・集団・人物など）。v6.20.0: 休眠した要素は複製せず共有する（month-transaction.js）。events は追記のみなので、長さで戻す */
+function checkpoint(civ) { return takeCheckpoint(civ, { keys: [...SNAP_KEYS, "events"] }); }
 /** 取り消し。civ の最上位の入れ物（states・groups など）は同じオブジェクトのまま中身を戻す（外から持っている参照が切れない）。入れ物の中の国家などは作り直される */
-function rollback(w, cp) {
-  const { civ } = w;
-  for (const k of SNAP_KEYS) {
-    if (!(k in cp.part)) { delete civ[k]; continue; } const src = structuredClone(cp.part[k]), cur = civ[k];
-    if (Array.isArray(cur) && Array.isArray(src)) { cur.length = 0; cur.push(...src); } else if (cur && src && typeof cur === "object" && typeof src === "object" && !Array.isArray(cur)) { for (const x of Object.keys(cur)) delete cur[x]; Object.assign(cur, src); } else civ[k] = src;
-  }
-  civ.events.length = cp.ev; w.rebuild();
-}
-/** 追記専用の記録（実測: 既存の要素は一度も書き換わらない）。取り消し点では、複製せず長さだけを覚える（長期の世界で、毎回、全体を複製しないため） */
-const APPEND_ONLY = ["events", "works"];
-export const checkpointFull = (civ) => { const part = {}, lens = {}, order = Object.keys(civ); for (const k of order) if (APPEND_ONLY.includes(k) && Array.isArray(civ[k])) lens[k] = civ[k].length; else part[k] = structuredClone(civ[k]); return { order, part, lens }; };
-/** 取り消し点へ戻す。追記専用の記録は、長さを戻す（同じ配列のまま）。キーの順序も、取り消し点のとおりに戻す */
-export function restoreInto(w, snap) { const { civ } = w, keep = {}; for (const k of Object.keys(snap.lens)) { civ[k].length = snap.lens[k]; keep[k] = civ[k]; } for (const k of Object.keys(civ)) delete civ[k]; for (const k of snap.order) civ[k] = k in keep ? keep[k] : structuredClone(snap.part[k]); w.rebuild(); }
+function rollback(w, cp) { restoreCheckpoint(w.civ, cp); w.rebuild(); }
+export { checkpointFull, restoreInto };
 
 function log(civ, entry) { const L = (civ.wcde.log ??= []); L.push(entry); if (L.length > LOG_MAX) L.splice(0, L.length - LOG_MAX); }
 
@@ -77,16 +66,17 @@ export function dispatch(w, cmd) {
   return { ok: true, result: r.result ?? r };
 }
 
-/** 時間を進める。120か月ごとに取り消し点を取り、月の処理が例外になったら、その月の直前（安全な境界）まで戻して止める */
+/** 時間を進める。120か月ごとに取り消し点（月次トランザクション）を取り、月の処理が例外になったら、その月の直前（安全な境界）まで戻して止める。
+ *  v6.20.0: 取り消し点は差分型（休眠した記録は複製しない）。成功した区間は commit で取り消し点を捨てる */
 export function safeAdvance(w, months, { chunk = 120, onProgress = null } = {}) {
   const { civ } = w; let done = 0;
   while (done < months) {
-    const n = Math.min(chunk, months - done), snap = checkpointFull(civ);
-    try { w.sim.advanceMonths(n); done += n; if (onProgress) onProgress(done, months); continue; } catch (err) {
+    const n = Math.min(chunk, months - done), tx = beginMonth(w);
+    try { w.sim.advanceMonths(n); tx.commit(); done += n; if (onProgress) onProgress(done, months); continue; } catch (err) {
       // 失敗した月を探す: 取り消し点から決定的にやり直し、最後に成功した月まで進める
-      restoreInto(w, snap); let ok = 0, msg = String(err?.message ?? err);
+      tx.restoreAgain(); let ok = 0, msg = String(err?.message ?? err);
       try { for (; ok < n; ok++) w.sim.advanceMonth(); } catch (e2) { msg = String(e2?.message ?? e2); }
-      restoreInto(w, snap); if (ok > 0) w.sim.advanceMonths(ok);
+      tx.restoreAgain(); try { if (ok > 0) w.sim.advanceMonths(ok); } finally { tx.commit(); }
       civ.wcde.diagnostics.push({ at: civ.monthIndex, failedMonth: civ.monthIndex + 1, message: msg }); if (civ.wcde.diagnostics.length > 50) civ.wcde.diagnostics.shift();
       return { ok: false, advanced: done + ok, error: msg, haltedAt: { ...civ.date } };
     }

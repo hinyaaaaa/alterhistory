@@ -1,5 +1,37 @@
 # 変更履歴
 
+## v6.20.0 履歴の外部保存と軽い月次処理
+
+実装方針書 `AlterHistory_v6_20_0_実装方針書`（8 つの機構）に沿った、内部構造の更新。「データを減らす」更新ではなく、「データが増えても重くならない」更新。詳細・測定値・仕様との差は `docs/V6_20_0.md`。
+
+### 直した不具合（v6.19.0）
+- **アプリが起動しなかった**: `clock.js → contract.js → domains/index.js → events.js → decisions.js → clock.js` の循環 import で、バンドルの評価順により `registerDecision is not a function`。取り消し点を葉のモジュール（`sim/month-transaction.js`）へ切り出して循環を断った（UI のスモークテストが全滅していた原因）。
+- **UI で再生している間、civ.events が増え続けていた**: 歴史資料への移し替え（commitArchive）は time.advance だけで、clock.run では行われなかった。clock.run の成功後に行う。
+- 資料の「失われた」判定: ID の連番の読み方が検査文字ごと Number() になって NaN だった（`archive.js` の idNum）。
+
+### M1 月次トランザクション（`js/core/sim/month-transaction.js`）
+- 取り消し点を、文明全体の複製から差分型へ。休眠した国家・人物・戦争・条約は複製せず参照を共有、動いているものだけ複製、archive は共有、events・works は長さだけ。
+- Write Journal（`set / delete / push / splice / assign`）: 変更前の値を最初の 1 回だけ記録し、巻き戻す。キーの順序も戻す。
+- 月の途中で休眠要素へ書く処理（コンパクション）は journal を通す。通さない書き込みは guard モード（試験）が指紋の比較で検出する。
+- clockRun・safeAdvance・dispatch が使う。成功した月は commit で記録を捨てる。
+
+### M2/M3 履歴の外部保存・遅延読み込み・索引（`civ/history-store.js`・`history-index.js`・`io/history-store-idb.js`・`workers/history-worker.js`）
+- 物理チャンク 5 年（論理チャンク 100 年は据え置き）。gzip 圧縮して IndexedDB へ。書いて・読み戻して・検証できてから、メモリ上の記録を解放。失敗したらメモリに残す。容量不足は検出して停止。
+- 非同期 API: `getLiveEvent`（同期）・`getHistoricalEvent`・`getHistoryRange`・`getEntityHistory`・`iterRecordsAsync`・`pastViewAsync`。国家・人物の歴史は Bloom フィルタ＋位置索引で、無いチャンクを読まない。LRU 4 チャンク。
+- 保存先をつなぐと、コンパクションは資料を物理的に捨てない（事実の台帳は完全保存。残存の判定は読むときの絞り込み）。
+- 保存: `packSaveAsync` / `packSaveGzAsync` は外部の履歴を元の位置へ戻して書く（単体で復元できる .ahw。形式は schema 2 のまま、1 世紀ずつ流す）。`unpackSaveAsync` は保存先へ移行する。外部保存つきで同期の `packSave` を呼ぶと拒否する。
+
+### M4 整合性検査の分割・コンパクション・キュー
+- `integrity.js`: 毎月は現役のもの＋人物 400 人・終結した戦争 60 件・資料 1 チャンクのカーソル検査。全体検査（`checkWcdeIntegrity`）は保存前・読み込み後・手動と 100 年ごと。
+- `civ/compaction-queue.js`: 条約の失効・国家の滅亡・人物の没の時点で登録し、毎月 64 件まで消化（年 1 回の一括走査を廃止）。言語の音素表は 400 件ずつ分割。整理の中身は同じ（履歴の削除ではない）。
+
+### M5 性能監視・描画
+- `core/perf/perf-monitor.js`: 領域別の処理時間・取り消し点の時間・メモリ（measureUserAgentSpecificMemory → performance.memory）・増加傾向と処理時間悪化の警告。リングバッファ 400。診断画面は世界設定の「診断」。
+- UI: Dirty Rendering（時間だけ進んだときは時計だけ。ニュース・地図は変化があるときだけ）、newsSeen の上限、保存先の接続、保存・読み込みの非同期化。
+
+### テスト
+- 新規: `v620-transaction.test.mjs`・`v620-history-store.test.mjs`。測定: `tests/perf/v620-baseline.mjs`・`v620-memory.mjs`。
+
 ## v6.19.0 出来事 240 種・継承法・反乱の戦争化・災厄と世界の再創造
 
 要件は `docs/REQUIREMENTS.md` の §9・§10・§11。テストは v6.20.0 にまとめる（この版では書かない・走らせない。使い捨ての動作確認のみ）。

@@ -4,6 +4,7 @@
 //   ・軽さ: 地形・気候の層と陰影は、見ている範囲が変わったときだけ描き直して画像として持つ。ドラッグ・ズームの最中は画像を動かすだけにして、止まってから描き直す。
 import { colorOf, polityJa, assignColors, resetColors, hasColor } from "./common.js";
 import { pastView } from "../../core/civ/archive.js";
+import { hasExternal, pastViewAsync } from "../../core/civ/history-store.js";
 import { Geo, RAMPS, BIOME_COLORS, BIOME_JA, LAND_BASE, LAKE_COLOR, hillshade, reliefMarks, drawMarks, riverPaths, textureTile, clamp } from "./terrain.js";
 const TAU = Math.PI * 2;
 
@@ -84,7 +85,7 @@ export class MapView {
   /* ---------- 所有・色 ---------- */
   owner() {
     const civ = this.w.civ, pv = this.w.viewPast, key = pv ?? civ.monthIndex; if (this._own && this._ownAt === key) return this._own; const o = new Map();
-    if (pv != null) { /* 過去の閲覧: 残っている歴史資料から再構成した領域だけを描く（資料の無い土地は塗らない。読み取り専用） */ for (const [cell, stateId] of pastView(civ, pv).owner) o.set(cell, { cell, cells: [cell], stateId, pop: 1, cohorts: [] }); }
+    if (pv != null) { /* 過去の閲覧: 残っている歴史資料から再構成した領域だけを描く（資料の無い土地は塗らない。読み取り専用） */ const pvw = hasExternal(civ) ? this._pv?.month === pv ? this._pv.view : (this._pvBusy !== pv && (this._pvBusy = pv, pastViewAsync(civ, pv).then((v) => { this._pv = { month: pv, view: v }; this._own = null; this._pvBusy = null; this.draw(); })), null) : pastView(civ, pv); /* v6.20.0: 外部保存の履歴は非同期に集める（読み込み中は何も塗らない） */ for (const [cell, stateId] of (pvw?.owner ?? [])) o.set(cell, { cell, cells: [cell], stateId, pop: 1, cohorts: [] }); }
     else for (const g of Object.values(civ.groups)) { const cells = g.cells?.length ? g.cells : [g.cell]; for (const c of cells) o.set(c, g); }
     this._own = o; this._ownAt = key; this._idc = {}; this._labelsAt = -1; this.assign(o); return o;
   }

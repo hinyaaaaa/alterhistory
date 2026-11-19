@@ -7,6 +7,7 @@
 //   ・固定間隔の完全スナップショットは持たない。過去の閲覧は、残っている資料から再構成する（pastView）。資料が無い部分は「不明」と示す。
 //   ・古いチャンクは JSON 文字列（cold）で持ち、必要になったときだけ読む（遅延読み込み）。索引は派生で、保存しない。
 import { hashSeed } from "./civ-state.js";
+import { parseId } from "./ids.js";
 
 export const ARCHIVE_VERSION = 1;
 export const LIVE_MONTHS = 36;        // 直近の作業バッファに残す期間（因果の参照・ニュース・解釈が近い過去を引くため）
@@ -59,6 +60,14 @@ export function toRecord(civ, e) {
   const pol = policyOf(e.kind), r = { eventId: e.eventId, date: e.date, t: monthOfEvent(e), kind: e.kind, ty: pol.ty, im: e.imp ?? pol.im, m: e.media ?? "oral", title: e.title, participants: e.participants, location: e.location ?? null, causes: e.causes?.length ? e.causes : [], effects: pol.im >= 2 ? (e.effects ?? []) : [], provenance: e.provenance ?? "simulation" };
   if (e.facts) r.facts = e.facts; return r;
 }
+// v6.20.0: 外部保存（history-store.js）。civ ごとに実行時だけつなぐ。つながっているとき、コンパクションは資料を捨てず（事実の台帳は完全保存）、閉じた期間は外部へ移る
+const STORES = new WeakMap(); export const setStoreOf = (civ, st) => { if (st) STORES.set(civ, st); else STORES.delete(civ); }; export const storeOf = (civ) => STORES.get(civ) ?? null;
+/** メモリに常駐している全資料（外部保存へ移す候補） */
+export function residentRecords(civ) { const a = archiveOf(civ), out = []; for (const k in a.chunks) for (const r of chunkRecords(a, k)) out.push(r); return out; }
+/** 常駐の資料を keep で絞る（外部保存へ移した分を解放する）。cold のチャンクは開いた形に戻して絞る */
+export function replaceResident(civ, keep) { const a = archiveOf(civ); for (const k in a.chunks) { const c = a.chunks[k], recs = chunkRecords(a, k); c.rec = recs.filter(keep); delete c.cold; hot.get(a)?.delete(k); } }
+/** ID が外部保存のチャンクに入っているか（同期の目安。資料が「失われた」のではなく「外にある」） */
+export function inExternal(civ, id) { const e = civ.archive?.ext, n = parseId(id)?.n ?? null; if (!e || !Number.isFinite(n)) return false; for (const pk in e) { const m = e[pk]; if (m.minN != null && n >= m.minN && n <= m.maxN) return true; } return false; }
 const hot = new WeakMap(); // civ.archive → { key → 解析済みの配列 }（cold チャンクを読んだ結果を少数だけ覚える）
 function chunkRecords(a, key) {
   const c = a.chunks[key]; if (!c) return []; if (c.rec) return c.rec; let h = hot.get(a); if (!h) hot.set(a, h = new Map());
@@ -82,6 +91,7 @@ export function commitArchive(ctx) {
 }
 /** コンパクション: 残存しなくなった資料を捨て（二度と復活しない）、古い開いたチャンクを cold にする */
 export function compact(civ) {
+  if (storeOf(civ)) return 0; // 外部保存つき: 事実の台帳は物理的に捨てない（残存の判定は読むときの絞り込み。外部へ移るまで常駐）
   const a = archiveOf(civ), now = civ.monthIndex; let dropped = 0;
   for (const key in a.chunks) { const c = a.chunks[key], old = (now / 12 - (c.y0 + CHUNK_YEARS)) > COLD_AFTER_YEARS - CHUNK_YEARS; if (c.cold && !old) continue;
     const recs = chunkRecords(a, key), keep = recs.filter((r) => survives(civ, r, now)), lost = recs.length - keep.length;
@@ -97,7 +107,7 @@ export function* iterRecords(civ, { from = -Infinity, to = Infinity, kinds = nul
   for (const k of keys) { const y0 = k * CHUNK_YEARS; if (y0 * 12 > to || (y0 + CHUNK_YEARS) * 12 < from) continue; for (const r of chunkRecords(a, String(k))) { if (r.t < from || r.t > to) continue; if (kinds && !kinds.includes(r.kind)) continue; if (types && !types.includes(r.ty)) continue; if (!includeLost && !survives(civ, r, now)) continue; yield r; } }
   for (const e of civ.events) { const t = monthOfEvent(e); if (t < from || t > to) continue; const pol = policyOf(e.kind); if (kinds && !kinds.includes(e.kind)) continue; if (types && !types.includes(pol.ty)) continue; if (!pol.store && !kinds) continue; yield evAsRecord(civ, e); }
 }
-const idNum = (id) => Number(String(id).split("_").pop());
+const idNum = (id) => parseId(id)?.n ?? NaN; // v6.20.0: ID は「種別_連番(36進)+検査文字」。連番だけを読む（以前は検査文字ごと Number() にして NaN になっていた）
 /** 資料を ID で引く（作業バッファ → 資料）。残存しなければ null。lost: 記録された（はずの）が失われたかどうか */
 export function findRecord(civ, id) {
   const live = civ.events.find((e) => e.eventId === id); if (live) return evAsRecord(civ, live);
@@ -109,16 +119,19 @@ export const inLiveRange = (civ, id) => !civ.events.length || idNum(id) >= idNum
 /** 参加者（国家・集団・都市など）に関わる資料。新しい順 */
 export function recordsOf(civ, entityId, { limit = 50 } = {}) { const out = []; for (const r of iterRecords(civ)) if (r.participants.some((p) => p.entityId === entityId)) out.push(r); out.sort((x, y) => y.t - x.t); return out.slice(0, limit); }
 /** 原因リンクをたどる。原因の資料が失われていれば lost: true（「資料欠落」と表示する。起きなかった証拠ではない） */
-export function causesOfRecord(civ, rec) { return (rec.causes ?? []).map((c) => { const r = findRecord(civ, c.targetId); return { ...c, record: r, lost: !r && !inLiveRange(civ, c.targetId) }; }); }
+export function causesOfRecord(civ, rec) { return (rec.causes ?? []).map((c) => { const r = findRecord(civ, c.targetId); return { ...c, record: r, lost: !r && !inLiveRange(civ, c.targetId) && !inExternal(civ, c.targetId), external: !r && inExternal(civ, c.targetId) }; }); }
 /** 世紀ごとの残存状況（UI の「この時代の資料の欠落」表示）。total は記録された件数の推定で、特定の出来事を示さない */
 export function coverage(civ) { const a = archiveOf(civ), out = []; for (const k of Object.keys(a.chunks).map(Number).sort((x, y) => x - y)) { const c = a.chunks[k], kept = c.n, lost = c.lost; out.push({ y0: c.y0, kept, lost, ratio: kept + lost ? kept / (kept + lost) : 1, minor: Object.values(a.counts[k] ?? {}).reduce((s, v) => s + v, 0) }); } return out; }
 export const archiveStats = (civ) => { const a = archiveOf(civ); let cold = 0, bytes = 0; for (const k in a.chunks) { const c = a.chunks[k]; if (c.cold) { cold++; bytes += c.cold.length; } } return { chunks: Object.keys(a.chunks).length, cold, coldBytes: bytes, records: a.total, live: civ.events.length, flushed: a.evBase }; };
 
 // ---- 過去の再構成（残っている資料から）。固定間隔のスナップショットは使わない
 /** month 時点の国家・領域を、残っている資料から組み立てる。資料の無い部分は推測せず「不明」として返す */
-export function pastView(civ, month) {
+export function pastView(civ, month) { return pastReduce(civ, month, iterRecords(civ, { to: month, types: PAST_TYPES })); }
+export const PAST_TYPES = ["state", "war", "treaty", "city", "tech"];
+/** 記録の列から過去の姿を組み立てる（同期・非同期の両方から使う）。外部保存つきの世界は history-store.js の pastViewAsync */
+export function pastReduce(civ, month, recs) {
   const states = new Map(), cities = [], wars = new Map(); const ensure = (id) => states.get(id) ?? (states.set(id, { id, name: null, polity: null, capitalCell: null, cells: new Set(), formedAt: null, endedAt: null, known: { formed: false, ended: false }, mentions: 0 }), states.get(id));
-  for (const r of iterRecords(civ, { to: month, types: ["state", "war", "treaty", "city", "tech"] })) {
+  for (const r of recs) {
     const f = r.facts ?? {}, sid = f.stateId ?? r.participants.find((p) => p.role === "state" || p.role === "actor")?.entityId;
     if (r.kind === "state_formed") { const s = ensure(f.stateId ?? sid); s.name = f.name ?? s.name; s.polity = f.polity ?? s.polity; s.capitalCell = f.capitalCell ?? s.capitalCell; s.formedAt = r.t; s.known.formed = true; for (const c of f.cells ?? []) s.cells.add(c); s.endedAt = null; s.known.ended = false; }
     else if (r.kind === "state_dissolved") { const s = ensure(sid); s.endedAt = r.t; s.known.ended = true; s.mentions++; }
@@ -133,6 +146,9 @@ export function pastView(civ, month) {
   return { month, states: alive.map((s) => ({ ...s, cells: [...s.cells], known: s.known, partial: !s.known.formed || s.name == null })), owner, cities, wars: [...wars.values()].filter((w) => w.until == null), note: "残っている資料から再構成した姿です。資料が失われた部分は不明で、そこに何も無かったという意味ではありません。" };
 }
 /** 整合性: 資料の ID 重複・チャンクの件数・因果リンクの種類（direct のみ）・判断の記録を持たないこと */
+/** 資料チャンク 1 つの検査（チャンク内の ID 重複・因果リンクの種類・判断の ID）。チャンクを確定して外部へ移すとき・分割検査で使う */
+export function checkArchiveChunk(c, k = "?") { const errs = [], seen = new Set(); if (!c.rec && typeof c.cold !== "string") return [`資料チャンク ${k} が空`]; return checkRecords(c.rec ?? [], errs, seen); }
+export function checkRecords(recs, errs = [], seen = new Set()) { for (const r of recs) { if (seen.has(r.eventId)) errs.push(`資料の ID 重複 ${r.eventId}`); seen.add(r.eventId); for (const x of r.causes ?? []) if (x.basis !== "direct") errs.push(`資料 ${r.eventId} に direct 以外の因果リンクがある`); if ("decisionId" in r) errs.push(`資料 ${r.eventId} が判断の ID を持つ`); } return errs; }
 export function checkArchive(civ) {
   const errs = [], a = civ.archive; if (!a) return errs; const seen = new Set();
   for (const k in a.chunks) { const c = a.chunks[k]; if (!c.rec && typeof c.cold !== "string") { errs.push(`資料チャンク ${k} が空`); continue; }

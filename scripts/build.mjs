@@ -48,8 +48,9 @@ export async function buildAll({ write = true } = {}) {
   await run("js/main.js", "dist/app.js", { loader: { ".txt": "text" }, plugins: [useBuiltWorker], define: { __BUILD_ID__: JSON.stringify(buildId) } });
   await run("js/tools/worldgen-preview.js", "dist/worldgen-preview.js");
   await run("js/ui/v6/main.js", "dist/v6.js", { define: { __BUILD_ID__: JSON.stringify(buildId) } }); // v6 の画面（世界の生成から、地図・ハブ・ニュースと時間まで）
+  await run("js/workers/history-worker.js", "dist/history-worker.js"); // v6.20.0: 履歴の圧縮・展開を画面の外で行う Worker
   const pkg = JSON.parse(readFileSync(rel("package.json"), "utf8"));
-  const info = { version: pkg.version, buildId, sourceSha256: src, files: { "app.js": sha256(outs["dist/app.js"]), "worldgen-preview.js": sha256(outs["dist/worldgen-preview.js"]), "v6.js": sha256(outs["dist/v6.js"]) } };
+  const info = { version: pkg.version, buildId, sourceSha256: src, files: { "app.js": sha256(outs["dist/app.js"]), "worldgen-preview.js": sha256(outs["dist/worldgen-preview.js"]), "v6.js": sha256(outs["dist/v6.js"]), "history-worker.js": sha256(outs["dist/history-worker.js"]) } };
   outs["dist/build-info.json"] = Buffer.from(JSON.stringify(info, null, 2) + "\n");
   if (write) writeFileSync(rel("dist/build-info.json"), outs["dist/build-info.json"]);
   return { outs, info };

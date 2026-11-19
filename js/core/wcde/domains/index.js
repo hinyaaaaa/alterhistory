@@ -10,7 +10,7 @@ import { stepMilitary } from "./military.js";
 import { stepFallout } from "../special-ops.js";
 import { stepPeople, stepCities } from "./people.js";
 import { registerWcdeActions } from "./actions.js";
-import { checkWcdeIntegrity } from "../integrity.js";
+import { integrityStep } from "../integrity.js";
 import { syncControl } from "../control.js";
 import { stepInterventions } from "../intervention.js";
 import { predictWar } from "../warlab.js";
@@ -55,5 +55,5 @@ export function wcdeExtension(ticker, ctx) {
   ticker.register("people", stepRecovery, "stepRecovery"); ticker.register("people", stepRuins, "stepRuins", { every: 12, offset: 7 }); // v6.19.0: 災厄からの回復・旧世界の遺跡
   ticker.register("people", stepCities, "stepCities");
   ticker.register("integrity", (c) => syncControl(c.civ), "syncControl"); // 担当国家が滅びたら、担当を外す
-  ticker.register("integrity", (c) => { const errs = [...checkWcdeIntegrity(c.world, c.civ), ...(c.civ.monthIndex % 120 === 0 ? checkEco(c.world, c.civ) : [])]; if (errs.length) throw new Error("WCDE 整合性違反: " + errs.slice(0, 3).join(" / ")); }, "checkWcdeIntegrity");
+  ticker.register("integrity", (c) => { const errs = [...integrityStep(c.world, c.civ), ...(c.civ.monthIndex % 120 === 0 ? checkEco(c.world, c.civ) : [])]; if (errs.length) throw new Error("WCDE 整合性違反: " + errs.slice(0, 3).join(" / ")); }, "checkWcdeIntegrity");
 }

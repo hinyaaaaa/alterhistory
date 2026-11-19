@@ -9,84 +9,6 @@
       __defProp(target, name, { get: all[name], enumerable: true });
   };
 
-  // js/core/world/spec.js
-  function normalizeWorldSpec(input2 = {}) {
-    const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input2) ? input2 : {};
-    const num3 = (v, def, lo, hi, name, int = false) => {
-      if (v === void 0) return def;
-      if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {
-        errors.push(`${name} \u306F ${lo}\u301C${hi}${int ? " \u306E\u6574\u6570" : ""}\uFF08\u53D7\u3051\u53D6\u3063\u305F\u5024: ${String(v)}\uFF09`);
-        return def;
-      }
-      return v;
-    };
-    const spec = {
-      schemaVersion: WORLD_SPEC_SCHEMA,
-      generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,
-      worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),
-      planet: {
-        radiusKm: num3(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),
-        displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection
-      },
-      resolution: { targetCells: num3(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },
-      landFraction: num3(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
-      continentCountTarget: num3(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
-      islandMode: i.islandMode ?? d.islandMode,
-      layout: i.layout ?? d.layout,
-      plateCount: num3(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
-      initialGroups: num3(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
-      climateModel: {
-        fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,
-        lapseRateCPerKm: num3(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),
-        windMoistureLengthKm: num3(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")
-      }
-    };
-    if (!spec.worldSeed) errors.push("worldSeed \u304C\u7A7A\uFF08\u30B7\u30FC\u30C9\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u751F\u6210\u3059\u308B\u5834\u5408\u306F makeWorldSeed \u3092\u4F7F\u3046\uFF09");
-    if (!(spec.islandMode in ISLAND_MODES)) {
-      errors.push(`islandMode \u306F ${Object.keys(ISLAND_MODES).join("/")} \u306E\u3044\u305A\u308C\u304B`);
-      spec.islandMode = d.islandMode;
-    }
-    if (!LAYOUT_KEYS.includes(spec.layout)) {
-      errors.push(`layout \u306F ${LAYOUT_KEYS.join("/")} \u306E\u3044\u305A\u308C\u304B`);
-      spec.layout = d.layout;
-    }
-    if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \u306F\u73FE\u5728 equirectangular \u306E\u307F");
-    if (isObj(input2) && input2.schemaVersion !== void 0 && input2.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input2.schemaVersion} \u306F\u672A\u5BFE\u5FDC`);
-    return { spec, errors };
-  }
-  function makeWorldSeed(now) {
-    if (!Number.isFinite(now)) throw new Error("makeWorldSeed \u306B\u306F\u6642\u523B\uFF08\u30DF\u30EA\u79D2\uFF09\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044");
-    const s = Math.floor(now).toString(36), r = Math.floor((now * 9301 + 49297) % 233280).toString(36);
-    return `W-${s}-${r}`.toUpperCase();
-  }
-  var GENERATOR_VERSION, WORLD_SPEC_SCHEMA, ISLAND_MODES, LAYOUT_KEYS, DEFAULT_WORLD_SPEC, isObj;
-  var init_spec = __esm({
-    "js/core/world/spec.js"() {
-      GENERATOR_VERSION = "6.13.0";
-      WORLD_SPEC_SCHEMA = 1;
-      ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });
-      LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);
-      DEFAULT_WORLD_SPEC = Object.freeze({
-        schemaVersion: WORLD_SPEC_SCHEMA,
-        generatorVersion: GENERATOR_VERSION,
-        worldSeed: "",
-        planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
-        resolution: Object.freeze({ targetCells: 25e4 }),
-        landFraction: 0.36,
-        // v6.11.0: 0.3 → 0.36（フィクションの地図のように、海をやや少なく）。下限 0.1・上限 0.9 は変わらない
-        continentCountTarget: 6,
-        islandMode: "normal",
-        // v6.11.0: 標準は少なめ〜普通（many も選べる）
-        layout: "uneven",
-        // v6.11.0: 大陸の配置パターン（uneven / cluster / super / split）
-        plateCount: 14,
-        initialGroups: 12,
-        climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })
-      });
-      isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
-    }
-  });
-
   // js/core/civ/ids.js
   function createIdGen(seq) {
     return {
@@ -110,6 +32,188 @@
     }
   });
 
+  // js/core/perf/perf-monitor.js
+  function createPerfMonitor({ cap = 400 } = {}) {
+    const dom = /* @__PURE__ */ new Map(), samples = new Ring(cap), month = new Ring(cap), alerts = [];
+    let enabled = true, pending = null;
+    const d = (k) => {
+      let x = dom.get(k);
+      if (!x) dom.set(k, x = { n: 0, sum: 0, max: 0, last: 0, ring: new Ring(cap) });
+      return x;
+    };
+    const api = {
+      get enabled() {
+        return enabled;
+      },
+      set enabled(v) {
+        enabled = !!v;
+      },
+      /** 区間の測定。performance.mark / measure を使い、すぐ消す（タイムラインに溜めない）。使えなければ now() の差 */
+      time(name, fn) {
+        if (!enabled) return fn();
+        const t0 = now();
+        try {
+          return fn();
+        } finally {
+          api.add(name, now() - t0);
+        }
+      },
+      mark(name) {
+        if (!enabled) return null;
+        try {
+          performance.mark(`ah:${name}`);
+        } catch {
+        }
+        return now();
+      },
+      measure(name, t0) {
+        if (!enabled || t0 == null) return 0;
+        let ms = now() - t0;
+        try {
+          const m = performance.measure(`ah:${name}`, `ah:${name}`);
+          ms = m.duration || ms;
+          performance.clearMarks(`ah:${name}`);
+          performance.clearMeasures(`ah:${name}`);
+        } catch {
+        }
+        api.add(name, ms);
+        return ms;
+      },
+      add(name, ms) {
+        if (!enabled) return;
+        const x = d(name);
+        x.n++;
+        x.sum += ms;
+        x.last = ms;
+        if (ms > x.max) x.max = ms;
+        x.ring.push(ms);
+        if (pending) pending[name] = (pending[name] ?? 0) + ms;
+      },
+      /** 月の処理の区切り。その月の領域別の合計時間を 1 サンプルとして残す */
+      beginMonth() {
+        if (enabled) pending = {};
+      },
+      endMonth(monthIndex2) {
+        if (!enabled || !pending) return;
+        let total4 = 0;
+        for (const k in pending) total4 += pending[k];
+        month.push({ m: monthIndex2, total: total4, ...pending });
+        pending = null;
+      },
+      /** 状態のサンプル（年代・件数・メモリ）。呼ぶ側が間隔を決める（例: 12 か月ごと） */
+      async sample(info = {}) {
+        const mem = await api.memory();
+        const s = { at: Date.now(), ...info, heapMB: mem?.mb ?? null, memSource: mem?.source ?? null };
+        samples.push(s);
+        api.detect();
+        return s;
+      },
+      async memory() {
+        try {
+          if (typeof performance?.measureUserAgentSpecificMemory === "function" && globalThis.crossOriginIsolated) {
+            const r = await performance.measureUserAgentSpecificMemory();
+            return { mb: r.bytes / 1048576, source: "measureUserAgentSpecificMemory" };
+          }
+        } catch {
+        }
+        try {
+          const m = performance?.memory;
+          if (m?.usedJSHeapSize) return { mb: m.usedJSHeapSize / 1048576, source: "performance.memory\uFF08\u7C97\u3044\u88DC\u52A9\u5024\uFF09" };
+        } catch {
+        }
+        try {
+          if (typeof process !== "undefined" && process.memoryUsage) return { mb: process.memoryUsage().heapUsed / 1048576, source: "process.memoryUsage" };
+        } catch {
+        }
+        return null;
+      },
+      /** 悪化の検知: ① 年代あたりのメモリの増加（直近サンプルの回帰）② 月の処理時間の増加（前半と後半の中央値）。警告は 50 件まで */
+      detect() {
+        const s = samples.toArray().filter((x) => x.heapMB != null && x.year != null);
+        if (s.length >= 12) {
+          const t = s.slice(-60), n2 = t.length, mx = t.reduce((a, x) => a + x.year, 0) / n2, my = t.reduce((a, x) => a + x.heapMB, 0) / n2;
+          let num3 = 0, den = 0;
+          for (const x of t) {
+            num3 += (x.year - mx) * (x.heapMB - my);
+            den += (x.year - mx) ** 2;
+          }
+          const slope = den ? num3 / den * 100 : 0;
+          api.slopeMBPerCentury = slope;
+          if (slope > 60 && !api._warnMem) {
+            api._warnMem = true;
+            api.alert("\u30E1\u30E2\u30EA\u304C 100 \u5E74\u3042\u305F\u308A\u7D04 " + Math.round(slope) + " MB \u306E\u901F\u3055\u3067\u5897\u3048\u3066\u3044\u307E\u3059");
+          }
+          if (slope <= 60) api._warnMem = false;
+        }
+        const m = month.toArray();
+        if (m.length >= 40) {
+          const med = (a2) => {
+            const b2 = a2.map((x) => x.total).sort((p, q2) => p - q2);
+            return b2[b2.length >> 1];
+          }, h2 = m.length >> 1, a = med(m.slice(0, h2)), b = med(m.slice(h2));
+          api.slowdown = a > 0 ? b / a : 1;
+          if (api.slowdown > 2 && !api._warnT) {
+            api._warnT = true;
+            api.alert(`\u6708\u306E\u51E6\u7406\u6642\u9593\u304C ${api.slowdown.toFixed(1)} \u500D\u306B\u5897\u3048\u3066\u3044\u307E\u3059`);
+          }
+          if (api.slowdown <= 2) api._warnT = false;
+        }
+      },
+      alert(msg) {
+        alerts.push({ at: Date.now(), msg });
+        if (alerts.length > 50) alerts.shift();
+      },
+      report() {
+        const out = {};
+        for (const [k, x] of dom) out[k] = { n: x.n, avg: x.n ? x.sum / x.n : 0, max: x.max, last: x.last, recent: avgOf(x.ring.toArray()) };
+        return { domains: out, samples: samples.toArray(), months: month.toArray(), alerts: alerts.slice(), slopeMBPerCentury: api.slopeMBPerCentury ?? null, slowdown: api.slowdown ?? null };
+      },
+      reset() {
+        dom.clear();
+        samples.clear();
+        month.clear();
+        alerts.length = 0;
+        pending = null;
+        api._warnMem = api._warnT = false;
+        api.slopeMBPerCentury = api.slowdown = null;
+      }
+    };
+    return api;
+  }
+  var now, Ring, DOMAIN_OF, avgOf, perf;
+  var init_perf_monitor = __esm({
+    "js/core/perf/perf-monitor.js"() {
+      now = () => typeof performance !== "undefined" ? performance.now() : Date.now();
+      Ring = class {
+        constructor(cap = 400) {
+          this.cap = cap;
+          this.a = [];
+          this.i = 0;
+        }
+        push(v) {
+          if (this.a.length < this.cap) this.a.push(v);
+          else {
+            this.a[this.i] = v;
+            this.i = (this.i + 1) % this.cap;
+          }
+        }
+        toArray() {
+          return this.a.length < this.cap ? this.a.slice() : this.a.slice(this.i).concat(this.a.slice(0, this.i));
+        }
+        get length() {
+          return this.a.length;
+        }
+        clear() {
+          this.a = [];
+          this.i = 0;
+        }
+      };
+      DOMAIN_OF = Object.freeze({ economy_pop: "\u4EBA\u53E3", culture: "\u6587\u5316", tech: "\u6280\u8853", economy: "\u7D4C\u6E08", politics: "\u653F\u6CBB", military: "\u8ECD\u4E8B", conflict: "\u5916\u4EA4\u30FB\u6226\u4E89", people: "\u4EBA\u7269", archive: "\u30A2\u30FC\u30AB\u30A4\u30D6", integrity: "\u6574\u5408\u6027\u691C\u67FB", climate: "\u6C17\u5019", disaster: "\u707D\u5BB3", ecosystem: "\u751F\u614B\u7CFB", ai_plan: "\u56FD\u5BB6\u306E\u8A08\u753B", apply: "\u884C\u52D5\u306E\u5B9F\u884C", clock: "\u6642\u8A08", interventions: "\u4ECB\u5165", notify: "\u901A\u77E5" });
+      avgOf = (a) => a.length ? a.reduce((s, x) => s + x, 0) / a.length : 0;
+      perf = createPerfMonitor();
+    }
+  });
+
   // js/core/civ/tick.js
   function createTicker() {
     const handlers = new Map(PHASE_KEYS.map((k) => [k, []]));
@@ -122,16 +226,23 @@
       },
       runMonth(ctx) {
         ctx.trace = [];
+        const pm = perf.enabled;
+        if (pm) perf.beginMonth();
         for (const key3 of PHASE_KEYS) for (const h2 of handlers.get(key3)) {
           ctx.phase = key3;
           if (h2.every > 1) {
             const mi2 = ctx.civ?.monthIndex ?? 0;
             if ((mi2 % h2.every + h2.every) % h2.every !== h2.offset) continue;
           }
-          h2.fn(ctx);
+          if (pm) {
+            const t0 = performance.now();
+            h2.fn(ctx);
+            perf.add(key3, performance.now() - t0);
+          } else h2.fn(ctx);
           ctx.trace.push(`${key3}:${h2.label}`);
         }
         ctx.phase = null;
+        if (pm) perf.endMonth(ctx.civ?.monthIndex ?? 0);
         return ctx;
       },
       /** 登録済みの処理の一覧（台帳との突き合わせ・診断用）。月次の実行順そのまま */
@@ -145,6 +256,7 @@
   var PHASES, PHASE_KEYS, monthIndex, fromMonthIndex;
   var init_tick = __esm({
     "js/core/civ/tick.js"() {
+      init_perf_monitor();
       PHASES = Object.freeze([
         { key: "clock", name: "\u4E16\u754C\u6642\u8A08\u3092\u6B21\u306E\u6708\u3078" },
         { key: "interventions", name: "\u5275\u9020\u4E3B\u306E\u4ECB\u5165\u306E\u6E1B\u8870\uFF08\u5F53\u6708\u306E\u6709\u52B9\u5024\u3092\u78BA\u5B9A\uFF09" },
@@ -213,7 +325,7 @@
   }
   function commitArchive(ctx) {
     var _a, _b;
-    const { civ } = ctx, a = archiveOf(civ), now = civ.monthIndex, cutoff = now - LIVE_MONTHS;
+    const { civ } = ctx, a = archiveOf(civ), now2 = civ.monthIndex, cutoff = now2 - LIVE_MONTHS;
     let idx = 0;
     const pinned = /* @__PURE__ */ new Set();
     for (const q2 of civ.wcde?.news?.queue ?? []) if (q2.eventId) pinned.add(q2.eventId);
@@ -248,17 +360,18 @@
     return { moved: idx };
   }
   function compact(civ) {
-    const a = archiveOf(civ), now = civ.monthIndex;
+    if (storeOf(civ)) return 0;
+    const a = archiveOf(civ), now2 = civ.monthIndex;
     let dropped = 0;
     for (const key3 in a.chunks) {
-      const c = a.chunks[key3], old = now / 12 - (c.y0 + CHUNK_YEARS) > COLD_AFTER_YEARS - CHUNK_YEARS;
+      const c = a.chunks[key3], old = now2 / 12 - (c.y0 + CHUNK_YEARS) > COLD_AFTER_YEARS - CHUNK_YEARS;
       if (c.cold && !old) continue;
-      const recs = chunkRecords(a, key3), keep = recs.filter((r) => survives(civ, r, now)), lost = recs.length - keep.length;
+      const recs = chunkRecords(a, key3), keep = recs.filter((r) => survives(civ, r, now2)), lost = recs.length - keep.length;
       if (lost > 0 || old && !c.cold) {
         dropped += lost;
         c.lost += lost;
         c.n = keep.length;
-        if (old && now / 12 >= c.y0 + CHUNK_YEARS) {
+        if (old && now2 / 12 >= c.y0 + CHUNK_YEARS) {
           c.cold = JSON.stringify(keep);
           delete c.rec;
           hot.get(a)?.delete(key3);
@@ -275,7 +388,7 @@
     return dropped;
   }
   function* iterRecords(civ, { from = -Infinity, to = Infinity, kinds = null, types = null, includeLost = false } = {}) {
-    const a = archiveOf(civ), keys = Object.keys(a.chunks).map(Number).sort((x, y) => x - y), now = civ.monthIndex;
+    const a = archiveOf(civ), keys = Object.keys(a.chunks).map(Number).sort((x, y) => x - y), now2 = civ.monthIndex;
     for (const k of keys) {
       const y0 = k * CHUNK_YEARS;
       if (y0 * 12 > to || (y0 + CHUNK_YEARS) * 12 < from) continue;
@@ -283,7 +396,7 @@
         if (r.t < from || r.t > to) continue;
         if (kinds && !kinds.includes(r.kind)) continue;
         if (types && !types.includes(r.ty)) continue;
-        if (!includeLost && !survives(civ, r, now)) continue;
+        if (!includeLost && !survives(civ, r, now2)) continue;
         yield r;
       }
     }
@@ -304,10 +417,11 @@
     for (const k in a.chunks) for (const r of chunkRecords(a, k)) if (r.eventId === id) return survives(civ, r) ? r : null;
     return null;
   }
-  var ARCHIVE_VERSION, LIVE_MONTHS, CHUNK_YEARS, COLD_AFTER_YEARS, P, KIND_POLICY, policyOf, MEDIA, IMP_TAU, IMP_FLOOR, GRACE_YEARS, survives, emptyArchive, archiveOf, monthOfEvent, bucketOf, hot, evAsRecord;
+  var ARCHIVE_VERSION, LIVE_MONTHS, CHUNK_YEARS, COLD_AFTER_YEARS, P, KIND_POLICY, policyOf, MEDIA, IMP_TAU, IMP_FLOOR, GRACE_YEARS, survives, emptyArchive, archiveOf, monthOfEvent, bucketOf, STORES, storeOf, hot, evAsRecord;
   var init_archive = __esm({
     "js/core/civ/archive.js"() {
       init_civ_state();
+      init_ids();
       ARCHIVE_VERSION = 1;
       LIVE_MONTHS = 36;
       CHUNK_YEARS = 100;
@@ -400,6 +514,8 @@
       archiveOf = (civ) => civ.archive ?? (civ.archive = emptyArchive());
       monthOfEvent = (e) => e.date.year * 12 + (e.date.month - 1);
       bucketOf = (m) => Math.floor(m / 12 / CHUNK_YEARS);
+      STORES = /* @__PURE__ */ new WeakMap();
+      storeOf = (civ) => STORES.get(civ) ?? null;
       hot = /* @__PURE__ */ new WeakMap();
       evAsRecord = (civ, e) => toRecord(civ, { ...e, media: e.media ?? mediaOf(civ, e.participants, e.kind) });
     }
@@ -888,13 +1004,13 @@
     return { nodes: [...nodes2.keys()].map((n2) => getEvent(civ, n2)), edges, truncated };
   }
   function recentEventsFor(civ, entityIds, kinds, window2, limit = 2) {
-    const ix = graphIndex(civ), now = civ.monthIndex, out = [], seen = /* @__PURE__ */ new Set();
+    const ix = graphIndex(civ), now2 = civ.monthIndex, out = [], seen = /* @__PURE__ */ new Set();
     for (const e of entityIds) {
       const a = ix.byEntity.get(e);
       if (!a) continue;
       for (let i = a.length - 1; i >= 0; i--) {
         const ev = civ.events[a[i]];
-        if (now - evMonth(ev) > window2) break;
+        if (now2 - evMonth(ev) > window2) break;
         if (kinds.includes(ev.kind) && !seen.has(ev.eventId)) {
           seen.add(ev.eventId);
           out.push(ev);
@@ -1111,8 +1227,8 @@
     const base = baseOfState(st), next = composeStateName(base, polity, st.via, year, st.nameSfx ?? "", { dep: st.dependency?.kind ?? null, small: (st.pop ?? 0) > 0 && st.pop < 2e4 });
     return next !== st.name ? year == null ? { base, name: next } : { base, name: next, year } : null;
   }
-  function regnalOf(st, fresh2, rnd, gen = null) {
-    const birth = baseOfLeader(fresh2);
+  function regnalOf(st, fresh3, rnd, gen = null) {
+    const birth = baseOfLeader(fresh3);
     if (!REGNAL.has(st.polity)) return { name: birth, birth, type: "none" };
     const type = regnalTypeOf(st), reg = st.regnal ?? (st.regnal = {});
     if (type === "titled") {
@@ -1319,8 +1435,8 @@
     }
     return h2 >>> 0;
   }
-  function rngOf(seed) {
-    let a = seed >>> 0;
+  function rngOf(seed2) {
+    let a = seed2 >>> 0;
     return () => {
       a = a + 1831565813 >>> 0;
       let t = a;
@@ -2875,6 +2991,210 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
   });
 
+  // js/core/sim/month-transaction.js
+  var ABSENT, DIRECT, writerOf, APPEND_ONLY, SHARED;
+  var init_month_transaction = __esm({
+    "js/core/sim/month-transaction.js"() {
+      init_perf_monitor();
+      ABSENT = Symbol("absent");
+      DIRECT = Object.freeze({
+        set(o, k, v) {
+          o[k] = v;
+          return v;
+        },
+        delete(o, k) {
+          return delete o[k];
+        },
+        push(a, ...v) {
+          return a.push(...v);
+        },
+        splice(a, ...x) {
+          return a.splice(...x);
+        },
+        assign(o, p) {
+          return Object.assign(o, p);
+        }
+      });
+      writerOf = (ctx) => ctx?.tx?.journal ?? DIRECT;
+      APPEND_ONLY = Object.freeze(["events", "works"]);
+      SHARED = Object.freeze(["archive"]);
+    }
+  });
+
+  // js/core/civ/compaction-queue.js
+  function queueOf(civ) {
+    let q2 = Q.get(civ);
+    if (!q2) {
+      q2 = { seeded: false, seedAt: -Infinity, lang: { keys: null, i: 0, live: null, at: -Infinity }, stats: { drained: 0, pending: 0 } };
+      for (const k of KINDS3) q2[k] = fresh2();
+      Q.set(civ, q2);
+    }
+    return q2;
+  }
+  function enqueue(ctx, kind, id, at2) {
+    const J = writerOf(ctx), b = queueOf(ctx.civ)[kind];
+    if (b) J.push(b.a, { id, due: at2 + RETAIN[kind] });
+  }
+  function seed(ctx) {
+    const { civ } = ctx, J = writerOf(ctx), q2 = queueOf(civ), by = (k, list) => {
+      list.sort((x, y) => x.at - y.at || (x.id < y.id ? -1 : 1));
+      J.set(q2, k, { a: list.map((x) => ({ id: x.id, due: x.at + RETAIN[k] })), h: 0 });
+    };
+    const tr = [], st = [], hi = [], fg = [];
+    for (const id in civ.treaties) {
+      const t = civ.treaties[id];
+      if (!t.active && t.endedAt != null) tr.push({ id, at: t.endedAt });
+    }
+    for (const id in civ.states) {
+      const s = civ.states[id];
+      if (!s.alive && !s.compacted && s.dissolvedAt != null) st.push({ id, at: s.dissolvedAt });
+    }
+    for (const id in civ.figures ?? {}) {
+      const f = civ.figures[id];
+      if (f.diedAt == null) continue;
+      if (!f.compacted) hi.push({ id, at: f.diedAt });
+      fg.push({ id, at: f.diedAt });
+    }
+    by("treaty", tr);
+    by("state", st);
+    by("hist", hi);
+    by("fig", fg);
+    J.set(q2, "seeded", true);
+    J.set(q2, "seedAt", civ.monthIndex);
+  }
+  function drainQueue(ctx, budget = COMPACT.budget) {
+    const { civ } = ctx, J = writerOf(ctx), mi2 = civ.monthIndex, q0 = queueOf(civ);
+    if (!q0.seeded || mi2 - q0.seedAt >= COMPACT.reseedMonths) seed(ctx);
+    const q2 = queueOf(civ), stats = civ.stats ?? (civ.stats = {});
+    let used = 0, keep = null;
+    const take = (b) => {
+      if (b.h >= b.a.length || b.a[b.h].due > mi2) return null;
+      const it = b.a[b.h];
+      J.set(b, "h", b.h + 1);
+      if (b.h > 4096 && b.h * 2 > b.a.length) {
+        J.splice(b.a, 0, b.h);
+        J.set(b, "h", 0);
+      }
+      return it;
+    };
+    const bump = (k) => J.set(stats, k, (stats[k] ?? 0) + 1);
+    while (used < budget) {
+      const it = take(q2.treaty);
+      if (!it) break;
+      used++;
+      const t = civ.treaties[it.id];
+      if (t && !t.active && t.endedAt != null && mi2 - t.endedAt > COMPACT.treatyKeepMonths) {
+        J.delete(civ.treaties, it.id);
+        bump("treatiesPruned");
+      }
+    }
+    while (used < budget) {
+      const it = take(q2.state);
+      if (!it) break;
+      used++;
+      const s = civ.states[it.id];
+      if (s && !s.alive && !s.compacted && s.dissolvedAt != null && mi2 - s.dissolvedAt >= COMPACT.deadStateMonths) {
+        for (const k of DEAD_STATE_HEAVY) J.delete(s, k);
+        J.set(s, "compacted", true);
+      }
+    }
+    while (used < budget) {
+      const it = take(q2.hist);
+      if (!it) break;
+      used++;
+      const f = civ.figures?.[it.id];
+      if (f && f.diedAt != null && mi2 - f.diedAt > COMPACT.historyMonths && !f.compacted) {
+        if ((f.history?.length ?? 0) > 2) J.set(f, "history", [f.history[0], f.history[f.history.length - 1]]);
+        J.set(f, "compacted", true);
+      }
+    }
+    while (used < budget) {
+      const it = take(q2.fig);
+      if (!it) break;
+      used++;
+      const f = civ.figures?.[it.id];
+      if (!f || f.diedAt == null || mi2 - f.diedAt <= COMPACT.figureMonths) continue;
+      keep ?? (keep = pinnedFigures(civ));
+      if (keep.has(it.id) || f.children?.length || parentOfLiving(civ, f)) continue;
+      for (const pid of f.parents ?? []) {
+        const par = civ.figures[pid];
+        if (par) {
+          J.set(par, "children", par.children.filter((c) => c !== it.id));
+          if (par.diedAt != null) J.push(q2.fig.a, { id: pid, due: Math.max(par.diedAt + RETAIN.fig, mi2 + 12) });
+        }
+      }
+      J.delete(civ.figures, it.id);
+      bump("figuresPruned");
+    }
+    q2.stats.pending = KINDS3.reduce((n2, k) => n2 + q2[k].a.length - q2[k].h, 0);
+    J.set(q2.stats, "drained", q2.stats.drained + used);
+    return used;
+  }
+  function sweepSlow(ctx) {
+    const { civ } = ctx, J = writerOf(ctx), mi2 = civ.monthIndex, stats = civ.stats ?? (civ.stats = {}), q2 = queueOf(civ), L2 = q2.lang;
+    if (mi2 % 12 === 7) {
+      const led = civ.wcde?.diplomacy;
+      if (led?.proposals?.length > 200) {
+        const before = led.proposals.length;
+        J.set(led, "proposals", led.proposals.filter((p) => p.kind === "peace" && p.status === "accepted" || mi2 - p.at <= COMPACT.proposalKeepMonths));
+        J.set(stats, "proposalsPruned", (stats.proposalsPruned ?? 0) + (before - led.proposals.length));
+      }
+    }
+    if (civ.languages) {
+      if (!L2.keys && mi2 % 12 === 7 && mi2 !== L2.at) {
+        const live5 = /* @__PURE__ */ new Set();
+        for (const id in civ.groups) for (const co of civ.groups[id].cohorts ?? []) if (co.languageId) live5.add(co.languageId);
+        J.set(L2, "keys", Object.keys(civ.languages));
+        J.set(L2, "live", live5);
+        J.set(L2, "i", 0);
+        J.set(L2, "at", mi2);
+      }
+      if (L2.keys) {
+        let lp = 0;
+        const end = Math.min(L2.keys.length, L2.i + COMPACT.langBudget);
+        for (let i = L2.i; i < end; i++) {
+          const l = civ.languages[L2.keys[i]];
+          if (l && l.phon && !L2.live.has(l.id ?? L2.keys[i])) {
+            J.delete(l, "phon");
+            J.set(l, "phonDropped", true);
+            lp++;
+          }
+        }
+        J.set(L2, "i", end);
+        if (end >= L2.keys.length) {
+          J.set(L2, "keys", null);
+          J.set(L2, "live", null);
+        }
+        if (lp) J.set(stats, "languageProfilesPruned", (stats.languageProfilesPruned ?? 0) + lp);
+      }
+    }
+  }
+  var COMPACT, DEAD_STATE_HEAVY, RETAIN, KINDS3, Q, fresh2, pinnedFigures, parentOfLiving;
+  var init_compaction_queue = __esm({
+    "js/core/civ/compaction-queue.js"() {
+      init_month_transaction();
+      COMPACT = Object.freeze({ treatyKeepMonths: 600, proposalKeepMonths: 360, deadStateMonths: 600, figureMonths: 3600, historyMonths: 720, budget: 64, langBudget: 400, reseedMonths: 1200 });
+      DEAD_STATE_HEAVY = Object.freeze(["relations", "politics", "econ", "military", "sanctions", "strategy", "campaign", "interp", "interpDirty", "offices", "magic", "tradeRoutes"]);
+      RETAIN = { treaty: COMPACT.treatyKeepMonths, state: COMPACT.deadStateMonths, hist: COMPACT.historyMonths, fig: COMPACT.figureMonths };
+      KINDS3 = Object.keys(RETAIN);
+      Q = /* @__PURE__ */ new WeakMap();
+      fresh2 = () => ({ a: [], h: 0 });
+      pinnedFigures = (civ) => {
+        const keep = /* @__PURE__ */ new Set();
+        for (const id in civ.states) {
+          const s = civ.states[id];
+          if (s.leaderFigureId) keep.add(s.leaderFigureId);
+          if (s.heirFigureId) keep.add(s.heirFigureId);
+        }
+        return keep;
+      };
+      parentOfLiving = (civ, f) => {
+        for (const c of f.children ?? []) if (civ.figures[c]) return true;
+        return false;
+      };
+    }
+  });
+
   // js/core/civ/states.js
   function formState(ctx, { via, groupIds, predecessor = null, player = false, cause = null, threat = null, name = null, polity = null, capitalGroupId = null }) {
     const { world, civ, ids: ids2, rng } = ctx, gs = groupIds.map((i) => civ.groups[i]).filter(Boolean);
@@ -2931,18 +3251,18 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     st.formedEvent = ev.eventId;
     return st;
   }
-  function evaluateFormation(ctx, seed) {
-    const { world, civ } = ctx, { home } = spatialOf(ctx), dist = reachable(world, seed.cell, CLUSTER_BUDGET, 0), free2 = [seed];
+  function evaluateFormation(ctx, seed2) {
+    const { world, civ } = ctx, { home } = spatialOf(ctx), dist = reachable(world, seed2.cell, CLUSTER_BUDGET, 0), free2 = [seed2];
     for (const [c, d] of dist) {
       const gid = home.get(c);
-      if (gid && gid !== seed.id) {
+      if (gid && gid !== seed2.id) {
         const o = civ.groups[gid];
         if (o && !o.stateId && !o.player) free2.push(o);
       }
     }
     const st = (g) => g.settlementId ? civ.settlements[g.settlementId] : null, sum = (a) => a.reduce((s, g) => s + g.pop, 0);
-    const s0 = st(seed);
-    if (s0 && (s0.stage === "town" || s0.stage === "city") && (world.cell.coastDist[seed.cell] <= 2 || world.cell.river[seed.cell])) return { via: "city_state", groupIds: free2.filter((g) => dist.get(g.cell) <= 5).map((g) => g.id) };
+    const s0 = st(seed2);
+    if (s0 && (s0.stage === "town" || s0.stage === "city") && (world.cell.coastDist[seed2.cell] <= 2 || world.cell.river[seed2.cell])) return { via: "city_state", groupIds: free2.filter((g) => dist.get(g.cell) <= 5).map((g) => g.id) };
     const ag = free2.filter((g) => g.subsistence === "agriculture" && g.settlementId);
     if (ag.length >= 3 && sum(ag) >= 3e3) return { via: "agri_union", groupIds: ag.map((g) => g.id) };
     const byRel = /* @__PURE__ */ new Map();
@@ -2950,7 +3270,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       const r = dominant(g).religionId;
       if (r) (byRel.get(r) ?? byRel.set(r, []).get(r)).push(g);
     }
-    for (const [r, a] of byRel) if (a.length >= 3 && sum(a) >= 4e3 && a.some((g) => g.id === seed.id) && hashSeed(seed.id, ctx.civ.monthIndex >> 5) % 100 < 25) return { via: "religious_polity", groupIds: a.map((g) => g.id) };
+    for (const [r, a] of byRel) if (a.length >= 3 && sum(a) >= 4e3 && a.some((g) => g.id === seed2.id) && hashSeed(seed2.id, ctx.civ.monthIndex >> 5) % 100 < 25) return { via: "religious_polity", groupIds: a.map((g) => g.id) };
     const no = free2.filter((g) => g.subsistence === "pastoral");
     if (no.length >= 3 && sum(no) >= 1500) return { via: "nomad_confederation", groupIds: no.map((g) => g.id) };
     const cult = new Set(free2.filter((g) => g.pop >= 300).map((g) => dominant(g).cultureId));
@@ -3012,6 +3332,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
         A.corps = null;
         A.dissolvedAt = mi2;
         A.mergedInto = B.id;
+        enqueue(ctx, "state", A.id, mi2);
         merged.add(aid);
         if (lead) doneLead++;
         else done++;
@@ -3157,6 +3478,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       init_species();
       init_regimes();
       init_statefx();
+      init_compaction_queue();
       gatedPolity = (civ, cap, p) => !POLITY_CAP[p] || groupCaps(civ, cap).has(POLITY_CAP[p]) ? p : "tribal";
       OFFICE_RULER = (st) => REGIMES2[regimeOf2(st)].ruler;
       POLITY = Object.freeze({ tribal: "\u90E8\u65CF", chiefdom: "\u9996\u9577\u5236", kingdom: "\u738B\u56FD", empire: "\u5E1D\u56FD", republic: "\u5171\u548C\u5236", theocracy: "\u795E\u6A29\u5236" });
@@ -3174,6 +3496,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
         st.alive = false;
         st.corps = null;
         st.dissolvedAt = civ.monthIndex;
+        enqueue(ctx, "state", st.id, civ.monthIndex);
         for (const gid in civ.groups) if (civ.groups[gid].stateId === st.id) civ.groups[gid].stateId = null;
         for (const wid of [...st.warIds]) ctx.endWarHook?.(ctx, civ.wars[wid], "state_dissolved");
         makeEvent(civ, ids2, { kind: "state_dissolved", title: `${st.name}\u304C${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, facts: { stateId: st.id }, causes: [...st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : [], ...asCauses(recentEventsFor(civ, [st.id], ["war_ended"], 24, 1), "contributed_to", "plausible")] });
@@ -3871,7 +4194,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
 
   // js/core/wcde/corps.js
   function genPerson(ctx, st, tag, { minSkill = 0.25, spread = 0.6, service = "land" } = {}) {
-    const { civ } = ctx, S = st.corps, seed = hashSeed(civ.historySeed, "cp", st.id, tag, S.seq + 1), r = rngOf(seed), cap = civ.groups[st.capitalGroupId];
+    const { civ } = ctx, S = st.corps, seed2 = hashSeed(civ.historySeed, "cp", st.id, tag, S.seq + 1), r = rngOf(seed2), cap = civ.groups[st.capitalGroupId];
     const name = ctx.nameGen?.person(civ, cap, r) ?? `\u5C06${S.seq + 1}`, n2 = r() < 0.55 ? 1 : r() < 0.6 ? 0 : 2, traits = [], pool = traitsFor(service);
     while (traits.length < n2) {
       const k = pool[Math.floor(r() * pool.length)];
@@ -4250,7 +4573,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   }
   function fieldSite(ctx, w, camp, g) {
     const { civ } = ctx, ops = w.ops, recent = ops.sites ?? (ops.sites = []), cs = [g, ...[...neighborGroups(ctx, g)].map((o) => civ.groups[o]).filter(Boolean)].sort((x, y) => x.id < y.id ? -1 : 1);
-    const fresh2 = cs.filter((x) => !recent.includes(x.cell)), pool = fresh2.length ? fresh2 : cs, site = pool[Math.floor(U2(civ, w.id, civ.monthIndex, camp.id, "site") * pool.length)];
+    const fresh3 = cs.filter((x) => !recent.includes(x.cell)), pool = fresh3.length ? fresh3 : cs, site = pool[Math.floor(U2(civ, w.id, civ.monthIndex, camp.id, "site") * pool.length)];
     recent.push(site.cell);
     if (recent.length > 8) recent.shift();
     return site;
@@ -4935,321 +5258,725 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
   });
 
-  // js/core/wcde/domains/ecosystem.js
-  var FAUNA_BIOME, FLORA_BIOME;
-  var init_ecosystem = __esm({
-    "js/core/wcde/domains/ecosystem.js"() {
-      init_world_consts();
-      FAUNA_BIOME = { [BIOMES2.SAVANNA]: 1, [BIOMES2.GRASSLAND]: 0.9, [BIOMES2.TROPICAL_SEASONAL]: 0.85, [BIOMES2.TEMPERATE_FOREST]: 0.75, [BIOMES2.RAINFOREST]: 0.65, [BIOMES2.WETLAND]: 0.8, [BIOMES2.TAIGA]: 0.45, [BIOMES2.TUNDRA]: 0.4, [BIOMES2.ALPINE]: 0.3, [BIOMES2.COLD_DESERT]: 0.2, [BIOMES2.HOT_DESERT]: 0.12, [BIOMES2.ICE]: 0.05 };
-      FLORA_BIOME = { [BIOMES2.RAINFOREST]: 1, [BIOMES2.TROPICAL_SEASONAL]: 0.9, [BIOMES2.TEMPERATE_FOREST]: 0.85, [BIOMES2.SAVANNA]: 0.65, [BIOMES2.GRASSLAND]: 0.7, [BIOMES2.WETLAND]: 0.8, [BIOMES2.TAIGA]: 0.5, [BIOMES2.TUNDRA]: 0.25, [BIOMES2.ALPINE]: 0.2, [BIOMES2.COLD_DESERT]: 0.15, [BIOMES2.HOT_DESERT]: 0.08, [BIOMES2.ICE]: 0.02 };
-    }
-  });
-
-  // js/core/wcde/domains/religion.js
-  var init_religion = __esm({
-    "js/core/wcde/domains/religion.js"() {
-      init_civ_state();
-      init_culture();
-      init_events();
-      init_language();
-      init_naming();
-    }
-  });
-
-  // js/core/wcde/domains/economy.js
-  var init_economy = __esm({
-    "js/core/wcde/domains/economy.js"() {
-      init_spatial();
-      init_diplomacy();
-      init_events();
-      init_effective();
-      init_techfx();
-      init_tech();
-    }
-  });
-
-  // js/core/wcde/domains/politics.js
-  function initPolitics(st) {
-    const f = {};
-    for (const k of ["nobility", "clergy", "merchants", "military", "commoners"]) f[k] = { support: 0.55 };
-    return { factions: f, ideas: {}, assembly: ASSEMBLY[st.polity] ?? (adopted(st, "administration") ? "\u8AEE\u554F\u4F1A\u8B70" : null), legitimacy: 0.55, fatigue: 0, taxCeiling: 0.4, lastRegimeChange: -999 };
-  }
-  function reformPolity(ctx, st, P5, to, how) {
-    const { civ, ids: ids2 } = ctx, mi2 = civ.monthIndex, before = st.polity, oldName = st.name;
-    const war = civ.events.slice(-80).reverse().find((e) => (e.kind === "war_declared" || e.kind === "war_ended" || e.kind === "uprising" || e.kind === "famine") && e.participants.some((p) => p.entityId === st.id));
-    st.polity = to;
-    P5.lastRegimeChange = mi2;
-    st.stability = clamp33(st.stability + (how === "revolution" || how === "military_takeover" ? -0.2 : how === "decline" ? -0.1 : 0.02));
-    P5.fatigue = Math.max(0, (P5.fatigue ?? 0) - 0.2);
-    const rt = before !== to ? retitle(st, to, civ.date.year) : null;
-    if (rt) {
-      st.name = rt.name;
-      st.nameBase = rt.base;
-      st.titleYear = rt.year;
-    }
-    if (how === "revolution" || how === "military_takeover") {
-      const rg = regnalOf(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}\u306E\u65B0\u6307\u5C0E\u8005`, leaderRng(civ, st, "regime"), epithetGen(ctx, st, civ.groups[st.capitalGroupId]));
-      st.leader = { name: rg.name, birthName: rg.birth, bornAt: mi2 - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: how };
-    }
-    makeEvent(civ, ids2, { kind: "regime_change", title: `${oldName}\u3067${HOW_JA[how]}\u304C\u8D77\u304D\u3001\u653F\u4F53\u304C\u5909\u308F\u3063\u305F${rt ? `\u3002\u56FD\u53F7\u306F${rt.name}\u3068\u6539\u307E\u3063\u305F` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : []], causes: war ? [{ targetId: war.eventId ?? war.id, relation: "caused_by", basis: "plausible" }] : [], facts: { stateId: st.id, polity: to, name: st.name, by: how }, provenance: "simulation" });
-  }
-  var FACTIONS, CORE_FACTIONS, INFLUENCE, ASSEMBLY, clamp33, adopted, IDEAS2, HOW_JA;
-  var init_politics = __esm({
-    "js/core/wcde/domains/politics.js"() {
-      init_statefx();
-      init_spatial();
-      init_diplomacy();
-      init_tech();
-      init_events();
-      init_civ_state();
-      init_species();
-      init_effective();
-      init_naming();
-      FACTIONS = Object.freeze({ nobility: "\u8CB4\u65CF\u30FB\u6709\u529B\u8005", clergy: "\u8056\u8077\u8005", merchants: "\u5546\u4EBA", military: "\u8ECD", commoners: "\u6C11\u8846", bureaucrats: "\u5B98\u50DA\u30FB\u66F8\u8A18", artisans: "\u8077\u4EBA\u30FB\u5DE5\u623F", clans: "\u904A\u7267\u6C0F\u65CF" });
-      CORE_FACTIONS = Object.freeze(["nobility", "military", "commoners"]);
-      INFLUENCE = Object.freeze({
-        tribal: { nobility: 0.3, clergy: 0.15, merchants: 0.05, military: 0.3, commoners: 0.2, bureaucrats: 0.04, artisans: 0.04, clans: 0.25 },
-        chiefdom: { nobility: 0.3, clergy: 0.15, merchants: 0.1, military: 0.3, commoners: 0.15, bureaucrats: 0.05, artisans: 0.05, clans: 0.2 },
-        theocracy: { nobility: 0.15, clergy: 0.45, merchants: 0.1, military: 0.15, commoners: 0.15, bureaucrats: 0.1, artisans: 0.05, clans: 0.08 },
-        kingdom: { nobility: 0.35, clergy: 0.15, merchants: 0.1, military: 0.25, commoners: 0.15, bureaucrats: 0.12, artisans: 0.05, clans: 0.08 },
-        empire: { nobility: 0.3, clergy: 0.1, merchants: 0.1, military: 0.35, commoners: 0.15, bureaucrats: 0.2, artisans: 0.05, clans: 0.08 },
-        republic: { nobility: 0.15, clergy: 0.1, merchants: 0.3, military: 0.1, commoners: 0.35, bureaucrats: 0.1, artisans: 0.1, clans: 0.05 }
-      });
-      ASSEMBLY = Object.freeze({ tribal: "\u9577\u8001\u4F1A", chiefdom: null, theocracy: "\u8056\u8077\u8005\u4F1A\u8B70", kingdom: null, empire: null, republic: "\u5E02\u6C11\u8B70\u4F1A" });
-      clamp33 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
-      adopted = (st, k) => st.techAdopted?.[k] != null;
-      IDEAS2 = Object.freeze({
-        mercantilism: { ja: "\u5546\u696D\u4E3B\u7FA9", pro: { merchants: 0.12, artisans: 0.06 }, con: { nobility: -0.04 } },
-        martialism: { ja: "\u5C1A\u6B66\u306E\u6C17\u98A8", pro: { military: 0.12 }, con: { commoners: -0.05 } },
-        egalitarianism: { ja: "\u5E73\u7B49\u4E3B\u7FA9", pro: { commoners: 0.12 }, con: { nobility: -0.08 } },
-        piety: { ja: "\u656C\u8654\u4E3B\u7FA9", pro: { clergy: 0.12 }, con: { merchants: -0.04 } },
-        legalism: { ja: "\u6CD5\u6CBB\u4E3B\u7FA9", pro: { bureaucrats: 0.12, merchants: 0.04 }, con: { clans: -0.05 } },
-        traditionalism: { ja: "\u4F1D\u7D71\u4E3B\u7FA9", pro: { nobility: 0.12, clans: 0.05 }, con: { artisans: -0.04 } },
-        reformism: { ja: "\u6539\u9769\u5FD7\u5411", pro: { artisans: 0.1, bureaucrats: 0.05 }, con: { nobility: -0.05 } }
-      });
-      HOW_JA = { reform: "\u5236\u5EA6\u306E\u6539\u9769", religious_reform: "\u5B97\u6559\u6539\u9769", secularization: "\u4E16\u4FD7\u5316", conquest: "\u5F81\u670D\u306B\u3088\u308B\u5927\u56FD\u5316", revolution: "\u9769\u547D", military_takeover: "\u8ECD\u306B\u3088\u308B\u6A29\u529B\u306E\u638C\u63E1", decline: "\u4E2D\u592E\u306E\u8870\u9000" };
-    }
-  });
-
-  // js/core/wcde/domains/doctrine.js
-  var FX_KEYS, CAP, FX_JA, TIERS, SERVICE_JA, L, LINES, LINE_BY_ID, W, WS, fxOf2, N, COMMON_BRANCHES, COMMON_NODES, COMMON_BY_ID, SCHOOLS, SCHOOL_BY_ID, SCHOOL_NODES, SCHOOL_NODE_BY_ID, SPECIAL_TEMPLATES, MASTERY;
-  var init_doctrine = __esm({
-    "js/core/wcde/domains/doctrine.js"() {
-      init_world_consts();
-      init_spatial();
-      FX_KEYS = Object.freeze(["off", "def", "logi", "attr", "naval", "siege", "adapt", "coh", "landing", "armor", "air", "subs", "strike", "mob", "covert", "space"]);
-      CAP = Object.freeze({ off: 0.25, def: 0.4, logi: 0.3, attr: 0.25, naval: 0.35, siege: 0.3, adapt: 0.2, coh: 0.25, landing: 0.25, armor: 0.3, air: 0.35, subs: 0.3, strike: 0.3, mob: 0.3, covert: 0.4, space: 0.3 });
-      FX_JA = Object.freeze({ off: "\u653B\u6483", def: "\u9632\u5FA1", logi: "\u88DC\u7D66", attr: "\u640D\u8017\u8EFD\u6E1B", naval: "\u6D77\u8ECD\u904B\u7528", siege: "\u653B\u57CE", adapt: "\u6226\u5834\u9069\u5FDC", coh: "\u58EB\u6C17\u306E\u7D50\u675F", landing: "\u4E0A\u9678", armor: "\u6A5F\u7532\u904B\u7528", air: "\u822A\u7A7A\u904B\u7528", subs: "\u6F5C\u6C34\u904B\u7528", strike: "\u6253\u6483\u529B", mob: "\u52D5\u54E1", covert: "\u79D8\u533F", space: "\u5B87\u5B99\u904B\u7528" });
-      TIERS = 15;
-      SERVICE_JA = Object.freeze({ land: "\u9678\u8ECD", sea: "\u6D77\u8ECD", air: "\u7A7A\u8ECD", space: "\u5B87\u5B99\u8ECD" });
-      L = (id, ja, en, color, glyph, desc, svc, target, tiers) => ({ id, ja, en, color, glyph, desc, svc, target, tiers });
-      LINES = Object.freeze([
-        L(
-          "firepower",
-          "\u512A\u5148\u706B\u529B",
-          "FIREPOWER",
-          "#d0605a",
-          "\u7832",
-          "\u307E\u305A\u6483\u3061\u3001\u6575\u3092\u524A\u3063\u3066\u304B\u3089\u9032\u3080\u3002\u706B\u529B\u3068\u653B\u57CE\u306B\u512A\u308C\u3001\u640D\u8017\u306F\u8EFD\u3044\u3002",
-          { land: "\u7832\u5175\u3068\u706B\u529B\u652F\u63F4\u3092\u5897\u3084\u3059", sea: "\u4E3B\u529B\u8266\u3068\u8266\u7832\u30FB\u30DF\u30B5\u30A4\u30EB\u3092\u5897\u3084\u3059", air: "\u7206\u6483\u3068\u7CBE\u5BC6\u6253\u6483\u3092\u5897\u3084\u3059", space: "\u8ECC\u9053\u304B\u3089\u306E\u6253\u6483" },
-          { off: 0.13, siege: 0.18, attr: 0.1, strike: 0.15, adapt: -0.03 },
-          [
-            ["\u6295\u77F3\u3068\u5F13\u306E\u6589\u5C04", [], 20],
-            ["\u5F13\u5175\u306E\u5217", ["bow"], 45],
-            ["\u9752\u9285\u306E\u98DB\u3073\u9053\u5177", ["bronze_weapons"], 70],
-            ["\u653B\u57CE\u6A5F\u68B0", ["siege_engines"], 110],
-            ["\u5F29\u306E\u6589\u5C04", ["crossbow"], 150],
-            ["\u706B\u85AC\u306E\u5175\u5668", ["gunpowder"], 220],
-            ["\u9283\u306E\u4E00\u6589\u5C04\u6483", ["firearms"], 300],
-            ["\u7832\u5175\u306E\u7D44\u7E54", ["artillery"], 420],
-            ["\u65BD\u6761\u9283\u3068\u7832", ["rifled_arms"], 540],
-            ["\u5F8C\u88C5\u7832\u3068\u901F\u5C04", ["breech_loading"], 680],
-            ["\u6A5F\u95A2\u9283\u306E\u5F3E\u5E55", ["machine_gun"], 800],
-            ["\u69B4\u5F3E\u7832\u306E\u96C6\u4E2D", ["howitzer"], 920],
-            ["\u8A98\u5C0E\u5175\u5668", ["guided_munitions"], 1050],
-            ["\u30DF\u30B5\u30A4\u30EB\u6253\u6483", ["guided_missiles"], 1180],
-            ["\u6975\u8D85\u97F3\u901F\u306E\u6253\u6483", ["hypersonic_weapons"], 1350]
-          ]
-        ),
-        L(
-          "mobile",
-          "\u9AD8\u6A5F\u52D5\u6226",
-          "MANEUVER",
-          "#6fa8c9",
-          "\u75BE",
-          "\u901F\u3055\u3067\u6575\u306E\u9632\u5FA1\u3092\u3059\u308A\u629C\u3051\u308B\u3002\u88DC\u7D66\u306E\u5C4A\u304F\u7BC4\u56F2\u3068\u6226\u5834\u9069\u5FDC\u304C\u4F38\u3073\u308B\u3002",
-          { land: "\u9A0E\u5175\u30FB\u6A5F\u7532\u30FB\u6A5F\u68B0\u5316\u3092\u5897\u3084\u3059", sea: "\u9AD8\u901F\u8266\u3068\u7A7A\u6BCD\u6A5F\u52D5\u90E8\u968A\u3092\u5897\u3084\u3059", air: "\u5236\u7A7A\u3068\u7A7A\u4E2D\u6A5F\u52D5\u3092\u5897\u3084\u3059", space: "\u8ECC\u9053\u4E0A\u306E\u6A5F\u52D5\u5C55\u958B" },
-          { off: 0.11, adapt: 0.14, logi: 0.12, armor: 0.14, landing: 0.08, def: -0.04 },
-          [
-            ["\u65A5\u5019\u3068\u4F1D\u4EE4", [], 20],
-            ["\u9A0E\u99AC\u306E\u6A5F\u52D5", ["horse_riding"], 45],
-            ["\u6226\u8ECA\uFF08\u4E8C\u8F2A\uFF09\u306E\u7A81\u6483", ["chariot"], 70],
-            ["\u91CD\u9A0E\u5175", ["cavalry"], 110],
-            ["\u8857\u9053\u306E\u884C\u8ECD", ["roads"], 150],
-            ["\u5175\u7AD9\u306E\u6574\u5099", ["military_logistics"], 210],
-            ["\u5916\u6D0B\u306E\u6A5F\u52D5", ["ocean_sailing"], 290],
-            ["\u84B8\u6C17\u306E\u6A5F\u52D5", ["steam_engine"], 400],
-            ["\u9244\u9053\u52D5\u54E1", ["railway"], 520],
-            ["\u81EA\u52D5\u8ECA\u5316", ["motor_vehicle"], 680],
-            ["\u6A5F\u68B0\u5316\u6226", ["mechanized_warfare"], 820],
-            ["\u88C5\u7532\u7A81\u7834", ["tank"], 940],
-            ["\u6A5F\u68B0\u5316\u6B69\u5175\u306E\u968F\u4F34", ["motorized_infantry"], 1050],
-            ["\u7DB2\u3067\u3064\u306A\u3050\u6A5F\u52D5", ["network_warfare"], 1200],
-            ["\u81EA\u5F8B\u6A5F\u52D5", ["autonomous_systems"], 1350]
-          ]
-        ),
-        L(
-          "mass",
-          "\u4EBA\u6D77\u6226\u8853",
-          "MASS",
-          "#d8b45a",
-          "\u8846",
-          "\u6570\u3067\u62BC\u3057\u5207\u308B\u3002\u52D5\u54E1\u304C\u5897\u3048\u3001\u58EB\u6C17\u304C\u9AD8\u3044\u304C\u3001\u640D\u8017\u306F\u91CD\u3044\u3002",
-          { land: "\u591A\u304F\u306E\u5175\u3092\u52D5\u54E1\u3057\u3066\u7AF6\u308A\u52DD\u3064", sea: "\u3088\u308A\u591A\u304F\u306E\u8266\u3092\u52D5\u54E1\u3059\u308B", air: "\u6A5F\u6570\u3092\u63C3\u3048\u3066\u98FD\u548C\u3055\u305B\u308B", space: "\u885B\u661F\u3068\u8ECC\u9053\u6A5F\u306E\u6570\u3092\u63C3\u3048\u308B" },
-          { mob: 0.2, coh: 0.12, off: 0.06, logi: 0.05, attr: -0.1 },
-          [
-            ["\u90E8\u65CF\u306E\u7DCF\u51FA", [], 15],
-            ["\u6570\u3048\u4E0A\u3052\u308B\u5175", ["counting"], 40],
-            ["\u69CD\u5175\u306E\u5927\u96C6\u56E3", ["bronze_weapons"], 65],
-            ["\u884C\u653F\u306B\u3088\u308B\u5FB4\u767A", ["administration"], 100],
-            ["\u4EBA\u53E3\u8ABF\u67FB", ["census"], 140],
-            ["\u5E38\u5099\u8ECD\u306E\u62E1\u5927", ["standing_army"], 200],
-            ["\u5B98\u50DA\u306E\u52D5\u54E1", ["civil_service"], 280],
-            ["\u69CD\u3068\u9283\u306E\u5927\u8ECD", ["pike_and_shot"], 380],
-            ["\u56FD\u6C11\u7686\u5175", ["conscription"], 500],
-            ["\u5879\u58D5\u306E\u4EBA\u6CE2", ["trench_warfare"], 650],
-            ["\u5BFE\u6226\u8ECA\u306E\u8089\u8584", ["anti_tank"], 780],
-            ["\u7DCF\u529B\u6226\u306E\u7D44\u7E54", ["network_warfare"], 920],
-            ["\u7121\u4EBA\u6A5F\u306E\u7FA4\u308C", ["drone_warfare"], 1050],
-            ["\u81EA\u5F8B\u306E\u5927\u91CF\u904B\u7528", ["autonomous_systems"], 1200],
-            ["\u8A8D\u77E5\u3092\u675F\u306D\u308B\u52D5\u54E1", ["cognitive_warfare"], 1350]
-          ]
-        ),
-        L(
-          "position",
-          "\u9663\u5730\u6226\u7565",
-          "FORTRESS",
-          "#9fbf8a",
-          "\u9663",
-          "\u5B88\u308A\u3092\u56FA\u3081\u3001\u6575\u3092\u6D88\u8017\u3055\u305B\u308B\u3002\u9632\u5FA1\u3068\u7BC9\u57CE\u306B\u512A\u308C\u3001\u653B\u3081\u306F\u920D\u3044\u3002",
-          { land: "\u8981\u585E\u3068\u5B88\u5099\u5175\u3092\u5897\u3084\u3059", sea: "\u6CBF\u5CB8\u9632\u885B\u3068\u5C01\u9396\u3092\u91CD\u8996\u3059\u308B", air: "\u9632\u7A7A\u3068\u8FCE\u6483\u3092\u5897\u3084\u3059", space: "\u8ECC\u9053\u4E0A\u306E\u9632\u885B\u7DB2" },
-          { def: 0.2, attr: 0.12, coh: 0.1, siege: 0.06, logi: 0.05, off: -0.04 },
-          [
-            ["\u67F5\u3068\u7826", [], 25],
-            ["\u91CE\u55B6\u306E\u7BC9\u57CE", ["construction"], 50],
-            ["\u77F3\u306E\u57CE\u58C1", ["masonry"], 75],
-            ["\u8981\u585E", ["fortification"], 110],
-            ["\u9244\u306E\u5B88\u308A", ["iron_weapons"], 150],
-            ["\u57CE\u5E02\u306E\u6574\u5099", ["city_planning"], 200],
-            ["\u30B3\u30F3\u30AF\u30EA\u30FC\u30C8\u306E\u5821\u5841", ["concrete"], 280],
-            ["\u7A1C\u5821\u3068\u9283\u773C", ["firearms"], 380],
-            ["\u92FC\u306E\u69CB\u9020", ["structural_steel"], 500],
-            ["\u5879\u58D5\u7DDA", ["trench_warfare"], 640],
-            ["\u5BFE\u6226\u8ECA\u306E\u9632\u5FA1", ["anti_tank"], 770],
-            ["\u9632\u7A7A\u7DB2", ["air_defense"], 900],
-            ["\u30EC\u30FC\u30C0\u30FC\u306E\u8B66\u6212", ["radar_sonar"], 1020],
-            ["\u885B\u661F\u306E\u76E3\u8996", ["satellites"], 1150],
-            ["\u6307\u5411\u6027\u306E\u76FE", ["directed_energy"], 1300]
-          ]
-        ),
-        L(
-          "special",
-          "\u7279\u6B8A\u4F5C\u6226",
-          "SPECIAL OPS",
-          "#a58bd0",
-          "\u96A0",
-          "\u5C11\u6570\u7CBE\u92ED\u3068\u60C5\u5831\u3067\u3001\u6B63\u9762\u3092\u907F\u3051\u3066\u6025\u6240\u3092\u7A81\u304F\u3002\u6697\u6BBA\u30FB\u7834\u58CA\u5DE5\u4F5C\u30FB\u6F5C\u6C34\u30FB\u30B5\u30A4\u30D0\u30FC\u306B\u5F37\u3044\u3002",
-          { land: "\u7279\u6B8A\u90E8\u968A\u3068\u6D77\u5175\u3092\u5897\u3084\u3059", sea: "\u6F5C\u6C34\u8266\u3068\u6D77\u5175\u3092\u5897\u3084\u3059", air: "\u7121\u4EBA\u6A5F\u3068\u60C5\u5831\u6226\u3092\u5897\u3084\u3059", space: "\u885B\u661F\u3068\u8ECC\u9053\u4E0A\u306E\u60C5\u5831\u6226" },
-          { covert: 0.3, adapt: 0.1, subs: 0.18, landing: 0.1, strike: 0.08, off: 0.04, mob: -0.05 },
-          [
-            ["\u65A5\u5019\u3068\u9593\u8005", [], 20],
-            ["\u4F0F\u5175\u306E\u6280", ["bow"], 45],
-            ["\u4EA4\u6613\u8DEF\u306E\u8033\u76EE", ["barter_networks"], 70],
-            ["\u4F7F\u7BC0\u3068\u5BC6\u5075", ["diplomacy"], 105],
-            ["\u5F29\u306E\u6697\u6BBA", ["crossbow"], 150],
-            ["\u99C5\u4F1D\u3068\u5BC6\u66F8", ["postal_system"], 200],
-            ["\u5149\u5B66\u306E\u5075\u5BDF", ["optics"], 270],
-            ["\u5316\u5B66\u306E\u5DE5\u4F5C", ["chemistry"], 370],
-            ["\u96FB\u4FE1\u306E\u508D\u53D7", ["telegraph"], 490],
-            ["\u7121\u7DDA\u306E\u64B9\u4E71", ["radio"], 630],
-            ["\u7279\u6B8A\u90E8\u968A", ["special_forces"], 790],
-            ["\u30B5\u30A4\u30D0\u30FC\u6226", ["cyber_warfare"], 930],
-            ["\u30B9\u30C6\u30EB\u30B9", ["stealth"], 1060],
-            ["\u8A8D\u77E5\u6226", ["cognitive_warfare"], 1200],
-            ["\u8ECC\u9053\u306E\u79D8\u533F\u4F5C\u6226", ["orbital_warfare"], 1350]
-          ]
-        )
-      ]);
-      LINE_BY_ID = Object.freeze(Object.fromEntries(LINES.map((l) => [l.id, l])));
-      W = Array.from({ length: TIERS }, (_, i) => i + 2);
-      WS = W.reduce((a, b) => a + b, 0);
-      fxOf2 = (line, t) => {
-        const o = {};
-        for (const k in line.target) o[k] = Math.round(line.target[k] * W[t] / WS * 1e4) / 1e4;
-        return o;
+  // js/core/wcde/clock.js
+  var SPEEDS, DEFAULT_SPEED, timeOf, WORLD_WAR;
+  var init_clock = __esm({
+    "js/core/wcde/clock.js"() {
+      init_archive();
+      init_month_transaction();
+      init_decision_state();
+      SPEEDS = Object.freeze([{ id: 0, label: "\u505C\u6B62", mps: 0 }, { id: 1, label: "\u6708", mps: 1 }, { id: 2, label: "3\u6708", mps: 3 }, { id: 3, label: "\u5E74", mps: 12 }, { id: 4, label: "5\u5E74", mps: 60 }]);
+      DEFAULT_SPEED = 1;
+      timeOf = (civ) => {
+        var _a;
+        return (_a = civ.wcde).time ?? (_a.time = { speed: DEFAULT_SPEED, hold: false, resumeSpeed: null });
       };
-      N = (id, ja, branch, tier, prereq, tech, cost, fx3) => ({ id, ja, branch, tier, prereq, tech, cost, fx: fx3, special: false });
-      COMMON_BRANCHES = Object.freeze(LINES.map((l) => ({ id: l.id, ja: l.ja })));
-      COMMON_NODES = Object.freeze(LINES.flatMap((l) => l.tiers.map(([ja, tech, cost], i) => Object.freeze(N(`${l.id}:${i + 1}`, ja, l.id, i + 1, i ? [`${l.id}:${i}`] : [], tech, cost, fxOf2(l, i))))));
-      COMMON_BY_ID = Object.freeze(Object.fromEntries(COMMON_NODES.map((d) => [d.id, d])));
-      SCHOOLS = Object.freeze([]);
-      SCHOOL_BY_ID = Object.freeze({});
-      SCHOOL_NODES = Object.freeze([]);
-      SCHOOL_NODE_BY_ID = Object.freeze({});
-      SPECIAL_TEMPLATES = Object.freeze([]);
-      MASTERY = Object.freeze({ off: 0.02, def: 0.02, coh: 0.03 });
+      WORLD_WAR = Object.freeze({ minStates: 6, minPerSide: 2, minPopShare: 0.35 });
     }
   });
 
-  // js/core/wcde/domains/military.js
-  var OFF_CAP, DEF_CAP;
-  var init_military = __esm({
-    "js/core/wcde/domains/military.js"() {
-      init_spatial();
-      init_events();
-      init_effective();
-      init_statefx();
-      init_tech();
-      init_orbat();
-      init_doctrine();
-      OFF_CAP = CAP.off;
-      DEF_CAP = CAP.def;
+  // js/core/wcde/decisions.js
+  function hold(civ) {
+    const T4 = timeOf(civ);
+    if (!T4.hold) {
+      T4.hold = true;
+      T4.resumeSpeed = T4.speed;
     }
-  });
-
-  // js/core/wcde/special-ops.js
-  var COVERT, NUKE;
-  var init_special_ops = __esm({
-    "js/core/wcde/special-ops.js"() {
+  }
+  function raise(ctx, spec) {
+    const { civ } = ctx;
+    if (!isLive54(civ)) return null;
+    const D2 = decisionsOf(civ);
+    const d = { id: `dec_${++D2.seq}`, status: "open", at: civ.monthIndex, date: { ...civ.date }, kind: spec.kind, key: spec.key ?? null, stateId: spec.stateId, title: spec.title, body: spec.body ?? "", options: spec.options, payload: spec.payload ?? {}, fresh: true };
+    D2.queue.push(d);
+    hold(civ);
+    return d;
+  }
+  function scoutLevel(civ, st) {
+    let intel = 0;
+    for (const o of st.offices ?? []) if (OFFICES[o.id]?.[1] === "intel" || o.domain === "intel") intel++;
+    const a = (k) => st.techAdopted?.[k] != null ? 1 : 0;
+    return clamp33(0.3 + 0.12 * Math.min(3, intel) + 0.1 * a("writing") + 0.1 * a("administration") + (st.scoutBonus ?? 0) + stateFx(st).scout + (Object.values(st.intel ?? {}).some((t) => t > civ.monthIndex) ? 0.15 : 0), 0.2, 0.92);
+  }
+  function offerTreaty(ctx, from, to, type) {
+    const { civ } = ctx;
+    if (!isLive54(civ) || !to.player || from.player) return null;
+    if (treatyFeasible(civ, from, to, type) || treatyBetween(civ, from, to, type)) return null;
+    const key3 = `t|${from.id}|${to.id}|${type}`, pend = { ok: true, silent: true, pending: true, targetId: to.id };
+    if (openKey(civ, key3) || coolUntil(civ, key3) > civ.monthIndex) return pend;
+    const options = [{ id: "accept", ja: `${TREATY[type].ja}\u3092\u7D50\u3076`, hint: `${TREATY[type].merit}\u3002\u305F\u3060\u3057${TREATY[type].cost}` }, { id: "decline", ja: "\u65AD\u308B", hint: "\u95A2\u4FC2\u304C\u308F\u305A\u304B\u306B\u60AA\u5316" }];
+    if (type === "alliance") options.splice(1, 0, { id: "counter_na", ja: "\u4E0D\u53EF\u4FB5\u6761\u7D04\u306A\u3089\u7D50\u3076", hint: "\u540C\u76DF\u306E\u4EE3\u308F\u308A\u306E\u63D0\u6848", disabled: treatyFeasible(civ, from, to, "nonaggression") || (treatyBetween(civ, from, to, "nonaggression") ? "\u3059\u3067\u306B\u7D50\u3093\u3067\u3044\u308B" : null) });
+    raise(ctx, { kind: "treaty_offer", key: key3, stateId: to.id, title: TREATY[type].cat === "dep" ? `${from.name}\u304C${TREATY[type].ja}\u3092\u6C42\u3081\u3066\u3044\u308B\uFF08\u3042\u306A\u305F\u306E\u56FD\u304C\u5F93\u3046\u5074\uFF09` : `${from.name}\u304C${TREATY[type].ja}\u3092\u7533\u3057\u51FA\u305F`, body: `\u95A2\u4FC2\u5024 ${Math.round(to.relations[from.id] ?? 0)}\u3002${TREATY[type].ja}\uFF08${Math.round(TREATY[type].months / 12)}\u5E74\uFF09\u3002`, options, payload: { type, from: from.id, to: to.id } });
+    setCool(civ, key3, civ.monthIndex + 60);
+    return pend;
+  }
+  function offerPeace(ctx, proposer, war, other2, terms) {
+    const { civ } = ctx;
+    if (!isLive54(civ) || !other2.player || proposer.player) return null;
+    const key3 = `p|${war.id}|${proposer.id}`, pend = { ok: true, effects: [], silent: true, targetId: war.id, pending: true };
+    if (openKey(civ, key3) || coolUntil(civ, key3) > civ.monthIndex) return pend;
+    const kind = terms.kind === "reparations" ? `\u8CE0\u511F\uFF08${Math.round(terms.amount ?? 0)}\uFF09` : terms.kind === "cession" ? "\u5360\u9818\u5730\u306E\u5272\u8B72\uFF08\u73FE\u72B6\u306E\u4FDD\u6301\uFF09" : "\u767D\u7D19\u8B1B\u548C";
+    raise(ctx, { kind: "peace_offer", key: key3, stateId: other2.id, title: `${proposer.name}\u304C\u8B1B\u548C\u3092\u7533\u3057\u5165\u308C\u305F`, body: `\u6761\u4EF6: ${kind}\u3002\u6226\u6CC1 ${Math.round(war.sides.a.includes(other2.id) ? war.score : -war.score)}\uFF08\u81EA\u56FD\u304B\u3089\u898B\u3066\uFF09\u3002`, options: [{ id: "accept", ja: "\u53D7\u3051\u5165\u308C\u308B", hint: "\u6226\u4E89\u304C\u7D42\u308F\u308B" }, { id: "reject", ja: "\u62D2\u3080", hint: "\u6226\u4E89\u306F\u7D9A\u304F" }], payload: { warId: war.id, from: proposer.id, to: other2.id, terms } });
+    setCool(civ, key3, civ.monthIndex + 12);
+    return pend;
+  }
+  function warIncoming(ctx, atk, def, c) {
+    const { civ } = ctx;
+    if (!isLive54(civ) || !def.player || atk.player) return null;
+    const key3 = `w|${atk.id}|${def.id}`, pend = { ok: true, silent: true, pending: true, targetId: def.id };
+    if (atk.campaign?.target === def.id) atk.campaign.stage = "ultimatum";
+    if (openKey(civ, key3)) return pend;
+    const tribute = Math.round(Math.max(0, def.treasury) * 0.25), relNow = Math.round(def.relations[atk.id] ?? 0);
+    raise(ctx, { kind: "war_incoming", key: key3, stateId: def.id, title: `${atk.name}\u304C\u5BA3\u6226\u3057\u3088\u3046\u3068\u3057\u3066\u3044\u308B`, body: `${atk.name}\u306F\u3001${def.name}\u3078\u306E\u5BA3\u6226\u3092\u901A\u544A\u3057\u305F\u3002\u56DE\u7B54\u3057\u3060\u3044\u3067\u6226\u4E89\u306B\u306A\u308B\u3002\u95A2\u4FC2\u5024 ${relNow}\u3002`, options: [{ id: "stand", ja: "\u53D7\u3051\u3066\u7ACB\u3064", hint: "\u6226\u4E89\u304C\u59CB\u307E\u308B" }, { id: "yield", ja: `\u8981\u6C42\u3092\u306E\u3080\uFF08\u8CA2\u7D0D ${tribute}\uFF09`, hint: "\u6226\u4E89\u306F\u907F\u3051\u308B\u304C\u3001\u56FD\u306E\u5A01\u4FE1\u3068\u5B89\u5B9A\u304C\u4E0B\u304C\u308B", disabled: null }, { id: "plead", ja: "\u4F7F\u7BC0\u3092\u9001\u308A\u548C\u89E3\u3092\u8A66\u307F\u308B\uFF08\u8CBB\u7528 15\uFF09", hint: "\u95A2\u4FC2\u304C\u826F\u3044\u307B\u3069\u6210\u529F\u3057\u3084\u3059\u3044", disabled: def.treasury >= 15 ? null : "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044" }], payload: { atk: atk.id, def: def.id, reason: c?.reason ?? "conquest", tribute } });
+    return pend;
+  }
+  function startWar(ctx, atk, def, d) {
+    const { civ } = ctx;
+    if (!atk?.alive || !def?.alive || atWarWith(civ, atk, def)) return null;
+    const w = declareWar(ctx, atk, def, { reason: d.payload.reason === "conquest" ? "conquest" : d.payload.reason, provenance: "simulation" });
+    if (atk.campaign?.target === def.id) {
+      atk.campaign.stage = "war";
+      atk.campaign.warId = w.id;
+    }
+    return w;
+  }
+  function allyCall(ctx, w, side, host, foe, ally) {
+    const { civ } = ctx;
+    if (!isLive54(civ) || !ally.player || host.player) return false;
+    const key3 = `a|${w.id}|${ally.id}`;
+    if (openKey(civ, key3)) return true;
+    raise(ctx, { kind: "ally_call", key: key3, stateId: ally.id, title: `\u540C\u76DF\u56FD${host.name}\u304C\u53C2\u6226\u3092\u6C42\u3081\u3066\u3044\u308B`, body: `${host.name}\u3068${foe.name}\u306E\u6226\u4E89\u3002\u540C\u76DF\u306E\u7D04\u675F\u306B\u5F93\u3044\u3001${host.name}\u5074\u3067\u53C2\u6226\u3059\u308B\u304B\u3002`, options: [{ id: "join", ja: `${host.name}\u5074\u3067\u53C2\u6226\u3059\u308B`, hint: `${foe.name}\u3068\u306E\u95A2\u4FC2\u304C\u60AA\u5316\u3059\u308B` }, { id: "refuse", ja: "\u53C2\u6226\u3092\u65AD\u308B", hint: `${host.name}\u3068\u306E\u95A2\u4FC2\u304C\u5927\u304D\u304F\u60AA\u5316` }], payload: { warId: w.id, side, host: host.id, foe: foe.id, ally: ally.id } });
+    return true;
+  }
+  function successionOptions(ctx, st) {
+    const { civ } = ctx, mi2 = civ.monthIndex, ls = lifeScale(civ, st), person = (k) => ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], leaderRng(civ, st, `sc${k}${mi2}`)) ?? `${st.name}\u306E\u4EBA${k}`, u = (k) => U4(civ, st.id, mi2, "sc", k);
+    const fkeys = Object.keys(st.politics?.factions ?? {}), has2 = (k) => fkeys.includes(k), { law, lawJa: lj, partition, list } = successionList(ctx, st), opts = [];
+    const lawNote = (c) => `${c.risk >= 0.3 ? "\uFF0F\u4E89\u3044\u306E\u706B\u7A2E" : ""}`;
+    for (const c of list) {
+      if (c.minor) for (const [rid, rel2, bk, k] of [["queen", "\u6BCD\u540E", "nobility", 5], ["vizier", "\u5BB0\u76F8", has2("bureaucrats") ? "bureaucrats" : "nobility", 6], ["general", "\u5C06\u8ECD", "military", 7]]) {
+        const reg = { name: person(k), skill: r34(0.35 + 0.5 * u(`r${rid}`)), backer: bk, relation: rel2 };
+        opts.push({ id: `${c.id}:${rid}`, ja: `${c.name}\uFF08${c.ageYears}\u6B73\uFF09\u3092\u7ACB\u3066\u3001${rel2}${reg.name}\u304C\u6442\u653F`, hint: `\u80FD\u529B${Math.round(reg.skill * 100)}\u30FB${FACT_JA[bk]}\u304C\u652F\u6301\uFF0F\u6B63\u7D71\u6027 \u9AD8`, payload: { cand: c, regent: reg } });
+      }
+      else opts.push({ id: c.id, ja: `${c.relation}\uFF1A${c.name}\uFF08${c.ageYears}\u6B73\uFF09`, hint: `\u80FD\u529B${Math.round(c.skill * 100)}\u30FB\u6B63\u7D71\u6027${Math.round(c.legit * 100)}\u30FB${FACT_JA[c.backer]}\u304C\u652F\u6301${c.kin ? "" : "\uFF0F\u738B\u671D\u304C\u4EE3\u308F\u308B"}${lawNote(c)}`, payload: { cand: c } });
+    }
+    const adult = list.find((c) => !c.minor && c.kin);
+    if (partition && adult && (byState(ctx).get(st.id)?.length ?? 0) >= 4) opts.push({ id: "partition", ja: `\u9818\u571F\u3092\u5B50\u3089\u3067\u5206\u3051\u308B\uFF08${adult.name}\u304C\u672C\u56FD\u3092\u7D99\u3050\uFF09`, hint: "\u5206\u5272\u76F8\u7D9A\u3002\u65B0\u3057\u3044\u56FD\u304C\u3067\u304D\u308B\uFF08\u6226\u4E89\u306B\u306F\u306A\u3089\u306A\u3044\uFF09\uFF0F\u672C\u56FD\u306F\u5F31\u304F\u306A\u308B", payload: { cand: adult, partition: true } });
+    opts.law = { law, ja: lj };
+    return opts;
+  }
+  function succession(ctx, st) {
+    const { civ } = ctx;
+    if (!isLive54(civ) || !st.player) return false;
+    const key3 = `s|${st.id}`;
+    if (openKey(civ, key3)) return true;
+    const opts = successionOptions(ctx, st);
+    const payload = {};
+    const options = opts.map((o) => {
+      payload[o.id] = o.payload;
+      return { id: o.id, ja: o.ja, hint: o.hint };
+    });
+    raise(ctx, { kind: "succession", key: key3, stateId: st.id, title: `${st.leader.name}\u306E\u8DE1\u3092\u7D99\u3050\u8005\u3092\u6C7A\u3081\u308B`, body: `\u7D99\u627F\u6CD5: ${opts.law?.ja ?? lawJa(civ, st)}\u3002\u5019\u88DC\u8005\u306E\u4E2D\u304B\u3089\u9078\u3076\u3002`, options, payload });
+    return true;
+  }
+  function rebellion(ctx, st, groupIds) {
+    const { civ } = ctx;
+    if (!isLive54(civ) || !st.player) return false;
+    const key3 = `r|${st.id}`;
+    if (openKey(civ, key3)) return true;
+    st.lastCrisis = civ.monthIndex;
+    const cost = Math.round(20 + st.pop * 3e-4), n2 = groupIds.length;
+    raise(ctx, { kind: "rebellion", key: key3, stateId: st.id, title: `${st.name}\u3067\u53CD\u4E71\u306E\u6A5F\u904B\u304C\u9AD8\u307E\u3063\u3066\u3044\u308B`, body: `\u4E0D\u6E80\u304C\u9650\u754C\u306B\u8FD1\u3065\u304D\u3001${n2}\u306E\u5730\u57DF\u304C\u72EC\u7ACB\u3092\u6C42\u3081\u3066\u8702\u8D77\u3057\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002\u5B89\u5B9A\u5EA6 ${Math.round(st.stability * 100)}\u3002`, options: [{ id: "suppress", ja: `\u6B66\u529B\u3067\u93AE\u5727\u3059\u308B\uFF08\u8CBB\u7528 ${cost}\uFF09`, hint: "\u5B89\u5B9A\u306F\u623B\u308B\u304C\u3001\u6C11\u8846\u306E\u652F\u6301\u304C\u4E0B\u304C\u308B", disabled: st.treasury >= cost ? null : "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044" }, { id: "concede", ja: "\u8B72\u6B69\u3059\u308B\uFF08\u81EA\u6CBB\u3092\u8A8D\u3081\u3001\u6E1B\u7A0E\uFF09", hint: "\u5B89\u5B9A\u304C\u623B\u308A\u3001\u8CB4\u65CF\u306E\u652F\u6301\u304C\u4E0B\u304C\u308B" }, { id: "allow", ja: "\u5206\u96E2\u3092\u8A8D\u3081\u308B\uFF0F\u653E\u7F6E\u3059\u308B", hint: "\u65B0\u3057\u3044\u56FD\u304C\u6210\u7ACB\u3057\u3001\u5185\u6226\u306B\u306A\u308B" }], payload: { groupIds, cost } });
+    return true;
+  }
+  function omen(ctx, st) {
+    const { civ } = ctx, mi2 = civ.monthIndex;
+    if (!isLive54(civ) || !st.player || st.stability >= 0.45 || mi2 - (st.lastCrisis ?? -999) <= 60 || mi2 - (st.omenAt ?? -999) <= 36) return;
+    const gs = byState(ctx).get(st.id) ?? [];
+    if (gs.length < 3) return;
+    st.omenAt = mi2;
+    if (U4(civ, st.id, mi2, "omen") >= scoutLevel(civ, st)) return;
+    const key3 = `o|${st.id}`;
+    if (openKey(civ, key3)) return;
+    const cost = 15;
+    raise(ctx, { kind: "omen", key: key3, stateId: st.id, title: "\u8ADC\u5831\u304C\u4E0D\u7A4F\u306E\u5146\u3057\u3092\u3064\u304B\u3093\u3060", body: `\u5404\u5730\u3067\u4E0D\u6E80\u304C\u9AD8\u307E\u308A\u3001\u53CD\u4E71\u306E\u706B\u7A2E\u304C\u898B\u3048\u308B\uFF08\u5B89\u5B9A\u5EA6 ${Math.round(st.stability * 100)}\uFF09\u3002\u4ECA\u306A\u3089\u624B\u304C\u6253\u3066\u308B\u3002`, options: [{ id: "act", ja: `\u5BA5\u548C\u7B56\u3092\u8B1B\u3058\u308B\uFF08\u8CBB\u7528 ${cost}\uFF09`, hint: "\u4E0D\u6E80\u304C\u548C\u3089\u3050", disabled: st.treasury >= cost ? null : "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044" }, { id: "ignore", ja: "\u9759\u89B3\u3059\u308B", hint: "\u4F55\u3082\u3057\u306A\u3044" }], payload: { cost } });
+  }
+  function isMajor(ctx, w, { camp, A, D: D2, g, domain = "land" }) {
+    const { civ } = ctx, ops = w.ops, mi2 = civ.monthIndex, sA = civ.states[A.stateId], sD = civ.states[D2.stateId], me = sA.player ? A : sD.player ? D2 : null;
+    if (!me?.corpsId || !isLive54(civ)) return false;
+    if ((ops.lastBattleDecision ?? -99) > mi2 - 2) return false;
+    const mine = civ.states[me.stateId], share = domain === "sea" ? navyShare(mine) : landShare(mine), land = Math.max(1, mine.army * share), stage = warHelpers.stageOf(civ, g), cap = civ.states[g.stateId]?.capitalGroupId === g.id;
+    return A.size + D2.size >= 600 && Math.min(A.size, D2.size) >= 0.25 * land || domain === "land" && (stage === "city" || cap) || Math.abs(w.score) >= 50 || ops.broken.a > 0 || ops.broken.d > 0;
+  }
+  function battle(ctx, w, { camp, A, D: D2, g, site, domain = "land" }) {
+    const { civ } = ctx;
+    if (!w.ops || !isMajor(ctx, w, { camp, A, D: D2, g, domain })) return null;
+    const sA = civ.states[A.stateId], sD = civ.states[D2.stateId], mine = sA.player ? sA : sD, side = sA.player ? "A" : "D", me = side === "A" ? A : D2, foe = side === "A" ? D2 : A, foeSt = civ.states[foe.stateId];
+    const key3 = `b|${w.id}|${camp.id}`;
+    if (openKey(civ, key3)) return pendingOf(civ).find((x) => x.key === key3).id;
+    const stage = warHelpers.stageOf(civ, g), fort = domain === "sea" ? 1 : 1 + ((civ.states[D2.stateId].defense ?? 0) + (stage === "city" ? 0.3 : stage === "town" ? 0.15 : 0.05) * (stage ? 1 : 0));
+    const field2 = createField(ctx, {
+      domain,
+      place: placeName2(ctx, site),
+      seed: `${key3}|${civ.monthIndex}`,
+      terr: domain === "sea" ? 0 : warHelpers.terrainBonus(ctx.world, site.cell),
+      fort,
+      meDefends: side === "D",
+      long: domain === "land" && stage === "city" ? 1 : 0,
+      me: { st: mine, size: me.size, corps: corpsById(mine, me.corpsId), morale: me.morale, supply: me.supply },
+      foe: { st: foeSt, size: foe.size, corps: corpsById(foeSt, foe.corpsId ?? foe.lead), morale: foe.morale, supply: foe.supply, label: foeSt.name }
+    });
+    field2.fog = scoutK(civ, mine, key3);
+    field2.war = w.name ?? "\u6226\u4E89";
+    const d = raise(ctx, { kind: "battle", key: key3, stateId: mine.id, title: `${field2.place}\u306E${DOMAINS[domain].ja}`, body: "", options: [{ id: "end", ja: "\u6226\u3044\u3092\u7D42\u3048\u308B" }], payload: { warId: w.id, campId: camp.id, forceA: A.id, forceD: D2.id, gid: g.id, siteId: site.id, side, domain, field: field2 } });
+    if (!d) return null;
+    w.ops.lastBattleDecision = civ.monthIndex;
+    return d.id;
+  }
+  function skirmish(ctx, w, domain) {
+    const { civ } = ctx, ops = w.ops;
+    if (!ops || !isLive54(civ)) return null;
+    const me = [...w.sides.a, ...w.sides.d].map((i) => civ.states[i]).find((x) => x?.player);
+    if (!me) return null;
+    const mySide = w.sides.a.includes(me.id) ? "a" : "d", foes = w.sides[mySide === "a" ? "d" : "a"].map((i) => civ.states[i]).filter((x) => x?.alive).sort((x, y) => headsOf(y, domain) - headsOf(x, domain)), foeSt = foes[0];
+    if (!foeSt) return null;
+    const mh = headsOf(me, domain), fh = headsOf(foeSt, domain);
+    if (mh < 30 || fh < 20) return null;
+    const key3 = `s|${w.id}|${domain}`;
+    if (openKey(civ, key3) || (ops.lastSkirm?.[domain] ?? -99) > civ.monthIndex - 5) return null;
+    const commit = Math.min(1, 0.7), field2 = createField(ctx, { domain, place: DOMAINS[domain].ja === "\u7A7A\u6226" ? "\u6226\u57DF\u306E\u7A7A" : "\u8ECC\u9053\u4E0A", seed: `${key3}|${civ.monthIndex}`, terr: 0, fort: 1, meDefends: false, me: { st: me, size: mh * commit, corps: leadCorps(me, domain), morale: 0.85, supply: 1 }, foe: { st: foeSt, size: fh * commit, corps: leadCorps(foeSt, domain), morale: 0.8, supply: 1, label: foeSt.name } });
+    field2.fog = scoutK(civ, me, key3);
+    field2.war = w.name ?? "\u6226\u4E89";
+    (ops.lastSkirm ?? (ops.lastSkirm = {}))[domain] = civ.monthIndex;
+    const d = raise(ctx, { kind: "battle", key: key3, stateId: me.id, title: `${field2.place}\u306E${DOMAINS[domain].ja}`, body: "", options: [{ id: "end", ja: "\u6226\u3044\u3092\u7D42\u3048\u308B" }], payload: { warId: w.id, domain, skirmish: true, mySide, foeId: foeSt.id, field: field2 } });
+    return d?.id ?? null;
+  }
+  function commanderDeath(ctx, st, cp, cands, cause) {
+    const key3 = `cd|${cp.id}|${ctx.civ.monthIndex}`;
+    if (openKey(ctx.civ, key3)) return null;
+    const old = cp.commander;
+    const d = raise(ctx, { kind: "commander_death", key: key3, stateId: st.id, title: `${cp.name}\u306E\u6307\u63EE\u5B98 ${old.name} \u304C${cause}`, body: "", options: cands.map((c) => ({ id: c.p.id, ja: c.p.name, hint: `${c.from}\u30FB\u80FD\u529B ${Math.round(c.p.skill * 100)}` })), payload: { corpsId: cp.id, fallen: { name: old.name, skill: old.skill, traits: old.traits ?? [] }, cause, cands: Object.fromEntries(cands.map((c) => [c.p.id, { p: JSON.parse(JSON.stringify(c.p)), from: c.from, slot: c.slot ?? null, fresh: !!c.fresh }])) } });
+    return d?.id ?? null;
+  }
+  var clamp33, r34, U4, HANDLERS, registerDecision, DECISION_JA, openKey, FACT_JA, scoutK, DECISION_HOOKS;
+  var init_decisions = __esm({
+    "js/core/wcde/decisions.js"() {
+      init_diplomacy();
       init_events();
       init_civ_state();
-      init_diplomacy();
-      init_species();
       init_spatial();
-      init_shocks();
+      init_species();
+      init_naming();
+      init_states();
+      init_negotiation();
+      init_regimes();
+      init_succession();
+      init_warfare();
+      init_corps();
       init_power();
       init_orbat();
-      init_warfare();
-      COVERT = Object.freeze({
-        assassinate: { ja: "\u6697\u6BBA", cost: 60, base: 0.2, hint: "\u6307\u5C0E\u8005\u3092\u72D9\u3046\u3002\u6210\u529F\u3059\u308C\u3070\u76F8\u624B\u306F\u5927\u304D\u304F\u63FA\u308C\u308B\u304C\u3001\u9732\u898B\u3059\u308C\u3070\u6226\u4E89\u306E\u53E3\u5B9F\u306B\u306A\u308B" },
-        sabotage: { ja: "\u7834\u58CA\u5DE5\u4F5C", cost: 40, base: 0.36, hint: "\u5009\u5EAB\u30FB\u6A4B\u30FB\u5DE5\u623F\u3092\u58CA\u3059\u3002\u76F8\u624B\u306E\u56FD\u5EAB\u3068\u5175\u529B\u3092\u524A\u308B" },
-        recon: { ja: "\u60C5\u5831\u53CE\u96C6", cost: 20, base: 0.6, hint: "\u76F8\u624B\u306E\u8ECD\u306E\u52D5\u304D\u304C 3 \u5E74\u9593\u3088\u304F\u898B\u3048\u308B\uFF08\u4F1A\u6226\u306E\u5075\u5BDF\uFF09" },
-        rescue: { ja: "\u6551\u51FA", cost: 50, base: 0.32, hint: "\u6226\u4E89\u4E2D\u306B\u3001\u6355\u3089\u308F\u308C\u305F\u5C06\u3084\u4EBA\u8CEA\u3092\u53D6\u308A\u623B\u3059\u3002\u81EA\u8ECD\u306E\u58EB\u6C17\u304C\u4E0A\u304C\u308B" }
+      init_battlefield();
+      init_statefx();
+      init_clock();
+      init_decision_state();
+      clamp33 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+      r34 = (x) => Math.round(x * 1e3) / 1e3;
+      U4 = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
+      HANDLERS = {};
+      registerDecision = (kind, fn) => {
+        HANDLERS[kind] = fn;
+      };
+      DECISION_JA = Object.freeze({ treaty_offer: "\u6761\u7D04\u306E\u7533\u3057\u51FA", peace_offer: "\u8B1B\u548C\u306E\u7533\u3057\u51FA", war_incoming: "\u5BA3\u6226\u5E03\u544A", ally_call: "\u540C\u76DF\u56FD\u306E\u53C2\u6226\u8981\u8ACB", succession: "\u738B\u4F4D\u306E\u7D99\u627F", rebellion: "\u53CD\u4E71\u30FB\u5206\u96E2", omen: "\u4E0D\u7A4F\u306E\u524D\u5146", battle: "\u4F1A\u6226", commander_death: "\u6307\u63EE\u5B98\u306E\u6226\u6B7B", pact_invite: "\u76DF\u7D04\u3078\u306E\u8A98\u3044", pact_merge: "\u7D71\u5408\u306E\u63D0\u6848", event: "\u51FA\u6765\u4E8B" });
+      openKey = (civ, key3) => pendingOf(civ).some((d) => d.key === key3);
+      registerDecision("treaty_offer", (ctx, d, opt) => {
+        const { civ } = ctx, p = d.payload, from = civ.states[p.from], to = civ.states[p.to];
+        if (!from?.alive || !to?.alive) return { ok: true, note: "\u76F8\u624B\u306E\u56FD\u304C\u6D88\u3048\u3066\u3044\u305F" };
+        if (opt === "decline") {
+          recordProposal(ctx, { kind: "treaty", type: p.type, from: p.from, to: p.to, status: "rejected", counter: null });
+          adjustRel(from, to, -3);
+          return { ok: true, note: "\u7533\u3057\u51FA\u3092\u65AD\u3063\u305F" };
+        }
+        const type = opt === "counter_na" ? "nonaggression" : p.type;
+        if (treatyFeasible(civ, from, to, type) || treatyBetween(civ, from, to, type) || atWarWith(civ, from, to)) return { ok: true, note: "\u72B6\u6CC1\u304C\u5909\u308F\u308A\u3001\u6210\u7ACB\u3057\u306A\u304B\u3063\u305F" };
+        signTreaty(ctx, type, from, to, { provenance: "player" });
+        recordProposal(ctx, { kind: "treaty", type, from: p.from, to: p.to, status: "accepted", counter: null });
+        return { ok: true, note: `${TREATY[type].ja}\u3092\u7D50\u3093\u3060` };
       });
-      NUKE = Object.freeze({ tactical: { ja: "\u6226\u8853\u6838", pop: 0.35, groups: 1, cost: 150 }, strategic: { ja: "\u6226\u7565\u6838", pop: 0.55, groups: 4, cost: 400 } });
+      registerDecision("peace_offer", (ctx, d, opt) => {
+        const { civ } = ctx, p = d.payload, war = civ.wars[p.warId], from = civ.states[p.from];
+        if (!war || war.status !== "active" || !from?.alive) return { ok: true, note: "\u6226\u4E89\u306F\u3059\u3067\u306B\u7D42\u308F\u3063\u3066\u3044\u305F" };
+        if (opt === "reject") {
+          recordProposal(ctx, { kind: "peace", warId: war.id, from: p.from, to: p.to, terms: p.terms, separate: false, status: "rejected" });
+          return { ok: true, note: "\u8B1B\u548C\u3092\u62D2\u3093\u3060" };
+        }
+        const r = negotiatePeace(ctx, from, war, { terms: p.terms, withId: p.to, forceAccept: true });
+        return r.ok ? { ok: true, note: "\u8B1B\u548C\u3057\u305F" } : { ok: true, note: r.error ?? "\u8B1B\u548C\u306F\u6210\u7ACB\u3057\u306A\u304B\u3063\u305F" };
+      });
+      registerDecision("war_incoming", (ctx, d, opt) => {
+        const { civ } = ctx, p = d.payload, atk = civ.states[p.atk], def = civ.states[p.def];
+        if (!atk?.alive || !def?.alive) return { ok: true, note: "\u76F8\u624B\u306E\u56FD\u304C\u6D88\u3048\u3066\u3044\u305F" };
+        const stand = () => {
+          startWar(ctx, atk, def, d);
+          return { ok: true, note: "\u53D7\u3051\u3066\u7ACB\u3063\u305F\u3002\u6226\u4E89\u304C\u59CB\u307E\u308B" };
+        };
+        if (opt === "stand") return stand();
+        if (opt === "plead") {
+          def.treasury -= 15;
+          const chance = clamp33(0.2 + 0.5 * ((def.relations[atk.id] ?? 0) + 40) / 140, 0.1, 0.8);
+          if (U4(civ, d.id, "plead") < chance) {
+            if (atk.campaign?.target === def.id) atk.campaign = null;
+            atk.lastWarWith = { ...atk.lastWarWith ?? {}, [def.id]: civ.monthIndex };
+            adjustRel(atk, def, 10);
+            return { ok: true, note: "\u4F7F\u7BC0\u306E\u8AAC\u5F97\u304C\u5B9F\u308A\u3001\u6226\u4E89\u306F\u907F\u3051\u3089\u308C\u305F" };
+          }
+          const r = stand();
+          return { ...r, note: "\u8AAC\u5F97\u306F\u5B9F\u3089\u305A\u3001\u6226\u4E89\u304C\u59CB\u307E\u3063\u305F" };
+        }
+        const pay = Math.min(Math.max(0, def.treasury), p.tribute);
+        def.treasury -= pay;
+        atk.treasury += pay;
+        def.stability = clamp33(def.stability - 0.06);
+        adjustRel(atk, def, 15);
+        if (atk.campaign?.target === def.id) atk.campaign = null;
+        atk.lastWarWith = { ...atk.lastWarWith ?? {}, [def.id]: civ.monthIndex };
+        atk.lastWarEnd = civ.monthIndex;
+        makeEvent(civ, ctx.ids, { kind: "state_action", title: `${def.name}\u304C${atk.name}\u306E\u8981\u6C42\u3092\u306E\u307F\u3001\u8CA2\u7D0D\u3057\u305F`, participants: [{ entityId: def.id, role: "actor" }, { entityId: atk.id, role: "target" }], location: null, effects: [{ targetId: def.id, property: "treasury", before: null, after: Math.round(def.treasury) }], provenance: "player" });
+        return { ok: true, note: `\u8981\u6C42\u3092\u306E\u3093\u3060\uFF08\u8CA2\u7D0D ${Math.round(pay)}\uFF09` };
+      });
+      registerDecision("ally_call", (ctx, d, opt) => {
+        const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], host = civ.states[p.host], foe = civ.states[p.foe], ally = civ.states[p.ally];
+        if (!w || w.status !== "active" || !ally?.alive) return { ok: true, note: "\u6226\u4E89\u306F\u3059\u3067\u306B\u7D42\u308F\u3063\u3066\u3044\u305F" };
+        if (opt === "refuse") {
+          adjustRel(ally, host, -25);
+          return { ok: true, note: "\u53C2\u6226\u3092\u65AD\u3063\u305F" };
+        }
+        if (w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) return { ok: true, note: "\u3059\u3067\u306B\u53C2\u6226\u3057\u3066\u3044\u308B" };
+        w.sides[p.side].push(ally.id);
+        ally.warIds.push(w.id);
+        adjustRel(ally, foe, -25);
+        w.ops && ctx.warOps?.monthly;
+        makeEvent(civ, ctx.ids, { kind: "ally_joined", title: `${ally.name}\u304C${host.name}\u5074\u3067\u53C2\u6226\u3057\u305F`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: host.id, role: "host" }, { entityId: w.id, role: "war" }], location: null, provenance: "player" });
+        return { ok: true, note: "\u53C2\u6226\u3057\u305F" };
+      });
+      FACT_JA = { nobility: "\u8CB4\u65CF", military: "\u8ECD", clergy: "\u8056\u8077\u8005", merchants: "\u5546\u4EBA", commoners: "\u6C11\u8846", bureaucrats: "\u5B98\u50DA", artisans: "\u8077\u4EBA", clans: "\u6C0F\u65CF" };
+      registerDecision("succession", (ctx, d, opt) => {
+        const { civ } = ctx, st = civ.states[d.stateId];
+        if (!st?.alive) return { ok: true, note: "\u56FD\u304C\u3059\u3067\u306B\u306A\u3044" };
+        const pl = d.payload[opt];
+        if (!pl) return { ok: false, error: "\u305D\u306E\u5019\u88DC\u306F\u3044\u307E\u305B\u3093" };
+        const c = pl.cand, reg = pl.regent ?? null;
+        if (pl.partition) {
+          const gs = (byState(ctx).get(st.id) ?? []).filter((g) => g.id !== st.capitalGroupId).sort((a, b) => a.id < b.id ? -1 : 1), part2 = gs.filter((_, i) => i % 2 === 1);
+          if (part2.length && part2.length < gs.length + 1) {
+            const ns = formState(ctx, { via: "secession", groupIds: part2.map((g) => g.id), predecessor: st.id });
+            if (ns) {
+              ns.relations[st.id] = 20;
+              st.relations[ns.id] = 20;
+              makeEvent(civ, ctx.ids, { kind: "state_action", title: `${st.name}\u306E\u9818\u571F\u304C\u3001${c.name}\u306E\u7D99\u627F\u306B\u3068\u3082\u306A\u3044\u5B50\u3089\u3067\u5206\u3051\u3089\u308C\u3001${ns.name}\u304C\u6210\u7ACB\u3057\u305F`, participants: [{ entityId: st.id, role: "actor" }, { entityId: ns.id, role: "target" }], location: null, provenance: "player" });
+            }
+          }
+        }
+        const hit = 0.02 + 0.1 * (1 - (reg ? Math.max(c.legit, 0.8) : c.legit));
+        enthrone(ctx, st, { name: c.name, bornAt: c.bornAt, kin: c.kin, hit, how: reg ? `\u6442\u653F${reg.name}\u306E\u3082\u3068\u3001${c.name}\u304C\u7ACB\u3063\u305F` : `${c.relation}\u306E${c.name}\u304C\u7ACB\u3063\u305F` });
+        st.leader.skill = c.skill;
+        st.leader.backer = c.backer;
+        if (reg) st.leader.regent = { name: reg.name, skill: reg.skill, backer: reg.backer, relation: reg.relation, until: civ.monthIndex + Math.max(12, Math.round((16 - c.ageYears) * 12 * lifeScale(civ, st))) };
+        const F = st.politics?.factions;
+        if (F) {
+          const bump = (k, v) => {
+            if (F[k]) F[k].support = clamp33(F[k].support + v);
+          };
+          bump(c.backer, 0.1);
+          if (reg) bump(reg.backer, 0.06);
+          for (const k of Object.keys(F)) if (k !== c.backer && k !== reg?.backer && (k === "nobility" || k === "military") && c.kin === false) bump(k, -0.04);
+        }
+        if (c.risk && U4(civ, st.id, civ.monthIndex, "sdispute") < c.risk * (reg ? 0.6 : 1)) queueEvent(st, c.id === "usurper" || c.id === "general" ? "succ_coup_after" : "succ_dispute", 3 + Math.floor(9 * U4(civ, st.id, "sdd")), civ.monthIndex);
+        return { ok: true, note: reg ? `\u6442\u653F\u3092\u7F6E\u304D\u3001${c.name}\u304C\u5373\u4F4D\u3057\u305F` : `${c.name}\u304C\u5373\u4F4D\u3057\u305F` };
+      });
+      registerDecision("rebellion", (ctx, d, opt) => {
+        const { civ } = ctx, st = civ.states[d.stateId];
+        if (!st?.alive) return { ok: true, note: "\u56FD\u304C\u3059\u3067\u306B\u306A\u3044" };
+        const gs = byState(ctx).get(st.id) ?? [], F = st.politics?.factions, bump = (k, v) => {
+          if (F?.[k]) F[k].support = clamp33(F[k].support + v);
+        };
+        const calm = (f) => {
+          for (const g of gs) for (const co of g.cohorts) co.tension *= f;
+        };
+        if (opt === "suppress") {
+          st.treasury -= d.payload.cost;
+          calm(0.7);
+          st.stability = clamp33(st.stability + 0.06);
+          bump("commoners", -0.06);
+          bump("military", 0.04);
+          st.lastCrisis = civ.monthIndex + 60;
+          return { ok: true, note: "\u53CD\u4E71\u3092\u93AE\u5727\u3057\u305F" };
+        }
+        if (opt === "concede") {
+          st.policy.autonomy = r34(clamp33(st.policy.autonomy + 0.2));
+          st.policy.tax = r34(clamp33(st.policy.tax - 0.03, 0.02, 0.4));
+          calm(0.85);
+          st.stability = clamp33(st.stability + 0.05);
+          bump("nobility", -0.04);
+          st.lastCrisis = civ.monthIndex;
+          return { ok: true, note: "\u8B72\u6B69\u3057\u3066\u53CD\u4E71\u3092\u53CE\u3081\u305F" };
+        }
+        const part2 = d.payload.groupIds.map((i) => civ.groups[i]).filter((g) => g?.stateId === st.id);
+        if (!part2.length || part2.length >= gs.length) return { ok: true, note: "\u5206\u96E2\u306F\u8D77\u304D\u306A\u304B\u3063\u305F" };
+        runSecession(ctx, st, part2);
+        return { ok: true, note: "\u5206\u96E2\u304C\u8D77\u304D\u3001\u5185\u6226\u306B\u306A\u3063\u305F" };
+      });
+      registerDecision("omen", (ctx, d, opt) => {
+        const st = ctx.civ.states[d.stateId];
+        if (!st?.alive) return { ok: true };
+        if (opt === "act") {
+          st.treasury -= d.payload.cost;
+          for (const g of byState(ctx).get(st.id) ?? []) for (const co of g.cohorts) co.tension *= 0.88;
+          st.stability = clamp33(st.stability + 0.04);
+          return { ok: true, note: "\u5BA5\u548C\u7B56\u3092\u8B1B\u3058\u305F" };
+        }
+        return { ok: true, note: "\u9759\u89B3\u3057\u305F" };
+      });
+      scoutK = (civ, mine, key3) => {
+        const sc = scoutLevel(civ, mine);
+        return { exact: sc >= 0.85, k: 1 + (U4(civ, key3, "fogs") - 0.5) * 2 * (1 - sc) * 0.4 };
+      };
+      registerDecision("battle", (ctx, d, opt) => {
+        const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], ops = w?.ops;
+        if (p.skirmish) {
+          if (!w || w.status !== "active" || ops?.ended) return { ok: true, note: "\u6226\u6CC1\u304C\u5909\u308F\u308A\u3001\u6226\u3044\u306F\u8D77\u304D\u306A\u304B\u3063\u305F" };
+          const me = civ.states[d.stateId], foe = civ.states[p.foeId], o2 = fieldOutcome(p.field, true), dom = ops.dom ?? (ops.dom = { air: 0, space: 0, nuke: 0 }), sg = p.mySide === "a" ? 1 : -1;
+          for (const [st, heads, lm] of [[me, headsOf(me, p.domain), o2.lossMine], [foe, headsOf(foe, p.domain), o2.lossFoe]]) if (st?.alive) {
+            const dead = Math.min(st.army, heads * 0.1 * lm * 0.7);
+            st.army = Math.max(0, st.army - dead);
+            serviceLoss(st, p.domain, dead);
+            w.casualties += dead;
+            ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + dead;
+          }
+          dom[p.domain] = clamp33((dom[p.domain] ?? 0) + sg * (o2.win ? 1 : -1) * 0.6, -1, 1);
+          (ops.battles ?? (ops.battles = [])).push({ id: `b${++ops.seq}`, at: civ.monthIndex, kind: p.domain, name: `${p.field.place}\u306E${DOMAINS[p.domain].ja}`, cell: civ.groups[civ.states[d.stateId].capitalGroupId]?.cell ?? 0, a: me.id, d: foe.id, winner: o2.win ? me.id : foe.id, deadA: o2.result.lossMe, deadD: o2.result.lossFoe, win: o2.win ? "A" : "D", notable: true, domain: p.domain });
+          return { ok: true, note: `${DOMAINS[p.domain].ja}: ${o2.win ? "\u52DD\u5229" : "\u6557\u5317"}\uFF08${p.domain === "air" ? "\u5236\u7A7A" : "\u5236\u5B99"}\u306B\u97FF\u304F\uFF09` };
+        }
+        const A = ops?.forces?.[p.forceA], D2 = ops?.forces?.[p.forceD], camp = ops?.campaigns?.[p.campId], g = civ.groups[p.gid], site = civ.groups[p.siteId];
+        if (!w || w.status !== "active" || ops?.ended || !A || !D2 || !camp || !g || !site) {
+          if (camp) camp.waiting = null;
+          return { ok: true, note: "\u6226\u6CC1\u304C\u5909\u308F\u308A\u3001\u4F1A\u6226\u306F\u8D77\u304D\u306A\u304B\u3063\u305F" };
+        }
+        const o = fieldOutcome(p.field, p.side === "A"), lossA = p.side === "A" ? o.lossMine : o.lossFoe, lossD = p.side === "A" ? o.lossFoe : o.lossMine;
+        ops.lastBattleDecision = civ.monthIndex;
+        camp.waiting = null;
+        const force = o.winA ? "A" : "D", r = p.domain === "sea" ? navalEngage(ctx, w, camp, A, D2, g, { site, bias: o.bias, lossA, lossD, force }) : fieldEngage(ctx, w, camp, A, D2, g, { site, bias: o.bias, lossA, lossD, force });
+        return { ok: true, note: `${r.rec.name}: ${o.win ? "\u52DD\u5229" : "\u6557\u5317"}\uFF08${o.result.days} \u65E5\uFF09` };
+      });
+      registerDecision("commander_death", (ctx, d, opt) => {
+        const st = ctx.civ.states[d.stateId], cp = st ? corpsById(st, d.payload.corpsId) : null, c = d.payload.cands[opt];
+        if (!cp || !c) return { ok: true, note: "\u8ECD\u56E3\u304C\u3059\u3067\u306B\u306A\u3044" };
+        installCommander(st, cp, c.p, c.slot);
+        return { ok: true, note: `${c.p.name}\u304C\u5F8C\u4EFB\u306B\u5C31\u3044\u305F` };
+      });
+      DECISION_HOOKS = Object.freeze({ offerTreaty, offerPeace, warIncoming, allyCall, succession, rebellion, omen, battle, skirmish, commanderDeath, raise, scoutLevel });
     }
   });
 
-  // js/core/wcde/domains/people.js
-  var AGE_MIN;
-  var init_people = __esm({
-    "js/core/wcde/domains/people.js"() {
-      init_civ_state();
+  // js/core/wcde/pacts.js
+  function callPacts(ctx, w, atk, def) {
+    const { civ, ids: ids2, rng } = ctx, inWar = (id) => w.sides.a.includes(id) || w.sides.d.includes(id);
+    for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const p of pactsOfState(civ, host.id)) {
+      if (p.members.includes(foe.id)) continue;
+      const chance = p.purpose === "defense" ? side === "d" ? 0.85 : 0 : p.purpose === "counter" ? foe.id === p.target ? 0.8 : 0 : p.purpose === "religion" ? w.reason === "religion" ? 0.5 : 0 : 0;
+      if (!chance) continue;
+      for (const m of p.members) {
+        const s = civ.states[m];
+        if (m === host.id || !s?.alive || inWar(m) || s.dependency?.overlord === foe.id) continue;
+        if (s.player && ctx.decisions?.allyCall(ctx, w, side, host, foe, s)) continue;
+        if (rng() >= chance) continue;
+        w.sides[side].push(m);
+        s.warIds.push(w.id);
+        adjustRel(s, foe, -20);
+        makeEvent(civ, ids2, { kind: "ally_joined", title: `${s.name}\u304C${p.name}\u306E\u76DF\u7D04\u306B\u5F93\u3044\u3001${host.name}\u5074\u3067\u53C2\u6226\u3057\u305F`, participants: [{ entityId: m, role: "ally" }, { entityId: w.id, role: "war" }], location: null, causes: [{ targetId: w.declaredEvent, relation: "reaction_to", basis: "strong" }] });
+      }
+    }
+  }
+  var PACT_PURPOSES, pactsOf, listPacts, pactsOfState;
+  var init_pacts = __esm({
+    "js/core/wcde/pacts.js"() {
+      init_diplomacy();
       init_events();
-      init_language();
-      init_naming();
+      init_cohorts();
+      init_civ_state();
+      init_decisions();
+      init_regimes();
+      PACT_PURPOSES = Object.freeze({
+        defense: { ja: "\u9632\u885B\u540C\u76DF", suffix: "\u540C\u76DF", merit: "\u653B\u3081\u3089\u308C\u305F\u3068\u304D\u52A9\u3051\u304C\u6765\u308B", cost: "\u52A0\u76DF\u56FD\u3069\u3046\u3057\u3067\u6226\u3048\u306A\u3044" },
+        trade: { ja: "\u901A\u5546\u9023\u5408", suffix: "\u9023\u5408", merit: "\u4EA4\u6613\u306E\u914D\u5F53\u304C\u5165\u308B", cost: "\u52A0\u76DF\u56FD\u3069\u3046\u3057\u3067\u6226\u3048\u306A\u3044" },
+        religion: { ja: "\u5B97\u6559\u9023\u76DF", suffix: "\u9023\u76DF", merit: "\u540C\u3058\u4FE1\u4EF0\u306E\u56FD\u304C\u5B89\u5B9A\u3059\u308B", cost: "\u5B97\u6559\u306E\u6226\u4E89\u306B\u547C\u3070\u308C\u308B" },
+        counter: { ja: "\u5BFE\u6297\u9023\u5408", suffix: "\u9023\u5408", merit: "\u5F37\u56FD\u306B\u5171\u540C\u3067\u5F53\u305F\u308C\u308B", cost: "\u5BFE\u8C61\u3068\u306E\u95A2\u4FC2\u304C\u60AA\u5316\u3059\u308B" }
+      });
+      pactsOf = (civ) => {
+        var _a;
+        return (_a = civ.wcde ?? (civ.wcde = {})).pacts ?? (_a.pacts = { items: {}, seq: 0 });
+      };
+      listPacts = (civ, all = false) => Object.values(pactsOf(civ).items).filter((p) => all || p.active);
+      pactsOfState = (civ, id) => listPacts(civ).filter((p) => p.members.includes(id));
+    }
+  });
+
+  // js/core/civ/diplomacy.js
+  function neighborStates(ctx, st) {
+    const cache4 = ctx._nbr && ctx._nbrMonth === ctx.civ.monthIndex ? ctx._nbr : (ctx._nbr = /* @__PURE__ */ new Map(), ctx._nbrMonth = ctx.civ.monthIndex, ctx._nbr);
+    if (cache4.has(st.id)) return cache4.get(st.id);
+    const out = /* @__PURE__ */ new Set();
+    for (const g of byState(ctx).get(st.id) ?? []) for (const o of neighborGroups(ctx, g)) {
+      const s = ctx.civ.groups[o]?.stateId;
+      if (s && s !== st.id && ctx.civ.states[s].alive) out.add(s);
+    }
+    const r = [...out].sort();
+    cache4.set(st.id, r);
+    return r;
+  }
+  function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "simulation", reverse = false, extra = null } = {}) {
+    if (reverse) [a, b] = [b, a];
+    const { civ, ids: ids2 } = ctx, T4 = TREATY[type], id = ids2.next("treaty"), t = { id, type, a: a.id, b: b.id, signedAt: civ.monthIndex, expiresAt: civ.monthIndex + T4.months, active: true };
+    if (extra) t.terms = extra;
+    civ.treaties[id] = t;
+    civ.activeTreatyIds.push(id);
+    adjustRel(a, b, T4.cat === "dep" ? 5 : type === "alliance" || type === "union" || type === "marriage" ? 25 : T4.cat === "land" ? 5 : 15);
+    const title = T4.dep ? `${b.name}\u304C${a.name}\u306E${{ vassal: "\u5C01\u81E3", tributary: "\u671D\u8CA2\u56FD", protectorate: "\u4FDD\u8B77\u56FD", union: "\u540C\u541B\u9023\u5408\u306E\u4E00\u54E1" }[T4.dep]}\u3068\u306A\u3063\u305F\uFF08${T4.ja}\uFF09` : `${a.name}\u3068${b.name}\u304C${T4.ja}\u3092\u7D50\u3093\u3060`;
+    const ev = makeEvent(civ, ids2, { kind: "treaty_signed", title, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance });
+    t.event = ev.eventId;
+    onTreatySigned(ctx, t, a, b);
+    return t;
+  }
+  function endTreaty(ctx, t, why, byId2 = null) {
+    const { civ, ids: ids2 } = ctx;
+    t.active = false;
+    onTreatyEnded(ctx, t);
+    t.endedAt = civ.monthIndex;
+    enqueue(ctx, "treaty", t.id, civ.monthIndex);
+    if (t.type === "nonaggression") {
+      for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex;
+    }
+    civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
+    makeEvent(civ, ids2, { kind: "treaty_ended", title: `${TREATY[t.type].ja}\u304C${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId2 === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId2 === t.b ? "breaker" : "party" }], location: null, effects: byId2 ? [{ targetId: t.id, property: "broken_by", before: null, after: byId2 }] : [] });
+  }
+  function revengeCauses(civ, atk, def) {
+    const out = [];
+    for (const ev of recentEventsFor(civ, [atk.id], ["war_ended"], 1200, 6)) {
+      if (!ev.participants.some((p) => p.entityId === def.id)) continue;
+      const w = civ.wars[ev.participants.find((p) => p.role === "war")?.entityId];
+      const lost = w && (w.sides.a.includes(atk.id) && w.outcome === "defender_victory" || w.sides.d.includes(atk.id) && w.outcome === "aggressor_victory");
+      out.push({ targetId: ev.eventId, relation: "reaction_to", basis: lost ? "strong" : "plausible" });
+      if (out.length >= 2) break;
+    }
+    return out;
+  }
+  function warReasonFor(ctx, atk, def) {
+    const { civ } = ctx, mi2 = civ.monthIndex, h2 = hashSeed(atk.id, def.id, mi2 >> 3) % 10007 / 10007, year = civ.date.year;
+    const era = year < 1200 ? 0 : year < 3e3 ? 1 : year < 4200 ? 2 : year < 4700 ? 3 : 4, cA = civ.groups[atk.capitalGroupId], cB = civ.groups[def.capitalGroupId];
+    const wt = { conquest: era === 0 ? 3.2 : era === 1 ? 2.6 : era === 2 ? 2 : 1.4, plunder: era === 0 ? 1.6 : era === 1 ? 0.8 : 0.1, subjugation: era >= 1 && atk.army > def.army * 1.8 ? 1.2 : 0.3, preventive: def.army > atk.army * 1.2 && (atk.relations?.[def.id] ?? 0) < -10 ? 1.1 : 0.2 };
+    if (def.dynastyChangedAt != null && mi2 - def.dynastyChangedAt < 240) wt.succession = 3.2;
+    else if (def.leader && def.leader.deposed) wt.succession = 1.2;
+    else wt.succession = era >= 1 ? 0.5 : 0.2;
+    if (cA && cB && dominant(cA).religionId && dominant(cB).religionId && dominant(cA).religionId !== dominant(cB).religionId) wt.religion = era === 0 ? 0.6 : era <= 3 ? 2.6 : 0.8;
+    else wt.religion = 0.2;
+    const coastal2 = (c) => !!c && (ctx.world?.cell?.coastDist?.[c.cell] ?? 9) <= 1;
+    wt.trade_route = (atk.econ?.trade || def.econ?.trade) && era >= 1 ? 1.8 : 0.3;
+    wt.maritime = coastal2(cA) && coastal2(cB) && era >= 2 ? 1.6 : 0;
+    wt.unification = era >= 3 && cA && cB && dominant(cA).cultureId && dominant(cA).cultureId === dominant(cB).cultureId ? 1.6 : 0;
+    wt.ideology = era >= 4 ? 2.2 : era === 3 ? 0.4 : 0;
+    wt.resource = era >= 3 ? 1 : 0;
+    const ents = Object.entries(wt).filter(([, v]) => v > 0), tot = ents.reduce((a, [, v]) => a + v, 0);
+    let x = h2 * tot;
+    for (const [k, v] of ents) {
+      x -= v;
+      if (x <= 0) return k;
+    }
+    return "conquest";
+  }
+  function warPretextFor(ctx, atk, def) {
+    const mi2 = ctx.civ.monthIndex;
+    if (atk.lastWarWith?.[def.id] != null && mi2 - atk.lastWarWith[def.id] < 1200) return "revenge";
+    return null;
+  }
+  function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation" } = {}) {
+    const { civ, ids: ids2, rng } = ctx;
+    if (reason === "conquest") reason = warReasonFor(ctx, atk, def);
+    const id = ids2.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 };
+    {
+      const pt = warPretextFor(ctx, atk, def);
+      if (pt) w.pretext = pt;
+      w.cls = warClassOf(reason);
+    }
+    civ.wars[id] = w;
+    civ.activeWarIds.push(id);
+    atk.warIds.push(id);
+    def.warIds.push(id);
+    adjustRel(atk, def, -40);
+    const ev = makeEvent(civ, ids2, { kind: "war_declared", title: `${atk.name}\u304C${def.name}\u306B\u5BA3\u6226\u3057\u305F`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance });
+    w.declaredEvent = ev.eventId;
+    for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) {
+      if (t.type !== "alliance" || t.a !== host.id && t.b !== host.id) continue;
+      const ally = civ.states[t.a === host.id ? t.b : t.a];
+      if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;
+      if (ally.player && ctx.decisions?.allyCall(ctx, w, side, host, foe, ally)) continue;
+      if (rng() < 0.6) {
+        w.sides[side].push(ally.id);
+        ally.warIds.push(id);
+        adjustRel(ally, foe, -25);
+        makeEvent(civ, ids2, { kind: "ally_joined", title: `${ally.name}\u304C${host.name}\u5074\u3067\u53C2\u6226\u3057\u305F`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: id, role: "war" }], location: null, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] });
+      }
+    }
+    callDependents(ctx, w, atk, def);
+    callPacts(ctx, w, atk, def);
+    ctx.warOps?.init(ctx, w);
+    return w;
+  }
+  function endWar(ctx, w, outcome, terms = null) {
+    const { civ, ids: ids2 } = ctx;
+    if (w.status !== "active") return;
+    w.status = "ended";
+    w.outcome = outcome;
+    w.endedAt = civ.monthIndex;
+    civ.activeWarIds = civ.activeWarIds.filter((i) => i !== w.id);
+    const all = [...w.sides.a, ...w.sides.d].map((i) => civ.states[i]);
+    for (const s of all) s.warIds = s.warIds.filter((i) => i !== w.id);
+    const atk = civ.states[w.aggressor], def = civ.states[w.defender];
+    const lead = outcome === "aggressor_victory" || outcome === "negotiated" && w.score > 0;
+    const gained = [], moved = [];
+    const settled = ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null;
+    if (settled) for (const x of settled) {
+      gained.push(x.gid);
+      moved.push(x);
+    }
+    else if (lead && atk?.alive) for (const gid of w.occupied) {
+      const g = civ.groups[gid];
+      if (g && g.stateId === w.defender) {
+        g.stateId = atk.id;
+        gained.push(gid);
+      }
+    }
+    submitAfterWar(ctx, w, outcome);
+    for (const x of w.sides.a) for (const y of w.sides.d) {
+      const X = civ.states[x], Y = civ.states[y];
+      if (X && Y) {
+        (X.lastWarWith ?? (X.lastWarWith = {}))[y] = civ.monthIndex;
+        (Y.lastWarWith ?? (Y.lastWarWith = {}))[x] = civ.monthIndex;
+      }
+    }
+    for (const s of all) {
+      s.lastWarEnd = civ.monthIndex;
+      s.stability = Math.max(0, s.stability - 0.04);
+      if (s.campaign?.warId === w.id) s.campaign = null;
+    }
+    if (atk && def) adjustRel(atk, def, -10);
+    makeEvent(civ, ids2, { kind: "war_ended", title: `${atk?.name ?? "?"}\u3068${def?.name ?? "?"}\u306E\u6226\u4E89\u304C\u7D42\u308F\u3063\u305F\uFF08${{ aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", stalemate: "\u6C7A\u7740\u3064\u304B\u305A", negotiated: terms?.kind === "cession" ? "\u8B1B\u548C\uFF08\u5360\u9818\u5730\u306E\u5272\u8B72\uFF09" : "\u8B1B\u548C", state_dissolved: "\u56FD\u5BB6\u306E\u6D88\u6EC5" }[outcome] ?? outcome}\uFF09`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => {
+      const m = moved.find((x) => x.gid === gid);
+      return { targetId: gid, property: "stateId", before: m?.from ?? w.defender, after: m?.to ?? atk.id };
+    }), facts: { warId: w.id, outcome, terms: terms?.kind ?? null, stateId: gained.length ? moved[0]?.to ?? atk?.id ?? null : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
+    ctx.warOps?.finalize(ctx, w, outcome);
+  }
+  function stepWars(ctx) {
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
+    if (mi2 % 12 === 0) {
+      for (const i of [...civ.activeTreatyIds]) {
+        const t = civ.treaties[i];
+        if (t.expiresAt <= mi2 || !civ.states[t.a]?.alive || !civ.states[t.b]?.alive) endTreaty(ctx, t, "\u671F\u9650\u3092\u8FCE\u3048\u305F");
+      }
+      for (const id in civ.states) {
+        const s = civ.states[id];
+        if (s.alive) for (const k in s.relations) {
+          s.relations[k] = Math.round(s.relations[k] * 0.9 * 10) / 10;
+          if (Math.abs(s.relations[k]) < 1) delete s.relations[k];
+        }
+      }
+    }
+    const groups = byState(ctx);
+    ctx.warOps?.monthly(ctx);
+    for (const wid of [...civ.activeWarIds]) {
+      const w = civ.wars[wid], A = w.sides.a.map((i) => civ.states[i]).filter((s) => s.alive), D2 = w.sides.d.map((i) => civ.states[i]).filter((s) => s.alive);
+      if (!civ.states[w.aggressor].alive || !civ.states[w.defender].alive || !A.length || !D2.length) {
+        endWar(ctx, w, "state_dissolved");
+        continue;
+      }
+      if (ctx.warOps) {
+        ctx.warOps.step(ctx, w);
+        continue;
+      }
+      const sA = A.reduce((s, x) => s + strength(civ, x), 0), sD = D2.reduce((s, x) => s + strength(civ, x), 0);
+      w.score = Math.max(-100, Math.min(100, w.score + (sA - sD) / (sA + sD + 1) * 6 + (rng() - 0.5) * 3));
+      const lossA = 25e-4 * (sD / (sA + sD + 1)), lossD = 25e-4 * (sA / (sA + sD + 1));
+      let dead = 0;
+      for (const [side, loss] of [[A, lossA], [D2, lossD]]) for (const s of side) {
+        const gs = groups.get(s.id);
+        if (!gs?.length) continue;
+        const g = gs[Math.floor(rng() * gs.length)], l = g.pop * loss * 4;
+        g.pop -= l;
+        dead += l;
+      }
+      w.casualties += dead;
+      if (mi2 % 3 === 0 && rng() < 0.4) makeEvent(civ, ids2, { kind: "battle_fought", title: `${civ.states[w.aggressor].name}\u3068${civ.states[w.defender].name}\u306E\u6226\u95D8`, participants: [{ entityId: w.id, role: "war" }, { entityId: w.aggressor, role: "aggressor" }, { entityId: w.defender, role: "defender" }], location: { cell: civ.groups[civ.states[w.defender].capitalGroupId]?.cell ?? null }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: [{ targetId: w.id, property: "score", before: null, after: Math.round(w.score) }] });
+      if (w.score >= 35 && w.occupied.length < 3 && rng() < 0.08) {
+        const cap = civ.groups[civ.states[w.aggressor].capitalGroupId];
+        const cand2 = D2.flatMap((s) => groups.get(s.id) ?? []).filter((g) => !w.occupied.includes(g.id));
+        if (cap && cand2.length) {
+          cand2.sort((a, b) => distKm(world, cap.cell, a.cell) - distKm(world, cap.cell, b.cell));
+          const g = cand2[0];
+          w.occupied.push(g.id);
+          makeEvent(civ, ids2, { kind: "territory_occupied", title: "\u9818\u571F\u304C\u5360\u9818\u3055\u308C\u305F", participants: [{ entityId: g.id, role: "territory" }, { entityId: w.id, role: "war" }], location: { cell: g.cell }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }] });
+        }
+      }
+      const age = mi2 - w.startedAt;
+      if (w.score >= 80) endWar(ctx, w, "aggressor_victory");
+      else if (w.score <= -80) endWar(ctx, w, "defender_victory");
+      else if (age > 120) endWar(ctx, w, "stalemate");
+    }
+  }
+  var WAR_REASON_JA, WAR_CLASS, WAR_CLASS_JA, warClassOf, rematchCooldown, TREATY_CATS, TREATY, adjustRel, treatyBetween, atWarWith, strength;
+  var init_diplomacy = __esm({
+    "js/core/civ/diplomacy.js"() {
+      init_events();
+      init_spatial();
+      init_cohorts();
+      init_civ_state();
+      init_techfx();
+      init_states();
+      init_dependency();
+      init_pacts();
       init_graph();
-      AGE_MIN = 14 * 12;
+      init_compaction_queue();
+      WAR_REASON_JA = Object.freeze({ conquest: "\u9818\u571F\u306E\u5F81\u670D", plunder: "\u7565\u596A\u30FB\u9060\u5F81", succession: "\u738B\u4F4D\u7D99\u627F\u3092\u3081\u3050\u308B\u4E89\u3044", religion: "\u5B97\u6559\u7684\u306A\u5BFE\u7ACB", trade_route: "\u4EA4\u6613\u8DEF\u30FB\u8CC7\u6E90\u3092\u3081\u3050\u308B\u4E89\u3044", maritime: "\u6D77\u4E0A\u8987\u6A29\u3092\u3081\u3050\u308B\u4E89\u3044", revenge: "\u5831\u5FA9\u30FB\u5931\u5730\u306E\u56DE\u5FA9", independence: "\u72EC\u7ACB\u30FB\u81EA\u6CBB\u3092\u6C42\u3081\u308B\u6226\u4E89", unification: "\u7D71\u4E00\u3092\u6C42\u3081\u308B\u6226\u4E89", ideology: "\u4F53\u5236\u30FB\u30A4\u30C7\u30AA\u30ED\u30AE\u30FC\u306E\u5BFE\u7ACB", resource: "\u8CC7\u6E90\u3092\u3081\u3050\u308B\u4E89\u3044", subjugation: "\u5F93\u5C5E\u306E\u5F37\u5236", civil_war: "\u5185\u6226\u30FB\u53CD\u4E71", alliance: "\u540C\u76DF\u306B\u57FA\u3065\u304F\u53C2\u6226", preventive: "\u4E88\u9632\u6226\u4E89", defense: "\u9632\u885B" });
+      WAR_CLASS = Object.freeze({ conquest: "plunder", plunder: "plunder", revenge: "plunder", succession: "succession", religion: "religion", trade_route: "trade", maritime: "trade", independence: "independence", unification: "independence", civil_war: "independence", subjugation: "subjugation", alliance: "preventive", preventive: "preventive", defense: "preventive", ideology: "ideology", resource: "ideology" });
+      WAR_CLASS_JA = Object.freeze({ plunder: "\u7565\u596A\u30FB\u5F81\u670D", succession: "\u7D99\u627F", religion: "\u5B97\u6559", trade: "\u901A\u5546\u30FB\u6D77\u4E0A\u8987\u6A29", independence: "\u72EC\u7ACB\u30FB\u7D71\u4E00", subjugation: "\u5F93\u5C5E\u306E\u5F37\u5236\u30FB\u96E2\u8131", preventive: "\u540C\u76DF\u7FA9\u52D9\u30FB\u4E88\u9632\u6226\u4E89", ideology: "\u30A4\u30C7\u30AA\u30ED\u30AE\u30FC\u30FB\u8CC7\u6E90" });
+      warClassOf = (reason) => WAR_CLASS[reason] ?? "plunder";
+      rematchCooldown = (year) => year < 3e3 ? 480 : year < 4500 ? 300 : year < 4850 ? 180 : 120;
+      TREATY_CATS = Object.freeze({ mil: "\u8ECD\u4E8B", dep: "\u5F93\u5C5E", eco: "\u7D4C\u6E08", land: "\u9818\u571F", dyn: "\u738B\u5BB6" });
+      TREATY = Object.freeze({
+        alliance: { ja: "\u653B\u5B88\u540C\u76DF", cat: "mil", months: 480, merit: "\u53C2\u6226\u3092\u983C\u3081\u308B", cost: "\u76F8\u624B\u306E\u6226\u4E89\u306B\u5DFB\u304D\u8FBC\u307E\u308C\u308B" },
+        defensive: { ja: "\u9632\u885B\u540C\u76DF", cat: "mil", months: 360, needs: ["diplomacy"], merit: "\u653B\u3081\u3089\u308C\u305F\u3068\u304D\u52A9\u3051\u304C\u6765\u308B", cost: "\u5B88\u308A\u306E\u6226\u4E89\u306B\u3060\u3051\u53C2\u6226\u3059\u308B" },
+        nonaggression: { ja: "\u4E0D\u53EF\u4FB5\u6761\u7D04", cat: "mil", months: 240, merit: "\u96A3\u56FD\u306B\u653B\u3081\u3089\u308C\u306B\u304F\u304F\u306A\u308B", cost: "\u3053\u3061\u3089\u3082\u5BA3\u6226\u3057\u306B\u304F\u3044" },
+        passage: { ja: "\u8ECD\u4E8B\u901A\u904E\u6A29", cat: "mil", months: 240, needs: ["roads"], merit: "\u76F8\u624B\u306E\u9818\u5185\u3092\u8ECD\u304C\u901A\u308C\u308B", cost: "\u76F8\u624B\u304C\u5F37\u3044\u3068\u5185\u653F\u304C\u8105\u304B\u3055\u308C\u308B" },
+        garrison: { ja: "\u99D0\u7559\u5354\u5B9A", cat: "mil", months: 360, needs: ["standing_army"], merit: "\u5B88\u308A\u304C\u56FA\u304F\u306A\u308B", cost: "\u99D0\u7559\u56FD\u306E\u5F71\u97FF\u304C\u5F37\u307E\u308B" },
+        feudal: { ja: "\u5C01\u5EFA\u5951\u7D04", cat: "dep", dep: "vassal", months: 1200, needs: ["administration"], merit: "\u5B97\u4E3B\u306F\u8ECD\u5F79\u3068\u8CA2\u7D0D\u3092\u5F97\u308B", cost: "\u5F93\u3046\u5074\u306F\u81EA\u7531\u3092\u5931\u3046" },
+        tribute: { ja: "\u671D\u8CA2", cat: "dep", dep: "tributary", months: 1200, needs: ["diplomacy"], merit: "\u540D\u76EE\u306E\u670D\u5C5E\u3067\u3001\u653B\u3081\u3089\u308C\u306B\u304F\u3044", cost: "\u8CA2\u304E\u7269\u3092\u7D0D\u3081\u308B" },
+        protectorate: { ja: "\u4FDD\u8B77\u6761\u7D04", cat: "dep", dep: "protectorate", months: 1200, needs: ["diplomacy"], merit: "\u5B97\u4E3B\u304C\u5B88\u3063\u3066\u304F\u308C\u308B", cost: "\u5916\u4EA4\u6A29\u3092\u5931\u3046" },
+        trade: { ja: "\u901A\u5546\u6761\u7D04", cat: "eco", months: 240, merit: "\u4EA4\u6613\u306E\u53CE\u5165\u304C\u5897\u3048\u308B", cost: "\u76F8\u624B\u3078\u306E\u4F9D\u5B58\u304C\u6DF1\u307E\u308B" },
+        tariff: { ja: "\u95A2\u7A0E\u5354\u5B9A", cat: "eco", months: 240, needs: ["coinage"], merit: "\u95A2\u7A0E\u304C\u4E0B\u304C\u308B", cost: "\u81EA\u56FD\u306E\u7523\u696D\u304C\u7AF6\u4E89\u306B\u3055\u3089\u3055\u308C\u308B" },
+        unequal: { ja: "\u4E0D\u5E73\u7B49\u6761\u7D04", cat: "eco", months: 480, needs: ["coinage", "diplomacy"], merit: "\u5F37\u3044\u5074\u304C\u4E00\u65B9\u7684\u306B\u6709\u5229\u306B\u306A\u308B", cost: "\u5F31\u3044\u5074\u306F\u95A2\u7A0E\u3068\u88C1\u5224\u306E\u6A29\u5229\u3092\u5931\u3046" },
+        border: { ja: "\u56FD\u5883\u753B\u5B9A", cat: "land", months: 600, needs: ["surveying"], merit: "\u56FD\u5883\u306E\u7D1B\u4E89\u304C\u6E1B\u308B", cost: "\u4E3B\u5F35\u3092\u8AE6\u3081\u308B" },
+        sphere: { ja: "\u52E2\u529B\u570F\u5354\u5B9A", cat: "land", months: 360, needs: ["diplomacy"], merit: "\u4E92\u3044\u306E\u7E04\u5F35\u308A\u3092\u8A8D\u3081\u308B", cost: "\u570F\u5185\u306E\u56FD\u306F\u5F37\u56FD\u306B\u5F93\u3044\u3084\u3059\u3044" },
+        purchase: { ja: "\u9818\u571F\u306E\u8CB7\u53CE", cat: "land", months: 12, needs: ["coinage"], merit: "\u6226\u308F\u305A\u306B\u571F\u5730\u3092\u5F97\u308B", cost: "\u56FD\u5EAB\u3092\u5931\u3046" },
+        cession: { ja: "\u9818\u571F\u306E\u5272\u8B72", cat: "land", months: 12, merit: "\u76F8\u624B\u306E\u6B53\u5FC3\u3092\u8CB7\u3046", cost: "\u571F\u5730\u3068\u6C11\u3092\u5931\u3046" },
+        exchange: { ja: "\u9818\u571F\u306E\u4EA4\u63DB", cat: "land", months: 12, needs: ["surveying"], merit: "\u56FD\u5883\u304C\u3059\u3063\u304D\u308A\u3059\u308B", cost: "\u624B\u653E\u3059\u571F\u5730\u306E\u6C11\u304C\u4E0D\u6E80\u3092\u6301\u3064" },
+        marriage: { ja: "\u5A5A\u59FB\u540C\u76DF", cat: "dyn", months: 600, needs: ["diplomacy"], merit: "\u738B\u5BB6\u304C\u7D50\u3070\u308C\u3001\u95A2\u4FC2\u304C\u6DF1\u307E\u308B", cost: "\u7D99\u627F\u3092\u3081\u3050\u308B\u4E89\u3044\u306E\u706B\u7A2E\u306B\u306A\u308B" },
+        union: { ja: "\u540C\u541B\u9023\u5408", cat: "dyn", dep: "union", months: 1200, needs: ["diplomacy"], merit: "\u4E00\u4EBA\u306E\u541B\u4E3B\u3092\u6234\u304D\u3001\u4E00\u4F53\u3067\u52D5\u304F", cost: "\u5F93\u3046\u5074\u306E\u72EC\u7ACB\u6027\u304C\u8584\u308C\u308B" },
+        succession_pact: { ja: "\u738B\u4F4D\u7D99\u627F\u5354\u5B9A", cat: "dyn", months: 600, needs: ["law"], merit: "\u7D99\u627F\u306E\u4E89\u3044\u304C\u6E1B\u308B", cost: "\u7D99\u627F\u6A29\u3092\u8A8D\u3081\u308B" }
+      });
+      adjustRel = (a, b, d) => {
+        const c = (v) => Math.max(-100, Math.min(100, v));
+        a.relations[b.id] = c((a.relations[b.id] ?? 0) + d);
+        b.relations[a.id] = c((b.relations[a.id] ?? 0) + d);
+      };
+      treatyBetween = (civ, a, b, type) => civ.activeTreatyIds.map((i) => civ.treaties[i]).find((t) => t.active && (!type || t.type === type) && (t.a === a.id && t.b === b.id || t.a === b.id && t.b === a.id));
+      atWarWith = (civ, a, b) => a.warIds.map((i) => civ.wars[i]).some((w) => w.sides.a.includes(b.id) || w.sides.d.includes(b.id));
+      strength = (civ, st) => st.army * milMult(st) * (1 + (st.defense + (st.milDef ?? 0)) * 0.5);
     }
   });
 
@@ -5431,7 +6158,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   }
   function stepClimate(ctx) {
     const { civ, ids: ids2 } = ctx, mi2 = civ.monthIndex, idx = climateIndex(civ, mi2), ph = phaseOf(idx);
-    civ.climate.index = r34(idx);
+    civ.climate.index = r35(idx);
     if (ph !== civ.climate.phase) {
       const old = civ.climate.phase;
       civ.climate.phase = ph;
@@ -5449,7 +6176,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
   function remember(civ, st, kind, sev) {
     var _a;
     const m = (_a = st.memory ?? (st.memory = {})).disaster ?? (_a.disaster = {}), cur = m[kind] ? m[kind].w * Math.pow(0.5, (civ.monthIndex - m[kind].at) / HALF_LIFE) : 0;
-    m[kind] = { w: r34(cur + sev), at: civ.monthIndex };
+    m[kind] = { w: r35(cur + sev), at: civ.monthIndex };
   }
   function stepDisaster(ctx) {
     const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, rate = (civ.options.disasterRate ?? 1) * RATE2;
@@ -5477,7 +6204,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
   }
   function strike(ctx, g0, kind) {
-    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, sev = r34(0.3 + 0.7 * rng()), { terr } = spatialOf(ctx);
+    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex, sev = r35(0.3 + 0.7 * rng()), { terr } = spatialOf(ctx);
     const cells = new Set(territoryOf(world, g0.cell));
     if (kind === "drought") {
       const m = world.mesh;
@@ -5497,7 +6224,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       if (kind === "flood") g.pop = Math.max(5, g.pop * (1 - 0.08 * sev * res));
       else if (kind === "volcano") g.pop = Math.max(5, g.pop * (1 - 0.15 * sev * res));
       if (kind !== "flood") {
-        g.capMult = r34(clamp34(1 - (kind === "drought" ? 0.45 : 0.35) * sev * res, 0.3, 1));
+        g.capMult = r35(clamp34(1 - (kind === "drought" ? 0.45 : 0.35) * sev * res, 0.3, 1));
         g.capUntil = mi2 + months + (kind === "volcano" ? 12 : 6);
       }
       dead += Math.max(0, before - g.pop);
@@ -5515,7 +6242,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       const b = st.stability;
       st.stability = Math.max(0, st.stability - 0.03 * sev * (1 - 0.6 * (st.resilience ?? 0)));
       remember(civ, st, kind, sev);
-      effects.push({ targetId: sid, property: "stability", before: r34(b), after: r34(st.stability) });
+      effects.push({ targetId: sid, property: "stability", before: r35(b), after: r35(st.stability) });
     }
     const ev = makeEvent(civ, ids2, { kind: "disaster_struck", title: `${KIND_JA[kind]}\uFF08\u898F\u6A21 ${Math.round(sev * 100)}\uFF09\u304C\u8D77\u304D\u305F`, participants: [{ entityId: id, role: "disaster" }, ...d.groupIds.slice(0, 8).map((x) => ({ entityId: x, role: "affected" })), ...[...states].slice(0, 4).map((x) => ({ entityId: x, role: "state" }))], location: { cell: g0.cell }, causes: [{ targetId: "world", relation: "enabled_by", basis: "plausible" }].filter(() => false).concat(civ.climate.phase !== "normal" ? [] : []), effects });
     d.eventId = ev.eventId;
@@ -5550,7 +6277,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
     return Math.min(1, s);
   }
-  var KIND_JA, CLIMATE_JA, HALF_LIFE, RATE2, clamp34, r34, phaseOf, climateGrowth, WEIGHT, pickKind, resist;
+  var KIND_JA, CLIMATE_JA, HALF_LIFE, RATE2, clamp34, r35, phaseOf, climateGrowth, WEIGHT, pickKind, resist;
   var init_disaster = __esm({
     "js/core/civ/disaster.js"() {
       init_events();
@@ -5564,7 +6291,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       HALF_LIFE = 1440;
       RATE2 = 0.02;
       clamp34 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
-      r34 = (x) => Math.round(x * 1e3) / 1e3;
+      r35 = (x) => Math.round(x * 1e3) / 1e3;
       phaseOf = (i) => i > 0.35 ? "warm" : i < -0.35 ? "cool" : "normal";
       climateGrowth = (civ) => civ.climate.phase === "cool" ? 0.97 : civ.climate.phase === "warm" ? 1.01 : 1;
       WEIGHT = {
@@ -5637,7 +6364,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     const e = observe(ctx, st), list = def.key === "declare_war" ? [cand("declare_war", {}, { target })] : def.candidates(ctx, st, e);
     return list.find((c) => (c.target ?? null) === (target ?? null) && (c.opt ?? null) === (opt ?? null)) ?? null;
   }
-  var clamp35, cand, bad, r35, eff, spend, free, ACTIONS, ACTION, RECORDED;
+  var clamp35, cand, bad, r36, eff, spend, free, ACTIONS, ACTION, RECORDED;
   var init_actions = __esm({
     "js/core/civ/actions.js"() {
       init_events();
@@ -5654,7 +6381,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       clamp35 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
       cand = (key3, f, o = {}) => ({ key: key3, target: o.target ?? null, opt: o.opt ?? null, factors: f, eligible: o.eligible ?? true, reason: o.reason ?? null, label: o.label ?? null });
       bad = (key3, reason, o = {}) => cand(key3, {}, { ...o, eligible: false, reason });
-      r35 = (x) => Math.round(x * 1e3) / 1e3;
+      r36 = (x) => Math.round(x * 1e3) / 1e3;
       eff = (list, st, property, before, after) => {
         list.push({ targetId: st.id, property, before: typeof before === "number" ? Math.round(before * 1e3) / 1e3 : before, after: typeof after === "number" ? Math.round(after * 1e3) / 1e3 : after });
       };
@@ -5675,7 +6402,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
             return out;
           },
           execute(ctx, st, c) {
-            const ef = [], b = st.policy.tax, a = r35(clamp35(b + (c.opt === "up" ? 0.05 : -0.05), 0.02, 0.4));
+            const ef = [], b = st.policy.tax, a = r36(clamp35(b + (c.opt === "up" ? 0.05 : -0.05), 0.02, 0.4));
             st.policy.tax = a;
             eff(ef, st, "policy.tax", b, a);
             return { ok: true, effects: ef, title: c.opt === "up" ? "\u5897\u7A0E" : "\u6E1B\u7A0E" };
@@ -6001,7 +6728,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
           },
           execute(ctx, st) {
             const ef = [], b = st.policy.autonomy;
-            st.policy.autonomy = r35(clamp35(b + 0.2));
+            st.policy.autonomy = r36(clamp35(b + 0.2));
             eff(ef, st, "policy.autonomy", b, st.policy.autonomy);
             for (const g of byState(ctx).get(st.id) ?? []) for (const c of g.cohorts) c.tension *= 0.85;
             return { ok: true, effects: ef };
@@ -6017,7 +6744,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
           },
           execute(ctx, st) {
             const ef = [], b = st.policy.assimilation;
-            st.policy.assimilation = r35(clamp35(b + 0.2));
+            st.policy.assimilation = r36(clamp35(b + 0.2));
             eff(ef, st, "policy.assimilation", b, st.policy.assimilation);
             return { ok: true, effects: ef };
           }
@@ -6032,7 +6759,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
             return [t < 1 ? cand("set_tolerance", { stability: 0.4 * e.tension, culture: -0.1 }, { opt: "up", label: "\u5BDB\u5BB9" }) : bad("set_tolerance", "\u6700\u5927", { opt: "up" }), t > 0 ? cand("set_tolerance", { culture: 0.3, stability: -0.3 * e.tension }, { opt: "down", label: "\u56FD\u6559\u306E\u5F37\u5316" }) : bad("set_tolerance", "\u6700\u5C0F", { opt: "down" })];
           },
           execute(ctx, st, c) {
-            const ef = [], b = st.policy.tolerance, a = r35(clamp35(b + (c.opt === "up" ? 0.2 : -0.2)));
+            const ef = [], b = st.policy.tolerance, a = r36(clamp35(b + (c.opt === "up" ? 0.2 : -0.2)));
             st.policy.tolerance = a;
             eff(ef, st, "policy.tolerance", b, a);
             return { ok: true, effects: ef };
@@ -6191,1591 +6918,6 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     }
   });
 
-  // js/core/wcde/domains/actions.js
-  var init_actions2 = __esm({
-    "js/core/wcde/domains/actions.js"() {
-      init_actions();
-      init_spatial();
-      init_military();
-      init_doctrine();
-      init_civ_state();
-      init_doctrine();
-      init_politics();
-    }
-  });
-
-  // js/core/wcde/intervention.js
-  var init_intervention = __esm({
-    "js/core/wcde/intervention.js"() {
-      init_effective();
-    }
-  });
-
-  // js/core/wcde/calendar.js
-  var DEFAULT_CALENDAR;
-  var init_calendar = __esm({
-    "js/core/wcde/calendar.js"() {
-      DEFAULT_CALENDAR = Object.freeze({
-        epochName: "",
-        beforeName: "",
-        yearOffset: 0,
-        // v6.6.0: 既定は空白（「紀元」とは名づけない）。 // 表示年 = 内部の年 + yearOffset（内部の年が負なら beforeName の側で数える）
-        format: "{era}{year}\u5E74{month}\u6708",
-        monthNames: null,
-        eras: Object.freeze([])
-      });
-    }
-  });
-
-  // js/core/wcde/config.js
-  var DEFAULT_LAWS, RESOLUTION, BIOME_KEYS;
-  var init_config = __esm({
-    "js/core/wcde/config.js"() {
-      init_spec();
-      init_calendar();
-      init_world_consts();
-      init_civ_state();
-      DEFAULT_LAWS = Object.freeze({ disasterRate: 1, climateVolatility: 1, fertilityScale: 1, faunaRichness: 1, ecoResilience: 1 });
-      RESOLUTION = Object.freeze({ standard: 3e3, extra: 6e3, max: 2e4, choices: Object.freeze([3e3, 6e3]) });
-      BIOME_KEYS = Object.freeze(Object.keys(BIOMES2));
-    }
-  });
-
-  // js/core/wcde/prehistory.js
-  var DEG;
-  var init_prehistory = __esm({
-    "js/core/wcde/prehistory.js"() {
-      init_ids();
-      init_civ_state();
-      init_tick();
-      init_culture();
-      init_events();
-      init_population();
-      init_tech();
-      init_calibration();
-      init_ecosystem();
-      init_species();
-      init_world_consts();
-      init_config();
-      DEG = Math.PI / 180;
-    }
-  });
-
-  // js/core/names/flag.js
-  var FLAG_COLORS, FLAG_FIELDS, FLAG_CHARGES, BIAS, FLAG_BIAS_COUNT;
-  var init_flag = __esm({
-    "js/core/names/flag.js"() {
-      init_civ_state();
-      FLAG_COLORS = Object.freeze({ gold: "#e3b93f", white: "#f4f0e6", red: "#be3329", blue: "#244c9a", green: "#2c7a4d", black: "#1c1c1f", purple: "#68408f", orange: "#d8762a", sky: "#4a9bd4" });
-      FLAG_FIELDS = Object.freeze([
-        ["plain", "\u7121\u5730", 1],
-        ["h2", "\u6A2A\u4E8C\u5206", 2],
-        ["h3", "\u6A2A\u4E09\u5206", 3],
-        ["v2", "\u7E26\u4E8C\u5206", 2],
-        ["v3", "\u7E26\u4E09\u5206", 3],
-        ["pale", "\u7E26\u306E\u592A\u5E2F", 3],
-        ["cross", "\u5317\u6B27\u5341\u5B57", 3],
-        ["saltire", "\u659C\u3081\u5341\u5B57", 2],
-        ["bend", "\u659C\u3081\u5E2F", 2],
-        ["tri", "\u63B2\u63DA\u5074\u306E\u4E09\u89D2", 2],
-        ["canton", "\u89D2\u306E\u56DB\u89D2", 2],
-        ["quarters", "\u56DB\u5206\u5272", 2],
-        ["chevron", "\u5C71\u5F62", 2]
-      ].map(([kind, ja, n2]) => Object.freeze({ kind, ja, n: n2 })));
-      FLAG_CHARGES = Object.freeze([
-        ["none", "\u306A\u3057"],
-        ["disc", "\u5186"],
-        ["ring", "\u8F2A"],
-        ["star4", "\u56DB\u8292\u661F"],
-        ["star5", "\u4E94\u8292\u661F"],
-        ["star8", "\u516B\u8292\u661F"],
-        ["crescent", "\u6708"],
-        ["moonstar", "\u6708\u3068\u661F"],
-        ["diamond", "\u83F1\u5F62"],
-        ["triangle", "\u4E09\u89D2"],
-        ["sun", "\u592A\u967D"],
-        ["cross", "\u5341\u5B57"],
-        ["wave", "\u6CE2"]
-      ].map(([kind, ja]) => Object.freeze({ kind, ja })));
-      BIAS = Object.freeze([
-        { main: ["red", "black", "blue"], metal: ["gold", "white"] },
-        { main: ["green", "red", "blue"], metal: ["white", "gold"] },
-        { main: ["blue", "red", "green"], metal: ["white", "gold"] },
-        { main: ["black", "red", "purple"], metal: ["gold", "white"] },
-        { main: ["red", "orange", "green"], metal: ["gold", "white"] },
-        { main: ["sky", "blue", "green"], metal: ["white", "gold"] }
-      ]);
-      FLAG_BIAS_COUNT = BIAS.length;
-    }
-  });
-
-  // js/core/wcde/control.js
-  var FIELDS2, EDITABLE_STATE_FIELDS;
-  var init_control = __esm({
-    "js/core/wcde/control.js"() {
-      init_states();
-      init_events();
-      init_decisions();
-      FIELDS2 = {
-        name: { get: (s) => s.name, set: (s, v) => {
-          s.name = v;
-          s.nameBase = null;
-        }, check: (v) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 30 ? v.trim() : null },
-        polity: { get: (s) => s.polity, set: (s, v) => {
-          s.polity = v;
-        }, check: (v) => v in POLITY ? v : null },
-        "policy.tax": { get: (s) => s.policy.tax, set: (s, v) => {
-          s.policy.tax = v;
-        }, check: (v) => typeof v === "number" && v >= 0.02 && v <= 0.4 ? v : null },
-        "policy.mobilization": { get: (s) => s.policy.mobilization, set: (s, v) => {
-          s.policy.mobilization = v;
-        }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
-        "policy.tolerance": { get: (s) => s.policy.tolerance, set: (s, v) => {
-          s.policy.tolerance = v;
-        }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
-        "policy.assimilation": { get: (s) => s.policy.assimilation, set: (s, v) => {
-          s.policy.assimilation = v;
-        }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
-        "policy.autonomy": { get: (s) => s.policy.autonomy, set: (s, v) => {
-          s.policy.autonomy = v;
-        }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
-        treasury: { get: (s) => s.treasury, set: (s, v) => {
-          s.treasury = v;
-        }, check: (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e7 ? v : null },
-        stability: { get: (s) => s.stability, set: (s, v) => {
-          s.stability = v;
-        }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
-        "leader.name": { get: (s) => s.leader.name, set: (s, v) => {
-          s.leader.name = v;
-        }, check: (v) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 30 ? v.trim() : null }
-      };
-      EDITABLE_STATE_FIELDS = Object.freeze(Object.keys(FIELDS2));
-    }
-  });
-
-  // js/core/wcde/founding.js
-  function assignOffices(ctx, st, ids2, { keep = null } = {}) {
-    const { civ } = ctx, cap = civ.groups[st.capitalGroupId] ?? Object.values(civ.groups).find((g) => g.stateId === st.id), r = REGIMES2[regimeOf2(st)], old = new Map((keep ?? st.offices ?? []).map((o) => [o.id, o]));
-    st.offices = ids2.map((id) => {
-      if (id === r.ruler) return { id, holder: { name: st.leader.name, look: st.leader.look ?? 0 }, since: old.get(id)?.since ?? civ.monthIndex };
-      const o = old.get(id);
-      if (o) return o;
-      const rng = leaderRng(civ, st, "office", id);
-      return { id, holder: { name: personName2(ctx, civ, cap, rng), look: Math.floor(rng() * LOOKS) }, since: civ.monthIndex };
-    });
-    st.interpDirty = true;
-    return st.offices;
-  }
-  var LEADER_TRAITS, LOOKS, personName2;
-  var init_founding = __esm({
-    "js/core/wcde/founding.js"() {
-      init_tech();
-      init_states();
-      init_spatial();
-      init_population();
-      init_events();
-      init_naming();
-      init_flag();
-      init_species();
-      init_language();
-      init_control();
-      init_military();
-      init_regimes();
-      LEADER_TRAITS = Object.freeze({ valiant: "\u52C7\u731B", wise: "\u8CE2\u660E", merciful: "\u6148\u60B2\u6DF1\u3044", ambitious: "\u91CE\u5FC3\u5BB6", devout: "\u656C\u8654", frugal: "\u5039\u7D04", diplomat: "\u5916\u4EA4\u5BB6", strategist: "\u6226\u7565\u5BB6", popular: "\u4EBA\u671B", sickly: "\u75C5\u5F31" });
-      LOOKS = 12;
-      personName2 = (ctx, civ, cap, rng) => ctx.nameGen?.person?.(civ, cap, rng) ?? "\u540D\u3082\u306A\u304D\u4EBA";
-    }
-  });
-
-  // js/core/wcde/rebirth.js
-  var init_rebirth = __esm({
-    "js/core/wcde/rebirth.js"() {
-      init_civ_state();
-      init_events();
-      init_states();
-      init_prehistory();
-      init_language();
-      init_religion();
-      init_founding();
-    }
-  });
-
-  // js/core/wcde/catastrophe.js
-  var init_catastrophe = __esm({
-    "js/core/wcde/catastrophe.js"() {
-      init_events();
-      init_civ_state();
-      init_states();
-      init_rebirth();
-    }
-  });
-
-  // js/core/wcde/integrity.js
-  var init_integrity = __esm({
-    "js/core/wcde/integrity.js"() {
-      init_archive();
-      init_doctrine();
-      init_warfare();
-      init_politics();
-      init_intervention();
-      init_clock();
-      init_decisions();
-      init_catastrophe();
-    }
-  });
-
-  // js/core/wcde/warlab.js
-  var init_warlab = __esm({
-    "js/core/wcde/warlab.js"() {
-      init_power();
-      init_effective();
-    }
-  });
-
-  // js/core/wcde/regime-evolution.js
-  function changeScale(from, to) {
-    const gap = Math.abs(tierOf3(to) - tierOf3(from)), fam = familyOf2(from) !== familyOf2(to) ? 1 : 0, aut = familyOf2(to) === "aut" !== (familyOf2(from) === "aut") ? 1 : 0;
-    return clamp36(0.08 + gap * 0.06 + fam * 0.25 + aut * 0.25);
-  }
-  function gateFor(ctx, st, id) {
-    const civ = ctx.civ, g = civ.groups[st.capitalGroupId];
-    if (!g) return "\u9996\u90FD\u304C\u306A\u3044";
-    const r = REGIMES2[id], why = regimeGate(civ, g, id);
-    if (why) return why;
-    if (id === "direct_democracy" && st.pop > 2e5 && (st.techAdopted?.public_education == null && g.tech.known.public_education == null)) return "\u5927\u304D\u306A\u56FD\u306E\u6C11\u4E3B\u5236\u306B\u306F\u516C\u6559\u80B2\u304C\u8981\u308B";
-    if ((st.pop ?? 0) < (MIN_POP[r.core] ?? 0)) return "\u4EBA\u53E3\u304C\u8DB3\u308A\u306A\u3044";
-    const size = byState(ctx).get(st.id)?.length ?? 0;
-    if (id === "empire" && size < 12) return "\u9818\u571F\u304C\u5C0F\u3055\u3044";
-    if (id === "city_state" && size > 3) return "\u9818\u571F\u304C\u5E83\u3059\u304E\u308B";
-    return null;
-  }
-  function regimeCandidates(ctx, st, pressure = 0) {
-    const cur = regimeOf2(st), curT = tierOf3(cur), curF = familyOf2(cur), out = [], nbs = neighborStates(ctx, st), share = {};
-    for (const n2 of nbs) {
-      const id = regimeOf2(ctx.civ.states[n2]);
-      share[id] = (share[id] ?? 0) + 1 / Math.max(1, nbs.length);
-    }
-    for (const id of REGIME_IDS) {
-      if (id === cur || REGIMES2[id].crisisOnly || gateFor(ctx, st, id)) continue;
-      const gap = tierOf3(id) - curT, f = familyOf2(id);
-      if (gap < -1) continue;
-      let w = gap >= 0 ? 1 + gap * 0.5 : 0.2;
-      w *= f === curF ? 1 : pressure > 0.25 ? 0.3 : 0.05;
-      if (f === "aut" && curF !== "aut") w *= pressure > 0.35 ? 1 : 0.1;
-      w *= (1 + 2 * (share[id] ?? 0)) * (RARITY[id] ?? 1);
-      out.push({ id, w, gap });
-    }
-    return out;
-  }
-  function switchRegime(ctx, st, to, how = "reform") {
-    const { civ, ids: ids2 } = ctx, P5 = st.politics ?? (st.politics = initPolitics(st)), from = regimeOf2(st), R = REGIMES2[to], mi2 = civ.monthIndex;
-    if (!R || from === to) return null;
-    const scale = changeScale(from, to), oldName = st.name, polityBefore = st.polity;
-    if (R.core !== st.polity) {
-      const hw = how === "imitation" || how === "conquest" ? "reform" : how;
-      reformPolity(ctx, st, P5, R.core, { reform: "reform", revolution: "revolution", military_takeover: "military_takeover", decline: "decline" }[hw] ?? "reform");
-    }
-    st.regime = to;
-    P5.lastRegimeChange = mi2;
-    st.regimeSince = mi2;
-    (st.regimeHistory ?? (st.regimeHistory = [])).push({ at: mi2, from, to, how });
-    if (st.regimeHistory.length > 8) st.regimeHistory.shift();
-    st.stability = clamp36(st.stability - 0.02 - 0.16 * scale);
-    const f = P5.factions;
-    if (f) {
-      const k = familyOf2(from) !== familyOf2(to) ? 0.12 * scale + 0.04 : 0.02;
-      for (const x of Object.keys(f)) f[x].support = clamp36(f[x].support - (x === "nobility" || x === "clergy" ? k * 1.4 : k * 0.6));
-    }
-    let rt = null;
-    if (polityBefore === st.polity) {
-      rt = retitle(st, st.polity, civ.date.year);
-      if (rt && rt.name !== st.name) {
-        st.name = rt.name;
-        st.nameBase = rt.base;
-        st.titleYear = rt.year;
-      } else rt = null;
-    }
-    st.offices = null;
-    if (st.player) assignOffices(ctx, st, defaultOffices(to));
-    st.interpDirty = true;
-    makeEvent(civ, ids2, { kind: "regime_change", title: `${oldName}\u306E\u653F\u4F53\u304C${REGIMES2[from].ja}\u304B\u3089${R.ja}\u3078\u79FB\u3063\u305F\uFF08${HOW_JA2[how] ?? how}\uFF09${rt ? `\u3002\u56FD\u53F7\u306F${rt.name}\u3068\u6539\u307E\u3063\u305F` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "regime", before: from, after: to }], facts: { stateId: st.id, regime: to, from, by: how, scale: Math.round(scale * 100) / 100 }, provenance: "simulation" });
-    return { from, to, how, scale };
-  }
-  var clamp36, REGIME_META, tierOf3, familyOf2, RARITY, MIN_POP, HOW_JA2;
-  var init_regime_evolution = __esm({
-    "js/core/wcde/regime-evolution.js"() {
-      init_regimes();
-      init_founding();
-      init_politics();
-      init_naming();
-      init_diplomacy();
-      init_spatial();
-      init_events();
-      init_civ_state();
-      init_effective();
-      clamp36 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
-      REGIME_META = Object.freeze({
-        tribal: [0, "tri"],
-        chiefdom: [1, "tri"],
-        city_state: [2, "tri"],
-        theocracy: [2, "the"],
-        kingdom: [3, "mon"],
-        oligarchic_republic: [3, "rep"],
-        direct_democracy: [3, "rep"],
-        empire: [4, "mon"],
-        feudal: [4, "mon"],
-        clerical_state: [4, "the"],
-        merchant_republic: [5, "rep"],
-        elective_monarchy: [5, "mon"],
-        despotism: [6, "mon"],
-        constitutional_monarchy: [7, "mon"],
-        confederation: [7, "rep"],
-        anarchist: [7, "anar"],
-        parliamentary: [8, "rep"],
-        presidential: [8, "rep"],
-        socialist: [8, "aut"],
-        junta: [8, "aut"],
-        one_party: [9, "aut"],
-        totalitarian: [9, "aut"],
-        technocracy: [10, "aut"],
-        adv_direct_democracy: [11, "rep"]
-      });
-      tierOf3 = (id) => REGIME_META[id]?.[0] ?? 0;
-      familyOf2 = (id) => REGIME_META[id]?.[1] ?? "tri";
-      RARITY = { adv_direct_democracy: 0.3, technocracy: 0.45, totalitarian: 0.5, junta: 0.6, one_party: 0.7 };
-      MIN_POP = { tribal: 0, chiefdom: 0, theocracy: 0, kingdom: 2e3, republic: 300, empire: 6e4 };
-      HOW_JA2 = { reform: "\u5236\u5EA6\u306E\u6539\u9769", revolution: "\u9769\u547D", military_takeover: "\u8ECD\u306B\u3088\u308B\u6A29\u529B\u306E\u638C\u63E1", conquest: "\u5F81\u670D\u306B\u3088\u308B\u5927\u56FD\u5316", decline: "\u4E2D\u592E\u306E\u8870\u9000", imitation: "\u96A3\u56FD\u306B\u306A\u3089\u3063\u305F\u6539\u9769" };
-    }
-  });
-
-  // js/core/wcde/treaty-ai.js
-  var init_treaty_ai = __esm({
-    "js/core/wcde/treaty-ai.js"() {
-      init_diplomacy();
-      init_civ_state();
-      init_negotiation();
-      init_dependency();
-    }
-  });
-
-  // js/core/wcde/events-data.js
-  var CATEGORIES, ARCH, parseCond, parseCh, EVENTS2, E, EVENT_BY_ID;
-  var init_events_data = __esm({
-    "js/core/wcde/events-data.js"() {
-      CATEGORIES = Object.freeze({ ppl: "\u4EBA\u7269", dyn: "\u738B\u5BB6\u7D99\u627F", cou: "\u653F\u5909\u30FB\u9769\u547D", dip: "\u5916\u4EA4", war: "\u6226\u4E89\u30FB\u8ECD\u4E8B", rel: "\u5B97\u6559", eco: "\u7D4C\u6E08\u30FB\u793E\u4F1A", dis: "\u707D\u5BB3\u30FB\u75AB\u75C5", cul: "\u6587\u5316\u30FB\u6280\u8853", odd: "\u5947\u8B5A" });
-      ARCH = Object.freeze({
-        person: ["bur+3 stab+1 tre-1 nob-2", "tre-3 stab+2 leg+1", "stab-1 mil+2 leg-1 nob+1", "stab-1"],
-        tragedy_royal: ["stab+2 tre-3 nob+2", "stab-1 mil+2 leg+1", "stab-3 nob-4 mil+3", "stab-2"],
-        coup_threat: ["stab+3 mil-6 army-2 leg-2", "mil+4 tre-4 stab+1", "com+4 mil-3 stab-1 tre-1", "stab-3 mil+1"],
-        succession_crisis: ["stab+2 nob-3 leg-2 mil+2", "stab+3 nob+3 tre-2 leg+1", "relF+6 nob-4 stab-1 tre-1", "stab-4 nob-2"],
-        crisis: ["stab+4 tre-2 com-4 mil+2", "stab+2 tre-4 nob-3 leg+1", "tre+3 stab-3 mer+3 com-2", "stab-5 tens+2"],
-        diplomacy_chance: ["relF+10 tre-1 relR-3", "relF+7 nob+2 tre-2", "relF+5 mer+3 tre+1", "relF-1"],
-        war_threat: ["army+4 tre-3 com-2 stab-1 relR-5", "tre-3 relR+8 mil-3 stab-1", "relF+6 tre-1 relR-4 stab+1", "stab-2 army-1"],
-        border: ["army+2 relR-12 mil+3 stab+1 tre-2", "relR+5 tre-1 mil-2", "tre-3 army+3 relR-3", "stab-2 relR-3"],
-        opportunity_war: ["army-2 mil+3 tre-2 relR-10", "relR-6 tre+2 stab+1", "relR+8 mer+2 mil-3", "mil-2"],
-        reform: ["stab-2 bur+4 nob-4 tre-2 leg+1", "stab+1 bur+2 nob-1 tre-1", "com+3 nob-3 stab-1", "stab-1 bur-1"],
-        rebel_peasant: ["stab+2 com-5 tre-2 pop-1 army-1", "stab+3 nob-4 tre-3", "stab+1 tre-2 com-2 mil+2", "stab-4 tens+3 pop-1"],
-        rebel_noble: ["army-3 tre-3 nob-5 stab+1 mil+3", "nob+4 tre-3 leg-2 stab+2", "relF+3 nob-2 tre-1 leg-2", "stab-3 nob+1 leg-2"],
-        fiscal: ["tre+5 com-4 stab-3", "tre+3 nob-3 mil-2 stab-1", "tre+5 relF-3 leg-1", "tre-3 stab-2"],
-        omen: ["stab+3 clr+3 com+1 leg+1 tre-1", "stab-1 clr-2", "tre-2 art+2 clr-3 bur+1", "stab-1"],
-        religion_move: ["clr+5 stab+2 tre-3 art-1", "stab+1 clr-3 mer+2 art+2", "stab+1 clr+2 com-4 tens+3", "stab-1 clr-1"],
-        trade_boom: ["tre-3 mer+4 stab+1", "tre+5 mer-4 stab-1", "tre+3 mer-2 relA-2", "mer+1"],
-        culture_boom: ["tre-3 art+4 stab+2 leg+1", "stab+1 art-3 clr+2", "tre+3 art+2 relA+1", "art+1"],
-        tech_boom: ["tre-4 bur+3 art+3 stab+1", "tre-1 mil+3 relA-2", "tre-3 stab-2 mer+3", "bur-1"],
-        plague: ["pop-1 stab+2 tre-3 mer-3", "stab+3 clr+4 pop-3 tre-1", "tre-5 pop-1 bur+3 art+2", "pop-5 stab-4"],
-        famine: ["tre-4 stab+3 pop-1", "stab-1 com-4 mil+2 tre+1 pop-1", "tre-3 mer+3 relF+3", "pop-4 stab-4 tens+3"],
-        disaster: ["tre-5 stab+3 pop-1", "clr+4 stab+1 pop-2", "tre+1 com-4 stab-2 pop-3", "pop-3 stab-3"]
-      });
-      parseCond = (s) => {
-        const c = { w: 1 };
-        for (const t of String(s).split(/\s+/).filter(Boolean)) {
-          let m;
-          if (m = /^e(\d)(?:-(\d))?$/.exec(t)) {
-            c.e = [+m[1], m[2] != null ? +m[2] : +m[1]];
-          } else if (t.startsWith("po:")) c.po = t.slice(3).split(",");
-          else if (t === "her" || t === "nher" || t === "war" || t === "nwar" || t === "lows" || t === "highs" || t === "poor" || t === "rich" || t === "big" || t === "small" || t === "coast" || t === "rival" || t === "friend" || t === "only") c[t] = true;
-          else if (m = /^w(\d)$/.exec(t)) c.w = +m[1];
-        }
-        return c;
-      };
-      parseCh = (s) => String(s).split(",").filter(Boolean).map((t) => {
-        const [body, only] = t.split("@"), [id, d, p] = body.split(":");
-        return { id, delay: +d, p: +p, only: only != null ? only.split("").map(Number) : null };
-      }).filter((c) => c.p > 0);
-      EVENTS2 = [];
-      E = (id, cat, arch, title, body, opts, cond = "", ch = "", x = null) => EVENTS2.push({ id, cat, arch, title, body, opts, cond: parseCond(cond), ch: parseCh(ch), x });
-      E("gen_rise", "ppl", "person", "\u8FBA\u5883\u306E\u540D\u5C06\u304C\u982D\u89D2\u3092\u73FE\u3059", "{s}\u306E\u56FD\u5883\u3067\u3001\u7121\u540D\u306E\u5C06\u304C\u7570\u6C11\u65CF\u3092\u6483\u9000\u3057\u3001\u5175\u306E\u4EBA\u6C17\u3092\u96C6\u3081\u305F\u3002", ["\u8981\u8077\u306B\u767B\u7528\u3059\u308B", "\u6069\u8CDE\u3092\u4E0E\u3048\u9060\u3056\u3051\u308B", "\u8B66\u6212\u3057\u3066\u76E3\u8996\u3059\u308B"], "e1-5 nwar", "gen_coup:18:.35@2,hero_general:24:.4@0");
-      E("hero_general", "ppl", "person", "\u6C11\u8846\u304C\u82F1\u96C4\u3068\u8B83\u3048\u308B\u5C06\u8ECD", "{s}\u306E\u5C06\u8ECD\u306E\u6226\u529F\u306F\u3001\u5E02\u4E95\u306E\u6B4C\u306B\u307E\u3067\u306A\u3063\u305F\u3002", ["\u51F1\u65CB\u5F0F\u3092\u958B\u304F", "\u540D\u8A89\u8077\u3067\u9047\u3059\u308B", "\u5730\u65B9\u3078\u51FA\u3059"], "e1-5 only", "acclaimed_emperor:20:.4@0,gen_coup:16:.3@2");
-      E("acclaimed_emperor", "ppl", "coup_threat", "\u5C06\u8ECD\u304C\u7687\u5E1D\u3068\u3057\u3066\u63A8\u6234\u3055\u308C\u308B", "\u8ECD\u3068\u6C11\u8846\u306F\u3001\u52DD\u3061\u7D9A\u3051\u305F\u5C06\u8ECD\u306E\u5373\u4F4D\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u63A8\u6234\u3092\u53D7\u3051\u5165\u308C\u308B", "\u5F62\u3060\u3051\u8F9E\u9000\u3057\u3066\u53D7\u3051\u308B", "\u63A8\u6234\u3092\u62D2\u307F\u5FE0\u8AA0\u3092\u8A93\u308F\u305B\u308B"], "e1-5 only", "civil_war_outbreak:14:.3@2", ["ldr:coup", "ldr:coup", ""]);
-      E("able_vizier", "ppl", "person", "\u6709\u80FD\u306A\u5BB0\u76F8\u304C\u56FD\u653F\u3092\u6574\u3048\u308B", "{L}\u306F\u3001\u624D\u3042\u308B\u3082\u306E\u3092\u8EAB\u5206\u3092\u554F\u308F\u305A\u5BB0\u76F8\u306B\u636E\u3048\u305F\u3002", ["\u5168\u6A29\u3092\u59D4\u306D\u308B", "\u88DC\u4F50\u5F79\u306B\u3068\u3069\u3081\u308B", "\u8CB4\u65CF\u306E\u53CD\u767A\u3092\u6291\u3048\u308B"], "e1-5");
-      E("corrupt_vizier", "ppl", "person", "\u5BB0\u76F8\u306E\u6C5A\u8077\u304C\u9732\u898B\u3059\u308B", "\u5BAE\u5EF7\u306E\u8CA1\u304C\u3001\u5BB0\u76F8\u306E\u5C4B\u6577\u306B\u6D41\u308C\u3066\u3044\u305F\u3002", ["\u51E6\u5211\u3057\u3066\u898B\u305B\u3057\u3081\u306B", "\u7F77\u514D\u306E\u307F\u3067\u6E08\u307E\u305B\u308B", "\u4E0D\u554F\u306B\u4ED8\u3059"], "e1-5 poor");
-      E("prince_rebel", "ppl", "tragedy_royal", "\u738B\u5B50\u304C\u7236\u306B\u80CC\u304F", "{L}\u306E\u4E16\u7D99\u304E\u304C\u3001\u5EF7\u81E3\u3068\u8B00\u3063\u3066\u7236\u306B\u53CD\u6297\u3057\u305F\u3002", ["\u738B\u5B50\u3092\u5E7D\u9589\u3059\u308B", "\u8A31\u3057\u3066\u548C\u89E3\u3059\u308B", "\u5EC3\u5AE1\u3057\u5F1F\u3092\u7ACB\u3066\u308B"], "e1-5 her", "succ_dispute:10:.35@2");
-      E("heir_genius", "ppl", "person", "\u795E\u7AE5\u3068\u547C\u3070\u308C\u308B\u4E16\u7D99\u304E", "{s}\u306E\u4E16\u7D99\u304E\u306F\u3001\u5E7C\u304F\u3057\u3066\u5B66\u554F\u3068\u6B66\u82B8\u306B\u79C0\u3067\u305F\u3002", ["\u540D\u5E2B\u3092\u3064\u3051\u80B2\u3066\u308B", "\u6C11\u306B\u59FF\u3092\u898B\u305B\u4EBA\u6C17\u3092\u9AD8\u3081\u308B", "\u6162\u5FC3\u3092\u6050\u308C\u3066\u96A0\u3059"], "e1-5 her");
-      E("heir_wastrel", "ppl", "tragedy_royal", "\u4E16\u7D99\u304E\u306E\u653E\u8569", "{s}\u306E\u4E16\u7D99\u304E\u306F\u3001\u904A\u8208\u306B\u6EBA\u308C\u3001\u501F\u8CA1\u3092\u91CD\u306D\u3066\u3044\u308B\u3002", ["\u53B3\u3057\u304F\u77EF\u6B63\u3059\u308B", "\u501F\u8CA1\u3092\u80A9\u4EE3\u308F\u308A\u3059\u308B", "\u5F1F\u3092\u5F8C\u7D99\u306B\u63A8\u3059"], "e1-5 her", "succ_dispute:20:.3@2");
-      E("royal_physician", "ppl", "person", "\u540D\u533B\u304C\u5BAE\u5EF7\u306B\u4ED5\u3048\u308B", "\u9060\u65B9\u304B\u3089\u540D\u533B\u304C\u62DB\u304B\u308C\u3001{L}\u306E\u6301\u75C5\u3092\u3084\u308F\u3089\u3052\u305F\u3002", ["\u539A\u304F\u9047\u3057\u7559\u3081\u308B", "\u5B66\u9662\u3092\u4F5C\u3089\u305B\u308B", "\u7570\u56FD\u306E\u8005\u3068\u8B66\u6212\u3059\u308B"], "e1-5");
-      E("war_hero_return", "ppl", "person", "\u8001\u5C06\u306E\u5E30\u9084", "\u9577\u5E74\u7570\u90F7\u3067\u6226\u3063\u305F\u8001\u5C06\u304C\u3001\u6545\u90F7{s}\u306B\u623B\u3063\u3066\u304D\u305F\u3002", ["\u9867\u554F\u306B\u8FCE\u3048\u308B", "\u9818\u5730\u3092\u4E0E\u3048\u5F15\u9000\u3055\u305B\u308B", "\u65B0\u5175\u306E\u6559\u7DF4\u3092\u4EFB\u305B\u308B"], "e1-5 nwar");
-      E("prophet_beggar", "ppl", "omen", "\u7269\u4E5E\u3044\u306E\u9810\u8A00\u8005", "\u8857\u89D2\u306E\u7269\u4E5E\u3044\u304C\u3001{s}\u306E\u884C\u304F\u672B\u3092\u8A00\u3044\u5F53\u3066\u305F\u3068\u5642\u3055\u308C\u308B\u3002", ["\u5BAE\u5EF7\u306B\u62DB\u304F", "\u805E\u304D\u6D41\u3059", "\u98A8\u8AAC\u3092\u7981\u3058\u308B"], "e1-4");
-      E("court_poet", "ppl", "person", "\u5BAE\u5EF7\u8A69\u4EBA\u306E\u98A8\u523A", "\u8A69\u4EBA\u304C\u3001{L}\u306E\u6CBB\u4E16\u3092\u76AE\u8089\u308B\u8A69\u3092\u5E02\u4E2D\u306B\u5E83\u3081\u305F\u3002", ["\u8A69\u4EBA\u3092\u7F70\u3059\u308B", "\u8A69\u4EBA\u3092\u5E87\u8B77\u3059\u308B", "\u540C\u3058\u8A69\u3067\u56FD\u5A01\u3092\u5BA3\u63DA\u3055\u305B\u308B"], "e1-5");
-      E("cruel_governor", "ppl", "crisis", "\u82DB\u653F\u306E\u7DCF\u7763", "\u9060\u9694\u5730\u306E\u7DCF\u7763\u304C\u3001\u6C11\u304B\u3089\u904E\u9177\u306A\u53D6\u308A\u7ACB\u3066\u3092\u884C\u3063\u3066\u3044\u308B\u3002", ["\u89E3\u4EFB\u3057\u3066\u7F70\u3059\u308B", "\u69D8\u5B50\u3092\u898B\u308B", "\u53D6\u308A\u7ACB\u3066\u3092\u56FD\u5EAB\u306B\u56DE\u3055\u305B\u308B"], "e1-5 big", "peasant_revolt:12:.25@12");
-      E("honest_judge", "ppl", "person", "\u6E05\u5EC9\u306A\u88C1\u5224\u5B98", "\u8CA7\u3057\u3044\u8005\u306B\u3082\u516C\u5E73\u306A\u88C1\u304D\u3092\u4E0B\u3059\u88C1\u5224\u5B98\u304C\u6C11\u306E\u4FE1\u3092\u96C6\u3081\u305F\u3002", ["\u6CD5\u5B98\u306B\u6607\u683C\u3055\u305B\u308B", "\u8912\u8CDE\u3092\u4E0E\u3048\u308B", "\u8CB4\u65CF\u306E\u53CD\u767A\u304B\u3089\u5B88\u308B"], "e1-5");
-      E("foreign_advisor", "ppl", "person", "\u7570\u56FD\u4EBA\u306E\u9867\u554F", "{f}\u304B\u3089\u6765\u305F\u8CE2\u8005\u304C\u3001{s}\u306E\u7D71\u6CBB\u3078\u306E\u52A9\u8A00\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u9867\u554F\u306B\u4EFB\u3058\u308B", "\u5B66\u554F\u306E\u307F\u53D7\u3051\u5165\u308C\u308B", "\u56FD\u653F\u306B\u8FD1\u3065\u3051\u306A\u3044"], "e1-5 friend");
-      E("spy_caught", "ppl", "omen", "\u4ED6\u56FD\u306E\u9593\u8005\u3092\u6355\u3089\u3048\u308B", "{r}\u306E\u9593\u8005\u304C\u5BAE\u5EF7\u306B\u6F5C\u3093\u3067\u3044\u305F\u3053\u3068\u304C\u308F\u304B\u3063\u305F\u3002", ["\u516C\u958B\u51E6\u5211\u3059\u308B", "\u4E8C\u91CD\u9593\u8005\u306B\u4ED5\u7ACB\u3066\u308B", "\u79D8\u5BC6\u88CF\u306B\u9001\u9084\u3059\u308B"], "e1-5 rival");
-      E("assassin_attempt", "ppl", "tragedy_royal", "\u6697\u6BBA\u672A\u9042", "{L}\u306E\u98DF\u4E8B\u306B\u6BD2\u304C\u76DB\u3089\u308C\u3066\u3044\u305F\u3002\u4F01\u3066\u305F\u8005\u306F\u4E0D\u660E\u3067\u3042\u308B\u3002", ["\u5927\u898F\u6A21\u306A\u7C9B\u6E05\u3092\u884C\u3046", "\u8B77\u885B\u3092\u5F37\u5316\u3059\u308B", "\u72AF\u4EBA\u63A2\u3057\u3092\u63A7\u3048\u5E73\u9759\u3092\u88C5\u3046"], "e1-5", "dictator_assassination:30:.25@2");
-      E("dictator_assassination", "ppl", "tragedy_royal", "\u6307\u5C0E\u8005\u6697\u6BBA", "{L}\u304C\u3001\u5074\u8FD1\u306E\u51F6\u5203\u306B\u5012\u308C\u305F\u3002\u56FD\u306F\u52D5\u63FA\u3057\u3066\u3044\u308B\u3002", ["\u9996\u8B00\u8005\u3092\u8FFD\u53CA\u3059\u308B", "\u5F8C\u7D99\u3092\u6025\u304E\u5B9A\u3081\u308B", "\u56FD\u846C\u3067\u7D50\u675F\u3092\u56F3\u308B"], "e1-5 only", "succ_dispute:4:.7,revolution_breaks:18:.25@0", ["", "ldr:assn", "ldr:assn"]);
-      E("beloved_leader_dies", "ppl", "tragedy_royal", "\u6155\u308F\u308C\u305F\u6307\u5C0E\u8005\u306E\u6B7B", "\u6C11\u306B\u611B\u3055\u308C\u305F{L}\u304C\u4E16\u3092\u53BB\u308A\u3001\u56FD\u4E2D\u304C\u55AA\u306B\u670D\u3057\u305F\u3002", ["\u76DB\u5927\u306A\u56FD\u846C\u3092\u55B6\u3080", "\u7C21\u7D20\u306B\u6E08\u307E\u305B\u308B", "\u8FFD\u60BC\u3092\u653F\u6CBB\u306B\u5229\u7528\u3059\u308B"], "e1-5", "succ_dispute:6:.3");
-      E("exile_returns", "ppl", "coup_threat", "\u4EA1\u547D\u8005\u306E\u5E30\u9084", "\u5916\u56FD\u306B\u9003\u308C\u3066\u3044\u305F\u524D\u306E\u738B\u65CF\u304C\u3001\u5E30\u56FD\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u8FCE\u3048\u5165\u308C\u308B", "\u56FD\u5883\u3067\u62D2\u3080", "\u5916\u56FD\u306B\u5F15\u304D\u6E21\u3059"], "e1-5 her", "succ_dispute:12:.3@0");
-      E("female_ruler_rumor", "ppl", "person", "\u5973\u5091\u306E\u8A55\u5224", "{s}\u306B\u3001\u8ECD\u3082\u653F\u3082\u52D5\u304B\u3059\u3068\u8A55\u5224\u306E\u5973\u6027\u304C\u73FE\u308C\u305F\u3002", ["\u653F\u52D9\u306B\u52A0\u3048\u308B", "\u8A55\u5224\u3092\u5229\u7528\u3059\u308B", "\u5BAE\u5EF7\u304B\u3089\u9060\u3056\u3051\u308B"], "e1-5");
-      E("mercenary_captain", "ppl", "coup_threat", "\u50AD\u5175\u968A\u9577\u306E\u58F2\u308A\u8FBC\u307F", "\u540D\u9AD8\u3044\u50AD\u5175\u968A\u9577\u304C\u3001\u9AD8\u984D\u3067{s}\u306B\u4ED5\u3048\u305F\u3044\u3068\u8A00\u3046\u3002", ["\u96C7\u3044\u5165\u308C\u308B", "\u65AD\u308B", "\u76F8\u624B\u56FD\u306B\u96C7\u308F\u305B\u306A\u3044"], "e1-5 war");
-      E("tutor_scholar", "ppl", "culture_boom", "\u5B66\u8005\u3092\u5BB6\u5EAD\u6559\u5E2B\u306B", "\u8457\u540D\u306A\u5B66\u8005\u304C\u3001\u4E16\u7D99\u304E\u306E\u5E2B\u3068\u306A\u308B\u3002", ["\u624B\u539A\u304F\u8FCE\u3048\u308B", "\u5BAE\u5EF7\u4ED8\u3051\u306B\u3068\u3069\u3081\u308B", "\u7570\u7AEF\u3068\u9000\u3051\u308B"], "e1-5 her");
-      E("old_king_abdicates", "ppl", "succession_crisis", "\u8001\u738B\u306E\u9000\u4F4D", "\u9AD8\u9F62\u306E{L}\u304C\u3001\u5F8C\u9032\u306B\u9053\u3092\u8B72\u308A\u305F\u3044\u3068\u8A00\u3044\u51FA\u3057\u305F\u3002", ["\u9000\u4F4D\u3092\u8A8D\u3081\u308B", "\u7D9A\u6295\u3092\u6C42\u3081\u308B", "\u6442\u653F\u3092\u7F6E\u304F"], "e1-5 her", "succ_dispute:6:.2@1");
-      E("hunt_accident", "ppl", "tragedy_royal", "\u72E9\u731F\u3067\u306E\u4E8B\u6545", "\u72E9\u308A\u306E\u6700\u4E2D\u306B{L}\u304C\u843D\u99AC\u3057\u3001\u91CD\u50B7\u3092\u8CA0\u3063\u305F\u3002", ["\u6700\u9AD8\u306E\u533B\u8005\u3092\u96C6\u3081\u308B", "\u7948\u7977\u306B\u3059\u304C\u308B", "\u4E8B\u5B9F\u3092\u4F0F\u305B\u308B"], "e1-5 her", "king_sudden_death:3:.3@2");
-      E("royal_marriage_love", "ppl", "tragedy_royal", "\u8EAB\u5206\u9055\u3044\u306E\u604B", "{L}\u304C\u3001\u8CB4\u65CF\u3067\u306A\u3044\u5A18\u3068\u306E\u7D50\u5A5A\u3092\u671B\u3093\u3067\u3044\u308B\u3002", ["\u8A31\u3057\u3066\u7D50\u5A5A\u3059\u308B", "\u8AE6\u3081\u3055\u305B\u308B", "\u990A\u5973\u306E\u5F62\u306B\u3057\u3066\u7D50\u5A5A\u3059\u308B"], "e1-5 her");
-      E("elder_wisdom", "ppl", "person", "\u9577\u8001\u305F\u3061\u306E\u8AEB\u8A00", "{s}\u306E\u9577\u8001\u305F\u3061\u304C\u3001{L}\u306B\u653F\u7B56\u306E\u8EE2\u63DB\u3092\u6C42\u3081\u305F\u3002", ["\u8AEB\u8A00\u3092\u5BB9\u308C\u308B", "\u4E00\u90E8\u3060\u3051\u53D7\u3051\u5165\u308C\u308B", "\u9000\u3051\u308B"], "e0-2");
-      E("tribal_hero", "ppl", "person", "\u90E8\u65CF\u306E\u82F1\u96C4", "\u5927\u718A\u3092\u5012\u3057\u305F\u82E5\u8005\u304C\u3001\u90E8\u65CF\u306E\u82F1\u96C4\u306B\u306A\u3063\u305F\u3002", ["\u6226\u58EB\u9577\u306B\u53D6\u308A\u7ACB\u3066\u308B", "\u795D\u5BB4\u3092\u958B\u304F", "\u9577\u8001\u306E\u4E0B\u306B\u7F6E\u304F"], "e0-1 po:tribal,chiefdom");
-      E("saint_hermit", "ppl", "omen", "\u8056\u8005\u306E\u96A0\u9041", "\u5FB3\u9AD8\u3044\u96A0\u8005\u304C\u3001\u5C71\u4E2D\u3067\u4EBA\u3005\u306E\u76F8\u8AC7\u306B\u5FDC\u3058\u3066\u3044\u308B\u3002", ["\u5EB5\u3092\u5EFA\u3066\u3066\u4FDD\u8B77\u3059\u308B", "\u8A2A\u306D\u3066\u6559\u3048\u3092\u8ACB\u3046", "\u6C11\u5FC3\u3092\u60D1\u308F\u3059\u3068\u8B66\u6212\u3059\u308B"], "e1-4 coast");
-      E("duelist_champion", "ppl", "person", "\u6B66\u82B8\u8005\u306E\u540D\u4E57\u308A", "\u56FD\u4E2D\u306E\u6B66\u82B8\u8005\u304C\u96C6\u307E\u308B\u8A66\u5408\u3067\u3001\u7121\u540D\u306E\u82E5\u8005\u304C\u512A\u52DD\u3057\u305F\u3002", ["\u8FD1\u885B\u306B\u53D6\u308A\u7ACB\u3066\u308B", "\u8912\u7F8E\u3092\u4E0E\u3048\u6545\u90F7\u3078\u5E30\u3059", "\u8A66\u5408\u306E\u5B9A\u671F\u958B\u50AC\u3092\u6C7A\u3081\u308B"], "e1-4 nwar");
-      E("traitor_general", "ppl", "coup_threat", "\u5C06\u8ECD\u306E\u5185\u901A", "\u5C06\u8ECD\u304C{r}\u3068\u5BC6\u304B\u306B\u901A\u3058\u3066\u3044\u308B\u7591\u3044\u304C\u51FA\u305F\u3002", ["\u8A3C\u62E0\u3092\u56FA\u3081\u65AD\u7F6A\u3059\u308B", "\u5FE0\u8AA0\u3092\u8A66\u3059", "\u7591\u308F\u305A\u4EFB\u306B\u5C31\u304B\u305B\u308B"], "e1-5 war rival", "gen_coup:6:.3@2");
-      E("loyal_servant", "ppl", "person", "\u5FE0\u81E3\u306E\u6700\u671F", "\u4E3B\u541B\u3092\u5E87\u3063\u3066\u5FE0\u81E3\u304C\u547D\u3092\u843D\u3068\u3057\u305F\u3002", ["\u9855\u5F70\u7891\u3092\u5EFA\u3066\u308B", "\u907A\u65CF\u3092\u539A\u9047\u3059\u308B", "\u8A9E\u3089\u305A\u55AA\u306B\u670D\u3059"], "e1-5");
-      E("rebel_poet_hero", "ppl", "omen", "\u53CD\u9AA8\u306E\u8A69\u4EBA\u304C\u6C11\u8846\u3092\u9F13\u821E\u3059\u308B", "\u8A69\u4EBA\u304C\u3001\u91CD\u7A0E\u3068\u8CB4\u65CF\u306E\u7279\u6A29\u3092\u7CFE\u5F3E\u3057\u305F\u3002", ["\u6355\u3089\u3048\u308B", "\u5BFE\u8A71\u3092\u6301\u3064", "\u8A69\u3092\u81EA\u56FD\u306E\u8A87\u308A\u3068\u3057\u3066\u53D6\u308A\u8FBC\u3080"], "e2-5 lows");
-      E("beauty_scandal", "ppl", "tragedy_royal", "\u5BAE\u5EF7\u306E\u919C\u805E", "{L}\u306E\u5BF5\u611B\u3092\u3081\u3050\u3063\u3066\u3001\u5BAE\u5EF7\u304C\u63FA\u308C\u3066\u3044\u308B\u3002", ["\u95A2\u4FC2\u8005\u3092\u9060\u3056\u3051\u308B", "\u4E8B\u5B9F\u3092\u516C\u8868\u3057\u53CE\u3081\u308B", "\u919C\u805E\u3092\u5229\u7528\u3057\u3066\u6575\u3092\u8FFD\u3044\u843D\u3068\u3059"], "e1-5 her");
-      E("farmer_prophet", "ppl", "omen", "\u8FB2\u6C11\u306E\u9810\u8A00\u8005", "\u300C\u5929\u306E\u6012\u308A\u304C\u8FD1\u3044\u300D\u3068\u8AAC\u304F\u8FB2\u6C11\u306B\u7FA4\u8846\u304C\u96C6\u307E\u3063\u305F\u3002", ["\u8AAC\u6559\u3092\u8A31\u3059", "\u5F3E\u5727\u3059\u308B", "\u8056\u8077\u8005\u306B\u8ABF\u3079\u3055\u305B\u308B"], "e1-3", "peasant_revolt:12:.2@1");
-      E("sea_captain_voyage", "ppl", "tech_boom", "\u8239\u9577\u306E\u9060\u6D0B\u822A\u6D77\u8A08\u753B", "\u8001\u7DF4\u306A\u8239\u9577\u304C\u3001\u672A\u77E5\u306E\u6D77\u3078\u306E\u822A\u6D77\u3092\u9858\u3044\u51FA\u305F\u3002", ["\u8239\u56E3\u3092\u4E0E\u3048\u308B", "\u8CC7\u91D1\u3092\u534A\u5206\u51FA\u3059", "\u5371\u967A\u3060\u3068\u5374\u4E0B\u3059\u308B"], "e2-5 coast", "new_sea_route:36:.45@0");
-      E("engineer_invention", "ppl", "tech_boom", "\u6280\u5E2B\u306E\u767A\u660E", "\u6280\u5E2B\u304C\u3001\u65B0\u3057\u3044\u6A5F\u68B0\u306E\u56F3\u9762\u3092\u6301\u3061\u8FBC\u3093\u3060\u3002", ["\u5DE5\u623F\u3092\u4F5C\u3089\u305B\u308B", "\u7279\u8A31\u72B6\u3092\u4E0E\u3048\u308B", "\u8ECD\u306E\u79D8\u5BC6\u306B\u3059\u308B"], "e3-5");
-      E("general_retire", "ppl", "person", "\u8001\u5C06\u8ECD\u306E\u5F15\u9000", "\u9577\u5E74\u8ECD\u3092\u7387\u3044\u305F\u5C06\u8ECD\u304C\u3001\u5F15\u9000\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u5F8C\u4EFB\u3092\u81EA\u3089\u6307\u540D\u3055\u305B\u308B", "\u540D\u8A89\u8077\u3092\u4E0E\u3048\u308B", "\u6170\u7559\u3059\u308B"], "e1-5 nwar");
-      E("heir_foreign_study", "ppl", "person", "\u4E16\u7D99\u304E\u306E\u7559\u5B66", "\u4E16\u7D99\u304E\u304C\u3001{f}\u306B\u5B66\u3076\u3053\u3068\u3092\u671B\u3093\u3067\u3044\u308B\u3002", ["\u7559\u5B66\u3092\u8A31\u3059", "\u56FD\u5185\u3067\u5B66\u3070\u305B\u308B", "\u4EBA\u8CEA\u306E\u3088\u3046\u306A\u5F62\u3067\u9001\u308B"], "e2-5 her friend");
-      E("peasant_hero", "ppl", "coup_threat", "\u8FB2\u6C11\u51FA\u306E\u52C7\u58EB", "\u8EAB\u5206\u306E\u4F4E\u3044\u52C7\u58EB\u304C\u3001\u6226\u5834\u3067\u8CB4\u65CF\u3092\u6551\u3063\u305F\u3002", ["\u8CB4\u65CF\u306B\u53D9\u3059", "\u8912\u7F8E\u306E\u307F\u4E0E\u3048\u308B", "\u529F\u7E3E\u3092\u8CB4\u65CF\u306B\u4E0E\u3048\u308B"], "e1-4 war");
-      E("succ_dispute", "dyn", "succession_crisis", "\u7D99\u627F\u3092\u3081\u3050\u308B\u4E89\u3044", "{s}\u3067\u3001\u9078\u3070\u308C\u306A\u304B\u3063\u305F\u6709\u529B\u8005\u304C\u3001\u7D99\u627F\u306E\u6B63\u7D71\u6027\u3092\u7591\u3044\u306F\u3058\u3081\u305F\u3002", ["\u4E89\u3046\u8005\u3092\u65AD\u7F6A\u3059\u308B", "\u9818\u5730\u3092\u5206\u3051\u3066\u61D0\u67D4\u3059\u308B", "\u5916\u56FD\u306E\u4EF2\u88C1\u3092\u6C42\u3081\u308B"], "e1-5 only", "succ_war:8:.4@2,king_sudden_death:0:0");
-      E("succ_coup_after", "dyn", "coup_threat", "\u7C12\u596A\u3092\u3046\u304B\u304C\u3046\u8005", "{s}\u306E\u65B0\u738B\u306E\u5373\u4F4D\u306B\u4E0D\u6E80\u3092\u6301\u3064\u5C06\u304C\u3001\u6319\u5175\u306E\u6A5F\u3092\u3046\u304B\u304C\u3063\u3066\u3044\u308B\u3002", ["\u5148\u624B\u3092\u6253\u3063\u3066\u6355\u3048\u308B", "\u5730\u4F4D\u3092\u4E0E\u3048\u53D6\u308A\u8FBC\u3080", "\u5175\u3092\u96C6\u3081\u3066\u5099\u3048\u308B"], "only", "gen_coup:6:.35@2");
-      E("king_sudden_death", "dyn", "succession_crisis", "\u738B\u306E\u6025\u6B7B", "{L}\u304C\u3001\u5F8C\u7D99\u3092\u5B9A\u3081\u306C\u307E\u307E\u6025\u6B7B\u3057\u305F\u3002", ["\u9577\u5B50\u3092\u5373\u4F4D\u3055\u305B\u308B", "\u91CD\u81E3\u4F1A\u8B70\u3067\u6C7A\u3081\u308B", "\u6442\u653F\u3092\u7ACB\u3066\u308B"], "e1-5 her", "succ_war:6:.35@1,succ_dispute:4:.4@0", ["ldr:die", "ldr:die", "ldr:die"]);
-      E("succ_war", "dyn", "war_threat", "\u7D99\u627F\u6226\u4E89", "{s}\u306E\u738B\u4F4D\u3092\u3081\u3050\u308A\u3001{r}\u304C\u7D99\u627F\u6A29\u3092\u4E3B\u5F35\u3057\u3066\u8ECD\u3092\u52D5\u304B\u3057\u305F\u3002", ["\u53D7\u3051\u3066\u7ACB\u3064", "\u8B72\u6B69\u3057\u3066\u6761\u4EF6\u3092\u63A2\u308B", "\u540C\u76DF\u3092\u983C\u308B"], "e1-5 only rival", "personal_union:14:.3@1", ["warby:R:succession", "", "warby:R:succession"]);
-      E("personal_union", "dyn", "diplomacy_chance", "\u540C\u541B\u9023\u5408\u306E\u6210\u7ACB", "{s}\u3068{r}\u306E\u738B\u5BB6\u304C\u7D50\u3070\u308C\u3001\u4E00\u4EBA\u306E\u738B\u3092\u5171\u306B\u6234\u304F\u3053\u3068\u306B\u306A\u3063\u305F\u3002", ["\u9023\u5408\u3092\u53D7\u3051\u5165\u308C\u308B", "\u6761\u4EF6\u3092\u4ED8\u3051\u3066\u7D50\u3076", "\u62D2\u3093\u3067\u738B\u4F4D\u3092\u5B88\u308B"], "e2-5 only rival her", "union_merge:96:.3@0,union_dissolve:60:.4@1");
-      E("union_merge", "dyn", "reform", "\u9023\u5408\u306E\u7D71\u5408", "\u540C\u541B\u9023\u5408\u306F\u3001\u9577\u3044\u3042\u3044\u3060\u306B\u3001\u4E00\u3064\u306E\u56FD\u3068\u3057\u3066\u307E\u3068\u307E\u308D\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u7D71\u5408\u3092\u63A8\u3057\u9032\u3081\u308B", "\u81EA\u6CBB\u3092\u4FDD\u969C\u3057\u3066\u7D71\u5408\u3059\u308B", "\u9023\u5408\u306E\u307E\u307E\u306B\u3059\u308B"], "e2-5 only", "");
-      E("union_dissolve", "dyn", "rebel_noble", "\u9023\u5408\u306E\u89E3\u6D88", "\u9023\u5408\u306E\u4E8C\u56FD\u306F\u3001\u738B\u4F4D\u306E\u5206\u304B\u308C\u3068\u3068\u3082\u306B\u5225\u3005\u306E\u9053\u3078\u9032\u3093\u3060\u3002", ["\u5186\u6E80\u306B\u5206\u304B\u308C\u308B", "\u9023\u5408\u306E\u7DAD\u6301\u3092\u8A34\u3048\u308B", "\u6226\u3092\u3082\u8F9E\u3055\u306A\u3044"], "e2-5 only", "");
-      E("regency_power", "dyn", "coup_threat", "\u6442\u653F\u306E\u6A29\u529B", "\u5E7C\u3044\u738B\u306E\u6442\u653F\u304C\u3001\u5EF7\u81E3\u3092\u5F93\u3048\u3001\u56FD\u653F\u3092\u5C02\u65AD\u3057\u3066\u3044\u308B\u3002", ["\u6442\u653F\u3092\u4FE1\u983C\u3059\u308B", "\u6442\u653F\u306E\u6A29\u9650\u3092\u524A\u308B", "\u6442\u653F\u3092\u6392\u9664\u3059\u308B"], "e1-5 her", "gen_coup:12:.2@0");
-      E("heir_born", "dyn", "person", "\u5F85\u671B\u306E\u4E16\u7D99\u304E\u8A95\u751F", "{L}\u306B\u3001\u5F85\u671B\u306E\u4E16\u7D99\u304E\u304C\u751F\u307E\u308C\u305F\u3002", ["\u76DB\u5927\u306A\u795D\u796D\u3092\u884C\u3046", "\u6E1B\u7A0E\u3067\u6C11\u3068\u795D\u3046", "\u614E\u307E\u3057\u304F\u795D\u3046"], "e1-5 her");
-      E("no_heir", "dyn", "succession_crisis", "\u4E16\u7D99\u304E\u304C\u3044\u306A\u3044", "{L}\u306B\u306F\u3001\u4E16\u7D99\u304E\u304C\u306A\u304F\u3001\u5EF7\u81E3\u306F\u4E0D\u5B89\u3092\u52DF\u3089\u305B\u3066\u3044\u308B\u3002", ["\u990A\u5B50\u3092\u8FCE\u3048\u308B", "\u9060\u7E01\u3092\u5F8C\u7D99\u306B\u5B9A\u3081\u308B", "\u91CD\u81E3\u306B\u9078\u3070\u305B\u308B"], "e1-5 her", "succ_dispute:24:.4@1");
-      E("illegitimate_claim", "dyn", "succession_crisis", "\u5EB6\u5B50\u306E\u8ACB\u6C42", "{L}\u306E\u5EB6\u5B50\u304C\u3001\u738B\u4F4D\u306E\u7D99\u627F\u6A29\u3092\u4E3B\u5F35\u3057\u3066\u3044\u308B\u3002", ["\u8A8D\u77E5\u3057\u3066\u9818\u5730\u3092\u4E0E\u3048\u308B", "\u8A3C\u62E0\u306A\u3057\u3068\u9000\u3051\u308B", "\u4FEE\u9053\u9662\u306B\u5165\u308C\u308B"], "e1-5 her", "succ_dispute:10:.3@1");
-      E("queen_regent", "dyn", "person", "\u6BCD\u540E\u306E\u53F0\u982D", "\u5E7C\u3044\u738B\u306E\u6BCD\u304C\u3001\u653F\u52D9\u306B\u53E3\u3092\u51FA\u3057\u306F\u3058\u3081\u305F\u3002", ["\u6442\u653F\u306B\u4EFB\u547D\u3059\u308B", "\u5EF7\u81E3\u306B\u88DC\u4F50\u3055\u305B\u308B", "\u5225\u306E\u6442\u653F\u3092\u7ACB\u3066\u308B"], "e1-5 her");
-      E("royal_marriage_alliance", "dyn", "diplomacy_chance", "\u653F\u7565\u7D50\u5A5A\u306E\u7533\u3057\u51FA", "{f}\u304C\u3001\u738B\u5BB6\u3069\u3046\u3057\u306E\u5A5A\u59FB\u3092\u7533\u3057\u8FBC\u3093\u3067\u304D\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u6301\u53C2\u91D1\u3092\u6761\u4EF6\u306B\u5FDC\u3058\u308B", "\u65AD\u308B"], "e1-5 friend her");
-      E("royal_marriage_scandal", "dyn", "tragedy_royal", "\u7D50\u5A5A\u306E\u7834\u8AC7", "{r}\u3068\u306E\u7E01\u8AC7\u304C\u3001\u76F4\u524D\u3067\u58CA\u308C\u305F\u3002", ["\u8B1D\u7F6A\u306E\u4F7F\u8005\u3092\u51FA\u3059", "\u5F37\u304F\u6297\u8B70\u3059\u308B", "\u5225\u306E\u7E01\u8AC7\u3092\u63A2\u3059"], "e1-5 rival her", "border_clash:12:.3@1");
-      E("fratricide", "dyn", "tragedy_royal", "\u5144\u5F1F\u306E\u6BBA\u3057\u5408\u3044", "\u738B\u4F4D\u3092\u4E89\u3063\u3066\u5144\u5F1F\u304C\u6BBA\u3057\u5408\u3063\u305F\u3002", ["\u52DD\u8005\u3092\u8A8D\u3081\u308B", "\u751F\u304D\u6B8B\u308A\u3092\u88C1\u304F", "\u4E21\u8005\u3092\u6392\u3057\u7B2C\u4E09\u8005\u3092\u7ACB\u3066\u308B"], "e1-5 her", "succ_dispute:2:.5");
-      E("deposed_king", "dyn", "coup_threat", "\u738B\u304C\u5EC3\u3055\u308C\u308B", "\u5EF7\u81E3\u305F\u3061\u304C\u3001\u7121\u80FD\u306A{L}\u3092\u738B\u4F4D\u304B\u3089\u5EC3\u3057\u305F\u3002", ["\u5EC3\u4F4D\u3092\u8FFD\u8A8D\u3059\u308B", "\u738B\u3092\u652F\u6301\u3059\u308B", "\u65B0\u738B\u306E\u9078\u5B9A\u3092\u6025\u3050"], "e1-5 her lows", "succ_dispute:3:.4", ["ldr:coup", "", "ldr:coup"]);
-      E("dynasty_old_decay", "dyn", "crisis", "\u738B\u671D\u306E\u8870\u3048", "{s}\u306E\u738B\u671D\u306F\u3001\u6A29\u5A01\u304C\u8870\u3048\u3001\u5404\u5730\u306B\u4E0D\u6E80\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u6539\u9769\u3092\u9032\u3081\u308B", "\u5916\u5F81\u3067\u5A01\u4FE1\u3092\u53D6\u308A\u623B\u3059", "\u614E\u91CD\u306B\u5EF6\u547D\u3092\u56F3\u308B"], "e2-5 her lows", "dynasty_fall:36:.3@2");
-      E("dynasty_fall", "dyn", "rebel_noble", "\u738B\u671D\u306E\u4EA4\u4EE3", "\u6C11\u5FC3\u3092\u5931\u3063\u305F\u738B\u671D\u306B\u4EE3\u308F\u3063\u3066\u3001\u65B0\u3057\u3044\u5BB6\u304C\u738B\u4F4D\u306B\u5C31\u3044\u305F\u3002", ["\u65B0\u738B\u671D\u3092\u627F\u8A8D\u3059\u308B", "\u65E7\u738B\u5BB6\u3092\u4FDD\u8B77\u3059\u308B", "\u65E7\u738B\u5BB6\u306B\u62B5\u6297\u3092\u4FC3\u3059"], "e1-5 only her", "", ["ldr:coup", "", "ldr:coup"]);
-      E("marriage_to_commoner", "dyn", "person", "\u5E73\u6C11\u306E\u540E", "\u738B\u304C\u3001\u5E73\u6C11\u306E\u51FA\u306E\u540E\u3092\u8FCE\u3048\u305F\u3002", ["\u795D\u798F\u3059\u308B", "\u8EAB\u5206\u3092\u4E0E\u3048\u8CB4\u65CF\u306B\u53D9\u3059", "\u8CB4\u65CF\u304C\u53CD\u767A\u3059\u308B\u3068\u6291\u3048\u308B"], "e1-5 her");
-      E("heir_hostage", "dyn", "diplomacy_chance", "\u4E16\u7D99\u304E\u3092\u4EBA\u8CEA\u306B", "{f}\u3068\u306E\u53CB\u597D\u306E\u305F\u3081\u3001\u4E16\u7D99\u304E\u3092\u4EBA\u8CEA\u306B\u9001\u308B\u6848\u304C\u51FA\u305F\u3002", ["\u4EBA\u8CEA\u3092\u51FA\u3059", "\u9AD8\u5B98\u306E\u5B50\u3092\u4EE3\u308F\u308A\u306B", "\u65AD\u308B"], "e1-4 friend her");
-      E("royal_will", "dyn", "succession_crisis", "\u738B\u306E\u907A\u8A00", "\u75C5\u5E8A\u306E{L}\u304C\u3001\u907A\u8A00\u306B\u5F8C\u7D99\u3092\u8A18\u3057\u305F\u3002", ["\u907A\u8A00\u3069\u304A\u308A\u306B", "\u91CD\u81E3\u4F1A\u8B70\u306B\u304B\u3051\u76F4\u3059", "\u907A\u8A00\u3092\u63E1\u308A\u3064\u3076\u3059"], "e1-5 her", "succ_dispute:4:.3@2");
-      E("tanist_council", "dyn", "succession_crisis", "\u6C0F\u65CF\u4F1A\u8B70\u306E\u5F8C\u7D99\u9078\u3073", "\u6C0F\u65CF\u9577\u305F\u3061\u304C\u96C6\u307E\u308A\u3001\u6B21\u306E\u9996\u9577\u3092\u9078\u307C\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u6700\u3082\u5F37\u3044\u8005\u3092\u63A8\u3059", "\u5E74\u9577\u8005\u3092\u63A8\u3059", "\u4F1A\u8B70\u3092\u5EF6\u671F\u3059\u308B"], "e0-2 po:tribal,chiefdom");
-      E("pretender_appears", "dyn", "coup_threat", "\u507D\u308A\u306E\u738B\u304C\u73FE\u308C\u308B", "\u300C\u5148\u738B\u306E\u5B50\u300D\u3092\u540D\u4E57\u308B\u7537\u304C\u3001\u5730\u65B9\u3067\u5175\u3092\u96C6\u3081\u305F\u3002", ["\u8A0E\u4F10\u3059\u308B", "\u7537\u3092\u53D6\u308A\u8FBC\u3080", "\u5916\u56FD\u306E\u52D5\u304D\u3092\u63A2\u308B"], "e1-4 her", "succ_dispute:6:.25@1");
-      E("king_mad", "dyn", "tragedy_royal", "\u738B\u306E\u767A\u72C2", "{L}\u306F\u3001\u91CD\u3044\u5FC3\u306E\u75C5\u306B\u5012\u308C\u3001\u653F\u52D9\u3092\u57F7\u308C\u306A\u304F\u306A\u3063\u305F\u3002", ["\u6442\u653F\u3092\u7F6E\u304F", "\u75C5\u3092\u96A0\u3059", "\u9000\u4F4D\u3092\u4FC3\u3059"], "e1-5 her", "succ_dispute:8:.3@1");
-      E("coronation_pomp", "dyn", "culture_boom", "\u76DB\u5927\u306A\u6234\u51A0\u5F0F", "{s}\u306E\u65B0\u738B\u306E\u6234\u51A0\u5F0F\u306B\u3001\u9060\u65B9\u304B\u3089\u3082\u4F7F\u7BC0\u304C\u6765\u305F\u3002", ["\u8C6A\u83EF\u306B\u55B6\u3080", "\u7C21\u7D20\u306B\u55B6\u3080", "\u8AF8\u56FD\u306E\u4F7F\u7BC0\u3092\u539A\u9047\u3059\u308B"], "e1-5 her");
-      E("gen_coup", "cou", "coup_threat", "\u5C06\u8ECD\u306E\u30AF\u30FC\u30C7\u30BF\u30FC", "{s}\u3067\u3001\u5C06\u8ECD\u304C\u5175\u3092\u7387\u3044\u3066\u5BAE\u5EF7\u3092\u62BC\u3055\u3048\u305F\u3002", ["\u65B0\u653F\u6A29\u3092\u627F\u8A8D\u3059\u308B", "\u62B5\u6297\u3059\u308B", "\u4EA1\u547D\u3059\u308B"], "e1-5 only", "junta_rule:6:.6@0,civil_war_outbreak:4:.3@1", ["regime:mil", "rebel:coup", "ldr:coup"]);
-      E("junta_rule", "cou", "reform", "\u8ECD\u4E8B\u653F\u6A29\u306E\u65B9\u91DD", "\u6A29\u529B\u3092\u63E1\u3063\u305F\u8ECD\u306F\u3001\u56FD\u306E\u9032\u3080\u9053\u3092\u6C7A\u3081\u306D\u3070\u306A\u3089\u306A\u3044\u3002", ["\u5916\u5F81\u3067\u56E3\u7D50\u3092\u56F3\u308B", "\u884C\u653F\u3092\u6574\u3048\u3066\u5B89\u5B9A\u3055\u305B\u308B", "\u79C1\u8179\u3092\u80A5\u3084\u3059"], "e1-5 only", "junta_expedition:12:.5@0,junta_corrupt:18:.5@2");
-      E("junta_expedition", "cou", "opportunity_war", "\u8ECD\u653F\u306E\u5916\u5F81", "\u8ECD\u4E8B\u653F\u6A29\u306F\u3001\u5A01\u4FE1\u3092\u6C42\u3081\u3066\u96A3\u56FD\u3078\u306E\u51FA\u5175\u3092\u6C7A\u3081\u305F\u3002", ["\u51FA\u5175\u3059\u308B", "\u793A\u5A01\u306B\u7559\u3081\u308B", "\u5185\u653F\u306B\u5C02\u5FF5\u3059\u308B"], "only rival", "");
-      E("junta_corrupt", "cou", "crisis", "\u8ECD\u653F\u306E\u8150\u6557", "\u8ECD\u653F\u306E\u9AD8\u5B98\u306E\u79C1\u8179\u304C\u3001\u6C11\u306E\u6012\u308A\u3092\u8CB7\u3063\u3066\u3044\u308B\u3002", ["\u9AD8\u5B98\u3092\u7C9B\u6E05\u3059\u308B", "\u898B\u3066\u898B\u306C\u3075\u308A\u3092\u3059\u308B", "\u6C11\u8846\u306E\u4EE3\u8868\u3092\u52A0\u3048\u308B"], "only", "leader_plot:12:.4@1");
-      E("leader_plot", "cou", "coup_threat", "\u6307\u5C0E\u8005\u6697\u6BBA\u306E\u9670\u8B00", "\u5074\u8FD1\u306E\u9593\u306B\u3001\u6307\u5C0E\u8005\u6697\u6BBA\u306E\u4F01\u3066\u304C\u3042\u308B\u3002", ["\u9996\u8B00\u8005\u3092\u6355\u3048\u308B", "\u653F\u7B56\u3092\u6539\u3081\u4E0D\u6E80\u3092\u7DE9\u548C\u3059\u308B", "\u8B77\u885B\u3092\u5897\u3084\u3059\u306E\u307F"], "e1-5 only", "dictator_assassination:8:.5@12");
-      E("revolution_breaks", "cou", "rebel_peasant", "\u9769\u547D\u306E\u52C3\u767A", "\u5727\u653F\u306B\u8010\u3048\u304B\u306D\u305F\u6C11\u8846\u304C\u3001\u90FD\u5E02\u3067\u8702\u8D77\u3057\u305F\u3002", ["\u6B66\u529B\u3067\u93AE\u5727\u3059\u308B", "\u6539\u9769\u3092\u7D04\u675F\u3059\u308B", "\u4F53\u5236\u306E\u79FB\u884C\u3092\u53D7\u3051\u5165\u308C\u308B"], "e2-5 only", "republic_born:6:.5@2", ["", "", "regime:rev"]);
-      E("republic_born", "cou", "diplomacy_chance", "\u5171\u548C\u56FD\u306E\u8A95\u751F", "{s}\u306B\u3001\u738B\u306E\u5C45\u306A\u3044\u56FD\u306E\u653F\u6CBB\u304C\u59CB\u307E\u3063\u305F\u3002", ["\u65B0\u4F53\u5236\u3092\u56FA\u3081\u308B", "\u65E7\u52E2\u529B\u3068\u548C\u89E3\u3059\u308B", "\u5468\u8FBA\u56FD\u306B\u627F\u8A8D\u3092\u6C42\u3081\u308B"], "e2-5 only", "foreign_intervention:12:.4");
-      E("foreign_intervention", "cou", "war_threat", "\u9769\u547D\u3078\u306E\u5E72\u6E09", "\u5468\u8FBA\u306E\u541B\u4E3B\u304C\u3001\u9769\u547D\u306E\u6CE2\u53CA\u3092\u6050\u308C\u3066{s}\u306B\u5727\u529B\u3092\u304B\u3051\u3066\u304D\u305F\u3002", ["\u5E72\u6E09\u3092\u64A5\u306D\u3064\u3051\u308B", "\u8B72\u6B69\u3057\u3066\u4F7F\u7BC0\u3092\u9001\u308B", "\u540C\u76DF\u3092\u6C42\u3081\u308B"], "e2-5 only rival", "intervention_war:6:.35@0");
-      E("intervention_war", "cou", "opportunity_war", "\u5E72\u6E09\u6226\u4E89", "\u9769\u547D\u3092\u6F70\u305D\u3046\u3068\u3059\u308B\u96A3\u56FD\u304C\u3001\u56FD\u5883\u306B\u8ECD\u3092\u9032\u3081\u305F\u3002", ["\u5168\u529B\u3067\u9632\u3050", "\u8B1B\u548C\u3092\u63A2\u308B", "\u9769\u547D\u3092\u8F38\u51FA\u3059\u308B"], "only rival", "", ["warby:R:ideology", "", "warby:R:ideology"]);
-      E("civil_war_outbreak", "cou", "rebel_noble", "\u5185\u6226\u306E\u52C3\u767A", "{s}\u3067\u3001\u8CB4\u65CF\u3068\u5C06\u8ECD\u304C\u5206\u304B\u308C\u3001\u56FD\u304C\u4E8C\u3064\u306B\u88C2\u3051\u305F\u3002", ["\u8A0E\u4F10\u8ECD\u3092\u51FA\u3059", "\u548C\u5E73\u306E\u4EF2\u4ECB\u3092\u983C\u3080", "\u5206\u88C2\u3092\u53D7\u3051\u5165\u308C\u308B"], "e1-5 only", "", ["rebel:noble", "", "rebel:noble"]);
-      E("palace_coup", "cou", "coup_threat", "\u5BAE\u5EF7\u306E\u30AF\u30FC\u30C7\u30BF\u30FC", "\u8FD1\u885B\u304C\u3001{L}\u3092\u5BAE\u6BBF\u304B\u3089\u8FFD\u3044\u51FA\u3057\u305F\u3002", ["\u8FFD\u8A8D\u3059\u308B", "\u596A\u9084\u3092\u8A66\u307F\u308B", "\u4EA1\u547D\u5148\u306E\u4FDD\u8B77\u3092\u6C42\u3081\u308B"], "e1-5 lows", "succ_dispute:4:.3", ["ldr:coup", "", "ldr:coup"]);
-      E("peasant_revolt", "cou", "rebel_peasant", "\u8FB2\u6C11\u306E\u5927\u53CD\u4E71", "\u91CD\u7A0E\u3068\u98E2\u3048\u306B\u82E6\u3057\u3080\u8FB2\u6C11\u304C\u3001\u936C\u3092\u624B\u306B\u8702\u8D77\u3057\u305F\u3002", ["\u93AE\u5727\u3059\u308B", "\u8B72\u6B69\u3057\u3066\u7A0E\u3092\u8EFD\u304F\u3059\u308B", "\u9996\u8B00\u8005\u3092\u53D6\u308A\u8FBC\u3080"], "e1-4 big lows", "reform_edict:12:.4@1,dynasty_fall:24:.2@0");
-      E("reform_edict", "cou", "reform", "\u6539\u9769\u306E\u52C5\u4EE4", "\u6DF7\u4E71\u306E\u53CE\u307E\u3063\u305F\u3042\u3068\u3001{s}\u306F\u5927\u304D\u306A\u5236\u5EA6\u306E\u6539\u9769\u3092\u6C7A\u65AD\u3057\u305F\u3002", ["\u65AD\u884C\u3059\u308B", "\u6F38\u9032\u7684\u306B\u9032\u3081\u308B", "\u68DA\u4E0A\u3052\u3059\u308B"], "e1-5 only", "");
-      E("tax_burden", "cou", "fiscal", "\u91CD\u7A0E\u3078\u306E\u4E0D\u6E80", "\u76F8\u6B21\u3050\u5897\u7A0E\u306B\u3001\u6C11\u3068\u5546\u4EBA\u304C\u4E0D\u6E80\u3092\u52DF\u3089\u305B\u3066\u3044\u308B\u3002", ["\u6E1B\u7A0E\u3059\u308B", "\u53D6\u308A\u7ACB\u3066\u3092\u7D9A\u3051\u308B", "\u7279\u6A29\u5C64\u306B\u3082\u8AB2\u7A0E\u3059\u308B"], "e1-5", "peasant_revolt:12:.3@1");
-      E("noble_conspiracy", "cou", "rebel_noble", "\u8CB4\u65CF\u306E\u9670\u8B00", "\u6709\u529B\u8CB4\u65CF\u304C\u3001\u738B\u6A29\u3092\u5236\u9650\u3059\u308B\u76DF\u7D04\u3092\u7D50\u3093\u3060\u3002", ["\u76DF\u7D04\u3092\u89E3\u6563\u3055\u305B\u308B", "\u52C5\u8A31\u72B6\u3092\u4E0E\u3048\u8B72\u6B69\u3059\u308B", "\u9996\u8B00\u8005\u3060\u3051\u61D0\u67D4\u3059\u308B"], "e2-5 her", "constitution_drafted:24:.3@1");
-      E("clergy_uprising", "cou", "rebel_noble", "\u8056\u8077\u8005\u306E\u8702\u8D77", "{s}\u306E\u8056\u8077\u8005\u304C\u3001\u4E16\u4FD7\u306E\u652F\u914D\u3078\u306E\u53CD\u6297\u3092\u59CB\u3081\u305F\u3002", ["\u5F3E\u5727\u3059\u308B", "\u6559\u4F1A\u306B\u7279\u6A29\u3092\u4E0E\u3048\u308B", "\u6559\u7FA9\u306E\u8AD6\u4E89\u3092\u4ED5\u639B\u3051\u308B"], "e1-5 lows");
-      E("garrison_mutiny", "cou", "coup_threat", "\u99D0\u5C6F\u8ECD\u306E\u53CD\u4E71", "\u7D66\u91D1\u306E\u9045\u308C\u306B\u6012\u3063\u305F\u99D0\u5C6F\u8ECD\u304C\u3001\u5B98\u5EAB\u3092\u8972\u3063\u305F\u3002", ["\u672A\u6255\u3044\u3092\u652F\u6255\u3046", "\u9996\u8B00\u8005\u3092\u51E6\u7F70\u3059\u308B", "\u5175\u3092\u5165\u308C\u66FF\u3048\u308B"], "e1-5 poor");
-      E("secession_movement", "cou", "rebel_noble", "\u5206\u96E2\u72EC\u7ACB\u306E\u52D5\u304D", "\u9060\u3044\u5730\u65B9\u306E\u6709\u529B\u8005\u304C\u3001\u72EC\u7ACB\u3092\u5BA3\u8A00\u3057\u305F\u3002", ["\u8A0E\u4F10\u3059\u308B", "\u81EA\u6CBB\u3092\u8A8D\u3081\u3066\u61D0\u67D4\u3059\u308B", "\u4ED6\u306E\u5730\u65B9\u306B\u898B\u305B\u3057\u3081\u306B\u3059\u308B"], "e1-5 big lows", "", ["rebel:separatist", "", "rebel:separatist"]);
-      E("tribal_split", "cou", "rebel_noble", "\u90E8\u65CF\u306E\u5206\u88C2", "\u9996\u9577\u306E\u5EA7\u3092\u3081\u3050\u3063\u3066\u3001\u90E8\u65CF\u304C\u4E8C\u6D3E\u306B\u5206\u304B\u308C\u305F\u3002", ["\u4E00\u65B9\u3092\u652F\u6301\u3059\u308B", "\u4EF2\u88C1\u3059\u308B", "\u5206\u88C2\u3092\u8A8D\u3081\u308B"], "e0-2 po:tribal,chiefdom", "", ["rebel:separatist", "", ""]);
-      E("purge_elite", "cou", "coup_threat", "\u5927\u7C9B\u6E05", "{L}\u306F\u3001\u653F\u6575\u3092\u4E00\u6589\u306B\u6355\u3048\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u7C9B\u6E05\u3092\u65AD\u884C\u3059\u308B", "\u5BFE\u8C61\u3092\u7D5E\u308B", "\u601D\u3044\u3068\u3069\u307E\u308B"], "e1-5 lows", "leader_plot:18:.3@0");
-      E("student_protest", "cou", "crisis", "\u5B66\u751F\u306E\u6297\u8B70", "\u90FD\u5E02\u3067\u3001\u5B66\u751F\u3068\u5E02\u6C11\u304C\u653F\u6CBB\u306E\u6539\u9769\u3092\u6C42\u3081\u3066\u30C7\u30E2\u3092\u884C\u3063\u305F\u3002", ["\u8981\u6C42\u3092\u805E\u304D\u5165\u308C\u308B", "\u6CBB\u5B89\u90E8\u968A\u3092\u51FA\u3059", "\u6307\u5C0E\u8005\u3068\u5BFE\u8A71\u3059\u308B"], "e4-5 lows", "revolution_breaks:8:.2@1");
-      E("strike_wave", "cou", "crisis", "\u5927\u898F\u6A21\u306A\u30B9\u30C8\u30E9\u30A4\u30AD", "\u5DE5\u5834\u3068\u6E2F\u3067\u3001\u8CC3\u91D1\u3092\u6C42\u3081\u308B\u5927\u898F\u6A21\u306A\u30B9\u30C8\u30E9\u30A4\u30AD\u304C\u8D77\u304D\u305F\u3002", ["\u8981\u6C42\u3092\u53D7\u3051\u5165\u308C\u308B", "\u8ECD\u3092\u51FA\u3057\u3066\u93AE\u3081\u308B", "\u4EF2\u88C1\u3092\u8A2D\u3051\u308B"], "e4-5", "revolution_breaks:10:.15@1");
-      E("election_fraud", "cou", "crisis", "\u9078\u6319\u4E0D\u6B63\u306E\u7591\u60D1", "\u9078\u6319\u3067\u4E0D\u6B63\u304C\u3042\u3063\u305F\u3068\u306E\u5642\u304C\u3001\u90FD\u5E02\u3092\u99C6\u3051\u3081\u3050\u3063\u305F\u3002", ["\u518D\u9078\u6319\u3092\u884C\u3046", "\u8ABF\u67FB\u3092\u7D04\u675F\u3059\u308B", "\u7591\u60D1\u3092\u5C01\u3058\u308B"], "e4-5 nher");
-      E("constitution_drafted", "cou", "reform", "\u61B2\u6CD5\u306E\u8D77\u8349", "\u8AF8\u968E\u5C64\u306F\u3001\u56FD\u306E\u57FA\u672C\u6CD5\u3092\u6587\u7AE0\u306B\u3057\u3066\u5B9A\u3081\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u61B2\u6CD5\u3092\u5236\u5B9A\u3059\u308B", "\u738B\u6A29\u3092\u6B8B\u3057\u3066\u5236\u5B9A\u3059\u308B", "\u6642\u671F\u5C1A\u65E9\u3068\u3057\u3066\u5EF6\u3070\u3059"], "e2-5 only", "");
-      E("vassal_rebellion", "cou", "rebel_noble", "\u5F93\u5C5E\u56FD\u306E\u53CD\u6297", "\u5F93\u5C5E\u3055\u305B\u3066\u3044\u305F\u5730\u65B9\u304C\u3001\u72EC\u7ACB\u3092\u6C42\u3081\u3066\u7ACB\u3061\u4E0A\u304C\u3063\u305F\u3002", ["\u8ECD\u3092\u9001\u308B", "\u81EA\u6CBB\u3092\u62E1\u5927\u3057\u3066\u5BA5\u3081\u308B", "\u72EC\u7ACB\u3092\u8A8D\u3081\u308B"], "e1-5", "", ["", "", "rebel:separatist"]);
-      E("border_clash", "dip", "border", "\u56FD\u5883\u3067\u306E\u5C0F\u7AF6\u308A\u5408\u3044", "{s}\u3068{r}\u306E\u56FD\u5883\u3067\u3001\u5175\u304C\u885D\u7A81\u3057\u305F\u3002", ["\u5148\u5236\u3057\u3066\u5831\u5FA9\u3059\u308B", "\u6297\u8B70\u306B\u3068\u3069\u3081\u308B", "\u7826\u3092\u7BC9\u304F"], "e1-5 rival", "defeat_humiliation:0:0", ["warby:R:conquest", "", ""]);
-      E("envoy_insult", "dip", "border", "\u4F7F\u7BC0\u3078\u306E\u4FAE\u8FB1", "{r}\u306E\u5BAE\u5EF7\u3067\u3001{s}\u306E\u4F7F\u7BC0\u304C\u4FAE\u8FB1\u3092\u53D7\u3051\u305F\u3002", ["\u5BA3\u6226\u306E\u53E3\u5B9F\u3068\u3059\u308B", "\u8B1D\u7F6A\u3092\u8981\u6C42\u3059\u308B", "\u8010\u3048\u3066\u95A2\u4FC2\u3092\u4FDD\u3064"], "e1-5 rival");
-      E("trade_treaty_offer", "dip", "diplomacy_chance", "\u901A\u5546\u6761\u7D04\u306E\u7533\u3057\u51FA", "{f}\u304B\u3089\u3001\u95A2\u7A0E\u3092\u4E0B\u3052\u308B\u901A\u5546\u5354\u5B9A\u306E\u7533\u3057\u51FA\u304C\u5C4A\u3044\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u6761\u4EF6\u3092\u53B3\u3057\u304F\u3057\u3066\u53D7\u3051\u308B", "\u65AD\u308B"], "e1-5 friend");
-      E("alliance_plea", "dip", "diplomacy_chance", "\u540C\u76DF\u56FD\u306E\u6551\u63F4\u8981\u8ACB", "\u540C\u76DF\u56FD{f}\u304C\u3001\u96A3\u56FD\u3068\u306E\u6226\u3044\u306B\u52A9\u529B\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u63F4\u8ECD\u3092\u9001\u308B", "\u8CC7\u91D1\u3067\u52A9\u3051\u308B", "\u4E2D\u7ACB\u3092\u4FDD\u3064"], "e1-5 friend war");
-      E("tribute_demand", "dip", "war_threat", "\u671D\u8CA2\u306E\u8981\u6C42", "\u5F37\u56FD{r}\u304C\u3001{s}\u306B\u8CA2\u7269\u3092\u6C42\u3081\u308B\u4F7F\u8005\u3092\u9001\u3063\u305F\u3002", ["\u5F93\u3046", "\u62D2\u3093\u3067\u5099\u3048\u308B", "\u5916\u4EA4\u3067\u6642\u9593\u3092\u7A3C\u3050"], "e1-4 rival", "border_clash:6:.3@1");
-      E("peace_conference", "dip", "diplomacy_chance", "\u548C\u5E73\u4F1A\u8B70\u306E\u63D0\u5531", "\u8AF8\u56FD\u304C\u3001\u7D1B\u4E89\u3092\u53CE\u3081\u308B\u4F1A\u8B70\u306E\u958B\u50AC\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u53C2\u52A0\u3057\u3066\u4EF2\u4ECB\u3092\u53D7\u3051\u308B", "\u6761\u4EF6\u3092\u3064\u3051\u3066\u51FA\u5E2D\u3059\u308B", "\u6B20\u5E2D\u3059\u308B"], "e3-5 war");
-      E("trade_war", "dip", "trade_boom", "\u95A2\u7A0E\u3092\u3081\u3050\u308B\u4E89\u3044", "{r}\u304C\u3001{s}\u306E\u5546\u54C1\u306B\u9AD8\u3044\u95A2\u7A0E\u3092\u304B\u3051\u305F\u3002", ["\u5831\u5FA9\u95A2\u7A0E\u3092\u304B\u3051\u308B", "\u4EA4\u6E09\u3092\u6C42\u3081\u308B", "\u4ED6\u306E\u53D6\u5F15\u5148\u3092\u63A2\u3059"], "e2-5 rival");
-      E("border_treaty", "dip", "diplomacy_chance", "\u56FD\u5883\u753B\u5B9A\u306E\u63D0\u6848", "{f}\u304C\u3001\u56FD\u5883\u306E\u753B\u5B9A\u3092\u63D0\u6848\u3057\u305F\u3002", ["\u53D7\u3051\u308B", "\u4E00\u90E8\u4FEE\u6B63\u3057\u3066\u53D7\u3051\u308B", "\u62D2\u3080"], "e2-5 friend");
-      E("great_embassy", "dip", "diplomacy_chance", "\u5927\u4F7F\u7BC0\u56E3\u306E\u6765\u8A2A", "\u9060\u65B9\u306E\u5927\u56FD\u304B\u3089\u3001\u5927\u4F7F\u7BC0\u56E3\u304C{s}\u3092\u8A2A\u308C\u305F\u3002", ["\u6700\u5927\u9650\u3082\u3066\u306A\u3059", "\u7C21\u7D20\u306B\u8FCE\u3048\u308B", "\u8B66\u6212\u3057\u3066\u5236\u9650\u3059\u308B"], "e1-4", "trade_treaty_offer:6:.4@0");
-      E("refugee_wave", "dip", "crisis", "\u96E3\u6C11\u306E\u6D41\u5165", "\u6226\u4E71\u3092\u9003\u308C\u305F\u96E3\u6C11\u304C\u3001{s}\u306E\u56FD\u5883\u306B\u62BC\u3057\u5BC4\u305B\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u4E00\u90E8\u3092\u53D7\u3051\u5165\u308C\u308B", "\u56FD\u5883\u3092\u9589\u3056\u3059"], "e1-5 rival");
-      E("spy_scandal_ally", "dip", "omen", "\u540C\u76DF\u56FD\u3078\u306E\u8ADC\u5831\u306E\u767A\u899A", "{f}\u306B\u4ED5\u639B\u3051\u305F\u8ADC\u5831\u304C\u3001\u9732\u898B\u3057\u305F\u3002", ["\u95A2\u4E0E\u3092\u5426\u5B9A\u3059\u308B", "\u8B1D\u7F6A\u3059\u308B", "\u958B\u304D\u76F4\u308B"], "e2-5 friend");
-      E("naval_incident", "dip", "border", "\u6D77\u4E0A\u306E\u885D\u7A81", "{r}\u306E\u8239\u56E3\u3068\u3001{s}\u306E\u8239\u56E3\u304C\u3001\u6D77\u4E0A\u3067\u7832\u706B\u3092\u4EA4\u3048\u305F\u3002", ["\u8266\u968A\u3092\u5897\u5F37\u3059\u308B", "\u5916\u4EA4\u6297\u8B70\u306B\u3068\u3069\u3081\u308B", "\u5171\u540C\u306E\u5DE1\u8996\u3092\u63D0\u6848\u3059\u308B"], "e3-5 rival coast");
-      E("rival_embargo", "dip", "trade_boom", "\u7981\u8F38\u63AA\u7F6E", "{r}\u304C\u3001{s}\u3078\u306E\u4E3B\u8981\u7269\u8CC7\u306E\u8F38\u51FA\u3092\u6B62\u3081\u305F\u3002", ["\u4EE3\u66FF\u306E\u4F9B\u7D66\u6E90\u3092\u63A2\u3059", "\u6B66\u529B\u3067\u6253\u958B\u3059\u308B", "\u4EA4\u6E09\u3067\u7DE9\u548C\u3092\u6C42\u3081\u308B"], "e2-5 rival", "border_clash:6:.3@1");
-      E("diplomatic_marriage_crisis", "dip", "tragedy_royal", "\u5916\u4EA4\u4E0A\u306E\u5A5A\u59FB\u306E\u62D2\u5426", "{f}\u304C\u3001{s}\u306E\u7E01\u8AC7\u3092\u65AD\u3063\u305F\u3002", ["\u4E0D\u5FEB\u3092\u793A\u3059", "\u5225\u306E\u76F8\u624B\u3092\u63A2\u3059", "\u7A4F\u5F53\u306B\u53D7\u3051\u6B62\u3081\u308B"], "e1-5 friend her");
-      E("neighbor_collapse", "dip", "opportunity_war", "\u96A3\u56FD\u306E\u6DF7\u4E71", "{r}\u3067\u5185\u4E71\u304C\u7D9A\u304D\u3001\u56FD\u5883\u306E\u5B88\u308A\u304C\u8584\u304F\u306A\u3063\u305F\u3002", ["\u4ECB\u5165\u3057\u3066\u9818\u571F\u3092\u53D6\u308B", "\u4EA1\u547D\u8005\u3092\u4FDD\u8B77\u3057\u5F71\u97FF\u3092\u53CA\u307C\u3059", "\u4E0D\u4ECB\u5165\u3092\u4FDD\u3064"], "e1-5 rival", "", ["warby:R:plunder", "", ""]);
-      E("pact_proposal", "dip", "diplomacy_chance", "\u5171\u540C\u9632\u885B\u306E\u8A98\u3044", "\u6570\u304B\u56FD\u304C\u3001\u5171\u540C\u306E\u9632\u885B\u76DF\u7D04\u3092\u7D50\u307C\u3046\u3068{s}\u3092\u8A98\u3063\u305F\u3002", ["\u52A0\u76DF\u3059\u308B", "\u6761\u4EF6\u4ED8\u304D\u3067\u52A0\u308F\u308B", "\u52A0\u76DF\u3057\u306A\u3044"], "e2-5");
-      E("hostage_incident", "dip", "crisis", "\u4EBA\u8CEA\u4E8B\u4EF6", "{s}\u306E\u5546\u4EBA\u304C\u3001{r}\u3067\u6355\u3048\u3089\u308C\u305F\u3002", ["\u6B66\u529B\u3092\u3061\u3089\u3064\u304B\u305B\u308B", "\u8EAB\u4EE3\u91D1\u3092\u6255\u3046", "\u4F7F\u7BC0\u3092\u9001\u3063\u3066\u4EA4\u6E09\u3059\u308B"], "e1-5 rival");
-      E("protest_note", "dip", "border", "\u6297\u8B70\u306E\u66F8\u7C21", "{r}\u304C\u3001{s}\u306E\u653F\u7B56\u306B\u6297\u8B70\u3059\u308B\u66F8\u7C21\u3092\u9001\u3063\u3066\u304D\u305F\u3002", ["\u5F37\u786C\u306B\u53CD\u8AD6\u3059\u308B", "\u4E01\u5BE7\u306B\u8FD4\u7B54\u3059\u308B", "\u7121\u8996\u3059\u308B"], "e2-5 rival");
-      E("cultural_exchange", "dip", "culture_boom", "\u6587\u5316\u4EA4\u6D41\u56E3", "{f}\u304B\u3089\u3001\u5B66\u8005\u3068\u697D\u4EBA\u304C\u8A2A\u308C\u3001\u4EA4\u6D41\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u5B66\u8005\u306E\u307F\u53D7\u3051\u5165\u308C\u308B", "\u65AD\u308B"], "e1-5 friend");
-      E("grain_aid", "dip", "famine", "\u98DF\u7CE7\u63F4\u52A9\u306E\u4F9D\u983C", "{f}\u304C\u3001\u51F6\u4F5C\u3067\u98DF\u7CE7\u306E\u63F4\u52A9\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u63F4\u52A9\u3059\u308B", "\u58F2\u5374\u306B\u5207\u308A\u66FF\u3048\u308B", "\u65AD\u308B"], "e1-5 friend rich");
-      E("vassal_demand", "dip", "opportunity_war", "\u5F93\u5C5E\u56FD\u306E\u5897\u984D\u8981\u6C42", "\u5F93\u5C5E\u56FD\u304C\u3001\u5E87\u8B77\u306E\u898B\u8FD4\u308A\u306E\u5897\u984D\u3092\u6C42\u3081\u305F\u3002", ["\u5FDC\u3058\u308B", "\u65AD\u308B", "\u5185\u90E8\u306B\u4ECB\u5165\u3057\u3066\u7D71\u5236\u3059\u308B"], "e2-5");
-      E("neutral_declaration", "dip", "war_threat", "\u4E2D\u7ACB\u306E\u5BA3\u8A00", "\u5927\u56FD\u3069\u3046\u3057\u306E\u6226\u3044\u306E\u306A\u304B\u3001{s}\u306F\u4E2D\u7ACB\u3092\u5BA3\u8A00\u3059\u308B\u304B\u3069\u3046\u304B\u3092\u8FEB\u3089\u308C\u305F\u3002", ["\u4E2D\u7ACB\u3092\u5B88\u308B", "\u4E00\u65B9\u306B\u3064\u304F", "\u3069\u3061\u3089\u3082\u8B66\u6212\u3057\u3066\u8ECD\u5099\u3092\u6574\u3048\u308B"], "e2-5 war");
-      E("treaty_violation", "dip", "border", "\u6761\u7D04\u9055\u53CD\u306E\u7591\u3044", "{r}\u304C\u3001\u7D50\u3093\u3060\u6761\u7D04\u306B\u80CC\u3044\u305F\u3068\u7591\u308F\u308C\u3066\u3044\u308B\u3002", ["\u53B3\u91CD\u306B\u6297\u8B70\u3059\u308B", "\u8A3C\u62E0\u3092\u96C6\u3081\u308B", "\u4E0D\u554F\u306B\u4ED8\u3059"], "e2-5 rival", "border_clash:8:.3@0");
-      E("alliance_betrayal", "dip", "tragedy_royal", "\u540C\u76DF\u56FD\u306E\u88CF\u5207\u308A", "\u540C\u76DF\u56FD\u304C\u3001{s}\u3092\u898B\u6368\u3066\u3001\u6575\u56FD\u3068\u548C\u3057\u305F\u3002", ["\u7D76\u7E01\u3059\u308B", "\u7406\u7531\u3092\u554F\u3044\u305F\u3060\u3059", "\u65B0\u3057\u3044\u540C\u76DF\u56FD\u3092\u63A2\u3059"], "e1-5 friend war");
-      E("global_council", "dip", "diplomacy_chance", "\u56FD\u969B\u4F1A\u8B70\u3078\u306E\u62DB\u5F85", "\u65B0\u3057\u3044\u79E9\u5E8F\u3092\u3064\u304F\u308B\u56FD\u969B\u4F1A\u8B70\u3078\u306E\u62DB\u304D\u304C\u6765\u305F\u3002", ["\u4EE3\u8868\u56E3\u3092\u9001\u308B", "\u66F8\u9762\u3067\u610F\u898B\u3092\u9001\u308B", "\u53C2\u52A0\u3057\u306A\u3044"], "e4-5");
-      E("defeat_humiliation", "war", "crisis", "\u6557\u6226\u306E\u5C48\u8FB1", "\u6226\u3044\u306B\u6557\u308C\u305F{s}\u306F\u3001\u5C48\u8FB1\u7684\u306A\u8B1B\u548C\u3092\u53D7\u3051\u5165\u308C\u305F\u3002", ["\u6761\u7D04\u3092\u53D7\u3051\u5165\u308C\u308B", "\u96A0\u308C\u3066\u518D\u8D77\u3092\u671F\u3059", "\u56FD\u6C11\u306B\u8CAC\u4EFB\u3092\u554F\u3046"], "e1-5 nwar lows", "reparation_burden:6:.5");
-      E("reparation_burden", "war", "fiscal", "\u8CE0\u511F\u91D1\u306E\u91CD\u8377", "\u8CE0\u511F\u91D1\u306E\u652F\u6255\u3044\u304C\u3001{s}\u306E\u8CA1\u653F\u3092\u5727\u8FEB\u3057\u3066\u3044\u308B\u3002", ["\u5897\u7A0E\u3057\u3066\u6255\u3046", "\u652F\u6255\u3044\u306E\u5EF6\u671F\u3092\u6C42\u3081\u308B", "\u56FD\u50B5\u3067\u51CC\u3050"], "e1-5 only", "revanchism:18:.4");
-      E("revanchism", "war", "war_threat", "\u5FA9\u8B90\u4E3B\u7FA9\u306E\u9AD8\u307E\u308A", "\u6557\u5317\u3092\u5FD8\u308C\u306C\u4E16\u8AD6\u304C\u3001\u8ECD\u306E\u518D\u5EFA\u3068\u5831\u5FA9\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u5831\u5FA9\u306E\u6E96\u5099\u3092\u9032\u3081\u308B", "\u4E16\u8AD6\u3092\u5BA5\u3081\u308B", "\u5916\u4EA4\u3067\u5305\u56F2\u7DB2\u3092\u4F5C\u308B"], "e1-5 only", "revenge_war:24:.35@0");
-      E("revenge_war", "war", "opportunity_war", "\u5831\u5FA9\u306E\u6226\u3044", "\u56FD\u529B\u3092\u56DE\u5FA9\u3057\u305F{s}\u306F\u3001\u304B\u3064\u3066\u306E\u6575\u306B\u96EA\u8FB1\u3092\u679C\u305F\u305D\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u5BA3\u6226\u3059\u308B", "\u540C\u76DF\u3092\u56FA\u3081\u3066\u6A5F\u3092\u5F85\u3064", "\u5831\u5FA9\u3092\u65AD\u5FF5\u3059\u308B"], "e1-5 only rival", "", ["warby:R:conquest", "", ""]);
-      E("miracle_victory", "war", "war_threat", "\u5BE1\u5175\u304C\u5927\u8ECD\u3092\u7834\u308B", "\u5C11\u306A\u3044\u5175\u3067\u3001\u6575\u306E\u5927\u8ECD\u3092\u6253\u3061\u7834\u308B\u3068\u3044\u3046\u5947\u8DE1\u304C\u8D77\u304D\u305F\u3002", ["\u52DD\u5229\u3092\u5927\u3044\u306B\u5BA3\u4F1D\u3059\u308B", "\u8FFD\u6483\u3057\u3066\u6226\u679C\u3092\u5E83\u3052\u308B", "\u8B1B\u548C\u3092\u63A2\u308B"], "e1-5 war", "legend_forms:12:.5@0");
-      E("legend_forms", "war", "culture_boom", "\u5947\u8DE1\u304C\u4F1D\u8AAC\u306B\u306A\u308B", "\u3042\u306E\u52DD\u5229\u306E\u7269\u8A9E\u306F\u3001\u6B4C\u3068\u7D75\u306B\u306A\u3063\u3066\u56FD\u4E2D\u306B\u5E83\u307E\u3063\u3066\u3044\u304F\u3002", ["\u4F1D\u8AAC\u3092\u516C\u8A8D\u3059\u308B", "\u8A69\u4EBA\u306B\u5E87\u8B77\u3092\u4E0E\u3048\u308B", "\u53F2\u5B9F\u306E\u78BA\u8A8D\u3092\u4FC3\u3059"], "e1-5 only", "national_identity:36:.4");
-      E("national_identity", "war", "culture_boom", "\u56FD\u6C11\u610F\u8B58\u306E\u82BD\u751F\u3048", "\u5171\u6709\u3059\u308B\u7269\u8A9E\u306E\u3082\u3068\u3001{s}\u306E\u4EBA\u3005\u306F\u540C\u3058\u56FD\u306E\u6C11\u3060\u3068\u611F\u3058\u306F\u3058\u3081\u305F\u3002", ["\u795D\u65E5\u3092\u5B9A\u3081\u308B", "\u6C11\u65CF\u306E\u6B4C\u3092\u5968\u52B1\u3059\u308B", "\u56FD\u8A9E\u3092\u6574\u3048\u308B"], "e2-5 only");
-      E("siege_endured", "war", "war_threat", "\u9577\u3044\u5305\u56F2\u6226", "{s}\u306E\u57CE\u585E\u304C\u3001\u6575\u8ECD\u306B\u9577\u671F\u9593\u5305\u56F2\u3055\u308C\u3066\u3044\u308B\u3002", ["\u6C7A\u6B7B\u306E\u51FA\u6483\u3092\u884C\u3046", "\u964D\u4F0F\u306E\u4EA4\u6E09\u3092\u3059\u308B", "\u63F4\u8ECD\u3092\u5F85\u3064"], "e1-5 war");
-      E("mutiny_navy", "war", "coup_threat", "\u6C34\u5175\u306E\u53CD\u4E71", "\u8266\u968A\u306E\u6C34\u5175\u304C\u3001\u5F85\u9047\u306B\u6297\u8B70\u3057\u3066\u53CD\u4E71\u3092\u8D77\u3053\u3057\u305F\u3002", ["\u8981\u6C42\u3092\u53D7\u3051\u5165\u308C\u308B", "\u9996\u8B00\u8005\u3092\u51E6\u5211\u3059\u308B", "\u63D0\u7763\u3092\u66F4\u8FED\u3059\u308B"], "e3-5 coast war");
-      E("plague_in_army", "war", "plague", "\u8ECD\u4E2D\u306E\u75AB\u75C5", "\u8ECD\u4E2D\u306B\u75AB\u75C5\u304C\u5E83\u304C\u308A\u3001\u5175\u304C\u3070\u305F\u3070\u305F\u3068\u5012\u308C\u3066\u3044\u308B\u3002", ["\u64A4\u9000\u3059\u308B", "\u9694\u96E2\u3057\u3066\u524D\u9032\u3059\u308B", "\u533B\u5E2B\u56E3\u3092\u6025\u6D3E\u3059\u308B"], "e1-5 war");
-      E("deserters_flood", "war", "crisis", "\u8131\u8D70\u5175\u306E\u7D9A\u51FA", "\u9577\u5F15\u304F\u6226\u4E89\u306B\u75B2\u308C\u305F\u5175\u304C\u3001\u8131\u8D70\u3092\u59CB\u3081\u305F\u3002", ["\u898B\u305B\u3057\u3081\u306B\u51E6\u5211\u3059\u308B", "\u6069\u8D66\u3092\u51FA\u3059", "\u7D66\u91D1\u3092\u5897\u3084\u3059"], "e1-5 war");
-      E("fortress_built", "war", "border", "\u56FD\u5883\u306E\u8981\u585E\u5EFA\u8A2D", "\u56FD\u5883\u306B\u5927\u8981\u585E\u3092\u7BC9\u304F\u6848\u304C\u3001\u91CD\u81E3\u304B\u3089\u51FA\u3055\u308C\u305F\u3002", ["\u7BC9\u304F", "\u5C0F\u898F\u6A21\u306A\u7826\u306B\u3068\u3069\u3081\u308B", "\u5916\u4EA4\u3067\u89E3\u6C7A\u3092\u63A2\u308B"], "e1-5 rival", "border_clash:12:.3@0");
-      E("new_weapon", "war", "tech_boom", "\u65B0\u5175\u5668\u306E\u767B\u5834", "{s}\u306E\u5DE5\u623F\u304C\u3001\u65B0\u3057\u3044\u6B66\u5668\u3092\u5B8C\u6210\u3055\u305B\u305F\u3002", ["\u5927\u91CF\u306B\u88C5\u5099\u3059\u308B", "\u8A66\u9A13\u7684\u306B\u63A1\u7528\u3059\u308B", "\u4ED6\u56FD\u306B\u58F2\u5374\u3059\u308B"], "e1-5");
-      E("army_reform", "war", "reform", "\u8ECD\u5236\u306E\u6539\u9769", "\u53E4\u3044\u8ECD\u306E\u7DE8\u5236\u3092\u6539\u3081\u3088\u3068\u306E\u58F0\u304C\u3001\u5C06\u6821\u304B\u3089\u4E0A\u304C\u3063\u305F\u3002", ["\u5168\u9762\u7684\u306B\u6539\u9769\u3059\u308B", "\u4E00\u90E8\u306E\u90E8\u968A\u3067\u8A66\u3059", "\u73FE\u72B6\u3092\u7DAD\u6301\u3059\u308B"], "e1-5 nwar");
-      E("great_general_dies", "war", "tragedy_royal", "\u540D\u5C06\u306E\u6226\u6B7B", "\u8ECD\u306E\u67F1\u3067\u3042\u3063\u305F\u5C06\u8ECD\u304C\u3001\u6226\u5834\u3067\u5012\u308C\u305F\u3002", ["\u56FD\u846C\u3092\u55B6\u3080", "\u5F8C\u4EFB\u3092\u6025\u304E\u5B9A\u3081\u308B", "\u6575\u306E\u4ED5\u696D\u3068\u7CFE\u5F3E\u3059\u308B"], "e1-5 war");
-      E("conscription_riot", "war", "rebel_peasant", "\u5FB4\u5175\u3078\u306E\u62B5\u6297", "\u5FB4\u5175\u306B\u53CD\u5BFE\u3057\u3066\u3001\u8FB2\u6751\u3067\u66B4\u52D5\u304C\u8D77\u304D\u305F\u3002", ["\u6B66\u529B\u3067\u93AE\u3081\u308B", "\u5FB4\u5175\u3092\u6E1B\u3089\u3059", "\u514D\u5F79\u91D1\u3092\u8A8D\u3081\u308B"], "e3-5 war");
-      E("fleet_lost", "war", "tragedy_royal", "\u8266\u968A\u306E\u906D\u96E3", "\u5D50\u3067\u3001\u9060\u5F81\u306E\u8266\u968A\u304C\u906D\u96E3\u3057\u305F\u3002", ["\u518D\u5EFA\u3092\u6025\u3050", "\u9060\u5F81\u3092\u3042\u304D\u3089\u3081\u308B", "\u4ED6\u56FD\u306B\u652F\u63F4\u3092\u6C42\u3081\u308B"], "e2-5 coast");
-      E("peace_rumor", "war", "war_threat", "\u548C\u5E73\u306E\u5642", "\u6575\u304C\u548C\u5E73\u3092\u63A2\u3063\u3066\u3044\u308B\u3068\u306E\u5642\u304C\u6D41\u308C\u305F\u3002", ["\u4F1A\u8AC7\u306B\u5FDC\u3058\u308B", "\u6226\u679C\u3092\u5E83\u3052\u3066\u304B\u3089\u5FDC\u3058\u308B", "\u5642\u3092\u7121\u8996\u3059\u308B"], "e1-5 war");
-      E("war_profiteer", "war", "fiscal", "\u6226\u4E89\u6210\u91D1", "\u6226\u3067\u8CA1\u3092\u6210\u3057\u305F\u5546\u4EBA\u304C\u3001\u5BAE\u5EF7\u306B\u5F71\u97FF\u529B\u3092\u6301\u3061\u306F\u3058\u3081\u305F\u3002", ["\u8AB2\u7A0E\u3059\u308B", "\u53D6\u308A\u8FBC\u3080", "\u9060\u3056\u3051\u308B"], "e2-5 war");
-      E("veterans_return", "war", "reform", "\u5E30\u9084\u5175\u306E\u51E6\u9047", "\u9060\u5F81\u304B\u3089\u623B\u3063\u305F\u5175\u304C\u3001\u6069\u8CDE\u3068\u571F\u5730\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u571F\u5730\u3092\u4E0E\u3048\u308B", "\u5E74\u91D1\u3092\u4E0E\u3048\u308B", "\u89E3\u6563\u3057\u3066\u5E30\u8FB2\u3055\u305B\u308B"], "e1-5 nwar", "peasant_revolt:12:.15@2");
-      E("siege_engine", "war", "tech_boom", "\u653B\u57CE\u5175\u5668\u306E\u958B\u767A", "\u65B0\u3057\u3044\u653B\u57CE\u5175\u5668\u304C\u958B\u767A\u3055\u308C\u3001\u57CE\u58C1\u306E\u4FA1\u5024\u304C\u63FA\u3089\u3044\u3067\u3044\u308B\u3002", ["\u63A1\u7528\u3059\u308B", "\u60C5\u5831\u3092\u5B88\u308B", "\u57CE\u58C1\u306E\u5F37\u5316\u3092\u512A\u5148\u3059\u308B"], "e1-3");
-      E("naval_victory", "war", "war_threat", "\u6D77\u6226\u306E\u5927\u52DD", "{s}\u306E\u8266\u968A\u304C\u3001\u6575\u8266\u968A\u3092\u6253\u3061\u7834\u308A\u3001\u5236\u6D77\u6A29\u3092\u63E1\u3063\u305F\u3002", ["\u6D77\u4E0A\u5C01\u9396\u3078\u79FB\u308B", "\u52DD\u5229\u3092\u6A5F\u306B\u8B1B\u548C\u3059\u308B", "\u6D77\u8ECD\u3092\u5897\u5F37\u3059\u308B"], "e2-5 coast war");
-      E("fifth_column", "war", "omen", "\u5185\u901A\u8005\u306E\u6697\u8E8D", "\u6575\u306B\u901A\u3058\u308B\u8005\u304C\u3001\u8ECD\u306E\u52D5\u304D\u3092\u6F0F\u3089\u3057\u3066\u3044\u305F\u3002", ["\u5927\u898F\u6A21\u306B\u6458\u767A\u3059\u308B", "\u507D\u60C5\u5831\u3092\u6D41\u3059", "\u8B66\u6212\u3092\u547C\u3073\u304B\u3051\u308B\u306E\u307F"], "e1-5 war");
-      E("scorched_earth", "war", "war_threat", "\u7126\u571F\u4F5C\u6226", "\u6575\u306E\u9032\u8ECD\u3092\u9045\u3089\u305B\u308B\u305F\u3081\u3001\u56FD\u5883\u306E\u6751\u3092\u713C\u304F\u6848\u304C\u51FA\u305F\u3002", ["\u5B9F\u884C\u3059\u308B", "\u4E00\u90E8\u306E\u307F\u884C\u3046", "\u6C11\u3092\u5B88\u3063\u3066\u6226\u3046"], "e1-5 war");
-      E("armistice_offer", "war", "diplomacy_chance", "\u4F11\u6226\u306E\u7533\u3057\u51FA", "\u6575\u304C\u3001\u4E00\u6642\u306E\u4F11\u6226\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u6761\u4EF6\u3092\u4ED8\u3051\u308B", "\u62D2\u3080"], "e1-5 war");
-      E("captured_commander", "war", "war_threat", "\u6575\u5C06\u3092\u6355\u865C\u306B\u3059\u308B", "\u6226\u3044\u3067\u3001\u6575\u306E\u6307\u63EE\u5B98\u3092\u751F\u3051\u6355\u308A\u306B\u3057\u305F\u3002", ["\u8EAB\u4EE3\u91D1\u3092\u53D6\u308B", "\u4E01\u91CD\u306B\u6271\u3044\u4EA4\u6E09\u306B\u4F7F\u3046", "\u51E6\u5211\u3059\u308B"], "e1-5 war");
-      E("garrison_famine", "war", "famine", "\u8981\u585E\u306E\u98E2\u3048", "\u5305\u56F2\u3055\u308C\u305F\u8981\u585E\u3067\u3001\u98DF\u7CE7\u304C\u5C3D\u304D\u304B\u3051\u3066\u3044\u308B\u3002", ["\u7A81\u7834\u3092\u8A66\u307F\u308B", "\u98DF\u7CE7\u3092\u7A7A\u8F38\u3059\u308B", "\u964D\u4F0F\u3092\u8003\u3048\u308B"], "e3-5 war");
-      E("mobilization_decree", "war", "war_threat", "\u7DCF\u52D5\u54E1\u306E\u5E03\u544A", "\u56FD\u96E3\u306B\u969B\u3057\u3066\u3001\u7DCF\u52D5\u54E1\u4EE4\u3092\u51FA\u3059\u6848\u304C\u3042\u308B\u3002", ["\u7DCF\u52D5\u54E1\u3059\u308B", "\u90E8\u5206\u52D5\u54E1\u306B\u3068\u3069\u3081\u308B", "\u5916\u4EA4\u3067\u6253\u958B\u3059\u308B"], "e3-5 war");
-      E("nuclear_scare", "war", "war_threat", "\u6838\u306E\u6050\u6016", "\u6575\u56FD\u304C\u65B0\u578B\u306E\u5927\u91CF\u7834\u58CA\u5175\u5668\u3092\u6301\u3063\u305F\u3068\u306E\u60C5\u5831\u304C\u5165\u3063\u305F\u3002", ["\u67FB\u5BDF\u3092\u6C42\u3081\u308B", "\u8ECD\u5099\u3092\u6025\u3050", "\u4EA4\u6E09\u306E\u5834\u3092\u8A2D\u3051\u308B"], "e5 rival");
-      E("space_race", "war", "tech_boom", "\u5B87\u5B99\u3092\u3081\u3050\u308B\u7AF6\u4E89", "{r}\u304C\u8ECC\u9053\u306B\u885B\u661F\u3092\u6253\u3061\u4E0A\u3052\u305F\u3002", ["\u8FFD\u968F\u3057\u3066\u6295\u8CC7\u3059\u308B", "\u540C\u76DF\u56FD\u3068\u5171\u540C\u3067\u9032\u3081\u308B", "\u5730\u4E0A\u306E\u9632\u885B\u3092\u512A\u5148\u3059\u308B"], "e5 rival");
-      E("reformation_preacher", "rel", "religion_move", "\u6539\u9769\u3092\u8AAC\u304F\u8AAC\u6559\u5E2B", "\u6559\u4F1A\u306E\u8150\u6557\u3092\u7CFE\u5F3E\u3059\u308B\u8AAC\u6559\u5E2B\u304C\u3001\u6C11\u8846\u306E\u4EBA\u6C17\u3092\u96C6\u3081\u305F\u3002", ["\u5F3E\u5727\u3059\u308B", "\u8A0E\u8AD6\u3092\u8A31\u3059", "\u6539\u9769\u3092\u53D6\u308A\u8FBC\u3080"], "e2-4", "church_lands:24:.4@2,religious_war:18:.3@0");
-      E("church_lands", "rel", "religion_move", "\u6559\u4F1A\u9818\u306E\u6CA1\u53CE", "\u6559\u4F1A\u304C\u6301\u3064\u5E83\u5927\u306A\u9818\u5730\u3092\u3001\u56FD\u5EAB\u306B\u53CE\u3081\u3088\u3046\u3068\u306E\u6848\u304C\u51FA\u305F\u3002", ["\u6CA1\u53CE\u3059\u308B", "\u4E00\u90E8\u3092\u6CA1\u53CE\u3059\u308B", "\u5BC4\u9032\u3092\u6C42\u3081\u308B\u306B\u3068\u3069\u3081\u308B"], "e2-4 only", "religious_war:12:.4@0,toleration_edict:24:.3@2");
-      E("religious_war", "rel", "opportunity_war", "\u5B97\u6559\u6226\u4E89", "\u4FE1\u4EF0\u306E\u9055\u3044\u3092\u7406\u7531\u306B\u3001\u56FD\u304C\u4E8C\u3064\u306B\u5272\u308C\u3066\u6226\u3044\u304C\u59CB\u307E\u3063\u305F\u3002", ["\u6B63\u7D71\u3092\u63B2\u3052\u3066\u6226\u3046", "\u7A4F\u5065\u6D3E\u3068\u548C\u3092\u63A2\u308B", "\u5916\u56FD\u306E\u8ABF\u505C\u3092\u983C\u3080"], "e2-4 only", "toleration_edict:36:.5", ["rebel:religious", "", ""]);
-      E("toleration_edict", "rel", "reform", "\u5BDB\u5BB9\u4EE4", "\u9577\u3044\u4E89\u3044\u306E\u672B\u306B\u3001\u4FE1\u4EF0\u306E\u81EA\u7531\u3092\u8A8D\u3081\u308B\u52C5\u4EE4\u304C\u51FA\u3055\u308C\u305F\u3002", ["\u5BDB\u5BB9\u4EE4\u3092\u51FA\u3059", "\u9650\u5B9A\u7684\u306B\u8A8D\u3081\u308B", "\u5F93\u6765\u306E\u65B9\u91DD\u3092\u7D9A\u3051\u308B"], "e2-5 only");
-      E("heresy_spread", "rel", "religion_move", "\u7570\u7AEF\u306E\u5E83\u304C\u308A", "\u6B63\u7D71\u3068\u306F\u7570\u306A\u308B\u6559\u3048\u304C\u3001{s}\u306E\u6C11\u306B\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u7570\u7AEF\u5BE9\u554F\u3092\u884C\u3046", "\u5BDB\u5BB9\u306B\u6271\u3046", "\u6559\u7FA9\u306E\u8B70\u8AD6\u3092\u4FC3\u3059"], "e1-4");
-      E("pilgrimage_boom", "rel", "trade_boom", "\u5DE1\u793C\u306E\u76DB\u6CC1", "\u8056\u5730\u3078\u306E\u5DE1\u793C\u304C\u76DB\u3093\u306B\u306A\u308A\u3001\u8857\u9053\u306B\u4EBA\u304C\u7D76\u3048\u306A\u3044\u3002", ["\u5DE1\u793C\u8DEF\u3092\u6574\u5099\u3059\u308B", "\u5DE1\u793C\u7A0E\u3092\u8AB2\u3059", "\u5BBF\u6CCA\u6240\u3092\u6559\u4F1A\u306B\u4EFB\u305B\u308B"], "e1-4");
-      E("temple_wealth", "rel", "fiscal", "\u795E\u6BBF\u306E\u84C4\u8CA1", "\u795E\u6BBF\u304C\u8CB4\u91D1\u5C5E\u3092\u84C4\u3048\u3001\u56FD\u5EAB\u3092\u4E0A\u56DE\u308B\u5BCC\u3092\u6301\u3063\u305F\u3002", ["\u5BC4\u9032\u3092\u6C42\u3081\u308B", "\u795E\u6BBF\u3092\u4FDD\u8B77\u3059\u308B", "\u4E16\u4FD7\u5316\u3092\u9032\u3081\u308B"], "e1-4", "church_lands:24:.3@0");
-      E("miracle_claimed", "rel", "omen", "\u5947\u8DE1\u306E\u4E3B\u5F35", "\u300C\u75C5\u304C\u7652\u3048\u305F\u300D\u3068\u3001\u8FB2\u6751\u3067\u591A\u304F\u306E\u4EBA\u304C\u8A3C\u8A00\u3057\u3066\u3044\u308B\u3002", ["\u5947\u8DE1\u3092\u516C\u8A8D\u3059\u308B", "\u8ABF\u67FB\u3092\u547D\u3058\u308B", "\u6C11\u5FC3\u3092\u60D1\u308F\u3059\u3068\u7981\u3058\u308B"], "e1-4");
-      E("religious_schism", "rel", "crisis", "\u6559\u7FA9\u306E\u5206\u88C2", "\u6559\u7FA9\u306E\u89E3\u91C8\u3092\u3081\u3050\u3063\u3066\u3001\u8056\u8077\u8005\u304C\u4E8C\u6D3E\u306B\u5206\u304B\u308C\u305F\u3002", ["\u4E00\u65B9\u3092\u652F\u6301\u3059\u308B", "\u516C\u4F1A\u8B70\u3092\u958B\u304F", "\u5206\u88C2\u3092\u653E\u7F6E\u3059\u308B"], "e1-5", "religious_war:18:.2@2");
-      E("missionary_arrives", "rel", "religion_move", "\u5BA3\u6559\u5E2B\u306E\u6765\u8A2A", "\u7570\u56FD\u306E\u5BA3\u6559\u5E2B\u304C\u3001\u65B0\u3057\u3044\u6559\u3048\u3092\u5E83\u3081\u306B\u6765\u305F\u3002", ["\u5E03\u6559\u3092\u8A31\u3059", "\u7279\u5B9A\u306E\u5730\u57DF\u306B\u9650\u308B", "\u8FFD\u653E\u3059\u308B"], "e1-4 friend");
-      E("inquisitor_zeal", "rel", "religion_move", "\u5BE9\u554F\u5B98\u306E\u66B4\u8D70", "\u7570\u7AEF\u5BE9\u554F\u5B98\u304C\u3001\u6A29\u9650\u3092\u9038\u8131\u3057\u3066\u8CB4\u65CF\u3092\u6355\u3048\u305F\u3002", ["\u5BE9\u554F\u5B98\u3092\u6291\u3048\u308B", "\u652F\u6301\u3059\u308B", "\u8CB4\u65CF\u306B\u614E\u91CD\u3092\u6C42\u3081\u308B"], "e2-4", "reformation_preacher:12:.2@1");
-      E("holy_war_call", "rel", "war_threat", "\u8056\u6226\u306E\u547C\u3073\u304B\u3051", "\u8056\u8077\u8005\u304C\u3001\u7570\u6559\u5F92\u3068\u306E\u8056\u6226\u3092\u6C11\u306B\u547C\u3073\u304B\u3051\u3066\u3044\u308B\u3002", ["\u8056\u6226\u3092\u5BA3\u8A00\u3059\u308B", "\u547C\u3073\u304B\u3051\u3092\u6291\u3048\u308B", "\u5916\u4EA4\u3067\u5727\u529B\u3092\u304B\u3051\u308B"], "e1-4 rival", "border_clash:6:.3@0");
-      E("sacred_text_found", "rel", "culture_boom", "\u8056\u5178\u306E\u767A\u898B", "\u53E4\u3044\u8056\u5178\u306E\u5199\u672C\u304C\u767A\u898B\u3055\u308C\u3001\u6559\u7FA9\u306E\u8AD6\u4E89\u304C\u71C3\u3048\u305F\u3002", ["\u5199\u672C\u3092\u516C\u8A8D\u3059\u308B", "\u7814\u7A76\u3092\u547D\u3058\u308B", "\u79D8\u8535\u3059\u308B"], "e1-4");
-      E("priest_king_cult", "rel", "religion_move", "\u738B\u306E\u795E\u683C\u5316", "\u8056\u8077\u8005\u304C\u3001{L}\u3092\u795E\u306E\u5B50\u3068\u3059\u308B\u6559\u3048\u3092\u8AAC\u3044\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u9650\u5B9A\u7684\u306B\u8A8D\u3081\u308B", "\u62D2\u3080"], "e0-2 her");
-      E("secular_reform", "rel", "reform", "\u653F\u6559\u5206\u96E2\u306E\u6A5F\u904B", "\u56FD\u306E\u7D71\u6CBB\u3068\u4FE1\u4EF0\u3092\u5206\u3051\u3088\u3001\u3068\u306E\u58F0\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u5206\u96E2\u3092\u9032\u3081\u308B", "\u6F38\u9032\u7684\u306B\u9032\u3081\u308B", "\u8056\u8077\u8005\u3068\u5354\u8ABF\u3059\u308B"], "e3-5", "toleration_edict:12:.2@0");
-      E("cult_sect_rises", "rel", "crisis", "\u65B0\u8208\u6559\u56E3\u306E\u53F0\u982D", "\u7D42\u672B\u3092\u8AAC\u304F\u65B0\u8208\u6559\u56E3\u304C\u3001\u6C11\u306E\u5FC3\u3092\u3068\u3089\u3048\u305F\u3002", ["\u89E3\u6563\u3055\u305B\u308B", "\u7A4F\u5065\u306B\u53D6\u308A\u8FBC\u3080", "\u69D8\u5B50\u3092\u898B\u308B"], "e2-5 lows");
-      E("temple_collapse", "rel", "disaster", "\u795E\u6BBF\u306E\u5D29\u58CA", "\u5730\u9707\u3067\u3001\u56FD\u306E\u4E2D\u5FC3\u306E\u795E\u6BBF\u304C\u5D29\u308C\u305F\u3002", ["\u518D\u5EFA\u306B\u5168\u529B\u3092\u50BE\u3051\u308B", "\u7C21\u7D20\u306B\u5EFA\u3066\u76F4\u3059", "\u5409\u51F6\u3092\u5360\u3046"], "e1-4", "omen_comet:6:.2");
-      E("rite_of_spring", "rel", "culture_boom", "\u6625\u306E\u796D\u308A", "\u56FD\u4E2D\u3067\u3001\u8C4A\u7A63\u3092\u7948\u308B\u796D\u308A\u304C\u55B6\u307E\u308C\u308B\u3002", ["\u56FD\u8CBB\u3067\u76DB\u5927\u306B\u884C\u3046", "\u6C11\u306E\u81EA\u4E3B\u306B\u4EFB\u305B\u308B", "\u7C21\u7D20\u306B\u3059\u308B"], "e0-3");
-      E("religious_scholars_debate", "rel", "culture_boom", "\u5927\u8AD6\u4E89", "\u8AF8\u5B97\u6D3E\u306E\u5B66\u8005\u304C\u3001\u516C\u958B\u3067\u6559\u7406\u3092\u6226\u308F\u305B\u305F\u3002", ["\u81EA\u3089\u81E8\u5E2D\u3059\u308B", "\u5F8C\u63F4\u3059\u308B", "\u9A12\u304E\u3060\u3068\u5236\u9650\u3059\u308B"], "e2-4");
-      E("conversion_ruler", "rel", "religion_move", "\u541B\u4E3B\u306E\u6539\u5B97", "{L}\u304C\u3001\u65B0\u3057\u3044\u6559\u3048\u306B\u5E30\u4F9D\u3057\u305F\u3044\u3068\u8A00\u3044\u3060\u3057\u305F\u3002", ["\u6539\u5B97\u3059\u308B", "\u5F62\u3060\u3051\u53D7\u3051\u308B", "\u6C11\u306E\u4FE1\u4EF0\u3092\u5C0A\u91CD\u3057\u3066\u6539\u5B97\u3057\u306A\u3044"], "e1-4 her", "religious_war:12:.2@0");
-      E("new_sea_route", "eco", "trade_boom", "\u65B0\u822A\u8DEF\u306E\u767A\u898B", "\u9060\u6D0B\u306B\u51FA\u305F\u8239\u56E3\u304C\u3001\u672A\u77E5\u306E\u6D77\u3078\u306E\u822A\u8DEF\u3092\u62D3\u3044\u3066\u5E30\u6E2F\u3057\u305F\u3002", ["\u738B\u5BA4\u306E\u72EC\u5360\u4E8B\u696D\u306B\u3059\u308B", "\u5546\u4EBA\u306B\u958B\u653E\u3059\u308B", "\u822A\u8DEF\u3092\u79D8\u5BC6\u306B\u3059\u308B"], "e3-5 coast", "merchant_wealth:24:.5@1,merchant_wealth:36:.35@0");
-      E("merchant_wealth", "eco", "trade_boom", "\u4EA4\u6613\u306E\u5BCC\u304C\u6D41\u308C\u8FBC\u3080", "\u65B0\u3057\u3044\u4EA4\u6613\u3067\u3001\u6E2F\u753A\u306B\u83AB\u5927\u306A\u5BCC\u304C\u96C6\u307E\u308A\u306F\u3058\u3081\u305F\u3002", ["\u95A2\u7A0E\u3092\u9AD8\u3081\u308B", "\u6E2F\u306E\u81EA\u6CBB\u3092\u8A8D\u3081\u308B", "\u6295\u8CC7\u3092\u547C\u3073\u8FBC\u3080"], "e3-5 only", "merchant_rise:24:.5");
-      E("merchant_rise", "eco", "reform", "\u5546\u4EBA\u306E\u53F0\u982D", "\u5BCC\u3092\u84C4\u3048\u305F\u5546\u4EBA\u304C\u3001\u653F\u6CBB\u3078\u306E\u767A\u8A00\u3092\u6C42\u3081\u306F\u3058\u3081\u305F\u3002", ["\u5546\u4EBA\u3092\u8CB4\u65CF\u306B\u53D6\u308A\u7ACB\u3066\u308B", "\u4F1A\u8B70\u3078\u306E\u53C2\u52A0\u3092\u8A8D\u3081\u308B", "\u7279\u6A29\u3092\u5B88\u308B"], "e3-5 only", "assembly_founded:24:.4@1");
-      E("assembly_founded", "eco", "reform", "\u8EAB\u5206\u5236\u8B70\u4F1A\u306E\u8A2D\u7F6E", "\u8AF8\u8EAB\u5206\u306E\u4EE3\u8868\u304C\u96C6\u3046\u8B70\u4F1A\u304C\u3001\u521D\u3081\u3066\u958B\u304B\u308C\u305F\u3002", ["\u8B70\u4F1A\u3092\u8A2D\u3051\u308B", "\u8AEE\u554F\u6A5F\u95A2\u306B\u3068\u3069\u3081\u308B", "\u8A2D\u7F6E\u3092\u62D2\u3080"], "e3-5 only", "constitution_drafted:36:.3@0");
-      E("labor_shortage", "eco", "crisis", "\u52B4\u50CD\u529B\u306E\u4E0D\u8DB3", "\u4EBA\u53E3\u306E\u6E1B\u5C11\u3067\u3001\u7551\u3068\u5DE5\u623F\u306E\u50CD\u304D\u624B\u304C\u8DB3\u308A\u306A\u3044\u3002", ["\u79FB\u6C11\u3092\u52DF\u308B", "\u8CC3\u91D1\u306E\u4E0A\u9650\u3092\u5B9A\u3081\u308B", "\u52B4\u50CD\u306E\u81EA\u7531\u3092\u5E83\u3052\u308B"], "e1-4 only", "serf_emancipation:24:.4@2");
-      E("serf_emancipation", "eco", "reform", "\u8FB2\u5974\u306E\u89E3\u653E", "\u9818\u4E3B\u306B\u7E1B\u3089\u308C\u305F\u8FB2\u6C11\u306B\u3001\u79FB\u52D5\u3068\u5951\u7D04\u306E\u81EA\u7531\u3092\u4E0E\u3048\u3088\u3046\u3068\u3059\u308B\u52D5\u304D\u304C\u51FA\u305F\u3002", ["\u5168\u9762\u7684\u306B\u89E3\u653E\u3059\u308B", "\u6709\u511F\u3067\u89E3\u653E\u3059\u308B", "\u73FE\u72B6\u3092\u7DAD\u6301\u3059\u308B"], "e2-4 only", "estates_shaken:12:.5@0");
-      E("estates_shaken", "eco", "reform", "\u8EAB\u5206\u5236\u306E\u52D5\u63FA", "\u89E3\u653E\u3055\u308C\u305F\u6C11\u304C\u90FD\u5E02\u306B\u6D41\u308C\u3001\u53E4\u3044\u8EAB\u5206\u306E\u79E9\u5E8F\u304C\u63FA\u3089\u3044\u3067\u3044\u308B\u3002", ["\u79E9\u5E8F\u3092\u5B88\u308B", "\u65B0\u3057\u3044\u79E9\u5E8F\u3092\u7BC9\u304F", "\u6DF7\u4E71\u3092\u653E\u7F6E\u3059\u308B"], "e2-5 only");
-      E("great_famine", "eco", "famine", "\u5927\u98E2\u9949", "\u5929\u5019\u4E0D\u9806\u304C\u7D9A\u304D\u3001{s}\u306E\u7A40\u5009\u304C\u7A7A\u306B\u306A\u3063\u305F\u3002", ["\u5099\u84C4\u3092\u958B\u304F", "\u4ED6\u56FD\u304B\u3089\u8CB7\u3046", "\u8015\u4F5C\u3092\u5F37\u5236\u3059\u308B"], "e1-4", "tax_burden:12:.35");
-      E("harvest_boom", "eco", "trade_boom", "\u5927\u8C4A\u4F5C", "\u4ECA\u5E74\u306F\u3001\u53CE\u7A6B\u304C\u8A18\u9332\u7684\u306A\u91CF\u306B\u9054\u3057\u305F\u3002", ["\u4F59\u5270\u3092\u5099\u84C4\u3059\u308B", "\u8F38\u51FA\u3059\u308B", "\u6C11\u306B\u9084\u5143\u3059\u308B"], "e1-4");
-      E("market_riot", "eco", "rebel_peasant", "\u5E02\u5834\u306E\u66B4\u52D5", "\u30D1\u30F3\u306E\u5024\u4E0A\u304C\u308A\u3067\u3001\u5E02\u5834\u304C\u66B4\u5F92\u306B\u8972\u308F\u308C\u305F\u3002", ["\u4FA1\u683C\u3092\u7D71\u5236\u3059\u308B", "\u5175\u3092\u51FA\u3059", "\u7A40\u7269\u3092\u914D\u308B"], "e2-5 poor");
-      E("guild_monopoly", "eco", "trade_boom", "\u540C\u696D\u7D44\u5408\u306E\u72EC\u5360", "\u8077\u4EBA\u7D44\u5408\u304C\u3001\u65B0\u898F\u53C2\u5165\u3092\u6392\u9664\u3057\u3066\u3044\u308B\u3002", ["\u7279\u6A29\u3092\u8A8D\u3081\u308B", "\u72EC\u5360\u3092\u7981\u3058\u308B", "\u8AB2\u7A0E\u3057\u3066\u898B\u9003\u3059"], "e2-4");
-      E("silver_mine", "eco", "trade_boom", "\u9280\u9271\u306E\u767A\u898B", "\u5C71\u4E2D\u3067\u3001\u5927\u304D\u306A\u9280\u9271\u304C\u898B\u3064\u304B\u3063\u305F\u3002", ["\u738B\u5BA4\u304C\u76F4\u55B6\u3059\u308B", "\u6C11\u9593\u306B\u958B\u653E\u3059\u308B", "\u5916\u56FD\u306B\u6A29\u5229\u3092\u58F2\u308B"], "e1-4", "inflation_crisis:36:.35@0");
-      E("inflation_crisis", "eco", "fiscal", "\u7269\u4FA1\u306E\u9AD8\u9A30", "\u8CA8\u5E63\u306E\u5897\u3048\u3059\u304E\u3067\u3001\u7269\u4FA1\u304C\u4E0A\u304C\u308A\u7D9A\u3051\u3066\u3044\u308B\u3002", ["\u8CA8\u5E63\u306E\u6539\u92F3\u3092\u884C\u3046", "\u4FA1\u683C\u7D71\u5236\u3092\u8A66\u307F\u308B", "\u5E02\u5834\u306B\u4EFB\u305B\u308B"], "e2-5", "market_riot:6:.3@2");
-      E("debt_trap", "eco", "fiscal", "\u56FD\u50B5\u306E\u8FD4\u6E08\u96E3", "\u56FD\u306E\u501F\u91D1\u304C\u81A8\u3089\u307F\u3001\u8CB8\u3057\u624B\u304C\u8FD4\u6E08\u3092\u6025\u304B\u3057\u3066\u3044\u308B\u3002", ["\u5897\u7A0E\u3067\u8FD4\u3059", "\u50B5\u52D9\u306E\u6574\u7406\u3092\u6C42\u3081\u308B", "\u5229\u6255\u3044\u3092\u5EF6\u3070\u3059"], "e2-5 poor");
-      E("canal_project", "eco", "trade_boom", "\u5927\u904B\u6CB3\u306E\u8A08\u753B", "\u56FD\u3092\u8CAB\u304F\u904B\u6CB3\u3092\u6398\u308C\u3070\u3001\u4EA4\u6613\u304C\u6F64\u3046\u3068\u6280\u5E2B\u304C\u8AAC\u3044\u305F\u3002", ["\u5EFA\u8A2D\u3092\u6C7A\u3081\u308B", "\u4E00\u90E8\u306E\u533A\u9593\u304B\u3089\u59CB\u3081\u308B", "\u8CBB\u7528\u3092\u7406\u7531\u306B\u898B\u9001\u308B"], "e1-5 rich");
-      E("road_network", "eco", "tech_boom", "\u8857\u9053\u7DB2\u306E\u6574\u5099", "\u4E3B\u8981\u90FD\u5E02\u3092\u3064\u306A\u3050\u8857\u9053\u3092\u6574\u3048\u308B\u6848\u304C\u51FA\u305F\u3002", ["\u56FD\u8CBB\u3067\u6574\u5099\u3059\u308B", "\u901A\u884C\u7A0E\u3067\u8CC4\u3046", "\u8ECD\u4E8B\u7528\u306B\u9650\u308B"], "e1-5");
-      E("migrant_workers", "eco", "crisis", "\u51FA\u7A3C\u304E\u52B4\u50CD\u8005\u306E\u6D41\u5165", "\u90FD\u5E02\u306B\u3001\u5404\u5730\u304B\u3089\u8CA7\u3057\u3044\u51FA\u7A3C\u304E\u306E\u4EBA\u3005\u304C\u96C6\u307E\u3063\u3066\u3044\u308B\u3002", ["\u4F4F\u5C45\u3092\u6574\u5099\u3059\u308B", "\u6D41\u5165\u3092\u5236\u9650\u3059\u308B", "\u5E02\u5834\u306B\u4EFB\u305B\u308B"], "e3-5");
-      E("tax_reform_proposal", "eco", "reform", "\u7A0E\u5236\u306E\u6539\u9769\u6848", "\u5F79\u4EBA\u304C\u3001\u571F\u5730\u306E\u5E83\u3055\u306B\u5FDC\u3058\u305F\u65B0\u3057\u3044\u7A0E\u5236\u3092\u63D0\u6848\u3057\u305F\u3002", ["\u5C0E\u5165\u3059\u308B", "\u4E00\u90E8\u306E\u5730\u57DF\u3067\u8A66\u3059", "\u53CD\u5BFE\u3059\u308B"], "e1-4", "tax_burden:12:.2@0");
-      E("black_market", "eco", "crisis", "\u95C7\u5E02\u306E\u62E1\u5927", "\u7D71\u5236\u3092\u9003\u308C\u305F\u95C7\u5E02\u304C\u3001\u90FD\u5E02\u306B\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u53D6\u308A\u7DE0\u307E\u308B", "\u8AB2\u7A0E\u3057\u3066\u516C\u8A8D\u3059\u308B", "\u653E\u7F6E\u3059\u308B"], "e3-5 lows");
-      E("urban_fire", "eco", "disaster", "\u90FD\u5E02\u306E\u5927\u706B", "\u90FD\u306E\u5546\u696D\u5730\u533A\u304C\u3001\u708E\u306B\u5305\u307E\u308C\u305F\u3002", ["\u533A\u753B\u6574\u7406\u3092\u65AD\u884C\u3059\u308B", "\u5143\u3069\u304A\u308A\u306B\u518D\u5EFA\u3059\u308B", "\u9632\u706B\u306E\u5236\u5EA6\u3092\u4F5C\u308B"], "e1-5");
-      E("orphan_crisis", "eco", "crisis", "\u5B64\u5150\u306E\u5897\u52A0", "\u6226\u3068\u98E2\u3048\u3067\u3001\u8857\u306B\u5B64\u5150\u304C\u6EA2\u308C\u3066\u3044\u308B\u3002", ["\u990A\u80B2\u9662\u3092\u8A2D\u3051\u308B", "\u6559\u4F1A\u306B\u59D4\u306D\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B"], "e1-5");
-      E("pension_demand", "eco", "fiscal", "\u5E74\u91D1\u5236\u5EA6\u306E\u8981\u6C42", "\u8001\u3044\u305F\u52B4\u50CD\u8005\u304C\u3001\u56FD\u306B\u751F\u6D3B\u306E\u4FDD\u969C\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u5236\u5EA6\u3092\u4F5C\u308B", "\u5C0F\u898F\u6A21\u306B\u59CB\u3081\u308B", "\u62D2\u3080"], "e4-5");
-      E("housing_shortage", "eco", "crisis", "\u4F4F\u5B85\u306E\u4E0D\u8DB3", "\u90FD\u5E02\u306E\u4EBA\u53E3\u304C\u6025\u5897\u3057\u3001\u4F4F\u307E\u3044\u304C\u8DB3\u308A\u306A\u3044\u3002", ["\u516C\u55B6\u4F4F\u5B85\u3092\u5EFA\u3066\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B", "\u90FD\u5E02\u306E\u62E1\u5F35\u3092\u7981\u3058\u308B"], "e4-5");
-      E("automation_fear", "eco", "crisis", "\u6A5F\u68B0\u5316\u3078\u306E\u4E0D\u5B89", "\u65B0\u3057\u3044\u6A5F\u68B0\u304C\u3001\u8077\u4EBA\u306E\u4ED5\u4E8B\u3092\u596A\u304A\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u5C0E\u5165\u3092\u5968\u52B1\u3059\u308B", "\u5C0E\u5165\u3092\u9045\u3089\u305B\u308B", "\u88DC\u511F\u3092\u8A2D\u3051\u308B"], "e4-5");
-      E("trade_fair", "eco", "trade_boom", "\u5927\u5E02\u306E\u958B\u50AC", "\u56FD\u5883\u306E\u753A\u3067\u3001\u5927\u304D\u306A\u5E02\u304C\u958B\u304B\u308C\u308B\u3002", ["\u56FD\u304C\u4E3B\u50AC\u3059\u308B", "\u5546\u4EBA\u306B\u4EFB\u305B\u308B", "\u95A2\u7A0E\u3092\u514D\u9664\u3059\u308B"], "e1-4");
-      E("plague_wave", "dis", "plague", "\u75AB\u75C5\u306E\u6D41\u884C", "\u90FD\u306B\u3001\u539F\u56E0\u306E\u5206\u304B\u3089\u306A\u3044\u75AB\u75C5\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u90FD\u5E02\u3092\u5C01\u9396\u3059\u308B", "\u7948\u308A\u3068\u5100\u5F0F\u306B\u983C\u308B", "\u533B\u5E2B\u56E3\u3092\u6D3E\u9063\u3059\u308B"], "e1-4", "labor_shortage:24:.5");
-      E("earthquake", "dis", "disaster", "\u5927\u5730\u9707", "\u5927\u5730\u9707\u304C\u90FD\u3092\u8972\u3044\u3001\u591A\u304F\u306E\u5BB6\u5C4B\u304C\u5012\u308C\u305F\u3002", ["\u6551\u6E08\u3092\u6700\u512A\u5148\u3059\u308B", "\u5FA9\u8208\u3092\u738B\u5BA4\u304C\u4E3B\u5C0E\u3059\u308B", "\u6C11\u306B\u59D4\u306D\u308B"], "e1-5");
-      E("flood_great", "dis", "disaster", "\u5927\u6D2A\u6C34", "\u5927\u6CB3\u304C\u6C3E\u6FEB\u3057\u3001\u5E83\u5927\u306A\u7530\u7551\u304C\u6C34\u306B\u6C88\u3093\u3060\u3002", ["\u5824\u9632\u3092\u7BC9\u304F", "\u96E3\u6C11\u3092\u53D7\u3051\u5165\u308C\u308B", "\u79FB\u4F4F\u3092\u52E7\u3081\u308B"], "e1-5", "great_famine:6:.3");
-      E("drought_long", "dis", "famine", "\u9577\u3044\u5E72\u3070\u3064", "\u96E8\u304C\u964D\u3089\u305A\u3001\u4E95\u6238\u3082\u5DDD\u3082\u5E72\u4E0A\u304C\u3063\u305F\u3002", ["\u704C\u6F11\u3092\u6574\u3048\u308B", "\u96E8\u4E5E\u3044\u3092\u884C\u3046", "\u9077\u90FD\u3092\u691C\u8A0E\u3059\u308B"], "e1-4", "great_famine:6:.4@1");
-      E("volcano_erupts", "dis", "disaster", "\u706B\u5C71\u306E\u5674\u706B", "\u9060\u65B9\u306E\u706B\u5C71\u304C\u5674\u706B\u3057\u3001\u7070\u304C\u7A7A\u3092\u8986\u3063\u305F\u3002", ["\u88AB\u707D\u5730\u3092\u6551\u63F4\u3059\u308B", "\u5929\u306E\u6012\u308A\u3068\u89E3\u91C8\u3059\u308B", "\u79FB\u4F4F\u3092\u652F\u63F4\u3059\u308B"], "e1-4 coast", "great_famine:12:.4");
-      E("locust_swarm", "dis", "famine", "\u8757\u306E\u5927\u7FA4", "\u8757\u306E\u7FA4\u308C\u304C\u3001\u7551\u3092\u98DF\u3044\u5C3D\u304F\u3057\u3066\u3044\u308B\u3002", ["\u5168\u529B\u3067\u99C6\u9664\u3059\u308B", "\u7948\u7977\u306B\u983C\u308B", "\u53CE\u7A6B\u3092\u524D\u5012\u3057\u3059\u308B"], "e1-3");
-      E("cold_summer", "dis", "famine", "\u51B7\u590F", "\u590F\u304C\u6765\u3066\u3082\u5BD2\u304F\u3001\u4F5C\u7269\u304C\u5B9F\u3089\u306A\u3044\u3002", ["\u6551\u8352\u4F5C\u7269\u3092\u5968\u52B1\u3059\u308B", "\u5099\u84C4\u3092\u653E\u51FA\u3059\u308B", "\u79DF\u7A0E\u3092\u514D\u3058\u308B"], "e1-4", "great_famine:8:.3");
-      E("storm_fleet_lost", "dis", "disaster", "\u5D50\u3067\u5546\u8239\u56E3\u304C\u5931\u308F\u308C\u308B", "\u5927\u5D50\u304C\u3001\u4EA4\u6613\u8239\u56E3\u3092\u6C88\u3081\u305F\u3002", ["\u518D\u5EFA\u3092\u652F\u63F4\u3059\u308B", "\u4FDD\u967A\u306E\u4ED5\u7D44\u307F\u3092\u4F5C\u308B", "\u81EA\u5DF1\u8CAC\u4EFB\u3068\u3059\u308B"], "e2-4 coast");
-      E("fire_palace", "dis", "disaster", "\u5BAE\u6BBF\u306E\u706B\u707D", "\u5BAE\u6BBF\u304C\u713C\u3051\u3001\u8A18\u9332\u3084\u5B9D\u7269\u304C\u5931\u308F\u308C\u305F\u3002", ["\u518D\u5EFA\u3092\u6025\u3050", "\u7C21\u7D20\u306B\u518D\u5EFA\u3059\u308B", "\u9077\u90FD\u3092\u691C\u8A0E\u3059\u308B"], "e1-5");
-      E("pestilence_cattle", "dis", "plague", "\u5BB6\u755C\u306E\u75AB\u75C5", "\u725B\u99AC\u306E\u75AB\u75C5\u304C\u5E83\u304C\u308A\u3001\u8FB2\u8015\u306B\u652F\u969C\u304C\u51FA\u3066\u3044\u308B\u3002", ["\u5BB6\u755C\u3092\u51E6\u5206\u3059\u308B", "\u9694\u96E2\u3057\u3066\u69D8\u5B50\u3092\u898B\u308B", "\u4ED6\u56FD\u304B\u3089\u5C0E\u5165\u3059\u308B"], "e1-3");
-      E("avalanche_pass", "dis", "disaster", "\u5CE0\u306E\u96EA\u5D29", "\u4EA4\u6613\u306E\u8981\u306E\u5CE0\u304C\u3001\u96EA\u5D29\u3067\u585E\u304C\u308C\u305F\u3002", ["\u5FA9\u65E7\u3059\u308B", "\u5225\u306E\u9053\u3092\u62D3\u304F", "\u653E\u7F6E\u3059\u308B"], "e1-4");
-      E("tsunami", "dis", "disaster", "\u5927\u6D25\u6CE2", "\u6CBF\u5CB8\u306E\u6E2F\u753A\u3092\u3001\u5DE8\u5927\u306A\u6CE2\u304C\u5451\u307F\u8FBC\u3093\u3060\u3002", ["\u9AD8\u53F0\u3078\u306E\u79FB\u8EE2\u3092\u9032\u3081\u308B", "\u540C\u3058\u5834\u6240\u306B\u518D\u5EFA\u3059\u308B", "\u6551\u63F4\u3092\u4ED6\u56FD\u306B\u6C42\u3081\u308B"], "e1-5 coast");
-      E("epidemic_port", "dis", "plague", "\u6E2F\u304B\u3089\u306E\u75AB\u75C5", "\u5916\u56FD\u8239\u304C\u904B\u3093\u3067\u304D\u305F\u75AB\u75C5\u304C\u3001\u6E2F\u753A\u3067\u5E83\u304C\u3063\u305F\u3002", ["\u6E2F\u3092\u9589\u9396\u3059\u308B", "\u691C\u75AB\u3092\u8A2D\u3051\u308B", "\u4EA4\u6613\u3092\u512A\u5148\u3059\u308B"], "e2-5 coast", "plague_wave:6:.3@2");
-      E("heat_wave", "dis", "famine", "\u9177\u6691", "\u731B\u6691\u3067\u3001\u5BB6\u755C\u3068\u4EBA\u304C\u5012\u308C\u3066\u3044\u308B\u3002", ["\u6C34\u306E\u914D\u7D66\u3092\u884C\u3046", "\u7948\u7977\u3092\u547D\u3058\u308B", "\u4F5C\u696D\u3092\u591C\u306B\u79FB\u3059"], "e1-5");
-      E("sea_level_rise", "dis", "disaster", "\u6D77\u9762\u306E\u4E0A\u6607", "\u6CBF\u5CB8\u306E\u6751\u3005\u304C\u3001\u6F6E\u306B\u6D78\u3055\u308C\u306F\u3058\u3081\u305F\u3002", ["\u5824\u9632\u3092\u7BC9\u304F", "\u5185\u9678\u3078\u306E\u79FB\u4F4F\u3092\u9032\u3081\u308B", "\u69D8\u5B50\u3092\u898B\u308B"], "e4-5 coast");
-      E("industrial_smog", "dis", "plague", "\u5DE5\u5834\u306E\u7164\u7159", "\u5DE5\u696D\u90FD\u5E02\u306B\u7164\u7159\u304C\u7ACB\u3061\u8FBC\u3081\u3001\u75C5\u4EBA\u304C\u5897\u3048\u3066\u3044\u308B\u3002", ["\u898F\u5236\u3092\u8A2D\u3051\u308B", "\u7523\u696D\u3092\u512A\u5148\u3059\u308B", "\u79FB\u8EE2\u3092\u547D\u3058\u308B"], "e4-5");
-      E("pandemic_modern", "dis", "plague", "\u65B0\u3057\u3044\u611F\u67D3\u75C7", "\u4E16\u754C\u306E\u3042\u3061\u3053\u3061\u3067\u3001\u65B0\u3057\u3044\u611F\u67D3\u75C7\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u56FD\u5883\u3092\u5C01\u9396\u3059\u308B", "\u533B\u7642\u306B\u6295\u8CC7\u3059\u308B", "\u60C5\u5831\u306E\u516C\u958B\u3092\u512A\u5148\u3059\u308B"], "e4-5");
-      E("mine_collapse", "dis", "disaster", "\u70AD\u9271\u306E\u843D\u76E4", "\u70AD\u9271\u3067\u843D\u76E4\u304C\u8D77\u304D\u3001\u591A\u304F\u306E\u5751\u592B\u304C\u57CB\u307E\u3063\u305F\u3002", ["\u6551\u51FA\u306B\u5168\u529B\u3092\u5C3D\u304F\u3059", "\u88DC\u511F\u3059\u308B", "\u5B89\u5168\u306E\u898F\u5247\u3092\u8A2D\u3051\u308B"], "e3-5");
-      E("meteor_fall", "dis", "disaster", "\u9695\u77F3\u306E\u843D\u4E0B", "\u7A7A\u304B\u3089\u964D\u3063\u305F\u77F3\u304C\u3001\u91CE\u3092\u713C\u3044\u305F\u3002", ["\u88AB\u5BB3\u3092\u8ABF\u3079\u308B", "\u8056\u306A\u308B\u77F3\u3068\u3057\u3066\u7940\u308B", "\u7ACB\u3061\u5165\u308A\u3092\u7981\u3058\u308B"], "e1-5");
-      E("climate_shift_local", "dis", "famine", "\u6C17\u5019\u306E\u5909\u8ABF", "\u6570\u5E74\u306B\u308F\u305F\u308A\u3001\u6C17\u5019\u304C\u4EE5\u524D\u3068\u5909\u308F\u3063\u3066\u3057\u307E\u3063\u305F\u3002", ["\u8FB2\u6CD5\u3092\u6539\u3081\u308B", "\u79FB\u4F4F\u3092\u691C\u8A0E\u3059\u308B", "\u5F93\u6765\u306E\u66AE\u3089\u3057\u3092\u7D9A\u3051\u308B"], "e1-5");
-      E("grand_library", "cul", "culture_boom", "\u5927\u56F3\u66F8\u9928\u306E\u69CB\u60F3", "\u5B66\u8005\u304C\u3001\u56FD\u4E2D\u306E\u66F8\u3092\u96C6\u3081\u308B\u5927\u56F3\u66F8\u9928\u3092\u5EFA\u3066\u305F\u3044\u3068\u9858\u3044\u51FA\u305F\u3002", ["\u56FD\u8CBB\u3067\u5EFA\u8A2D\u3059\u308B", "\u6C11\u9593\u306E\u5BC4\u9032\u306B\u4EFB\u305B\u308B", "\u8CBB\u7528\u3092\u7406\u7531\u306B\u9000\u3051\u308B"], "e1-4");
-      E("university_founded", "cul", "culture_boom", "\u5B66\u9662\u306E\u5275\u8A2D", "\u5B66\u554F\u3092\u6559\u3048\u308B\u5B66\u9662\u3092\u958B\u304F\u6848\u304C\u51FA\u3055\u308C\u305F\u3002", ["\u5275\u8A2D\u3059\u308B", "\u6559\u4F1A\u306B\u4EFB\u305B\u308B", "\u898B\u9001\u308B"], "e2-4");
-      E("printing_arrives", "cul", "tech_boom", "\u5370\u5237\u8853\u306E\u4F1D\u6765", "\u7570\u56FD\u304B\u3089\u3001\u66F8\u7269\u3092\u5927\u91CF\u306B\u5237\u308B\u6280\u8853\u304C\u4F1D\u308F\u3063\u305F\u3002", ["\u56FD\u3067\u7BA1\u7406\u3059\u308B", "\u6C11\u9593\u306B\u958B\u653E\u3059\u308B", "\u691C\u95B2\u3092\u8A2D\u3051\u3066\u8A31\u3059"], "e3-4", "heresy_spread:12:.2@1");
-      E("great_monument", "cul", "culture_boom", "\u5927\u8A18\u5FF5\u5EFA\u9020\u7269", "\u738B\u304C\u3001\u6C38\u9060\u306B\u6B8B\u308B\u5927\u8A18\u5FF5\u5EFA\u9020\u7269\u306E\u5EFA\u8A2D\u3092\u671B\u3093\u3067\u3044\u308B\u3002", ["\u5EFA\u8A2D\u3059\u308B", "\u898F\u6A21\u3092\u7E2E\u5C0F\u3059\u308B", "\u7A0E\u306E\u8CA0\u62C5\u3092\u7406\u7531\u306B\u898B\u9001\u308B"], "e1-4 rich");
-      E("poet_golden_age", "cul", "culture_boom", "\u8A69\u306E\u9EC4\u91D1\u6642\u4EE3", "\u5BAE\u5EF7\u3067\u512A\u308C\u305F\u8A69\u4EBA\u304C\u76F8\u6B21\u304E\u3001\u6587\u5316\u304C\u82B1\u958B\u3044\u305F\u3002", ["\u4FDD\u8B77\u3092\u539A\u304F\u3059\u308B", "\u6C11\u9593\u306B\u5E83\u3052\u308B", "\u8CBB\u7528\u3092\u6291\u3048\u308B"], "e1-5 nwar");
-      E("steam_engine", "cul", "tech_boom", "\u84B8\u6C17\u6A5F\u95A2\u306E\u5B9F\u7528\u5316", "\u84B8\u6C17\u306E\u529B\u3067\u52D5\u304F\u6A5F\u68B0\u304C\u3001\u5B9F\u7528\u306B\u306A\u3063\u305F\u3002", ["\u56FD\u304C\u5C0E\u5165\u3092\u4E3B\u5C0E\u3059\u308B", "\u6C11\u9593\u306E\u8D77\u696D\u3092\u652F\u63F4\u3059\u308B", "\u8077\u4EBA\u306E\u4ED5\u4E8B\u3092\u5B88\u308B"], "e3-4", "automation_fear:24:.3");
-      E("railway_plan", "cul", "tech_boom", "\u9244\u9053\u306E\u5EFA\u8A2D\u8A08\u753B", "\u9244\u306E\u9053\u3092\u56FD\u4E2D\u306B\u6577\u304F\u6848\u304C\u3001\u5B9F\u696D\u5BB6\u304B\u3089\u51FA\u305F\u3002", ["\u56FD\u304C\u5EFA\u8A2D\u3059\u308B", "\u6C11\u9593\u306B\u7279\u8A31\u3092\u4E0E\u3048\u308B", "\u8ECD\u4E8B\u512A\u5148\u3067\u9032\u3081\u308B"], "e4 rich");
-      E("electric_light", "cul", "tech_boom", "\u96FB\u6C17\u306E\u706F\u308A", "\u90FD\u5E02\u306B\u3001\u96FB\u706F\u304C\u3068\u3082\u3063\u305F\u3002", ["\u5168\u56FD\u306B\u5E83\u3052\u308B", "\u90FD\u5E02\u304B\u3089\u6574\u3048\u308B", "\u8CBB\u7528\u3092\u7406\u7531\u306B\u9045\u3089\u305B\u308B"], "e4");
-      E("radio_broadcast", "cul", "tech_boom", "\u30E9\u30B8\u30AA\u653E\u9001\u306E\u958B\u59CB", "\u58F0\u304C\u96FB\u6CE2\u306B\u4E57\u308A\u3001\u56FD\u4E2D\u306B\u5C4A\u304F\u6642\u4EE3\u304C\u6765\u305F\u3002", ["\u56FD\u55B6\u306B\u3059\u308B", "\u6C11\u9593\u306B\u958B\u653E\u3059\u308B", "\u691C\u95B2\u3064\u304D\u3067\u8A31\u3059"], "e4-5", "propaganda_state:12:.3@0");
-      E("propaganda_state", "cul", "reform", "\u56FD\u5BB6\u306E\u5BA3\u4F1D", "\u653E\u9001\u3068\u65B0\u805E\u3092\u4F7F\u3063\u3066\u3001\u56FD\u6C11\u306E\u610F\u8B58\u3092\u307E\u3068\u3081\u308B\u6848\u304C\u51FA\u305F\u3002", ["\u7A4D\u6975\u7684\u306B\u9032\u3081\u308B", "\u7A4F\u5F53\u306B\u884C\u3046", "\u8868\u73FE\u306E\u81EA\u7531\u3092\u5B88\u308B"], "e4-5 only");
-      E("scientific_academy", "cul", "tech_boom", "\u79D1\u5B66\u30A2\u30AB\u30C7\u30DF\u30FC\u306E\u8A2D\u7ACB", "\u5B66\u8005\u306E\u96C6\u3046\u3001\u79D1\u5B66\u30A2\u30AB\u30C7\u30DF\u30FC\u304C\u8A2D\u7ACB\u3055\u308C\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u8A2D\u7ACB\u3059\u308B", "\u5C0F\u898F\u6A21\u3067\u59CB\u3081\u308B", "\u5B97\u6559\u754C\u306E\u53CD\u5BFE\u306B\u914D\u616E\u3059\u308B"], "e3-4");
-      E("compulsory_school", "cul", "reform", "\u7FA9\u52D9\u6559\u80B2\u306E\u69CB\u60F3", "\u5168\u3066\u306E\u5B50\u4F9B\u306B\u5B66\u6821\u6559\u80B2\u3092\u884C\u3046\u6848\u304C\u51FA\u305F\u3002", ["\u5C0E\u5165\u3059\u308B", "\u6BB5\u968E\u7684\u306B\u9032\u3081\u308B", "\u6642\u671F\u5C1A\u65E9\u3068\u3059\u308B"], "e4-5");
-      E("sports_festival", "cul", "culture_boom", "\u7AF6\u6280\u4F1A\u306E\u958B\u50AC", "\u56FD\u4E2D\u304B\u3089\u9078\u624B\u304C\u96C6\u307E\u308B\u7AF6\u6280\u4F1A\u3092\u958B\u304F\u6848\u304C\u51FA\u305F\u3002", ["\u56FD\u5A01\u3068\u3057\u3066\u958B\u304F", "\u5730\u65B9\u306E\u796D\u308A\u306B\u4EFB\u305B\u308B", "\u8CBB\u7528\u3092\u6291\u3048\u308B"], "e1-5 nwar");
-      E("space_program", "cul", "tech_boom", "\u5B87\u5B99\u8A08\u753B", "\u5B87\u5B99\u3078\u306E\u9032\u51FA\u3092\u76EE\u6307\u3059\u56FD\u5BB6\u8A08\u753B\u304C\u63D0\u6848\u3055\u308C\u305F\u3002", ["\u5927\u898F\u6A21\u306B\u63A8\u9032\u3059\u308B", "\u6BB5\u968E\u7684\u306B\u9032\u3081\u308B", "\u5730\u4E0A\u306E\u554F\u984C\u3092\u512A\u5148\u3059\u308B"], "e5");
-      E("ai_dawn", "cul", "tech_boom", "\u6A5F\u68B0\u77E5\u80FD\u306E\u591C\u660E\u3051", "\u5224\u65AD\u3092\u81EA\u3089\u884C\u3046\u6A5F\u68B0\u304C\u3001\u5B9F\u9A13\u5BA4\u304B\u3089\u51FA\u3066\u304D\u305F\u3002", ["\u56FD\u5BB6\u304C\u7BA1\u7406\u3059\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B", "\u898F\u5236\u3092\u8A2D\u3051\u308B"], "e5", "automation_fear:12:.4");
-      E("genetic_medicine", "cul", "tech_boom", "\u907A\u4F1D\u5B50\u533B\u7642", "\u751F\u547D\u306E\u8A2D\u8A08\u56F3\u306B\u624B\u3092\u52A0\u3048\u308B\u533B\u7642\u304C\u5B9F\u7528\u306B\u306A\u3063\u305F\u3002", ["\u516C\u7684\u306B\u63A8\u9032\u3059\u308B", "\u9650\u5B9A\u7684\u306B\u8A31\u53EF\u3059\u308B", "\u502B\u7406\u4E0A\u7981\u3058\u308B"], "e5");
-      E("translators_movement", "cul", "culture_boom", "\u7FFB\u8A33\u904B\u52D5", "\u7570\u56FD\u306E\u66F8\u7269\u3092\u81EA\u56FD\u8A9E\u306B\u8A33\u3059\u5927\u4E8B\u696D\u304C\u8D77\u304D\u305F\u3002", ["\u56FD\u3067\u652F\u63F4\u3059\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B", "\u81EA\u56FD\u306E\u4F1D\u7D71\u3092\u5B88\u308B"], "e2-4");
-      E("sailing_chart", "cul", "tech_boom", "\u822A\u6D77\u8853\u306E\u9032\u6B69", "\u65B0\u3057\u3044\u7F85\u91DD\u76E4\u3068\u6D77\u56F3\u304C\u3001\u822A\u6D77\u3092\u5909\u3048\u305F\u3002", ["\u9020\u8239\u6240\u306B\u6295\u8CC7\u3059\u308B", "\u79D8\u5BC6\u306B\u3059\u308B", "\u5546\u4EBA\u306B\u5E83\u3052\u308B"], "e2-4 coast", "new_sea_route:24:.3@0");
-      E("medical_college", "cul", "tech_boom", "\u533B\u5B66\u6821\u306E\u8A2D\u7ACB", "\u533B\u8853\u3092\u4F53\u7CFB\u7684\u306B\u6559\u3048\u308B\u5B66\u6821\u306E\u8A2D\u7ACB\u304C\u63D0\u6848\u3055\u308C\u305F\u3002", ["\u8A2D\u7ACB\u3059\u308B", "\u5C0F\u898F\u6A21\u304B\u3089\u59CB\u3081\u308B", "\u7948\u7977\u5E2B\u306E\u53CD\u767A\u3092\u6050\u308C\u308B"], "e2-4");
-      E("theatre_boom", "cul", "culture_boom", "\u6F14\u5287\u306E\u9686\u76DB", "\u90FD\u5E02\u3067\u3001\u6C11\u8846\u304C\u697D\u3057\u3080\u6F14\u5287\u304C\u76DB\u3093\u306B\u306A\u3063\u305F\u3002", ["\u4FDD\u8B77\u3059\u308B", "\u691C\u95B2\u3092\u8A2D\u3051\u308B", "\u7A0E\u3092\u8AB2\u3059"], "e2-5");
-      E("omen_comet", "odd", "omen", "\u5F57\u661F\u306E\u51FA\u73FE", "\u591C\u7A7A\u306B\u3001\u9577\u3044\u5C3E\u3092\u5F15\u304F\u661F\u304C\u73FE\u308C\u305F\u3002", ["\u5409\u5146\u3068\u5E03\u544A\u3059\u308B", "\u51F6\u5146\u3068\u3057\u3066\u7948\u7977\u3059\u308B", "\u5B66\u8005\u306B\u89B3\u6E2C\u3055\u305B\u308B"], "e1-4");
-      E("omen_eclipse", "odd", "omen", "\u65E5\u98DF", "\u663C\u306E\u592A\u967D\u304C\u3001\u7A81\u7136\u6B20\u3051\u305F\u3002", ["\u795E\u610F\u3068\u767A\u8868\u3059\u308B", "\u5B66\u8005\u306B\u8AAC\u660E\u3055\u305B\u308B", "\u6DF7\u4E71\u3092\u6291\u3048\u308B"], "e0-4");
-      E("lost_city_found", "odd", "culture_boom", "\u5FD8\u308C\u3089\u308C\u305F\u90FD\u5E02\u306E\u767A\u898B", "\u5C71\u4E2D\u3067\u3001\u53E4\u3044\u6642\u4EE3\u306E\u90FD\u5E02\u306E\u907A\u69CB\u304C\u898B\u3064\u304B\u3063\u305F\u3002", ["\u767A\u6398\u3059\u308B", "\u8056\u5730\u3068\u3057\u3066\u5C01\u3058\u308B", "\u5B66\u8005\u306B\u8ABF\u67FB\u3055\u305B\u308B"], "e1-5");
-      E("talking_beast", "odd", "omen", "\u8A9E\u308B\u7363", "\u300C\u7363\u304C\u4EBA\u306E\u8A00\u8449\u3092\u8A9E\u3063\u305F\u300D\u3068\u306E\u5642\u304C\u3001\u6751\u3005\u306B\u5E83\u304C\u3063\u305F\u3002", ["\u8ABF\u3079\u3055\u305B\u308B", "\u5642\u3092\u653E\u7F6E\u3059\u308B", "\u7981\u3058\u308B"], "e0-3");
-      E("twin_suns", "odd", "omen", "\u4E8C\u3064\u306E\u592A\u967D", "\u8703\u6C17\u697C\u306E\u306A\u304B\u3001\u7A7A\u306B\u4E8C\u3064\u306E\u592A\u967D\u304C\u898B\u3048\u305F\u3002", ["\u745E\u5146\u3068\u795D\u3046", "\u51F6\u5146\u3068\u3057\u3066\u5099\u3048\u308B", "\u89B3\u6E2C\u3092\u547D\u3058\u308B"], "e1-4");
-      E("ghost_fleet", "odd", "omen", "\u5E7D\u970A\u8239", "\u9727\u306E\u6D77\u306B\u3001\u898B\u77E5\u3089\u306C\u8239\u56E3\u304C\u73FE\u308C\u3001\u6D88\u3048\u305F\u3002", ["\u6D77\u8ECD\u306B\u8B66\u6212\u3055\u305B\u308B", "\u7948\u7977\u3092\u884C\u3046", "\u6F01\u5E2B\u306E\u8A71\u3068\u7247\u4ED8\u3051\u308B"], "e1-5 coast");
-      E("sleeping_king_legend", "odd", "culture_boom", "\u7720\u308C\u308B\u738B\u306E\u4F1D\u8AAC", "\u300C\u7720\u308C\u308B\u738B\u304C\u76EE\u899A\u3081\u308B\u300D\u3068\u3044\u3046\u4F1D\u8AAC\u304C\u3001\u6C11\u306E\u9593\u306B\u306F\u3084\u3063\u305F\u3002", ["\u4F1D\u8AAC\u3092\u5229\u7528\u3059\u308B", "\u7981\u3058\u308B", "\u7B11\u3044\u98DB\u3070\u3059"], "e1-4");
-      E("mysterious_stones", "odd", "omen", "\u5947\u5999\u306A\u77F3\u306E\u5186\u74B0", "\u91CE\u306B\u3001\u8AB0\u304C\u5EFA\u3066\u305F\u304B\u5206\u304B\u3089\u306A\u3044\u5DE8\u77F3\u304C\u4E26\u3093\u3067\u3044\u305F\u3002", ["\u795E\u6BBF\u306B\u3059\u308B", "\u7814\u7A76\u3055\u305B\u308B", "\u7834\u58CA\u3059\u308B"], "e0-2");
-      E("child_oracle", "odd", "omen", "\u795E\u8A17\u306E\u5B50", "\u5E7C\u3044\u5B50\u4F9B\u304C\u3001\u672A\u6765\u3092\u8A00\u3044\u5F53\u3066\u308B\u3068\u8A55\u5224\u306B\u306A\u3063\u305F\u3002", ["\u5BAE\u5EF7\u306B\u8FCE\u3048\u308B", "\u89AA\u5143\u306B\u8FD4\u3059", "\u8056\u8077\u8005\u306B\u9810\u3051\u308B"], "e1-4");
-      E("plague_doctor_cult", "odd", "omen", "\u5947\u75C5\u6CBB\u7642\u306E\u6D41\u884C", "\u6839\u62E0\u306E\u306A\u3044\u6CBB\u7642\u6CD5\u304C\u3001\u90FD\u3067\u5927\u6D41\u884C\u3057\u3066\u3044\u308B\u3002", ["\u7981\u6B62\u3059\u308B", "\u533B\u5E2B\u306B\u691C\u8A3C\u3055\u305B\u308B", "\u653E\u7F6E\u3059\u308B"], "e2-4");
-      EVENT_BY_ID = Object.freeze(Object.fromEntries(EVENTS2.map((e) => [e.id, e])));
-    }
-  });
-
-  // js/core/wcde/events.js
-  function contextOf(ctx, st) {
-    const { civ } = ctx, n2 = Object.keys(st.techAdopted ?? {}).length / Math.max(1, TREE.length);
-    let era = 0;
-    while (era < 5 && n2 >= ERA_AT[era]) era++;
-    let rival = null, friend = null, rv = -15, fv = 15;
-    for (const id of Object.keys(st.relations ?? {}).sort()) {
-      const o = civ.states[id];
-      if (!o?.alive || o.id === st.id) continue;
-      const v = st.relations[id];
-      if (v < rv) {
-        rv = v;
-        rival = o;
-      }
-      if (v > fv) {
-        fv = v;
-        friend = o;
-      }
-    }
-    const cap = civ.groups[st.capitalGroupId], S = scaleOf(st);
-    return { era, rival, friend, war: st.warIds.length > 0, poly: st.polity, her: !!REGIMES2[regimeOf2(st)]?.heredity, stab: st.stability, poor: st.treasury < S * 4, rich: st.treasury > S * 20, big: st.pop > 15e4, small: st.pop < 4e4, coast: !!cap && (ctx.world?.cell?.coastDist?.[cap.cell] ?? 9) <= 1, S };
-  }
-  function leaderChange(ctx, st, mode) {
-    const { civ } = ctx, mi2 = civ.monthIndex;
-    if (mode === "assn") {
-      addShock(st, mi2, "event", 0.05, 12);
-      makeEvent(civ, ctx.ids, { kind: "leader_assassinated", title: `${st.name}\u306E${st.leader?.name ?? "\u6307\u5C0E\u8005"}\u304C\u6697\u6BBA\u3055\u308C\u305F`, participants: [{ entityId: st.id, role: "state" }], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, facts: { stateId: st.id }, provenance: "simulation" });
-    }
-    if ((mode === "die" || mode === "assn" || mode === "abd") && st.player && isLive54(civ) && DECISION_HOOKS.succession(ctx, st)) return;
-    enthrone(ctx, st, { kin: mode === "die" || mode === "abd" ? true : mode === "assn" ? ctx.rng() < 0.55 : false });
-    if (mode === "coup") {
-      st.stability = clamp37(st.stability - 0.05);
-      addShock(st, mi2, "event", 0.04, 10);
-    }
-  }
-  function farPart(ctx, st) {
-    const gs = byState(ctx).get(st.id) ?? [], cap = ctx.civ.groups[st.capitalGroupId];
-    if (gs.length < 4 || !cap) return null;
-    const far = gs.filter((g) => g.id !== cap.id).map((g) => [distKm(ctx.world, cap.cell, g.cell), g]).sort((a, b) => b[0] - a[0] || (a[1].id < b[1].id ? -1 : 1)).map((x) => x[1]);
-    return far.slice(0, Math.max(1, Math.min(far.length - 1, Math.round(gs.length * 0.35))));
-  }
-  function shift(ctx, st, kind) {
-    const { civ } = ctx, cand2 = regimeCandidates(ctx, st, 0.7).filter((c) => kind === "mil" ? c.id === "junta" || familyOf2(c.id) === "aut" : kind === "rep" ? familyOf2(c.id) === "rep" : kind === "mon" ? familyOf2(c.id) === "mon" : familyOf2(c.id) !== familyOf2(regimeOf2(st)) || c.gap > 0);
-    if (!cand2.length) {
-      st.stability = clamp37(st.stability - 0.04);
-      return false;
-    }
-    const tot = cand2.reduce((a, c) => a + c.w, 0);
-    let x = U4(civ, st.id, civ.monthIndex, "rg", kind) * tot, pick2 = cand2[0].id;
-    for (const c of cand2) {
-      x -= c.w;
-      if (x <= 0) {
-        pick2 = c.id;
-        break;
-      }
-    }
-    const ok3 = switchRegime(ctx, st, pick2, kind === "mil" ? "military_takeover" : kind === "rev" ? "revolution" : "reform");
-    return !!ok3;
-  }
-  function applyFx(ctx, st, fx3, cx) {
-    const { civ } = ctx, mi2 = civ.monthIndex, S = cx.S, F = st.politics?.factions;
-    for (const t of fx3.split(/\s+/).filter(Boolean)) {
-      let m;
-      if (m = /^([a-zA-Z]+)([+-]\d+(?:\.\d+)?)$/.exec(t)) {
-        const k = m[1], v = +m[2];
-        if (k === "stab") st.stability = clamp37(st.stability + v * 0.01);
-        else if (k === "tre") st.treasury += v * S * 0.5;
-        else if (k === "pop") {
-          const f = 1 + v / 100;
-          for (const g of byState(ctx).get(st.id) ?? []) g.pop = Math.max(1, g.pop * f);
-          st.pop = Math.max(0, st.pop * f);
-        } else if (k === "army") st.army = Math.max(0, st.army * (1 + v / 100));
-        else if (k === "leg") {
-          if (v < 0) addShock(st, mi2, "event", -v * 0.01, 10);
-          else st.stability = clamp37(st.stability + v * 5e-3);
-        } else if (k === "tens") for (const g of byState(ctx).get(st.id) ?? []) for (const c of g.cohorts ?? []) c.tension = clamp37(c.tension * (1 + v * 0.05));
-        else if (FAC2[k]) {
-          const f = F?.[FAC2[k]];
-          if (f) f.support = clamp37(f.support + v * 0.01);
-        } else if (k === "relR" && cx.rival) {
-          st.relations[cx.rival.id] = clamp37((st.relations[cx.rival.id] ?? 0) + v, -100, 100);
-          cx.rival.relations[st.id] = clamp37((cx.rival.relations[st.id] ?? 0) + v, -100, 100);
-        } else if (k === "relF" && cx.friend) {
-          st.relations[cx.friend.id] = clamp37((st.relations[cx.friend.id] ?? 0) + v, -100, 100);
-          cx.friend.relations[st.id] = clamp37((cx.friend.relations[st.id] ?? 0) + v, -100, 100);
-        } else if (k === "relA") for (const id of Object.keys(st.relations ?? {})) {
-          const o = civ.states[id];
-          if (o?.alive) st.relations[id] = clamp37(st.relations[id] + v * 0.5, -100, 100);
-        }
-      } else if (m = /^ldr:(\w+)$/.exec(t)) leaderChange(ctx, st, m[1]);
-      else if (m = /^rebel:(\w+)$/.exec(t)) {
-        const k = m[1];
-        if (k === "coup") {
-          leaderChange(ctx, st, "coup");
-          const f = F?.military;
-          if (f) f.support = clamp37(f.support + 0.05);
-        } else if (k === "revolution") shift(ctx, st, "rev");
-        else {
-          const part2 = farPart(ctx, st);
-          if (part2) runSecession(ctx, st, part2);
-          else st.stability = clamp37(st.stability - 0.06);
-        }
-      } else if (m = /^regime:(\w+)$/.exec(t)) shift(ctx, st, m[1]);
-      else if (m = /^(war|warby):R:(\w+)$/.exec(t)) {
-        const r = cx.rival;
-        if (!r?.alive || atWarWith(civ, st, r)) continue;
-        const reason = m[2];
-        if (m[1] === "war") declareWar(ctx, st, r, { reason, provenance: "simulation" });
-        else if (st.player && isLive54(civ) && DECISION_HOOKS.warIncoming(ctx, r, st, { reason })) {
-        } else declareWar(ctx, r, st, { reason, provenance: "simulation" });
-      }
-    }
-    ctx._byState = null;
-  }
-  function chainAfter(ctx, st, ev, i) {
-    const { civ } = ctx;
-    for (const c of ev.ch) if ((!c.only || c.only.includes(i)) && U4(civ, st.id, civ.monthIndex, ev.id, c.id) < c.p) queueEvent(st, c.id, c.delay, civ.monthIndex);
-  }
-  function resolve2(ctx, st, ev, i, cx) {
-    const { civ } = ctx, chosen = i >= ev.opts.length ? "\u4F55\u3082\u3057\u306A\u304B\u3063\u305F" : ev.opts[i];
-    applyFx(ctx, st, fxOf3(ev, i), cx);
-    chainAfter(ctx, st, ev, i);
-    (st.evSeen ?? (st.evSeen = {}))[ev.id] = civ.monthIndex;
-    st.evLast = civ.monthIndex;
-    makeEvent(civ, ctx.ids, { kind: "event_occurred", title: `${st.name}\u3067\u300C${fill(ev.title, st, cx)}\u300D\uFF08${chosen}\uFF09`, participants: [{ entityId: st.id, role: "state" }], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, facts: { eventId: ev.id, option: i, cat: ev.cat }, provenance: st.player ? "player" : "simulation" });
-    return chosen;
-  }
-  var clamp37, U4, FAC2, ERA_AT, scaleOf, fill, fxOf3;
-  var init_events2 = __esm({
-    "js/core/wcde/events.js"() {
-      init_civ_state();
-      init_spatial();
-      init_states();
-      init_diplomacy();
-      init_events();
-      init_techtree();
-      init_shocks();
-      init_regimes();
-      init_regime_evolution();
-      init_decisions();
-      init_decision_state();
-      init_succession();
-      init_events_data();
-      clamp37 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
-      U4 = (civ, ...p) => hashSeed(civ.historySeed, "evt", ...p) % 1000003 / 1000003;
-      FAC2 = { nob: "nobility", mil: "military", clr: "clergy", mer: "merchants", com: "commoners", bur: "bureaucrats", art: "artisans", clan: "clans" };
-      ERA_AT = [0.06, 0.15, 0.3, 0.5, 0.75];
-      scaleOf = (st) => 20 + (st.pop ?? 0) * 3e-4;
-      fill = (t, st, cx) => String(t).replaceAll("{s}", st.name).replaceAll("{L}", st.leader?.name ?? "\u6307\u5C0E\u8005").replaceAll("{r}", cx.rival?.name ?? "\u6575\u56FD").replaceAll("{f}", cx.friend?.name ?? "\u53CB\u597D\u56FD");
-      fxOf3 = (ev, i) => {
-        const a = ARCH[ev.arch], n2 = ev.opts.length;
-        const base = i >= n2 ? a[3] : a[Math.min(i, 2)];
-        return `${base}${ev.x?.[i] ? " " + ev.x[i] : ""}`.trim();
-      };
-      registerDecision("event", (ctx, d, opt) => {
-        const st = ctx.civ.states[d.stateId], ev = EVENT_BY_ID[d.payload.evId];
-        if (!st?.alive || !ev) return { ok: true, note: "\u51FA\u6765\u4E8B\u306F\u3059\u3067\u306B\u904E\u304E\u3066\u3044\u305F" };
-        const i = Number(opt);
-        if (!Number.isInteger(i) || i < 0 || i > ev.opts.length) return { ok: false, error: "\u305D\u306E\u9078\u629E\u80A2\u306F\u3042\u308A\u307E\u305B\u3093" };
-        const cx = contextOf(ctx, st), chosen = resolve2(ctx, st, ev, i, cx);
-        return { ok: true, note: chosen };
-      });
-    }
-  });
-
-  // js/core/wcde/domains/index.js
-  var init_domains = __esm({
-    "js/core/wcde/domains/index.js"() {
-      init_events();
-      init_ecosystem();
-      init_language();
-      init_religion();
-      init_economy();
-      init_politics();
-      init_military();
-      init_special_ops();
-      init_people();
-      init_actions2();
-      init_integrity();
-      init_control();
-      init_intervention();
-      init_warlab();
-      init_negotiation();
-      init_effective();
-      init_decisions();
-      init_corps();
-      init_statefx();
-      init_regimes();
-      init_regime_evolution();
-      init_dependency();
-      init_pacts();
-      init_treaty_ai();
-      init_events2();
-      init_rebirth();
-      init_warfare();
-    }
-  });
-
-  // js/core/wcde/contract.js
-  var AUTHORITY;
-  var init_contract = __esm({
-    "js/core/wcde/contract.js"() {
-      init_civ_sim();
-      init_domains();
-      AUTHORITY = Object.freeze({ PLAYER: "player_order", CREATOR: "creator_intervention", AI: "ai_action", SIM: "simulation_transition", ADMIN: "administrative" });
-    }
-  });
-
-  // js/core/wcde/clock.js
-  var SPEEDS, DEFAULT_SPEED, timeOf, WORLD_WAR;
-  var init_clock = __esm({
-    "js/core/wcde/clock.js"() {
-      init_archive();
-      init_contract();
-      init_decision_state();
-      SPEEDS = Object.freeze([{ id: 0, label: "\u505C\u6B62", mps: 0 }, { id: 1, label: "\u6708", mps: 1 }, { id: 2, label: "3\u6708", mps: 3 }, { id: 3, label: "\u5E74", mps: 12 }, { id: 4, label: "5\u5E74", mps: 60 }]);
-      DEFAULT_SPEED = 1;
-      timeOf = (civ) => {
-        var _a;
-        return (_a = civ.wcde).time ?? (_a.time = { speed: DEFAULT_SPEED, hold: false, resumeSpeed: null });
-      };
-      WORLD_WAR = Object.freeze({ minStates: 6, minPerSide: 2, minPopShare: 0.35 });
-    }
-  });
-
-  // js/core/wcde/decisions.js
-  function hold(civ) {
-    const T4 = timeOf(civ);
-    if (!T4.hold) {
-      T4.hold = true;
-      T4.resumeSpeed = T4.speed;
-    }
-  }
-  function raise(ctx, spec) {
-    const { civ } = ctx;
-    if (!isLive54(civ)) return null;
-    const D2 = decisionsOf(civ);
-    const d = { id: `dec_${++D2.seq}`, status: "open", at: civ.monthIndex, date: { ...civ.date }, kind: spec.kind, key: spec.key ?? null, stateId: spec.stateId, title: spec.title, body: spec.body ?? "", options: spec.options, payload: spec.payload ?? {}, fresh: true };
-    D2.queue.push(d);
-    hold(civ);
-    return d;
-  }
-  function scoutLevel(civ, st) {
-    let intel = 0;
-    for (const o of st.offices ?? []) if (OFFICES[o.id]?.[1] === "intel" || o.domain === "intel") intel++;
-    const a = (k) => st.techAdopted?.[k] != null ? 1 : 0;
-    return clamp38(0.3 + 0.12 * Math.min(3, intel) + 0.1 * a("writing") + 0.1 * a("administration") + (st.scoutBonus ?? 0) + stateFx(st).scout + (Object.values(st.intel ?? {}).some((t) => t > civ.monthIndex) ? 0.15 : 0), 0.2, 0.92);
-  }
-  function offerTreaty(ctx, from, to, type) {
-    const { civ } = ctx;
-    if (!isLive54(civ) || !to.player || from.player) return null;
-    if (treatyFeasible(civ, from, to, type) || treatyBetween(civ, from, to, type)) return null;
-    const key3 = `t|${from.id}|${to.id}|${type}`, pend = { ok: true, silent: true, pending: true, targetId: to.id };
-    if (openKey(civ, key3) || coolUntil(civ, key3) > civ.monthIndex) return pend;
-    const options = [{ id: "accept", ja: `${TREATY[type].ja}\u3092\u7D50\u3076`, hint: `${TREATY[type].merit}\u3002\u305F\u3060\u3057${TREATY[type].cost}` }, { id: "decline", ja: "\u65AD\u308B", hint: "\u95A2\u4FC2\u304C\u308F\u305A\u304B\u306B\u60AA\u5316" }];
-    if (type === "alliance") options.splice(1, 0, { id: "counter_na", ja: "\u4E0D\u53EF\u4FB5\u6761\u7D04\u306A\u3089\u7D50\u3076", hint: "\u540C\u76DF\u306E\u4EE3\u308F\u308A\u306E\u63D0\u6848", disabled: treatyFeasible(civ, from, to, "nonaggression") || (treatyBetween(civ, from, to, "nonaggression") ? "\u3059\u3067\u306B\u7D50\u3093\u3067\u3044\u308B" : null) });
-    raise(ctx, { kind: "treaty_offer", key: key3, stateId: to.id, title: TREATY[type].cat === "dep" ? `${from.name}\u304C${TREATY[type].ja}\u3092\u6C42\u3081\u3066\u3044\u308B\uFF08\u3042\u306A\u305F\u306E\u56FD\u304C\u5F93\u3046\u5074\uFF09` : `${from.name}\u304C${TREATY[type].ja}\u3092\u7533\u3057\u51FA\u305F`, body: `\u95A2\u4FC2\u5024 ${Math.round(to.relations[from.id] ?? 0)}\u3002${TREATY[type].ja}\uFF08${Math.round(TREATY[type].months / 12)}\u5E74\uFF09\u3002`, options, payload: { type, from: from.id, to: to.id } });
-    setCool(civ, key3, civ.monthIndex + 60);
-    return pend;
-  }
-  function offerPeace(ctx, proposer, war, other2, terms) {
-    const { civ } = ctx;
-    if (!isLive54(civ) || !other2.player || proposer.player) return null;
-    const key3 = `p|${war.id}|${proposer.id}`, pend = { ok: true, effects: [], silent: true, targetId: war.id, pending: true };
-    if (openKey(civ, key3) || coolUntil(civ, key3) > civ.monthIndex) return pend;
-    const kind = terms.kind === "reparations" ? `\u8CE0\u511F\uFF08${Math.round(terms.amount ?? 0)}\uFF09` : terms.kind === "cession" ? "\u5360\u9818\u5730\u306E\u5272\u8B72\uFF08\u73FE\u72B6\u306E\u4FDD\u6301\uFF09" : "\u767D\u7D19\u8B1B\u548C";
-    raise(ctx, { kind: "peace_offer", key: key3, stateId: other2.id, title: `${proposer.name}\u304C\u8B1B\u548C\u3092\u7533\u3057\u5165\u308C\u305F`, body: `\u6761\u4EF6: ${kind}\u3002\u6226\u6CC1 ${Math.round(war.sides.a.includes(other2.id) ? war.score : -war.score)}\uFF08\u81EA\u56FD\u304B\u3089\u898B\u3066\uFF09\u3002`, options: [{ id: "accept", ja: "\u53D7\u3051\u5165\u308C\u308B", hint: "\u6226\u4E89\u304C\u7D42\u308F\u308B" }, { id: "reject", ja: "\u62D2\u3080", hint: "\u6226\u4E89\u306F\u7D9A\u304F" }], payload: { warId: war.id, from: proposer.id, to: other2.id, terms } });
-    setCool(civ, key3, civ.monthIndex + 12);
-    return pend;
-  }
-  function warIncoming(ctx, atk, def, c) {
-    const { civ } = ctx;
-    if (!isLive54(civ) || !def.player || atk.player) return null;
-    const key3 = `w|${atk.id}|${def.id}`, pend = { ok: true, silent: true, pending: true, targetId: def.id };
-    if (atk.campaign?.target === def.id) atk.campaign.stage = "ultimatum";
-    if (openKey(civ, key3)) return pend;
-    const tribute = Math.round(Math.max(0, def.treasury) * 0.25), relNow = Math.round(def.relations[atk.id] ?? 0);
-    raise(ctx, { kind: "war_incoming", key: key3, stateId: def.id, title: `${atk.name}\u304C\u5BA3\u6226\u3057\u3088\u3046\u3068\u3057\u3066\u3044\u308B`, body: `${atk.name}\u306F\u3001${def.name}\u3078\u306E\u5BA3\u6226\u3092\u901A\u544A\u3057\u305F\u3002\u56DE\u7B54\u3057\u3060\u3044\u3067\u6226\u4E89\u306B\u306A\u308B\u3002\u95A2\u4FC2\u5024 ${relNow}\u3002`, options: [{ id: "stand", ja: "\u53D7\u3051\u3066\u7ACB\u3064", hint: "\u6226\u4E89\u304C\u59CB\u307E\u308B" }, { id: "yield", ja: `\u8981\u6C42\u3092\u306E\u3080\uFF08\u8CA2\u7D0D ${tribute}\uFF09`, hint: "\u6226\u4E89\u306F\u907F\u3051\u308B\u304C\u3001\u56FD\u306E\u5A01\u4FE1\u3068\u5B89\u5B9A\u304C\u4E0B\u304C\u308B", disabled: null }, { id: "plead", ja: "\u4F7F\u7BC0\u3092\u9001\u308A\u548C\u89E3\u3092\u8A66\u307F\u308B\uFF08\u8CBB\u7528 15\uFF09", hint: "\u95A2\u4FC2\u304C\u826F\u3044\u307B\u3069\u6210\u529F\u3057\u3084\u3059\u3044", disabled: def.treasury >= 15 ? null : "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044" }], payload: { atk: atk.id, def: def.id, reason: c?.reason ?? "conquest", tribute } });
-    return pend;
-  }
-  function startWar(ctx, atk, def, d) {
-    const { civ } = ctx;
-    if (!atk?.alive || !def?.alive || atWarWith(civ, atk, def)) return null;
-    const w = declareWar(ctx, atk, def, { reason: d.payload.reason === "conquest" ? "conquest" : d.payload.reason, provenance: "simulation" });
-    if (atk.campaign?.target === def.id) {
-      atk.campaign.stage = "war";
-      atk.campaign.warId = w.id;
-    }
-    return w;
-  }
-  function allyCall(ctx, w, side, host, foe, ally) {
-    const { civ } = ctx;
-    if (!isLive54(civ) || !ally.player || host.player) return false;
-    const key3 = `a|${w.id}|${ally.id}`;
-    if (openKey(civ, key3)) return true;
-    raise(ctx, { kind: "ally_call", key: key3, stateId: ally.id, title: `\u540C\u76DF\u56FD${host.name}\u304C\u53C2\u6226\u3092\u6C42\u3081\u3066\u3044\u308B`, body: `${host.name}\u3068${foe.name}\u306E\u6226\u4E89\u3002\u540C\u76DF\u306E\u7D04\u675F\u306B\u5F93\u3044\u3001${host.name}\u5074\u3067\u53C2\u6226\u3059\u308B\u304B\u3002`, options: [{ id: "join", ja: `${host.name}\u5074\u3067\u53C2\u6226\u3059\u308B`, hint: `${foe.name}\u3068\u306E\u95A2\u4FC2\u304C\u60AA\u5316\u3059\u308B` }, { id: "refuse", ja: "\u53C2\u6226\u3092\u65AD\u308B", hint: `${host.name}\u3068\u306E\u95A2\u4FC2\u304C\u5927\u304D\u304F\u60AA\u5316` }], payload: { warId: w.id, side, host: host.id, foe: foe.id, ally: ally.id } });
-    return true;
-  }
-  function successionOptions(ctx, st) {
-    const { civ } = ctx, mi2 = civ.monthIndex, ls = lifeScale(civ, st), person = (k) => ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], leaderRng(civ, st, `sc${k}${mi2}`)) ?? `${st.name}\u306E\u4EBA${k}`, u = (k) => U5(civ, st.id, mi2, "sc", k);
-    const fkeys = Object.keys(st.politics?.factions ?? {}), has2 = (k) => fkeys.includes(k), { law, lawJa: lj, partition, list } = successionList(ctx, st), opts = [];
-    const lawNote = (c) => `${c.risk >= 0.3 ? "\uFF0F\u4E89\u3044\u306E\u706B\u7A2E" : ""}`;
-    for (const c of list) {
-      if (c.minor) for (const [rid, rel2, bk, k] of [["queen", "\u6BCD\u540E", "nobility", 5], ["vizier", "\u5BB0\u76F8", has2("bureaucrats") ? "bureaucrats" : "nobility", 6], ["general", "\u5C06\u8ECD", "military", 7]]) {
-        const reg = { name: person(k), skill: r36(0.35 + 0.5 * u(`r${rid}`)), backer: bk, relation: rel2 };
-        opts.push({ id: `${c.id}:${rid}`, ja: `${c.name}\uFF08${c.ageYears}\u6B73\uFF09\u3092\u7ACB\u3066\u3001${rel2}${reg.name}\u304C\u6442\u653F`, hint: `\u80FD\u529B${Math.round(reg.skill * 100)}\u30FB${FACT_JA[bk]}\u304C\u652F\u6301\uFF0F\u6B63\u7D71\u6027 \u9AD8`, payload: { cand: c, regent: reg } });
-      }
-      else opts.push({ id: c.id, ja: `${c.relation}\uFF1A${c.name}\uFF08${c.ageYears}\u6B73\uFF09`, hint: `\u80FD\u529B${Math.round(c.skill * 100)}\u30FB\u6B63\u7D71\u6027${Math.round(c.legit * 100)}\u30FB${FACT_JA[c.backer]}\u304C\u652F\u6301${c.kin ? "" : "\uFF0F\u738B\u671D\u304C\u4EE3\u308F\u308B"}${lawNote(c)}`, payload: { cand: c } });
-    }
-    const adult = list.find((c) => !c.minor && c.kin);
-    if (partition && adult && (byState(ctx).get(st.id)?.length ?? 0) >= 4) opts.push({ id: "partition", ja: `\u9818\u571F\u3092\u5B50\u3089\u3067\u5206\u3051\u308B\uFF08${adult.name}\u304C\u672C\u56FD\u3092\u7D99\u3050\uFF09`, hint: "\u5206\u5272\u76F8\u7D9A\u3002\u65B0\u3057\u3044\u56FD\u304C\u3067\u304D\u308B\uFF08\u6226\u4E89\u306B\u306F\u306A\u3089\u306A\u3044\uFF09\uFF0F\u672C\u56FD\u306F\u5F31\u304F\u306A\u308B", payload: { cand: adult, partition: true } });
-    opts.law = { law, ja: lj };
-    return opts;
-  }
-  function succession(ctx, st) {
-    const { civ } = ctx;
-    if (!isLive54(civ) || !st.player) return false;
-    const key3 = `s|${st.id}`;
-    if (openKey(civ, key3)) return true;
-    const opts = successionOptions(ctx, st);
-    const payload = {};
-    const options = opts.map((o) => {
-      payload[o.id] = o.payload;
-      return { id: o.id, ja: o.ja, hint: o.hint };
-    });
-    raise(ctx, { kind: "succession", key: key3, stateId: st.id, title: `${st.leader.name}\u306E\u8DE1\u3092\u7D99\u3050\u8005\u3092\u6C7A\u3081\u308B`, body: `\u7D99\u627F\u6CD5: ${opts.law?.ja ?? lawJa(civ, st)}\u3002\u5019\u88DC\u8005\u306E\u4E2D\u304B\u3089\u9078\u3076\u3002`, options, payload });
-    return true;
-  }
-  function rebellion(ctx, st, groupIds) {
-    const { civ } = ctx;
-    if (!isLive54(civ) || !st.player) return false;
-    const key3 = `r|${st.id}`;
-    if (openKey(civ, key3)) return true;
-    st.lastCrisis = civ.monthIndex;
-    const cost = Math.round(20 + st.pop * 3e-4), n2 = groupIds.length;
-    raise(ctx, { kind: "rebellion", key: key3, stateId: st.id, title: `${st.name}\u3067\u53CD\u4E71\u306E\u6A5F\u904B\u304C\u9AD8\u307E\u3063\u3066\u3044\u308B`, body: `\u4E0D\u6E80\u304C\u9650\u754C\u306B\u8FD1\u3065\u304D\u3001${n2}\u306E\u5730\u57DF\u304C\u72EC\u7ACB\u3092\u6C42\u3081\u3066\u8702\u8D77\u3057\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002\u5B89\u5B9A\u5EA6 ${Math.round(st.stability * 100)}\u3002`, options: [{ id: "suppress", ja: `\u6B66\u529B\u3067\u93AE\u5727\u3059\u308B\uFF08\u8CBB\u7528 ${cost}\uFF09`, hint: "\u5B89\u5B9A\u306F\u623B\u308B\u304C\u3001\u6C11\u8846\u306E\u652F\u6301\u304C\u4E0B\u304C\u308B", disabled: st.treasury >= cost ? null : "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044" }, { id: "concede", ja: "\u8B72\u6B69\u3059\u308B\uFF08\u81EA\u6CBB\u3092\u8A8D\u3081\u3001\u6E1B\u7A0E\uFF09", hint: "\u5B89\u5B9A\u304C\u623B\u308A\u3001\u8CB4\u65CF\u306E\u652F\u6301\u304C\u4E0B\u304C\u308B" }, { id: "allow", ja: "\u5206\u96E2\u3092\u8A8D\u3081\u308B\uFF0F\u653E\u7F6E\u3059\u308B", hint: "\u65B0\u3057\u3044\u56FD\u304C\u6210\u7ACB\u3057\u3001\u5185\u6226\u306B\u306A\u308B" }], payload: { groupIds, cost } });
-    return true;
-  }
-  function omen(ctx, st) {
-    const { civ } = ctx, mi2 = civ.monthIndex;
-    if (!isLive54(civ) || !st.player || st.stability >= 0.45 || mi2 - (st.lastCrisis ?? -999) <= 60 || mi2 - (st.omenAt ?? -999) <= 36) return;
-    const gs = byState(ctx).get(st.id) ?? [];
-    if (gs.length < 3) return;
-    st.omenAt = mi2;
-    if (U5(civ, st.id, mi2, "omen") >= scoutLevel(civ, st)) return;
-    const key3 = `o|${st.id}`;
-    if (openKey(civ, key3)) return;
-    const cost = 15;
-    raise(ctx, { kind: "omen", key: key3, stateId: st.id, title: "\u8ADC\u5831\u304C\u4E0D\u7A4F\u306E\u5146\u3057\u3092\u3064\u304B\u3093\u3060", body: `\u5404\u5730\u3067\u4E0D\u6E80\u304C\u9AD8\u307E\u308A\u3001\u53CD\u4E71\u306E\u706B\u7A2E\u304C\u898B\u3048\u308B\uFF08\u5B89\u5B9A\u5EA6 ${Math.round(st.stability * 100)}\uFF09\u3002\u4ECA\u306A\u3089\u624B\u304C\u6253\u3066\u308B\u3002`, options: [{ id: "act", ja: `\u5BA5\u548C\u7B56\u3092\u8B1B\u3058\u308B\uFF08\u8CBB\u7528 ${cost}\uFF09`, hint: "\u4E0D\u6E80\u304C\u548C\u3089\u3050", disabled: st.treasury >= cost ? null : "\u8CA1\u653F\u304C\u8DB3\u308A\u306A\u3044" }, { id: "ignore", ja: "\u9759\u89B3\u3059\u308B", hint: "\u4F55\u3082\u3057\u306A\u3044" }], payload: { cost } });
-  }
-  function isMajor(ctx, w, { camp, A, D: D2, g, domain = "land" }) {
-    const { civ } = ctx, ops = w.ops, mi2 = civ.monthIndex, sA = civ.states[A.stateId], sD = civ.states[D2.stateId], me = sA.player ? A : sD.player ? D2 : null;
-    if (!me?.corpsId || !isLive54(civ)) return false;
-    if ((ops.lastBattleDecision ?? -99) > mi2 - 2) return false;
-    const mine = civ.states[me.stateId], share = domain === "sea" ? navyShare(mine) : landShare(mine), land = Math.max(1, mine.army * share), stage = warHelpers.stageOf(civ, g), cap = civ.states[g.stateId]?.capitalGroupId === g.id;
-    return A.size + D2.size >= 600 && Math.min(A.size, D2.size) >= 0.25 * land || domain === "land" && (stage === "city" || cap) || Math.abs(w.score) >= 50 || ops.broken.a > 0 || ops.broken.d > 0;
-  }
-  function battle(ctx, w, { camp, A, D: D2, g, site, domain = "land" }) {
-    const { civ } = ctx;
-    if (!w.ops || !isMajor(ctx, w, { camp, A, D: D2, g, domain })) return null;
-    const sA = civ.states[A.stateId], sD = civ.states[D2.stateId], mine = sA.player ? sA : sD, side = sA.player ? "A" : "D", me = side === "A" ? A : D2, foe = side === "A" ? D2 : A, foeSt = civ.states[foe.stateId];
-    const key3 = `b|${w.id}|${camp.id}`;
-    if (openKey(civ, key3)) return pendingOf(civ).find((x) => x.key === key3).id;
-    const stage = warHelpers.stageOf(civ, g), fort = domain === "sea" ? 1 : 1 + ((civ.states[D2.stateId].defense ?? 0) + (stage === "city" ? 0.3 : stage === "town" ? 0.15 : 0.05) * (stage ? 1 : 0));
-    const field2 = createField(ctx, {
-      domain,
-      place: placeName2(ctx, site),
-      seed: `${key3}|${civ.monthIndex}`,
-      terr: domain === "sea" ? 0 : warHelpers.terrainBonus(ctx.world, site.cell),
-      fort,
-      meDefends: side === "D",
-      long: domain === "land" && stage === "city" ? 1 : 0,
-      me: { st: mine, size: me.size, corps: corpsById(mine, me.corpsId), morale: me.morale, supply: me.supply },
-      foe: { st: foeSt, size: foe.size, corps: corpsById(foeSt, foe.corpsId ?? foe.lead), morale: foe.morale, supply: foe.supply, label: foeSt.name }
-    });
-    field2.fog = scoutK(civ, mine, key3);
-    field2.war = w.name ?? "\u6226\u4E89";
-    const d = raise(ctx, { kind: "battle", key: key3, stateId: mine.id, title: `${field2.place}\u306E${DOMAINS[domain].ja}`, body: "", options: [{ id: "end", ja: "\u6226\u3044\u3092\u7D42\u3048\u308B" }], payload: { warId: w.id, campId: camp.id, forceA: A.id, forceD: D2.id, gid: g.id, siteId: site.id, side, domain, field: field2 } });
-    if (!d) return null;
-    w.ops.lastBattleDecision = civ.monthIndex;
-    return d.id;
-  }
-  function skirmish(ctx, w, domain) {
-    const { civ } = ctx, ops = w.ops;
-    if (!ops || !isLive54(civ)) return null;
-    const me = [...w.sides.a, ...w.sides.d].map((i) => civ.states[i]).find((x) => x?.player);
-    if (!me) return null;
-    const mySide = w.sides.a.includes(me.id) ? "a" : "d", foes = w.sides[mySide === "a" ? "d" : "a"].map((i) => civ.states[i]).filter((x) => x?.alive).sort((x, y) => headsOf(y, domain) - headsOf(x, domain)), foeSt = foes[0];
-    if (!foeSt) return null;
-    const mh = headsOf(me, domain), fh = headsOf(foeSt, domain);
-    if (mh < 30 || fh < 20) return null;
-    const key3 = `s|${w.id}|${domain}`;
-    if (openKey(civ, key3) || (ops.lastSkirm?.[domain] ?? -99) > civ.monthIndex - 5) return null;
-    const commit = Math.min(1, 0.7), field2 = createField(ctx, { domain, place: DOMAINS[domain].ja === "\u7A7A\u6226" ? "\u6226\u57DF\u306E\u7A7A" : "\u8ECC\u9053\u4E0A", seed: `${key3}|${civ.monthIndex}`, terr: 0, fort: 1, meDefends: false, me: { st: me, size: mh * commit, corps: leadCorps(me, domain), morale: 0.85, supply: 1 }, foe: { st: foeSt, size: fh * commit, corps: leadCorps(foeSt, domain), morale: 0.8, supply: 1, label: foeSt.name } });
-    field2.fog = scoutK(civ, me, key3);
-    field2.war = w.name ?? "\u6226\u4E89";
-    (ops.lastSkirm ?? (ops.lastSkirm = {}))[domain] = civ.monthIndex;
-    const d = raise(ctx, { kind: "battle", key: key3, stateId: me.id, title: `${field2.place}\u306E${DOMAINS[domain].ja}`, body: "", options: [{ id: "end", ja: "\u6226\u3044\u3092\u7D42\u3048\u308B" }], payload: { warId: w.id, domain, skirmish: true, mySide, foeId: foeSt.id, field: field2 } });
-    return d?.id ?? null;
-  }
-  function commanderDeath(ctx, st, cp, cands, cause) {
-    const key3 = `cd|${cp.id}|${ctx.civ.monthIndex}`;
-    if (openKey(ctx.civ, key3)) return null;
-    const old = cp.commander;
-    const d = raise(ctx, { kind: "commander_death", key: key3, stateId: st.id, title: `${cp.name}\u306E\u6307\u63EE\u5B98 ${old.name} \u304C${cause}`, body: "", options: cands.map((c) => ({ id: c.p.id, ja: c.p.name, hint: `${c.from}\u30FB\u80FD\u529B ${Math.round(c.p.skill * 100)}` })), payload: { corpsId: cp.id, fallen: { name: old.name, skill: old.skill, traits: old.traits ?? [] }, cause, cands: Object.fromEntries(cands.map((c) => [c.p.id, { p: JSON.parse(JSON.stringify(c.p)), from: c.from, slot: c.slot ?? null, fresh: !!c.fresh }])) } });
-    return d?.id ?? null;
-  }
-  var clamp38, r36, U5, HANDLERS, registerDecision, DECISION_JA, openKey, FACT_JA, scoutK, DECISION_HOOKS;
-  var init_decisions = __esm({
-    "js/core/wcde/decisions.js"() {
-      init_diplomacy();
-      init_events();
-      init_civ_state();
-      init_spatial();
-      init_species();
-      init_naming();
-      init_states();
-      init_negotiation();
-      init_regimes();
-      init_succession();
-      init_warfare();
-      init_corps();
-      init_power();
-      init_orbat();
-      init_battlefield();
-      init_statefx();
-      init_clock();
-      init_decision_state();
-      clamp38 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
-      r36 = (x) => Math.round(x * 1e3) / 1e3;
-      U5 = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
-      HANDLERS = {};
-      registerDecision = (kind, fn) => {
-        HANDLERS[kind] = fn;
-      };
-      DECISION_JA = Object.freeze({ treaty_offer: "\u6761\u7D04\u306E\u7533\u3057\u51FA", peace_offer: "\u8B1B\u548C\u306E\u7533\u3057\u51FA", war_incoming: "\u5BA3\u6226\u5E03\u544A", ally_call: "\u540C\u76DF\u56FD\u306E\u53C2\u6226\u8981\u8ACB", succession: "\u738B\u4F4D\u306E\u7D99\u627F", rebellion: "\u53CD\u4E71\u30FB\u5206\u96E2", omen: "\u4E0D\u7A4F\u306E\u524D\u5146", battle: "\u4F1A\u6226", commander_death: "\u6307\u63EE\u5B98\u306E\u6226\u6B7B", pact_invite: "\u76DF\u7D04\u3078\u306E\u8A98\u3044", pact_merge: "\u7D71\u5408\u306E\u63D0\u6848", event: "\u51FA\u6765\u4E8B" });
-      openKey = (civ, key3) => pendingOf(civ).some((d) => d.key === key3);
-      registerDecision("treaty_offer", (ctx, d, opt) => {
-        const { civ } = ctx, p = d.payload, from = civ.states[p.from], to = civ.states[p.to];
-        if (!from?.alive || !to?.alive) return { ok: true, note: "\u76F8\u624B\u306E\u56FD\u304C\u6D88\u3048\u3066\u3044\u305F" };
-        if (opt === "decline") {
-          recordProposal(ctx, { kind: "treaty", type: p.type, from: p.from, to: p.to, status: "rejected", counter: null });
-          adjustRel(from, to, -3);
-          return { ok: true, note: "\u7533\u3057\u51FA\u3092\u65AD\u3063\u305F" };
-        }
-        const type = opt === "counter_na" ? "nonaggression" : p.type;
-        if (treatyFeasible(civ, from, to, type) || treatyBetween(civ, from, to, type) || atWarWith(civ, from, to)) return { ok: true, note: "\u72B6\u6CC1\u304C\u5909\u308F\u308A\u3001\u6210\u7ACB\u3057\u306A\u304B\u3063\u305F" };
-        signTreaty(ctx, type, from, to, { provenance: "player" });
-        recordProposal(ctx, { kind: "treaty", type, from: p.from, to: p.to, status: "accepted", counter: null });
-        return { ok: true, note: `${TREATY[type].ja}\u3092\u7D50\u3093\u3060` };
-      });
-      registerDecision("peace_offer", (ctx, d, opt) => {
-        const { civ } = ctx, p = d.payload, war = civ.wars[p.warId], from = civ.states[p.from];
-        if (!war || war.status !== "active" || !from?.alive) return { ok: true, note: "\u6226\u4E89\u306F\u3059\u3067\u306B\u7D42\u308F\u3063\u3066\u3044\u305F" };
-        if (opt === "reject") {
-          recordProposal(ctx, { kind: "peace", warId: war.id, from: p.from, to: p.to, terms: p.terms, separate: false, status: "rejected" });
-          return { ok: true, note: "\u8B1B\u548C\u3092\u62D2\u3093\u3060" };
-        }
-        const r = negotiatePeace(ctx, from, war, { terms: p.terms, withId: p.to, forceAccept: true });
-        return r.ok ? { ok: true, note: "\u8B1B\u548C\u3057\u305F" } : { ok: true, note: r.error ?? "\u8B1B\u548C\u306F\u6210\u7ACB\u3057\u306A\u304B\u3063\u305F" };
-      });
-      registerDecision("war_incoming", (ctx, d, opt) => {
-        const { civ } = ctx, p = d.payload, atk = civ.states[p.atk], def = civ.states[p.def];
-        if (!atk?.alive || !def?.alive) return { ok: true, note: "\u76F8\u624B\u306E\u56FD\u304C\u6D88\u3048\u3066\u3044\u305F" };
-        const stand = () => {
-          startWar(ctx, atk, def, d);
-          return { ok: true, note: "\u53D7\u3051\u3066\u7ACB\u3063\u305F\u3002\u6226\u4E89\u304C\u59CB\u307E\u308B" };
-        };
-        if (opt === "stand") return stand();
-        if (opt === "plead") {
-          def.treasury -= 15;
-          const chance = clamp38(0.2 + 0.5 * ((def.relations[atk.id] ?? 0) + 40) / 140, 0.1, 0.8);
-          if (U5(civ, d.id, "plead") < chance) {
-            if (atk.campaign?.target === def.id) atk.campaign = null;
-            atk.lastWarWith = { ...atk.lastWarWith ?? {}, [def.id]: civ.monthIndex };
-            adjustRel(atk, def, 10);
-            return { ok: true, note: "\u4F7F\u7BC0\u306E\u8AAC\u5F97\u304C\u5B9F\u308A\u3001\u6226\u4E89\u306F\u907F\u3051\u3089\u308C\u305F" };
-          }
-          const r = stand();
-          return { ...r, note: "\u8AAC\u5F97\u306F\u5B9F\u3089\u305A\u3001\u6226\u4E89\u304C\u59CB\u307E\u3063\u305F" };
-        }
-        const pay = Math.min(Math.max(0, def.treasury), p.tribute);
-        def.treasury -= pay;
-        atk.treasury += pay;
-        def.stability = clamp38(def.stability - 0.06);
-        adjustRel(atk, def, 15);
-        if (atk.campaign?.target === def.id) atk.campaign = null;
-        atk.lastWarWith = { ...atk.lastWarWith ?? {}, [def.id]: civ.monthIndex };
-        atk.lastWarEnd = civ.monthIndex;
-        makeEvent(civ, ctx.ids, { kind: "state_action", title: `${def.name}\u304C${atk.name}\u306E\u8981\u6C42\u3092\u306E\u307F\u3001\u8CA2\u7D0D\u3057\u305F`, participants: [{ entityId: def.id, role: "actor" }, { entityId: atk.id, role: "target" }], location: null, effects: [{ targetId: def.id, property: "treasury", before: null, after: Math.round(def.treasury) }], provenance: "player" });
-        return { ok: true, note: `\u8981\u6C42\u3092\u306E\u3093\u3060\uFF08\u8CA2\u7D0D ${Math.round(pay)}\uFF09` };
-      });
-      registerDecision("ally_call", (ctx, d, opt) => {
-        const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], host = civ.states[p.host], foe = civ.states[p.foe], ally = civ.states[p.ally];
-        if (!w || w.status !== "active" || !ally?.alive) return { ok: true, note: "\u6226\u4E89\u306F\u3059\u3067\u306B\u7D42\u308F\u3063\u3066\u3044\u305F" };
-        if (opt === "refuse") {
-          adjustRel(ally, host, -25);
-          return { ok: true, note: "\u53C2\u6226\u3092\u65AD\u3063\u305F" };
-        }
-        if (w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) return { ok: true, note: "\u3059\u3067\u306B\u53C2\u6226\u3057\u3066\u3044\u308B" };
-        w.sides[p.side].push(ally.id);
-        ally.warIds.push(w.id);
-        adjustRel(ally, foe, -25);
-        w.ops && ctx.warOps?.monthly;
-        makeEvent(civ, ctx.ids, { kind: "ally_joined", title: `${ally.name}\u304C${host.name}\u5074\u3067\u53C2\u6226\u3057\u305F`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: host.id, role: "host" }, { entityId: w.id, role: "war" }], location: null, provenance: "player" });
-        return { ok: true, note: "\u53C2\u6226\u3057\u305F" };
-      });
-      FACT_JA = { nobility: "\u8CB4\u65CF", military: "\u8ECD", clergy: "\u8056\u8077\u8005", merchants: "\u5546\u4EBA", commoners: "\u6C11\u8846", bureaucrats: "\u5B98\u50DA", artisans: "\u8077\u4EBA", clans: "\u6C0F\u65CF" };
-      registerDecision("succession", (ctx, d, opt) => {
-        const { civ } = ctx, st = civ.states[d.stateId];
-        if (!st?.alive) return { ok: true, note: "\u56FD\u304C\u3059\u3067\u306B\u306A\u3044" };
-        const pl = d.payload[opt];
-        if (!pl) return { ok: false, error: "\u305D\u306E\u5019\u88DC\u306F\u3044\u307E\u305B\u3093" };
-        const c = pl.cand, reg = pl.regent ?? null;
-        if (pl.partition) {
-          const gs = (byState(ctx).get(st.id) ?? []).filter((g) => g.id !== st.capitalGroupId).sort((a, b) => a.id < b.id ? -1 : 1), part2 = gs.filter((_, i) => i % 2 === 1);
-          if (part2.length && part2.length < gs.length + 1) {
-            const ns = formState(ctx, { via: "secession", groupIds: part2.map((g) => g.id), predecessor: st.id });
-            if (ns) {
-              ns.relations[st.id] = 20;
-              st.relations[ns.id] = 20;
-              makeEvent(civ, ctx.ids, { kind: "state_action", title: `${st.name}\u306E\u9818\u571F\u304C\u3001${c.name}\u306E\u7D99\u627F\u306B\u3068\u3082\u306A\u3044\u5B50\u3089\u3067\u5206\u3051\u3089\u308C\u3001${ns.name}\u304C\u6210\u7ACB\u3057\u305F`, participants: [{ entityId: st.id, role: "actor" }, { entityId: ns.id, role: "target" }], location: null, provenance: "player" });
-            }
-          }
-        }
-        const hit = 0.02 + 0.1 * (1 - (reg ? Math.max(c.legit, 0.8) : c.legit));
-        enthrone(ctx, st, { name: c.name, bornAt: c.bornAt, kin: c.kin, hit, how: reg ? `\u6442\u653F${reg.name}\u306E\u3082\u3068\u3001${c.name}\u304C\u7ACB\u3063\u305F` : `${c.relation}\u306E${c.name}\u304C\u7ACB\u3063\u305F` });
-        st.leader.skill = c.skill;
-        st.leader.backer = c.backer;
-        if (reg) st.leader.regent = { name: reg.name, skill: reg.skill, backer: reg.backer, relation: reg.relation, until: civ.monthIndex + Math.max(12, Math.round((16 - c.ageYears) * 12 * lifeScale(civ, st))) };
-        const F = st.politics?.factions;
-        if (F) {
-          const bump = (k, v) => {
-            if (F[k]) F[k].support = clamp38(F[k].support + v);
-          };
-          bump(c.backer, 0.1);
-          if (reg) bump(reg.backer, 0.06);
-          for (const k of Object.keys(F)) if (k !== c.backer && k !== reg?.backer && (k === "nobility" || k === "military") && c.kin === false) bump(k, -0.04);
-        }
-        if (c.risk && U5(civ, st.id, civ.monthIndex, "sdispute") < c.risk * (reg ? 0.6 : 1)) queueEvent(st, c.id === "usurper" || c.id === "general" ? "succ_coup_after" : "succ_dispute", 3 + Math.floor(9 * U5(civ, st.id, "sdd")), civ.monthIndex);
-        return { ok: true, note: reg ? `\u6442\u653F\u3092\u7F6E\u304D\u3001${c.name}\u304C\u5373\u4F4D\u3057\u305F` : `${c.name}\u304C\u5373\u4F4D\u3057\u305F` };
-      });
-      registerDecision("rebellion", (ctx, d, opt) => {
-        const { civ } = ctx, st = civ.states[d.stateId];
-        if (!st?.alive) return { ok: true, note: "\u56FD\u304C\u3059\u3067\u306B\u306A\u3044" };
-        const gs = byState(ctx).get(st.id) ?? [], F = st.politics?.factions, bump = (k, v) => {
-          if (F?.[k]) F[k].support = clamp38(F[k].support + v);
-        };
-        const calm = (f) => {
-          for (const g of gs) for (const co of g.cohorts) co.tension *= f;
-        };
-        if (opt === "suppress") {
-          st.treasury -= d.payload.cost;
-          calm(0.7);
-          st.stability = clamp38(st.stability + 0.06);
-          bump("commoners", -0.06);
-          bump("military", 0.04);
-          st.lastCrisis = civ.monthIndex + 60;
-          return { ok: true, note: "\u53CD\u4E71\u3092\u93AE\u5727\u3057\u305F" };
-        }
-        if (opt === "concede") {
-          st.policy.autonomy = r36(clamp38(st.policy.autonomy + 0.2));
-          st.policy.tax = r36(clamp38(st.policy.tax - 0.03, 0.02, 0.4));
-          calm(0.85);
-          st.stability = clamp38(st.stability + 0.05);
-          bump("nobility", -0.04);
-          st.lastCrisis = civ.monthIndex;
-          return { ok: true, note: "\u8B72\u6B69\u3057\u3066\u53CD\u4E71\u3092\u53CE\u3081\u305F" };
-        }
-        const part2 = d.payload.groupIds.map((i) => civ.groups[i]).filter((g) => g?.stateId === st.id);
-        if (!part2.length || part2.length >= gs.length) return { ok: true, note: "\u5206\u96E2\u306F\u8D77\u304D\u306A\u304B\u3063\u305F" };
-        runSecession(ctx, st, part2);
-        return { ok: true, note: "\u5206\u96E2\u304C\u8D77\u304D\u3001\u5185\u6226\u306B\u306A\u3063\u305F" };
-      });
-      registerDecision("omen", (ctx, d, opt) => {
-        const st = ctx.civ.states[d.stateId];
-        if (!st?.alive) return { ok: true };
-        if (opt === "act") {
-          st.treasury -= d.payload.cost;
-          for (const g of byState(ctx).get(st.id) ?? []) for (const co of g.cohorts) co.tension *= 0.88;
-          st.stability = clamp38(st.stability + 0.04);
-          return { ok: true, note: "\u5BA5\u548C\u7B56\u3092\u8B1B\u3058\u305F" };
-        }
-        return { ok: true, note: "\u9759\u89B3\u3057\u305F" };
-      });
-      scoutK = (civ, mine, key3) => {
-        const sc = scoutLevel(civ, mine);
-        return { exact: sc >= 0.85, k: 1 + (U5(civ, key3, "fogs") - 0.5) * 2 * (1 - sc) * 0.4 };
-      };
-      registerDecision("battle", (ctx, d, opt) => {
-        const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], ops = w?.ops;
-        if (p.skirmish) {
-          if (!w || w.status !== "active" || ops?.ended) return { ok: true, note: "\u6226\u6CC1\u304C\u5909\u308F\u308A\u3001\u6226\u3044\u306F\u8D77\u304D\u306A\u304B\u3063\u305F" };
-          const me = civ.states[d.stateId], foe = civ.states[p.foeId], o2 = fieldOutcome(p.field, true), dom = ops.dom ?? (ops.dom = { air: 0, space: 0, nuke: 0 }), sg = p.mySide === "a" ? 1 : -1;
-          for (const [st, heads, lm] of [[me, headsOf(me, p.domain), o2.lossMine], [foe, headsOf(foe, p.domain), o2.lossFoe]]) if (st?.alive) {
-            const dead = Math.min(st.army, heads * 0.1 * lm * 0.7);
-            st.army = Math.max(0, st.army - dead);
-            serviceLoss(st, p.domain, dead);
-            w.casualties += dead;
-            ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + dead;
-          }
-          dom[p.domain] = clamp38((dom[p.domain] ?? 0) + sg * (o2.win ? 1 : -1) * 0.6, -1, 1);
-          (ops.battles ?? (ops.battles = [])).push({ id: `b${++ops.seq}`, at: civ.monthIndex, kind: p.domain, name: `${p.field.place}\u306E${DOMAINS[p.domain].ja}`, cell: civ.groups[civ.states[d.stateId].capitalGroupId]?.cell ?? 0, a: me.id, d: foe.id, winner: o2.win ? me.id : foe.id, deadA: o2.result.lossMe, deadD: o2.result.lossFoe, win: o2.win ? "A" : "D", notable: true, domain: p.domain });
-          return { ok: true, note: `${DOMAINS[p.domain].ja}: ${o2.win ? "\u52DD\u5229" : "\u6557\u5317"}\uFF08${p.domain === "air" ? "\u5236\u7A7A" : "\u5236\u5B99"}\u306B\u97FF\u304F\uFF09` };
-        }
-        const A = ops?.forces?.[p.forceA], D2 = ops?.forces?.[p.forceD], camp = ops?.campaigns?.[p.campId], g = civ.groups[p.gid], site = civ.groups[p.siteId];
-        if (!w || w.status !== "active" || ops?.ended || !A || !D2 || !camp || !g || !site) {
-          if (camp) camp.waiting = null;
-          return { ok: true, note: "\u6226\u6CC1\u304C\u5909\u308F\u308A\u3001\u4F1A\u6226\u306F\u8D77\u304D\u306A\u304B\u3063\u305F" };
-        }
-        const o = fieldOutcome(p.field, p.side === "A"), lossA = p.side === "A" ? o.lossMine : o.lossFoe, lossD = p.side === "A" ? o.lossFoe : o.lossMine;
-        ops.lastBattleDecision = civ.monthIndex;
-        camp.waiting = null;
-        const force = o.winA ? "A" : "D", r = p.domain === "sea" ? navalEngage(ctx, w, camp, A, D2, g, { site, bias: o.bias, lossA, lossD, force }) : fieldEngage(ctx, w, camp, A, D2, g, { site, bias: o.bias, lossA, lossD, force });
-        return { ok: true, note: `${r.rec.name}: ${o.win ? "\u52DD\u5229" : "\u6557\u5317"}\uFF08${o.result.days} \u65E5\uFF09` };
-      });
-      registerDecision("commander_death", (ctx, d, opt) => {
-        const st = ctx.civ.states[d.stateId], cp = st ? corpsById(st, d.payload.corpsId) : null, c = d.payload.cands[opt];
-        if (!cp || !c) return { ok: true, note: "\u8ECD\u56E3\u304C\u3059\u3067\u306B\u306A\u3044" };
-        installCommander(st, cp, c.p, c.slot);
-        return { ok: true, note: `${c.p.name}\u304C\u5F8C\u4EFB\u306B\u5C31\u3044\u305F` };
-      });
-      DECISION_HOOKS = Object.freeze({ offerTreaty, offerPeace, warIncoming, allyCall, succession, rebellion, omen, battle, skirmish, commanderDeath, raise, scoutLevel });
-    }
-  });
-
-  // js/core/wcde/pacts.js
-  function callPacts(ctx, w, atk, def) {
-    const { civ, ids: ids2, rng } = ctx, inWar = (id) => w.sides.a.includes(id) || w.sides.d.includes(id);
-    for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const p of pactsOfState(civ, host.id)) {
-      if (p.members.includes(foe.id)) continue;
-      const chance = p.purpose === "defense" ? side === "d" ? 0.85 : 0 : p.purpose === "counter" ? foe.id === p.target ? 0.8 : 0 : p.purpose === "religion" ? w.reason === "religion" ? 0.5 : 0 : 0;
-      if (!chance) continue;
-      for (const m of p.members) {
-        const s = civ.states[m];
-        if (m === host.id || !s?.alive || inWar(m) || s.dependency?.overlord === foe.id) continue;
-        if (s.player && ctx.decisions?.allyCall(ctx, w, side, host, foe, s)) continue;
-        if (rng() >= chance) continue;
-        w.sides[side].push(m);
-        s.warIds.push(w.id);
-        adjustRel(s, foe, -20);
-        makeEvent(civ, ids2, { kind: "ally_joined", title: `${s.name}\u304C${p.name}\u306E\u76DF\u7D04\u306B\u5F93\u3044\u3001${host.name}\u5074\u3067\u53C2\u6226\u3057\u305F`, participants: [{ entityId: m, role: "ally" }, { entityId: w.id, role: "war" }], location: null, causes: [{ targetId: w.declaredEvent, relation: "reaction_to", basis: "strong" }] });
-      }
-    }
-  }
-  var PACT_PURPOSES, pactsOf, listPacts, pactsOfState;
-  var init_pacts = __esm({
-    "js/core/wcde/pacts.js"() {
-      init_diplomacy();
-      init_events();
-      init_cohorts();
-      init_civ_state();
-      init_decisions();
-      init_regimes();
-      PACT_PURPOSES = Object.freeze({
-        defense: { ja: "\u9632\u885B\u540C\u76DF", suffix: "\u540C\u76DF", merit: "\u653B\u3081\u3089\u308C\u305F\u3068\u304D\u52A9\u3051\u304C\u6765\u308B", cost: "\u52A0\u76DF\u56FD\u3069\u3046\u3057\u3067\u6226\u3048\u306A\u3044" },
-        trade: { ja: "\u901A\u5546\u9023\u5408", suffix: "\u9023\u5408", merit: "\u4EA4\u6613\u306E\u914D\u5F53\u304C\u5165\u308B", cost: "\u52A0\u76DF\u56FD\u3069\u3046\u3057\u3067\u6226\u3048\u306A\u3044" },
-        religion: { ja: "\u5B97\u6559\u9023\u76DF", suffix: "\u9023\u76DF", merit: "\u540C\u3058\u4FE1\u4EF0\u306E\u56FD\u304C\u5B89\u5B9A\u3059\u308B", cost: "\u5B97\u6559\u306E\u6226\u4E89\u306B\u547C\u3070\u308C\u308B" },
-        counter: { ja: "\u5BFE\u6297\u9023\u5408", suffix: "\u9023\u5408", merit: "\u5F37\u56FD\u306B\u5171\u540C\u3067\u5F53\u305F\u308C\u308B", cost: "\u5BFE\u8C61\u3068\u306E\u95A2\u4FC2\u304C\u60AA\u5316\u3059\u308B" }
-      });
-      pactsOf = (civ) => {
-        var _a;
-        return (_a = civ.wcde ?? (civ.wcde = {})).pacts ?? (_a.pacts = { items: {}, seq: 0 });
-      };
-      listPacts = (civ, all = false) => Object.values(pactsOf(civ).items).filter((p) => all || p.active);
-      pactsOfState = (civ, id) => listPacts(civ).filter((p) => p.members.includes(id));
-    }
-  });
-
-  // js/core/civ/diplomacy.js
-  function neighborStates(ctx, st) {
-    const cache4 = ctx._nbr && ctx._nbrMonth === ctx.civ.monthIndex ? ctx._nbr : (ctx._nbr = /* @__PURE__ */ new Map(), ctx._nbrMonth = ctx.civ.monthIndex, ctx._nbr);
-    if (cache4.has(st.id)) return cache4.get(st.id);
-    const out = /* @__PURE__ */ new Set();
-    for (const g of byState(ctx).get(st.id) ?? []) for (const o of neighborGroups(ctx, g)) {
-      const s = ctx.civ.groups[o]?.stateId;
-      if (s && s !== st.id && ctx.civ.states[s].alive) out.add(s);
-    }
-    const r = [...out].sort();
-    cache4.set(st.id, r);
-    return r;
-  }
-  function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "simulation", reverse = false, extra = null } = {}) {
-    if (reverse) [a, b] = [b, a];
-    const { civ, ids: ids2 } = ctx, T4 = TREATY[type], id = ids2.next("treaty"), t = { id, type, a: a.id, b: b.id, signedAt: civ.monthIndex, expiresAt: civ.monthIndex + T4.months, active: true };
-    if (extra) t.terms = extra;
-    civ.treaties[id] = t;
-    civ.activeTreatyIds.push(id);
-    adjustRel(a, b, T4.cat === "dep" ? 5 : type === "alliance" || type === "union" || type === "marriage" ? 25 : T4.cat === "land" ? 5 : 15);
-    const title = T4.dep ? `${b.name}\u304C${a.name}\u306E${{ vassal: "\u5C01\u81E3", tributary: "\u671D\u8CA2\u56FD", protectorate: "\u4FDD\u8B77\u56FD", union: "\u540C\u541B\u9023\u5408\u306E\u4E00\u54E1" }[T4.dep]}\u3068\u306A\u3063\u305F\uFF08${T4.ja}\uFF09` : `${a.name}\u3068${b.name}\u304C${T4.ja}\u3092\u7D50\u3093\u3060`;
-    const ev = makeEvent(civ, ids2, { kind: "treaty_signed", title, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance });
-    t.event = ev.eventId;
-    onTreatySigned(ctx, t, a, b);
-    return t;
-  }
-  function endTreaty(ctx, t, why, byId2 = null) {
-    const { civ, ids: ids2 } = ctx;
-    t.active = false;
-    onTreatyEnded(ctx, t);
-    t.endedAt = civ.monthIndex;
-    if (t.type === "nonaggression") {
-      for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex;
-    }
-    civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
-    makeEvent(civ, ids2, { kind: "treaty_ended", title: `${TREATY[t.type].ja}\u304C${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId2 === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId2 === t.b ? "breaker" : "party" }], location: null, effects: byId2 ? [{ targetId: t.id, property: "broken_by", before: null, after: byId2 }] : [] });
-  }
-  function revengeCauses(civ, atk, def) {
-    const out = [];
-    for (const ev of recentEventsFor(civ, [atk.id], ["war_ended"], 1200, 6)) {
-      if (!ev.participants.some((p) => p.entityId === def.id)) continue;
-      const w = civ.wars[ev.participants.find((p) => p.role === "war")?.entityId];
-      const lost = w && (w.sides.a.includes(atk.id) && w.outcome === "defender_victory" || w.sides.d.includes(atk.id) && w.outcome === "aggressor_victory");
-      out.push({ targetId: ev.eventId, relation: "reaction_to", basis: lost ? "strong" : "plausible" });
-      if (out.length >= 2) break;
-    }
-    return out;
-  }
-  function warReasonFor(ctx, atk, def) {
-    const { civ } = ctx, mi2 = civ.monthIndex, h2 = hashSeed(atk.id, def.id, mi2 >> 3) % 10007 / 10007, year = civ.date.year;
-    const era = year < 1200 ? 0 : year < 3e3 ? 1 : year < 4200 ? 2 : year < 4700 ? 3 : 4, cA = civ.groups[atk.capitalGroupId], cB = civ.groups[def.capitalGroupId];
-    const wt = { conquest: era === 0 ? 3.2 : era === 1 ? 2.6 : era === 2 ? 2 : 1.4, plunder: era === 0 ? 1.6 : era === 1 ? 0.8 : 0.1, subjugation: era >= 1 && atk.army > def.army * 1.8 ? 1.2 : 0.3, preventive: def.army > atk.army * 1.2 && (atk.relations?.[def.id] ?? 0) < -10 ? 1.1 : 0.2 };
-    if (def.dynastyChangedAt != null && mi2 - def.dynastyChangedAt < 240) wt.succession = 3.2;
-    else if (def.leader && def.leader.deposed) wt.succession = 1.2;
-    else wt.succession = era >= 1 ? 0.5 : 0.2;
-    if (cA && cB && dominant(cA).religionId && dominant(cB).religionId && dominant(cA).religionId !== dominant(cB).religionId) wt.religion = era === 0 ? 0.6 : era <= 3 ? 2.6 : 0.8;
-    else wt.religion = 0.2;
-    const coastal2 = (c) => !!c && (ctx.world?.cell?.coastDist?.[c.cell] ?? 9) <= 1;
-    wt.trade_route = (atk.econ?.trade || def.econ?.trade) && era >= 1 ? 1.8 : 0.3;
-    wt.maritime = coastal2(cA) && coastal2(cB) && era >= 2 ? 1.6 : 0;
-    wt.unification = era >= 3 && cA && cB && dominant(cA).cultureId && dominant(cA).cultureId === dominant(cB).cultureId ? 1.6 : 0;
-    wt.ideology = era >= 4 ? 2.2 : era === 3 ? 0.4 : 0;
-    wt.resource = era >= 3 ? 1 : 0;
-    const ents = Object.entries(wt).filter(([, v]) => v > 0), tot = ents.reduce((a, [, v]) => a + v, 0);
-    let x = h2 * tot;
-    for (const [k, v] of ents) {
-      x -= v;
-      if (x <= 0) return k;
-    }
-    return "conquest";
-  }
-  function warPretextFor(ctx, atk, def) {
-    const mi2 = ctx.civ.monthIndex;
-    if (atk.lastWarWith?.[def.id] != null && mi2 - atk.lastWarWith[def.id] < 1200) return "revenge";
-    return null;
-  }
-  function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation" } = {}) {
-    const { civ, ids: ids2, rng } = ctx;
-    if (reason === "conquest") reason = warReasonFor(ctx, atk, def);
-    const id = ids2.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 };
-    {
-      const pt = warPretextFor(ctx, atk, def);
-      if (pt) w.pretext = pt;
-      w.cls = warClassOf(reason);
-    }
-    civ.wars[id] = w;
-    civ.activeWarIds.push(id);
-    atk.warIds.push(id);
-    def.warIds.push(id);
-    adjustRel(atk, def, -40);
-    const ev = makeEvent(civ, ids2, { kind: "war_declared", title: `${atk.name}\u304C${def.name}\u306B\u5BA3\u6226\u3057\u305F`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance });
-    w.declaredEvent = ev.eventId;
-    for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) {
-      if (t.type !== "alliance" || t.a !== host.id && t.b !== host.id) continue;
-      const ally = civ.states[t.a === host.id ? t.b : t.a];
-      if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;
-      if (ally.player && ctx.decisions?.allyCall(ctx, w, side, host, foe, ally)) continue;
-      if (rng() < 0.6) {
-        w.sides[side].push(ally.id);
-        ally.warIds.push(id);
-        adjustRel(ally, foe, -25);
-        makeEvent(civ, ids2, { kind: "ally_joined", title: `${ally.name}\u304C${host.name}\u5074\u3067\u53C2\u6226\u3057\u305F`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: id, role: "war" }], location: null, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] });
-      }
-    }
-    callDependents(ctx, w, atk, def);
-    callPacts(ctx, w, atk, def);
-    ctx.warOps?.init(ctx, w);
-    return w;
-  }
-  function endWar(ctx, w, outcome, terms = null) {
-    const { civ, ids: ids2 } = ctx;
-    if (w.status !== "active") return;
-    w.status = "ended";
-    w.outcome = outcome;
-    w.endedAt = civ.monthIndex;
-    civ.activeWarIds = civ.activeWarIds.filter((i) => i !== w.id);
-    const all = [...w.sides.a, ...w.sides.d].map((i) => civ.states[i]);
-    for (const s of all) s.warIds = s.warIds.filter((i) => i !== w.id);
-    const atk = civ.states[w.aggressor], def = civ.states[w.defender];
-    const lead = outcome === "aggressor_victory" || outcome === "negotiated" && w.score > 0;
-    const gained = [], moved = [];
-    const settled = ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null;
-    if (settled) for (const x of settled) {
-      gained.push(x.gid);
-      moved.push(x);
-    }
-    else if (lead && atk?.alive) for (const gid of w.occupied) {
-      const g = civ.groups[gid];
-      if (g && g.stateId === w.defender) {
-        g.stateId = atk.id;
-        gained.push(gid);
-      }
-    }
-    submitAfterWar(ctx, w, outcome);
-    for (const x of w.sides.a) for (const y of w.sides.d) {
-      const X = civ.states[x], Y = civ.states[y];
-      if (X && Y) {
-        (X.lastWarWith ?? (X.lastWarWith = {}))[y] = civ.monthIndex;
-        (Y.lastWarWith ?? (Y.lastWarWith = {}))[x] = civ.monthIndex;
-      }
-    }
-    for (const s of all) {
-      s.lastWarEnd = civ.monthIndex;
-      s.stability = Math.max(0, s.stability - 0.04);
-      if (s.campaign?.warId === w.id) s.campaign = null;
-    }
-    if (atk && def) adjustRel(atk, def, -10);
-    makeEvent(civ, ids2, { kind: "war_ended", title: `${atk?.name ?? "?"}\u3068${def?.name ?? "?"}\u306E\u6226\u4E89\u304C\u7D42\u308F\u3063\u305F\uFF08${{ aggressor_victory: "\u653B\u6483\u5074\u306E\u52DD\u5229", defender_victory: "\u9632\u885B\u5074\u306E\u52DD\u5229", stalemate: "\u6C7A\u7740\u3064\u304B\u305A", negotiated: terms?.kind === "cession" ? "\u8B1B\u548C\uFF08\u5360\u9818\u5730\u306E\u5272\u8B72\uFF09" : "\u8B1B\u548C", state_dissolved: "\u56FD\u5BB6\u306E\u6D88\u6EC5" }[outcome] ?? outcome}\uFF09`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => {
-      const m = moved.find((x) => x.gid === gid);
-      return { targetId: gid, property: "stateId", before: m?.from ?? w.defender, after: m?.to ?? atk.id };
-    }), facts: { warId: w.id, outcome, terms: terms?.kind ?? null, stateId: gained.length ? moved[0]?.to ?? atk?.id ?? null : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
-    ctx.warOps?.finalize(ctx, w, outcome);
-  }
-  function stepWars(ctx) {
-    const { world, civ, ids: ids2, rng } = ctx, mi2 = civ.monthIndex;
-    if (mi2 % 12 === 0) {
-      for (const i of [...civ.activeTreatyIds]) {
-        const t = civ.treaties[i];
-        if (t.expiresAt <= mi2 || !civ.states[t.a]?.alive || !civ.states[t.b]?.alive) endTreaty(ctx, t, "\u671F\u9650\u3092\u8FCE\u3048\u305F");
-      }
-      for (const id in civ.states) {
-        const s = civ.states[id];
-        if (s.alive) for (const k in s.relations) {
-          s.relations[k] = Math.round(s.relations[k] * 0.9 * 10) / 10;
-          if (Math.abs(s.relations[k]) < 1) delete s.relations[k];
-        }
-      }
-    }
-    const groups = byState(ctx);
-    ctx.warOps?.monthly(ctx);
-    for (const wid of [...civ.activeWarIds]) {
-      const w = civ.wars[wid], A = w.sides.a.map((i) => civ.states[i]).filter((s) => s.alive), D2 = w.sides.d.map((i) => civ.states[i]).filter((s) => s.alive);
-      if (!civ.states[w.aggressor].alive || !civ.states[w.defender].alive || !A.length || !D2.length) {
-        endWar(ctx, w, "state_dissolved");
-        continue;
-      }
-      if (ctx.warOps) {
-        ctx.warOps.step(ctx, w);
-        continue;
-      }
-      const sA = A.reduce((s, x) => s + strength(civ, x), 0), sD = D2.reduce((s, x) => s + strength(civ, x), 0);
-      w.score = Math.max(-100, Math.min(100, w.score + (sA - sD) / (sA + sD + 1) * 6 + (rng() - 0.5) * 3));
-      const lossA = 25e-4 * (sD / (sA + sD + 1)), lossD = 25e-4 * (sA / (sA + sD + 1));
-      let dead = 0;
-      for (const [side, loss] of [[A, lossA], [D2, lossD]]) for (const s of side) {
-        const gs = groups.get(s.id);
-        if (!gs?.length) continue;
-        const g = gs[Math.floor(rng() * gs.length)], l = g.pop * loss * 4;
-        g.pop -= l;
-        dead += l;
-      }
-      w.casualties += dead;
-      if (mi2 % 3 === 0 && rng() < 0.4) makeEvent(civ, ids2, { kind: "battle_fought", title: `${civ.states[w.aggressor].name}\u3068${civ.states[w.defender].name}\u306E\u6226\u95D8`, participants: [{ entityId: w.id, role: "war" }, { entityId: w.aggressor, role: "aggressor" }, { entityId: w.defender, role: "defender" }], location: { cell: civ.groups[civ.states[w.defender].capitalGroupId]?.cell ?? null }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: [{ targetId: w.id, property: "score", before: null, after: Math.round(w.score) }] });
-      if (w.score >= 35 && w.occupied.length < 3 && rng() < 0.08) {
-        const cap = civ.groups[civ.states[w.aggressor].capitalGroupId];
-        const cand2 = D2.flatMap((s) => groups.get(s.id) ?? []).filter((g) => !w.occupied.includes(g.id));
-        if (cap && cand2.length) {
-          cand2.sort((a, b) => distKm(world, cap.cell, a.cell) - distKm(world, cap.cell, b.cell));
-          const g = cand2[0];
-          w.occupied.push(g.id);
-          makeEvent(civ, ids2, { kind: "territory_occupied", title: "\u9818\u571F\u304C\u5360\u9818\u3055\u308C\u305F", participants: [{ entityId: g.id, role: "territory" }, { entityId: w.id, role: "war" }], location: { cell: g.cell }, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }] });
-        }
-      }
-      const age = mi2 - w.startedAt;
-      if (w.score >= 80) endWar(ctx, w, "aggressor_victory");
-      else if (w.score <= -80) endWar(ctx, w, "defender_victory");
-      else if (age > 120) endWar(ctx, w, "stalemate");
-    }
-  }
-  var WAR_REASON_JA, WAR_CLASS, WAR_CLASS_JA, warClassOf, rematchCooldown, TREATY_CATS, TREATY, adjustRel, treatyBetween, atWarWith, strength;
-  var init_diplomacy = __esm({
-    "js/core/civ/diplomacy.js"() {
-      init_events();
-      init_spatial();
-      init_cohorts();
-      init_civ_state();
-      init_techfx();
-      init_states();
-      init_dependency();
-      init_pacts();
-      init_graph();
-      WAR_REASON_JA = Object.freeze({ conquest: "\u9818\u571F\u306E\u5F81\u670D", plunder: "\u7565\u596A\u30FB\u9060\u5F81", succession: "\u738B\u4F4D\u7D99\u627F\u3092\u3081\u3050\u308B\u4E89\u3044", religion: "\u5B97\u6559\u7684\u306A\u5BFE\u7ACB", trade_route: "\u4EA4\u6613\u8DEF\u30FB\u8CC7\u6E90\u3092\u3081\u3050\u308B\u4E89\u3044", maritime: "\u6D77\u4E0A\u8987\u6A29\u3092\u3081\u3050\u308B\u4E89\u3044", revenge: "\u5831\u5FA9\u30FB\u5931\u5730\u306E\u56DE\u5FA9", independence: "\u72EC\u7ACB\u30FB\u81EA\u6CBB\u3092\u6C42\u3081\u308B\u6226\u4E89", unification: "\u7D71\u4E00\u3092\u6C42\u3081\u308B\u6226\u4E89", ideology: "\u4F53\u5236\u30FB\u30A4\u30C7\u30AA\u30ED\u30AE\u30FC\u306E\u5BFE\u7ACB", resource: "\u8CC7\u6E90\u3092\u3081\u3050\u308B\u4E89\u3044", subjugation: "\u5F93\u5C5E\u306E\u5F37\u5236", civil_war: "\u5185\u6226\u30FB\u53CD\u4E71", alliance: "\u540C\u76DF\u306B\u57FA\u3065\u304F\u53C2\u6226", preventive: "\u4E88\u9632\u6226\u4E89", defense: "\u9632\u885B" });
-      WAR_CLASS = Object.freeze({ conquest: "plunder", plunder: "plunder", revenge: "plunder", succession: "succession", religion: "religion", trade_route: "trade", maritime: "trade", independence: "independence", unification: "independence", civil_war: "independence", subjugation: "subjugation", alliance: "preventive", preventive: "preventive", defense: "preventive", ideology: "ideology", resource: "ideology" });
-      WAR_CLASS_JA = Object.freeze({ plunder: "\u7565\u596A\u30FB\u5F81\u670D", succession: "\u7D99\u627F", religion: "\u5B97\u6559", trade: "\u901A\u5546\u30FB\u6D77\u4E0A\u8987\u6A29", independence: "\u72EC\u7ACB\u30FB\u7D71\u4E00", subjugation: "\u5F93\u5C5E\u306E\u5F37\u5236\u30FB\u96E2\u8131", preventive: "\u540C\u76DF\u7FA9\u52D9\u30FB\u4E88\u9632\u6226\u4E89", ideology: "\u30A4\u30C7\u30AA\u30ED\u30AE\u30FC\u30FB\u8CC7\u6E90" });
-      warClassOf = (reason) => WAR_CLASS[reason] ?? "plunder";
-      rematchCooldown = (year) => year < 3e3 ? 480 : year < 4500 ? 300 : year < 4850 ? 180 : 120;
-      TREATY_CATS = Object.freeze({ mil: "\u8ECD\u4E8B", dep: "\u5F93\u5C5E", eco: "\u7D4C\u6E08", land: "\u9818\u571F", dyn: "\u738B\u5BB6" });
-      TREATY = Object.freeze({
-        alliance: { ja: "\u653B\u5B88\u540C\u76DF", cat: "mil", months: 480, merit: "\u53C2\u6226\u3092\u983C\u3081\u308B", cost: "\u76F8\u624B\u306E\u6226\u4E89\u306B\u5DFB\u304D\u8FBC\u307E\u308C\u308B" },
-        defensive: { ja: "\u9632\u885B\u540C\u76DF", cat: "mil", months: 360, needs: ["diplomacy"], merit: "\u653B\u3081\u3089\u308C\u305F\u3068\u304D\u52A9\u3051\u304C\u6765\u308B", cost: "\u5B88\u308A\u306E\u6226\u4E89\u306B\u3060\u3051\u53C2\u6226\u3059\u308B" },
-        nonaggression: { ja: "\u4E0D\u53EF\u4FB5\u6761\u7D04", cat: "mil", months: 240, merit: "\u96A3\u56FD\u306B\u653B\u3081\u3089\u308C\u306B\u304F\u304F\u306A\u308B", cost: "\u3053\u3061\u3089\u3082\u5BA3\u6226\u3057\u306B\u304F\u3044" },
-        passage: { ja: "\u8ECD\u4E8B\u901A\u904E\u6A29", cat: "mil", months: 240, needs: ["roads"], merit: "\u76F8\u624B\u306E\u9818\u5185\u3092\u8ECD\u304C\u901A\u308C\u308B", cost: "\u76F8\u624B\u304C\u5F37\u3044\u3068\u5185\u653F\u304C\u8105\u304B\u3055\u308C\u308B" },
-        garrison: { ja: "\u99D0\u7559\u5354\u5B9A", cat: "mil", months: 360, needs: ["standing_army"], merit: "\u5B88\u308A\u304C\u56FA\u304F\u306A\u308B", cost: "\u99D0\u7559\u56FD\u306E\u5F71\u97FF\u304C\u5F37\u307E\u308B" },
-        feudal: { ja: "\u5C01\u5EFA\u5951\u7D04", cat: "dep", dep: "vassal", months: 1200, needs: ["administration"], merit: "\u5B97\u4E3B\u306F\u8ECD\u5F79\u3068\u8CA2\u7D0D\u3092\u5F97\u308B", cost: "\u5F93\u3046\u5074\u306F\u81EA\u7531\u3092\u5931\u3046" },
-        tribute: { ja: "\u671D\u8CA2", cat: "dep", dep: "tributary", months: 1200, needs: ["diplomacy"], merit: "\u540D\u76EE\u306E\u670D\u5C5E\u3067\u3001\u653B\u3081\u3089\u308C\u306B\u304F\u3044", cost: "\u8CA2\u304E\u7269\u3092\u7D0D\u3081\u308B" },
-        protectorate: { ja: "\u4FDD\u8B77\u6761\u7D04", cat: "dep", dep: "protectorate", months: 1200, needs: ["diplomacy"], merit: "\u5B97\u4E3B\u304C\u5B88\u3063\u3066\u304F\u308C\u308B", cost: "\u5916\u4EA4\u6A29\u3092\u5931\u3046" },
-        trade: { ja: "\u901A\u5546\u6761\u7D04", cat: "eco", months: 240, merit: "\u4EA4\u6613\u306E\u53CE\u5165\u304C\u5897\u3048\u308B", cost: "\u76F8\u624B\u3078\u306E\u4F9D\u5B58\u304C\u6DF1\u307E\u308B" },
-        tariff: { ja: "\u95A2\u7A0E\u5354\u5B9A", cat: "eco", months: 240, needs: ["coinage"], merit: "\u95A2\u7A0E\u304C\u4E0B\u304C\u308B", cost: "\u81EA\u56FD\u306E\u7523\u696D\u304C\u7AF6\u4E89\u306B\u3055\u3089\u3055\u308C\u308B" },
-        unequal: { ja: "\u4E0D\u5E73\u7B49\u6761\u7D04", cat: "eco", months: 480, needs: ["coinage", "diplomacy"], merit: "\u5F37\u3044\u5074\u304C\u4E00\u65B9\u7684\u306B\u6709\u5229\u306B\u306A\u308B", cost: "\u5F31\u3044\u5074\u306F\u95A2\u7A0E\u3068\u88C1\u5224\u306E\u6A29\u5229\u3092\u5931\u3046" },
-        border: { ja: "\u56FD\u5883\u753B\u5B9A", cat: "land", months: 600, needs: ["surveying"], merit: "\u56FD\u5883\u306E\u7D1B\u4E89\u304C\u6E1B\u308B", cost: "\u4E3B\u5F35\u3092\u8AE6\u3081\u308B" },
-        sphere: { ja: "\u52E2\u529B\u570F\u5354\u5B9A", cat: "land", months: 360, needs: ["diplomacy"], merit: "\u4E92\u3044\u306E\u7E04\u5F35\u308A\u3092\u8A8D\u3081\u308B", cost: "\u570F\u5185\u306E\u56FD\u306F\u5F37\u56FD\u306B\u5F93\u3044\u3084\u3059\u3044" },
-        purchase: { ja: "\u9818\u571F\u306E\u8CB7\u53CE", cat: "land", months: 12, needs: ["coinage"], merit: "\u6226\u308F\u305A\u306B\u571F\u5730\u3092\u5F97\u308B", cost: "\u56FD\u5EAB\u3092\u5931\u3046" },
-        cession: { ja: "\u9818\u571F\u306E\u5272\u8B72", cat: "land", months: 12, merit: "\u76F8\u624B\u306E\u6B53\u5FC3\u3092\u8CB7\u3046", cost: "\u571F\u5730\u3068\u6C11\u3092\u5931\u3046" },
-        exchange: { ja: "\u9818\u571F\u306E\u4EA4\u63DB", cat: "land", months: 12, needs: ["surveying"], merit: "\u56FD\u5883\u304C\u3059\u3063\u304D\u308A\u3059\u308B", cost: "\u624B\u653E\u3059\u571F\u5730\u306E\u6C11\u304C\u4E0D\u6E80\u3092\u6301\u3064" },
-        marriage: { ja: "\u5A5A\u59FB\u540C\u76DF", cat: "dyn", months: 600, needs: ["diplomacy"], merit: "\u738B\u5BB6\u304C\u7D50\u3070\u308C\u3001\u95A2\u4FC2\u304C\u6DF1\u307E\u308B", cost: "\u7D99\u627F\u3092\u3081\u3050\u308B\u4E89\u3044\u306E\u706B\u7A2E\u306B\u306A\u308B" },
-        union: { ja: "\u540C\u541B\u9023\u5408", cat: "dyn", dep: "union", months: 1200, needs: ["diplomacy"], merit: "\u4E00\u4EBA\u306E\u541B\u4E3B\u3092\u6234\u304D\u3001\u4E00\u4F53\u3067\u52D5\u304F", cost: "\u5F93\u3046\u5074\u306E\u72EC\u7ACB\u6027\u304C\u8584\u308C\u308B" },
-        succession_pact: { ja: "\u738B\u4F4D\u7D99\u627F\u5354\u5B9A", cat: "dyn", months: 600, needs: ["law"], merit: "\u7D99\u627F\u306E\u4E89\u3044\u304C\u6E1B\u308B", cost: "\u7D99\u627F\u6A29\u3092\u8A8D\u3081\u308B" }
-      });
-      adjustRel = (a, b, d) => {
-        const c = (v) => Math.max(-100, Math.min(100, v));
-        a.relations[b.id] = c((a.relations[b.id] ?? 0) + d);
-        b.relations[a.id] = c((b.relations[a.id] ?? 0) + d);
-      };
-      treatyBetween = (civ, a, b, type) => civ.activeTreatyIds.map((i) => civ.treaties[i]).find((t) => t.active && (!type || t.type === type) && (t.a === a.id && t.b === b.id || t.a === b.id && t.b === a.id));
-      atWarWith = (civ, a, b) => a.warIds.map((i) => civ.wars[i]).some((w) => w.sides.a.includes(b.id) || w.sides.d.includes(b.id));
-      strength = (civ, st) => st.army * milMult(st) * (1 + (st.defense + (st.milDef ?? 0)) * 0.5);
-    }
-  });
-
   // js/core/civ/ai.js
   function record2(ctx, st, d) {
     return { decisionId: null, actorId: st.id, result: null };
@@ -7792,7 +6934,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     return round3(t);
   }
   function chooseStrategy(ctx, st, e) {
-    const needs = { expand: 0.25 + 0.4 * clamp39((e.my + 1) / (e.nbs.reduce((s, n2) => s + n2.strength, 0) / Math.max(1, e.nbs.length) + 1) - 1, 0, 2) * 0.5, prosper: e.treasuryNeed, secure: e.threat, advance: e.techLag, consolidate: 1 - st.stability };
+    const needs = { expand: 0.25 + 0.4 * clamp36((e.my + 1) / (e.nbs.reduce((s, n2) => s + n2.strength, 0) / Math.max(1, e.nbs.length) + 1) - 1, 0, 2) * 0.5, prosper: e.treasuryNeed, secure: e.threat, advance: e.techLag, consolidate: 1 - st.stability };
     const list = Object.entries(needs).map(([goal, n2]) => ({ goal, total: round3(n2 * st.personality[GOALS[goal]]) })).sort((a, b) => b.total - a.total || (a.goal < b.goal ? -1 : 1));
     const d = record2(ctx, st, { layer: "strategy", type: "set_strategy", obs: obsOf(st, e), candidates: list.map((x) => view({ key: x.goal, target: null, opt: null, eligible: true, reason: null, factors: {} }, x.total)), chosen: { key: list[0].goal, target: null, opt: null } });
     const changed = st.strategy?.goal !== list[0].goal;
@@ -7905,7 +7047,7 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
     d.result = { ok: r.ok, error: r.error ?? null, eventIds: r.eventIds };
     return r;
   }
-  var GOALS, GOAL_JA, BASELINE, STRATEGY_EVERY, FACTORS, SHOWN, SHOWN_IDLE, expandDecision, clamp39, round3, obsOf, view, AUTO_KEYS;
+  var GOALS, GOAL_JA, BASELINE, STRATEGY_EVERY, FACTORS, SHOWN, SHOWN_IDLE, expandDecision, clamp36, round3, obsOf, view, AUTO_KEYS;
   var init_ai = __esm({
     "js/core/civ/ai.js"() {
       init_actions();
@@ -7920,351 +7062,11 @@ I \u901A\u4FE1\u4FDD\u5168\u306E\u9577\u5B98`;
       SHOWN = 6;
       SHOWN_IDLE = 3;
       expandDecision = (civ, d) => ({ ...d, candidates: [] });
-      clamp39 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+      clamp36 = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
       round3 = (x) => Math.round(x * 1e3) / 1e3;
       obsOf = (st, e) => ({ pop: Math.round(st.pop), treasury: Math.round(st.treasury), stability: round3(st.stability), army: Math.round(st.army), strength: Math.round(e.my), atWar: e.atWar, neighbors: e.nbs.length, tension: round3(e.tension), threat: round3(e.threat), campaign: st.campaign ? `${st.campaign.kind}:${st.campaign.stage}` : null });
       view = (c, total4) => [c, total4];
       AUTO_KEYS = /* @__PURE__ */ new Set(["adopt_tech", "adopt_doctrine"]);
-    }
-  });
-
-  // js/core/civ/commands.js
-  function playerGroup(civ, groupId) {
-    const g = civ.groups[groupId];
-    if (!g) return [null, "\u305D\u306E\u96C6\u56E3\u306F\u5B58\u5728\u3057\u307E\u305B\u3093"];
-    if (!g.player) return [null, "\u30D7\u30EC\u30A4\u30E4\u30FC\u306E\u96C6\u56E3\u3067\u306F\u3042\u308A\u307E\u305B\u3093"];
-    return [g, null];
-  }
-  function applyCommand(ctx, cmd) {
-    const { world, civ, ids: ids2 } = ctx;
-    switch (cmd.type) {
-      case "moveGroup": {
-        const [g, e] = playerGroup(civ, cmd.groupId);
-        if (e) return fail(e);
-        if (g.order) return fail("\u3059\u3067\u306B\u79FB\u52D5\u4E2D\u3067\u3059");
-        if (world.cell.landWater[cmd.to] !== LAND_WATER2.LAND) return fail("\u79FB\u52D5\u5148\u306F\u9678\u5730\u3067\u306A\u3051\u308C\u3070\u306A\u308A\u307E\u305B\u3093");
-        const dist = reachable(world, g.cell, POP.moveRange[g.subsistence] * 2, g.knowledge.seafaring), d = dist.get(cmd.to);
-        if (d == null) return fail(g.knowledge.seafaring < 1 ? "\u5C4A\u304D\u307E\u305B\u3093\uFF08\u6D77\u3092\u6E21\u308B\u822A\u6D77\u306E\u77E5\u8B58\u304C\u306A\u3044\u304B\u3001\u9060\u3059\u304E\u307E\u3059\uFF09" : "\u9060\u3059\u304E\u3066\u5C4A\u304D\u307E\u305B\u3093");
-        g.order = { type: "move", to: cmd.to, arriveAt: civ.monthIndex + Math.max(1, Math.ceil(d / 2)) };
-        g.pop = Math.round(g.pop * (1 - Math.min(0.2, d * 0.01)));
-        return { ok: true, arriveAt: g.order.arriveAt };
-      }
-      case "setSubsistence": {
-        const [g, e] = playerGroup(civ, cmd.groupId);
-        if (e) return fail(e);
-        if (!SUBSISTENCE[cmd.subsistence]) return fail("\u672A\u77E5\u306E\u751F\u696D\u3067\u3059");
-        if (cmd.subsistence === "agriculture" && g.knowledge.agriculture < 1) return fail("\u8FB2\u8015\u306E\u77E5\u8B58\u304C\u307E\u3060\u8DB3\u308A\u307E\u305B\u3093");
-        if (cmd.subsistence === "pastoral" && g.knowledge.herding < 1) return fail("\u7267\u755C\u306E\u77E5\u8B58\u304C\u307E\u3060\u8DB3\u308A\u307E\u305B\u3093");
-        if (cmd.subsistence === "fishing" && world.cell.coastDist[g.cell] > 2 && !world.cell.river[g.cell]) return fail("\u6C34\u8FBA\u3067\u306F\u306A\u3044\u306E\u3067\u6F01\u6488\u306F\u3067\u304D\u307E\u305B\u3093");
-        const before = g.subsistence;
-        if (before === cmd.subsistence) return fail("\u3059\u3067\u306B\u305D\u306E\u751F\u696D\u3067\u3059");
-        g.subsistence = cmd.subsistence;
-        makeEvent(civ, ids2, { kind: "subsistence_changed", title: `\u751F\u696D\u306E\u8EE2\u63DB\uFF08${SUBSISTENCE[before]}\u2192${SUBSISTENCE[cmd.subsistence]}\uFF09`, participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "subsistence", before, after: cmd.subsistence }], provenance: "player" });
-        return { ok: true };
-      }
-      case "foundSettlement": {
-        const [g, e] = playerGroup(civ, cmd.groupId);
-        if (e) return fail(e);
-        if (g.settlementId) return fail("\u3059\u3067\u306B\u5B9A\u4F4F\u3057\u3066\u3044\u307E\u3059");
-        if (g.subsistence === "forage" || g.subsistence === "pastoral") return fail("\u63A1\u96C6\u72E9\u731F\u30FB\u7267\u755C\u306E\u307E\u307E\u3067\u306F\u5B9A\u4F4F\u3067\u304D\u307E\u305B\u3093\uFF08\u8FB2\u8015\u304B\u6F01\u6488\u3078\uFF09");
-        if (g.pop < POP.settleMinPop) return fail(`\u4EBA\u53E3\u304C\u8DB3\u308A\u307E\u305B\u3093\uFF08${POP.settleMinPop}\u4EBA\u4EE5\u4E0A\uFF09`);
-        const s = foundSettlement(world, civ, ids2, g);
-        civ.events[civ.events.length - 1].provenance = "player";
-        return { ok: true, settlementId: s.id };
-      }
-      case "splitGroup": {
-        const [g, e] = playerGroup(civ, cmd.groupId);
-        if (e) return fail(e);
-        if (g.order) return fail("\u79FB\u52D5\u4E2D\u306F\u5206\u6D3E\u3067\u304D\u307E\u305B\u3093");
-        if (g.pop < POP.minBudPop * 2) return fail("\u4EBA\u53E3\u304C\u8DB3\u308A\u307E\u305B\u3093");
-        const dist = reachable(world, g.cell, POP.moveRange[g.subsistence], g.knowledge.seafaring);
-        if (!dist.has(cmd.to) || world.cell.landWater[cmd.to] !== LAND_WATER2.LAND || cmd.to === g.cell) return fail("\u305D\u3053\u3078\u306F\u5206\u6D3E\u3067\u304D\u307E\u305B\u3093");
-        for (const o of Object.values(civ.groups)) if (territoryOf(world, o.cell).includes(cmd.to) || o.cell === cmd.to) return fail("\u305D\u3053\u306F\u307B\u304B\u306E\u96C6\u56E3\u306E\u9818\u57DF\u3067\u3059");
-        const moved = Math.round(g.pop * POP.budShare);
-        g.pop -= moved;
-        g.lastBudAt = civ.monthIndex;
-        const child = spawnGroup(civ, ids2, g, cmd.to, moved);
-        child.player = false;
-        makeEvent(civ, ids2, { kind: "group_split", title: "\u96C6\u56E3\u306E\u5206\u6D3E", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: cmd.to }, causes: asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible"), provenance: "player" });
-        return { ok: true, childId: child.id };
-      }
-      case "formState": {
-        const [g, e] = playerGroup(civ, cmd.groupId);
-        if (e) return fail(e);
-        if (g.stateId) return fail("\u3059\u3067\u306B\u56FD\u5BB6\u306B\u5C5E\u3057\u3066\u3044\u307E\u3059");
-        const f = evaluateFormation(ctx, g);
-        if (!f) return fail("\u56FD\u5BB6\u3092\u5F62\u6210\u3059\u308B\u6761\u4EF6\u304C\u307E\u3060\u6574\u3063\u3066\u3044\u307E\u305B\u3093");
-        if (cmd.via && cmd.via !== f.via) return fail(`\u305D\u306E\u7D4C\u8DEF\u3067\u306F\u6210\u7ACB\u3057\u307E\u305B\u3093\uFF08\u73FE\u5728\u306E\u6761\u4EF6\u306F\u300C${f.via}\u300D\uFF09`);
-        const st = formState(ctx, { ...f, player: true });
-        return st ? { ok: true, stateId: st.id } : fail("\u5F62\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
-      }
-      case "stateAction": {
-        const st = civ.states[cmd.stateId];
-        if (!st?.alive) return fail("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-        if (!st.player) return fail("\u30D7\u30EC\u30A4\u30E4\u30FC\u306E\u56FD\u5BB6\u3067\u306F\u3042\u308A\u307E\u305B\u3093");
-        const def = ACTION[cmd.action];
-        if (!def) return fail("\u672A\u77E5\u306E\u884C\u52D5\u3067\u3059");
-        if (!def.enabled) return fail(`\u3053\u306E\u884C\u52D5\u306F\u307E\u3060\u4F7F\u3048\u307E\u305B\u3093\uFF08${def.disabledReason}\uFF09`);
-        const c = findCandidate(ctx, st, def, { target: cmd.target ?? null, opt: cmd.opt ?? null });
-        if (!c) return fail("\u305D\u306E\u5BFE\u8C61\u30FB\u5185\u5BB9\u3067\u306F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093");
-        if (!c.eligible) return fail(c.reason ?? "\u6761\u4EF6\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093");
-        const r = runPlayerAction(ctx, st, def, c);
-        return r.ok ? { ok: true, eventIds: r.eventIds, warId: r.warId } : fail(r.error);
-      }
-      case "acceptProposal": {
-        const p = civ.proposals.find((x) => x.proposalId === cmd.proposalId && !x.resolved);
-        if (!p) return fail("\u305D\u306E\u63D0\u6848\u306F\u3042\u308A\u307E\u305B\u3093");
-        const map = { change_subsistence: () => ({ type: "setSubsistence", groupId: p.groupId, subsistence: p.payload.subsistence }), found_settlement: () => ({ type: "foundSettlement", groupId: p.groupId }), form_state: () => ({ type: "formState", groupId: p.groupId, via: p.payload.via }), split: () => ({ type: "splitGroup", groupId: p.groupId, to: cmd.to ?? p.payload.targets?.[0]?.cell }) };
-        const r = applyCommand(ctx, map[p.kind]());
-        if (r.ok) p.resolved = true;
-        return r;
-      }
-      case "dismissProposal": {
-        const p = civ.proposals.find((x) => x.proposalId === cmd.proposalId && !x.resolved);
-        if (!p) return fail("\u305D\u306E\u63D0\u6848\u306F\u3042\u308A\u307E\u305B\u3093");
-        p.resolved = true;
-        return { ok: true };
-      }
-      default:
-        return fail(`\u672A\u77E5\u306E\u547D\u4EE4: ${cmd.type}`);
-    }
-  }
-  var fail;
-  var init_commands = __esm({
-    "js/core/civ/commands.js"() {
-      init_population();
-      init_events();
-      init_world_consts();
-      init_states();
-      init_actions();
-      init_ai();
-      init_graph();
-      fail = (error) => ({ ok: false, error });
-    }
-  });
-
-  // js/core/civ/compact.js
-  function stepCompact(ctx) {
-    const { civ } = ctx;
-    if (!civ.options?.wcde || civ.monthIndex % 12 !== 7) return;
-    const mi2 = civ.monthIndex, stats = civ.stats ?? (civ.stats = {});
-    let tp = 0;
-    for (const id in civ.treaties) {
-      const t = civ.treaties[id];
-      if (!t.active && t.endedAt != null && mi2 - t.endedAt > COMPACT.treatyKeepMonths) {
-        delete civ.treaties[id];
-        tp++;
-      }
-    }
-    if (tp) stats.treatiesPruned = (stats.treatiesPruned ?? 0) + tp;
-    const led = civ.wcde?.diplomacy;
-    if (led?.proposals?.length > 200) {
-      const before = led.proposals.length;
-      led.proposals = led.proposals.filter((p) => p.kind === "peace" && p.status === "accepted" || mi2 - p.at <= COMPACT.proposalKeepMonths);
-      stats.proposalsPruned = (stats.proposalsPruned ?? 0) + (before - led.proposals.length);
-    }
-    for (const id in civ.states) {
-      const s = civ.states[id];
-      if (s.alive || s.compacted || s.dissolvedAt == null || mi2 - s.dissolvedAt < COMPACT.deadStateMonths) continue;
-      for (const k of DEAD_STATE_HEAVY) delete s[k];
-      s.compacted = true;
-    }
-    if (civ.languages) {
-      const live5 = /* @__PURE__ */ new Set();
-      for (const id in civ.groups) for (const co of civ.groups[id].cohorts ?? []) if (co.languageId) live5.add(co.languageId);
-      let lp = 0;
-      for (const id in civ.languages) {
-        const l = civ.languages[id];
-        if (l.phon && !live5.has(id)) {
-          delete l.phon;
-          l.phonDropped = true;
-          lp++;
-        }
-      }
-      if (lp) stats.languageProfilesPruned = (stats.languageProfilesPruned ?? 0) + lp;
-    }
-    if (civ.figures) {
-      const keep = /* @__PURE__ */ new Set();
-      for (const id in civ.states) {
-        const s = civ.states[id];
-        if (s.leaderFigureId) keep.add(s.leaderFigureId);
-        if (s.heirFigureId) keep.add(s.heirFigureId);
-      }
-      let fp = 0;
-      for (const id in civ.figures) {
-        const f = civ.figures[id];
-        if (f.diedAt != null && mi2 - f.diedAt > COMPACT.figureMonths && !keep.has(id) && !f.children?.length && !isParentOfLiving(civ, id)) {
-          for (const pid of f.parents ?? []) {
-            const par = civ.figures[pid];
-            if (par) par.children = par.children.filter((c) => c !== id);
-          }
-          delete civ.figures[id];
-          fp++;
-        }
-      }
-      if (fp) stats.figuresPruned = (stats.figuresPruned ?? 0) + fp;
-    }
-  }
-  function isParentOfLiving(civ, id) {
-    const f = civ.figures[id];
-    for (const c of f.children ?? []) if (civ.figures[c]) return true;
-    return false;
-  }
-  var COMPACT, DEAD_STATE_HEAVY;
-  var init_compact = __esm({
-    "js/core/civ/compact.js"() {
-      COMPACT = Object.freeze({ treatyKeepMonths: 600, proposalKeepMonths: 360, deadStateMonths: 600, figureMonths: 3600 });
-      DEAD_STATE_HEAVY = ["relations", "politics", "econ", "military", "sanctions", "strategy", "campaign", "interp", "interpDirty", "offices", "magic", "tradeRoutes"];
-    }
-  });
-
-  // js/core/civ/civ-sim.js
-  function createCivSim(world, civ, { extensions = [] } = {}) {
-    const ids2 = createIdGen(civ.seq), ticker = createTicker();
-    ticker.register("clock", (ctx2) => {
-      setDate(ctx2.civ, ctx2.civ.monthIndex + 1);
-      ctx2.rng = rngOf(hashSeed(ctx2.civ.historySeed, ctx2.civ.monthIndex));
-    }, "advanceClock");
-    ticker.register("climate", stepClimate, "stepClimate");
-    ticker.register("disaster", stepDisaster, "stepDisaster");
-    ticker.register("economy_pop", stepCalibration, "stepCalibration", { every: 12, offset: 0 });
-    ticker.register("archive", stepCompact, "stepCompact", { every: 12, offset: 7 });
-    ticker.register("economy_pop", stepPopulation, "stepPopulation");
-    ticker.register("culture", stepCulture, "stepCulture");
-    ticker.register("culture", stepCohorts, "stepCohorts");
-    if (!civ.options?.wcde) ticker.register("culture", stepMagic, "stepMagic");
-    ticker.register("tech", stepTech, "stepTech");
-    ticker.register("ai_plan", stepAIPlan, "stepAIPlan");
-    ticker.register("apply", stepAIApply, "stepAIApply");
-    ticker.register("conflict", stepStates, "stepStates", { every: 3 });
-    ticker.register("conflict", stepWars, "stepWars");
-    ticker.register("conflict", stepInterpretation, "stepInterpretation");
-    ticker.register("integrity", (ctx2) => {
-      const full = ctx2.civ.monthIndex % 120 === 0, errs = checkCivIntegrity(ctx2.world, ctx2.civ, { sinceEvent: full ? 0 : ctx2.eventsChecked ?? 0, structure: full || ctx2.civ.monthIndex % 12 === 0 });
-      ctx2.eventsChecked = ctx2.civ.events.length;
-      if (errs.length) throw new Error("\u6587\u660E\u72B6\u614B\u306E\u6574\u5408\u6027\u9055\u53CD: " + errs.slice(0, 3).join(" / "));
-    }, "checkIntegrity");
-    ticker.register("archive", (ctx2) => {
-      if (!ctx2.civ.options.wcde) recordMonth(ctx2);
-    }, "recordMonth");
-    const ctx = {
-      world,
-      civ,
-      ids: ids2,
-      rng: rngOf(hashSeed(civ.historySeed, civ.monthIndex)),
-      growthMult: () => climateGrowth(civ),
-      trace: [],
-      eventsChecked: civ.events.length,
-      plans: [],
-      endWarHook: endWar,
-      stateMult: (g) => {
-        const st = g.stateId ? civ.states[g.stateId] : null;
-        return st ? (st.boostUntil > civ.monthIndex ? 1.2 : 1) * (1 - 0.4 * st.policy.mobilization) : 1;
-      }
-    };
-    for (const ext of extensions) ext(ticker, ctx);
-    return {
-      ctx,
-      ticker,
-      advanceMonth() {
-        ticker.runMonth(ctx);
-        return civ.date;
-      },
-      advanceMonths(n2, onProgress) {
-        for (let i = 0; i < n2; i++) {
-          ticker.runMonth(ctx);
-          if (onProgress && i % 120 === 119) onProgress(i + 1, n2);
-        }
-        if (civ.options.wcde) commitArchive(ctx);
-        return civ.date;
-      },
-      /** 作業バッファの出来事を歴史資料へ移して整理する（明示的に呼ぶ場合） */
-      commit() {
-        return commitArchive(ctx);
-      },
-      command: (cmd) => {
-        const r = applyCommand(ctx, cmd);
-        if (r.ok) {
-          ctx._byState = null;
-          recordMonth(ctx);
-        }
-        return r;
-      }
-      // 命令で変わった状態は、同じ月の記録を上書きする
-    };
-  }
-  function checkCivIntegrity(world, civ, { sinceEvent = 0, structure = true } = {}) {
-    const errs = [], N2 = world.mesh.cellCount;
-    let players = 0;
-    if (structure) for (const id of sortedGroupIds(civ)) {
-      const g = civ.groups[id];
-      if (g.id !== id) errs.push(`\u96C6\u56E3ID\u306E\u4E0D\u4E00\u81F4 ${id}`);
-      if (!Number.isFinite(g.pop) || g.pop < 0) errs.push(`\u4EBA\u53E3\u304C\u4E0D\u6B63 ${id}`);
-      if (!(g.cell >= 0 && g.cell < N2) || world.cell.landWater[g.cell] !== 1) errs.push(`\u96C6\u56E3 ${id} \u304C\u9678\u306B\u3044\u306A\u3044`);
-      if (g.player) players++;
-      if (g.settlementId && civ.settlements[g.settlementId]?.groupId !== id) errs.push(`\u96C6\u843D\u306E\u76F8\u4E92\u53C2\u7167\u304C\u58CA\u308C\u3066\u3044\u308B ${id}`);
-      for (const k in g.tech.known) {
-        if (!TECH[k]) errs.push(`\u96C6\u56E3 ${id} \u304C\u672A\u77E5\u306E\u6280\u8853 ${k} \u3092\u6301\u3064`);
-        else if (!Number.isFinite(g.tech.known[k])) errs.push(`\u96C6\u56E3 ${id} \u306E\u6280\u8853 ${k} \u306E\u6642\u70B9\u304C\u4E0D\u6B63`);
-      }
-    }
-    if (players > 1) errs.push("\u30D7\u30EC\u30A4\u30E4\u30FC\u96C6\u56E3\u304C\u8907\u6570\u3042\u308B");
-    let ps = 0;
-    for (const id in civ.states) {
-      const st = civ.states[id];
-      if (!st.alive) continue;
-      if (st.player) ps++;
-      for (const k in st.techAdopted) if (!TECH[k]) errs.push(`\u56FD\u5BB6 ${id} \u304C\u672A\u77E5\u306E\u6280\u8853 ${k} \u3092\u63A1\u7528\u3057\u3066\u3044\u308B`);
-      if (!civ.groups[st.capitalGroupId] && civ.monthIndex % 3 !== 1) errs.push(`\u56FD\u5BB6 ${id} \u306E\u9996\u90FD\u96C6\u56E3\u304C\u7121\u3044`);
-      for (const w of st.warIds) if (civ.wars[w]?.status !== "active") errs.push(`\u56FD\u5BB6 ${id} \u306E\u6226\u4E89\u53C2\u7167\u304C\u4E0D\u6B63 ${w}`);
-    }
-    if (ps > 1) errs.push("\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u5BB6\u304C\u8907\u6570\u3042\u308B");
-    if (structure) for (const id of sortedGroupIds(civ)) {
-      const g = civ.groups[id];
-      if (g.stateId && !civ.states[g.stateId]?.alive) errs.push(`\u96C6\u56E3 ${id} \u304C\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6 ${g.stateId} \u306B\u5C5E\u3057\u3066\u3044\u308B`);
-      let sh = 0;
-      for (const c of g.cohorts) sh += c.share;
-      if (Math.abs(sh - 1) > 1e-6) errs.push(`\u96C6\u56E3 ${id} \u306E\u30B3\u30DB\u30FC\u30C8\u5272\u5408\u306E\u5408\u8A08\u304C1\u3067\u306A\u3044`);
-    }
-    for (const wid of civ.activeWarIds) {
-      const w = civ.wars[wid];
-      if (!w || w.status !== "active") errs.push(`\u9032\u884C\u4E2D\u306E\u6226\u4E89\u306E\u8A18\u9332\u304C\u4E0D\u6B63 ${wid}`);
-    }
-    for (const s of Object.values(civ.settlements)) if (!civ.groups[s.groupId]) errs.push(`\u96C6\u843D ${s.id} \u306E\u96C6\u56E3\u304C\u7121\u3044`);
-    if (sinceEvent === 0) {
-      const seen = /* @__PURE__ */ new Set(), known = /* @__PURE__ */ new Set();
-      for (const e of civ.events) {
-        if (seen.has(e.eventId)) errs.push(`\u30A4\u30D9\u30F3\u30C8ID\u91CD\u8907 ${e.eventId}`);
-        seen.add(e.eventId);
-        for (const p of e.participants) known.add(p.entityId);
-      }
-    } else {
-      const last = civ.events.length > 0 ? civ.events[civ.events.length - 1].eventId : null;
-      if (last && civ.events.slice(sinceEvent).some((e, i, a) => a.findIndex((x) => x.eventId === e.eventId) !== i)) errs.push("\u4ECA\u6708\u306E\u30A4\u30D9\u30F3\u30C8ID\u91CD\u8907");
-    }
-    return errs;
-  }
-  var init_civ_sim = __esm({
-    "js/core/civ/civ-sim.js"() {
-      init_tick();
-      init_ids();
-      init_civ_state();
-      init_population();
-      init_culture();
-      init_cohorts();
-      init_tech();
-      init_states();
-      init_diplomacy();
-      init_ai();
-      init_interpret();
-      init_history();
-      init_magic();
-      init_archive();
-      init_disaster();
-      init_spatial();
-      init_commands();
-      init_calibration();
-      init_compact();
     }
   });
 
@@ -10918,10 +9720,10 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     const k = monthKey(t) + n2;
     return { year: Math.floor(k / 12), month: k % 12 + 1 };
   };
-  function zoneActive(zone, now) {
+  function zoneActive(zone, now2) {
     if (!zone?.endAt) return true;
-    if (!now) return true;
-    const k = monthKey(now);
+    if (!now2) return true;
+    const k = monthKey(now2);
     return k < monthKey(zone.endAt) && (!zone.startAt || k >= monthKey(zone.startAt));
   }
   function zoneColor(zone) {
@@ -11018,11 +9820,11 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     if (!zones.length) return;
     const { cells, vertices } = map.geometry.pack;
     const n2 = map.pack.cells.biome.length;
-    const now = map.worldTime ?? null;
+    const now2 = map.worldTime ?? null;
     zones.forEach((z) => {
       if (!z || !Array.isArray(z.cells) || !z.cells.length) return;
       const isFocus = !!focus && z.zid === focus;
-      const active = !z.hidden && zoneActive(z, now);
+      const active = !z.hidden && zoneActive(z, now2);
       if (!active && !isFocus) return;
       const color = zoneColor(z);
       if (active) {
@@ -11429,8 +10231,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   }
 
   // js/core/random.js
-  function createRandom(seed) {
-    let s = normalizeSeed(seed);
+  function createRandom(seed2) {
+    let s = normalizeSeed(seed2);
     const next = () => {
       s = s + 1831565813 | 0;
       let t = Math.imul(s ^ s >>> 15, 1 | s);
@@ -11470,9 +10272,9 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
       }
     };
   }
-  function normalizeSeed(seed) {
-    if (typeof seed === "number" && Number.isFinite(seed)) return seed >>> 0;
-    const str = String(seed ?? Date.now());
+  function normalizeSeed(seed2) {
+    if (typeof seed2 === "number" && Number.isFinite(seed2)) return seed2 >>> 0;
+    const str = String(seed2 ?? Date.now());
     let h2 = 2166136261;
     for (let i = 0; i < str.length; i++) {
       h2 ^= str.charCodeAt(i);
@@ -12349,8 +11151,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     if (tp !== 3 * T4) throw new Error(`\u4E09\u89D2\u5F62\u306E\u6570\u304C\u5408\u308F\u306A\u3044: ${tp / 3} != ${T4}`);
     {
       const a = tri[0] * 3, b = tri[1] * 3, c = tri[2] * 3, P5 = [centerXYZ[a], centerXYZ[a + 1], centerXYZ[a + 2]];
-      const Q = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];
-      if (dot(cross(sub(Q, P5), sub(R, P5)), P5) < 0) for (let t = 0; t < T4; t++) {
+      const Q2 = [centerXYZ[b], centerXYZ[b + 1], centerXYZ[b + 2]], R = [centerXYZ[c], centerXYZ[c + 1], centerXYZ[c + 2]];
+      if (dot(cross(sub(Q2, P5), sub(R, P5)), P5) < 0) for (let t = 0; t < T4; t++) {
         const x = tri[3 * t + 1];
         tri[3 * t + 1] = tri[3 * t + 2];
         tri[3 * t + 2] = x;
@@ -12492,8 +11294,78 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     return (h2 >>> 0).toString(16).padStart(8, "0");
   }
 
-  // js/core/world/worldgen.js
-  init_spec();
+  // js/core/world/spec.js
+  var GENERATOR_VERSION = "6.13.0";
+  var WORLD_SPEC_SCHEMA = 1;
+  var ISLAND_MODES = Object.freeze({ few: 6, normal: 16, many: 90 });
+  var LAYOUT_KEYS = Object.freeze(["uneven", "cluster", "super", "split"]);
+  var DEFAULT_WORLD_SPEC = Object.freeze({
+    schemaVersion: WORLD_SPEC_SCHEMA,
+    generatorVersion: GENERATOR_VERSION,
+    worldSeed: "",
+    planet: Object.freeze({ radiusKm: 6371, displayProjection: "equirectangular" }),
+    resolution: Object.freeze({ targetCells: 25e4 }),
+    landFraction: 0.36,
+    // v6.11.0: 0.3 → 0.36（フィクションの地図のように、海をやや少なく）。下限 0.1・上限 0.9 は変わらない
+    continentCountTarget: 6,
+    islandMode: "normal",
+    // v6.11.0: 標準は少なめ〜普通（many も選べる）
+    layout: "uneven",
+    // v6.11.0: 大陸の配置パターン（uneven / cluster / super / split）
+    plateCount: 14,
+    initialGroups: 12,
+    climateModel: Object.freeze({ fantasyAdjustment: "default", lapseRateCPerKm: 6.5, windMoistureLengthKm: 4500 })
+  });
+  var isObj = (v) => v && typeof v === "object" && !Array.isArray(v);
+  function normalizeWorldSpec(input2 = {}) {
+    const errors = [], d = DEFAULT_WORLD_SPEC, i = isObj(input2) ? input2 : {};
+    const num3 = (v, def, lo, hi, name, int = false) => {
+      if (v === void 0) return def;
+      if (typeof v !== "number" || !Number.isFinite(v) || int && !Number.isInteger(v) || v < lo || v > hi) {
+        errors.push(`${name} \u306F ${lo}\u301C${hi}${int ? " \u306E\u6574\u6570" : ""}\uFF08\u53D7\u3051\u53D6\u3063\u305F\u5024: ${String(v)}\uFF09`);
+        return def;
+      }
+      return v;
+    };
+    const spec = {
+      schemaVersion: WORLD_SPEC_SCHEMA,
+      generatorVersion: typeof i.generatorVersion === "string" ? i.generatorVersion : GENERATOR_VERSION,
+      worldSeed: typeof i.worldSeed === "string" ? i.worldSeed : i.worldSeed === void 0 ? "" : String(i.worldSeed),
+      planet: {
+        radiusKm: num3(i.planet?.radiusKm, d.planet.radiusKm, 500, 1e5, "planet.radiusKm"),
+        displayProjection: i.planet?.displayProjection ?? d.planet.displayProjection
+      },
+      resolution: { targetCells: num3(i.resolution?.targetCells, d.resolution.targetCells, 500, 1e6, "resolution.targetCells", true) },
+      landFraction: num3(i.landFraction, d.landFraction, 0.1, 0.9, "landFraction"),
+      continentCountTarget: num3(i.continentCountTarget, d.continentCountTarget, 1, 12, "continentCountTarget", true),
+      islandMode: i.islandMode ?? d.islandMode,
+      layout: i.layout ?? d.layout,
+      plateCount: num3(i.plateCount, d.plateCount, 4, 40, "plateCount", true),
+      initialGroups: num3(i.initialGroups, d.initialGroups, 1, 64, "initialGroups", true),
+      climateModel: {
+        fantasyAdjustment: i.climateModel?.fantasyAdjustment ?? d.climateModel.fantasyAdjustment,
+        lapseRateCPerKm: num3(i.climateModel?.lapseRateCPerKm, d.climateModel.lapseRateCPerKm, 0, 15, "climateModel.lapseRateCPerKm"),
+        windMoistureLengthKm: num3(i.climateModel?.windMoistureLengthKm, d.climateModel.windMoistureLengthKm, 200, 1e4, "climateModel.windMoistureLengthKm")
+      }
+    };
+    if (!spec.worldSeed) errors.push("worldSeed \u304C\u7A7A\uFF08\u30B7\u30FC\u30C9\u3092\u6307\u5B9A\u3057\u3066\u304F\u3060\u3055\u3044\u3002\u751F\u6210\u3059\u308B\u5834\u5408\u306F makeWorldSeed \u3092\u4F7F\u3046\uFF09");
+    if (!(spec.islandMode in ISLAND_MODES)) {
+      errors.push(`islandMode \u306F ${Object.keys(ISLAND_MODES).join("/")} \u306E\u3044\u305A\u308C\u304B`);
+      spec.islandMode = d.islandMode;
+    }
+    if (!LAYOUT_KEYS.includes(spec.layout)) {
+      errors.push(`layout \u306F ${LAYOUT_KEYS.join("/")} \u306E\u3044\u305A\u308C\u304B`);
+      spec.layout = d.layout;
+    }
+    if (spec.planet.displayProjection !== "equirectangular") errors.push("displayProjection \u306F\u73FE\u5728 equirectangular \u306E\u307F");
+    if (isObj(input2) && input2.schemaVersion !== void 0 && input2.schemaVersion !== WORLD_SPEC_SCHEMA) errors.push(`schemaVersion ${input2.schemaVersion} \u306F\u672A\u5BFE\u5FDC`);
+    return { spec, errors };
+  }
+  function makeWorldSeed(now2) {
+    if (!Number.isFinite(now2)) throw new Error("makeWorldSeed \u306B\u306F\u6642\u523B\uFF08\u30DF\u30EA\u79D2\uFF09\u3092\u6E21\u3057\u3066\u304F\u3060\u3055\u3044");
+    const s = Math.floor(now2).toString(36), r = Math.floor((now2 * 9301 + 49297) % 233280).toString(36);
+    return `W-${s}-${r}`.toUpperCase();
+  }
 
   // js/core/world/sites.js
   var LAKE2 = 2;
@@ -12526,19 +11398,19 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     else if (T4 > 30) s -= (T4 - 30) * 0.05;
     return s;
   }
-  function cellRand(seed, c, salt = 0) {
-    let h2 = (seed ^ Math.imul(c + 1, 2654435761) ^ Math.imul(salt + 7, 2246822507)) >>> 0;
+  function cellRand(seed2, c, salt = 0) {
+    let h2 = (seed2 ^ Math.imul(c + 1, 2654435761) ^ Math.imul(salt + 7, 2246822507)) >>> 0;
     h2 = Math.imul(h2 ^ h2 >>> 15, 739982445);
     h2 = Math.imul(h2 ^ h2 >>> 12, 695872825);
     return ((h2 ^ h2 >>> 15) >>> 0) / 4294967296;
   }
-  function planSettlements(world, groups, seed, score = null) {
+  function planSettlements(world, groups, seed2, score = null) {
     const { mesh } = world, off = mesh.neighborOffsets, nb = mesh.neighborIds, V = mesh.cellCount, plan = [];
     for (const g of groups) {
       let best = -1, bs = -Infinity;
       for (const c of g.cells) {
         if (world.cell.elevation[c] <= 0) continue;
-        const s = (score ? score(world, c, siteScore(world, c), g) : siteScore(world, c)) + (cellRand(seed, c, 1) - 0.5) * 0.3;
+        const s = (score ? score(world, c, siteScore(world, c), g) : siteScore(world, c)) + (cellRand(seed2, c, 1) - 0.5) * 0.3;
         if (s > bs) {
           bs = s;
           best = c;
@@ -12551,7 +11423,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     plan.forEach(({ g, c }, idx) => {
       if (blocked[c]) return;
       out.set(g.id, c);
-      const r = Math.floor(cellRand(seed, c, 2) * 3);
+      const r = Math.floor(cellRand(seed2, c, 2) * 3);
       let qh = 0, qt = 0;
       q2[qt++] = c;
       depth[c] = 0;
@@ -12647,38 +11519,38 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     };
     return next;
   }
-  function hash3(seed, x, y, z) {
-    let h2 = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
+  function hash3(seed2, x, y, z) {
+    let h2 = seed2 ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
     h2 = Math.imul(h2 ^ h2 >>> 15, 2246822507);
     h2 = Math.imul(h2 ^ h2 >>> 13, 3266489909);
     return ((h2 ^ h2 >>> 16) >>> 0) / 4294967296;
   }
   var fade = (t) => t * t * (3 - 2 * t);
-  function valueNoise3(seed, x, y, z) {
+  function valueNoise3(seed2, x, y, z) {
     const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx3 = fade(x - xi), fy = fade(y - yi), fz = fade(z - zi);
-    const c000 = hash3(seed, xi, yi, zi), c100 = hash3(seed, xi + 1, yi, zi), c010 = hash3(seed, xi, yi + 1, zi), c110 = hash3(seed, xi + 1, yi + 1, zi);
-    const c001 = hash3(seed, xi, yi, zi + 1), c101 = hash3(seed, xi + 1, yi, zi + 1), c011 = hash3(seed, xi, yi + 1, zi + 1), c111 = hash3(seed, xi + 1, yi + 1, zi + 1);
+    const c000 = hash3(seed2, xi, yi, zi), c100 = hash3(seed2, xi + 1, yi, zi), c010 = hash3(seed2, xi, yi + 1, zi), c110 = hash3(seed2, xi + 1, yi + 1, zi);
+    const c001 = hash3(seed2, xi, yi, zi + 1), c101 = hash3(seed2, xi + 1, yi, zi + 1), c011 = hash3(seed2, xi, yi + 1, zi + 1), c111 = hash3(seed2, xi + 1, yi + 1, zi + 1);
     const x00 = c000 + (c100 - c000) * fx3, x10 = c010 + (c110 - c010) * fx3, x01 = c001 + (c101 - c001) * fx3, x11 = c011 + (c111 - c011) * fx3;
     const y0 = x00 + (x10 - x00) * fy, y1 = x01 + (x11 - x01) * fy;
     return y0 + (y1 - y0) * fz;
   }
-  function fbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {
+  function fbm3(seed2, x, y, z, octaves = 4, freq = 1, gain = 0.5) {
     let sum = 0, amp = 1, norm2 = 0, f = freq;
     for (let o = 0; o < octaves; o++) {
-      sum += amp * valueNoise3(seed + o * 101, x * f, y * f, z * f);
+      sum += amp * valueNoise3(seed2 + o * 101, x * f, y * f, z * f);
       norm2 += amp;
       amp *= gain;
       f *= 2.03;
     }
     return sum / norm2;
   }
-  function makeFbm3(seed, octaves = 4, freq = 1, gain = 0.5) {
+  function makeFbm3(seed2, octaves = 4, freq = 1, gain = 0.5) {
     const O = octaves, kx = new Int32Array(O).fill(2147483647), ky = new Int32Array(O), kz = new Int32Array(O), cv = new Float64Array(O * 8), fs = new Float64Array(O), sd = new Int32Array(O);
     let f = freq, norm2 = 0, amp = 1;
     const amps = new Float64Array(O);
     for (let o = 0; o < O; o++) {
       fs[o] = f;
-      sd[o] = seed + o * 101;
+      sd[o] = seed2 + o * 101;
       amps[o] = amp;
       norm2 += amp;
       amp *= gain;
@@ -12711,8 +11583,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     };
   }
   var GRAD3 = [[1, 1, 0], [-1, 1, 0], [1, -1, 0], [-1, -1, 0], [1, 0, 1], [-1, 0, 1], [1, 0, -1], [-1, 0, -1], [0, 1, 1], [0, -1, 1], [0, 1, -1], [0, -1, -1]];
-  function ghash(seed, x, y, z) {
-    let h2 = seed ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
+  function ghash(seed2, x, y, z) {
+    let h2 = seed2 ^ Math.imul(x, 668265261) ^ Math.imul(y, 374761393) ^ Math.imul(z, 2654435761);
     h2 = Math.imul(h2 ^ h2 >>> 15, 2246822507);
     h2 = Math.imul(h2 ^ h2 >>> 13, 3266489909);
     return ((h2 ^ h2 >>> 16) >>> 0) % 12;
@@ -12721,43 +11593,43 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   var GX = Float64Array.from(GRAD3, (g) => g[0]);
   var GY = Float64Array.from(GRAD3, (g) => g[1]);
   var GZ = Float64Array.from(GRAD3, (g) => g[2]);
-  function gradNoise3(seed, x, y, z) {
+  function gradNoise3(seed2, x, y, z) {
     const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), fx3 = x - xi, fy = y - yi, fz = z - zi, u = qfade(fx3), v = qfade(fy), w = qfade(fz);
     const gx = fx3 - 1, gy = fy - 1, gz = fz - 1;
-    let g = ghash(seed, xi, yi, zi);
+    let g = ghash(seed2, xi, yi, zi);
     const n000 = GX[g] * fx3 + GY[g] * fy + GZ[g] * fz;
-    g = ghash(seed, xi + 1, yi, zi);
+    g = ghash(seed2, xi + 1, yi, zi);
     const n100 = GX[g] * gx + GY[g] * fy + GZ[g] * fz;
-    g = ghash(seed, xi, yi + 1, zi);
+    g = ghash(seed2, xi, yi + 1, zi);
     const n010 = GX[g] * fx3 + GY[g] * gy + GZ[g] * fz;
-    g = ghash(seed, xi + 1, yi + 1, zi);
+    g = ghash(seed2, xi + 1, yi + 1, zi);
     const n110 = GX[g] * gx + GY[g] * gy + GZ[g] * fz;
-    g = ghash(seed, xi, yi, zi + 1);
+    g = ghash(seed2, xi, yi, zi + 1);
     const n001 = GX[g] * fx3 + GY[g] * fy + GZ[g] * gz;
-    g = ghash(seed, xi + 1, yi, zi + 1);
+    g = ghash(seed2, xi + 1, yi, zi + 1);
     const n101 = GX[g] * gx + GY[g] * fy + GZ[g] * gz;
-    g = ghash(seed, xi, yi + 1, zi + 1);
+    g = ghash(seed2, xi, yi + 1, zi + 1);
     const n011 = GX[g] * fx3 + GY[g] * gy + GZ[g] * gz;
-    g = ghash(seed, xi + 1, yi + 1, zi + 1);
+    g = ghash(seed2, xi + 1, yi + 1, zi + 1);
     const n111 = GX[g] * gx + GY[g] * gy + GZ[g] * gz;
     const x00 = n000 + (n100 - n000) * u, x10 = n010 + (n110 - n010) * u, x01 = n001 + (n101 - n001) * u, x11 = n011 + (n111 - n011) * u;
     const y0 = x00 + (x10 - x00) * v, y1 = x01 + (x11 - x01) * v;
     return y0 + (y1 - y0) * w;
   }
-  function gfbm3(seed, x, y, z, octaves = 4, freq = 1, gain = 0.5) {
+  function gfbm3(seed2, x, y, z, octaves = 4, freq = 1, gain = 0.5) {
     let sum = 0, amp = 1, norm2 = 0, f = freq;
     for (let o = 0; o < octaves; o++) {
-      sum += amp * gradNoise3(seed + o * 101, x * f, y * f, z * f);
+      sum += amp * gradNoise3(seed2 + o * 101, x * f, y * f, z * f);
       norm2 += amp;
       amp *= gain;
       f *= 2.03;
     }
     return Math.max(0, Math.min(1, 0.5 + 0.62 * (sum / norm2)));
   }
-  function ridged3(seed, x, y, z, octaves = 5, freq = 1, gain = 0.5) {
+  function ridged3(seed2, x, y, z, octaves = 5, freq = 1, gain = 0.5) {
     let sum = 0, amp = 0.5, f = freq, weight = 1, norm2 = 0;
     for (let o = 0; o < octaves; o++) {
-      let s = 1 - Math.abs(gradNoise3(seed + o * 131, x * f, y * f, z * f));
+      let s = 1 - Math.abs(gradNoise3(seed2 + o * 131, x * f, y * f, z * f));
       s *= s;
       s *= weight;
       weight = Math.max(0, Math.min(1, s * 2));
@@ -12836,8 +11708,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     return Math.max(0, 0.02 - 0.02 * smooth01((a - 0.9703) / 0.02));
   };
   function planContinents(spec, islandCount, salt = 0) {
-    const seed = salt ? `${spec.worldSeed}#plan${salt}` : spec.worldSeed, K = spec.continentCountTarget, lf = spec.landFraction, layout = spec.layout in LAYOUTS ? spec.layout : "uneven";
-    const rc = makeRng(seed, "continents"), rs = makeRng(seed, "continent-shape"), ri = makeRng(seed, "islands");
+    const seed2 = salt ? `${spec.worldSeed}#plan${salt}` : spec.worldSeed, K = spec.continentCountTarget, lf = spec.landFraction, layout = spec.layout in LAYOUTS ? spec.layout : "uneven";
+    const rc = makeRng(seed2, "continents"), rs = makeRng(seed2, "continent-shape"), ri = makeRng(seed2, "islands");
     const raw = [];
     for (let i = 0; i < K; i++) raw.push(layout === "cluster" ? Math.exp(rc.range(-0.6, 0.5)) : layout === "split" ? Math.exp(rc.range(-0.5, 0.5)) : Math.exp(rc.range(-0.95, 0.75)));
     raw.sort((a, b) => b - a);
@@ -13168,7 +12040,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   function generateWorld(specInput, options = {}) {
     const { spec, errors } = normalizeWorldSpec(specInput);
     if (errors.length) throw new Error("WorldSpec \u304C\u4E0D\u6B63: " + errors.join(" / "));
-    const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed = spec.worldSeed, tAll = performance.now();
+    const timings = {}, stage = makeStager(options.onProgress, options.signal, timings), seed2 = spec.worldSeed, tAll = performance.now();
     const D2 = versionAtLeast(spec.generatorVersion, "6.13.0");
     const n2 = frequencyForCells(spec.resolution.targetCells);
     const mesh = stage("G1_mesh", "\u7403\u9762\u30E1\u30C3\u30B7\u30E5", () => buildSphereMesh(n2));
@@ -13183,7 +12055,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     });
     const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), spacingRad = spacingKm / R;
     const ang = (a, b) => greatCircleRad(X[3 * a], X[3 * a + 1], X[3 * a + 2], X[3 * b], X[3 * b + 1], X[3 * b + 2]);
-    const nSeed = (name) => hashString(`${seed}::noise::${name}`);
+    const nSeed = (name) => hashString(`${seed2}::noise::${name}`);
     const plate = new Uint8Array(V), mountain = new Float32Array(V), rift = new Float32Array(V), continent = new Float32Array(V);
     const volcanic = new Float32Array(V);
     let seamInfo = { psi: 0, cost: 0 };
@@ -13246,7 +12118,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
         return Math.abs(Math.PI - Math.abs(lon2)) > o.r * 1.6 + 5 * D2R2;
       });
       const { fieldAt, islandAt } = makeFields(plan);
-      const rp = makeRng(seed, "plates"), P5 = spec.plateCount, seeds = [], omega = [];
+      const rp = makeRng(seed2, "plates"), P5 = spec.plateCount, seeds = [], omega = [];
       const contSeeds = [];
       for (const ct of plan.continents) for (const v of ct.plateSeeds) contSeeds.push(rotZ(v, -psi));
       const nCont = Math.min(contSeeds.length, Math.max(1, P5 - 3)), isContPlate = new Uint8Array(P5);
@@ -13373,7 +12245,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
           volcanic[c] = Math.max(volcanic[c], 0.6);
         }
       }
-      const rh = makeRng(seed, "hotspots");
+      const rh = makeRng(seed2, "hotspots");
       for (let h2 = 0; h2 < [1, 2, 5][modeLevel]; h2++) {
         const start2 = rh.unitVec(), dirv = rh.unitVec(), count = rh.int(6, 14), step = rh.range(1.2, 2.2) * D2R2;
         const dot3 = start2[0] * dirv[0] + start2[1] * dirv[1] + start2[2] * dirv[2];
@@ -13500,7 +12372,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
       for (let c = 0; c < V; c++) if (landWater[c] === LAND_WATER.LAND && flow[c] >= riverThreshold && flow[c] > 0) river[c] = 1;
     });
     const soil = new Uint8Array(V), fertility = new Float32Array(V), resource = new Uint16Array(V), capacity = new Float32Array(V);
-    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed) };
+    const lu = { mesh, isSea, landWater, biome, elevation, river, volcanic, mountain, coastDist, temp, precip, areaKm2, resource, soil, fertility, capacity, ...landUseNoise(seed2) };
     stage("G6_soil", "\u571F\u58CC\u30FB\u80A5\u6C83\u5EA6\u30FB\u8CC7\u6E90", () => {
       lu.seaDist = seaDistances(mesh, isSea);
       for (let c = 0; c < V; c++) landUseAt(lu, c);
@@ -13629,8 +12501,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     }
     return { lakeCount, unreached };
   }
-  function landUseNoise(seed) {
-    const ns = (name) => hashString(`${seed}::noise::${name}`);
+  function landUseNoise(seed2) {
+    const ns = (name) => hashString(`${seed2}::noise::${name}`);
     return { rs: ["iron", "copper", "tin", "gold", "coal", "gems"].map(ns), sSalt: ns("salt") };
   }
   var SOIL_FERT = { [SOILS.NONE]: 0, [SOILS.ROCK]: 0.05, [SOILS.SAND]: 0.1, [SOILS.LOAM]: 0.85, [SOILS.CLAY]: 0.55, [SOILS.VOLCANIC]: 1.05, [SOILS.PERMAFROST]: 0.1, [SOILS.ALLUVIAL]: 1.2, [SOILS.PODZOL]: 0.5, [SOILS.BLACK_EARTH]: 1.15 };
@@ -13957,7 +12829,6 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   }
 
   // js/core/world/ahmap2.js
-  init_spec();
   var AHMAP2_MAGIC = "AHMAP2\0\0";
   var AHMAP2_CONTAINER_VERSION = 1;
   var AHMAP2_SCHEMA_VERSION = 1;
@@ -15606,8 +14477,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     add2(`${place}\u306E\u6226\u3044`, 3);
     add2(`${place}\u4F1A\u6226`, 2);
     add2(`${place}\u653B\u9632\u6226`, 1);
-    const fresh2 = cand2.filter((x) => !used.includes(x.name));
-    if (fresh2.length) return pickW(rnd, fresh2);
+    const fresh3 = cand2.filter((x) => !used.includes(x.name));
+    if (fresh3.length) return pickW(rnd, fresh3);
     return variantBattleName(map, burg, { rnd, used, year });
   }
   function variantBattleName(map, burg, { rnd, used = [], year = null }) {
@@ -15660,8 +14531,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     let burg = null;
     for (let widen = 0; widen < 3 && !burg; widen++) {
       const hi = Math.min(pool.length - 1, maxIdx + widen * 2);
-      const fresh2 = pool.slice(0, hi + 1).filter((c) => c && !everUsed.has(c.i));
-      if (fresh2.length) burg = fresh2[Math.floor(rnd.next() * fresh2.length)];
+      const fresh3 = pool.slice(0, hi + 1).filter((c) => c && !everUsed.has(c.i));
+      if (fresh3.length) burg = fresh3[Math.floor(rnd.next() * fresh3.length)];
     }
     for (let t = 0; t < 8 && !burg; t++) {
       const c = pool[Math.min(maxIdx, Math.floor(rnd.next() * (maxIdx + 1)))];
@@ -16204,7 +15075,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   var SERIES_YEARS = 100;
   var mkey = (d) => (d?.year ?? 0) * 12 + ((d?.month ?? 1) - 1);
   function recentWarBetween(map, a, d, date, exceptId = null) {
-    const now = date ?? map.worldTime ?? { year: 1, month: 1 };
+    const now2 = date ?? map.worldTime ?? { year: 1, month: 1 };
     const hit = listWars(map).filter((w) => {
       if (w.id === exceptId) return false;
       const sideOf2 = (id) => w.attackers.includes(id) ? "a" : w.defenders.includes(id) ? "d" : null;
@@ -16213,8 +15084,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
         return p && q2 && p !== q2;
       }));
       if (!opposed) return false;
-      const last = w.endedAt ?? now;
-      return mkey(now) - mkey(last) <= SERIES_YEARS * 12;
+      const last = w.endedAt ?? now2;
+      return mkey(now2) - mkey(last) <= SERIES_YEARS * 12;
     });
     return hit.sort((x, y) => mkey(y.startedAt) - mkey(x.startedAt))[0] ?? null;
   }
@@ -16425,8 +15296,8 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   function exhaustionCollapse(map, war, fx3, date) {
     const r = war.result;
     if (!r || r.victory?.type === "exhaustion") return null;
-    const now = (id) => Math.max(0, Math.min(100, supportOf(map.pack.states[id]) + (fx3.support.get(id) ?? 0)));
-    const worst = (ids2) => ids2.map((id) => ({ id, v: now(id) })).filter((x) => x.v <= EXHAUST_SUPPORT).sort((a2, b) => a2.v - b.v)[0] ?? null;
+    const now2 = (id) => Math.max(0, Math.min(100, supportOf(map.pack.states[id]) + (fx3.support.get(id) ?? 0)));
+    const worst = (ids2) => ids2.map((id) => ({ id, v: now2(id) })).filter((x) => x.v <= EXHAUST_SUPPORT).sort((a2, b) => a2.v - b.v)[0] ?? null;
     const a = worst(war.attackers ?? []), d = worst(war.defenders ?? []);
     if (!a && !d) return null;
     const loseSide = a && d ? a.v <= d.v ? "attacker" : "defender" : a ? "attacker" : "defender";
@@ -17909,7 +16780,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   var SIGNABLE_KINDS = Object.freeze(["alliance", "economic", "declaration", "nonaggression"]);
   var NONAGG_MODES = Object.freeze([{ key: "nonaggression", label: "\u4E0D\u53EF\u4FB5\uFF08\u4E92\u3044\u306B\u5BA3\u6226\u3057\u306A\u3044\uFF09" }, { key: "neutral", label: "\u4E2D\u7ACB\uFF08\u540C\u76DF\u306E\u53C2\u6226\u62DB\u96C6\u306B\u5FDC\u3058\u306A\u3044\uFF09" }]);
   var isNeutral = (t) => t.kind === "nonaggression" && t.terms?.mode === "neutral";
-  var neutralStates = (map, now = nowOf2(map)) => new Set(activeTreaties(map, now, "nonaggression").filter(isNeutral).flatMap(partyIds));
+  var neutralStates = (map, now2 = nowOf2(map)) => new Set(activeTreaties(map, now2, "nonaggression").filter(isNeutral).flatMap(partyIds));
   var BIND_LEVELS = Object.freeze([
     { key: "strong", label: "\u5F37", bond: "strict", desc: "\u653B\u3081\u308B\u6226\u4E89\u306B\u3082\u5B88\u308B\u6226\u4E89\u306B\u3082\u3001\u5F53\u4E8B\u56FD\u306F\u5FC5\u305A\u53C2\u6226\u3059\u308B\u3002" },
     { key: "medium", label: "\u4E2D", bond: "standard", desc: "\u5F53\u4E8B\u56FD\u304C\u653B\u3081\u3089\u308C\u305F\u3089\u53C2\u6226\u3059\u308B\uFF08\u9632\u885B\u7FA9\u52D9\uFF09\u3002" },
@@ -17945,15 +16816,15 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     const l = listTreaties(map);
     return l.length ? Math.max(...l.map((t) => t.id)) + 1 : 1;
   };
-  function treatyStatus(t, now) {
+  function treatyStatus(t, now2) {
     if (t.status === "broken") return "broken";
     if (t.status === "expired") return "expired";
-    if (t.expiresAt && now && monthKey2(now) >= monthKey2(t.expiresAt)) return "expired";
+    if (t.expiresAt && now2 && monthKey2(now2) >= monthKey2(t.expiresAt)) return "expired";
     return "active";
   }
   var STATUS_LABEL = Object.freeze({ active: "\u6709\u52B9", expired: "\u5931\u52B9", broken: "\u7834\u68C4" });
   var nowOf2 = (map) => map.worldTime ?? { year: 1, month: 1 };
-  var activeTreaties = (map, now = nowOf2(map), kind = null) => listTreaties(map).filter((t) => treatyStatus(t, now) === "active" && (!kind || t.kind === kind));
+  var activeTreaties = (map, now2 = nowOf2(map), kind = null) => listTreaties(map).filter((t) => treatyStatus(t, now2) === "active" && (!kind || t.kind === kind));
   var partyIds = (t) => t.parties.map((p) => p.state);
   var joinNames = (map, ids2) => ids2.map((id) => nameOf2(map.pack.states[id])).join("\u30FB");
   function autoName(map, kind, parties, terms = {}) {
@@ -18051,21 +16922,21 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   function planBreakTreaty(map, id, { by = null, date = null } = {}) {
     const t = listTreaties(map).find((x) => x.id === id);
     if (!t) throw new Error("\u305D\u306E\u6761\u7D04\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
-    const now = date ?? nowOf2(map);
-    if (treatyStatus(t, now) !== "active") throw new Error("\u3059\u3067\u306B\u6709\u52B9\u3067\u306F\u3042\u308A\u307E\u305B\u3093");
+    const now2 = date ?? nowOf2(map);
+    if (treatyStatus(t, now2) !== "active") throw new Error("\u3059\u3067\u306B\u6709\u52B9\u3067\u306F\u3042\u308A\u307E\u305B\u3093");
     if (t.kind === "peace") throw new Error("\u8B1B\u548C\u6761\u7D04\u306F\u7834\u68C4\u3067\u304D\u307E\u305B\u3093\uFF08\u6226\u4E89\u306F\u7D42\u308F\u3063\u305F\u307E\u307E\u3067\u3059\uFF09");
     const parts = [];
     const before = listTreaties(map);
-    const after = before.map((x) => x.id === id ? { ...x, status: "broken", endedAt: { ...now }, brokenBy: by } : x);
+    const after = before.map((x) => x.id === id ? { ...x, status: "broken", endedAt: { ...now2 }, brokenBy: by } : x);
     parts.push({ apply: (m) => writeTreaties(m, after), revert: (m) => writeTreaties(m, before) });
     if (t.kind === "alliance" && t.ref?.allianceId) {
       const al = listAlliances(map).find((a) => a.id === t.ref.allianceId);
-      if (al && !al.dissolvedAt) parts.push(...planDissolveAlliance(map, al.id, now).parts);
+      if (al && !al.dissolvedAt) parts.push(...planDissolveAlliance(map, al.id, now2).parts);
     }
     if (t.kind === "vassal" && t.ref?.vassalState && vassalInfo(map, t.ref.vassalState)) parts.push(...planReleaseVassal(map, t.ref.vassalState).parts);
     if (by != null && partyIds(t).includes(by) && ["alliance", "nonaggression", "economic", "vassal", "border"].includes(t.kind)) parts.push(...breachPenaltyParts(map, by, 5, 10));
     const cmd = makeCommand(`\u6761\u7D04\u3092\u7834\u68C4\uFF08${t.name}\uFF09`, ["politics"], parts);
-    return withEvent(map, cmd, { type: "treaty-broken", title: `${t.name}\u304C\u7834\u68C4\u3055\u308C\u305F`, detail: by != null ? `${nameOf2(map.pack.states[by])}\u304C\u7834\u68C4` : null, date: now, states: partyIds(t) });
+    return withEvent(map, cmd, { type: "treaty-broken", title: `${t.name}\u304C\u7834\u68C4\u3055\u308C\u305F`, detail: by != null ? `${nameOf2(map.pack.states[by])}\u304C\u7834\u68C4` : null, date: now2, states: partyIds(t) });
   }
   function planSetTreatyParties(map, id, stateIds) {
     const list = listTreaties(map);
@@ -18127,9 +16998,9 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     const sup2 = typeof s.support === "number" ? s.support : 70, cred = typeof s.credibility === "number" ? s.credibility : 70;
     return [setProps(s, { support: clamp10(sup2 - supportDrop, 0, 100), credibility: clamp10(cred - creditDrop, 0, 100) })];
   }
-  function findWarViolations(map, attackers, defenders, now = nowOf2(map)) {
+  function findWarViolations(map, attackers, defenders, now2 = nowOf2(map)) {
     const out = [];
-    for (const t of activeTreaties(map, now, "nonaggression")) {
+    for (const t of activeTreaties(map, now2, "nonaggression")) {
       const ids2 = partyIds(t);
       for (const a of attackers) if (ids2.includes(a)) {
         for (const d of defenders) if (ids2.includes(d) && d !== a) out.push({ treaty: t, aggressor: a, target: d });
@@ -18144,25 +17015,25 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     });
   }
   function planWarBreach(map, attackers, defenders, date = null) {
-    const now = date ?? nowOf2(map);
-    const v = findWarViolations(map, attackers, defenders, now);
+    const now2 = date ?? nowOf2(map);
+    const v = findWarViolations(map, attackers, defenders, now2);
     if (!v.length) return null;
     const list = listTreaties(map);
     const broken = new Map(v.map((x) => [x.treaty.id, x.aggressor]));
-    const after = list.map((t) => broken.has(t.id) ? { ...t, status: "broken", endedAt: { ...now }, brokenBy: broken.get(t.id) } : t);
+    const after = list.map((t) => broken.has(t.id) ? { ...t, status: "broken", endedAt: { ...now2 }, brokenBy: broken.get(t.id) } : t);
     const parts = [{ apply: (m) => writeTreaties(m, after), revert: (m) => writeTreaties(m, list) }];
     const aggressors = [...new Set(v.map((x) => x.aggressor))];
     for (const a of aggressors) parts.push(...breachPenaltyParts(map, a, 8, 15));
     const cmd = makeCommand("\u4E0D\u53EF\u4FB5\u6761\u7D04\u306E\u9055\u7D04", ["politics"], parts);
-    return withEvent(map, cmd, { type: "treaty-breach", title: `${nameOf2(map.pack.states[aggressors[0]])}\u304C\u4E0D\u53EF\u4FB5\u6761\u7D04\u3092\u7834\u3063\u3066\u5BA3\u6226`, detail: v.map((x) => x.treaty.name).join("\u3001"), date: now, states: [...new Set(v.flatMap((x) => [x.aggressor, x.target]))] });
+    return withEvent(map, cmd, { type: "treaty-breach", title: `${nameOf2(map.pack.states[aggressors[0]])}\u304C\u4E0D\u53EF\u4FB5\u6761\u7D04\u3092\u7834\u3063\u3066\u5BA3\u6226`, detail: v.map((x) => x.treaty.name).join("\u3001"), date: now2, states: [...new Set(v.flatMap((x) => [x.aggressor, x.target]))] });
   }
   function joinCommands(base, extra) {
     if (!extra) return base;
     return makeCommand(base.label, [.../* @__PURE__ */ new Set([...base.layers ?? [], ...extra.layers ?? []])], [...base.parts, ...extra.parts]);
   }
-  function pairBoost(map, a, b, now = nowOf2(map)) {
+  function pairBoost(map, a, b, now2 = nowOf2(map)) {
     let x = 0;
-    for (const t of activeTreaties(map, now, "economic")) {
+    for (const t of activeTreaties(map, now2, "economic")) {
       const ids2 = partyIds(t);
       if (ids2.includes(a) && ids2.includes(b)) x += TARIFF_BY_KEY[t.terms?.tariff]?.boost ?? 0.06;
     }
@@ -18170,9 +17041,9 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   }
   function planExpireWarSupport(map, warId, date = null) {
     const list = listTreaties(map);
-    const now = date ?? nowOf2(map);
+    const now2 = date ?? nowOf2(map);
     if (!list.some((t) => t.kind === "support" && t.originWar === warId && t.status === "active")) return null;
-    const after = list.map((t) => t.kind === "support" && t.originWar === warId && t.status === "active" ? { ...t, status: "expired", endedAt: { ...now } } : t);
+    const after = list.map((t) => t.kind === "support" && t.originWar === warId && t.status === "active" ? { ...t, status: "expired", endedAt: { ...now2 } } : t);
     return makeCommand("\u5916\u56FD\u306E\u652F\u63F4\u304C\u5931\u52B9", [], [{ apply: (m) => writeTreaties(m, after), revert: (m) => writeTreaties(m, list) }]);
   }
   var getTreatySettings = (map) => ({ civilCallsAllies: map.ext?.data?.treatySettings?.civilCallsAllies === true });
@@ -18193,17 +17064,17 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     }]);
   }
   var EXPIRY_WARN_MONTHS = 12;
-  function expiringTreaties(map, now = nowOf2(map)) {
-    return activeTreaties(map, now).filter((t) => t.expiresAt && t.kind !== "peace").map((t) => ({ treaty: t, left: monthKey2(t.expiresAt) - monthKey2(now) })).filter((x) => x.left <= EXPIRY_WARN_MONTHS);
+  function expiringTreaties(map, now2 = nowOf2(map)) {
+    return activeTreaties(map, now2).filter((t) => t.expiresAt && t.kind !== "peace").map((t) => ({ treaty: t, left: monthKey2(t.expiresAt) - monthKey2(now2) })).filter((x) => x.left <= EXPIRY_WARN_MONTHS);
   }
   var noticeKey = (t) => monthKey2(t.expiresAt);
-  function treatiesNeedingNotice(map, now = nowOf2(map)) {
+  function treatiesNeedingNotice(map, now2 = nowOf2(map)) {
     const done = new Set((map.ext?.data?.historyLog ?? []).filter((h2) => h2.type === "treaty-expiring" && h2.data?.treatyId != null).map((h2) => `${h2.data.treatyId}|${h2.data.until}`));
-    return expiringTreaties(map, now).filter((x) => !done.has(`${x.treaty.id}|${noticeKey(x.treaty)}`)).map((x) => x.treaty);
+    return expiringTreaties(map, now2).filter((x) => !done.has(`${x.treaty.id}|${noticeKey(x.treaty)}`)).map((x) => x.treaty);
   }
-  function planTreatyExpiryNotice(map, t, now = nowOf2(map)) {
-    const left = Math.max(0, monthKey2(t.expiresAt) - monthKey2(now)), names2 = t.parties.map((p) => map.pack.states[p.state]?.fullName ?? map.pack.states[p.state]?.name ?? "?").join("\u30FB");
-    return withEvent(map, makeCommand(`\u6761\u7D04\u306E\u671F\u9650\uFF08${t.name}\uFF09`, [], []), { type: "treaty-expiring", title: `\u300C${t.name}\u300D\uFF08${names2}\uFF09\u306E\u671F\u9650\u304C\u8FD1\u3044`, detail: `\u671F\u9650\u306F${t.expiresAt.year}\u5E74${t.expiresAt.month}\u6708\u307E\u3067\uFF08\u3042\u3068${left}\u304B\u6708\uFF09\u3002\u66F4\u65B0\u3057\u306A\u3051\u308C\u3070\u5931\u52B9\u3059\u308B`, date: now, states: t.parties.map((p) => p.state), data: { treatyId: t.id, until: noticeKey(t) } });
+  function planTreatyExpiryNotice(map, t, now2 = nowOf2(map)) {
+    const left = Math.max(0, monthKey2(t.expiresAt) - monthKey2(now2)), names2 = t.parties.map((p) => map.pack.states[p.state]?.fullName ?? map.pack.states[p.state]?.name ?? "?").join("\u30FB");
+    return withEvent(map, makeCommand(`\u6761\u7D04\u306E\u671F\u9650\uFF08${t.name}\uFF09`, [], []), { type: "treaty-expiring", title: `\u300C${t.name}\u300D\uFF08${names2}\uFF09\u306E\u671F\u9650\u304C\u8FD1\u3044`, detail: `\u671F\u9650\u306F${t.expiresAt.year}\u5E74${t.expiresAt.month}\u6708\u307E\u3067\uFF08\u3042\u3068${left}\u304B\u6708\uFF09\u3002\u66F4\u65B0\u3057\u306A\u3051\u308C\u3070\u5931\u52B9\u3059\u308B`, date: now2, states: t.parties.map((p) => p.state), data: { treatyId: t.id, until: noticeKey(t) } });
   }
   function planRenewTreaty(map, id, months = null, date = null) {
     const list = listTreaties(map), t = list.find((x) => x.id === id);
@@ -18285,7 +17156,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   var exists = (map, id) => Number.isInteger(id) && id > 0 && !!map.pack.states[id];
   var live = (map, id) => exists(map, id) && !map.pack.states[id].removed;
   function checkRecords(map) {
-    const out = [], data = map.ext?.data ?? {}, now = map.worldTime ?? null;
+    const out = [], data = map.ext?.data ?? {}, now2 = map.worldTime ?? null;
     for (const [sid, rec] of Object.entries(data.leaders ?? {})) {
       if (!exists(map, +sid)) {
         out.push(`\u6307\u5C0E\u8005\u306E\u8A18\u9332\u304C\u3001\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6#${sid}\u3092\u6307\u3057\u3066\u3044\u307E\u3059`);
@@ -18332,7 +17203,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     for (const t of data.treaties ?? []) {
       if (t.status !== "active") continue;
       if (t.kind !== "peace" && (t.parties ?? []).some((p) => exists(map, p.state) && !live(map, p.state))) out.push(`\u6761\u7D04\u300C${t.name}\u300D\u306F\u6709\u52B9\u3067\u3059\u304C\u3001\u5F53\u4E8B\u56FD\u304C\u6D88\u3048\u3066\u3044\u307E\u3059`);
-      if (t.expiresAt && now && key2(now.year, now.month) >= key2(t.expiresAt.year, t.expiresAt.month)) out.push(`\u6761\u7D04\u300C${t.name}\u300D\u306F\u671F\u9650\u5207\u308C\u306A\u306E\u306B\u3001\u6709\u52B9\u306E\u307E\u307E\u3067\u3059`);
+      if (t.expiresAt && now2 && key2(now2.year, now2.month) >= key2(t.expiresAt.year, t.expiresAt.month)) out.push(`\u6761\u7D04\u300C${t.name}\u300D\u306F\u671F\u9650\u5207\u308C\u306A\u306E\u306B\u3001\u6709\u52B9\u306E\u307E\u307E\u3067\u3059`);
     }
     return out;
   }
@@ -18688,13 +17559,13 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     return { name: p.full, gender: g, birthYear: when.year - a, family: p.family };
   }
   function ensureHeirs(map, date = null) {
-    const now = date ?? map.worldTime ?? { year: 1, month: 1 }, data = ensureExt(map).data;
+    const now2 = date ?? map.worldTime ?? { year: 1, month: 1 }, data = ensureExt(map).data;
     let n2 = 0;
     for (const st of map.pack.states) {
       if (!isLive19(st) || !hereditaryOf(st)) continue;
       const l = data.leaders?.[st.i]?.current;
       if (!l || l.regentFor || data.heirs?.[st.i]) continue;
-      const h2 = makeHeir(st, l, now, createRandom(st.i * 733 + now.year * 3 + 11), languageOfState(map, st));
+      const h2 = makeHeir(st, l, now2, createRandom(st.i * 733 + now2.year * 3 + 11), languageOfState(map, st));
       if (!h2) continue;
       data.heirs = data.heirs ?? {};
       data.heirs[st.i] = h2;
@@ -18702,14 +17573,14 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     }
     return n2;
   }
-  function leaderCandidates(map, stateId, { n: n2 = 3, seed = null, date = null } = {}) {
+  function leaderCandidates(map, stateId, { n: n2 = 3, seed: seed2 = null, date = null } = {}) {
     const st = map.pack.states[stateId];
     if (!isLive19(st)) throw new Error("\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6\u3067\u3059");
-    const now = date ?? map.worldTime ?? { year: 1, month: 1 };
-    const rnd = createRandom(seed ?? stateId * 977 + now.year * 13 + now.month + seqOf(map) * 31);
+    const now2 = date ?? map.worldTime ?? { year: 1, month: 1 };
+    const rnd = createRandom(seed2 ?? stateId * 977 + now2.year * 13 + now2.month + seqOf(map) * 31);
     const hereditary = hereditaryOf(st), fam = familyOf(leaderRecord(map, stateId).current), heir = hereditary ? heirOf(map, stateId) : null;
     const out = [];
-    if (heir) out.push({ name: heir.name, gender: heir.gender, title: titleFor(st, heir.gender), age: leaderAge(heir, now), heir: true });
+    if (heir) out.push({ name: heir.name, gender: heir.gender, title: titleFor(st, heir.gender), age: leaderAge(heir, now2), heir: true });
     while (out.length < n2) {
       const gender = rnd.chance(hereditary ? 0.3 : 0.45) ? "f" : "m";
       const lang = languageOfState(map, st), p = hereditary && fam ? personOf(rnd, gender, fam, lang) : generatePersonName(rnd, gender, null, lang);
@@ -18803,7 +17674,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     return withEvent(map, cmd, { type: "succession", title: evTitle, detail, date: when, states: [stateId] });
   }
   function ensureLeaders(map, date = null) {
-    const now = date ?? map.worldTime ?? { year: 1, month: 1 };
+    const now2 = date ?? map.worldTime ?? { year: 1, month: 1 };
     const data = ensureExt(map).data;
     data.leaders = data.leaders ?? {};
     let n2 = data.leaderSeq ?? 0, added = 0;
@@ -18811,12 +17682,12 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
       if (!isLive19(st) || data.leaders[st.i]?.current) continue;
       const rnd = createRandom(st.i * 1291 + 7), g = rnd.chance(0.2) ? "f" : "m";
       const rec = data.leaders[st.i] ?? { current: null, history: [] };
-      rec.current = { id: ++n2, name: generatePersonName(rnd, g, null, languageOfState(map, st)).full, gender: g, birthYear: now.year - rnd.int(30, 60), since: { year: Math.max(1, now.year - rnd.int(0, 12)), month: 1 }, title: titleFor(st, g), reason: "death", stability: "stable", gen: rec.history.length + 1 };
+      rec.current = { id: ++n2, name: generatePersonName(rnd, g, null, languageOfState(map, st)).full, gender: g, birthYear: now2.year - rnd.int(30, 60), since: { year: Math.max(1, now2.year - rnd.int(0, 12)), month: 1 }, title: titleFor(st, g), reason: "death", stability: "stable", gen: rec.history.length + 1 };
       data.leaders[st.i] = rec;
       added++;
     }
     data.leaderSeq = n2;
-    ensureHeirs(map, now);
+    ensureHeirs(map, now2);
     return added;
   }
   function migrateMonarchs(map) {
@@ -18948,9 +17819,6 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   async function loadMapFile(file) {
     return loadMapBytes(new Uint8Array(await file.arrayBuffer()));
   }
-
-  // js/app/actions.js
-  init_spec();
 
   // js/app/group-actions.js
   function visibleGroups(state) {
@@ -20386,43 +19254,43 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     const top = (arr, key3, n2 = 4) => arr.slice().sort((a, b) => key3(b) - key3(a)).slice(0, n2);
     const pickOf = (arr) => rnd ? rnd.pick(arr) : arr[0];
     const capCulture = capCell2 >= 0 ? c.culture[capCell2] : null, capReligion = capCell2 >= 0 ? c.religion[capCell2] : null;
-    let seed;
+    let seed2;
     switch (t.seed) {
       case "populous":
-        seed = pickOf(top(burgCells.length > 1 ? burgCells.filter((i) => capDist(i) > 0) : burgCells, (i) => (c.pop[i] ?? 0) + (burgAt(i)?.population ?? 0), 3));
+        seed2 = pickOf(top(burgCells.length > 1 ? burgCells.filter((i) => capDist(i) > 0) : burgCells, (i) => (c.pop[i] ?? 0) + (burgAt(i)?.population ?? 0), 3));
         break;
       case "foreign-culture": {
         const f = burgCells.filter((i) => c.culture[i] !== capCulture);
-        seed = pickOf(top(f.length ? f : burgCells, capDist, 3));
+        seed2 = pickOf(top(f.length ? f : burgCells, capDist, 3));
         break;
       }
       case "foreign-religion": {
         const f = burgCells.filter((i) => c.religion[i] !== capReligion);
-        seed = pickOf(top(f.length ? f : burgCells, capDist, 3));
+        seed2 = pickOf(top(f.length ? f : burgCells, capDist, 3));
         break;
       }
       case "near-capital":
-        seed = pickOf(burgCells.slice().sort((a, b) => capDist(a) - capDist(b)).slice(0, 2));
+        seed2 = pickOf(burgCells.slice().sort((a, b) => capDist(a) - capDist(b)).slice(0, 2));
         break;
       case "second-city":
-        seed = top(burgCells, (i) => burgAt(i)?.population ?? 0, 1)[0];
+        seed2 = top(burgCells, (i) => burgAt(i)?.population ?? 0, 1)[0];
         break;
       default:
-        seed = burgCells[0];
+        seed2 = burgCells[0];
     }
     const total4 = mine.length, target = clamp11(Math.round(total4 * sc.share), 1, Math.max(1, Math.floor(total4 * 0.65)));
     const inState = new Set(mine);
     inState.delete(capCell2);
-    const chosen = /* @__PURE__ */ new Set([seed]), frontier = /* @__PURE__ */ new Set();
+    const chosen = /* @__PURE__ */ new Set([seed2]), frontier = /* @__PURE__ */ new Set();
     const push2 = (i) => {
       for (const j of adj?.[i] ?? []) if (inState.has(j) && !chosen.has(j)) frontier.add(j);
     };
     if (adj) {
-      push2(seed);
+      push2(seed2);
       while (chosen.size < target && frontier.size) {
         let best = -1, bd = Infinity;
         for (const j of frontier) {
-          const dd = d(j, seed);
+          const dd = d(j, seed2);
           if (dd < bd) {
             bd = dd;
             best = j;
@@ -20434,14 +19302,14 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
       }
     }
     if (chosen.size < target) {
-      for (const i of [...inState].sort((a, b) => d(a, seed) - d(b, seed))) {
+      for (const i of [...inState].sort((a, b) => d(a, seed2) - d(b, seed2))) {
         if (chosen.size >= target) break;
         chosen.add(i);
       }
     }
     const cells = [...chosen], burgs = cells.map((i) => burgAt(i)?.i).filter(Boolean);
     if (!burgs.length || total4 - cells.length < 1) return null;
-    return { cells, seed, burgs };
+    return { cells, seed: seed2, burgs };
   }
   var canRebel = (map, stateId) => !!pickRebelRegion(map, stateId, "uprising", "small", null);
   function rebelWarName(type, ctx) {
@@ -21209,7 +20077,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
     const stateAt2 = stateAtFor(map, namer);
     const T4 = analyzeTerritory(map);
     const W2 = T4.W, H = T4.H;
-    const now = map.worldTime ?? { year: 1, month: 1 };
+    const now2 = map.worldTime ?? { year: 1, month: 1 };
     const eras = listEras(map);
     const eraName = (d) => validDate(d) ? eraAt(map, d.year)?.name ?? null : null;
     const biomeName = (id) => map.biomesData[id]?.name ?? `\u30D0\u30A4\u30AA\u30FC\u30E0#${id}`;
@@ -21445,7 +20313,7 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
         name: map.meta.name || fileName || "\u540D\u79F0\u672A\u8A2D\u5B9A\u306E\u4E16\u754C",
         sourceFile: fileName || null,
         mapSize: { width: W2, height: H, note: "\u5EA7\u6A19\u7CFB: \u5DE6\u4E0A\u304C(0,0)\u3001x \u306F\u6771\u3078\u3001y \u306F\u5357\u3078\u5897\u3048\u308B\u3002\u300C\u5317\u897F\u300D\u306A\u3069\u306E position \u306F\u3053\u306E\u5EA7\u6A19\u30923\u5206\u5272\u3057\u305F\u8A00\u8449\u3002" },
-        currentDate: { year: now.year, month: now.month, text: fmtDate2(now), era: eraName(now) },
+        currentDate: { year: now2.year, month: now2.month, text: fmtDate2(now2), era: eraName(now2) },
         eras: eras.map((e, i) => ({ id: e.id, name: e.name, fromYear: e.fromYear, untilYear: eras[i + 1] ? eras[i + 1].fromYear - 1 : null })),
         totals: {
           states: liveStates.length,
@@ -21954,9 +20822,9 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
           let stageT = T0, stageName = "\u958B\u59CB";
           const world = await worldService.generate(spec, { onProgress: (p) => {
             if (my !== genToken) return;
-            const now = performance.now();
-            stages.push([stageName, now - stageT]);
-            stageT = now;
+            const now2 = performance.now();
+            stages.push([stageName, now2 - stageT]);
+            stageT = now2;
             stageName = p.label ?? p.stage;
             store.update((s) => {
               s.busy = `\u4E16\u754C\u3092\u751F\u6210\u4E2D: ${stageName}\uFF08${el2()}\u7D4C\u904E\uFF09`;
@@ -22260,10 +21128,10 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
       lastSig = sig;
       clearTimeout(timer);
       timer = setTimeout(() => {
-        const fresh2 = [...new Set(namesOf(map))].filter((c) => !loadedChars.has(c));
-        if (!fresh2.length) return;
-        fresh2.forEach((c) => loadedChars.add(c));
-        loadMapFonts(fresh2.join(""), () => renderer.requestRender());
+        const fresh3 = [...new Set(namesOf(map))].filter((c) => !loadedChars.has(c));
+        if (!fresh3.length) return;
+        fresh3.forEach((c) => loadedChars.add(c));
+        loadMapFonts(fresh3.join(""), () => renderer.requestRender());
       }, 250);
     }
     store.subscribe(check3);
@@ -22289,10 +21157,10 @@ ${rows2.map((r) => `| ${r.map((x) => String(x ?? "").replace(/\|/g, "\\|").repla
   }
 
   // js/version.js
-  var APP_VERSION = "6.19.0";
-  var APP_VERSION_NAME = "\u51FA\u6765\u4E8B\u3068\u707D\u5384";
+  var APP_VERSION = "6.20.0";
+  var APP_VERSION_NAME = "\u5C65\u6B74\u306E\u5916\u90E8\u4FDD\u5B58\u3068\u8EFD\u3044\u6708\u6B21\u51E6\u7406";
   var APP_VERSION_LABEL = `v${APP_VERSION} ${APP_VERSION_NAME}`;
-  var APP_BUILD_ID = true ? "17c3b17de94a" : "dev";
+  var APP_BUILD_ID = true ? "de07f9a9cf3f" : "dev";
 
   // js/ui/icons.js
   var P3 = {
@@ -23953,13 +22821,13 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       if (canvas.height !== mapCanvas.height) canvas.height = mapCanvas.height;
     }
     const dprNow = () => window.devicePixelRatio || 1;
-    function drawOverlay(now) {
+    function drawOverlay(now2) {
       const map = store.getState().map;
       if (!overlay || !map?.geometry) return;
       const { cells, vertices } = map.geometry.pack, dpr = dprNow();
       ctx.save();
       viewport.apply(ctx, dpr);
-      const pulse = 0.5 + 0.5 * Math.cos(now / PULSE_MS * Math.PI * 2);
+      const pulse = 0.5 + 0.5 * Math.cos(now2 / PULSE_MS * Math.PI * 2);
       for (const it of overlay.items) {
         ctx.fillStyle = `rgba(${COLOR}, ${it.strong ? 0.38 + 0.2 * pulse : 0.24})`;
         ctx.beginPath();
@@ -23978,17 +22846,17 @@ ${nm4(map, who)}\u306E\u4E00\u65B9\u7684\u306A\u7834\u68C4\u306F\u9055\u7D04\u30
       ctx.restore();
     }
     const overlayAnimated = () => !!overlay?.items.some((it) => it.strong);
-    function draw(now = performance.now()) {
+    function draw(now2 = performance.now()) {
       syncSize();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      if (overlay) drawOverlay(now);
+      if (overlay) drawOverlay(now2);
       if (!segs) return overlayAnimated();
-      if (now - t0 >= HIGHLIGHT_MS) {
+      if (now2 - t0 >= HIGHLIGHT_MS) {
         segs = null;
         return overlayAnimated();
       }
-      const a = highlightAlpha(now - t0);
+      const a = highlightAlpha(now2 - t0);
       const dpr = dprNow();
       ctx.save();
       viewport.apply(ctx, dpr);
@@ -24827,15 +23695,15 @@ ${shown}${more}`;
         reseed(map);
         return;
       }
-      const now = snapshot(map), fresh2 = [];
-      for (const e of now) {
+      const now2 = snapshot(map), fresh3 = [];
+      for (const e of now2) {
         const k = keyOf(e);
         if (!seen.has(k)) {
           seen.add(k);
-          fresh2.push(e);
+          fresh3.push(e);
         }
       }
-      for (const e of fresh2.slice(-MAX)) show(e);
+      for (const e of fresh3.slice(-MAX)) show(e);
     }
     store.subscribe((state, change) => {
       if (change?.type === "replace") {
@@ -24965,8 +23833,8 @@ ${shown}${more}`;
           raf = 0;
           return;
         }
-        const now = viewSig();
-        if (now !== sig || !overCanvas()) return hide();
+        const now2 = viewSig();
+        if (now2 !== sig || !overCanvas()) return hide();
         raf = requestAnimationFrame(tick);
       };
       raf = requestAnimationFrame(tick);
@@ -25236,12 +24104,12 @@ ${shown}${more}`;
   var MAX_HISTORY = 60;
   function createWorldEditor(world) {
     const { mesh, cell } = world, V = mesh.cellCount, off = mesh.neighborOffsets, nb = mesh.neighborIds, R = world.spec.planet.radiusKm;
-    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), seed = world.spec.worldSeed;
-    const noise = landUseNoise(seed), undoStack = [], redoStack = [];
+    const spacingKm = Math.sqrt(4 * Math.PI * R * R / V), seed2 = world.spec.worldSeed;
+    const noise = landUseNoise(seed2), undoStack = [], redoStack = [];
     const isSea = new Uint8Array(V);
     for (let c = 0; c < V; c++) isSea[c] = cell.elevation[c] <= 0 ? 1 : 0;
     const cx = { mesh, lat: cell.lat, lon: cell.lon, elevation: cell.elevation, isSea, moisture: cell.moisture, precipNoise: null, lapse: world.spec.climateModel.lapseRateCPerKm, decay: Math.exp(-spacingKm / world.spec.climateModel.windMoistureLengthKm) };
-    cx.precipNoise = hashSeed2(seed, "precip");
+    cx.precipNoise = hashSeed2(seed2, "precip");
     const hyd = { mesh, elevation: cell.elevation, isSea, precip: cell.precip, areaKm2: cell.areaKm2, parent: cell.riverTo, filled: cell.filled, flow: cell.riverFlow, basin: cell.basin, landWater: cell.landWater, biome: cell.biome };
     const lu = { mesh, isSea, landWater: cell.landWater, biome: cell.biome, elevation: cell.elevation, river: cell.river, volcanic: cell.volcanic, mountain: cell.mountain, coastDist: cell.coastDist, temp: cell.temp, precip: cell.precip, areaKm2: cell.areaKm2, resource: cell.resource, soil: cell.soil, fertility: cell.fertility, capacity: cell.capacity, ...noise };
     const snapshot = (idx) => {
@@ -25427,8 +24295,8 @@ ${shown}${more}`;
       }
     };
   }
-  function hashSeed2(seed, name) {
-    return hashString(`${seed}::noise::${name}`);
+  function hashSeed2(seed2, name) {
+    return hashString(`${seed2}::noise::${name}`);
   }
 
   // js/core/edit/burgs.js
@@ -26622,9 +25490,9 @@ ${shown}${more}`;
     if (!freeCount) return { cells: [], seed: -1, reason: "no-free-land" };
     const ratio = (TERRITORY_SIZES[size] ?? TERRITORY_SIZES.m).ratio;
     const want = Math.max(MIN_CELLS, Math.round(landCount * ratio));
-    let seed = seedCell >= 0 && free2(seedCell) ? seedCell : -1;
+    let seed2 = seedCell >= 0 && free2(seedCell) ? seedCell : -1;
     let want_override = 0;
-    if (seed < 0 && !(Array.isArray(ownCells) && ownCells.length)) {
+    if (seed2 < 0 && !(Array.isArray(ownCells) && ownCells.length)) {
       const comp = new Int32Array(n2).fill(-1);
       const sizes = [];
       for (let i = 0; i < n2; i++) {
@@ -26653,7 +25521,7 @@ ${shown}${more}`;
         const score = geom.c[cand2].filter(free2).length;
         if (score > bestScore) {
           bestScore = score;
-          seed = cand2;
+          seed2 = cand2;
         }
       }
     }
@@ -26677,14 +25545,14 @@ ${shown}${more}`;
       for (const i of ownCells) mine[i] = 1;
       for (const i of ownCells) offer(i, 0);
       if (!frontier.size) return { cells: [], seed: -1, reason: "no-adjacent-free-land" };
-      seed = ownCells[0];
+      seed2 = ownCells[0];
       const grow = Math.max(MIN_CELLS, Math.round(Math.max(ownCells.length * ratio * 2, landCount * ratio * 0.5)));
       want_override = grow;
     } else {
-      inSet[seed] = 1;
-      cells.push(seed);
-      dist.set(seed, 0);
-      offer(seed, 0);
+      inSet[seed2] = 1;
+      cells.push(seed2);
+      dist.set(seed2, 0);
+      offer(seed2, 0);
     }
     const target = expanding ? want_override : want;
     const near2 = (j) => {
@@ -26710,7 +25578,7 @@ ${shown}${more}`;
       cells.push(best);
       offer(best, dist.get(best) ?? 0);
     }
-    return { cells, seed };
+    return { cells, seed: seed2 };
   }
   function pickCapitalCell(map, stateId) {
     const { state, burg } = map.pack.cells;
@@ -26771,19 +25639,19 @@ ${shown}${more}`;
     const threshold = Math.min(want, Math.max(...sizes));
     const candidates = [];
     for (let i = 0; i < n2; i++) if (free2(i) && sizes[comp[i]] >= threshold) candidates.push(i);
-    let seed = -1, bestScore = -1;
+    let seed2 = -1, bestScore = -1;
     for (let t = 0; t < 8; t++) {
       const cand2 = candidates[Math.floor(rnd.next() * candidates.length)];
       const score = geom.c[cand2].filter(free2).length;
       if (score > bestScore) {
         bestScore = score;
-        seed = cand2;
+        seed2 = cand2;
       }
     }
     const H = map.geometry.pack.h;
     const stepCost2 = (j) => 1 + (H ? Math.max(0, H[j] - 45) / 25 : 0);
-    const inSet = new Uint8Array(n2), cells = [seed], dist = /* @__PURE__ */ new Map([[seed, 0]]), frontier = /* @__PURE__ */ new Set();
-    inSet[seed] = 1;
+    const inSet = new Uint8Array(n2), cells = [seed2], dist = /* @__PURE__ */ new Map([[seed2, 0]]), frontier = /* @__PURE__ */ new Set();
+    inSet[seed2] = 1;
     const offer = (from) => {
       for (const j of geom.c[from]) {
         if (!free2(j) || inSet[j]) continue;
@@ -26792,7 +25660,7 @@ ${shown}${more}`;
         frontier.add(j);
       }
     };
-    offer(seed);
+    offer(seed2);
     while (cells.length < want && frontier.size) {
       let best = -1, bestKey = Infinity;
       for (const j of frontier) {
@@ -26808,7 +25676,7 @@ ${shown}${more}`;
       cells.push(best);
       offer(best);
     }
-    return { cells, seed };
+    return { cells, seed: seed2 };
   }
 
   // js/app/builder-actions.js
@@ -27689,8 +26557,8 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     }
     const stab = leaderRecord(map, state.i)?.current?.stability;
     if (LEADER_PENALTY[stab]) factors.push({ label: stab === "chaos" ? "\u7D99\u627F\u306E\u5927\u304D\u306A\u6DF7\u4E71" : "\u7D99\u627F\u306E\u4E89\u3044", delta: -LEADER_PENALTY[stab] });
-    const now = (map.worldTime?.year ?? 0) * 12 + (map.worldTime?.month ?? 1);
-    const recent = listHistory(map).filter((h2) => UNSETTLING_EVENTS.includes(h2.type) && (h2.states ?? []).includes(state.i) && h2.year != null && now - (h2.year * 12 + (h2.month ?? 1)) <= EVENT_WINDOW_MONTHS && now >= h2.year * 12 + (h2.month ?? 1));
+    const now2 = (map.worldTime?.year ?? 0) * 12 + (map.worldTime?.month ?? 1);
+    const recent = listHistory(map).filter((h2) => UNSETTLING_EVENTS.includes(h2.type) && (h2.states ?? []).includes(state.i) && h2.year != null && now2 - (h2.year * 12 + (h2.month ?? 1)) <= EVENT_WINDOW_MONTHS && now2 >= h2.year * 12 + (h2.month ?? 1));
     if (recent.length) factors.push({ label: `\u76F4\u8FD1\u306E\u51FA\u6765\u4E8B${recent.length}\u4EF6`, delta: -Math.min(EVENT_PENALTY_MAX, recent.length * EVENT_PENALTY) });
     const score = factors.reduce((n2, f) => n2 + f.delta, 0);
     const level = STABILITY_LEVELS.find((l) => score >= l.min);
@@ -28246,10 +27114,10 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
       return box;
     }
     function leaderBlock(map, s) {
-      const box = el("div", "nation-leader"), now = map.worldTime ?? { year: 1, month: 1 };
+      const box = el("div", "nation-leader"), now2 = map.worldTime ?? { year: 1, month: 1 };
       const l = leaderRecord(map, s.i).current;
       const face = el("div", "np-face");
-      face.innerHTML = l ? faceSvg(faceOf(l, now), 120) : "";
+      face.innerHTML = l ? faceSvg(faceOf(l, now2), 120) : "";
       box.append(face);
       const t = el("div", "nation-leader-t");
       if (!l) {
@@ -28257,16 +27125,16 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
         box.append(t);
         return box;
       }
-      t.append(el("strong", "", `${l.title}\u3000${l.name}`), el("div", "hint", `${leaderAge(l, now)}\u6B73\u30FB${l.gender === "f" ? "\u5973\u6027" : "\u7537\u6027"}\u30FB\u7B2C${l.gen}\u4EE3\u30FB${l.since.year}\u5E74\u306B\u5C31\u4EFB`));
+      t.append(el("strong", "", `${l.title}\u3000${l.name}`), el("div", "hint", `${leaderAge(l, now2)}\u6B73\u30FB${l.gender === "f" ? "\u5973\u6027" : "\u7537\u6027"}\u30FB\u7B2C${l.gen}\u4EE3\u30FB${l.since.year}\u5E74\u306B\u5C31\u4EFB`));
       if (familyOf(l) && heirOf(map, s.i) !== void 0 && regimeOf(s).succession === "hereditary") t.append(el("div", "hint", `\u738B\u671D: ${familyOf(l)}\u5BB6`));
       if (l.regentFor) {
-        const q2 = el("div", "hint nation-regent", `\u6442\u653F: \u5E7C\u3044${l.regentFor.title}${l.regentFor.name}\uFF08${leaderAge(l.regentFor, now)}\u6B73\uFF09\u306B\u4EE3\u308F\u3063\u3066\u653F\u52D9\u3092\u3068\u308B\u3002${l.regentFor.birthYear + MAJORITY}\u5E74\u306B\u89AA\u653F\u3078`);
+        const q2 = el("div", "hint nation-regent", `\u6442\u653F: \u5E7C\u3044${l.regentFor.title}${l.regentFor.name}\uFF08${leaderAge(l.regentFor, now2)}\u6B73\uFF09\u306B\u4EE3\u308F\u3063\u3066\u653F\u52D9\u3092\u3068\u308B\u3002${l.regentFor.birthYear + MAJORITY}\u5E74\u306B\u89AA\u653F\u3078`);
         q2.dataset.field = "regent";
         t.append(q2);
       }
       const hr = regimeOf(s).succession === "hereditary" ? heirOf(map, s.i) : null;
       if (hr) {
-        const q2 = el("div", "hint nation-heir", `\u6B21\u306E\u6307\u5C0E\u8005: ${titleFor(s, hr.gender)}\u3000${hr.name}\uFF08${leaderAge(hr, now)}\u6B73\u30FB${hr.gender === "f" ? "\u5973" : "\u7537"}\uFF09`);
+        const q2 = el("div", "hint nation-heir", `\u6B21\u306E\u6307\u5C0E\u8005: ${titleFor(s, hr.gender)}\u3000${hr.name}\uFF08${leaderAge(hr, now2)}\u6B73\u30FB${hr.gender === "f" ? "\u5973" : "\u7537"}\uFF09`);
         q2.dataset.field = "heir";
         t.append(q2);
       }
@@ -29892,8 +28760,8 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
     if (!isLive53(s)) return null;
     const support = typeof s.support === "number" ? s.support : 70;
     if (support >= 30) return null;
-    const now = date ?? map.worldTime ?? { year: 1, month: 1 };
-    const recent = listHistory(map).filter((h2) => FOLLOW_KEYS.some((k) => h2.type === `natural-${k}`) && (h2.states ?? []).includes(stateId) && mk2(now) - mk2(h2) <= 36 && mk2(now) >= mk2(h2));
+    const now2 = date ?? map.worldTime ?? { year: 1, month: 1 };
+    const recent = listHistory(map).filter((h2) => FOLLOW_KEYS.some((k) => h2.type === `natural-${k}`) && (h2.states ?? []).includes(stateId) && mk2(now2) - mk2(h2) <= 36 && mk2(now2) >= mk2(h2));
     return { support, level: support < 15 ? "\u5F37\u3044" : "\u304F\u3059\u3076\u3063\u3066\u3044\u308B", causes: recent.map((h2) => h2.title).slice(-3) };
   }
 
@@ -30464,9 +29332,9 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
               }
               const up = planArmyUpkeep(map, st.i, rng);
               if (up) {
-                const fresh2 = !(st.military ?? []).length;
+                const fresh3 = !(st.military ?? []).length;
                 store.commit(up);
-                if (fresh2) {
+                if (fresh3) {
                   const f = planAnnualConscription(map, st.i, { fill: true });
                   if (f) store.commit(f);
                 }
@@ -31081,7 +29949,275 @@ ${effectText(n2.fx)}${atCap(n2) ? "\n\u4E0A\u9650\u306B\u9054\u3057\u3066\u3044\
 
   // js/app/civ-actions.js
   init_civ_state();
-  init_civ_sim();
+
+  // js/core/civ/civ-sim.js
+  init_tick();
+  init_ids();
+  init_civ_state();
+  init_population();
+  init_culture();
+  init_cohorts();
+  init_tech();
+  init_states();
+  init_diplomacy();
+  init_ai();
+  init_interpret();
+  init_history();
+  init_magic();
+  init_archive();
+  init_disaster();
+  init_spatial();
+
+  // js/core/civ/commands.js
+  init_population();
+  init_events();
+  init_world_consts();
+  init_states();
+  init_actions();
+  init_ai();
+  init_graph();
+  var fail = (error) => ({ ok: false, error });
+  function playerGroup(civ, groupId) {
+    const g = civ.groups[groupId];
+    if (!g) return [null, "\u305D\u306E\u96C6\u56E3\u306F\u5B58\u5728\u3057\u307E\u305B\u3093"];
+    if (!g.player) return [null, "\u30D7\u30EC\u30A4\u30E4\u30FC\u306E\u96C6\u56E3\u3067\u306F\u3042\u308A\u307E\u305B\u3093"];
+    return [g, null];
+  }
+  function applyCommand(ctx, cmd) {
+    const { world, civ, ids: ids2 } = ctx;
+    switch (cmd.type) {
+      case "moveGroup": {
+        const [g, e] = playerGroup(civ, cmd.groupId);
+        if (e) return fail(e);
+        if (g.order) return fail("\u3059\u3067\u306B\u79FB\u52D5\u4E2D\u3067\u3059");
+        if (world.cell.landWater[cmd.to] !== LAND_WATER2.LAND) return fail("\u79FB\u52D5\u5148\u306F\u9678\u5730\u3067\u306A\u3051\u308C\u3070\u306A\u308A\u307E\u305B\u3093");
+        const dist = reachable(world, g.cell, POP.moveRange[g.subsistence] * 2, g.knowledge.seafaring), d = dist.get(cmd.to);
+        if (d == null) return fail(g.knowledge.seafaring < 1 ? "\u5C4A\u304D\u307E\u305B\u3093\uFF08\u6D77\u3092\u6E21\u308B\u822A\u6D77\u306E\u77E5\u8B58\u304C\u306A\u3044\u304B\u3001\u9060\u3059\u304E\u307E\u3059\uFF09" : "\u9060\u3059\u304E\u3066\u5C4A\u304D\u307E\u305B\u3093");
+        g.order = { type: "move", to: cmd.to, arriveAt: civ.monthIndex + Math.max(1, Math.ceil(d / 2)) };
+        g.pop = Math.round(g.pop * (1 - Math.min(0.2, d * 0.01)));
+        return { ok: true, arriveAt: g.order.arriveAt };
+      }
+      case "setSubsistence": {
+        const [g, e] = playerGroup(civ, cmd.groupId);
+        if (e) return fail(e);
+        if (!SUBSISTENCE[cmd.subsistence]) return fail("\u672A\u77E5\u306E\u751F\u696D\u3067\u3059");
+        if (cmd.subsistence === "agriculture" && g.knowledge.agriculture < 1) return fail("\u8FB2\u8015\u306E\u77E5\u8B58\u304C\u307E\u3060\u8DB3\u308A\u307E\u305B\u3093");
+        if (cmd.subsistence === "pastoral" && g.knowledge.herding < 1) return fail("\u7267\u755C\u306E\u77E5\u8B58\u304C\u307E\u3060\u8DB3\u308A\u307E\u305B\u3093");
+        if (cmd.subsistence === "fishing" && world.cell.coastDist[g.cell] > 2 && !world.cell.river[g.cell]) return fail("\u6C34\u8FBA\u3067\u306F\u306A\u3044\u306E\u3067\u6F01\u6488\u306F\u3067\u304D\u307E\u305B\u3093");
+        const before = g.subsistence;
+        if (before === cmd.subsistence) return fail("\u3059\u3067\u306B\u305D\u306E\u751F\u696D\u3067\u3059");
+        g.subsistence = cmd.subsistence;
+        makeEvent(civ, ids2, { kind: "subsistence_changed", title: `\u751F\u696D\u306E\u8EE2\u63DB\uFF08${SUBSISTENCE[before]}\u2192${SUBSISTENCE[cmd.subsistence]}\uFF09`, participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "subsistence", before, after: cmd.subsistence }], provenance: "player" });
+        return { ok: true };
+      }
+      case "foundSettlement": {
+        const [g, e] = playerGroup(civ, cmd.groupId);
+        if (e) return fail(e);
+        if (g.settlementId) return fail("\u3059\u3067\u306B\u5B9A\u4F4F\u3057\u3066\u3044\u307E\u3059");
+        if (g.subsistence === "forage" || g.subsistence === "pastoral") return fail("\u63A1\u96C6\u72E9\u731F\u30FB\u7267\u755C\u306E\u307E\u307E\u3067\u306F\u5B9A\u4F4F\u3067\u304D\u307E\u305B\u3093\uFF08\u8FB2\u8015\u304B\u6F01\u6488\u3078\uFF09");
+        if (g.pop < POP.settleMinPop) return fail(`\u4EBA\u53E3\u304C\u8DB3\u308A\u307E\u305B\u3093\uFF08${POP.settleMinPop}\u4EBA\u4EE5\u4E0A\uFF09`);
+        const s = foundSettlement(world, civ, ids2, g);
+        civ.events[civ.events.length - 1].provenance = "player";
+        return { ok: true, settlementId: s.id };
+      }
+      case "splitGroup": {
+        const [g, e] = playerGroup(civ, cmd.groupId);
+        if (e) return fail(e);
+        if (g.order) return fail("\u79FB\u52D5\u4E2D\u306F\u5206\u6D3E\u3067\u304D\u307E\u305B\u3093");
+        if (g.pop < POP.minBudPop * 2) return fail("\u4EBA\u53E3\u304C\u8DB3\u308A\u307E\u305B\u3093");
+        const dist = reachable(world, g.cell, POP.moveRange[g.subsistence], g.knowledge.seafaring);
+        if (!dist.has(cmd.to) || world.cell.landWater[cmd.to] !== LAND_WATER2.LAND || cmd.to === g.cell) return fail("\u305D\u3053\u3078\u306F\u5206\u6D3E\u3067\u304D\u307E\u305B\u3093");
+        for (const o of Object.values(civ.groups)) if (territoryOf(world, o.cell).includes(cmd.to) || o.cell === cmd.to) return fail("\u305D\u3053\u306F\u307B\u304B\u306E\u96C6\u56E3\u306E\u9818\u57DF\u3067\u3059");
+        const moved = Math.round(g.pop * POP.budShare);
+        g.pop -= moved;
+        g.lastBudAt = civ.monthIndex;
+        const child = spawnGroup(civ, ids2, g, cmd.to, moved);
+        child.player = false;
+        makeEvent(civ, ids2, { kind: "group_split", title: "\u96C6\u56E3\u306E\u5206\u6D3E", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: cmd.to }, causes: asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible"), provenance: "player" });
+        return { ok: true, childId: child.id };
+      }
+      case "formState": {
+        const [g, e] = playerGroup(civ, cmd.groupId);
+        if (e) return fail(e);
+        if (g.stateId) return fail("\u3059\u3067\u306B\u56FD\u5BB6\u306B\u5C5E\u3057\u3066\u3044\u307E\u3059");
+        const f = evaluateFormation(ctx, g);
+        if (!f) return fail("\u56FD\u5BB6\u3092\u5F62\u6210\u3059\u308B\u6761\u4EF6\u304C\u307E\u3060\u6574\u3063\u3066\u3044\u307E\u305B\u3093");
+        if (cmd.via && cmd.via !== f.via) return fail(`\u305D\u306E\u7D4C\u8DEF\u3067\u306F\u6210\u7ACB\u3057\u307E\u305B\u3093\uFF08\u73FE\u5728\u306E\u6761\u4EF6\u306F\u300C${f.via}\u300D\uFF09`);
+        const st = formState(ctx, { ...f, player: true });
+        return st ? { ok: true, stateId: st.id } : fail("\u5F62\u6210\u306B\u5931\u6557\u3057\u307E\u3057\u305F");
+      }
+      case "stateAction": {
+        const st = civ.states[cmd.stateId];
+        if (!st?.alive) return fail("\u305D\u306E\u56FD\u5BB6\u306F\u5B58\u5728\u3057\u307E\u305B\u3093");
+        if (!st.player) return fail("\u30D7\u30EC\u30A4\u30E4\u30FC\u306E\u56FD\u5BB6\u3067\u306F\u3042\u308A\u307E\u305B\u3093");
+        const def = ACTION[cmd.action];
+        if (!def) return fail("\u672A\u77E5\u306E\u884C\u52D5\u3067\u3059");
+        if (!def.enabled) return fail(`\u3053\u306E\u884C\u52D5\u306F\u307E\u3060\u4F7F\u3048\u307E\u305B\u3093\uFF08${def.disabledReason}\uFF09`);
+        const c = findCandidate(ctx, st, def, { target: cmd.target ?? null, opt: cmd.opt ?? null });
+        if (!c) return fail("\u305D\u306E\u5BFE\u8C61\u30FB\u5185\u5BB9\u3067\u306F\u5B9F\u884C\u3067\u304D\u307E\u305B\u3093");
+        if (!c.eligible) return fail(c.reason ?? "\u6761\u4EF6\u3092\u6E80\u305F\u3057\u3066\u3044\u307E\u305B\u3093");
+        const r = runPlayerAction(ctx, st, def, c);
+        return r.ok ? { ok: true, eventIds: r.eventIds, warId: r.warId } : fail(r.error);
+      }
+      case "acceptProposal": {
+        const p = civ.proposals.find((x) => x.proposalId === cmd.proposalId && !x.resolved);
+        if (!p) return fail("\u305D\u306E\u63D0\u6848\u306F\u3042\u308A\u307E\u305B\u3093");
+        const map = { change_subsistence: () => ({ type: "setSubsistence", groupId: p.groupId, subsistence: p.payload.subsistence }), found_settlement: () => ({ type: "foundSettlement", groupId: p.groupId }), form_state: () => ({ type: "formState", groupId: p.groupId, via: p.payload.via }), split: () => ({ type: "splitGroup", groupId: p.groupId, to: cmd.to ?? p.payload.targets?.[0]?.cell }) };
+        const r = applyCommand(ctx, map[p.kind]());
+        if (r.ok) p.resolved = true;
+        return r;
+      }
+      case "dismissProposal": {
+        const p = civ.proposals.find((x) => x.proposalId === cmd.proposalId && !x.resolved);
+        if (!p) return fail("\u305D\u306E\u63D0\u6848\u306F\u3042\u308A\u307E\u305B\u3093");
+        p.resolved = true;
+        return { ok: true };
+      }
+      default:
+        return fail(`\u672A\u77E5\u306E\u547D\u4EE4: ${cmd.type}`);
+    }
+  }
+
+  // js/core/civ/civ-sim.js
+  init_calibration();
+
+  // js/core/civ/compact.js
+  init_compaction_queue();
+  function stepCompact(ctx) {
+    const { civ } = ctx;
+    if (!civ.options?.wcde) return;
+    drainQueue(ctx);
+    sweepSlow(ctx);
+  }
+
+  // js/core/civ/civ-sim.js
+  function createCivSim(world, civ, { extensions = [] } = {}) {
+    const ids2 = createIdGen(civ.seq), ticker = createTicker();
+    ticker.register("clock", (ctx2) => {
+      setDate(ctx2.civ, ctx2.civ.monthIndex + 1);
+      ctx2.rng = rngOf(hashSeed(ctx2.civ.historySeed, ctx2.civ.monthIndex));
+    }, "advanceClock");
+    ticker.register("climate", stepClimate, "stepClimate");
+    ticker.register("disaster", stepDisaster, "stepDisaster");
+    ticker.register("economy_pop", stepCalibration, "stepCalibration", { every: 12, offset: 0 });
+    ticker.register("archive", stepCompact, "stepCompact");
+    ticker.register("economy_pop", stepPopulation, "stepPopulation");
+    ticker.register("culture", stepCulture, "stepCulture");
+    ticker.register("culture", stepCohorts, "stepCohorts");
+    if (!civ.options?.wcde) ticker.register("culture", stepMagic, "stepMagic");
+    ticker.register("tech", stepTech, "stepTech");
+    ticker.register("ai_plan", stepAIPlan, "stepAIPlan");
+    ticker.register("apply", stepAIApply, "stepAIApply");
+    ticker.register("conflict", stepStates, "stepStates", { every: 3 });
+    ticker.register("conflict", stepWars, "stepWars");
+    ticker.register("conflict", stepInterpretation, "stepInterpretation");
+    ticker.register("integrity", (ctx2) => {
+      const full = ctx2.civ.monthIndex % 120 === 0, errs = checkCivIntegrity(ctx2.world, ctx2.civ, { sinceEvent: full ? 0 : ctx2.eventsChecked ?? 0, structure: full || ctx2.civ.monthIndex % 12 === 0 });
+      ctx2.eventsChecked = ctx2.civ.events.length;
+      if (errs.length) throw new Error("\u6587\u660E\u72B6\u614B\u306E\u6574\u5408\u6027\u9055\u53CD: " + errs.slice(0, 3).join(" / "));
+    }, "checkIntegrity");
+    ticker.register("archive", (ctx2) => {
+      if (!ctx2.civ.options.wcde) recordMonth(ctx2);
+    }, "recordMonth");
+    const ctx = {
+      world,
+      civ,
+      ids: ids2,
+      rng: rngOf(hashSeed(civ.historySeed, civ.monthIndex)),
+      growthMult: () => climateGrowth(civ),
+      trace: [],
+      eventsChecked: civ.events.length,
+      plans: [],
+      endWarHook: endWar,
+      stateMult: (g) => {
+        const st = g.stateId ? civ.states[g.stateId] : null;
+        return st ? (st.boostUntil > civ.monthIndex ? 1.2 : 1) * (1 - 0.4 * st.policy.mobilization) : 1;
+      }
+    };
+    for (const ext of extensions) ext(ticker, ctx);
+    return {
+      ctx,
+      ticker,
+      advanceMonth() {
+        ticker.runMonth(ctx);
+        return civ.date;
+      },
+      advanceMonths(n2, onProgress) {
+        for (let i = 0; i < n2; i++) {
+          ticker.runMonth(ctx);
+          if (onProgress && i % 120 === 119) onProgress(i + 1, n2);
+        }
+        if (civ.options.wcde) commitArchive(ctx);
+        return civ.date;
+      },
+      /** 作業バッファの出来事を歴史資料へ移して整理する（明示的に呼ぶ場合） */
+      commit() {
+        return commitArchive(ctx);
+      },
+      command: (cmd) => {
+        const r = applyCommand(ctx, cmd);
+        if (r.ok) {
+          ctx._byState = null;
+          recordMonth(ctx);
+        }
+        return r;
+      }
+      // 命令で変わった状態は、同じ月の記録を上書きする
+    };
+  }
+  function checkCivIntegrity(world, civ, { sinceEvent = 0, structure = true } = {}) {
+    const errs = [], N2 = world.mesh.cellCount;
+    let players = 0;
+    if (structure) for (const id of sortedGroupIds(civ)) {
+      const g = civ.groups[id];
+      if (g.id !== id) errs.push(`\u96C6\u56E3ID\u306E\u4E0D\u4E00\u81F4 ${id}`);
+      if (!Number.isFinite(g.pop) || g.pop < 0) errs.push(`\u4EBA\u53E3\u304C\u4E0D\u6B63 ${id}`);
+      if (!(g.cell >= 0 && g.cell < N2) || world.cell.landWater[g.cell] !== 1) errs.push(`\u96C6\u56E3 ${id} \u304C\u9678\u306B\u3044\u306A\u3044`);
+      if (g.player) players++;
+      if (g.settlementId && civ.settlements[g.settlementId]?.groupId !== id) errs.push(`\u96C6\u843D\u306E\u76F8\u4E92\u53C2\u7167\u304C\u58CA\u308C\u3066\u3044\u308B ${id}`);
+      for (const k in g.tech.known) {
+        if (!TECH[k]) errs.push(`\u96C6\u56E3 ${id} \u304C\u672A\u77E5\u306E\u6280\u8853 ${k} \u3092\u6301\u3064`);
+        else if (!Number.isFinite(g.tech.known[k])) errs.push(`\u96C6\u56E3 ${id} \u306E\u6280\u8853 ${k} \u306E\u6642\u70B9\u304C\u4E0D\u6B63`);
+      }
+    }
+    if (players > 1) errs.push("\u30D7\u30EC\u30A4\u30E4\u30FC\u96C6\u56E3\u304C\u8907\u6570\u3042\u308B");
+    let ps = 0;
+    for (const id in civ.states) {
+      const st = civ.states[id];
+      if (!st.alive) continue;
+      if (st.player) ps++;
+      for (const k in st.techAdopted) if (!TECH[k]) errs.push(`\u56FD\u5BB6 ${id} \u304C\u672A\u77E5\u306E\u6280\u8853 ${k} \u3092\u63A1\u7528\u3057\u3066\u3044\u308B`);
+      if (!civ.groups[st.capitalGroupId] && civ.monthIndex % 3 !== 1) errs.push(`\u56FD\u5BB6 ${id} \u306E\u9996\u90FD\u96C6\u56E3\u304C\u7121\u3044`);
+      for (const w of st.warIds) if (civ.wars[w]?.status !== "active") errs.push(`\u56FD\u5BB6 ${id} \u306E\u6226\u4E89\u53C2\u7167\u304C\u4E0D\u6B63 ${w}`);
+    }
+    if (ps > 1) errs.push("\u30D7\u30EC\u30A4\u30E4\u30FC\u56FD\u5BB6\u304C\u8907\u6570\u3042\u308B");
+    if (structure) for (const id of sortedGroupIds(civ)) {
+      const g = civ.groups[id];
+      if (g.stateId && !civ.states[g.stateId]?.alive) errs.push(`\u96C6\u56E3 ${id} \u304C\u5B58\u5728\u3057\u306A\u3044\u56FD\u5BB6 ${g.stateId} \u306B\u5C5E\u3057\u3066\u3044\u308B`);
+      let sh = 0;
+      for (const c of g.cohorts) sh += c.share;
+      if (Math.abs(sh - 1) > 1e-6) errs.push(`\u96C6\u56E3 ${id} \u306E\u30B3\u30DB\u30FC\u30C8\u5272\u5408\u306E\u5408\u8A08\u304C1\u3067\u306A\u3044`);
+    }
+    for (const wid of civ.activeWarIds) {
+      const w = civ.wars[wid];
+      if (!w || w.status !== "active") errs.push(`\u9032\u884C\u4E2D\u306E\u6226\u4E89\u306E\u8A18\u9332\u304C\u4E0D\u6B63 ${wid}`);
+    }
+    for (const s of Object.values(civ.settlements)) if (!civ.groups[s.groupId]) errs.push(`\u96C6\u843D ${s.id} \u306E\u96C6\u56E3\u304C\u7121\u3044`);
+    if (sinceEvent === 0) {
+      const seen = /* @__PURE__ */ new Set(), known = /* @__PURE__ */ new Set();
+      for (const e of civ.events) {
+        if (seen.has(e.eventId)) errs.push(`\u30A4\u30D9\u30F3\u30C8ID\u91CD\u8907 ${e.eventId}`);
+        seen.add(e.eventId);
+        for (const p of e.participants) known.add(p.entityId);
+      }
+    } else {
+      const last = civ.events.length > 0 ? civ.events[civ.events.length - 1].eventId : null;
+      if (last && civ.events.slice(sinceEvent).some((e, i, a) => a.findIndex((x) => x.eventId === e.eventId) !== i)) errs.push("\u4ECA\u6708\u306E\u30A4\u30D9\u30F3\u30C8ID\u91CD\u8907");
+    }
+    return errs;
+  }
+
+  // js/app/civ-actions.js
   init_population();
   init_tick();
   init_actions();
@@ -32827,8 +31963,8 @@ ${shown}${more}`;
       nameIn.className = "war-name-input";
       nameIn.addEventListener("change", () => simActions.renameWar(w.id, nameIn.value));
       const typeName2 = warTypeOf(w.type).label;
-      const now = map.worldTime ?? { year: w.startedAt.year, month: w.startedAt.month };
-      const elapsed = Math.max(0, monthIdx(w.endedAt ?? now) - monthIdx(w.startedAt));
+      const now2 = map.worldTime ?? { year: w.startedAt.year, month: w.startedAt.month };
+      const elapsed = Math.max(0, monthIdx(w.endedAt ?? now2) - monthIdx(w.startedAt));
       ov.append(el("label", "field-label", `\u6226\u4E89\u306E\u540D\u524D\uFF08${typeName2}\uFF09`), nameIn);
       if (!w.endedAt && w.type !== "civil") {
         const tb = el("div", "war-types");
@@ -32883,7 +32019,7 @@ ${shown}${more}`;
         }
       }
       const events = [...(w.battles ?? []).map((b) => ({ date: b.date ?? (b.year != null ? { year: b.year, month: b.month } : null), tag: "\u6226\u95D8", text: `${b.name ?? "\u6226\u95D8"}\u3000${b.text ?? ""}` })), ...(w.events ?? []).map((e) => ({ date: e.date, tag: { event: "\u51FA\u6765\u4E8B", omen: "\u5146\u3057", "omen-fulfilled": "\u7684\u4E2D", "omen-faded": "\u675E\u6182", withdraw: "\u64A4\u9000", reevaluate: "\u518D\u5224\u5B9A" }[e.kind] ?? "\u51FA\u6765\u4E8B", text: e.text, kind: e.kind }))];
-      const reached = (d) => !d || w.endedAt || monthIdx(d) <= monthIdx(now);
+      const reached = (d) => !d || w.endedAt || monthIdx(d) <= monthIdx(now2);
       const shown = events.filter((e) => reached(e.date)).sort((x, y) => (x.date ? monthIdx(x.date) : 0) - (y.date ? monthIdx(y.date) : 0));
       lg.append(el("h4", "", "\u7D4C\u904E\u306E\u8A18\u9332"));
       if (!shown.length) lg.append(el("p", "muted", "\u307E\u3060\u8A18\u9332\u306F\u3042\u308A\u307E\u305B\u3093\u3002\u6642\u9593\u304C\u9032\u3080\u3068\u3001\u30B7\u30B9\u30C6\u30E0\u304C\u9032\u8ECD\u3055\u305B\u3001\u6226\u3044\u3084\u51FA\u6765\u4E8B\u3092\u81EA\u52D5\u3067\u8A18\u9332\u3057\u307E\u3059\u3002"));
@@ -33553,7 +32689,6 @@ ${shown}${more}`;
   }
 
   // js/ui/world-new-dialog.js
-  init_spec();
   var PRESETS = [[5e4, "50,000\uFF08\u8EFD\u3044\uFF09"], [1e5, "100,000"], [25e4, "250,000\uFF08\u6A19\u6E96\uFF09"], [5e5, "500,000"], [1e6, "1,000,000\uFF08\u91CD\u3044\uFF09"]];
   async function confirmDiscard(store) {
     const s = store.getState();
@@ -33574,13 +32709,13 @@ ${shown}${more}`;
       form.append(r);
       return ctl;
     };
-    const seed = document.createElement("input");
-    seed.type = "text";
-    seed.value = makeWorldSeed(Date.now());
-    seed.setAttribute("aria-label", "\u30B7\u30FC\u30C9");
+    const seed2 = document.createElement("input");
+    seed2.type = "text";
+    seed2.value = makeWorldSeed(Date.now());
+    seed2.setAttribute("aria-label", "\u30B7\u30FC\u30C9");
     const seedBox = el("span", "world-seedbox");
-    seedBox.append(seed, btn("", "\u30E9\u30F3\u30C0\u30E0", "\u65B0\u3057\u3044\u30B7\u30FC\u30C9\u306B\u3059\u308B", () => {
-      seed.value = makeWorldSeed(Date.now());
+    seedBox.append(seed2, btn("", "\u30E9\u30F3\u30C0\u30E0", "\u65B0\u3057\u3044\u30B7\u30FC\u30C9\u306B\u3059\u308B", () => {
+      seed2.value = makeWorldSeed(Date.now());
     }));
     row("\u30B7\u30FC\u30C9", seedBox, "\u540C\u3058\u30B7\u30FC\u30C9\u3068\u8A2D\u5B9A\u306A\u3089\u3001\u540C\u3058\u5730\u5F62\u306B\u306A\u308A\u307E\u3059");
     const preset = document.createElement("select");
@@ -33639,7 +32774,7 @@ ${shown}${more}`;
       dlg.close();
       dlg.remove();
     }), ok3 = btn("primary", "\u751F\u6210\u3059\u308B", "", () => {
-      const spec = { worldSeed: seed.value.trim(), resolution: { targetCells: Number(preset.value) }, landFraction: Number(land.value) / 100, continentCountTarget: Number(cont.value), islandMode: isl.value, layout: lay.value, initialGroups: Number(groups.value) };
+      const spec = { worldSeed: seed2.value.trim(), resolution: { targetCells: Number(preset.value) }, landFraction: Number(land.value) / 100, continentCountTarget: Number(cont.value), islandMode: isl.value, layout: lay.value, initialGroups: Number(groups.value) };
       dlg.close();
       dlg.remove();
       actions.newWorld(spec);
@@ -33649,7 +32784,7 @@ ${shown}${more}`;
     dlg.addEventListener("cancel", () => dlg.remove());
     document.body.append(dlg);
     dlg.showModal();
-    seed.focus();
+    seed2.focus();
   }
 
   // js/render/world-colors.js
@@ -33762,17 +32897,1053 @@ ${shown}${more}`;
     render(store.getState());
   }
 
-  // js/core/wcde/world.js
-  init_config();
-  init_prehistory();
-  init_language();
-  init_religion();
-  init_contract();
-  init_founding();
+  // js/core/wcde/calendar.js
+  var DEFAULT_CALENDAR = Object.freeze({
+    epochName: "",
+    beforeName: "",
+    yearOffset: 0,
+    // v6.6.0: 既定は空白（「紀元」とは名づけない）。 // 表示年 = 内部の年 + yearOffset（内部の年が負なら beforeName の側で数える）
+    format: "{era}{year}\u5E74{month}\u6708",
+    monthNames: null,
+    eras: Object.freeze([])
+  });
 
-  // js/core/wcde/commands.js
-  init_contract();
-  init_founding();
+  // js/core/wcde/config.js
+  init_world_consts();
+  init_civ_state();
+  var DEFAULT_LAWS = Object.freeze({ disasterRate: 1, climateVolatility: 1, fertilityScale: 1, faunaRichness: 1, ecoResilience: 1 });
+  var RESOLUTION = Object.freeze({ standard: 3e3, extra: 6e3, max: 2e4, choices: Object.freeze([3e3, 6e3]) });
+  var BIOME_KEYS = Object.freeze(Object.keys(BIOMES2));
+
+  // js/core/wcde/prehistory.js
+  init_ids();
+  init_civ_state();
+  init_tick();
+  init_culture();
+  init_events();
+  init_population();
+  init_tech();
+  init_calibration();
+
+  // js/core/wcde/domains/ecosystem.js
+  init_world_consts();
+  var FAUNA_BIOME = { [BIOMES2.SAVANNA]: 1, [BIOMES2.GRASSLAND]: 0.9, [BIOMES2.TROPICAL_SEASONAL]: 0.85, [BIOMES2.TEMPERATE_FOREST]: 0.75, [BIOMES2.RAINFOREST]: 0.65, [BIOMES2.WETLAND]: 0.8, [BIOMES2.TAIGA]: 0.45, [BIOMES2.TUNDRA]: 0.4, [BIOMES2.ALPINE]: 0.3, [BIOMES2.COLD_DESERT]: 0.2, [BIOMES2.HOT_DESERT]: 0.12, [BIOMES2.ICE]: 0.05 };
+  var FLORA_BIOME = { [BIOMES2.RAINFOREST]: 1, [BIOMES2.TROPICAL_SEASONAL]: 0.9, [BIOMES2.TEMPERATE_FOREST]: 0.85, [BIOMES2.SAVANNA]: 0.65, [BIOMES2.GRASSLAND]: 0.7, [BIOMES2.WETLAND]: 0.8, [BIOMES2.TAIGA]: 0.5, [BIOMES2.TUNDRA]: 0.25, [BIOMES2.ALPINE]: 0.2, [BIOMES2.COLD_DESERT]: 0.15, [BIOMES2.HOT_DESERT]: 0.08, [BIOMES2.ICE]: 0.02 };
+
+  // js/core/wcde/prehistory.js
+  init_species();
+  init_world_consts();
+  var DEG = Math.PI / 180;
+
+  // js/core/wcde/world.js
+  init_language();
+
+  // js/core/wcde/domains/religion.js
+  init_civ_state();
+  init_culture();
+  init_events();
+  init_language();
+  init_naming();
+
+  // js/core/wcde/domains/index.js
+  init_events();
+  init_language();
+
+  // js/core/wcde/domains/economy.js
+  init_spatial();
+  init_diplomacy();
+  init_events();
+  init_effective();
+  init_techfx();
+  init_tech();
+
+  // js/core/wcde/domains/politics.js
+  init_statefx();
+  init_spatial();
+  init_diplomacy();
+  init_tech();
+  init_events();
+  init_civ_state();
+  init_species();
+  init_effective();
+  init_naming();
+  var FACTIONS = Object.freeze({ nobility: "\u8CB4\u65CF\u30FB\u6709\u529B\u8005", clergy: "\u8056\u8077\u8005", merchants: "\u5546\u4EBA", military: "\u8ECD", commoners: "\u6C11\u8846", bureaucrats: "\u5B98\u50DA\u30FB\u66F8\u8A18", artisans: "\u8077\u4EBA\u30FB\u5DE5\u623F", clans: "\u904A\u7267\u6C0F\u65CF" });
+  var CORE_FACTIONS = Object.freeze(["nobility", "military", "commoners"]);
+  var INFLUENCE = Object.freeze({
+    tribal: { nobility: 0.3, clergy: 0.15, merchants: 0.05, military: 0.3, commoners: 0.2, bureaucrats: 0.04, artisans: 0.04, clans: 0.25 },
+    chiefdom: { nobility: 0.3, clergy: 0.15, merchants: 0.1, military: 0.3, commoners: 0.15, bureaucrats: 0.05, artisans: 0.05, clans: 0.2 },
+    theocracy: { nobility: 0.15, clergy: 0.45, merchants: 0.1, military: 0.15, commoners: 0.15, bureaucrats: 0.1, artisans: 0.05, clans: 0.08 },
+    kingdom: { nobility: 0.35, clergy: 0.15, merchants: 0.1, military: 0.25, commoners: 0.15, bureaucrats: 0.12, artisans: 0.05, clans: 0.08 },
+    empire: { nobility: 0.3, clergy: 0.1, merchants: 0.1, military: 0.35, commoners: 0.15, bureaucrats: 0.2, artisans: 0.05, clans: 0.08 },
+    republic: { nobility: 0.15, clergy: 0.1, merchants: 0.3, military: 0.1, commoners: 0.35, bureaucrats: 0.1, artisans: 0.1, clans: 0.05 }
+  });
+  var ASSEMBLY = Object.freeze({ tribal: "\u9577\u8001\u4F1A", chiefdom: null, theocracy: "\u8056\u8077\u8005\u4F1A\u8B70", kingdom: null, empire: null, republic: "\u5E02\u6C11\u8B70\u4F1A" });
+  var clamp37 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+  var adopted = (st, k) => st.techAdopted?.[k] != null;
+  function initPolitics(st) {
+    const f = {};
+    for (const k of ["nobility", "clergy", "merchants", "military", "commoners"]) f[k] = { support: 0.55 };
+    return { factions: f, ideas: {}, assembly: ASSEMBLY[st.polity] ?? (adopted(st, "administration") ? "\u8AEE\u554F\u4F1A\u8B70" : null), legitimacy: 0.55, fatigue: 0, taxCeiling: 0.4, lastRegimeChange: -999 };
+  }
+  var IDEAS2 = Object.freeze({
+    mercantilism: { ja: "\u5546\u696D\u4E3B\u7FA9", pro: { merchants: 0.12, artisans: 0.06 }, con: { nobility: -0.04 } },
+    martialism: { ja: "\u5C1A\u6B66\u306E\u6C17\u98A8", pro: { military: 0.12 }, con: { commoners: -0.05 } },
+    egalitarianism: { ja: "\u5E73\u7B49\u4E3B\u7FA9", pro: { commoners: 0.12 }, con: { nobility: -0.08 } },
+    piety: { ja: "\u656C\u8654\u4E3B\u7FA9", pro: { clergy: 0.12 }, con: { merchants: -0.04 } },
+    legalism: { ja: "\u6CD5\u6CBB\u4E3B\u7FA9", pro: { bureaucrats: 0.12, merchants: 0.04 }, con: { clans: -0.05 } },
+    traditionalism: { ja: "\u4F1D\u7D71\u4E3B\u7FA9", pro: { nobility: 0.12, clans: 0.05 }, con: { artisans: -0.04 } },
+    reformism: { ja: "\u6539\u9769\u5FD7\u5411", pro: { artisans: 0.1, bureaucrats: 0.05 }, con: { nobility: -0.05 } }
+  });
+  var HOW_JA = { reform: "\u5236\u5EA6\u306E\u6539\u9769", religious_reform: "\u5B97\u6559\u6539\u9769", secularization: "\u4E16\u4FD7\u5316", conquest: "\u5F81\u670D\u306B\u3088\u308B\u5927\u56FD\u5316", revolution: "\u9769\u547D", military_takeover: "\u8ECD\u306B\u3088\u308B\u6A29\u529B\u306E\u638C\u63E1", decline: "\u4E2D\u592E\u306E\u8870\u9000" };
+  function reformPolity(ctx, st, P5, to, how) {
+    const { civ, ids: ids2 } = ctx, mi2 = civ.monthIndex, before = st.polity, oldName = st.name;
+    const war = civ.events.slice(-80).reverse().find((e) => (e.kind === "war_declared" || e.kind === "war_ended" || e.kind === "uprising" || e.kind === "famine") && e.participants.some((p) => p.entityId === st.id));
+    st.polity = to;
+    P5.lastRegimeChange = mi2;
+    st.stability = clamp37(st.stability + (how === "revolution" || how === "military_takeover" ? -0.2 : how === "decline" ? -0.1 : 0.02));
+    P5.fatigue = Math.max(0, (P5.fatigue ?? 0) - 0.2);
+    const rt = before !== to ? retitle(st, to, civ.date.year) : null;
+    if (rt) {
+      st.name = rt.name;
+      st.nameBase = rt.base;
+      st.titleYear = rt.year;
+    }
+    if (how === "revolution" || how === "military_takeover") {
+      const rg = regnalOf(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}\u306E\u65B0\u6307\u5C0E\u8005`, leaderRng(civ, st, "regime"), epithetGen(ctx, st, civ.groups[st.capitalGroupId]));
+      st.leader = { name: rg.name, birthName: rg.birth, bornAt: mi2 - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: how };
+    }
+    makeEvent(civ, ids2, { kind: "regime_change", title: `${oldName}\u3067${HOW_JA[how]}\u304C\u8D77\u304D\u3001\u653F\u4F53\u304C\u5909\u308F\u3063\u305F${rt ? `\u3002\u56FD\u53F7\u306F${rt.name}\u3068\u6539\u307E\u3063\u305F` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : []], causes: war ? [{ targetId: war.eventId ?? war.id, relation: "caused_by", basis: "plausible" }] : [], facts: { stateId: st.id, polity: to, name: st.name, by: how }, provenance: "simulation" });
+  }
+
+  // js/core/wcde/domains/military.js
+  init_spatial();
+  init_events();
+  init_effective();
+  init_statefx();
+  init_tech();
+  init_orbat();
+
+  // js/core/wcde/domains/doctrine.js
+  init_world_consts();
+  init_spatial();
+  var FX_KEYS = Object.freeze(["off", "def", "logi", "attr", "naval", "siege", "adapt", "coh", "landing", "armor", "air", "subs", "strike", "mob", "covert", "space"]);
+  var CAP = Object.freeze({ off: 0.25, def: 0.4, logi: 0.3, attr: 0.25, naval: 0.35, siege: 0.3, adapt: 0.2, coh: 0.25, landing: 0.25, armor: 0.3, air: 0.35, subs: 0.3, strike: 0.3, mob: 0.3, covert: 0.4, space: 0.3 });
+  var FX_JA = Object.freeze({ off: "\u653B\u6483", def: "\u9632\u5FA1", logi: "\u88DC\u7D66", attr: "\u640D\u8017\u8EFD\u6E1B", naval: "\u6D77\u8ECD\u904B\u7528", siege: "\u653B\u57CE", adapt: "\u6226\u5834\u9069\u5FDC", coh: "\u58EB\u6C17\u306E\u7D50\u675F", landing: "\u4E0A\u9678", armor: "\u6A5F\u7532\u904B\u7528", air: "\u822A\u7A7A\u904B\u7528", subs: "\u6F5C\u6C34\u904B\u7528", strike: "\u6253\u6483\u529B", mob: "\u52D5\u54E1", covert: "\u79D8\u533F", space: "\u5B87\u5B99\u904B\u7528" });
+  var TIERS = 15;
+  var SERVICE_JA = Object.freeze({ land: "\u9678\u8ECD", sea: "\u6D77\u8ECD", air: "\u7A7A\u8ECD", space: "\u5B87\u5B99\u8ECD" });
+  var L = (id, ja, en, color, glyph, desc, svc, target, tiers) => ({ id, ja, en, color, glyph, desc, svc, target, tiers });
+  var LINES = Object.freeze([
+    L(
+      "firepower",
+      "\u512A\u5148\u706B\u529B",
+      "FIREPOWER",
+      "#d0605a",
+      "\u7832",
+      "\u307E\u305A\u6483\u3061\u3001\u6575\u3092\u524A\u3063\u3066\u304B\u3089\u9032\u3080\u3002\u706B\u529B\u3068\u653B\u57CE\u306B\u512A\u308C\u3001\u640D\u8017\u306F\u8EFD\u3044\u3002",
+      { land: "\u7832\u5175\u3068\u706B\u529B\u652F\u63F4\u3092\u5897\u3084\u3059", sea: "\u4E3B\u529B\u8266\u3068\u8266\u7832\u30FB\u30DF\u30B5\u30A4\u30EB\u3092\u5897\u3084\u3059", air: "\u7206\u6483\u3068\u7CBE\u5BC6\u6253\u6483\u3092\u5897\u3084\u3059", space: "\u8ECC\u9053\u304B\u3089\u306E\u6253\u6483" },
+      { off: 0.13, siege: 0.18, attr: 0.1, strike: 0.15, adapt: -0.03 },
+      [
+        ["\u6295\u77F3\u3068\u5F13\u306E\u6589\u5C04", [], 20],
+        ["\u5F13\u5175\u306E\u5217", ["bow"], 45],
+        ["\u9752\u9285\u306E\u98DB\u3073\u9053\u5177", ["bronze_weapons"], 70],
+        ["\u653B\u57CE\u6A5F\u68B0", ["siege_engines"], 110],
+        ["\u5F29\u306E\u6589\u5C04", ["crossbow"], 150],
+        ["\u706B\u85AC\u306E\u5175\u5668", ["gunpowder"], 220],
+        ["\u9283\u306E\u4E00\u6589\u5C04\u6483", ["firearms"], 300],
+        ["\u7832\u5175\u306E\u7D44\u7E54", ["artillery"], 420],
+        ["\u65BD\u6761\u9283\u3068\u7832", ["rifled_arms"], 540],
+        ["\u5F8C\u88C5\u7832\u3068\u901F\u5C04", ["breech_loading"], 680],
+        ["\u6A5F\u95A2\u9283\u306E\u5F3E\u5E55", ["machine_gun"], 800],
+        ["\u69B4\u5F3E\u7832\u306E\u96C6\u4E2D", ["howitzer"], 920],
+        ["\u8A98\u5C0E\u5175\u5668", ["guided_munitions"], 1050],
+        ["\u30DF\u30B5\u30A4\u30EB\u6253\u6483", ["guided_missiles"], 1180],
+        ["\u6975\u8D85\u97F3\u901F\u306E\u6253\u6483", ["hypersonic_weapons"], 1350]
+      ]
+    ),
+    L(
+      "mobile",
+      "\u9AD8\u6A5F\u52D5\u6226",
+      "MANEUVER",
+      "#6fa8c9",
+      "\u75BE",
+      "\u901F\u3055\u3067\u6575\u306E\u9632\u5FA1\u3092\u3059\u308A\u629C\u3051\u308B\u3002\u88DC\u7D66\u306E\u5C4A\u304F\u7BC4\u56F2\u3068\u6226\u5834\u9069\u5FDC\u304C\u4F38\u3073\u308B\u3002",
+      { land: "\u9A0E\u5175\u30FB\u6A5F\u7532\u30FB\u6A5F\u68B0\u5316\u3092\u5897\u3084\u3059", sea: "\u9AD8\u901F\u8266\u3068\u7A7A\u6BCD\u6A5F\u52D5\u90E8\u968A\u3092\u5897\u3084\u3059", air: "\u5236\u7A7A\u3068\u7A7A\u4E2D\u6A5F\u52D5\u3092\u5897\u3084\u3059", space: "\u8ECC\u9053\u4E0A\u306E\u6A5F\u52D5\u5C55\u958B" },
+      { off: 0.11, adapt: 0.14, logi: 0.12, armor: 0.14, landing: 0.08, def: -0.04 },
+      [
+        ["\u65A5\u5019\u3068\u4F1D\u4EE4", [], 20],
+        ["\u9A0E\u99AC\u306E\u6A5F\u52D5", ["horse_riding"], 45],
+        ["\u6226\u8ECA\uFF08\u4E8C\u8F2A\uFF09\u306E\u7A81\u6483", ["chariot"], 70],
+        ["\u91CD\u9A0E\u5175", ["cavalry"], 110],
+        ["\u8857\u9053\u306E\u884C\u8ECD", ["roads"], 150],
+        ["\u5175\u7AD9\u306E\u6574\u5099", ["military_logistics"], 210],
+        ["\u5916\u6D0B\u306E\u6A5F\u52D5", ["ocean_sailing"], 290],
+        ["\u84B8\u6C17\u306E\u6A5F\u52D5", ["steam_engine"], 400],
+        ["\u9244\u9053\u52D5\u54E1", ["railway"], 520],
+        ["\u81EA\u52D5\u8ECA\u5316", ["motor_vehicle"], 680],
+        ["\u6A5F\u68B0\u5316\u6226", ["mechanized_warfare"], 820],
+        ["\u88C5\u7532\u7A81\u7834", ["tank"], 940],
+        ["\u6A5F\u68B0\u5316\u6B69\u5175\u306E\u968F\u4F34", ["motorized_infantry"], 1050],
+        ["\u7DB2\u3067\u3064\u306A\u3050\u6A5F\u52D5", ["network_warfare"], 1200],
+        ["\u81EA\u5F8B\u6A5F\u52D5", ["autonomous_systems"], 1350]
+      ]
+    ),
+    L(
+      "mass",
+      "\u4EBA\u6D77\u6226\u8853",
+      "MASS",
+      "#d8b45a",
+      "\u8846",
+      "\u6570\u3067\u62BC\u3057\u5207\u308B\u3002\u52D5\u54E1\u304C\u5897\u3048\u3001\u58EB\u6C17\u304C\u9AD8\u3044\u304C\u3001\u640D\u8017\u306F\u91CD\u3044\u3002",
+      { land: "\u591A\u304F\u306E\u5175\u3092\u52D5\u54E1\u3057\u3066\u7AF6\u308A\u52DD\u3064", sea: "\u3088\u308A\u591A\u304F\u306E\u8266\u3092\u52D5\u54E1\u3059\u308B", air: "\u6A5F\u6570\u3092\u63C3\u3048\u3066\u98FD\u548C\u3055\u305B\u308B", space: "\u885B\u661F\u3068\u8ECC\u9053\u6A5F\u306E\u6570\u3092\u63C3\u3048\u308B" },
+      { mob: 0.2, coh: 0.12, off: 0.06, logi: 0.05, attr: -0.1 },
+      [
+        ["\u90E8\u65CF\u306E\u7DCF\u51FA", [], 15],
+        ["\u6570\u3048\u4E0A\u3052\u308B\u5175", ["counting"], 40],
+        ["\u69CD\u5175\u306E\u5927\u96C6\u56E3", ["bronze_weapons"], 65],
+        ["\u884C\u653F\u306B\u3088\u308B\u5FB4\u767A", ["administration"], 100],
+        ["\u4EBA\u53E3\u8ABF\u67FB", ["census"], 140],
+        ["\u5E38\u5099\u8ECD\u306E\u62E1\u5927", ["standing_army"], 200],
+        ["\u5B98\u50DA\u306E\u52D5\u54E1", ["civil_service"], 280],
+        ["\u69CD\u3068\u9283\u306E\u5927\u8ECD", ["pike_and_shot"], 380],
+        ["\u56FD\u6C11\u7686\u5175", ["conscription"], 500],
+        ["\u5879\u58D5\u306E\u4EBA\u6CE2", ["trench_warfare"], 650],
+        ["\u5BFE\u6226\u8ECA\u306E\u8089\u8584", ["anti_tank"], 780],
+        ["\u7DCF\u529B\u6226\u306E\u7D44\u7E54", ["network_warfare"], 920],
+        ["\u7121\u4EBA\u6A5F\u306E\u7FA4\u308C", ["drone_warfare"], 1050],
+        ["\u81EA\u5F8B\u306E\u5927\u91CF\u904B\u7528", ["autonomous_systems"], 1200],
+        ["\u8A8D\u77E5\u3092\u675F\u306D\u308B\u52D5\u54E1", ["cognitive_warfare"], 1350]
+      ]
+    ),
+    L(
+      "position",
+      "\u9663\u5730\u6226\u7565",
+      "FORTRESS",
+      "#9fbf8a",
+      "\u9663",
+      "\u5B88\u308A\u3092\u56FA\u3081\u3001\u6575\u3092\u6D88\u8017\u3055\u305B\u308B\u3002\u9632\u5FA1\u3068\u7BC9\u57CE\u306B\u512A\u308C\u3001\u653B\u3081\u306F\u920D\u3044\u3002",
+      { land: "\u8981\u585E\u3068\u5B88\u5099\u5175\u3092\u5897\u3084\u3059", sea: "\u6CBF\u5CB8\u9632\u885B\u3068\u5C01\u9396\u3092\u91CD\u8996\u3059\u308B", air: "\u9632\u7A7A\u3068\u8FCE\u6483\u3092\u5897\u3084\u3059", space: "\u8ECC\u9053\u4E0A\u306E\u9632\u885B\u7DB2" },
+      { def: 0.2, attr: 0.12, coh: 0.1, siege: 0.06, logi: 0.05, off: -0.04 },
+      [
+        ["\u67F5\u3068\u7826", [], 25],
+        ["\u91CE\u55B6\u306E\u7BC9\u57CE", ["construction"], 50],
+        ["\u77F3\u306E\u57CE\u58C1", ["masonry"], 75],
+        ["\u8981\u585E", ["fortification"], 110],
+        ["\u9244\u306E\u5B88\u308A", ["iron_weapons"], 150],
+        ["\u57CE\u5E02\u306E\u6574\u5099", ["city_planning"], 200],
+        ["\u30B3\u30F3\u30AF\u30EA\u30FC\u30C8\u306E\u5821\u5841", ["concrete"], 280],
+        ["\u7A1C\u5821\u3068\u9283\u773C", ["firearms"], 380],
+        ["\u92FC\u306E\u69CB\u9020", ["structural_steel"], 500],
+        ["\u5879\u58D5\u7DDA", ["trench_warfare"], 640],
+        ["\u5BFE\u6226\u8ECA\u306E\u9632\u5FA1", ["anti_tank"], 770],
+        ["\u9632\u7A7A\u7DB2", ["air_defense"], 900],
+        ["\u30EC\u30FC\u30C0\u30FC\u306E\u8B66\u6212", ["radar_sonar"], 1020],
+        ["\u885B\u661F\u306E\u76E3\u8996", ["satellites"], 1150],
+        ["\u6307\u5411\u6027\u306E\u76FE", ["directed_energy"], 1300]
+      ]
+    ),
+    L(
+      "special",
+      "\u7279\u6B8A\u4F5C\u6226",
+      "SPECIAL OPS",
+      "#a58bd0",
+      "\u96A0",
+      "\u5C11\u6570\u7CBE\u92ED\u3068\u60C5\u5831\u3067\u3001\u6B63\u9762\u3092\u907F\u3051\u3066\u6025\u6240\u3092\u7A81\u304F\u3002\u6697\u6BBA\u30FB\u7834\u58CA\u5DE5\u4F5C\u30FB\u6F5C\u6C34\u30FB\u30B5\u30A4\u30D0\u30FC\u306B\u5F37\u3044\u3002",
+      { land: "\u7279\u6B8A\u90E8\u968A\u3068\u6D77\u5175\u3092\u5897\u3084\u3059", sea: "\u6F5C\u6C34\u8266\u3068\u6D77\u5175\u3092\u5897\u3084\u3059", air: "\u7121\u4EBA\u6A5F\u3068\u60C5\u5831\u6226\u3092\u5897\u3084\u3059", space: "\u885B\u661F\u3068\u8ECC\u9053\u4E0A\u306E\u60C5\u5831\u6226" },
+      { covert: 0.3, adapt: 0.1, subs: 0.18, landing: 0.1, strike: 0.08, off: 0.04, mob: -0.05 },
+      [
+        ["\u65A5\u5019\u3068\u9593\u8005", [], 20],
+        ["\u4F0F\u5175\u306E\u6280", ["bow"], 45],
+        ["\u4EA4\u6613\u8DEF\u306E\u8033\u76EE", ["barter_networks"], 70],
+        ["\u4F7F\u7BC0\u3068\u5BC6\u5075", ["diplomacy"], 105],
+        ["\u5F29\u306E\u6697\u6BBA", ["crossbow"], 150],
+        ["\u99C5\u4F1D\u3068\u5BC6\u66F8", ["postal_system"], 200],
+        ["\u5149\u5B66\u306E\u5075\u5BDF", ["optics"], 270],
+        ["\u5316\u5B66\u306E\u5DE5\u4F5C", ["chemistry"], 370],
+        ["\u96FB\u4FE1\u306E\u508D\u53D7", ["telegraph"], 490],
+        ["\u7121\u7DDA\u306E\u64B9\u4E71", ["radio"], 630],
+        ["\u7279\u6B8A\u90E8\u968A", ["special_forces"], 790],
+        ["\u30B5\u30A4\u30D0\u30FC\u6226", ["cyber_warfare"], 930],
+        ["\u30B9\u30C6\u30EB\u30B9", ["stealth"], 1060],
+        ["\u8A8D\u77E5\u6226", ["cognitive_warfare"], 1200],
+        ["\u8ECC\u9053\u306E\u79D8\u533F\u4F5C\u6226", ["orbital_warfare"], 1350]
+      ]
+    )
+  ]);
+  var LINE_BY_ID = Object.freeze(Object.fromEntries(LINES.map((l) => [l.id, l])));
+  var W = Array.from({ length: TIERS }, (_, i) => i + 2);
+  var WS = W.reduce((a, b) => a + b, 0);
+  var fxOf2 = (line, t) => {
+    const o = {};
+    for (const k in line.target) o[k] = Math.round(line.target[k] * W[t] / WS * 1e4) / 1e4;
+    return o;
+  };
+  var N = (id, ja, branch, tier, prereq, tech, cost, fx3) => ({ id, ja, branch, tier, prereq, tech, cost, fx: fx3, special: false });
+  var COMMON_BRANCHES = Object.freeze(LINES.map((l) => ({ id: l.id, ja: l.ja })));
+  var COMMON_NODES = Object.freeze(LINES.flatMap((l) => l.tiers.map(([ja, tech, cost], i) => Object.freeze(N(`${l.id}:${i + 1}`, ja, l.id, i + 1, i ? [`${l.id}:${i}`] : [], tech, cost, fxOf2(l, i))))));
+  var COMMON_BY_ID = Object.freeze(Object.fromEntries(COMMON_NODES.map((d) => [d.id, d])));
+  var SCHOOLS = Object.freeze([]);
+  var SCHOOL_BY_ID = Object.freeze({});
+  var SCHOOL_NODES = Object.freeze([]);
+  var SCHOOL_NODE_BY_ID = Object.freeze({});
+  var SPECIAL_TEMPLATES = Object.freeze([]);
+  var MASTERY = Object.freeze({ off: 0.02, def: 0.02, coh: 0.03 });
+
+  // js/core/wcde/domains/military.js
+  var OFF_CAP = CAP.off;
+  var DEF_CAP = CAP.def;
+
+  // js/core/wcde/special-ops.js
+  init_events();
+  init_civ_state();
+  init_diplomacy();
+  init_species();
+  init_spatial();
+  init_shocks();
+  init_power();
+  init_orbat();
+  init_warfare();
+  var COVERT = Object.freeze({
+    assassinate: { ja: "\u6697\u6BBA", cost: 60, base: 0.2, hint: "\u6307\u5C0E\u8005\u3092\u72D9\u3046\u3002\u6210\u529F\u3059\u308C\u3070\u76F8\u624B\u306F\u5927\u304D\u304F\u63FA\u308C\u308B\u304C\u3001\u9732\u898B\u3059\u308C\u3070\u6226\u4E89\u306E\u53E3\u5B9F\u306B\u306A\u308B" },
+    sabotage: { ja: "\u7834\u58CA\u5DE5\u4F5C", cost: 40, base: 0.36, hint: "\u5009\u5EAB\u30FB\u6A4B\u30FB\u5DE5\u623F\u3092\u58CA\u3059\u3002\u76F8\u624B\u306E\u56FD\u5EAB\u3068\u5175\u529B\u3092\u524A\u308B" },
+    recon: { ja: "\u60C5\u5831\u53CE\u96C6", cost: 20, base: 0.6, hint: "\u76F8\u624B\u306E\u8ECD\u306E\u52D5\u304D\u304C 3 \u5E74\u9593\u3088\u304F\u898B\u3048\u308B\uFF08\u4F1A\u6226\u306E\u5075\u5BDF\uFF09" },
+    rescue: { ja: "\u6551\u51FA", cost: 50, base: 0.32, hint: "\u6226\u4E89\u4E2D\u306B\u3001\u6355\u3089\u308F\u308C\u305F\u5C06\u3084\u4EBA\u8CEA\u3092\u53D6\u308A\u623B\u3059\u3002\u81EA\u8ECD\u306E\u58EB\u6C17\u304C\u4E0A\u304C\u308B" }
+  });
+  var NUKE = Object.freeze({ tactical: { ja: "\u6226\u8853\u6838", pop: 0.35, groups: 1, cost: 150 }, strategic: { ja: "\u6226\u7565\u6838", pop: 0.55, groups: 4, cost: 400 } });
+
+  // js/core/wcde/domains/people.js
+  init_civ_state();
+  init_events();
+  init_language();
+  init_naming();
+  init_graph();
+  init_compaction_queue();
+  var AGE_MIN = 14 * 12;
+
+  // js/core/wcde/domains/actions.js
+  init_actions();
+  init_spatial();
+  init_civ_state();
+
+  // js/core/wcde/integrity.js
+  init_archive();
+  init_perf_monitor();
+  init_warfare();
+
+  // js/core/wcde/intervention.js
+  init_effective();
+
+  // js/core/wcde/integrity.js
+  init_clock();
+  init_decisions();
+
+  // js/core/wcde/catastrophe.js
+  init_events();
+  init_civ_state();
+  init_states();
+
+  // js/core/wcde/rebirth.js
+  init_civ_state();
+  init_events();
+  init_states();
+  init_language();
+
+  // js/core/wcde/founding.js
+  init_tech();
+  init_states();
+  init_spatial();
+  init_population();
+  init_events();
+  init_naming();
+
+  // js/core/names/flag.js
+  init_civ_state();
+  var FLAG_COLORS = Object.freeze({ gold: "#e3b93f", white: "#f4f0e6", red: "#be3329", blue: "#244c9a", green: "#2c7a4d", black: "#1c1c1f", purple: "#68408f", orange: "#d8762a", sky: "#4a9bd4" });
+  var FLAG_FIELDS = Object.freeze([
+    ["plain", "\u7121\u5730", 1],
+    ["h2", "\u6A2A\u4E8C\u5206", 2],
+    ["h3", "\u6A2A\u4E09\u5206", 3],
+    ["v2", "\u7E26\u4E8C\u5206", 2],
+    ["v3", "\u7E26\u4E09\u5206", 3],
+    ["pale", "\u7E26\u306E\u592A\u5E2F", 3],
+    ["cross", "\u5317\u6B27\u5341\u5B57", 3],
+    ["saltire", "\u659C\u3081\u5341\u5B57", 2],
+    ["bend", "\u659C\u3081\u5E2F", 2],
+    ["tri", "\u63B2\u63DA\u5074\u306E\u4E09\u89D2", 2],
+    ["canton", "\u89D2\u306E\u56DB\u89D2", 2],
+    ["quarters", "\u56DB\u5206\u5272", 2],
+    ["chevron", "\u5C71\u5F62", 2]
+  ].map(([kind, ja, n2]) => Object.freeze({ kind, ja, n: n2 })));
+  var FLAG_CHARGES = Object.freeze([
+    ["none", "\u306A\u3057"],
+    ["disc", "\u5186"],
+    ["ring", "\u8F2A"],
+    ["star4", "\u56DB\u8292\u661F"],
+    ["star5", "\u4E94\u8292\u661F"],
+    ["star8", "\u516B\u8292\u661F"],
+    ["crescent", "\u6708"],
+    ["moonstar", "\u6708\u3068\u661F"],
+    ["diamond", "\u83F1\u5F62"],
+    ["triangle", "\u4E09\u89D2"],
+    ["sun", "\u592A\u967D"],
+    ["cross", "\u5341\u5B57"],
+    ["wave", "\u6CE2"]
+  ].map(([kind, ja]) => Object.freeze({ kind, ja })));
+  var BIAS = Object.freeze([
+    { main: ["red", "black", "blue"], metal: ["gold", "white"] },
+    { main: ["green", "red", "blue"], metal: ["white", "gold"] },
+    { main: ["blue", "red", "green"], metal: ["white", "gold"] },
+    { main: ["black", "red", "purple"], metal: ["gold", "white"] },
+    { main: ["red", "orange", "green"], metal: ["gold", "white"] },
+    { main: ["sky", "blue", "green"], metal: ["white", "gold"] }
+  ]);
+  var FLAG_BIAS_COUNT = BIAS.length;
+
+  // js/core/wcde/founding.js
+  init_species();
+  init_language();
+
+  // js/core/wcde/control.js
+  init_states();
+  init_events();
+  init_decisions();
+  var FIELDS2 = {
+    name: { get: (s) => s.name, set: (s, v) => {
+      s.name = v;
+      s.nameBase = null;
+    }, check: (v) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 30 ? v.trim() : null },
+    polity: { get: (s) => s.polity, set: (s, v) => {
+      s.polity = v;
+    }, check: (v) => v in POLITY ? v : null },
+    "policy.tax": { get: (s) => s.policy.tax, set: (s, v) => {
+      s.policy.tax = v;
+    }, check: (v) => typeof v === "number" && v >= 0.02 && v <= 0.4 ? v : null },
+    "policy.mobilization": { get: (s) => s.policy.mobilization, set: (s, v) => {
+      s.policy.mobilization = v;
+    }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
+    "policy.tolerance": { get: (s) => s.policy.tolerance, set: (s, v) => {
+      s.policy.tolerance = v;
+    }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
+    "policy.assimilation": { get: (s) => s.policy.assimilation, set: (s, v) => {
+      s.policy.assimilation = v;
+    }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
+    "policy.autonomy": { get: (s) => s.policy.autonomy, set: (s, v) => {
+      s.policy.autonomy = v;
+    }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
+    treasury: { get: (s) => s.treasury, set: (s, v) => {
+      s.treasury = v;
+    }, check: (v) => typeof v === "number" && Number.isFinite(v) && Math.abs(v) <= 1e7 ? v : null },
+    stability: { get: (s) => s.stability, set: (s, v) => {
+      s.stability = v;
+    }, check: (v) => typeof v === "number" && v >= 0 && v <= 1 ? v : null },
+    "leader.name": { get: (s) => s.leader.name, set: (s, v) => {
+      s.leader.name = v;
+    }, check: (v) => typeof v === "string" && v.trim().length >= 1 && v.trim().length <= 30 ? v.trim() : null }
+  };
+  var EDITABLE_STATE_FIELDS = Object.freeze(Object.keys(FIELDS2));
+
+  // js/core/wcde/founding.js
+  init_regimes();
+  var LEADER_TRAITS = Object.freeze({ valiant: "\u52C7\u731B", wise: "\u8CE2\u660E", merciful: "\u6148\u60B2\u6DF1\u3044", ambitious: "\u91CE\u5FC3\u5BB6", devout: "\u656C\u8654", frugal: "\u5039\u7D04", diplomat: "\u5916\u4EA4\u5BB6", strategist: "\u6226\u7565\u5BB6", popular: "\u4EBA\u671B", sickly: "\u75C5\u5F31" });
+  var LOOKS = 12;
+  var personName2 = (ctx, civ, cap, rng) => ctx.nameGen?.person?.(civ, cap, rng) ?? "\u540D\u3082\u306A\u304D\u4EBA";
+  function assignOffices(ctx, st, ids2, { keep = null } = {}) {
+    const { civ } = ctx, cap = civ.groups[st.capitalGroupId] ?? Object.values(civ.groups).find((g) => g.stateId === st.id), r = REGIMES2[regimeOf2(st)], old = new Map((keep ?? st.offices ?? []).map((o) => [o.id, o]));
+    st.offices = ids2.map((id) => {
+      if (id === r.ruler) return { id, holder: { name: st.leader.name, look: st.leader.look ?? 0 }, since: old.get(id)?.since ?? civ.monthIndex };
+      const o = old.get(id);
+      if (o) return o;
+      const rng = leaderRng(civ, st, "office", id);
+      return { id, holder: { name: personName2(ctx, civ, cap, rng), look: Math.floor(rng() * LOOKS) }, since: civ.monthIndex };
+    });
+    st.interpDirty = true;
+    return st.offices;
+  }
+
+  // js/core/wcde/integrity.js
+  var SLICE = Object.freeze({ figures: 400, endedWars: 60, archiveChunks: 1, fullEveryMonths: 1200 });
+
+  // js/core/wcde/warlab.js
+  init_power();
+  init_effective();
+
+  // js/core/wcde/domains/index.js
+  init_negotiation();
+  init_effective();
+  init_decisions();
+  init_corps();
+  init_statefx();
+  init_regimes();
+
+  // js/core/wcde/regime-evolution.js
+  init_regimes();
+  init_naming();
+  init_diplomacy();
+  init_spatial();
+  init_events();
+  init_civ_state();
+  init_effective();
+  var clamp38 = (x, a = 0, b = 1) => x < a ? a : x > b ? b : x;
+  var REGIME_META = Object.freeze({
+    tribal: [0, "tri"],
+    chiefdom: [1, "tri"],
+    city_state: [2, "tri"],
+    theocracy: [2, "the"],
+    kingdom: [3, "mon"],
+    oligarchic_republic: [3, "rep"],
+    direct_democracy: [3, "rep"],
+    empire: [4, "mon"],
+    feudal: [4, "mon"],
+    clerical_state: [4, "the"],
+    merchant_republic: [5, "rep"],
+    elective_monarchy: [5, "mon"],
+    despotism: [6, "mon"],
+    constitutional_monarchy: [7, "mon"],
+    confederation: [7, "rep"],
+    anarchist: [7, "anar"],
+    parliamentary: [8, "rep"],
+    presidential: [8, "rep"],
+    socialist: [8, "aut"],
+    junta: [8, "aut"],
+    one_party: [9, "aut"],
+    totalitarian: [9, "aut"],
+    technocracy: [10, "aut"],
+    adv_direct_democracy: [11, "rep"]
+  });
+  var tierOf3 = (id) => REGIME_META[id]?.[0] ?? 0;
+  var familyOf2 = (id) => REGIME_META[id]?.[1] ?? "tri";
+  var RARITY = { adv_direct_democracy: 0.3, technocracy: 0.45, totalitarian: 0.5, junta: 0.6, one_party: 0.7 };
+  var MIN_POP = { tribal: 0, chiefdom: 0, theocracy: 0, kingdom: 2e3, republic: 300, empire: 6e4 };
+  var HOW_JA2 = { reform: "\u5236\u5EA6\u306E\u6539\u9769", revolution: "\u9769\u547D", military_takeover: "\u8ECD\u306B\u3088\u308B\u6A29\u529B\u306E\u638C\u63E1", conquest: "\u5F81\u670D\u306B\u3088\u308B\u5927\u56FD\u5316", decline: "\u4E2D\u592E\u306E\u8870\u9000", imitation: "\u96A3\u56FD\u306B\u306A\u3089\u3063\u305F\u6539\u9769" };
+  function changeScale(from, to) {
+    const gap = Math.abs(tierOf3(to) - tierOf3(from)), fam = familyOf2(from) !== familyOf2(to) ? 1 : 0, aut = familyOf2(to) === "aut" !== (familyOf2(from) === "aut") ? 1 : 0;
+    return clamp38(0.08 + gap * 0.06 + fam * 0.25 + aut * 0.25);
+  }
+  function gateFor(ctx, st, id) {
+    const civ = ctx.civ, g = civ.groups[st.capitalGroupId];
+    if (!g) return "\u9996\u90FD\u304C\u306A\u3044";
+    const r = REGIMES2[id], why = regimeGate(civ, g, id);
+    if (why) return why;
+    if (id === "direct_democracy" && st.pop > 2e5 && (st.techAdopted?.public_education == null && g.tech.known.public_education == null)) return "\u5927\u304D\u306A\u56FD\u306E\u6C11\u4E3B\u5236\u306B\u306F\u516C\u6559\u80B2\u304C\u8981\u308B";
+    if ((st.pop ?? 0) < (MIN_POP[r.core] ?? 0)) return "\u4EBA\u53E3\u304C\u8DB3\u308A\u306A\u3044";
+    const size = byState(ctx).get(st.id)?.length ?? 0;
+    if (id === "empire" && size < 12) return "\u9818\u571F\u304C\u5C0F\u3055\u3044";
+    if (id === "city_state" && size > 3) return "\u9818\u571F\u304C\u5E83\u3059\u304E\u308B";
+    return null;
+  }
+  function regimeCandidates(ctx, st, pressure = 0) {
+    const cur = regimeOf2(st), curT = tierOf3(cur), curF = familyOf2(cur), out = [], nbs = neighborStates(ctx, st), share = {};
+    for (const n2 of nbs) {
+      const id = regimeOf2(ctx.civ.states[n2]);
+      share[id] = (share[id] ?? 0) + 1 / Math.max(1, nbs.length);
+    }
+    for (const id of REGIME_IDS) {
+      if (id === cur || REGIMES2[id].crisisOnly || gateFor(ctx, st, id)) continue;
+      const gap = tierOf3(id) - curT, f = familyOf2(id);
+      if (gap < -1) continue;
+      let w = gap >= 0 ? 1 + gap * 0.5 : 0.2;
+      w *= f === curF ? 1 : pressure > 0.25 ? 0.3 : 0.05;
+      if (f === "aut" && curF !== "aut") w *= pressure > 0.35 ? 1 : 0.1;
+      w *= (1 + 2 * (share[id] ?? 0)) * (RARITY[id] ?? 1);
+      out.push({ id, w, gap });
+    }
+    return out;
+  }
+  function switchRegime(ctx, st, to, how = "reform") {
+    const { civ, ids: ids2 } = ctx, P5 = st.politics ?? (st.politics = initPolitics(st)), from = regimeOf2(st), R = REGIMES2[to], mi2 = civ.monthIndex;
+    if (!R || from === to) return null;
+    const scale = changeScale(from, to), oldName = st.name, polityBefore = st.polity;
+    if (R.core !== st.polity) {
+      const hw = how === "imitation" || how === "conquest" ? "reform" : how;
+      reformPolity(ctx, st, P5, R.core, { reform: "reform", revolution: "revolution", military_takeover: "military_takeover", decline: "decline" }[hw] ?? "reform");
+    }
+    st.regime = to;
+    P5.lastRegimeChange = mi2;
+    st.regimeSince = mi2;
+    (st.regimeHistory ?? (st.regimeHistory = [])).push({ at: mi2, from, to, how });
+    if (st.regimeHistory.length > 8) st.regimeHistory.shift();
+    st.stability = clamp38(st.stability - 0.02 - 0.16 * scale);
+    const f = P5.factions;
+    if (f) {
+      const k = familyOf2(from) !== familyOf2(to) ? 0.12 * scale + 0.04 : 0.02;
+      for (const x of Object.keys(f)) f[x].support = clamp38(f[x].support - (x === "nobility" || x === "clergy" ? k * 1.4 : k * 0.6));
+    }
+    let rt = null;
+    if (polityBefore === st.polity) {
+      rt = retitle(st, st.polity, civ.date.year);
+      if (rt && rt.name !== st.name) {
+        st.name = rt.name;
+        st.nameBase = rt.base;
+        st.titleYear = rt.year;
+      } else rt = null;
+    }
+    st.offices = null;
+    if (st.player) assignOffices(ctx, st, defaultOffices(to));
+    st.interpDirty = true;
+    makeEvent(civ, ids2, { kind: "regime_change", title: `${oldName}\u306E\u653F\u4F53\u304C${REGIMES2[from].ja}\u304B\u3089${R.ja}\u3078\u79FB\u3063\u305F\uFF08${HOW_JA2[how] ?? how}\uFF09${rt ? `\u3002\u56FD\u53F7\u306F${rt.name}\u3068\u6539\u307E\u3063\u305F` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "regime", before: from, after: to }], facts: { stateId: st.id, regime: to, from, by: how, scale: Math.round(scale * 100) / 100 }, provenance: "simulation" });
+    return { from, to, how, scale };
+  }
+
+  // js/core/wcde/domains/index.js
+  init_dependency();
+  init_pacts();
+
+  // js/core/wcde/treaty-ai.js
+  init_diplomacy();
+  init_civ_state();
+  init_negotiation();
+  init_dependency();
+
+  // js/core/wcde/events.js
+  init_civ_state();
+  init_spatial();
+  init_states();
+  init_diplomacy();
+  init_events();
+  init_techtree();
+  init_shocks();
+  init_regimes();
+  init_decisions();
+  init_decision_state();
+  init_succession();
+
+  // js/core/wcde/events-data.js
+  var CATEGORIES = Object.freeze({ ppl: "\u4EBA\u7269", dyn: "\u738B\u5BB6\u7D99\u627F", cou: "\u653F\u5909\u30FB\u9769\u547D", dip: "\u5916\u4EA4", war: "\u6226\u4E89\u30FB\u8ECD\u4E8B", rel: "\u5B97\u6559", eco: "\u7D4C\u6E08\u30FB\u793E\u4F1A", dis: "\u707D\u5BB3\u30FB\u75AB\u75C5", cul: "\u6587\u5316\u30FB\u6280\u8853", odd: "\u5947\u8B5A" });
+  var ARCH = Object.freeze({
+    person: ["bur+3 stab+1 tre-1 nob-2", "tre-3 stab+2 leg+1", "stab-1 mil+2 leg-1 nob+1", "stab-1"],
+    tragedy_royal: ["stab+2 tre-3 nob+2", "stab-1 mil+2 leg+1", "stab-3 nob-4 mil+3", "stab-2"],
+    coup_threat: ["stab+3 mil-6 army-2 leg-2", "mil+4 tre-4 stab+1", "com+4 mil-3 stab-1 tre-1", "stab-3 mil+1"],
+    succession_crisis: ["stab+2 nob-3 leg-2 mil+2", "stab+3 nob+3 tre-2 leg+1", "relF+6 nob-4 stab-1 tre-1", "stab-4 nob-2"],
+    crisis: ["stab+4 tre-2 com-4 mil+2", "stab+2 tre-4 nob-3 leg+1", "tre+3 stab-3 mer+3 com-2", "stab-5 tens+2"],
+    diplomacy_chance: ["relF+10 tre-1 relR-3", "relF+7 nob+2 tre-2", "relF+5 mer+3 tre+1", "relF-1"],
+    war_threat: ["army+4 tre-3 com-2 stab-1 relR-5", "tre-3 relR+8 mil-3 stab-1", "relF+6 tre-1 relR-4 stab+1", "stab-2 army-1"],
+    border: ["army+2 relR-12 mil+3 stab+1 tre-2", "relR+5 tre-1 mil-2", "tre-3 army+3 relR-3", "stab-2 relR-3"],
+    opportunity_war: ["army-2 mil+3 tre-2 relR-10", "relR-6 tre+2 stab+1", "relR+8 mer+2 mil-3", "mil-2"],
+    reform: ["stab-2 bur+4 nob-4 tre-2 leg+1", "stab+1 bur+2 nob-1 tre-1", "com+3 nob-3 stab-1", "stab-1 bur-1"],
+    rebel_peasant: ["stab+2 com-5 tre-2 pop-1 army-1", "stab+3 nob-4 tre-3", "stab+1 tre-2 com-2 mil+2", "stab-4 tens+3 pop-1"],
+    rebel_noble: ["army-3 tre-3 nob-5 stab+1 mil+3", "nob+4 tre-3 leg-2 stab+2", "relF+3 nob-2 tre-1 leg-2", "stab-3 nob+1 leg-2"],
+    fiscal: ["tre+5 com-4 stab-3", "tre+3 nob-3 mil-2 stab-1", "tre+5 relF-3 leg-1", "tre-3 stab-2"],
+    omen: ["stab+3 clr+3 com+1 leg+1 tre-1", "stab-1 clr-2", "tre-2 art+2 clr-3 bur+1", "stab-1"],
+    religion_move: ["clr+5 stab+2 tre-3 art-1", "stab+1 clr-3 mer+2 art+2", "stab+1 clr+2 com-4 tens+3", "stab-1 clr-1"],
+    trade_boom: ["tre-3 mer+4 stab+1", "tre+5 mer-4 stab-1", "tre+3 mer-2 relA-2", "mer+1"],
+    culture_boom: ["tre-3 art+4 stab+2 leg+1", "stab+1 art-3 clr+2", "tre+3 art+2 relA+1", "art+1"],
+    tech_boom: ["tre-4 bur+3 art+3 stab+1", "tre-1 mil+3 relA-2", "tre-3 stab-2 mer+3", "bur-1"],
+    plague: ["pop-1 stab+2 tre-3 mer-3", "stab+3 clr+4 pop-3 tre-1", "tre-5 pop-1 bur+3 art+2", "pop-5 stab-4"],
+    famine: ["tre-4 stab+3 pop-1", "stab-1 com-4 mil+2 tre+1 pop-1", "tre-3 mer+3 relF+3", "pop-4 stab-4 tens+3"],
+    disaster: ["tre-5 stab+3 pop-1", "clr+4 stab+1 pop-2", "tre+1 com-4 stab-2 pop-3", "pop-3 stab-3"]
+  });
+  var parseCond = (s) => {
+    const c = { w: 1 };
+    for (const t of String(s).split(/\s+/).filter(Boolean)) {
+      let m;
+      if (m = /^e(\d)(?:-(\d))?$/.exec(t)) {
+        c.e = [+m[1], m[2] != null ? +m[2] : +m[1]];
+      } else if (t.startsWith("po:")) c.po = t.slice(3).split(",");
+      else if (t === "her" || t === "nher" || t === "war" || t === "nwar" || t === "lows" || t === "highs" || t === "poor" || t === "rich" || t === "big" || t === "small" || t === "coast" || t === "rival" || t === "friend" || t === "only") c[t] = true;
+      else if (m = /^w(\d)$/.exec(t)) c.w = +m[1];
+    }
+    return c;
+  };
+  var parseCh = (s) => String(s).split(",").filter(Boolean).map((t) => {
+    const [body, only] = t.split("@"), [id, d, p] = body.split(":");
+    return { id, delay: +d, p: +p, only: only != null ? only.split("").map(Number) : null };
+  }).filter((c) => c.p > 0);
+  var EVENTS2 = [];
+  var E = (id, cat, arch, title, body, opts, cond = "", ch = "", x = null) => EVENTS2.push({ id, cat, arch, title, body, opts, cond: parseCond(cond), ch: parseCh(ch), x });
+  E("gen_rise", "ppl", "person", "\u8FBA\u5883\u306E\u540D\u5C06\u304C\u982D\u89D2\u3092\u73FE\u3059", "{s}\u306E\u56FD\u5883\u3067\u3001\u7121\u540D\u306E\u5C06\u304C\u7570\u6C11\u65CF\u3092\u6483\u9000\u3057\u3001\u5175\u306E\u4EBA\u6C17\u3092\u96C6\u3081\u305F\u3002", ["\u8981\u8077\u306B\u767B\u7528\u3059\u308B", "\u6069\u8CDE\u3092\u4E0E\u3048\u9060\u3056\u3051\u308B", "\u8B66\u6212\u3057\u3066\u76E3\u8996\u3059\u308B"], "e1-5 nwar", "gen_coup:18:.35@2,hero_general:24:.4@0");
+  E("hero_general", "ppl", "person", "\u6C11\u8846\u304C\u82F1\u96C4\u3068\u8B83\u3048\u308B\u5C06\u8ECD", "{s}\u306E\u5C06\u8ECD\u306E\u6226\u529F\u306F\u3001\u5E02\u4E95\u306E\u6B4C\u306B\u307E\u3067\u306A\u3063\u305F\u3002", ["\u51F1\u65CB\u5F0F\u3092\u958B\u304F", "\u540D\u8A89\u8077\u3067\u9047\u3059\u308B", "\u5730\u65B9\u3078\u51FA\u3059"], "e1-5 only", "acclaimed_emperor:20:.4@0,gen_coup:16:.3@2");
+  E("acclaimed_emperor", "ppl", "coup_threat", "\u5C06\u8ECD\u304C\u7687\u5E1D\u3068\u3057\u3066\u63A8\u6234\u3055\u308C\u308B", "\u8ECD\u3068\u6C11\u8846\u306F\u3001\u52DD\u3061\u7D9A\u3051\u305F\u5C06\u8ECD\u306E\u5373\u4F4D\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u63A8\u6234\u3092\u53D7\u3051\u5165\u308C\u308B", "\u5F62\u3060\u3051\u8F9E\u9000\u3057\u3066\u53D7\u3051\u308B", "\u63A8\u6234\u3092\u62D2\u307F\u5FE0\u8AA0\u3092\u8A93\u308F\u305B\u308B"], "e1-5 only", "civil_war_outbreak:14:.3@2", ["ldr:coup", "ldr:coup", ""]);
+  E("able_vizier", "ppl", "person", "\u6709\u80FD\u306A\u5BB0\u76F8\u304C\u56FD\u653F\u3092\u6574\u3048\u308B", "{L}\u306F\u3001\u624D\u3042\u308B\u3082\u306E\u3092\u8EAB\u5206\u3092\u554F\u308F\u305A\u5BB0\u76F8\u306B\u636E\u3048\u305F\u3002", ["\u5168\u6A29\u3092\u59D4\u306D\u308B", "\u88DC\u4F50\u5F79\u306B\u3068\u3069\u3081\u308B", "\u8CB4\u65CF\u306E\u53CD\u767A\u3092\u6291\u3048\u308B"], "e1-5");
+  E("corrupt_vizier", "ppl", "person", "\u5BB0\u76F8\u306E\u6C5A\u8077\u304C\u9732\u898B\u3059\u308B", "\u5BAE\u5EF7\u306E\u8CA1\u304C\u3001\u5BB0\u76F8\u306E\u5C4B\u6577\u306B\u6D41\u308C\u3066\u3044\u305F\u3002", ["\u51E6\u5211\u3057\u3066\u898B\u305B\u3057\u3081\u306B", "\u7F77\u514D\u306E\u307F\u3067\u6E08\u307E\u305B\u308B", "\u4E0D\u554F\u306B\u4ED8\u3059"], "e1-5 poor");
+  E("prince_rebel", "ppl", "tragedy_royal", "\u738B\u5B50\u304C\u7236\u306B\u80CC\u304F", "{L}\u306E\u4E16\u7D99\u304E\u304C\u3001\u5EF7\u81E3\u3068\u8B00\u3063\u3066\u7236\u306B\u53CD\u6297\u3057\u305F\u3002", ["\u738B\u5B50\u3092\u5E7D\u9589\u3059\u308B", "\u8A31\u3057\u3066\u548C\u89E3\u3059\u308B", "\u5EC3\u5AE1\u3057\u5F1F\u3092\u7ACB\u3066\u308B"], "e1-5 her", "succ_dispute:10:.35@2");
+  E("heir_genius", "ppl", "person", "\u795E\u7AE5\u3068\u547C\u3070\u308C\u308B\u4E16\u7D99\u304E", "{s}\u306E\u4E16\u7D99\u304E\u306F\u3001\u5E7C\u304F\u3057\u3066\u5B66\u554F\u3068\u6B66\u82B8\u306B\u79C0\u3067\u305F\u3002", ["\u540D\u5E2B\u3092\u3064\u3051\u80B2\u3066\u308B", "\u6C11\u306B\u59FF\u3092\u898B\u305B\u4EBA\u6C17\u3092\u9AD8\u3081\u308B", "\u6162\u5FC3\u3092\u6050\u308C\u3066\u96A0\u3059"], "e1-5 her");
+  E("heir_wastrel", "ppl", "tragedy_royal", "\u4E16\u7D99\u304E\u306E\u653E\u8569", "{s}\u306E\u4E16\u7D99\u304E\u306F\u3001\u904A\u8208\u306B\u6EBA\u308C\u3001\u501F\u8CA1\u3092\u91CD\u306D\u3066\u3044\u308B\u3002", ["\u53B3\u3057\u304F\u77EF\u6B63\u3059\u308B", "\u501F\u8CA1\u3092\u80A9\u4EE3\u308F\u308A\u3059\u308B", "\u5F1F\u3092\u5F8C\u7D99\u306B\u63A8\u3059"], "e1-5 her", "succ_dispute:20:.3@2");
+  E("royal_physician", "ppl", "person", "\u540D\u533B\u304C\u5BAE\u5EF7\u306B\u4ED5\u3048\u308B", "\u9060\u65B9\u304B\u3089\u540D\u533B\u304C\u62DB\u304B\u308C\u3001{L}\u306E\u6301\u75C5\u3092\u3084\u308F\u3089\u3052\u305F\u3002", ["\u539A\u304F\u9047\u3057\u7559\u3081\u308B", "\u5B66\u9662\u3092\u4F5C\u3089\u305B\u308B", "\u7570\u56FD\u306E\u8005\u3068\u8B66\u6212\u3059\u308B"], "e1-5");
+  E("war_hero_return", "ppl", "person", "\u8001\u5C06\u306E\u5E30\u9084", "\u9577\u5E74\u7570\u90F7\u3067\u6226\u3063\u305F\u8001\u5C06\u304C\u3001\u6545\u90F7{s}\u306B\u623B\u3063\u3066\u304D\u305F\u3002", ["\u9867\u554F\u306B\u8FCE\u3048\u308B", "\u9818\u5730\u3092\u4E0E\u3048\u5F15\u9000\u3055\u305B\u308B", "\u65B0\u5175\u306E\u6559\u7DF4\u3092\u4EFB\u305B\u308B"], "e1-5 nwar");
+  E("prophet_beggar", "ppl", "omen", "\u7269\u4E5E\u3044\u306E\u9810\u8A00\u8005", "\u8857\u89D2\u306E\u7269\u4E5E\u3044\u304C\u3001{s}\u306E\u884C\u304F\u672B\u3092\u8A00\u3044\u5F53\u3066\u305F\u3068\u5642\u3055\u308C\u308B\u3002", ["\u5BAE\u5EF7\u306B\u62DB\u304F", "\u805E\u304D\u6D41\u3059", "\u98A8\u8AAC\u3092\u7981\u3058\u308B"], "e1-4");
+  E("court_poet", "ppl", "person", "\u5BAE\u5EF7\u8A69\u4EBA\u306E\u98A8\u523A", "\u8A69\u4EBA\u304C\u3001{L}\u306E\u6CBB\u4E16\u3092\u76AE\u8089\u308B\u8A69\u3092\u5E02\u4E2D\u306B\u5E83\u3081\u305F\u3002", ["\u8A69\u4EBA\u3092\u7F70\u3059\u308B", "\u8A69\u4EBA\u3092\u5E87\u8B77\u3059\u308B", "\u540C\u3058\u8A69\u3067\u56FD\u5A01\u3092\u5BA3\u63DA\u3055\u305B\u308B"], "e1-5");
+  E("cruel_governor", "ppl", "crisis", "\u82DB\u653F\u306E\u7DCF\u7763", "\u9060\u9694\u5730\u306E\u7DCF\u7763\u304C\u3001\u6C11\u304B\u3089\u904E\u9177\u306A\u53D6\u308A\u7ACB\u3066\u3092\u884C\u3063\u3066\u3044\u308B\u3002", ["\u89E3\u4EFB\u3057\u3066\u7F70\u3059\u308B", "\u69D8\u5B50\u3092\u898B\u308B", "\u53D6\u308A\u7ACB\u3066\u3092\u56FD\u5EAB\u306B\u56DE\u3055\u305B\u308B"], "e1-5 big", "peasant_revolt:12:.25@12");
+  E("honest_judge", "ppl", "person", "\u6E05\u5EC9\u306A\u88C1\u5224\u5B98", "\u8CA7\u3057\u3044\u8005\u306B\u3082\u516C\u5E73\u306A\u88C1\u304D\u3092\u4E0B\u3059\u88C1\u5224\u5B98\u304C\u6C11\u306E\u4FE1\u3092\u96C6\u3081\u305F\u3002", ["\u6CD5\u5B98\u306B\u6607\u683C\u3055\u305B\u308B", "\u8912\u8CDE\u3092\u4E0E\u3048\u308B", "\u8CB4\u65CF\u306E\u53CD\u767A\u304B\u3089\u5B88\u308B"], "e1-5");
+  E("foreign_advisor", "ppl", "person", "\u7570\u56FD\u4EBA\u306E\u9867\u554F", "{f}\u304B\u3089\u6765\u305F\u8CE2\u8005\u304C\u3001{s}\u306E\u7D71\u6CBB\u3078\u306E\u52A9\u8A00\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u9867\u554F\u306B\u4EFB\u3058\u308B", "\u5B66\u554F\u306E\u307F\u53D7\u3051\u5165\u308C\u308B", "\u56FD\u653F\u306B\u8FD1\u3065\u3051\u306A\u3044"], "e1-5 friend");
+  E("spy_caught", "ppl", "omen", "\u4ED6\u56FD\u306E\u9593\u8005\u3092\u6355\u3089\u3048\u308B", "{r}\u306E\u9593\u8005\u304C\u5BAE\u5EF7\u306B\u6F5C\u3093\u3067\u3044\u305F\u3053\u3068\u304C\u308F\u304B\u3063\u305F\u3002", ["\u516C\u958B\u51E6\u5211\u3059\u308B", "\u4E8C\u91CD\u9593\u8005\u306B\u4ED5\u7ACB\u3066\u308B", "\u79D8\u5BC6\u88CF\u306B\u9001\u9084\u3059\u308B"], "e1-5 rival");
+  E("assassin_attempt", "ppl", "tragedy_royal", "\u6697\u6BBA\u672A\u9042", "{L}\u306E\u98DF\u4E8B\u306B\u6BD2\u304C\u76DB\u3089\u308C\u3066\u3044\u305F\u3002\u4F01\u3066\u305F\u8005\u306F\u4E0D\u660E\u3067\u3042\u308B\u3002", ["\u5927\u898F\u6A21\u306A\u7C9B\u6E05\u3092\u884C\u3046", "\u8B77\u885B\u3092\u5F37\u5316\u3059\u308B", "\u72AF\u4EBA\u63A2\u3057\u3092\u63A7\u3048\u5E73\u9759\u3092\u88C5\u3046"], "e1-5", "dictator_assassination:30:.25@2");
+  E("dictator_assassination", "ppl", "tragedy_royal", "\u6307\u5C0E\u8005\u6697\u6BBA", "{L}\u304C\u3001\u5074\u8FD1\u306E\u51F6\u5203\u306B\u5012\u308C\u305F\u3002\u56FD\u306F\u52D5\u63FA\u3057\u3066\u3044\u308B\u3002", ["\u9996\u8B00\u8005\u3092\u8FFD\u53CA\u3059\u308B", "\u5F8C\u7D99\u3092\u6025\u304E\u5B9A\u3081\u308B", "\u56FD\u846C\u3067\u7D50\u675F\u3092\u56F3\u308B"], "e1-5 only", "succ_dispute:4:.7,revolution_breaks:18:.25@0", ["", "ldr:assn", "ldr:assn"]);
+  E("beloved_leader_dies", "ppl", "tragedy_royal", "\u6155\u308F\u308C\u305F\u6307\u5C0E\u8005\u306E\u6B7B", "\u6C11\u306B\u611B\u3055\u308C\u305F{L}\u304C\u4E16\u3092\u53BB\u308A\u3001\u56FD\u4E2D\u304C\u55AA\u306B\u670D\u3057\u305F\u3002", ["\u76DB\u5927\u306A\u56FD\u846C\u3092\u55B6\u3080", "\u7C21\u7D20\u306B\u6E08\u307E\u305B\u308B", "\u8FFD\u60BC\u3092\u653F\u6CBB\u306B\u5229\u7528\u3059\u308B"], "e1-5", "succ_dispute:6:.3");
+  E("exile_returns", "ppl", "coup_threat", "\u4EA1\u547D\u8005\u306E\u5E30\u9084", "\u5916\u56FD\u306B\u9003\u308C\u3066\u3044\u305F\u524D\u306E\u738B\u65CF\u304C\u3001\u5E30\u56FD\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u8FCE\u3048\u5165\u308C\u308B", "\u56FD\u5883\u3067\u62D2\u3080", "\u5916\u56FD\u306B\u5F15\u304D\u6E21\u3059"], "e1-5 her", "succ_dispute:12:.3@0");
+  E("female_ruler_rumor", "ppl", "person", "\u5973\u5091\u306E\u8A55\u5224", "{s}\u306B\u3001\u8ECD\u3082\u653F\u3082\u52D5\u304B\u3059\u3068\u8A55\u5224\u306E\u5973\u6027\u304C\u73FE\u308C\u305F\u3002", ["\u653F\u52D9\u306B\u52A0\u3048\u308B", "\u8A55\u5224\u3092\u5229\u7528\u3059\u308B", "\u5BAE\u5EF7\u304B\u3089\u9060\u3056\u3051\u308B"], "e1-5");
+  E("mercenary_captain", "ppl", "coup_threat", "\u50AD\u5175\u968A\u9577\u306E\u58F2\u308A\u8FBC\u307F", "\u540D\u9AD8\u3044\u50AD\u5175\u968A\u9577\u304C\u3001\u9AD8\u984D\u3067{s}\u306B\u4ED5\u3048\u305F\u3044\u3068\u8A00\u3046\u3002", ["\u96C7\u3044\u5165\u308C\u308B", "\u65AD\u308B", "\u76F8\u624B\u56FD\u306B\u96C7\u308F\u305B\u306A\u3044"], "e1-5 war");
+  E("tutor_scholar", "ppl", "culture_boom", "\u5B66\u8005\u3092\u5BB6\u5EAD\u6559\u5E2B\u306B", "\u8457\u540D\u306A\u5B66\u8005\u304C\u3001\u4E16\u7D99\u304E\u306E\u5E2B\u3068\u306A\u308B\u3002", ["\u624B\u539A\u304F\u8FCE\u3048\u308B", "\u5BAE\u5EF7\u4ED8\u3051\u306B\u3068\u3069\u3081\u308B", "\u7570\u7AEF\u3068\u9000\u3051\u308B"], "e1-5 her");
+  E("old_king_abdicates", "ppl", "succession_crisis", "\u8001\u738B\u306E\u9000\u4F4D", "\u9AD8\u9F62\u306E{L}\u304C\u3001\u5F8C\u9032\u306B\u9053\u3092\u8B72\u308A\u305F\u3044\u3068\u8A00\u3044\u51FA\u3057\u305F\u3002", ["\u9000\u4F4D\u3092\u8A8D\u3081\u308B", "\u7D9A\u6295\u3092\u6C42\u3081\u308B", "\u6442\u653F\u3092\u7F6E\u304F"], "e1-5 her", "succ_dispute:6:.2@1");
+  E("hunt_accident", "ppl", "tragedy_royal", "\u72E9\u731F\u3067\u306E\u4E8B\u6545", "\u72E9\u308A\u306E\u6700\u4E2D\u306B{L}\u304C\u843D\u99AC\u3057\u3001\u91CD\u50B7\u3092\u8CA0\u3063\u305F\u3002", ["\u6700\u9AD8\u306E\u533B\u8005\u3092\u96C6\u3081\u308B", "\u7948\u7977\u306B\u3059\u304C\u308B", "\u4E8B\u5B9F\u3092\u4F0F\u305B\u308B"], "e1-5 her", "king_sudden_death:3:.3@2");
+  E("royal_marriage_love", "ppl", "tragedy_royal", "\u8EAB\u5206\u9055\u3044\u306E\u604B", "{L}\u304C\u3001\u8CB4\u65CF\u3067\u306A\u3044\u5A18\u3068\u306E\u7D50\u5A5A\u3092\u671B\u3093\u3067\u3044\u308B\u3002", ["\u8A31\u3057\u3066\u7D50\u5A5A\u3059\u308B", "\u8AE6\u3081\u3055\u305B\u308B", "\u990A\u5973\u306E\u5F62\u306B\u3057\u3066\u7D50\u5A5A\u3059\u308B"], "e1-5 her");
+  E("elder_wisdom", "ppl", "person", "\u9577\u8001\u305F\u3061\u306E\u8AEB\u8A00", "{s}\u306E\u9577\u8001\u305F\u3061\u304C\u3001{L}\u306B\u653F\u7B56\u306E\u8EE2\u63DB\u3092\u6C42\u3081\u305F\u3002", ["\u8AEB\u8A00\u3092\u5BB9\u308C\u308B", "\u4E00\u90E8\u3060\u3051\u53D7\u3051\u5165\u308C\u308B", "\u9000\u3051\u308B"], "e0-2");
+  E("tribal_hero", "ppl", "person", "\u90E8\u65CF\u306E\u82F1\u96C4", "\u5927\u718A\u3092\u5012\u3057\u305F\u82E5\u8005\u304C\u3001\u90E8\u65CF\u306E\u82F1\u96C4\u306B\u306A\u3063\u305F\u3002", ["\u6226\u58EB\u9577\u306B\u53D6\u308A\u7ACB\u3066\u308B", "\u795D\u5BB4\u3092\u958B\u304F", "\u9577\u8001\u306E\u4E0B\u306B\u7F6E\u304F"], "e0-1 po:tribal,chiefdom");
+  E("saint_hermit", "ppl", "omen", "\u8056\u8005\u306E\u96A0\u9041", "\u5FB3\u9AD8\u3044\u96A0\u8005\u304C\u3001\u5C71\u4E2D\u3067\u4EBA\u3005\u306E\u76F8\u8AC7\u306B\u5FDC\u3058\u3066\u3044\u308B\u3002", ["\u5EB5\u3092\u5EFA\u3066\u3066\u4FDD\u8B77\u3059\u308B", "\u8A2A\u306D\u3066\u6559\u3048\u3092\u8ACB\u3046", "\u6C11\u5FC3\u3092\u60D1\u308F\u3059\u3068\u8B66\u6212\u3059\u308B"], "e1-4 coast");
+  E("duelist_champion", "ppl", "person", "\u6B66\u82B8\u8005\u306E\u540D\u4E57\u308A", "\u56FD\u4E2D\u306E\u6B66\u82B8\u8005\u304C\u96C6\u307E\u308B\u8A66\u5408\u3067\u3001\u7121\u540D\u306E\u82E5\u8005\u304C\u512A\u52DD\u3057\u305F\u3002", ["\u8FD1\u885B\u306B\u53D6\u308A\u7ACB\u3066\u308B", "\u8912\u7F8E\u3092\u4E0E\u3048\u6545\u90F7\u3078\u5E30\u3059", "\u8A66\u5408\u306E\u5B9A\u671F\u958B\u50AC\u3092\u6C7A\u3081\u308B"], "e1-4 nwar");
+  E("traitor_general", "ppl", "coup_threat", "\u5C06\u8ECD\u306E\u5185\u901A", "\u5C06\u8ECD\u304C{r}\u3068\u5BC6\u304B\u306B\u901A\u3058\u3066\u3044\u308B\u7591\u3044\u304C\u51FA\u305F\u3002", ["\u8A3C\u62E0\u3092\u56FA\u3081\u65AD\u7F6A\u3059\u308B", "\u5FE0\u8AA0\u3092\u8A66\u3059", "\u7591\u308F\u305A\u4EFB\u306B\u5C31\u304B\u305B\u308B"], "e1-5 war rival", "gen_coup:6:.3@2");
+  E("loyal_servant", "ppl", "person", "\u5FE0\u81E3\u306E\u6700\u671F", "\u4E3B\u541B\u3092\u5E87\u3063\u3066\u5FE0\u81E3\u304C\u547D\u3092\u843D\u3068\u3057\u305F\u3002", ["\u9855\u5F70\u7891\u3092\u5EFA\u3066\u308B", "\u907A\u65CF\u3092\u539A\u9047\u3059\u308B", "\u8A9E\u3089\u305A\u55AA\u306B\u670D\u3059"], "e1-5");
+  E("rebel_poet_hero", "ppl", "omen", "\u53CD\u9AA8\u306E\u8A69\u4EBA\u304C\u6C11\u8846\u3092\u9F13\u821E\u3059\u308B", "\u8A69\u4EBA\u304C\u3001\u91CD\u7A0E\u3068\u8CB4\u65CF\u306E\u7279\u6A29\u3092\u7CFE\u5F3E\u3057\u305F\u3002", ["\u6355\u3089\u3048\u308B", "\u5BFE\u8A71\u3092\u6301\u3064", "\u8A69\u3092\u81EA\u56FD\u306E\u8A87\u308A\u3068\u3057\u3066\u53D6\u308A\u8FBC\u3080"], "e2-5 lows");
+  E("beauty_scandal", "ppl", "tragedy_royal", "\u5BAE\u5EF7\u306E\u919C\u805E", "{L}\u306E\u5BF5\u611B\u3092\u3081\u3050\u3063\u3066\u3001\u5BAE\u5EF7\u304C\u63FA\u308C\u3066\u3044\u308B\u3002", ["\u95A2\u4FC2\u8005\u3092\u9060\u3056\u3051\u308B", "\u4E8B\u5B9F\u3092\u516C\u8868\u3057\u53CE\u3081\u308B", "\u919C\u805E\u3092\u5229\u7528\u3057\u3066\u6575\u3092\u8FFD\u3044\u843D\u3068\u3059"], "e1-5 her");
+  E("farmer_prophet", "ppl", "omen", "\u8FB2\u6C11\u306E\u9810\u8A00\u8005", "\u300C\u5929\u306E\u6012\u308A\u304C\u8FD1\u3044\u300D\u3068\u8AAC\u304F\u8FB2\u6C11\u306B\u7FA4\u8846\u304C\u96C6\u307E\u3063\u305F\u3002", ["\u8AAC\u6559\u3092\u8A31\u3059", "\u5F3E\u5727\u3059\u308B", "\u8056\u8077\u8005\u306B\u8ABF\u3079\u3055\u305B\u308B"], "e1-3", "peasant_revolt:12:.2@1");
+  E("sea_captain_voyage", "ppl", "tech_boom", "\u8239\u9577\u306E\u9060\u6D0B\u822A\u6D77\u8A08\u753B", "\u8001\u7DF4\u306A\u8239\u9577\u304C\u3001\u672A\u77E5\u306E\u6D77\u3078\u306E\u822A\u6D77\u3092\u9858\u3044\u51FA\u305F\u3002", ["\u8239\u56E3\u3092\u4E0E\u3048\u308B", "\u8CC7\u91D1\u3092\u534A\u5206\u51FA\u3059", "\u5371\u967A\u3060\u3068\u5374\u4E0B\u3059\u308B"], "e2-5 coast", "new_sea_route:36:.45@0");
+  E("engineer_invention", "ppl", "tech_boom", "\u6280\u5E2B\u306E\u767A\u660E", "\u6280\u5E2B\u304C\u3001\u65B0\u3057\u3044\u6A5F\u68B0\u306E\u56F3\u9762\u3092\u6301\u3061\u8FBC\u3093\u3060\u3002", ["\u5DE5\u623F\u3092\u4F5C\u3089\u305B\u308B", "\u7279\u8A31\u72B6\u3092\u4E0E\u3048\u308B", "\u8ECD\u306E\u79D8\u5BC6\u306B\u3059\u308B"], "e3-5");
+  E("general_retire", "ppl", "person", "\u8001\u5C06\u8ECD\u306E\u5F15\u9000", "\u9577\u5E74\u8ECD\u3092\u7387\u3044\u305F\u5C06\u8ECD\u304C\u3001\u5F15\u9000\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u5F8C\u4EFB\u3092\u81EA\u3089\u6307\u540D\u3055\u305B\u308B", "\u540D\u8A89\u8077\u3092\u4E0E\u3048\u308B", "\u6170\u7559\u3059\u308B"], "e1-5 nwar");
+  E("heir_foreign_study", "ppl", "person", "\u4E16\u7D99\u304E\u306E\u7559\u5B66", "\u4E16\u7D99\u304E\u304C\u3001{f}\u306B\u5B66\u3076\u3053\u3068\u3092\u671B\u3093\u3067\u3044\u308B\u3002", ["\u7559\u5B66\u3092\u8A31\u3059", "\u56FD\u5185\u3067\u5B66\u3070\u305B\u308B", "\u4EBA\u8CEA\u306E\u3088\u3046\u306A\u5F62\u3067\u9001\u308B"], "e2-5 her friend");
+  E("peasant_hero", "ppl", "coup_threat", "\u8FB2\u6C11\u51FA\u306E\u52C7\u58EB", "\u8EAB\u5206\u306E\u4F4E\u3044\u52C7\u58EB\u304C\u3001\u6226\u5834\u3067\u8CB4\u65CF\u3092\u6551\u3063\u305F\u3002", ["\u8CB4\u65CF\u306B\u53D9\u3059", "\u8912\u7F8E\u306E\u307F\u4E0E\u3048\u308B", "\u529F\u7E3E\u3092\u8CB4\u65CF\u306B\u4E0E\u3048\u308B"], "e1-4 war");
+  E("succ_dispute", "dyn", "succession_crisis", "\u7D99\u627F\u3092\u3081\u3050\u308B\u4E89\u3044", "{s}\u3067\u3001\u9078\u3070\u308C\u306A\u304B\u3063\u305F\u6709\u529B\u8005\u304C\u3001\u7D99\u627F\u306E\u6B63\u7D71\u6027\u3092\u7591\u3044\u306F\u3058\u3081\u305F\u3002", ["\u4E89\u3046\u8005\u3092\u65AD\u7F6A\u3059\u308B", "\u9818\u5730\u3092\u5206\u3051\u3066\u61D0\u67D4\u3059\u308B", "\u5916\u56FD\u306E\u4EF2\u88C1\u3092\u6C42\u3081\u308B"], "e1-5 only", "succ_war:8:.4@2,king_sudden_death:0:0");
+  E("succ_coup_after", "dyn", "coup_threat", "\u7C12\u596A\u3092\u3046\u304B\u304C\u3046\u8005", "{s}\u306E\u65B0\u738B\u306E\u5373\u4F4D\u306B\u4E0D\u6E80\u3092\u6301\u3064\u5C06\u304C\u3001\u6319\u5175\u306E\u6A5F\u3092\u3046\u304B\u304C\u3063\u3066\u3044\u308B\u3002", ["\u5148\u624B\u3092\u6253\u3063\u3066\u6355\u3048\u308B", "\u5730\u4F4D\u3092\u4E0E\u3048\u53D6\u308A\u8FBC\u3080", "\u5175\u3092\u96C6\u3081\u3066\u5099\u3048\u308B"], "only", "gen_coup:6:.35@2");
+  E("king_sudden_death", "dyn", "succession_crisis", "\u738B\u306E\u6025\u6B7B", "{L}\u304C\u3001\u5F8C\u7D99\u3092\u5B9A\u3081\u306C\u307E\u307E\u6025\u6B7B\u3057\u305F\u3002", ["\u9577\u5B50\u3092\u5373\u4F4D\u3055\u305B\u308B", "\u91CD\u81E3\u4F1A\u8B70\u3067\u6C7A\u3081\u308B", "\u6442\u653F\u3092\u7ACB\u3066\u308B"], "e1-5 her", "succ_war:6:.35@1,succ_dispute:4:.4@0", ["ldr:die", "ldr:die", "ldr:die"]);
+  E("succ_war", "dyn", "war_threat", "\u7D99\u627F\u6226\u4E89", "{s}\u306E\u738B\u4F4D\u3092\u3081\u3050\u308A\u3001{r}\u304C\u7D99\u627F\u6A29\u3092\u4E3B\u5F35\u3057\u3066\u8ECD\u3092\u52D5\u304B\u3057\u305F\u3002", ["\u53D7\u3051\u3066\u7ACB\u3064", "\u8B72\u6B69\u3057\u3066\u6761\u4EF6\u3092\u63A2\u308B", "\u540C\u76DF\u3092\u983C\u308B"], "e1-5 only rival", "personal_union:14:.3@1", ["warby:R:succession", "", "warby:R:succession"]);
+  E("personal_union", "dyn", "diplomacy_chance", "\u540C\u541B\u9023\u5408\u306E\u6210\u7ACB", "{s}\u3068{r}\u306E\u738B\u5BB6\u304C\u7D50\u3070\u308C\u3001\u4E00\u4EBA\u306E\u738B\u3092\u5171\u306B\u6234\u304F\u3053\u3068\u306B\u306A\u3063\u305F\u3002", ["\u9023\u5408\u3092\u53D7\u3051\u5165\u308C\u308B", "\u6761\u4EF6\u3092\u4ED8\u3051\u3066\u7D50\u3076", "\u62D2\u3093\u3067\u738B\u4F4D\u3092\u5B88\u308B"], "e2-5 only rival her", "union_merge:96:.3@0,union_dissolve:60:.4@1");
+  E("union_merge", "dyn", "reform", "\u9023\u5408\u306E\u7D71\u5408", "\u540C\u541B\u9023\u5408\u306F\u3001\u9577\u3044\u3042\u3044\u3060\u306B\u3001\u4E00\u3064\u306E\u56FD\u3068\u3057\u3066\u307E\u3068\u307E\u308D\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u7D71\u5408\u3092\u63A8\u3057\u9032\u3081\u308B", "\u81EA\u6CBB\u3092\u4FDD\u969C\u3057\u3066\u7D71\u5408\u3059\u308B", "\u9023\u5408\u306E\u307E\u307E\u306B\u3059\u308B"], "e2-5 only", "");
+  E("union_dissolve", "dyn", "rebel_noble", "\u9023\u5408\u306E\u89E3\u6D88", "\u9023\u5408\u306E\u4E8C\u56FD\u306F\u3001\u738B\u4F4D\u306E\u5206\u304B\u308C\u3068\u3068\u3082\u306B\u5225\u3005\u306E\u9053\u3078\u9032\u3093\u3060\u3002", ["\u5186\u6E80\u306B\u5206\u304B\u308C\u308B", "\u9023\u5408\u306E\u7DAD\u6301\u3092\u8A34\u3048\u308B", "\u6226\u3092\u3082\u8F9E\u3055\u306A\u3044"], "e2-5 only", "");
+  E("regency_power", "dyn", "coup_threat", "\u6442\u653F\u306E\u6A29\u529B", "\u5E7C\u3044\u738B\u306E\u6442\u653F\u304C\u3001\u5EF7\u81E3\u3092\u5F93\u3048\u3001\u56FD\u653F\u3092\u5C02\u65AD\u3057\u3066\u3044\u308B\u3002", ["\u6442\u653F\u3092\u4FE1\u983C\u3059\u308B", "\u6442\u653F\u306E\u6A29\u9650\u3092\u524A\u308B", "\u6442\u653F\u3092\u6392\u9664\u3059\u308B"], "e1-5 her", "gen_coup:12:.2@0");
+  E("heir_born", "dyn", "person", "\u5F85\u671B\u306E\u4E16\u7D99\u304E\u8A95\u751F", "{L}\u306B\u3001\u5F85\u671B\u306E\u4E16\u7D99\u304E\u304C\u751F\u307E\u308C\u305F\u3002", ["\u76DB\u5927\u306A\u795D\u796D\u3092\u884C\u3046", "\u6E1B\u7A0E\u3067\u6C11\u3068\u795D\u3046", "\u614E\u307E\u3057\u304F\u795D\u3046"], "e1-5 her");
+  E("no_heir", "dyn", "succession_crisis", "\u4E16\u7D99\u304E\u304C\u3044\u306A\u3044", "{L}\u306B\u306F\u3001\u4E16\u7D99\u304E\u304C\u306A\u304F\u3001\u5EF7\u81E3\u306F\u4E0D\u5B89\u3092\u52DF\u3089\u305B\u3066\u3044\u308B\u3002", ["\u990A\u5B50\u3092\u8FCE\u3048\u308B", "\u9060\u7E01\u3092\u5F8C\u7D99\u306B\u5B9A\u3081\u308B", "\u91CD\u81E3\u306B\u9078\u3070\u305B\u308B"], "e1-5 her", "succ_dispute:24:.4@1");
+  E("illegitimate_claim", "dyn", "succession_crisis", "\u5EB6\u5B50\u306E\u8ACB\u6C42", "{L}\u306E\u5EB6\u5B50\u304C\u3001\u738B\u4F4D\u306E\u7D99\u627F\u6A29\u3092\u4E3B\u5F35\u3057\u3066\u3044\u308B\u3002", ["\u8A8D\u77E5\u3057\u3066\u9818\u5730\u3092\u4E0E\u3048\u308B", "\u8A3C\u62E0\u306A\u3057\u3068\u9000\u3051\u308B", "\u4FEE\u9053\u9662\u306B\u5165\u308C\u308B"], "e1-5 her", "succ_dispute:10:.3@1");
+  E("queen_regent", "dyn", "person", "\u6BCD\u540E\u306E\u53F0\u982D", "\u5E7C\u3044\u738B\u306E\u6BCD\u304C\u3001\u653F\u52D9\u306B\u53E3\u3092\u51FA\u3057\u306F\u3058\u3081\u305F\u3002", ["\u6442\u653F\u306B\u4EFB\u547D\u3059\u308B", "\u5EF7\u81E3\u306B\u88DC\u4F50\u3055\u305B\u308B", "\u5225\u306E\u6442\u653F\u3092\u7ACB\u3066\u308B"], "e1-5 her");
+  E("royal_marriage_alliance", "dyn", "diplomacy_chance", "\u653F\u7565\u7D50\u5A5A\u306E\u7533\u3057\u51FA", "{f}\u304C\u3001\u738B\u5BB6\u3069\u3046\u3057\u306E\u5A5A\u59FB\u3092\u7533\u3057\u8FBC\u3093\u3067\u304D\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u6301\u53C2\u91D1\u3092\u6761\u4EF6\u306B\u5FDC\u3058\u308B", "\u65AD\u308B"], "e1-5 friend her");
+  E("royal_marriage_scandal", "dyn", "tragedy_royal", "\u7D50\u5A5A\u306E\u7834\u8AC7", "{r}\u3068\u306E\u7E01\u8AC7\u304C\u3001\u76F4\u524D\u3067\u58CA\u308C\u305F\u3002", ["\u8B1D\u7F6A\u306E\u4F7F\u8005\u3092\u51FA\u3059", "\u5F37\u304F\u6297\u8B70\u3059\u308B", "\u5225\u306E\u7E01\u8AC7\u3092\u63A2\u3059"], "e1-5 rival her", "border_clash:12:.3@1");
+  E("fratricide", "dyn", "tragedy_royal", "\u5144\u5F1F\u306E\u6BBA\u3057\u5408\u3044", "\u738B\u4F4D\u3092\u4E89\u3063\u3066\u5144\u5F1F\u304C\u6BBA\u3057\u5408\u3063\u305F\u3002", ["\u52DD\u8005\u3092\u8A8D\u3081\u308B", "\u751F\u304D\u6B8B\u308A\u3092\u88C1\u304F", "\u4E21\u8005\u3092\u6392\u3057\u7B2C\u4E09\u8005\u3092\u7ACB\u3066\u308B"], "e1-5 her", "succ_dispute:2:.5");
+  E("deposed_king", "dyn", "coup_threat", "\u738B\u304C\u5EC3\u3055\u308C\u308B", "\u5EF7\u81E3\u305F\u3061\u304C\u3001\u7121\u80FD\u306A{L}\u3092\u738B\u4F4D\u304B\u3089\u5EC3\u3057\u305F\u3002", ["\u5EC3\u4F4D\u3092\u8FFD\u8A8D\u3059\u308B", "\u738B\u3092\u652F\u6301\u3059\u308B", "\u65B0\u738B\u306E\u9078\u5B9A\u3092\u6025\u3050"], "e1-5 her lows", "succ_dispute:3:.4", ["ldr:coup", "", "ldr:coup"]);
+  E("dynasty_old_decay", "dyn", "crisis", "\u738B\u671D\u306E\u8870\u3048", "{s}\u306E\u738B\u671D\u306F\u3001\u6A29\u5A01\u304C\u8870\u3048\u3001\u5404\u5730\u306B\u4E0D\u6E80\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u6539\u9769\u3092\u9032\u3081\u308B", "\u5916\u5F81\u3067\u5A01\u4FE1\u3092\u53D6\u308A\u623B\u3059", "\u614E\u91CD\u306B\u5EF6\u547D\u3092\u56F3\u308B"], "e2-5 her lows", "dynasty_fall:36:.3@2");
+  E("dynasty_fall", "dyn", "rebel_noble", "\u738B\u671D\u306E\u4EA4\u4EE3", "\u6C11\u5FC3\u3092\u5931\u3063\u305F\u738B\u671D\u306B\u4EE3\u308F\u3063\u3066\u3001\u65B0\u3057\u3044\u5BB6\u304C\u738B\u4F4D\u306B\u5C31\u3044\u305F\u3002", ["\u65B0\u738B\u671D\u3092\u627F\u8A8D\u3059\u308B", "\u65E7\u738B\u5BB6\u3092\u4FDD\u8B77\u3059\u308B", "\u65E7\u738B\u5BB6\u306B\u62B5\u6297\u3092\u4FC3\u3059"], "e1-5 only her", "", ["ldr:coup", "", "ldr:coup"]);
+  E("marriage_to_commoner", "dyn", "person", "\u5E73\u6C11\u306E\u540E", "\u738B\u304C\u3001\u5E73\u6C11\u306E\u51FA\u306E\u540E\u3092\u8FCE\u3048\u305F\u3002", ["\u795D\u798F\u3059\u308B", "\u8EAB\u5206\u3092\u4E0E\u3048\u8CB4\u65CF\u306B\u53D9\u3059", "\u8CB4\u65CF\u304C\u53CD\u767A\u3059\u308B\u3068\u6291\u3048\u308B"], "e1-5 her");
+  E("heir_hostage", "dyn", "diplomacy_chance", "\u4E16\u7D99\u304E\u3092\u4EBA\u8CEA\u306B", "{f}\u3068\u306E\u53CB\u597D\u306E\u305F\u3081\u3001\u4E16\u7D99\u304E\u3092\u4EBA\u8CEA\u306B\u9001\u308B\u6848\u304C\u51FA\u305F\u3002", ["\u4EBA\u8CEA\u3092\u51FA\u3059", "\u9AD8\u5B98\u306E\u5B50\u3092\u4EE3\u308F\u308A\u306B", "\u65AD\u308B"], "e1-4 friend her");
+  E("royal_will", "dyn", "succession_crisis", "\u738B\u306E\u907A\u8A00", "\u75C5\u5E8A\u306E{L}\u304C\u3001\u907A\u8A00\u306B\u5F8C\u7D99\u3092\u8A18\u3057\u305F\u3002", ["\u907A\u8A00\u3069\u304A\u308A\u306B", "\u91CD\u81E3\u4F1A\u8B70\u306B\u304B\u3051\u76F4\u3059", "\u907A\u8A00\u3092\u63E1\u308A\u3064\u3076\u3059"], "e1-5 her", "succ_dispute:4:.3@2");
+  E("tanist_council", "dyn", "succession_crisis", "\u6C0F\u65CF\u4F1A\u8B70\u306E\u5F8C\u7D99\u9078\u3073", "\u6C0F\u65CF\u9577\u305F\u3061\u304C\u96C6\u307E\u308A\u3001\u6B21\u306E\u9996\u9577\u3092\u9078\u307C\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u6700\u3082\u5F37\u3044\u8005\u3092\u63A8\u3059", "\u5E74\u9577\u8005\u3092\u63A8\u3059", "\u4F1A\u8B70\u3092\u5EF6\u671F\u3059\u308B"], "e0-2 po:tribal,chiefdom");
+  E("pretender_appears", "dyn", "coup_threat", "\u507D\u308A\u306E\u738B\u304C\u73FE\u308C\u308B", "\u300C\u5148\u738B\u306E\u5B50\u300D\u3092\u540D\u4E57\u308B\u7537\u304C\u3001\u5730\u65B9\u3067\u5175\u3092\u96C6\u3081\u305F\u3002", ["\u8A0E\u4F10\u3059\u308B", "\u7537\u3092\u53D6\u308A\u8FBC\u3080", "\u5916\u56FD\u306E\u52D5\u304D\u3092\u63A2\u308B"], "e1-4 her", "succ_dispute:6:.25@1");
+  E("king_mad", "dyn", "tragedy_royal", "\u738B\u306E\u767A\u72C2", "{L}\u306F\u3001\u91CD\u3044\u5FC3\u306E\u75C5\u306B\u5012\u308C\u3001\u653F\u52D9\u3092\u57F7\u308C\u306A\u304F\u306A\u3063\u305F\u3002", ["\u6442\u653F\u3092\u7F6E\u304F", "\u75C5\u3092\u96A0\u3059", "\u9000\u4F4D\u3092\u4FC3\u3059"], "e1-5 her", "succ_dispute:8:.3@1");
+  E("coronation_pomp", "dyn", "culture_boom", "\u76DB\u5927\u306A\u6234\u51A0\u5F0F", "{s}\u306E\u65B0\u738B\u306E\u6234\u51A0\u5F0F\u306B\u3001\u9060\u65B9\u304B\u3089\u3082\u4F7F\u7BC0\u304C\u6765\u305F\u3002", ["\u8C6A\u83EF\u306B\u55B6\u3080", "\u7C21\u7D20\u306B\u55B6\u3080", "\u8AF8\u56FD\u306E\u4F7F\u7BC0\u3092\u539A\u9047\u3059\u308B"], "e1-5 her");
+  E("gen_coup", "cou", "coup_threat", "\u5C06\u8ECD\u306E\u30AF\u30FC\u30C7\u30BF\u30FC", "{s}\u3067\u3001\u5C06\u8ECD\u304C\u5175\u3092\u7387\u3044\u3066\u5BAE\u5EF7\u3092\u62BC\u3055\u3048\u305F\u3002", ["\u65B0\u653F\u6A29\u3092\u627F\u8A8D\u3059\u308B", "\u62B5\u6297\u3059\u308B", "\u4EA1\u547D\u3059\u308B"], "e1-5 only", "junta_rule:6:.6@0,civil_war_outbreak:4:.3@1", ["regime:mil", "rebel:coup", "ldr:coup"]);
+  E("junta_rule", "cou", "reform", "\u8ECD\u4E8B\u653F\u6A29\u306E\u65B9\u91DD", "\u6A29\u529B\u3092\u63E1\u3063\u305F\u8ECD\u306F\u3001\u56FD\u306E\u9032\u3080\u9053\u3092\u6C7A\u3081\u306D\u3070\u306A\u3089\u306A\u3044\u3002", ["\u5916\u5F81\u3067\u56E3\u7D50\u3092\u56F3\u308B", "\u884C\u653F\u3092\u6574\u3048\u3066\u5B89\u5B9A\u3055\u305B\u308B", "\u79C1\u8179\u3092\u80A5\u3084\u3059"], "e1-5 only", "junta_expedition:12:.5@0,junta_corrupt:18:.5@2");
+  E("junta_expedition", "cou", "opportunity_war", "\u8ECD\u653F\u306E\u5916\u5F81", "\u8ECD\u4E8B\u653F\u6A29\u306F\u3001\u5A01\u4FE1\u3092\u6C42\u3081\u3066\u96A3\u56FD\u3078\u306E\u51FA\u5175\u3092\u6C7A\u3081\u305F\u3002", ["\u51FA\u5175\u3059\u308B", "\u793A\u5A01\u306B\u7559\u3081\u308B", "\u5185\u653F\u306B\u5C02\u5FF5\u3059\u308B"], "only rival", "");
+  E("junta_corrupt", "cou", "crisis", "\u8ECD\u653F\u306E\u8150\u6557", "\u8ECD\u653F\u306E\u9AD8\u5B98\u306E\u79C1\u8179\u304C\u3001\u6C11\u306E\u6012\u308A\u3092\u8CB7\u3063\u3066\u3044\u308B\u3002", ["\u9AD8\u5B98\u3092\u7C9B\u6E05\u3059\u308B", "\u898B\u3066\u898B\u306C\u3075\u308A\u3092\u3059\u308B", "\u6C11\u8846\u306E\u4EE3\u8868\u3092\u52A0\u3048\u308B"], "only", "leader_plot:12:.4@1");
+  E("leader_plot", "cou", "coup_threat", "\u6307\u5C0E\u8005\u6697\u6BBA\u306E\u9670\u8B00", "\u5074\u8FD1\u306E\u9593\u306B\u3001\u6307\u5C0E\u8005\u6697\u6BBA\u306E\u4F01\u3066\u304C\u3042\u308B\u3002", ["\u9996\u8B00\u8005\u3092\u6355\u3048\u308B", "\u653F\u7B56\u3092\u6539\u3081\u4E0D\u6E80\u3092\u7DE9\u548C\u3059\u308B", "\u8B77\u885B\u3092\u5897\u3084\u3059\u306E\u307F"], "e1-5 only", "dictator_assassination:8:.5@12");
+  E("revolution_breaks", "cou", "rebel_peasant", "\u9769\u547D\u306E\u52C3\u767A", "\u5727\u653F\u306B\u8010\u3048\u304B\u306D\u305F\u6C11\u8846\u304C\u3001\u90FD\u5E02\u3067\u8702\u8D77\u3057\u305F\u3002", ["\u6B66\u529B\u3067\u93AE\u5727\u3059\u308B", "\u6539\u9769\u3092\u7D04\u675F\u3059\u308B", "\u4F53\u5236\u306E\u79FB\u884C\u3092\u53D7\u3051\u5165\u308C\u308B"], "e2-5 only", "republic_born:6:.5@2", ["", "", "regime:rev"]);
+  E("republic_born", "cou", "diplomacy_chance", "\u5171\u548C\u56FD\u306E\u8A95\u751F", "{s}\u306B\u3001\u738B\u306E\u5C45\u306A\u3044\u56FD\u306E\u653F\u6CBB\u304C\u59CB\u307E\u3063\u305F\u3002", ["\u65B0\u4F53\u5236\u3092\u56FA\u3081\u308B", "\u65E7\u52E2\u529B\u3068\u548C\u89E3\u3059\u308B", "\u5468\u8FBA\u56FD\u306B\u627F\u8A8D\u3092\u6C42\u3081\u308B"], "e2-5 only", "foreign_intervention:12:.4");
+  E("foreign_intervention", "cou", "war_threat", "\u9769\u547D\u3078\u306E\u5E72\u6E09", "\u5468\u8FBA\u306E\u541B\u4E3B\u304C\u3001\u9769\u547D\u306E\u6CE2\u53CA\u3092\u6050\u308C\u3066{s}\u306B\u5727\u529B\u3092\u304B\u3051\u3066\u304D\u305F\u3002", ["\u5E72\u6E09\u3092\u64A5\u306D\u3064\u3051\u308B", "\u8B72\u6B69\u3057\u3066\u4F7F\u7BC0\u3092\u9001\u308B", "\u540C\u76DF\u3092\u6C42\u3081\u308B"], "e2-5 only rival", "intervention_war:6:.35@0");
+  E("intervention_war", "cou", "opportunity_war", "\u5E72\u6E09\u6226\u4E89", "\u9769\u547D\u3092\u6F70\u305D\u3046\u3068\u3059\u308B\u96A3\u56FD\u304C\u3001\u56FD\u5883\u306B\u8ECD\u3092\u9032\u3081\u305F\u3002", ["\u5168\u529B\u3067\u9632\u3050", "\u8B1B\u548C\u3092\u63A2\u308B", "\u9769\u547D\u3092\u8F38\u51FA\u3059\u308B"], "only rival", "", ["warby:R:ideology", "", "warby:R:ideology"]);
+  E("civil_war_outbreak", "cou", "rebel_noble", "\u5185\u6226\u306E\u52C3\u767A", "{s}\u3067\u3001\u8CB4\u65CF\u3068\u5C06\u8ECD\u304C\u5206\u304B\u308C\u3001\u56FD\u304C\u4E8C\u3064\u306B\u88C2\u3051\u305F\u3002", ["\u8A0E\u4F10\u8ECD\u3092\u51FA\u3059", "\u548C\u5E73\u306E\u4EF2\u4ECB\u3092\u983C\u3080", "\u5206\u88C2\u3092\u53D7\u3051\u5165\u308C\u308B"], "e1-5 only", "", ["rebel:noble", "", "rebel:noble"]);
+  E("palace_coup", "cou", "coup_threat", "\u5BAE\u5EF7\u306E\u30AF\u30FC\u30C7\u30BF\u30FC", "\u8FD1\u885B\u304C\u3001{L}\u3092\u5BAE\u6BBF\u304B\u3089\u8FFD\u3044\u51FA\u3057\u305F\u3002", ["\u8FFD\u8A8D\u3059\u308B", "\u596A\u9084\u3092\u8A66\u307F\u308B", "\u4EA1\u547D\u5148\u306E\u4FDD\u8B77\u3092\u6C42\u3081\u308B"], "e1-5 lows", "succ_dispute:4:.3", ["ldr:coup", "", "ldr:coup"]);
+  E("peasant_revolt", "cou", "rebel_peasant", "\u8FB2\u6C11\u306E\u5927\u53CD\u4E71", "\u91CD\u7A0E\u3068\u98E2\u3048\u306B\u82E6\u3057\u3080\u8FB2\u6C11\u304C\u3001\u936C\u3092\u624B\u306B\u8702\u8D77\u3057\u305F\u3002", ["\u93AE\u5727\u3059\u308B", "\u8B72\u6B69\u3057\u3066\u7A0E\u3092\u8EFD\u304F\u3059\u308B", "\u9996\u8B00\u8005\u3092\u53D6\u308A\u8FBC\u3080"], "e1-4 big lows", "reform_edict:12:.4@1,dynasty_fall:24:.2@0");
+  E("reform_edict", "cou", "reform", "\u6539\u9769\u306E\u52C5\u4EE4", "\u6DF7\u4E71\u306E\u53CE\u307E\u3063\u305F\u3042\u3068\u3001{s}\u306F\u5927\u304D\u306A\u5236\u5EA6\u306E\u6539\u9769\u3092\u6C7A\u65AD\u3057\u305F\u3002", ["\u65AD\u884C\u3059\u308B", "\u6F38\u9032\u7684\u306B\u9032\u3081\u308B", "\u68DA\u4E0A\u3052\u3059\u308B"], "e1-5 only", "");
+  E("tax_burden", "cou", "fiscal", "\u91CD\u7A0E\u3078\u306E\u4E0D\u6E80", "\u76F8\u6B21\u3050\u5897\u7A0E\u306B\u3001\u6C11\u3068\u5546\u4EBA\u304C\u4E0D\u6E80\u3092\u52DF\u3089\u305B\u3066\u3044\u308B\u3002", ["\u6E1B\u7A0E\u3059\u308B", "\u53D6\u308A\u7ACB\u3066\u3092\u7D9A\u3051\u308B", "\u7279\u6A29\u5C64\u306B\u3082\u8AB2\u7A0E\u3059\u308B"], "e1-5", "peasant_revolt:12:.3@1");
+  E("noble_conspiracy", "cou", "rebel_noble", "\u8CB4\u65CF\u306E\u9670\u8B00", "\u6709\u529B\u8CB4\u65CF\u304C\u3001\u738B\u6A29\u3092\u5236\u9650\u3059\u308B\u76DF\u7D04\u3092\u7D50\u3093\u3060\u3002", ["\u76DF\u7D04\u3092\u89E3\u6563\u3055\u305B\u308B", "\u52C5\u8A31\u72B6\u3092\u4E0E\u3048\u8B72\u6B69\u3059\u308B", "\u9996\u8B00\u8005\u3060\u3051\u61D0\u67D4\u3059\u308B"], "e2-5 her", "constitution_drafted:24:.3@1");
+  E("clergy_uprising", "cou", "rebel_noble", "\u8056\u8077\u8005\u306E\u8702\u8D77", "{s}\u306E\u8056\u8077\u8005\u304C\u3001\u4E16\u4FD7\u306E\u652F\u914D\u3078\u306E\u53CD\u6297\u3092\u59CB\u3081\u305F\u3002", ["\u5F3E\u5727\u3059\u308B", "\u6559\u4F1A\u306B\u7279\u6A29\u3092\u4E0E\u3048\u308B", "\u6559\u7FA9\u306E\u8AD6\u4E89\u3092\u4ED5\u639B\u3051\u308B"], "e1-5 lows");
+  E("garrison_mutiny", "cou", "coup_threat", "\u99D0\u5C6F\u8ECD\u306E\u53CD\u4E71", "\u7D66\u91D1\u306E\u9045\u308C\u306B\u6012\u3063\u305F\u99D0\u5C6F\u8ECD\u304C\u3001\u5B98\u5EAB\u3092\u8972\u3063\u305F\u3002", ["\u672A\u6255\u3044\u3092\u652F\u6255\u3046", "\u9996\u8B00\u8005\u3092\u51E6\u7F70\u3059\u308B", "\u5175\u3092\u5165\u308C\u66FF\u3048\u308B"], "e1-5 poor");
+  E("secession_movement", "cou", "rebel_noble", "\u5206\u96E2\u72EC\u7ACB\u306E\u52D5\u304D", "\u9060\u3044\u5730\u65B9\u306E\u6709\u529B\u8005\u304C\u3001\u72EC\u7ACB\u3092\u5BA3\u8A00\u3057\u305F\u3002", ["\u8A0E\u4F10\u3059\u308B", "\u81EA\u6CBB\u3092\u8A8D\u3081\u3066\u61D0\u67D4\u3059\u308B", "\u4ED6\u306E\u5730\u65B9\u306B\u898B\u305B\u3057\u3081\u306B\u3059\u308B"], "e1-5 big lows", "", ["rebel:separatist", "", "rebel:separatist"]);
+  E("tribal_split", "cou", "rebel_noble", "\u90E8\u65CF\u306E\u5206\u88C2", "\u9996\u9577\u306E\u5EA7\u3092\u3081\u3050\u3063\u3066\u3001\u90E8\u65CF\u304C\u4E8C\u6D3E\u306B\u5206\u304B\u308C\u305F\u3002", ["\u4E00\u65B9\u3092\u652F\u6301\u3059\u308B", "\u4EF2\u88C1\u3059\u308B", "\u5206\u88C2\u3092\u8A8D\u3081\u308B"], "e0-2 po:tribal,chiefdom", "", ["rebel:separatist", "", ""]);
+  E("purge_elite", "cou", "coup_threat", "\u5927\u7C9B\u6E05", "{L}\u306F\u3001\u653F\u6575\u3092\u4E00\u6589\u306B\u6355\u3048\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u7C9B\u6E05\u3092\u65AD\u884C\u3059\u308B", "\u5BFE\u8C61\u3092\u7D5E\u308B", "\u601D\u3044\u3068\u3069\u307E\u308B"], "e1-5 lows", "leader_plot:18:.3@0");
+  E("student_protest", "cou", "crisis", "\u5B66\u751F\u306E\u6297\u8B70", "\u90FD\u5E02\u3067\u3001\u5B66\u751F\u3068\u5E02\u6C11\u304C\u653F\u6CBB\u306E\u6539\u9769\u3092\u6C42\u3081\u3066\u30C7\u30E2\u3092\u884C\u3063\u305F\u3002", ["\u8981\u6C42\u3092\u805E\u304D\u5165\u308C\u308B", "\u6CBB\u5B89\u90E8\u968A\u3092\u51FA\u3059", "\u6307\u5C0E\u8005\u3068\u5BFE\u8A71\u3059\u308B"], "e4-5 lows", "revolution_breaks:8:.2@1");
+  E("strike_wave", "cou", "crisis", "\u5927\u898F\u6A21\u306A\u30B9\u30C8\u30E9\u30A4\u30AD", "\u5DE5\u5834\u3068\u6E2F\u3067\u3001\u8CC3\u91D1\u3092\u6C42\u3081\u308B\u5927\u898F\u6A21\u306A\u30B9\u30C8\u30E9\u30A4\u30AD\u304C\u8D77\u304D\u305F\u3002", ["\u8981\u6C42\u3092\u53D7\u3051\u5165\u308C\u308B", "\u8ECD\u3092\u51FA\u3057\u3066\u93AE\u3081\u308B", "\u4EF2\u88C1\u3092\u8A2D\u3051\u308B"], "e4-5", "revolution_breaks:10:.15@1");
+  E("election_fraud", "cou", "crisis", "\u9078\u6319\u4E0D\u6B63\u306E\u7591\u60D1", "\u9078\u6319\u3067\u4E0D\u6B63\u304C\u3042\u3063\u305F\u3068\u306E\u5642\u304C\u3001\u90FD\u5E02\u3092\u99C6\u3051\u3081\u3050\u3063\u305F\u3002", ["\u518D\u9078\u6319\u3092\u884C\u3046", "\u8ABF\u67FB\u3092\u7D04\u675F\u3059\u308B", "\u7591\u60D1\u3092\u5C01\u3058\u308B"], "e4-5 nher");
+  E("constitution_drafted", "cou", "reform", "\u61B2\u6CD5\u306E\u8D77\u8349", "\u8AF8\u968E\u5C64\u306F\u3001\u56FD\u306E\u57FA\u672C\u6CD5\u3092\u6587\u7AE0\u306B\u3057\u3066\u5B9A\u3081\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u61B2\u6CD5\u3092\u5236\u5B9A\u3059\u308B", "\u738B\u6A29\u3092\u6B8B\u3057\u3066\u5236\u5B9A\u3059\u308B", "\u6642\u671F\u5C1A\u65E9\u3068\u3057\u3066\u5EF6\u3070\u3059"], "e2-5 only", "");
+  E("vassal_rebellion", "cou", "rebel_noble", "\u5F93\u5C5E\u56FD\u306E\u53CD\u6297", "\u5F93\u5C5E\u3055\u305B\u3066\u3044\u305F\u5730\u65B9\u304C\u3001\u72EC\u7ACB\u3092\u6C42\u3081\u3066\u7ACB\u3061\u4E0A\u304C\u3063\u305F\u3002", ["\u8ECD\u3092\u9001\u308B", "\u81EA\u6CBB\u3092\u62E1\u5927\u3057\u3066\u5BA5\u3081\u308B", "\u72EC\u7ACB\u3092\u8A8D\u3081\u308B"], "e1-5", "", ["", "", "rebel:separatist"]);
+  E("border_clash", "dip", "border", "\u56FD\u5883\u3067\u306E\u5C0F\u7AF6\u308A\u5408\u3044", "{s}\u3068{r}\u306E\u56FD\u5883\u3067\u3001\u5175\u304C\u885D\u7A81\u3057\u305F\u3002", ["\u5148\u5236\u3057\u3066\u5831\u5FA9\u3059\u308B", "\u6297\u8B70\u306B\u3068\u3069\u3081\u308B", "\u7826\u3092\u7BC9\u304F"], "e1-5 rival", "defeat_humiliation:0:0", ["warby:R:conquest", "", ""]);
+  E("envoy_insult", "dip", "border", "\u4F7F\u7BC0\u3078\u306E\u4FAE\u8FB1", "{r}\u306E\u5BAE\u5EF7\u3067\u3001{s}\u306E\u4F7F\u7BC0\u304C\u4FAE\u8FB1\u3092\u53D7\u3051\u305F\u3002", ["\u5BA3\u6226\u306E\u53E3\u5B9F\u3068\u3059\u308B", "\u8B1D\u7F6A\u3092\u8981\u6C42\u3059\u308B", "\u8010\u3048\u3066\u95A2\u4FC2\u3092\u4FDD\u3064"], "e1-5 rival");
+  E("trade_treaty_offer", "dip", "diplomacy_chance", "\u901A\u5546\u6761\u7D04\u306E\u7533\u3057\u51FA", "{f}\u304B\u3089\u3001\u95A2\u7A0E\u3092\u4E0B\u3052\u308B\u901A\u5546\u5354\u5B9A\u306E\u7533\u3057\u51FA\u304C\u5C4A\u3044\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u6761\u4EF6\u3092\u53B3\u3057\u304F\u3057\u3066\u53D7\u3051\u308B", "\u65AD\u308B"], "e1-5 friend");
+  E("alliance_plea", "dip", "diplomacy_chance", "\u540C\u76DF\u56FD\u306E\u6551\u63F4\u8981\u8ACB", "\u540C\u76DF\u56FD{f}\u304C\u3001\u96A3\u56FD\u3068\u306E\u6226\u3044\u306B\u52A9\u529B\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u63F4\u8ECD\u3092\u9001\u308B", "\u8CC7\u91D1\u3067\u52A9\u3051\u308B", "\u4E2D\u7ACB\u3092\u4FDD\u3064"], "e1-5 friend war");
+  E("tribute_demand", "dip", "war_threat", "\u671D\u8CA2\u306E\u8981\u6C42", "\u5F37\u56FD{r}\u304C\u3001{s}\u306B\u8CA2\u7269\u3092\u6C42\u3081\u308B\u4F7F\u8005\u3092\u9001\u3063\u305F\u3002", ["\u5F93\u3046", "\u62D2\u3093\u3067\u5099\u3048\u308B", "\u5916\u4EA4\u3067\u6642\u9593\u3092\u7A3C\u3050"], "e1-4 rival", "border_clash:6:.3@1");
+  E("peace_conference", "dip", "diplomacy_chance", "\u548C\u5E73\u4F1A\u8B70\u306E\u63D0\u5531", "\u8AF8\u56FD\u304C\u3001\u7D1B\u4E89\u3092\u53CE\u3081\u308B\u4F1A\u8B70\u306E\u958B\u50AC\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u53C2\u52A0\u3057\u3066\u4EF2\u4ECB\u3092\u53D7\u3051\u308B", "\u6761\u4EF6\u3092\u3064\u3051\u3066\u51FA\u5E2D\u3059\u308B", "\u6B20\u5E2D\u3059\u308B"], "e3-5 war");
+  E("trade_war", "dip", "trade_boom", "\u95A2\u7A0E\u3092\u3081\u3050\u308B\u4E89\u3044", "{r}\u304C\u3001{s}\u306E\u5546\u54C1\u306B\u9AD8\u3044\u95A2\u7A0E\u3092\u304B\u3051\u305F\u3002", ["\u5831\u5FA9\u95A2\u7A0E\u3092\u304B\u3051\u308B", "\u4EA4\u6E09\u3092\u6C42\u3081\u308B", "\u4ED6\u306E\u53D6\u5F15\u5148\u3092\u63A2\u3059"], "e2-5 rival");
+  E("border_treaty", "dip", "diplomacy_chance", "\u56FD\u5883\u753B\u5B9A\u306E\u63D0\u6848", "{f}\u304C\u3001\u56FD\u5883\u306E\u753B\u5B9A\u3092\u63D0\u6848\u3057\u305F\u3002", ["\u53D7\u3051\u308B", "\u4E00\u90E8\u4FEE\u6B63\u3057\u3066\u53D7\u3051\u308B", "\u62D2\u3080"], "e2-5 friend");
+  E("great_embassy", "dip", "diplomacy_chance", "\u5927\u4F7F\u7BC0\u56E3\u306E\u6765\u8A2A", "\u9060\u65B9\u306E\u5927\u56FD\u304B\u3089\u3001\u5927\u4F7F\u7BC0\u56E3\u304C{s}\u3092\u8A2A\u308C\u305F\u3002", ["\u6700\u5927\u9650\u3082\u3066\u306A\u3059", "\u7C21\u7D20\u306B\u8FCE\u3048\u308B", "\u8B66\u6212\u3057\u3066\u5236\u9650\u3059\u308B"], "e1-4", "trade_treaty_offer:6:.4@0");
+  E("refugee_wave", "dip", "crisis", "\u96E3\u6C11\u306E\u6D41\u5165", "\u6226\u4E71\u3092\u9003\u308C\u305F\u96E3\u6C11\u304C\u3001{s}\u306E\u56FD\u5883\u306B\u62BC\u3057\u5BC4\u305B\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u4E00\u90E8\u3092\u53D7\u3051\u5165\u308C\u308B", "\u56FD\u5883\u3092\u9589\u3056\u3059"], "e1-5 rival");
+  E("spy_scandal_ally", "dip", "omen", "\u540C\u76DF\u56FD\u3078\u306E\u8ADC\u5831\u306E\u767A\u899A", "{f}\u306B\u4ED5\u639B\u3051\u305F\u8ADC\u5831\u304C\u3001\u9732\u898B\u3057\u305F\u3002", ["\u95A2\u4E0E\u3092\u5426\u5B9A\u3059\u308B", "\u8B1D\u7F6A\u3059\u308B", "\u958B\u304D\u76F4\u308B"], "e2-5 friend");
+  E("naval_incident", "dip", "border", "\u6D77\u4E0A\u306E\u885D\u7A81", "{r}\u306E\u8239\u56E3\u3068\u3001{s}\u306E\u8239\u56E3\u304C\u3001\u6D77\u4E0A\u3067\u7832\u706B\u3092\u4EA4\u3048\u305F\u3002", ["\u8266\u968A\u3092\u5897\u5F37\u3059\u308B", "\u5916\u4EA4\u6297\u8B70\u306B\u3068\u3069\u3081\u308B", "\u5171\u540C\u306E\u5DE1\u8996\u3092\u63D0\u6848\u3059\u308B"], "e3-5 rival coast");
+  E("rival_embargo", "dip", "trade_boom", "\u7981\u8F38\u63AA\u7F6E", "{r}\u304C\u3001{s}\u3078\u306E\u4E3B\u8981\u7269\u8CC7\u306E\u8F38\u51FA\u3092\u6B62\u3081\u305F\u3002", ["\u4EE3\u66FF\u306E\u4F9B\u7D66\u6E90\u3092\u63A2\u3059", "\u6B66\u529B\u3067\u6253\u958B\u3059\u308B", "\u4EA4\u6E09\u3067\u7DE9\u548C\u3092\u6C42\u3081\u308B"], "e2-5 rival", "border_clash:6:.3@1");
+  E("diplomatic_marriage_crisis", "dip", "tragedy_royal", "\u5916\u4EA4\u4E0A\u306E\u5A5A\u59FB\u306E\u62D2\u5426", "{f}\u304C\u3001{s}\u306E\u7E01\u8AC7\u3092\u65AD\u3063\u305F\u3002", ["\u4E0D\u5FEB\u3092\u793A\u3059", "\u5225\u306E\u76F8\u624B\u3092\u63A2\u3059", "\u7A4F\u5F53\u306B\u53D7\u3051\u6B62\u3081\u308B"], "e1-5 friend her");
+  E("neighbor_collapse", "dip", "opportunity_war", "\u96A3\u56FD\u306E\u6DF7\u4E71", "{r}\u3067\u5185\u4E71\u304C\u7D9A\u304D\u3001\u56FD\u5883\u306E\u5B88\u308A\u304C\u8584\u304F\u306A\u3063\u305F\u3002", ["\u4ECB\u5165\u3057\u3066\u9818\u571F\u3092\u53D6\u308B", "\u4EA1\u547D\u8005\u3092\u4FDD\u8B77\u3057\u5F71\u97FF\u3092\u53CA\u307C\u3059", "\u4E0D\u4ECB\u5165\u3092\u4FDD\u3064"], "e1-5 rival", "", ["warby:R:plunder", "", ""]);
+  E("pact_proposal", "dip", "diplomacy_chance", "\u5171\u540C\u9632\u885B\u306E\u8A98\u3044", "\u6570\u304B\u56FD\u304C\u3001\u5171\u540C\u306E\u9632\u885B\u76DF\u7D04\u3092\u7D50\u307C\u3046\u3068{s}\u3092\u8A98\u3063\u305F\u3002", ["\u52A0\u76DF\u3059\u308B", "\u6761\u4EF6\u4ED8\u304D\u3067\u52A0\u308F\u308B", "\u52A0\u76DF\u3057\u306A\u3044"], "e2-5");
+  E("hostage_incident", "dip", "crisis", "\u4EBA\u8CEA\u4E8B\u4EF6", "{s}\u306E\u5546\u4EBA\u304C\u3001{r}\u3067\u6355\u3048\u3089\u308C\u305F\u3002", ["\u6B66\u529B\u3092\u3061\u3089\u3064\u304B\u305B\u308B", "\u8EAB\u4EE3\u91D1\u3092\u6255\u3046", "\u4F7F\u7BC0\u3092\u9001\u3063\u3066\u4EA4\u6E09\u3059\u308B"], "e1-5 rival");
+  E("protest_note", "dip", "border", "\u6297\u8B70\u306E\u66F8\u7C21", "{r}\u304C\u3001{s}\u306E\u653F\u7B56\u306B\u6297\u8B70\u3059\u308B\u66F8\u7C21\u3092\u9001\u3063\u3066\u304D\u305F\u3002", ["\u5F37\u786C\u306B\u53CD\u8AD6\u3059\u308B", "\u4E01\u5BE7\u306B\u8FD4\u7B54\u3059\u308B", "\u7121\u8996\u3059\u308B"], "e2-5 rival");
+  E("cultural_exchange", "dip", "culture_boom", "\u6587\u5316\u4EA4\u6D41\u56E3", "{f}\u304B\u3089\u3001\u5B66\u8005\u3068\u697D\u4EBA\u304C\u8A2A\u308C\u3001\u4EA4\u6D41\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u5B66\u8005\u306E\u307F\u53D7\u3051\u5165\u308C\u308B", "\u65AD\u308B"], "e1-5 friend");
+  E("grain_aid", "dip", "famine", "\u98DF\u7CE7\u63F4\u52A9\u306E\u4F9D\u983C", "{f}\u304C\u3001\u51F6\u4F5C\u3067\u98DF\u7CE7\u306E\u63F4\u52A9\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u63F4\u52A9\u3059\u308B", "\u58F2\u5374\u306B\u5207\u308A\u66FF\u3048\u308B", "\u65AD\u308B"], "e1-5 friend rich");
+  E("vassal_demand", "dip", "opportunity_war", "\u5F93\u5C5E\u56FD\u306E\u5897\u984D\u8981\u6C42", "\u5F93\u5C5E\u56FD\u304C\u3001\u5E87\u8B77\u306E\u898B\u8FD4\u308A\u306E\u5897\u984D\u3092\u6C42\u3081\u305F\u3002", ["\u5FDC\u3058\u308B", "\u65AD\u308B", "\u5185\u90E8\u306B\u4ECB\u5165\u3057\u3066\u7D71\u5236\u3059\u308B"], "e2-5");
+  E("neutral_declaration", "dip", "war_threat", "\u4E2D\u7ACB\u306E\u5BA3\u8A00", "\u5927\u56FD\u3069\u3046\u3057\u306E\u6226\u3044\u306E\u306A\u304B\u3001{s}\u306F\u4E2D\u7ACB\u3092\u5BA3\u8A00\u3059\u308B\u304B\u3069\u3046\u304B\u3092\u8FEB\u3089\u308C\u305F\u3002", ["\u4E2D\u7ACB\u3092\u5B88\u308B", "\u4E00\u65B9\u306B\u3064\u304F", "\u3069\u3061\u3089\u3082\u8B66\u6212\u3057\u3066\u8ECD\u5099\u3092\u6574\u3048\u308B"], "e2-5 war");
+  E("treaty_violation", "dip", "border", "\u6761\u7D04\u9055\u53CD\u306E\u7591\u3044", "{r}\u304C\u3001\u7D50\u3093\u3060\u6761\u7D04\u306B\u80CC\u3044\u305F\u3068\u7591\u308F\u308C\u3066\u3044\u308B\u3002", ["\u53B3\u91CD\u306B\u6297\u8B70\u3059\u308B", "\u8A3C\u62E0\u3092\u96C6\u3081\u308B", "\u4E0D\u554F\u306B\u4ED8\u3059"], "e2-5 rival", "border_clash:8:.3@0");
+  E("alliance_betrayal", "dip", "tragedy_royal", "\u540C\u76DF\u56FD\u306E\u88CF\u5207\u308A", "\u540C\u76DF\u56FD\u304C\u3001{s}\u3092\u898B\u6368\u3066\u3001\u6575\u56FD\u3068\u548C\u3057\u305F\u3002", ["\u7D76\u7E01\u3059\u308B", "\u7406\u7531\u3092\u554F\u3044\u305F\u3060\u3059", "\u65B0\u3057\u3044\u540C\u76DF\u56FD\u3092\u63A2\u3059"], "e1-5 friend war");
+  E("global_council", "dip", "diplomacy_chance", "\u56FD\u969B\u4F1A\u8B70\u3078\u306E\u62DB\u5F85", "\u65B0\u3057\u3044\u79E9\u5E8F\u3092\u3064\u304F\u308B\u56FD\u969B\u4F1A\u8B70\u3078\u306E\u62DB\u304D\u304C\u6765\u305F\u3002", ["\u4EE3\u8868\u56E3\u3092\u9001\u308B", "\u66F8\u9762\u3067\u610F\u898B\u3092\u9001\u308B", "\u53C2\u52A0\u3057\u306A\u3044"], "e4-5");
+  E("defeat_humiliation", "war", "crisis", "\u6557\u6226\u306E\u5C48\u8FB1", "\u6226\u3044\u306B\u6557\u308C\u305F{s}\u306F\u3001\u5C48\u8FB1\u7684\u306A\u8B1B\u548C\u3092\u53D7\u3051\u5165\u308C\u305F\u3002", ["\u6761\u7D04\u3092\u53D7\u3051\u5165\u308C\u308B", "\u96A0\u308C\u3066\u518D\u8D77\u3092\u671F\u3059", "\u56FD\u6C11\u306B\u8CAC\u4EFB\u3092\u554F\u3046"], "e1-5 nwar lows", "reparation_burden:6:.5");
+  E("reparation_burden", "war", "fiscal", "\u8CE0\u511F\u91D1\u306E\u91CD\u8377", "\u8CE0\u511F\u91D1\u306E\u652F\u6255\u3044\u304C\u3001{s}\u306E\u8CA1\u653F\u3092\u5727\u8FEB\u3057\u3066\u3044\u308B\u3002", ["\u5897\u7A0E\u3057\u3066\u6255\u3046", "\u652F\u6255\u3044\u306E\u5EF6\u671F\u3092\u6C42\u3081\u308B", "\u56FD\u50B5\u3067\u51CC\u3050"], "e1-5 only", "revanchism:18:.4");
+  E("revanchism", "war", "war_threat", "\u5FA9\u8B90\u4E3B\u7FA9\u306E\u9AD8\u307E\u308A", "\u6557\u5317\u3092\u5FD8\u308C\u306C\u4E16\u8AD6\u304C\u3001\u8ECD\u306E\u518D\u5EFA\u3068\u5831\u5FA9\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u5831\u5FA9\u306E\u6E96\u5099\u3092\u9032\u3081\u308B", "\u4E16\u8AD6\u3092\u5BA5\u3081\u308B", "\u5916\u4EA4\u3067\u5305\u56F2\u7DB2\u3092\u4F5C\u308B"], "e1-5 only", "revenge_war:24:.35@0");
+  E("revenge_war", "war", "opportunity_war", "\u5831\u5FA9\u306E\u6226\u3044", "\u56FD\u529B\u3092\u56DE\u5FA9\u3057\u305F{s}\u306F\u3001\u304B\u3064\u3066\u306E\u6575\u306B\u96EA\u8FB1\u3092\u679C\u305F\u305D\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u5BA3\u6226\u3059\u308B", "\u540C\u76DF\u3092\u56FA\u3081\u3066\u6A5F\u3092\u5F85\u3064", "\u5831\u5FA9\u3092\u65AD\u5FF5\u3059\u308B"], "e1-5 only rival", "", ["warby:R:conquest", "", ""]);
+  E("miracle_victory", "war", "war_threat", "\u5BE1\u5175\u304C\u5927\u8ECD\u3092\u7834\u308B", "\u5C11\u306A\u3044\u5175\u3067\u3001\u6575\u306E\u5927\u8ECD\u3092\u6253\u3061\u7834\u308B\u3068\u3044\u3046\u5947\u8DE1\u304C\u8D77\u304D\u305F\u3002", ["\u52DD\u5229\u3092\u5927\u3044\u306B\u5BA3\u4F1D\u3059\u308B", "\u8FFD\u6483\u3057\u3066\u6226\u679C\u3092\u5E83\u3052\u308B", "\u8B1B\u548C\u3092\u63A2\u308B"], "e1-5 war", "legend_forms:12:.5@0");
+  E("legend_forms", "war", "culture_boom", "\u5947\u8DE1\u304C\u4F1D\u8AAC\u306B\u306A\u308B", "\u3042\u306E\u52DD\u5229\u306E\u7269\u8A9E\u306F\u3001\u6B4C\u3068\u7D75\u306B\u306A\u3063\u3066\u56FD\u4E2D\u306B\u5E83\u307E\u3063\u3066\u3044\u304F\u3002", ["\u4F1D\u8AAC\u3092\u516C\u8A8D\u3059\u308B", "\u8A69\u4EBA\u306B\u5E87\u8B77\u3092\u4E0E\u3048\u308B", "\u53F2\u5B9F\u306E\u78BA\u8A8D\u3092\u4FC3\u3059"], "e1-5 only", "national_identity:36:.4");
+  E("national_identity", "war", "culture_boom", "\u56FD\u6C11\u610F\u8B58\u306E\u82BD\u751F\u3048", "\u5171\u6709\u3059\u308B\u7269\u8A9E\u306E\u3082\u3068\u3001{s}\u306E\u4EBA\u3005\u306F\u540C\u3058\u56FD\u306E\u6C11\u3060\u3068\u611F\u3058\u306F\u3058\u3081\u305F\u3002", ["\u795D\u65E5\u3092\u5B9A\u3081\u308B", "\u6C11\u65CF\u306E\u6B4C\u3092\u5968\u52B1\u3059\u308B", "\u56FD\u8A9E\u3092\u6574\u3048\u308B"], "e2-5 only");
+  E("siege_endured", "war", "war_threat", "\u9577\u3044\u5305\u56F2\u6226", "{s}\u306E\u57CE\u585E\u304C\u3001\u6575\u8ECD\u306B\u9577\u671F\u9593\u5305\u56F2\u3055\u308C\u3066\u3044\u308B\u3002", ["\u6C7A\u6B7B\u306E\u51FA\u6483\u3092\u884C\u3046", "\u964D\u4F0F\u306E\u4EA4\u6E09\u3092\u3059\u308B", "\u63F4\u8ECD\u3092\u5F85\u3064"], "e1-5 war");
+  E("mutiny_navy", "war", "coup_threat", "\u6C34\u5175\u306E\u53CD\u4E71", "\u8266\u968A\u306E\u6C34\u5175\u304C\u3001\u5F85\u9047\u306B\u6297\u8B70\u3057\u3066\u53CD\u4E71\u3092\u8D77\u3053\u3057\u305F\u3002", ["\u8981\u6C42\u3092\u53D7\u3051\u5165\u308C\u308B", "\u9996\u8B00\u8005\u3092\u51E6\u5211\u3059\u308B", "\u63D0\u7763\u3092\u66F4\u8FED\u3059\u308B"], "e3-5 coast war");
+  E("plague_in_army", "war", "plague", "\u8ECD\u4E2D\u306E\u75AB\u75C5", "\u8ECD\u4E2D\u306B\u75AB\u75C5\u304C\u5E83\u304C\u308A\u3001\u5175\u304C\u3070\u305F\u3070\u305F\u3068\u5012\u308C\u3066\u3044\u308B\u3002", ["\u64A4\u9000\u3059\u308B", "\u9694\u96E2\u3057\u3066\u524D\u9032\u3059\u308B", "\u533B\u5E2B\u56E3\u3092\u6025\u6D3E\u3059\u308B"], "e1-5 war");
+  E("deserters_flood", "war", "crisis", "\u8131\u8D70\u5175\u306E\u7D9A\u51FA", "\u9577\u5F15\u304F\u6226\u4E89\u306B\u75B2\u308C\u305F\u5175\u304C\u3001\u8131\u8D70\u3092\u59CB\u3081\u305F\u3002", ["\u898B\u305B\u3057\u3081\u306B\u51E6\u5211\u3059\u308B", "\u6069\u8D66\u3092\u51FA\u3059", "\u7D66\u91D1\u3092\u5897\u3084\u3059"], "e1-5 war");
+  E("fortress_built", "war", "border", "\u56FD\u5883\u306E\u8981\u585E\u5EFA\u8A2D", "\u56FD\u5883\u306B\u5927\u8981\u585E\u3092\u7BC9\u304F\u6848\u304C\u3001\u91CD\u81E3\u304B\u3089\u51FA\u3055\u308C\u305F\u3002", ["\u7BC9\u304F", "\u5C0F\u898F\u6A21\u306A\u7826\u306B\u3068\u3069\u3081\u308B", "\u5916\u4EA4\u3067\u89E3\u6C7A\u3092\u63A2\u308B"], "e1-5 rival", "border_clash:12:.3@0");
+  E("new_weapon", "war", "tech_boom", "\u65B0\u5175\u5668\u306E\u767B\u5834", "{s}\u306E\u5DE5\u623F\u304C\u3001\u65B0\u3057\u3044\u6B66\u5668\u3092\u5B8C\u6210\u3055\u305B\u305F\u3002", ["\u5927\u91CF\u306B\u88C5\u5099\u3059\u308B", "\u8A66\u9A13\u7684\u306B\u63A1\u7528\u3059\u308B", "\u4ED6\u56FD\u306B\u58F2\u5374\u3059\u308B"], "e1-5");
+  E("army_reform", "war", "reform", "\u8ECD\u5236\u306E\u6539\u9769", "\u53E4\u3044\u8ECD\u306E\u7DE8\u5236\u3092\u6539\u3081\u3088\u3068\u306E\u58F0\u304C\u3001\u5C06\u6821\u304B\u3089\u4E0A\u304C\u3063\u305F\u3002", ["\u5168\u9762\u7684\u306B\u6539\u9769\u3059\u308B", "\u4E00\u90E8\u306E\u90E8\u968A\u3067\u8A66\u3059", "\u73FE\u72B6\u3092\u7DAD\u6301\u3059\u308B"], "e1-5 nwar");
+  E("great_general_dies", "war", "tragedy_royal", "\u540D\u5C06\u306E\u6226\u6B7B", "\u8ECD\u306E\u67F1\u3067\u3042\u3063\u305F\u5C06\u8ECD\u304C\u3001\u6226\u5834\u3067\u5012\u308C\u305F\u3002", ["\u56FD\u846C\u3092\u55B6\u3080", "\u5F8C\u4EFB\u3092\u6025\u304E\u5B9A\u3081\u308B", "\u6575\u306E\u4ED5\u696D\u3068\u7CFE\u5F3E\u3059\u308B"], "e1-5 war");
+  E("conscription_riot", "war", "rebel_peasant", "\u5FB4\u5175\u3078\u306E\u62B5\u6297", "\u5FB4\u5175\u306B\u53CD\u5BFE\u3057\u3066\u3001\u8FB2\u6751\u3067\u66B4\u52D5\u304C\u8D77\u304D\u305F\u3002", ["\u6B66\u529B\u3067\u93AE\u3081\u308B", "\u5FB4\u5175\u3092\u6E1B\u3089\u3059", "\u514D\u5F79\u91D1\u3092\u8A8D\u3081\u308B"], "e3-5 war");
+  E("fleet_lost", "war", "tragedy_royal", "\u8266\u968A\u306E\u906D\u96E3", "\u5D50\u3067\u3001\u9060\u5F81\u306E\u8266\u968A\u304C\u906D\u96E3\u3057\u305F\u3002", ["\u518D\u5EFA\u3092\u6025\u3050", "\u9060\u5F81\u3092\u3042\u304D\u3089\u3081\u308B", "\u4ED6\u56FD\u306B\u652F\u63F4\u3092\u6C42\u3081\u308B"], "e2-5 coast");
+  E("peace_rumor", "war", "war_threat", "\u548C\u5E73\u306E\u5642", "\u6575\u304C\u548C\u5E73\u3092\u63A2\u3063\u3066\u3044\u308B\u3068\u306E\u5642\u304C\u6D41\u308C\u305F\u3002", ["\u4F1A\u8AC7\u306B\u5FDC\u3058\u308B", "\u6226\u679C\u3092\u5E83\u3052\u3066\u304B\u3089\u5FDC\u3058\u308B", "\u5642\u3092\u7121\u8996\u3059\u308B"], "e1-5 war");
+  E("war_profiteer", "war", "fiscal", "\u6226\u4E89\u6210\u91D1", "\u6226\u3067\u8CA1\u3092\u6210\u3057\u305F\u5546\u4EBA\u304C\u3001\u5BAE\u5EF7\u306B\u5F71\u97FF\u529B\u3092\u6301\u3061\u306F\u3058\u3081\u305F\u3002", ["\u8AB2\u7A0E\u3059\u308B", "\u53D6\u308A\u8FBC\u3080", "\u9060\u3056\u3051\u308B"], "e2-5 war");
+  E("veterans_return", "war", "reform", "\u5E30\u9084\u5175\u306E\u51E6\u9047", "\u9060\u5F81\u304B\u3089\u623B\u3063\u305F\u5175\u304C\u3001\u6069\u8CDE\u3068\u571F\u5730\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u571F\u5730\u3092\u4E0E\u3048\u308B", "\u5E74\u91D1\u3092\u4E0E\u3048\u308B", "\u89E3\u6563\u3057\u3066\u5E30\u8FB2\u3055\u305B\u308B"], "e1-5 nwar", "peasant_revolt:12:.15@2");
+  E("siege_engine", "war", "tech_boom", "\u653B\u57CE\u5175\u5668\u306E\u958B\u767A", "\u65B0\u3057\u3044\u653B\u57CE\u5175\u5668\u304C\u958B\u767A\u3055\u308C\u3001\u57CE\u58C1\u306E\u4FA1\u5024\u304C\u63FA\u3089\u3044\u3067\u3044\u308B\u3002", ["\u63A1\u7528\u3059\u308B", "\u60C5\u5831\u3092\u5B88\u308B", "\u57CE\u58C1\u306E\u5F37\u5316\u3092\u512A\u5148\u3059\u308B"], "e1-3");
+  E("naval_victory", "war", "war_threat", "\u6D77\u6226\u306E\u5927\u52DD", "{s}\u306E\u8266\u968A\u304C\u3001\u6575\u8266\u968A\u3092\u6253\u3061\u7834\u308A\u3001\u5236\u6D77\u6A29\u3092\u63E1\u3063\u305F\u3002", ["\u6D77\u4E0A\u5C01\u9396\u3078\u79FB\u308B", "\u52DD\u5229\u3092\u6A5F\u306B\u8B1B\u548C\u3059\u308B", "\u6D77\u8ECD\u3092\u5897\u5F37\u3059\u308B"], "e2-5 coast war");
+  E("fifth_column", "war", "omen", "\u5185\u901A\u8005\u306E\u6697\u8E8D", "\u6575\u306B\u901A\u3058\u308B\u8005\u304C\u3001\u8ECD\u306E\u52D5\u304D\u3092\u6F0F\u3089\u3057\u3066\u3044\u305F\u3002", ["\u5927\u898F\u6A21\u306B\u6458\u767A\u3059\u308B", "\u507D\u60C5\u5831\u3092\u6D41\u3059", "\u8B66\u6212\u3092\u547C\u3073\u304B\u3051\u308B\u306E\u307F"], "e1-5 war");
+  E("scorched_earth", "war", "war_threat", "\u7126\u571F\u4F5C\u6226", "\u6575\u306E\u9032\u8ECD\u3092\u9045\u3089\u305B\u308B\u305F\u3081\u3001\u56FD\u5883\u306E\u6751\u3092\u713C\u304F\u6848\u304C\u51FA\u305F\u3002", ["\u5B9F\u884C\u3059\u308B", "\u4E00\u90E8\u306E\u307F\u884C\u3046", "\u6C11\u3092\u5B88\u3063\u3066\u6226\u3046"], "e1-5 war");
+  E("armistice_offer", "war", "diplomacy_chance", "\u4F11\u6226\u306E\u7533\u3057\u51FA", "\u6575\u304C\u3001\u4E00\u6642\u306E\u4F11\u6226\u3092\u7533\u3057\u51FA\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u6761\u4EF6\u3092\u4ED8\u3051\u308B", "\u62D2\u3080"], "e1-5 war");
+  E("captured_commander", "war", "war_threat", "\u6575\u5C06\u3092\u6355\u865C\u306B\u3059\u308B", "\u6226\u3044\u3067\u3001\u6575\u306E\u6307\u63EE\u5B98\u3092\u751F\u3051\u6355\u308A\u306B\u3057\u305F\u3002", ["\u8EAB\u4EE3\u91D1\u3092\u53D6\u308B", "\u4E01\u91CD\u306B\u6271\u3044\u4EA4\u6E09\u306B\u4F7F\u3046", "\u51E6\u5211\u3059\u308B"], "e1-5 war");
+  E("garrison_famine", "war", "famine", "\u8981\u585E\u306E\u98E2\u3048", "\u5305\u56F2\u3055\u308C\u305F\u8981\u585E\u3067\u3001\u98DF\u7CE7\u304C\u5C3D\u304D\u304B\u3051\u3066\u3044\u308B\u3002", ["\u7A81\u7834\u3092\u8A66\u307F\u308B", "\u98DF\u7CE7\u3092\u7A7A\u8F38\u3059\u308B", "\u964D\u4F0F\u3092\u8003\u3048\u308B"], "e3-5 war");
+  E("mobilization_decree", "war", "war_threat", "\u7DCF\u52D5\u54E1\u306E\u5E03\u544A", "\u56FD\u96E3\u306B\u969B\u3057\u3066\u3001\u7DCF\u52D5\u54E1\u4EE4\u3092\u51FA\u3059\u6848\u304C\u3042\u308B\u3002", ["\u7DCF\u52D5\u54E1\u3059\u308B", "\u90E8\u5206\u52D5\u54E1\u306B\u3068\u3069\u3081\u308B", "\u5916\u4EA4\u3067\u6253\u958B\u3059\u308B"], "e3-5 war");
+  E("nuclear_scare", "war", "war_threat", "\u6838\u306E\u6050\u6016", "\u6575\u56FD\u304C\u65B0\u578B\u306E\u5927\u91CF\u7834\u58CA\u5175\u5668\u3092\u6301\u3063\u305F\u3068\u306E\u60C5\u5831\u304C\u5165\u3063\u305F\u3002", ["\u67FB\u5BDF\u3092\u6C42\u3081\u308B", "\u8ECD\u5099\u3092\u6025\u3050", "\u4EA4\u6E09\u306E\u5834\u3092\u8A2D\u3051\u308B"], "e5 rival");
+  E("space_race", "war", "tech_boom", "\u5B87\u5B99\u3092\u3081\u3050\u308B\u7AF6\u4E89", "{r}\u304C\u8ECC\u9053\u306B\u885B\u661F\u3092\u6253\u3061\u4E0A\u3052\u305F\u3002", ["\u8FFD\u968F\u3057\u3066\u6295\u8CC7\u3059\u308B", "\u540C\u76DF\u56FD\u3068\u5171\u540C\u3067\u9032\u3081\u308B", "\u5730\u4E0A\u306E\u9632\u885B\u3092\u512A\u5148\u3059\u308B"], "e5 rival");
+  E("reformation_preacher", "rel", "religion_move", "\u6539\u9769\u3092\u8AAC\u304F\u8AAC\u6559\u5E2B", "\u6559\u4F1A\u306E\u8150\u6557\u3092\u7CFE\u5F3E\u3059\u308B\u8AAC\u6559\u5E2B\u304C\u3001\u6C11\u8846\u306E\u4EBA\u6C17\u3092\u96C6\u3081\u305F\u3002", ["\u5F3E\u5727\u3059\u308B", "\u8A0E\u8AD6\u3092\u8A31\u3059", "\u6539\u9769\u3092\u53D6\u308A\u8FBC\u3080"], "e2-4", "church_lands:24:.4@2,religious_war:18:.3@0");
+  E("church_lands", "rel", "religion_move", "\u6559\u4F1A\u9818\u306E\u6CA1\u53CE", "\u6559\u4F1A\u304C\u6301\u3064\u5E83\u5927\u306A\u9818\u5730\u3092\u3001\u56FD\u5EAB\u306B\u53CE\u3081\u3088\u3046\u3068\u306E\u6848\u304C\u51FA\u305F\u3002", ["\u6CA1\u53CE\u3059\u308B", "\u4E00\u90E8\u3092\u6CA1\u53CE\u3059\u308B", "\u5BC4\u9032\u3092\u6C42\u3081\u308B\u306B\u3068\u3069\u3081\u308B"], "e2-4 only", "religious_war:12:.4@0,toleration_edict:24:.3@2");
+  E("religious_war", "rel", "opportunity_war", "\u5B97\u6559\u6226\u4E89", "\u4FE1\u4EF0\u306E\u9055\u3044\u3092\u7406\u7531\u306B\u3001\u56FD\u304C\u4E8C\u3064\u306B\u5272\u308C\u3066\u6226\u3044\u304C\u59CB\u307E\u3063\u305F\u3002", ["\u6B63\u7D71\u3092\u63B2\u3052\u3066\u6226\u3046", "\u7A4F\u5065\u6D3E\u3068\u548C\u3092\u63A2\u308B", "\u5916\u56FD\u306E\u8ABF\u505C\u3092\u983C\u3080"], "e2-4 only", "toleration_edict:36:.5", ["rebel:religious", "", ""]);
+  E("toleration_edict", "rel", "reform", "\u5BDB\u5BB9\u4EE4", "\u9577\u3044\u4E89\u3044\u306E\u672B\u306B\u3001\u4FE1\u4EF0\u306E\u81EA\u7531\u3092\u8A8D\u3081\u308B\u52C5\u4EE4\u304C\u51FA\u3055\u308C\u305F\u3002", ["\u5BDB\u5BB9\u4EE4\u3092\u51FA\u3059", "\u9650\u5B9A\u7684\u306B\u8A8D\u3081\u308B", "\u5F93\u6765\u306E\u65B9\u91DD\u3092\u7D9A\u3051\u308B"], "e2-5 only");
+  E("heresy_spread", "rel", "religion_move", "\u7570\u7AEF\u306E\u5E83\u304C\u308A", "\u6B63\u7D71\u3068\u306F\u7570\u306A\u308B\u6559\u3048\u304C\u3001{s}\u306E\u6C11\u306B\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u7570\u7AEF\u5BE9\u554F\u3092\u884C\u3046", "\u5BDB\u5BB9\u306B\u6271\u3046", "\u6559\u7FA9\u306E\u8B70\u8AD6\u3092\u4FC3\u3059"], "e1-4");
+  E("pilgrimage_boom", "rel", "trade_boom", "\u5DE1\u793C\u306E\u76DB\u6CC1", "\u8056\u5730\u3078\u306E\u5DE1\u793C\u304C\u76DB\u3093\u306B\u306A\u308A\u3001\u8857\u9053\u306B\u4EBA\u304C\u7D76\u3048\u306A\u3044\u3002", ["\u5DE1\u793C\u8DEF\u3092\u6574\u5099\u3059\u308B", "\u5DE1\u793C\u7A0E\u3092\u8AB2\u3059", "\u5BBF\u6CCA\u6240\u3092\u6559\u4F1A\u306B\u4EFB\u305B\u308B"], "e1-4");
+  E("temple_wealth", "rel", "fiscal", "\u795E\u6BBF\u306E\u84C4\u8CA1", "\u795E\u6BBF\u304C\u8CB4\u91D1\u5C5E\u3092\u84C4\u3048\u3001\u56FD\u5EAB\u3092\u4E0A\u56DE\u308B\u5BCC\u3092\u6301\u3063\u305F\u3002", ["\u5BC4\u9032\u3092\u6C42\u3081\u308B", "\u795E\u6BBF\u3092\u4FDD\u8B77\u3059\u308B", "\u4E16\u4FD7\u5316\u3092\u9032\u3081\u308B"], "e1-4", "church_lands:24:.3@0");
+  E("miracle_claimed", "rel", "omen", "\u5947\u8DE1\u306E\u4E3B\u5F35", "\u300C\u75C5\u304C\u7652\u3048\u305F\u300D\u3068\u3001\u8FB2\u6751\u3067\u591A\u304F\u306E\u4EBA\u304C\u8A3C\u8A00\u3057\u3066\u3044\u308B\u3002", ["\u5947\u8DE1\u3092\u516C\u8A8D\u3059\u308B", "\u8ABF\u67FB\u3092\u547D\u3058\u308B", "\u6C11\u5FC3\u3092\u60D1\u308F\u3059\u3068\u7981\u3058\u308B"], "e1-4");
+  E("religious_schism", "rel", "crisis", "\u6559\u7FA9\u306E\u5206\u88C2", "\u6559\u7FA9\u306E\u89E3\u91C8\u3092\u3081\u3050\u3063\u3066\u3001\u8056\u8077\u8005\u304C\u4E8C\u6D3E\u306B\u5206\u304B\u308C\u305F\u3002", ["\u4E00\u65B9\u3092\u652F\u6301\u3059\u308B", "\u516C\u4F1A\u8B70\u3092\u958B\u304F", "\u5206\u88C2\u3092\u653E\u7F6E\u3059\u308B"], "e1-5", "religious_war:18:.2@2");
+  E("missionary_arrives", "rel", "religion_move", "\u5BA3\u6559\u5E2B\u306E\u6765\u8A2A", "\u7570\u56FD\u306E\u5BA3\u6559\u5E2B\u304C\u3001\u65B0\u3057\u3044\u6559\u3048\u3092\u5E83\u3081\u306B\u6765\u305F\u3002", ["\u5E03\u6559\u3092\u8A31\u3059", "\u7279\u5B9A\u306E\u5730\u57DF\u306B\u9650\u308B", "\u8FFD\u653E\u3059\u308B"], "e1-4 friend");
+  E("inquisitor_zeal", "rel", "religion_move", "\u5BE9\u554F\u5B98\u306E\u66B4\u8D70", "\u7570\u7AEF\u5BE9\u554F\u5B98\u304C\u3001\u6A29\u9650\u3092\u9038\u8131\u3057\u3066\u8CB4\u65CF\u3092\u6355\u3048\u305F\u3002", ["\u5BE9\u554F\u5B98\u3092\u6291\u3048\u308B", "\u652F\u6301\u3059\u308B", "\u8CB4\u65CF\u306B\u614E\u91CD\u3092\u6C42\u3081\u308B"], "e2-4", "reformation_preacher:12:.2@1");
+  E("holy_war_call", "rel", "war_threat", "\u8056\u6226\u306E\u547C\u3073\u304B\u3051", "\u8056\u8077\u8005\u304C\u3001\u7570\u6559\u5F92\u3068\u306E\u8056\u6226\u3092\u6C11\u306B\u547C\u3073\u304B\u3051\u3066\u3044\u308B\u3002", ["\u8056\u6226\u3092\u5BA3\u8A00\u3059\u308B", "\u547C\u3073\u304B\u3051\u3092\u6291\u3048\u308B", "\u5916\u4EA4\u3067\u5727\u529B\u3092\u304B\u3051\u308B"], "e1-4 rival", "border_clash:6:.3@0");
+  E("sacred_text_found", "rel", "culture_boom", "\u8056\u5178\u306E\u767A\u898B", "\u53E4\u3044\u8056\u5178\u306E\u5199\u672C\u304C\u767A\u898B\u3055\u308C\u3001\u6559\u7FA9\u306E\u8AD6\u4E89\u304C\u71C3\u3048\u305F\u3002", ["\u5199\u672C\u3092\u516C\u8A8D\u3059\u308B", "\u7814\u7A76\u3092\u547D\u3058\u308B", "\u79D8\u8535\u3059\u308B"], "e1-4");
+  E("priest_king_cult", "rel", "religion_move", "\u738B\u306E\u795E\u683C\u5316", "\u8056\u8077\u8005\u304C\u3001{L}\u3092\u795E\u306E\u5B50\u3068\u3059\u308B\u6559\u3048\u3092\u8AAC\u3044\u305F\u3002", ["\u53D7\u3051\u5165\u308C\u308B", "\u9650\u5B9A\u7684\u306B\u8A8D\u3081\u308B", "\u62D2\u3080"], "e0-2 her");
+  E("secular_reform", "rel", "reform", "\u653F\u6559\u5206\u96E2\u306E\u6A5F\u904B", "\u56FD\u306E\u7D71\u6CBB\u3068\u4FE1\u4EF0\u3092\u5206\u3051\u3088\u3001\u3068\u306E\u58F0\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u5206\u96E2\u3092\u9032\u3081\u308B", "\u6F38\u9032\u7684\u306B\u9032\u3081\u308B", "\u8056\u8077\u8005\u3068\u5354\u8ABF\u3059\u308B"], "e3-5", "toleration_edict:12:.2@0");
+  E("cult_sect_rises", "rel", "crisis", "\u65B0\u8208\u6559\u56E3\u306E\u53F0\u982D", "\u7D42\u672B\u3092\u8AAC\u304F\u65B0\u8208\u6559\u56E3\u304C\u3001\u6C11\u306E\u5FC3\u3092\u3068\u3089\u3048\u305F\u3002", ["\u89E3\u6563\u3055\u305B\u308B", "\u7A4F\u5065\u306B\u53D6\u308A\u8FBC\u3080", "\u69D8\u5B50\u3092\u898B\u308B"], "e2-5 lows");
+  E("temple_collapse", "rel", "disaster", "\u795E\u6BBF\u306E\u5D29\u58CA", "\u5730\u9707\u3067\u3001\u56FD\u306E\u4E2D\u5FC3\u306E\u795E\u6BBF\u304C\u5D29\u308C\u305F\u3002", ["\u518D\u5EFA\u306B\u5168\u529B\u3092\u50BE\u3051\u308B", "\u7C21\u7D20\u306B\u5EFA\u3066\u76F4\u3059", "\u5409\u51F6\u3092\u5360\u3046"], "e1-4", "omen_comet:6:.2");
+  E("rite_of_spring", "rel", "culture_boom", "\u6625\u306E\u796D\u308A", "\u56FD\u4E2D\u3067\u3001\u8C4A\u7A63\u3092\u7948\u308B\u796D\u308A\u304C\u55B6\u307E\u308C\u308B\u3002", ["\u56FD\u8CBB\u3067\u76DB\u5927\u306B\u884C\u3046", "\u6C11\u306E\u81EA\u4E3B\u306B\u4EFB\u305B\u308B", "\u7C21\u7D20\u306B\u3059\u308B"], "e0-3");
+  E("religious_scholars_debate", "rel", "culture_boom", "\u5927\u8AD6\u4E89", "\u8AF8\u5B97\u6D3E\u306E\u5B66\u8005\u304C\u3001\u516C\u958B\u3067\u6559\u7406\u3092\u6226\u308F\u305B\u305F\u3002", ["\u81EA\u3089\u81E8\u5E2D\u3059\u308B", "\u5F8C\u63F4\u3059\u308B", "\u9A12\u304E\u3060\u3068\u5236\u9650\u3059\u308B"], "e2-4");
+  E("conversion_ruler", "rel", "religion_move", "\u541B\u4E3B\u306E\u6539\u5B97", "{L}\u304C\u3001\u65B0\u3057\u3044\u6559\u3048\u306B\u5E30\u4F9D\u3057\u305F\u3044\u3068\u8A00\u3044\u3060\u3057\u305F\u3002", ["\u6539\u5B97\u3059\u308B", "\u5F62\u3060\u3051\u53D7\u3051\u308B", "\u6C11\u306E\u4FE1\u4EF0\u3092\u5C0A\u91CD\u3057\u3066\u6539\u5B97\u3057\u306A\u3044"], "e1-4 her", "religious_war:12:.2@0");
+  E("new_sea_route", "eco", "trade_boom", "\u65B0\u822A\u8DEF\u306E\u767A\u898B", "\u9060\u6D0B\u306B\u51FA\u305F\u8239\u56E3\u304C\u3001\u672A\u77E5\u306E\u6D77\u3078\u306E\u822A\u8DEF\u3092\u62D3\u3044\u3066\u5E30\u6E2F\u3057\u305F\u3002", ["\u738B\u5BA4\u306E\u72EC\u5360\u4E8B\u696D\u306B\u3059\u308B", "\u5546\u4EBA\u306B\u958B\u653E\u3059\u308B", "\u822A\u8DEF\u3092\u79D8\u5BC6\u306B\u3059\u308B"], "e3-5 coast", "merchant_wealth:24:.5@1,merchant_wealth:36:.35@0");
+  E("merchant_wealth", "eco", "trade_boom", "\u4EA4\u6613\u306E\u5BCC\u304C\u6D41\u308C\u8FBC\u3080", "\u65B0\u3057\u3044\u4EA4\u6613\u3067\u3001\u6E2F\u753A\u306B\u83AB\u5927\u306A\u5BCC\u304C\u96C6\u307E\u308A\u306F\u3058\u3081\u305F\u3002", ["\u95A2\u7A0E\u3092\u9AD8\u3081\u308B", "\u6E2F\u306E\u81EA\u6CBB\u3092\u8A8D\u3081\u308B", "\u6295\u8CC7\u3092\u547C\u3073\u8FBC\u3080"], "e3-5 only", "merchant_rise:24:.5");
+  E("merchant_rise", "eco", "reform", "\u5546\u4EBA\u306E\u53F0\u982D", "\u5BCC\u3092\u84C4\u3048\u305F\u5546\u4EBA\u304C\u3001\u653F\u6CBB\u3078\u306E\u767A\u8A00\u3092\u6C42\u3081\u306F\u3058\u3081\u305F\u3002", ["\u5546\u4EBA\u3092\u8CB4\u65CF\u306B\u53D6\u308A\u7ACB\u3066\u308B", "\u4F1A\u8B70\u3078\u306E\u53C2\u52A0\u3092\u8A8D\u3081\u308B", "\u7279\u6A29\u3092\u5B88\u308B"], "e3-5 only", "assembly_founded:24:.4@1");
+  E("assembly_founded", "eco", "reform", "\u8EAB\u5206\u5236\u8B70\u4F1A\u306E\u8A2D\u7F6E", "\u8AF8\u8EAB\u5206\u306E\u4EE3\u8868\u304C\u96C6\u3046\u8B70\u4F1A\u304C\u3001\u521D\u3081\u3066\u958B\u304B\u308C\u305F\u3002", ["\u8B70\u4F1A\u3092\u8A2D\u3051\u308B", "\u8AEE\u554F\u6A5F\u95A2\u306B\u3068\u3069\u3081\u308B", "\u8A2D\u7F6E\u3092\u62D2\u3080"], "e3-5 only", "constitution_drafted:36:.3@0");
+  E("labor_shortage", "eco", "crisis", "\u52B4\u50CD\u529B\u306E\u4E0D\u8DB3", "\u4EBA\u53E3\u306E\u6E1B\u5C11\u3067\u3001\u7551\u3068\u5DE5\u623F\u306E\u50CD\u304D\u624B\u304C\u8DB3\u308A\u306A\u3044\u3002", ["\u79FB\u6C11\u3092\u52DF\u308B", "\u8CC3\u91D1\u306E\u4E0A\u9650\u3092\u5B9A\u3081\u308B", "\u52B4\u50CD\u306E\u81EA\u7531\u3092\u5E83\u3052\u308B"], "e1-4 only", "serf_emancipation:24:.4@2");
+  E("serf_emancipation", "eco", "reform", "\u8FB2\u5974\u306E\u89E3\u653E", "\u9818\u4E3B\u306B\u7E1B\u3089\u308C\u305F\u8FB2\u6C11\u306B\u3001\u79FB\u52D5\u3068\u5951\u7D04\u306E\u81EA\u7531\u3092\u4E0E\u3048\u3088\u3046\u3068\u3059\u308B\u52D5\u304D\u304C\u51FA\u305F\u3002", ["\u5168\u9762\u7684\u306B\u89E3\u653E\u3059\u308B", "\u6709\u511F\u3067\u89E3\u653E\u3059\u308B", "\u73FE\u72B6\u3092\u7DAD\u6301\u3059\u308B"], "e2-4 only", "estates_shaken:12:.5@0");
+  E("estates_shaken", "eco", "reform", "\u8EAB\u5206\u5236\u306E\u52D5\u63FA", "\u89E3\u653E\u3055\u308C\u305F\u6C11\u304C\u90FD\u5E02\u306B\u6D41\u308C\u3001\u53E4\u3044\u8EAB\u5206\u306E\u79E9\u5E8F\u304C\u63FA\u3089\u3044\u3067\u3044\u308B\u3002", ["\u79E9\u5E8F\u3092\u5B88\u308B", "\u65B0\u3057\u3044\u79E9\u5E8F\u3092\u7BC9\u304F", "\u6DF7\u4E71\u3092\u653E\u7F6E\u3059\u308B"], "e2-5 only");
+  E("great_famine", "eco", "famine", "\u5927\u98E2\u9949", "\u5929\u5019\u4E0D\u9806\u304C\u7D9A\u304D\u3001{s}\u306E\u7A40\u5009\u304C\u7A7A\u306B\u306A\u3063\u305F\u3002", ["\u5099\u84C4\u3092\u958B\u304F", "\u4ED6\u56FD\u304B\u3089\u8CB7\u3046", "\u8015\u4F5C\u3092\u5F37\u5236\u3059\u308B"], "e1-4", "tax_burden:12:.35");
+  E("harvest_boom", "eco", "trade_boom", "\u5927\u8C4A\u4F5C", "\u4ECA\u5E74\u306F\u3001\u53CE\u7A6B\u304C\u8A18\u9332\u7684\u306A\u91CF\u306B\u9054\u3057\u305F\u3002", ["\u4F59\u5270\u3092\u5099\u84C4\u3059\u308B", "\u8F38\u51FA\u3059\u308B", "\u6C11\u306B\u9084\u5143\u3059\u308B"], "e1-4");
+  E("market_riot", "eco", "rebel_peasant", "\u5E02\u5834\u306E\u66B4\u52D5", "\u30D1\u30F3\u306E\u5024\u4E0A\u304C\u308A\u3067\u3001\u5E02\u5834\u304C\u66B4\u5F92\u306B\u8972\u308F\u308C\u305F\u3002", ["\u4FA1\u683C\u3092\u7D71\u5236\u3059\u308B", "\u5175\u3092\u51FA\u3059", "\u7A40\u7269\u3092\u914D\u308B"], "e2-5 poor");
+  E("guild_monopoly", "eco", "trade_boom", "\u540C\u696D\u7D44\u5408\u306E\u72EC\u5360", "\u8077\u4EBA\u7D44\u5408\u304C\u3001\u65B0\u898F\u53C2\u5165\u3092\u6392\u9664\u3057\u3066\u3044\u308B\u3002", ["\u7279\u6A29\u3092\u8A8D\u3081\u308B", "\u72EC\u5360\u3092\u7981\u3058\u308B", "\u8AB2\u7A0E\u3057\u3066\u898B\u9003\u3059"], "e2-4");
+  E("silver_mine", "eco", "trade_boom", "\u9280\u9271\u306E\u767A\u898B", "\u5C71\u4E2D\u3067\u3001\u5927\u304D\u306A\u9280\u9271\u304C\u898B\u3064\u304B\u3063\u305F\u3002", ["\u738B\u5BA4\u304C\u76F4\u55B6\u3059\u308B", "\u6C11\u9593\u306B\u958B\u653E\u3059\u308B", "\u5916\u56FD\u306B\u6A29\u5229\u3092\u58F2\u308B"], "e1-4", "inflation_crisis:36:.35@0");
+  E("inflation_crisis", "eco", "fiscal", "\u7269\u4FA1\u306E\u9AD8\u9A30", "\u8CA8\u5E63\u306E\u5897\u3048\u3059\u304E\u3067\u3001\u7269\u4FA1\u304C\u4E0A\u304C\u308A\u7D9A\u3051\u3066\u3044\u308B\u3002", ["\u8CA8\u5E63\u306E\u6539\u92F3\u3092\u884C\u3046", "\u4FA1\u683C\u7D71\u5236\u3092\u8A66\u307F\u308B", "\u5E02\u5834\u306B\u4EFB\u305B\u308B"], "e2-5", "market_riot:6:.3@2");
+  E("debt_trap", "eco", "fiscal", "\u56FD\u50B5\u306E\u8FD4\u6E08\u96E3", "\u56FD\u306E\u501F\u91D1\u304C\u81A8\u3089\u307F\u3001\u8CB8\u3057\u624B\u304C\u8FD4\u6E08\u3092\u6025\u304B\u3057\u3066\u3044\u308B\u3002", ["\u5897\u7A0E\u3067\u8FD4\u3059", "\u50B5\u52D9\u306E\u6574\u7406\u3092\u6C42\u3081\u308B", "\u5229\u6255\u3044\u3092\u5EF6\u3070\u3059"], "e2-5 poor");
+  E("canal_project", "eco", "trade_boom", "\u5927\u904B\u6CB3\u306E\u8A08\u753B", "\u56FD\u3092\u8CAB\u304F\u904B\u6CB3\u3092\u6398\u308C\u3070\u3001\u4EA4\u6613\u304C\u6F64\u3046\u3068\u6280\u5E2B\u304C\u8AAC\u3044\u305F\u3002", ["\u5EFA\u8A2D\u3092\u6C7A\u3081\u308B", "\u4E00\u90E8\u306E\u533A\u9593\u304B\u3089\u59CB\u3081\u308B", "\u8CBB\u7528\u3092\u7406\u7531\u306B\u898B\u9001\u308B"], "e1-5 rich");
+  E("road_network", "eco", "tech_boom", "\u8857\u9053\u7DB2\u306E\u6574\u5099", "\u4E3B\u8981\u90FD\u5E02\u3092\u3064\u306A\u3050\u8857\u9053\u3092\u6574\u3048\u308B\u6848\u304C\u51FA\u305F\u3002", ["\u56FD\u8CBB\u3067\u6574\u5099\u3059\u308B", "\u901A\u884C\u7A0E\u3067\u8CC4\u3046", "\u8ECD\u4E8B\u7528\u306B\u9650\u308B"], "e1-5");
+  E("migrant_workers", "eco", "crisis", "\u51FA\u7A3C\u304E\u52B4\u50CD\u8005\u306E\u6D41\u5165", "\u90FD\u5E02\u306B\u3001\u5404\u5730\u304B\u3089\u8CA7\u3057\u3044\u51FA\u7A3C\u304E\u306E\u4EBA\u3005\u304C\u96C6\u307E\u3063\u3066\u3044\u308B\u3002", ["\u4F4F\u5C45\u3092\u6574\u5099\u3059\u308B", "\u6D41\u5165\u3092\u5236\u9650\u3059\u308B", "\u5E02\u5834\u306B\u4EFB\u305B\u308B"], "e3-5");
+  E("tax_reform_proposal", "eco", "reform", "\u7A0E\u5236\u306E\u6539\u9769\u6848", "\u5F79\u4EBA\u304C\u3001\u571F\u5730\u306E\u5E83\u3055\u306B\u5FDC\u3058\u305F\u65B0\u3057\u3044\u7A0E\u5236\u3092\u63D0\u6848\u3057\u305F\u3002", ["\u5C0E\u5165\u3059\u308B", "\u4E00\u90E8\u306E\u5730\u57DF\u3067\u8A66\u3059", "\u53CD\u5BFE\u3059\u308B"], "e1-4", "tax_burden:12:.2@0");
+  E("black_market", "eco", "crisis", "\u95C7\u5E02\u306E\u62E1\u5927", "\u7D71\u5236\u3092\u9003\u308C\u305F\u95C7\u5E02\u304C\u3001\u90FD\u5E02\u306B\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u53D6\u308A\u7DE0\u307E\u308B", "\u8AB2\u7A0E\u3057\u3066\u516C\u8A8D\u3059\u308B", "\u653E\u7F6E\u3059\u308B"], "e3-5 lows");
+  E("urban_fire", "eco", "disaster", "\u90FD\u5E02\u306E\u5927\u706B", "\u90FD\u306E\u5546\u696D\u5730\u533A\u304C\u3001\u708E\u306B\u5305\u307E\u308C\u305F\u3002", ["\u533A\u753B\u6574\u7406\u3092\u65AD\u884C\u3059\u308B", "\u5143\u3069\u304A\u308A\u306B\u518D\u5EFA\u3059\u308B", "\u9632\u706B\u306E\u5236\u5EA6\u3092\u4F5C\u308B"], "e1-5");
+  E("orphan_crisis", "eco", "crisis", "\u5B64\u5150\u306E\u5897\u52A0", "\u6226\u3068\u98E2\u3048\u3067\u3001\u8857\u306B\u5B64\u5150\u304C\u6EA2\u308C\u3066\u3044\u308B\u3002", ["\u990A\u80B2\u9662\u3092\u8A2D\u3051\u308B", "\u6559\u4F1A\u306B\u59D4\u306D\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B"], "e1-5");
+  E("pension_demand", "eco", "fiscal", "\u5E74\u91D1\u5236\u5EA6\u306E\u8981\u6C42", "\u8001\u3044\u305F\u52B4\u50CD\u8005\u304C\u3001\u56FD\u306B\u751F\u6D3B\u306E\u4FDD\u969C\u3092\u6C42\u3081\u3066\u3044\u308B\u3002", ["\u5236\u5EA6\u3092\u4F5C\u308B", "\u5C0F\u898F\u6A21\u306B\u59CB\u3081\u308B", "\u62D2\u3080"], "e4-5");
+  E("housing_shortage", "eco", "crisis", "\u4F4F\u5B85\u306E\u4E0D\u8DB3", "\u90FD\u5E02\u306E\u4EBA\u53E3\u304C\u6025\u5897\u3057\u3001\u4F4F\u307E\u3044\u304C\u8DB3\u308A\u306A\u3044\u3002", ["\u516C\u55B6\u4F4F\u5B85\u3092\u5EFA\u3066\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B", "\u90FD\u5E02\u306E\u62E1\u5F35\u3092\u7981\u3058\u308B"], "e4-5");
+  E("automation_fear", "eco", "crisis", "\u6A5F\u68B0\u5316\u3078\u306E\u4E0D\u5B89", "\u65B0\u3057\u3044\u6A5F\u68B0\u304C\u3001\u8077\u4EBA\u306E\u4ED5\u4E8B\u3092\u596A\u304A\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u5C0E\u5165\u3092\u5968\u52B1\u3059\u308B", "\u5C0E\u5165\u3092\u9045\u3089\u305B\u308B", "\u88DC\u511F\u3092\u8A2D\u3051\u308B"], "e4-5");
+  E("trade_fair", "eco", "trade_boom", "\u5927\u5E02\u306E\u958B\u50AC", "\u56FD\u5883\u306E\u753A\u3067\u3001\u5927\u304D\u306A\u5E02\u304C\u958B\u304B\u308C\u308B\u3002", ["\u56FD\u304C\u4E3B\u50AC\u3059\u308B", "\u5546\u4EBA\u306B\u4EFB\u305B\u308B", "\u95A2\u7A0E\u3092\u514D\u9664\u3059\u308B"], "e1-4");
+  E("plague_wave", "dis", "plague", "\u75AB\u75C5\u306E\u6D41\u884C", "\u90FD\u306B\u3001\u539F\u56E0\u306E\u5206\u304B\u3089\u306A\u3044\u75AB\u75C5\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u90FD\u5E02\u3092\u5C01\u9396\u3059\u308B", "\u7948\u308A\u3068\u5100\u5F0F\u306B\u983C\u308B", "\u533B\u5E2B\u56E3\u3092\u6D3E\u9063\u3059\u308B"], "e1-4", "labor_shortage:24:.5");
+  E("earthquake", "dis", "disaster", "\u5927\u5730\u9707", "\u5927\u5730\u9707\u304C\u90FD\u3092\u8972\u3044\u3001\u591A\u304F\u306E\u5BB6\u5C4B\u304C\u5012\u308C\u305F\u3002", ["\u6551\u6E08\u3092\u6700\u512A\u5148\u3059\u308B", "\u5FA9\u8208\u3092\u738B\u5BA4\u304C\u4E3B\u5C0E\u3059\u308B", "\u6C11\u306B\u59D4\u306D\u308B"], "e1-5");
+  E("flood_great", "dis", "disaster", "\u5927\u6D2A\u6C34", "\u5927\u6CB3\u304C\u6C3E\u6FEB\u3057\u3001\u5E83\u5927\u306A\u7530\u7551\u304C\u6C34\u306B\u6C88\u3093\u3060\u3002", ["\u5824\u9632\u3092\u7BC9\u304F", "\u96E3\u6C11\u3092\u53D7\u3051\u5165\u308C\u308B", "\u79FB\u4F4F\u3092\u52E7\u3081\u308B"], "e1-5", "great_famine:6:.3");
+  E("drought_long", "dis", "famine", "\u9577\u3044\u5E72\u3070\u3064", "\u96E8\u304C\u964D\u3089\u305A\u3001\u4E95\u6238\u3082\u5DDD\u3082\u5E72\u4E0A\u304C\u3063\u305F\u3002", ["\u704C\u6F11\u3092\u6574\u3048\u308B", "\u96E8\u4E5E\u3044\u3092\u884C\u3046", "\u9077\u90FD\u3092\u691C\u8A0E\u3059\u308B"], "e1-4", "great_famine:6:.4@1");
+  E("volcano_erupts", "dis", "disaster", "\u706B\u5C71\u306E\u5674\u706B", "\u9060\u65B9\u306E\u706B\u5C71\u304C\u5674\u706B\u3057\u3001\u7070\u304C\u7A7A\u3092\u8986\u3063\u305F\u3002", ["\u88AB\u707D\u5730\u3092\u6551\u63F4\u3059\u308B", "\u5929\u306E\u6012\u308A\u3068\u89E3\u91C8\u3059\u308B", "\u79FB\u4F4F\u3092\u652F\u63F4\u3059\u308B"], "e1-4 coast", "great_famine:12:.4");
+  E("locust_swarm", "dis", "famine", "\u8757\u306E\u5927\u7FA4", "\u8757\u306E\u7FA4\u308C\u304C\u3001\u7551\u3092\u98DF\u3044\u5C3D\u304F\u3057\u3066\u3044\u308B\u3002", ["\u5168\u529B\u3067\u99C6\u9664\u3059\u308B", "\u7948\u7977\u306B\u983C\u308B", "\u53CE\u7A6B\u3092\u524D\u5012\u3057\u3059\u308B"], "e1-3");
+  E("cold_summer", "dis", "famine", "\u51B7\u590F", "\u590F\u304C\u6765\u3066\u3082\u5BD2\u304F\u3001\u4F5C\u7269\u304C\u5B9F\u3089\u306A\u3044\u3002", ["\u6551\u8352\u4F5C\u7269\u3092\u5968\u52B1\u3059\u308B", "\u5099\u84C4\u3092\u653E\u51FA\u3059\u308B", "\u79DF\u7A0E\u3092\u514D\u3058\u308B"], "e1-4", "great_famine:8:.3");
+  E("storm_fleet_lost", "dis", "disaster", "\u5D50\u3067\u5546\u8239\u56E3\u304C\u5931\u308F\u308C\u308B", "\u5927\u5D50\u304C\u3001\u4EA4\u6613\u8239\u56E3\u3092\u6C88\u3081\u305F\u3002", ["\u518D\u5EFA\u3092\u652F\u63F4\u3059\u308B", "\u4FDD\u967A\u306E\u4ED5\u7D44\u307F\u3092\u4F5C\u308B", "\u81EA\u5DF1\u8CAC\u4EFB\u3068\u3059\u308B"], "e2-4 coast");
+  E("fire_palace", "dis", "disaster", "\u5BAE\u6BBF\u306E\u706B\u707D", "\u5BAE\u6BBF\u304C\u713C\u3051\u3001\u8A18\u9332\u3084\u5B9D\u7269\u304C\u5931\u308F\u308C\u305F\u3002", ["\u518D\u5EFA\u3092\u6025\u3050", "\u7C21\u7D20\u306B\u518D\u5EFA\u3059\u308B", "\u9077\u90FD\u3092\u691C\u8A0E\u3059\u308B"], "e1-5");
+  E("pestilence_cattle", "dis", "plague", "\u5BB6\u755C\u306E\u75AB\u75C5", "\u725B\u99AC\u306E\u75AB\u75C5\u304C\u5E83\u304C\u308A\u3001\u8FB2\u8015\u306B\u652F\u969C\u304C\u51FA\u3066\u3044\u308B\u3002", ["\u5BB6\u755C\u3092\u51E6\u5206\u3059\u308B", "\u9694\u96E2\u3057\u3066\u69D8\u5B50\u3092\u898B\u308B", "\u4ED6\u56FD\u304B\u3089\u5C0E\u5165\u3059\u308B"], "e1-3");
+  E("avalanche_pass", "dis", "disaster", "\u5CE0\u306E\u96EA\u5D29", "\u4EA4\u6613\u306E\u8981\u306E\u5CE0\u304C\u3001\u96EA\u5D29\u3067\u585E\u304C\u308C\u305F\u3002", ["\u5FA9\u65E7\u3059\u308B", "\u5225\u306E\u9053\u3092\u62D3\u304F", "\u653E\u7F6E\u3059\u308B"], "e1-4");
+  E("tsunami", "dis", "disaster", "\u5927\u6D25\u6CE2", "\u6CBF\u5CB8\u306E\u6E2F\u753A\u3092\u3001\u5DE8\u5927\u306A\u6CE2\u304C\u5451\u307F\u8FBC\u3093\u3060\u3002", ["\u9AD8\u53F0\u3078\u306E\u79FB\u8EE2\u3092\u9032\u3081\u308B", "\u540C\u3058\u5834\u6240\u306B\u518D\u5EFA\u3059\u308B", "\u6551\u63F4\u3092\u4ED6\u56FD\u306B\u6C42\u3081\u308B"], "e1-5 coast");
+  E("epidemic_port", "dis", "plague", "\u6E2F\u304B\u3089\u306E\u75AB\u75C5", "\u5916\u56FD\u8239\u304C\u904B\u3093\u3067\u304D\u305F\u75AB\u75C5\u304C\u3001\u6E2F\u753A\u3067\u5E83\u304C\u3063\u305F\u3002", ["\u6E2F\u3092\u9589\u9396\u3059\u308B", "\u691C\u75AB\u3092\u8A2D\u3051\u308B", "\u4EA4\u6613\u3092\u512A\u5148\u3059\u308B"], "e2-5 coast", "plague_wave:6:.3@2");
+  E("heat_wave", "dis", "famine", "\u9177\u6691", "\u731B\u6691\u3067\u3001\u5BB6\u755C\u3068\u4EBA\u304C\u5012\u308C\u3066\u3044\u308B\u3002", ["\u6C34\u306E\u914D\u7D66\u3092\u884C\u3046", "\u7948\u7977\u3092\u547D\u3058\u308B", "\u4F5C\u696D\u3092\u591C\u306B\u79FB\u3059"], "e1-5");
+  E("sea_level_rise", "dis", "disaster", "\u6D77\u9762\u306E\u4E0A\u6607", "\u6CBF\u5CB8\u306E\u6751\u3005\u304C\u3001\u6F6E\u306B\u6D78\u3055\u308C\u306F\u3058\u3081\u305F\u3002", ["\u5824\u9632\u3092\u7BC9\u304F", "\u5185\u9678\u3078\u306E\u79FB\u4F4F\u3092\u9032\u3081\u308B", "\u69D8\u5B50\u3092\u898B\u308B"], "e4-5 coast");
+  E("industrial_smog", "dis", "plague", "\u5DE5\u5834\u306E\u7164\u7159", "\u5DE5\u696D\u90FD\u5E02\u306B\u7164\u7159\u304C\u7ACB\u3061\u8FBC\u3081\u3001\u75C5\u4EBA\u304C\u5897\u3048\u3066\u3044\u308B\u3002", ["\u898F\u5236\u3092\u8A2D\u3051\u308B", "\u7523\u696D\u3092\u512A\u5148\u3059\u308B", "\u79FB\u8EE2\u3092\u547D\u3058\u308B"], "e4-5");
+  E("pandemic_modern", "dis", "plague", "\u65B0\u3057\u3044\u611F\u67D3\u75C7", "\u4E16\u754C\u306E\u3042\u3061\u3053\u3061\u3067\u3001\u65B0\u3057\u3044\u611F\u67D3\u75C7\u304C\u5E83\u304C\u3063\u3066\u3044\u308B\u3002", ["\u56FD\u5883\u3092\u5C01\u9396\u3059\u308B", "\u533B\u7642\u306B\u6295\u8CC7\u3059\u308B", "\u60C5\u5831\u306E\u516C\u958B\u3092\u512A\u5148\u3059\u308B"], "e4-5");
+  E("mine_collapse", "dis", "disaster", "\u70AD\u9271\u306E\u843D\u76E4", "\u70AD\u9271\u3067\u843D\u76E4\u304C\u8D77\u304D\u3001\u591A\u304F\u306E\u5751\u592B\u304C\u57CB\u307E\u3063\u305F\u3002", ["\u6551\u51FA\u306B\u5168\u529B\u3092\u5C3D\u304F\u3059", "\u88DC\u511F\u3059\u308B", "\u5B89\u5168\u306E\u898F\u5247\u3092\u8A2D\u3051\u308B"], "e3-5");
+  E("meteor_fall", "dis", "disaster", "\u9695\u77F3\u306E\u843D\u4E0B", "\u7A7A\u304B\u3089\u964D\u3063\u305F\u77F3\u304C\u3001\u91CE\u3092\u713C\u3044\u305F\u3002", ["\u88AB\u5BB3\u3092\u8ABF\u3079\u308B", "\u8056\u306A\u308B\u77F3\u3068\u3057\u3066\u7940\u308B", "\u7ACB\u3061\u5165\u308A\u3092\u7981\u3058\u308B"], "e1-5");
+  E("climate_shift_local", "dis", "famine", "\u6C17\u5019\u306E\u5909\u8ABF", "\u6570\u5E74\u306B\u308F\u305F\u308A\u3001\u6C17\u5019\u304C\u4EE5\u524D\u3068\u5909\u308F\u3063\u3066\u3057\u307E\u3063\u305F\u3002", ["\u8FB2\u6CD5\u3092\u6539\u3081\u308B", "\u79FB\u4F4F\u3092\u691C\u8A0E\u3059\u308B", "\u5F93\u6765\u306E\u66AE\u3089\u3057\u3092\u7D9A\u3051\u308B"], "e1-5");
+  E("grand_library", "cul", "culture_boom", "\u5927\u56F3\u66F8\u9928\u306E\u69CB\u60F3", "\u5B66\u8005\u304C\u3001\u56FD\u4E2D\u306E\u66F8\u3092\u96C6\u3081\u308B\u5927\u56F3\u66F8\u9928\u3092\u5EFA\u3066\u305F\u3044\u3068\u9858\u3044\u51FA\u305F\u3002", ["\u56FD\u8CBB\u3067\u5EFA\u8A2D\u3059\u308B", "\u6C11\u9593\u306E\u5BC4\u9032\u306B\u4EFB\u305B\u308B", "\u8CBB\u7528\u3092\u7406\u7531\u306B\u9000\u3051\u308B"], "e1-4");
+  E("university_founded", "cul", "culture_boom", "\u5B66\u9662\u306E\u5275\u8A2D", "\u5B66\u554F\u3092\u6559\u3048\u308B\u5B66\u9662\u3092\u958B\u304F\u6848\u304C\u51FA\u3055\u308C\u305F\u3002", ["\u5275\u8A2D\u3059\u308B", "\u6559\u4F1A\u306B\u4EFB\u305B\u308B", "\u898B\u9001\u308B"], "e2-4");
+  E("printing_arrives", "cul", "tech_boom", "\u5370\u5237\u8853\u306E\u4F1D\u6765", "\u7570\u56FD\u304B\u3089\u3001\u66F8\u7269\u3092\u5927\u91CF\u306B\u5237\u308B\u6280\u8853\u304C\u4F1D\u308F\u3063\u305F\u3002", ["\u56FD\u3067\u7BA1\u7406\u3059\u308B", "\u6C11\u9593\u306B\u958B\u653E\u3059\u308B", "\u691C\u95B2\u3092\u8A2D\u3051\u3066\u8A31\u3059"], "e3-4", "heresy_spread:12:.2@1");
+  E("great_monument", "cul", "culture_boom", "\u5927\u8A18\u5FF5\u5EFA\u9020\u7269", "\u738B\u304C\u3001\u6C38\u9060\u306B\u6B8B\u308B\u5927\u8A18\u5FF5\u5EFA\u9020\u7269\u306E\u5EFA\u8A2D\u3092\u671B\u3093\u3067\u3044\u308B\u3002", ["\u5EFA\u8A2D\u3059\u308B", "\u898F\u6A21\u3092\u7E2E\u5C0F\u3059\u308B", "\u7A0E\u306E\u8CA0\u62C5\u3092\u7406\u7531\u306B\u898B\u9001\u308B"], "e1-4 rich");
+  E("poet_golden_age", "cul", "culture_boom", "\u8A69\u306E\u9EC4\u91D1\u6642\u4EE3", "\u5BAE\u5EF7\u3067\u512A\u308C\u305F\u8A69\u4EBA\u304C\u76F8\u6B21\u304E\u3001\u6587\u5316\u304C\u82B1\u958B\u3044\u305F\u3002", ["\u4FDD\u8B77\u3092\u539A\u304F\u3059\u308B", "\u6C11\u9593\u306B\u5E83\u3052\u308B", "\u8CBB\u7528\u3092\u6291\u3048\u308B"], "e1-5 nwar");
+  E("steam_engine", "cul", "tech_boom", "\u84B8\u6C17\u6A5F\u95A2\u306E\u5B9F\u7528\u5316", "\u84B8\u6C17\u306E\u529B\u3067\u52D5\u304F\u6A5F\u68B0\u304C\u3001\u5B9F\u7528\u306B\u306A\u3063\u305F\u3002", ["\u56FD\u304C\u5C0E\u5165\u3092\u4E3B\u5C0E\u3059\u308B", "\u6C11\u9593\u306E\u8D77\u696D\u3092\u652F\u63F4\u3059\u308B", "\u8077\u4EBA\u306E\u4ED5\u4E8B\u3092\u5B88\u308B"], "e3-4", "automation_fear:24:.3");
+  E("railway_plan", "cul", "tech_boom", "\u9244\u9053\u306E\u5EFA\u8A2D\u8A08\u753B", "\u9244\u306E\u9053\u3092\u56FD\u4E2D\u306B\u6577\u304F\u6848\u304C\u3001\u5B9F\u696D\u5BB6\u304B\u3089\u51FA\u305F\u3002", ["\u56FD\u304C\u5EFA\u8A2D\u3059\u308B", "\u6C11\u9593\u306B\u7279\u8A31\u3092\u4E0E\u3048\u308B", "\u8ECD\u4E8B\u512A\u5148\u3067\u9032\u3081\u308B"], "e4 rich");
+  E("electric_light", "cul", "tech_boom", "\u96FB\u6C17\u306E\u706F\u308A", "\u90FD\u5E02\u306B\u3001\u96FB\u706F\u304C\u3068\u3082\u3063\u305F\u3002", ["\u5168\u56FD\u306B\u5E83\u3052\u308B", "\u90FD\u5E02\u304B\u3089\u6574\u3048\u308B", "\u8CBB\u7528\u3092\u7406\u7531\u306B\u9045\u3089\u305B\u308B"], "e4");
+  E("radio_broadcast", "cul", "tech_boom", "\u30E9\u30B8\u30AA\u653E\u9001\u306E\u958B\u59CB", "\u58F0\u304C\u96FB\u6CE2\u306B\u4E57\u308A\u3001\u56FD\u4E2D\u306B\u5C4A\u304F\u6642\u4EE3\u304C\u6765\u305F\u3002", ["\u56FD\u55B6\u306B\u3059\u308B", "\u6C11\u9593\u306B\u958B\u653E\u3059\u308B", "\u691C\u95B2\u3064\u304D\u3067\u8A31\u3059"], "e4-5", "propaganda_state:12:.3@0");
+  E("propaganda_state", "cul", "reform", "\u56FD\u5BB6\u306E\u5BA3\u4F1D", "\u653E\u9001\u3068\u65B0\u805E\u3092\u4F7F\u3063\u3066\u3001\u56FD\u6C11\u306E\u610F\u8B58\u3092\u307E\u3068\u3081\u308B\u6848\u304C\u51FA\u305F\u3002", ["\u7A4D\u6975\u7684\u306B\u9032\u3081\u308B", "\u7A4F\u5F53\u306B\u884C\u3046", "\u8868\u73FE\u306E\u81EA\u7531\u3092\u5B88\u308B"], "e4-5 only");
+  E("scientific_academy", "cul", "tech_boom", "\u79D1\u5B66\u30A2\u30AB\u30C7\u30DF\u30FC\u306E\u8A2D\u7ACB", "\u5B66\u8005\u306E\u96C6\u3046\u3001\u79D1\u5B66\u30A2\u30AB\u30C7\u30DF\u30FC\u304C\u8A2D\u7ACB\u3055\u308C\u3088\u3046\u3068\u3057\u3066\u3044\u308B\u3002", ["\u8A2D\u7ACB\u3059\u308B", "\u5C0F\u898F\u6A21\u3067\u59CB\u3081\u308B", "\u5B97\u6559\u754C\u306E\u53CD\u5BFE\u306B\u914D\u616E\u3059\u308B"], "e3-4");
+  E("compulsory_school", "cul", "reform", "\u7FA9\u52D9\u6559\u80B2\u306E\u69CB\u60F3", "\u5168\u3066\u306E\u5B50\u4F9B\u306B\u5B66\u6821\u6559\u80B2\u3092\u884C\u3046\u6848\u304C\u51FA\u305F\u3002", ["\u5C0E\u5165\u3059\u308B", "\u6BB5\u968E\u7684\u306B\u9032\u3081\u308B", "\u6642\u671F\u5C1A\u65E9\u3068\u3059\u308B"], "e4-5");
+  E("sports_festival", "cul", "culture_boom", "\u7AF6\u6280\u4F1A\u306E\u958B\u50AC", "\u56FD\u4E2D\u304B\u3089\u9078\u624B\u304C\u96C6\u307E\u308B\u7AF6\u6280\u4F1A\u3092\u958B\u304F\u6848\u304C\u51FA\u305F\u3002", ["\u56FD\u5A01\u3068\u3057\u3066\u958B\u304F", "\u5730\u65B9\u306E\u796D\u308A\u306B\u4EFB\u305B\u308B", "\u8CBB\u7528\u3092\u6291\u3048\u308B"], "e1-5 nwar");
+  E("space_program", "cul", "tech_boom", "\u5B87\u5B99\u8A08\u753B", "\u5B87\u5B99\u3078\u306E\u9032\u51FA\u3092\u76EE\u6307\u3059\u56FD\u5BB6\u8A08\u753B\u304C\u63D0\u6848\u3055\u308C\u305F\u3002", ["\u5927\u898F\u6A21\u306B\u63A8\u9032\u3059\u308B", "\u6BB5\u968E\u7684\u306B\u9032\u3081\u308B", "\u5730\u4E0A\u306E\u554F\u984C\u3092\u512A\u5148\u3059\u308B"], "e5");
+  E("ai_dawn", "cul", "tech_boom", "\u6A5F\u68B0\u77E5\u80FD\u306E\u591C\u660E\u3051", "\u5224\u65AD\u3092\u81EA\u3089\u884C\u3046\u6A5F\u68B0\u304C\u3001\u5B9F\u9A13\u5BA4\u304B\u3089\u51FA\u3066\u304D\u305F\u3002", ["\u56FD\u5BB6\u304C\u7BA1\u7406\u3059\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B", "\u898F\u5236\u3092\u8A2D\u3051\u308B"], "e5", "automation_fear:12:.4");
+  E("genetic_medicine", "cul", "tech_boom", "\u907A\u4F1D\u5B50\u533B\u7642", "\u751F\u547D\u306E\u8A2D\u8A08\u56F3\u306B\u624B\u3092\u52A0\u3048\u308B\u533B\u7642\u304C\u5B9F\u7528\u306B\u306A\u3063\u305F\u3002", ["\u516C\u7684\u306B\u63A8\u9032\u3059\u308B", "\u9650\u5B9A\u7684\u306B\u8A31\u53EF\u3059\u308B", "\u502B\u7406\u4E0A\u7981\u3058\u308B"], "e5");
+  E("translators_movement", "cul", "culture_boom", "\u7FFB\u8A33\u904B\u52D5", "\u7570\u56FD\u306E\u66F8\u7269\u3092\u81EA\u56FD\u8A9E\u306B\u8A33\u3059\u5927\u4E8B\u696D\u304C\u8D77\u304D\u305F\u3002", ["\u56FD\u3067\u652F\u63F4\u3059\u308B", "\u6C11\u9593\u306B\u4EFB\u305B\u308B", "\u81EA\u56FD\u306E\u4F1D\u7D71\u3092\u5B88\u308B"], "e2-4");
+  E("sailing_chart", "cul", "tech_boom", "\u822A\u6D77\u8853\u306E\u9032\u6B69", "\u65B0\u3057\u3044\u7F85\u91DD\u76E4\u3068\u6D77\u56F3\u304C\u3001\u822A\u6D77\u3092\u5909\u3048\u305F\u3002", ["\u9020\u8239\u6240\u306B\u6295\u8CC7\u3059\u308B", "\u79D8\u5BC6\u306B\u3059\u308B", "\u5546\u4EBA\u306B\u5E83\u3052\u308B"], "e2-4 coast", "new_sea_route:24:.3@0");
+  E("medical_college", "cul", "tech_boom", "\u533B\u5B66\u6821\u306E\u8A2D\u7ACB", "\u533B\u8853\u3092\u4F53\u7CFB\u7684\u306B\u6559\u3048\u308B\u5B66\u6821\u306E\u8A2D\u7ACB\u304C\u63D0\u6848\u3055\u308C\u305F\u3002", ["\u8A2D\u7ACB\u3059\u308B", "\u5C0F\u898F\u6A21\u304B\u3089\u59CB\u3081\u308B", "\u7948\u7977\u5E2B\u306E\u53CD\u767A\u3092\u6050\u308C\u308B"], "e2-4");
+  E("theatre_boom", "cul", "culture_boom", "\u6F14\u5287\u306E\u9686\u76DB", "\u90FD\u5E02\u3067\u3001\u6C11\u8846\u304C\u697D\u3057\u3080\u6F14\u5287\u304C\u76DB\u3093\u306B\u306A\u3063\u305F\u3002", ["\u4FDD\u8B77\u3059\u308B", "\u691C\u95B2\u3092\u8A2D\u3051\u308B", "\u7A0E\u3092\u8AB2\u3059"], "e2-5");
+  E("omen_comet", "odd", "omen", "\u5F57\u661F\u306E\u51FA\u73FE", "\u591C\u7A7A\u306B\u3001\u9577\u3044\u5C3E\u3092\u5F15\u304F\u661F\u304C\u73FE\u308C\u305F\u3002", ["\u5409\u5146\u3068\u5E03\u544A\u3059\u308B", "\u51F6\u5146\u3068\u3057\u3066\u7948\u7977\u3059\u308B", "\u5B66\u8005\u306B\u89B3\u6E2C\u3055\u305B\u308B"], "e1-4");
+  E("omen_eclipse", "odd", "omen", "\u65E5\u98DF", "\u663C\u306E\u592A\u967D\u304C\u3001\u7A81\u7136\u6B20\u3051\u305F\u3002", ["\u795E\u610F\u3068\u767A\u8868\u3059\u308B", "\u5B66\u8005\u306B\u8AAC\u660E\u3055\u305B\u308B", "\u6DF7\u4E71\u3092\u6291\u3048\u308B"], "e0-4");
+  E("lost_city_found", "odd", "culture_boom", "\u5FD8\u308C\u3089\u308C\u305F\u90FD\u5E02\u306E\u767A\u898B", "\u5C71\u4E2D\u3067\u3001\u53E4\u3044\u6642\u4EE3\u306E\u90FD\u5E02\u306E\u907A\u69CB\u304C\u898B\u3064\u304B\u3063\u305F\u3002", ["\u767A\u6398\u3059\u308B", "\u8056\u5730\u3068\u3057\u3066\u5C01\u3058\u308B", "\u5B66\u8005\u306B\u8ABF\u67FB\u3055\u305B\u308B"], "e1-5");
+  E("talking_beast", "odd", "omen", "\u8A9E\u308B\u7363", "\u300C\u7363\u304C\u4EBA\u306E\u8A00\u8449\u3092\u8A9E\u3063\u305F\u300D\u3068\u306E\u5642\u304C\u3001\u6751\u3005\u306B\u5E83\u304C\u3063\u305F\u3002", ["\u8ABF\u3079\u3055\u305B\u308B", "\u5642\u3092\u653E\u7F6E\u3059\u308B", "\u7981\u3058\u308B"], "e0-3");
+  E("twin_suns", "odd", "omen", "\u4E8C\u3064\u306E\u592A\u967D", "\u8703\u6C17\u697C\u306E\u306A\u304B\u3001\u7A7A\u306B\u4E8C\u3064\u306E\u592A\u967D\u304C\u898B\u3048\u305F\u3002", ["\u745E\u5146\u3068\u795D\u3046", "\u51F6\u5146\u3068\u3057\u3066\u5099\u3048\u308B", "\u89B3\u6E2C\u3092\u547D\u3058\u308B"], "e1-4");
+  E("ghost_fleet", "odd", "omen", "\u5E7D\u970A\u8239", "\u9727\u306E\u6D77\u306B\u3001\u898B\u77E5\u3089\u306C\u8239\u56E3\u304C\u73FE\u308C\u3001\u6D88\u3048\u305F\u3002", ["\u6D77\u8ECD\u306B\u8B66\u6212\u3055\u305B\u308B", "\u7948\u7977\u3092\u884C\u3046", "\u6F01\u5E2B\u306E\u8A71\u3068\u7247\u4ED8\u3051\u308B"], "e1-5 coast");
+  E("sleeping_king_legend", "odd", "culture_boom", "\u7720\u308C\u308B\u738B\u306E\u4F1D\u8AAC", "\u300C\u7720\u308C\u308B\u738B\u304C\u76EE\u899A\u3081\u308B\u300D\u3068\u3044\u3046\u4F1D\u8AAC\u304C\u3001\u6C11\u306E\u9593\u306B\u306F\u3084\u3063\u305F\u3002", ["\u4F1D\u8AAC\u3092\u5229\u7528\u3059\u308B", "\u7981\u3058\u308B", "\u7B11\u3044\u98DB\u3070\u3059"], "e1-4");
+  E("mysterious_stones", "odd", "omen", "\u5947\u5999\u306A\u77F3\u306E\u5186\u74B0", "\u91CE\u306B\u3001\u8AB0\u304C\u5EFA\u3066\u305F\u304B\u5206\u304B\u3089\u306A\u3044\u5DE8\u77F3\u304C\u4E26\u3093\u3067\u3044\u305F\u3002", ["\u795E\u6BBF\u306B\u3059\u308B", "\u7814\u7A76\u3055\u305B\u308B", "\u7834\u58CA\u3059\u308B"], "e0-2");
+  E("child_oracle", "odd", "omen", "\u795E\u8A17\u306E\u5B50", "\u5E7C\u3044\u5B50\u4F9B\u304C\u3001\u672A\u6765\u3092\u8A00\u3044\u5F53\u3066\u308B\u3068\u8A55\u5224\u306B\u306A\u3063\u305F\u3002", ["\u5BAE\u5EF7\u306B\u8FCE\u3048\u308B", "\u89AA\u5143\u306B\u8FD4\u3059", "\u8056\u8077\u8005\u306B\u9810\u3051\u308B"], "e1-4");
+  E("plague_doctor_cult", "odd", "omen", "\u5947\u75C5\u6CBB\u7642\u306E\u6D41\u884C", "\u6839\u62E0\u306E\u306A\u3044\u6CBB\u7642\u6CD5\u304C\u3001\u90FD\u3067\u5927\u6D41\u884C\u3057\u3066\u3044\u308B\u3002", ["\u7981\u6B62\u3059\u308B", "\u533B\u5E2B\u306B\u691C\u8A3C\u3055\u305B\u308B", "\u653E\u7F6E\u3059\u308B"], "e2-4");
+  var EVENT_BY_ID = Object.freeze(Object.fromEntries(EVENTS2.map((e) => [e.id, e])));
+
+  // js/core/wcde/events.js
+  var clamp39 = (v, a = 0, b = 1) => v < a ? a : v > b ? b : v;
+  var U5 = (civ, ...p) => hashSeed(civ.historySeed, "evt", ...p) % 1000003 / 1000003;
+  var FAC2 = { nob: "nobility", mil: "military", clr: "clergy", mer: "merchants", com: "commoners", bur: "bureaucrats", art: "artisans", clan: "clans" };
+  var ERA_AT = [0.06, 0.15, 0.3, 0.5, 0.75];
+  var scaleOf = (st) => 20 + (st.pop ?? 0) * 3e-4;
+  function contextOf(ctx, st) {
+    const { civ } = ctx, n2 = Object.keys(st.techAdopted ?? {}).length / Math.max(1, TREE.length);
+    let era = 0;
+    while (era < 5 && n2 >= ERA_AT[era]) era++;
+    let rival = null, friend = null, rv = -15, fv = 15;
+    for (const id of Object.keys(st.relations ?? {}).sort()) {
+      const o = civ.states[id];
+      if (!o?.alive || o.id === st.id) continue;
+      const v = st.relations[id];
+      if (v < rv) {
+        rv = v;
+        rival = o;
+      }
+      if (v > fv) {
+        fv = v;
+        friend = o;
+      }
+    }
+    const cap = civ.groups[st.capitalGroupId], S = scaleOf(st);
+    return { era, rival, friend, war: st.warIds.length > 0, poly: st.polity, her: !!REGIMES2[regimeOf2(st)]?.heredity, stab: st.stability, poor: st.treasury < S * 4, rich: st.treasury > S * 20, big: st.pop > 15e4, small: st.pop < 4e4, coast: !!cap && (ctx.world?.cell?.coastDist?.[cap.cell] ?? 9) <= 1, S };
+  }
+  var fill = (t, st, cx) => String(t).replaceAll("{s}", st.name).replaceAll("{L}", st.leader?.name ?? "\u6307\u5C0E\u8005").replaceAll("{r}", cx.rival?.name ?? "\u6575\u56FD").replaceAll("{f}", cx.friend?.name ?? "\u53CB\u597D\u56FD");
+  var fxOf3 = (ev, i) => {
+    const a = ARCH[ev.arch], n2 = ev.opts.length;
+    const base = i >= n2 ? a[3] : a[Math.min(i, 2)];
+    return `${base}${ev.x?.[i] ? " " + ev.x[i] : ""}`.trim();
+  };
+  function leaderChange(ctx, st, mode) {
+    const { civ } = ctx, mi2 = civ.monthIndex;
+    if (mode === "assn") {
+      addShock(st, mi2, "event", 0.05, 12);
+      makeEvent(civ, ctx.ids, { kind: "leader_assassinated", title: `${st.name}\u306E${st.leader?.name ?? "\u6307\u5C0E\u8005"}\u304C\u6697\u6BBA\u3055\u308C\u305F`, participants: [{ entityId: st.id, role: "state" }], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, facts: { stateId: st.id }, provenance: "simulation" });
+    }
+    if ((mode === "die" || mode === "assn" || mode === "abd") && st.player && isLive54(civ) && DECISION_HOOKS.succession(ctx, st)) return;
+    enthrone(ctx, st, { kin: mode === "die" || mode === "abd" ? true : mode === "assn" ? ctx.rng() < 0.55 : false });
+    if (mode === "coup") {
+      st.stability = clamp39(st.stability - 0.05);
+      addShock(st, mi2, "event", 0.04, 10);
+    }
+  }
+  function farPart(ctx, st) {
+    const gs = byState(ctx).get(st.id) ?? [], cap = ctx.civ.groups[st.capitalGroupId];
+    if (gs.length < 4 || !cap) return null;
+    const far = gs.filter((g) => g.id !== cap.id).map((g) => [distKm(ctx.world, cap.cell, g.cell), g]).sort((a, b) => b[0] - a[0] || (a[1].id < b[1].id ? -1 : 1)).map((x) => x[1]);
+    return far.slice(0, Math.max(1, Math.min(far.length - 1, Math.round(gs.length * 0.35))));
+  }
+  function shift(ctx, st, kind) {
+    const { civ } = ctx, cand2 = regimeCandidates(ctx, st, 0.7).filter((c) => kind === "mil" ? c.id === "junta" || familyOf2(c.id) === "aut" : kind === "rep" ? familyOf2(c.id) === "rep" : kind === "mon" ? familyOf2(c.id) === "mon" : familyOf2(c.id) !== familyOf2(regimeOf2(st)) || c.gap > 0);
+    if (!cand2.length) {
+      st.stability = clamp39(st.stability - 0.04);
+      return false;
+    }
+    const tot = cand2.reduce((a, c) => a + c.w, 0);
+    let x = U5(civ, st.id, civ.monthIndex, "rg", kind) * tot, pick2 = cand2[0].id;
+    for (const c of cand2) {
+      x -= c.w;
+      if (x <= 0) {
+        pick2 = c.id;
+        break;
+      }
+    }
+    const ok3 = switchRegime(ctx, st, pick2, kind === "mil" ? "military_takeover" : kind === "rev" ? "revolution" : "reform");
+    return !!ok3;
+  }
+  function applyFx(ctx, st, fx3, cx) {
+    const { civ } = ctx, mi2 = civ.monthIndex, S = cx.S, F = st.politics?.factions;
+    for (const t of fx3.split(/\s+/).filter(Boolean)) {
+      let m;
+      if (m = /^([a-zA-Z]+)([+-]\d+(?:\.\d+)?)$/.exec(t)) {
+        const k = m[1], v = +m[2];
+        if (k === "stab") st.stability = clamp39(st.stability + v * 0.01);
+        else if (k === "tre") st.treasury += v * S * 0.5;
+        else if (k === "pop") {
+          const f = 1 + v / 100;
+          for (const g of byState(ctx).get(st.id) ?? []) g.pop = Math.max(1, g.pop * f);
+          st.pop = Math.max(0, st.pop * f);
+        } else if (k === "army") st.army = Math.max(0, st.army * (1 + v / 100));
+        else if (k === "leg") {
+          if (v < 0) addShock(st, mi2, "event", -v * 0.01, 10);
+          else st.stability = clamp39(st.stability + v * 5e-3);
+        } else if (k === "tens") for (const g of byState(ctx).get(st.id) ?? []) for (const c of g.cohorts ?? []) c.tension = clamp39(c.tension * (1 + v * 0.05));
+        else if (FAC2[k]) {
+          const f = F?.[FAC2[k]];
+          if (f) f.support = clamp39(f.support + v * 0.01);
+        } else if (k === "relR" && cx.rival) {
+          st.relations[cx.rival.id] = clamp39((st.relations[cx.rival.id] ?? 0) + v, -100, 100);
+          cx.rival.relations[st.id] = clamp39((cx.rival.relations[st.id] ?? 0) + v, -100, 100);
+        } else if (k === "relF" && cx.friend) {
+          st.relations[cx.friend.id] = clamp39((st.relations[cx.friend.id] ?? 0) + v, -100, 100);
+          cx.friend.relations[st.id] = clamp39((cx.friend.relations[st.id] ?? 0) + v, -100, 100);
+        } else if (k === "relA") for (const id of Object.keys(st.relations ?? {})) {
+          const o = civ.states[id];
+          if (o?.alive) st.relations[id] = clamp39(st.relations[id] + v * 0.5, -100, 100);
+        }
+      } else if (m = /^ldr:(\w+)$/.exec(t)) leaderChange(ctx, st, m[1]);
+      else if (m = /^rebel:(\w+)$/.exec(t)) {
+        const k = m[1];
+        if (k === "coup") {
+          leaderChange(ctx, st, "coup");
+          const f = F?.military;
+          if (f) f.support = clamp39(f.support + 0.05);
+        } else if (k === "revolution") shift(ctx, st, "rev");
+        else {
+          const part2 = farPart(ctx, st);
+          if (part2) runSecession(ctx, st, part2);
+          else st.stability = clamp39(st.stability - 0.06);
+        }
+      } else if (m = /^regime:(\w+)$/.exec(t)) shift(ctx, st, m[1]);
+      else if (m = /^(war|warby):R:(\w+)$/.exec(t)) {
+        const r = cx.rival;
+        if (!r?.alive || atWarWith(civ, st, r)) continue;
+        const reason = m[2];
+        if (m[1] === "war") declareWar(ctx, st, r, { reason, provenance: "simulation" });
+        else if (st.player && isLive54(civ) && DECISION_HOOKS.warIncoming(ctx, r, st, { reason })) {
+        } else declareWar(ctx, r, st, { reason, provenance: "simulation" });
+      }
+    }
+    ctx._byState = null;
+  }
+  function chainAfter(ctx, st, ev, i) {
+    const { civ } = ctx;
+    for (const c of ev.ch) if ((!c.only || c.only.includes(i)) && U5(civ, st.id, civ.monthIndex, ev.id, c.id) < c.p) queueEvent(st, c.id, c.delay, civ.monthIndex);
+  }
+  function resolve2(ctx, st, ev, i, cx) {
+    const { civ } = ctx, chosen = i >= ev.opts.length ? "\u4F55\u3082\u3057\u306A\u304B\u3063\u305F" : ev.opts[i];
+    applyFx(ctx, st, fxOf3(ev, i), cx);
+    chainAfter(ctx, st, ev, i);
+    (st.evSeen ?? (st.evSeen = {}))[ev.id] = civ.monthIndex;
+    st.evLast = civ.monthIndex;
+    makeEvent(civ, ctx.ids, { kind: "event_occurred", title: `${st.name}\u3067\u300C${fill(ev.title, st, cx)}\u300D\uFF08${chosen}\uFF09`, participants: [{ entityId: st.id, role: "state" }], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, facts: { eventId: ev.id, option: i, cat: ev.cat }, provenance: st.player ? "player" : "simulation" });
+    return chosen;
+  }
+  registerDecision("event", (ctx, d, opt) => {
+    const st = ctx.civ.states[d.stateId], ev = EVENT_BY_ID[d.payload.evId];
+    if (!st?.alive || !ev) return { ok: true, note: "\u51FA\u6765\u4E8B\u306F\u3059\u3067\u306B\u904E\u304E\u3066\u3044\u305F" };
+    const i = Number(opt);
+    if (!Number.isInteger(i) || i < 0 || i > ev.opts.length) return { ok: false, error: "\u305D\u306E\u9078\u629E\u80A2\u306F\u3042\u308A\u307E\u305B\u3093" };
+    const cx = contextOf(ctx, st), chosen = resolve2(ctx, st, ev, i, cx);
+    return { ok: true, note: chosen };
+  });
+
+  // js/core/wcde/domains/index.js
+  init_warfare();
+
+  // js/core/wcde/contract.js
+  init_month_transaction();
+  var AUTHORITY = Object.freeze({ PLAYER: "player_order", CREATOR: "creator_intervention", AI: "ai_action", SIM: "simulation_transition", ADMIN: "administrative" });
 
   // js/core/wcde/uprising.js
   init_population();
@@ -33782,8 +33953,6 @@ ${shown}${more}`;
   init_events();
   init_naming();
   init_regimes();
-  init_founding();
-  init_control();
   init_decisions();
   var UPRISING_KINDS = Object.freeze({
     revolution: { ja: "\u6C11\u8846\u8702\u8D77\uFF08\u9769\u547D\uFF09", faction: "commoners", state: false, blurb: "\u91CD\u3044\u8CA0\u62C5\u3068\u4E0D\u6E80\u3092\u62B1\u3048\u305F\u6C11\u8846\u304C\u7ACB\u3061\u4E0A\u304C\u308A\u3001\u4F53\u5236\u3092\u5012\u305D\u3046\u3068\u3059\u308B\u3002" },
@@ -33794,12 +33963,7 @@ ${shown}${more}`;
   });
 
   // js/core/wcde/commands.js
-  init_control();
-  init_military();
-  init_calendar();
   init_clock();
-  init_catastrophe();
-  init_intervention();
   init_negotiation();
   init_pacts();
   init_diplomacy();
@@ -33814,9 +33978,6 @@ ${shown}${more}`;
   init_naming();
   init_language();
   init_regimes();
-  init_regime_evolution();
-  init_flag();
-  init_founding();
   init_shocks();
   var ORIGINS_HEREDITARY = Object.freeze(["\u738B\u306E\u5B50\uFF08\u5AE1\u51FA\uFF09", "\u738B\u306E\u5B50\uFF08\u5EB6\u5B50\uFF09", "\u738B\u306E\u5F1F", "\u738B\u306E\u7525", "\u5C06\u8ECD", "\u5BB0\u76F8", "\u990A\u5B50", "\u8056\u8077\u8005"]);
   var ORIGINS_OTHER = Object.freeze(["\u5C06\u8ECD", "\u9577\u8001", "\u5546\u4EBA", "\u66F8\u8A18\u5B98", "\u5F01\u8AD6\u5BB6", "\u795E\u5B98", "\u6C11\u4F1A\u306E\u63A8\u6319"]);
@@ -33832,8 +33993,6 @@ ${shown}${more}`;
   // js/core/wcde/commands.js
   init_corps();
   init_battlefield();
-  init_special_ops();
-  init_military();
   init_corps();
   init_decision_state();
 
@@ -33841,9 +34000,7 @@ ${shown}${more}`;
   init_tech();
 
   // js/core/wcde/world.js
-  init_calendar();
   init_civ_state();
-  init_contract();
   init_clock();
 
   // js/plugins/index.js
@@ -34049,12 +34206,12 @@ ${shown}${more}`;
       }
       if (major.length) {
         const known = new Set(ui.get().majorQueue.map((x) => x.id));
-        const fresh2 = major.filter((e) => !known.has(e.id));
-        if (fresh2.length) {
+        const fresh3 = major.filter((e) => !known.has(e.id));
+        if (fresh3.length) {
           const wasEmpty = ui.get().majorQueue.length === 0;
           if (wasEmpty) ui.set({ resumeAfterMajor: adapter.time.isRunning() });
           if (adapter.time.isRunning()) adapter.time.stop();
-          ui.set({ majorQueue: [...ui.get().majorQueue, ...fresh2] });
+          ui.set({ majorQueue: [...ui.get().majorQueue, ...fresh3] });
         }
       }
       if (ui.get().settings.showToasts) {
@@ -35138,7 +35295,7 @@ ${shown}${more}`;
   var WARN_AFTER_MONTHS = 12 * 1500;
   var STEPS2 = [["none", "\u4E16\u754C"], ["group", "\u521D\u671F\u96C6\u56E3"], ["running", "\u81EA\u52D5\u9032\u884C"], ["ready", "\u56FD\u5BB6\u6210\u7ACB"]];
   var stepIndex = (phase) => phase === "founded" ? 4 : Math.max(0, STEPS2.findIndex(([p]) => p === phase));
-  function createStartFlow({ adapter, ui, warnAfterMonths = WARN_AFTER_MONTHS, now = () => Date.now() }) {
+  function createStartFlow({ adapter, ui, warnAfterMonths = WARN_AFTER_MONTHS, now: now2 = () => Date.now() }) {
     const el2 = h("section", { class: "v53-start", role: "region", "aria-label": "\u6B74\u53F2\u306E\u59CB\u307E\u308A" });
     const body = h("div", { class: "v53-start-body" });
     const steps = h("ol", { class: "v53-steps", "aria-label": "\u624B\u9806" }, STEPS2.map(([p, t], i) => h("li", { dataset: { step: p } }, h("span", { class: "n", text: String(i + 1) }), h("span", { text: t }))));
@@ -35155,7 +35312,7 @@ ${shown}${more}`;
       });
     }
     function viewWorld() {
-      const seed = h("input", { type: "text", class: "v53-input", value: `world-${Date.now().toString(36)}`, "aria-label": "\u30B7\u30FC\u30C9" });
+      const seed2 = h("input", { type: "text", class: "v53-input", value: `world-${Date.now().toString(36)}`, "aria-label": "\u30B7\u30FC\u30C9" });
       const cells = h("select", { class: "v53-select", "aria-label": "\u30BB\u30EB\u6570" }, CELL_PRESETS.map(([v, t]) => h("option", { value: v, selected: v === 25e4 }, t)));
       const land = h("input", { type: "range", min: "20", max: "80", value: "36", "aria-label": "\u9678\u5730\u306E\u5272\u5408" });
       const landV = h("span", { class: "v53-hint", text: "36%" });
@@ -35170,7 +35327,7 @@ ${shown}${more}`;
         genBusy = "\u4E16\u754C\u3092\u751F\u6210\u4E2D\u2026";
         genError = "";
         render();
-        const r = await adapter.world.newWorld({ worldSeed: seed.value.trim(), resolution: { targetCells: Number(cells.value) }, landFraction: Number(land.value) / 100, layout: layout.value }, { signal: abort.signal, onProgress: (p) => {
+        const r = await adapter.world.newWorld({ worldSeed: seed2.value.trim(), resolution: { targetCells: Number(cells.value) }, landFraction: Number(land.value) / 100, layout: layout.value }, { signal: abort.signal, onProgress: (p) => {
           genBusy = `\u4E16\u754C\u3092\u751F\u6210\u4E2D: ${p?.label ?? p?.stage ?? ""}`;
         } });
         abort = null;
@@ -35180,7 +35337,7 @@ ${shown}${more}`;
       });
       return [
         h("p", { class: "v53-lead", text: "\u5927\u9678\u30FB\u6C17\u5019\u30FB\u5DDD\u30FB\u8CC7\u6E90\u3092\u6301\u3064\u7403\u9762\u306E\u4E16\u754C\u3092\u4F5C\u308A\u307E\u3059\u3002\u540C\u3058\u30B7\u30FC\u30C9\u3068\u8A2D\u5B9A\u306A\u3089\u3001\u540C\u3058\u5730\u5F62\u306B\u306A\u308A\u307E\u3059\u3002" }),
-        h("div", { class: "v53-form grid" }, label2("\u30B7\u30FC\u30C9", seed), label2("\u30BB\u30EB\u6570", cells), label2("\u9678\u5730\u306E\u5272\u5408", h("span", { class: "v53-inline" }, land, landV)), label2("\u5927\u9678\u306E\u914D\u7F6E", layout)),
+        h("div", { class: "v53-form grid" }, label2("\u30B7\u30FC\u30C9", seed2), label2("\u30BB\u30EB\u6570", cells), label2("\u9678\u5730\u306E\u5272\u5408", h("span", { class: "v53-inline" }, land, landV)), label2("\u5927\u9678\u306E\u914D\u7F6E", layout)),
         genBusy ? h("p", { class: "v53-hint", role: "status", text: genBusy }) : null,
         genError ? h("p", { class: "v53-error", role: "alert", text: genError }) : null,
         h("div", { class: "v53-actions" }, go, h("button", { type: "button", class: "v53-btn", dataset: { act: "open" }, text: "\u30D5\u30A1\u30A4\u30EB\u3092\u958B\u304F", onclick: () => adapter.world.openFile() }))
@@ -35218,7 +35375,7 @@ ${shown}${more}`;
       if (abort) return;
       abort = new AbortController();
       runError = "";
-      startedAt = now();
+      startedAt = now2();
       progress = { months: 0, year: 0, states: 0 };
       adapter.start.run({ signal: abort.signal, onProgress: (p) => {
         progress = p;
@@ -35235,7 +35392,7 @@ ${shown}${more}`;
     }
     const bar2 = h("div", { class: "v53-progress", dataset: { role: "progress" } });
     function renderProgress() {
-      const p = progress ?? { months: 0 }, secs = Math.round((now() - startedAt) / 1e3), long = p.months >= warnAfterMonths;
+      const p = progress ?? { months: 0 }, secs = Math.round((now2() - startedAt) / 1e3), long = p.months >= warnAfterMonths;
       bar2.replaceChildren(
         h("p", { class: "v53-progress-line" }, h("b", { text: `${Math.floor(p.months / 12).toLocaleString("ja-JP")} \u5E74\u7D4C\u904E` }), h("span", { text: `\u3000\u4E16\u754C\u306E\u5E74: ${fmtNum(p.year ?? 0)}\u5E74\u3000\u56FD\u5BB6 ${p.states ?? 0}\u3000${secs}\u79D2` })),
         long ? h("p", { class: "v53-warn", role: "status", text: "\u56FD\u5BB6\u306E\u6210\u7ACB\u307E\u3067\u9577\u5F15\u3044\u3066\u3044\u307E\u3059\u3002\u3053\u306E\u307E\u307E\u7D9A\u3051\u308B\u3053\u3068\u3082\u3001\u3044\u3063\u305F\u3093\u4E2D\u65AD\u3059\u308B\u3053\u3068\u3082\u3067\u304D\u307E\u3059\uFF08\u9032\u884C\u306F\u6B62\u307E\u308A\u307E\u305B\u3093\u3002\u6253\u3061\u5207\u308A\u3082\u3057\u307E\u305B\u3093\uFF09\u3002" }) : null,
@@ -35833,7 +35990,7 @@ ${shown}${more}`;
     const p = String(id).split("_")[0];
     return p === "state" || p === "war" || p === "event" || p === "treaty" || p === "decision" ? p : null;
   };
-  function createLiveAdapter({ store, civActions, history, timeActions, actions, groupActions = null, createCanvas = null, appVersion = "", openFileDialog = null, editMap = null, legacy = null, now = () => Date.now(), eventChunk = 2e3 }) {
+  function createLiveAdapter({ store, civActions, history, timeActions, actions, groupActions = null, createCanvas = null, appVersion = "", openFileDialog = null, editMap = null, legacy = null, now: now2 = () => Date.now(), eventChunk = 2e3 }) {
     const mapOf = () => store.getState().map, civOf = () => mapOf()?.civ ?? null, worldOf = () => mapOf()?.world ?? null;
     const subs = /* @__PURE__ */ new Set();
     let runGuard = null;
@@ -36126,10 +36283,10 @@ ${shown}${more}`;
       }
       if (cursor.civ !== civ || cursor.n > civ.events.length) cursor = { civ, n: civ.events.length };
       if (history.isPast() || cursor.n === civ.events.length) return [];
-      const fresh2 = civ.events.slice(cursor.n);
+      const fresh3 = civ.events.slice(cursor.n);
       cursor.n = civ.events.length;
       const worldPop = aliveStates2(civ).reduce((a, s) => a + s.pop, 0);
-      return fresh2.map((e) => {
+      return fresh3.map((e) => {
         const cause = e.causes.map((c) => getEvent(civ, c.targetId)).find(Boolean);
         return { id: e.eventId, month: evMonth(e), kind: e.kind, title: e.title, detail: "", causeText: cause ? `\u300C${cause.title}\u300D\u3092\u53D7\u3051\u3066` : "", actors: e.participants.filter((p) => civ.states[p.entityId]).map((p) => ({ kind: "state", id: p.entityId, name: civ.states[p.entityId].name })), impact: impactOf2(civ, e, worldPop) };
       });

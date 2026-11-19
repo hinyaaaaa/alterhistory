@@ -9,6 +9,7 @@ import { distKm } from "./states.js";
 import { onTreatySigned, onTreatyEnded, callDependents, submitAfterWar } from "../wcde/dependency.js";
 import { callPacts } from "../wcde/pacts.js";
 import { recentEventsFor, asCauses, getEvent } from "./graph.js";
+import { enqueue } from "./compaction-queue.js";
 
 /** 戦争の理由の表示名（v6.9.0）。旧版は AI の戦争がすべて「conquest」だった */
 export const WAR_REASON_JA = Object.freeze({ conquest: "領土の征服", plunder: "略奪・遠征", succession: "王位継承をめぐる争い", religion: "宗教的な対立", trade_route: "交易路・資源をめぐる争い", maritime: "海上覇権をめぐる争い", revenge: "報復・失地の回復", independence: "独立・自治を求める戦争", unification: "統一を求める戦争", ideology: "体制・イデオロギーの対立", resource: "資源をめぐる争い", subjugation: "従属の強制", civil_war: "内戦・反乱", alliance: "同盟に基づく参戦", preventive: "予防戦争", defense: "防衛" });
@@ -63,7 +64,7 @@ export function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "s
   t.event = ev.eventId; onTreatySigned(ctx, t, a, b); return t;
 }
 export function endTreaty(ctx, t, why, byId = null) {
-  const { civ, ids } = ctx; t.active = false; onTreatyEnded(ctx, t); t.endedAt = civ.monthIndex; if (t.type === "nonaggression") for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
+  const { civ, ids } = ctx; t.active = false; onTreatyEnded(ctx, t); t.endedAt = civ.monthIndex; enqueue(ctx, "treaty", t.id, civ.monthIndex); if (t.type === "nonaggression") for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
   makeEvent(civ, ids, { kind: "treaty_ended", title: `${TREATY[t.type].ja}が${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId === t.b ? "breaker" : "party" }], location: null, effects: byId ? [{ targetId: t.id, property: "broken_by", before: null, after: byId }] : [] });
 }
 /** 過去の同じ相手との戦争が、今回の宣戦の理由になっていれば「反応」として結ぶ（負けた側が仕掛けるなら根拠は strong） */

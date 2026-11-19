@@ -7,7 +7,7 @@
 //   ・ニュースは UI 向けの投影で、正本ではない。キュー・確認済み ID・停止前の速度・走査位置だけを保存し、画面の一覧は事実イベントから都度作る。
 //   ・時間を早送りする管理命令（time.advance）は、ニュースを判定せず走査位置だけを進める（早送りで飛ばした出来事で、後から全画面が出ない）。
 import { inLiveRange, findRecord } from "../civ/archive.js";
-import { checkpointFull, restoreInto } from "./contract.js";
+import { beginMonth } from "../sim/month-transaction.js"; // v6.20.0: 取り消し点は葉のモジュール（contract.js を import しない。循環 import の解消）
 import { hasPending, decisionsOf } from "./decision-state.js";
 
 export const SPEEDS = Object.freeze([{ id: 0, label: "停止", mps: 0 }, { id: 1, label: "月", mps: 1 }, { id: 2, label: "3月", mps: 3 }, { id: 3, label: "年", mps: 12 }, { id: 4, label: "5年", mps: 60 }]);
@@ -80,14 +80,19 @@ export const skipNews = (civ) => { newsOf(civ).scanned = civ.events.length; };
 /** 世界時計を最大 months か月進める（UI の再生が呼ぶ）。重大ニュースが出た月で止まる。hold 中は拒否 */
 export function clockRun(w, months) {
   const { civ } = w, T = timeOf(civ); if (T.hold) return hasPending(civ) ? { ok: false, code: "decision_hold", error: "決断が必要です（選ぶまで時間は進みません）。重大ニュースの確認待ちが残っていれば、先に OK を押してください" } : { ok: false, code: "news_hold", error: "重大ニュースの確認待ちです（OK を押すまで時間は進みません）" };
-  const n = Math.max(1, Math.min(MAX_RUN, months | 0)), snap = checkpointFull(civ); let done = 0, held = false;
-  decisionsOf(civ).live = true; // v6.12.0: 人間が時間を進めている間だけ、決断（条約の申し出・宣戦・継承・反乱・会戦）が出る
+  const n = Math.max(1, Math.min(MAX_RUN, months | 0)); let done = 0, held = false;
+  decisionsOf(civ).live = true; // v6.12.0: 人間が時間を進めている間だけ、決断（条約の申し出・宣戦・継承・反乱・会戦）が出る。取り消し点より前に立てる（失敗時の再現も、同じ live で進める）
+  const tx = beginMonth(w); // v6.20.0: 差分型の月次トランザクション
   try { for (; done < n; done++) { w.sim.advanceMonth(); if (scanNews(civ) > 0 || timeOf(civ).hold) { done++; held = true; break; } } } catch (err) {
-    // 失敗した月の手前まで、取り消し点から決定的に再現する（その手前の月は重大ニュースを出していない）
-    restoreInto(w, snap); const msg = String(err?.message ?? err); for (let i = 0; i < done; i++) w.sim.advanceMonth(); const ok = done;
+    // 失敗した月の手前まで、取り消し点から決定的に再現する（その手前の月は重大ニュースを出していない）。その月の途中状態は一切残さない
+    tx.restoreAgain(); const msg = String(err?.message ?? err); try { for (let i = 0; i < done; i++) w.sim.advanceMonth(); if (civ.options?.wcde) w.sim.commit(); } finally { tx.commit(); } const ok = done;
     skipNews(civ); timeOf(civ).speed = 0; civ.wcde.diagnostics.push({ at: civ.monthIndex, failedMonth: civ.monthIndex + 1, message: msg }); if (civ.wcde.diagnostics.length > 50) civ.wcde.diagnostics.shift();
     return { ok: false, advanced: ok, error: msg, haltedAt: { ...civ.date } };
   } finally { if (civ.wcde?.decisions) civ.wcde.decisions.live = false; }
+  tx.commit();
+  // v6.20.0: 対話の進行（clock.run）でも、安全な境界（この呼び出しが成功したあと・次の取り消し点より前）で、直近の作業バッファより古い出来事を歴史資料へ移す。
+  //   v6.19.0 までは time.advance（一括の進行）でしか移さず、UI で再生している間は civ.events が増え続けていた（メモリ増大の原因のひとつ）
+  if (civ.options?.wcde) w.sim.commit();
   return { ok: true, advanced: done, held, date: { ...civ.date } };
 }
 

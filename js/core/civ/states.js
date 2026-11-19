@@ -16,6 +16,7 @@ import { recentEventsFor, asCauses } from "./graph.js";
 import { speciesOf, lifeScale } from "./species.js";
 import { REGIMES as REG15, regimeOf as regimeOf15 } from "../wcde/regimes.js";
 import { stateStability as officeStability } from "../wcde/statefx.js"; // v6.12.0: 役職と国策の効果
+import { enqueue } from "./compaction-queue.js";
 const OFFICE_RULER = (st) => REG15[regimeOf15(st)].ruler;
 
 export const POLITY = Object.freeze({ tribal: "部族", chiefdom: "首長制", kingdom: "王国", empire: "帝国", republic: "共和制", theocracy: "神権制" });
@@ -56,7 +57,7 @@ export function evaluateFormation(ctx, seed) {
 }
 
 const dissolve = (ctx, st, why) => {
-  const { civ, ids } = ctx; st.alive = false; st.corps = null; /* v6.13.0: 滅んだ国家の部隊・指揮官は持ち越さない */ st.dissolvedAt = civ.monthIndex; for (const gid in civ.groups) if (civ.groups[gid].stateId === st.id) civ.groups[gid].stateId = null;
+  const { civ, ids } = ctx; st.alive = false; st.corps = null; /* v6.13.0: 滅んだ国家の部隊・指揮官は持ち越さない */ st.dissolvedAt = civ.monthIndex; enqueue(ctx, "state", st.id, civ.monthIndex); for (const gid in civ.groups) if (civ.groups[gid].stateId === st.id) civ.groups[gid].stateId = null;
   for (const wid of [...st.warIds]) ctx.endWarHook?.(ctx, civ.wars[wid], "state_dissolved");
   makeEvent(civ, ids, { kind: "state_dissolved", title: `${st.name}が${why}`, participants: [{ entityId: st.id, role: "state" }], location: { cell: civ.groups[st.capitalGroupId]?.cell ?? null }, facts: { stateId: st.id }, causes: [...(st.lastCrisisEvent ? [{ targetId: st.lastCrisisEvent, relation: "caused_by", basis: "plausible" }] : []), ...asCauses(recentEventsFor(civ, [st.id], ["war_ended"], 24, 1), "contributed_to", "plausible")] });
 };
@@ -96,7 +97,7 @@ export function stepUnification(ctx, groupsByState) {
       const p = 0.03 * (lead ? HEGEMON.boost : 1) * adm * (same ? 1 : lead ? 0.6 : 0.35) * (A.stability < 0.45 ? 1.8 : 1) * Math.min(1.5, B.stability + 0.3);
       if (rng() >= p) continue;
       const gsA = groupsByState.get(aid) ?? []; for (const g of gsA) g.stateId = B.id; gsB.push(...gsA); groupsByState.delete(aid); absorbers.add(B.id);
-      A.alive = false; A.corps = null; A.dissolvedAt = mi; A.mergedInto = B.id; merged.add(aid); if (lead) doneLead++; else done++;
+      A.alive = false; A.corps = null; A.dissolvedAt = mi; A.mergedInto = B.id; enqueue(ctx, "state", A.id, mi); merged.add(aid); if (lead) doneLead++; else done++;
       makeEvent(civ, ids, { kind: "state_merged", title: `${A.name}が${B.name}に統合された`, participants: [{ entityId: aid, role: "absorbed" }, { entityId: B.id, role: "state" }], location: cB ? { cell: cB.cell } : null, facts: { stateId: B.id, absorbed: aid, same: !!same }, causes: A.lastCrisisEvent ? [{ targetId: A.lastCrisisEvent, relation: "contributed_to", basis: "plausible" }] : [] });
       B.interpDirty = true; break;
     }

@@ -1,3 +1,10 @@
+# v6.20.0（最新）: 履歴の外部保存と軽い月次処理
+
+- 中身は `docs/V6_20_0.md`（仕様との差・測定値・テストの状況）と `docs/CHANGELOG.md`。
+- v6.19.0 の起動不能（循環 import）を直した。取り消し点は `sim/month-transaction.js`（葉）。`clock.js` は `contract.js` を import しない。この向きを崩さないこと。
+- 注意: 休眠した要素（COLD）は月の途中で書かない。書くなら `writerOf(ctx)`（journal）を通す。確認は `tests/perf/v620-guard-soak.mjs`。履歴は `HistoryStore`（外部）＋常駐。同期の `iterRecords` は常駐だけ。外部を含むのは `iterRecordsAsync` ほか。外部保存つきの world は `packSave`（同期）を拒否する。
+- 未確認: 実機・IndexedDB の挙動、5000 年の完走、groups の journal 化、store:false の扱い。旧仕様の 14 スイート（V6_20_0.md §4）は書き直しが要る。
+
 # v6.19.0（最新）: 出来事 240 種・継承法・反乱の戦争化・災厄と世界の再創造
 
 - 中身は `docs/CHANGELOG.md` の v6.19.0。要件の正本は `docs/REQUIREMENTS.md`（v6.20.0 は、これを最初に読む）。

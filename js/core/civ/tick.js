@@ -1,6 +1,7 @@
 // v5 M0 / v6.1.0 M1: 正式な月次tick（仕様 §5.2）。全システムは自分で月を進めず、ここに登録した順序で1か月ずつ更新される。
 // 順序を変える変更は DECISIONS.md に理由を残し、wcde/domains/registry.js の phase と突き合わせる（validateRegistry）。
 // 依存の向き: 時計 → 創造主の介入（有効値の確定）→ 自然環境 → 生態系・人口 → 文化・言語・宗教 → 技術 → 経済 → 政治 → 軍事 → AI の計画 → 検証つき実行 → 戦争・外交 → 人物・都市 → 歴史資料 → 整合性・ニュース。
+import { perf } from "../perf/perf-monitor.js";
 export const PHASES = Object.freeze([
   { key: "clock", name: "世界時計を次の月へ" },
   { key: "interventions", name: "創造主の介入の減衰（当月の有効値を確定）" },
@@ -35,10 +36,10 @@ export function createTicker() {
       handlers.get(phase).push({ fn, label, every, offset });
     },
     runMonth(ctx) {
-      ctx.trace = [];
+      ctx.trace = []; const pm = perf.enabled; if (pm) perf.beginMonth(); // v6.20.0: 領域（フェーズ）ごとの処理時間を測る
       // 月は時計の処理（clock フェーズ）で進む。every の判定は、その月が進んだあとの値（各処理が見る monthIndex と同じ値）で行う
-      for (const key of PHASE_KEYS) for (const h of handlers.get(key)) { ctx.phase = key; if (h.every > 1) { const mi = ctx.civ?.monthIndex ?? 0; if (((mi % h.every) + h.every) % h.every !== h.offset) continue; } h.fn(ctx); ctx.trace.push(`${key}:${h.label}`); }
-      ctx.phase = null; return ctx;
+      for (const key of PHASE_KEYS) for (const h of handlers.get(key)) { ctx.phase = key; if (h.every > 1) { const mi = ctx.civ?.monthIndex ?? 0; if (((mi % h.every) + h.every) % h.every !== h.offset) continue; } if (pm) { const t0 = performance.now(); h.fn(ctx); perf.add(key, performance.now() - t0); } else h.fn(ctx); ctx.trace.push(`${key}:${h.label}`); }
+      ctx.phase = null; if (pm) perf.endMonth(ctx.civ?.monthIndex ?? 0); return ctx;
     },
     /** 登録済みの処理の一覧（台帳との突き合わせ・診断用）。月次の実行順そのまま */
     labels() { const out = []; for (const key of PHASE_KEYS) for (const h of handlers.get(key)) out.push({ phase: key, label: h.label, every: h.every }); return out; },

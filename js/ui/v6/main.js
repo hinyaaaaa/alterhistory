@@ -17,6 +17,8 @@ import { initNotify, notify } from "./notify.js";
 import { pGeo, pNations, link, uprisingFull } from "./views-a.js";
 import { renderDecision } from "./decision.js";
 import { pMilitary, corpsMarkers } from "./military.js";
+import { linkHistory, scheduleFlush } from "./history-link.js";
+import { perf } from "../../core/perf/perf-monitor.js";
 import { pWar, pDiplo, pEntity, pStats, pSettings, pCreator, fileLoader } from "./views-b.js";
 export { h };
 const $ = (s) => document.querySelector(s), root = () => $("#v6-root");
@@ -46,7 +48,7 @@ function founding() {
 }
 
 /* ---------- 画面の骨格（モックと同じ構成） ---------- */
-function start() { S.newsSeen = null; S.hub = null; S.sel = controlled() ?? null; S.hooks = { founding, render, panel: renderPanel, mapOnly: () => { S.map.draw(); }, select, focusCell, loaded: (w, warn) => { S.w = w; S.fileWarn = warn; start(); } }; shell(); render(); clearInterval(S.timer); S.timer = setInterval(tick, 250); }
+function start() { S.newsSeen = null; S.dirty = null; linkHistory(S.w); S.hub = null; S.sel = controlled() ?? null; S.hooks = { founding, render, panel: renderPanel, mapOnly: () => { S.map.draw(); }, select, focusCell, loaded: (w, warn) => { S.w = w; S.fileWarn = warn; start(); } }; shell(); render(); clearInterval(S.timer); S.timer = setInterval(tick, 250); }
 function shell() {
   const cv = h("canvas", { id: "map", "aria-label": "世界地図" });
   root().replaceChildren(h("div", { id: "app" }, h("nav", { id: "hub" }), h("aside", { id: "panel" }, h("button", { id: "prefresh", title: "世界が進んだので、このページの内容は古くなっています", onclick: () => renderPanel() }, "↻ 最新の状態に更新"), h("div", { id: "pin" })), h("main", { id: "mapwrap" }, cv, h("div", { id: "clock" }), h("div", { id: "callout" }), h("div", { id: "newscall" }), h("div", { id: "pops" }))), h("div", { id: "newsmodal", hidden: true }), h("div", { id: "decmodal", hidden: true }));
@@ -75,13 +77,13 @@ function callout(p) {
 function renderRight() {
   const w = S.w, T = timeOf(w.civ), cs = controlled();
   const eraNow = eraLabel(w.civ.wcde.config.calendar, w.civ.monthIndex); $("#clock").replaceChildren(h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""), h("div", { class: "d", id: "date" }, formatWorldDate(w)), eraNow && !eraOf(w.civ.wcde.config.calendar, w.civ.monthIndex)?.restart ? h("div", { class: "era", id: "era" }, eraNow) : null, h("div", { class: "c" }, ...SPEEDS.map((s) => h("button", { class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "", "data-speed": s.id, title: s.id ? `${s.mps} か月／秒` : "停止", onclick: () => { run({ type: "clock.setSpeed", speed: s.id }); renderRight(); } }, s.label))), h("div", { class: "n", id: "runstate" }, cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）", overlayOpen() || T.hold ? "・一時停止" : T.speed ? "" : "・停止中"));
-  announce();
+  if (S.dirtyNews !== false) announce(); // v6.20.0: ニュースは、新しい出来事があったときだけ見る（毎回の再検索をしない）
 }
 /** v6.3.0: 右のニュース欄は廃止。重大でない大きな出来事は、地図のコールアウトとトースト通知で知らせる（重大ニュースは中央の確認画面） */
 function announce() {
   const c = S.w.civ, key = (n) => n.eventId ?? n.id, feed = newsFeed(c, { limit: 16, minLevel: "major" });
   if (!S.newsSeen) { S.newsSeen = new Set(feed.map(key)); return; }
-  const fresh = feed.filter((n) => n.level !== "critical" && !S.newsSeen.has(key(n))).reverse(); feed.forEach((n) => S.newsSeen.add(key(n)));
+  const fresh = feed.filter((n) => n.level !== "critical" && !S.newsSeen.has(key(n))).reverse(); feed.forEach((n) => S.newsSeen.add(key(n))); if (S.newsSeen.size > 400) S.newsSeen = new Set(feed.map(key)); /* 重複防止に要る範囲だけ持つ（過去のIDをすべて持たない） */
   if (!fresh.length) return; const shown = fresh.slice(-3);
   const last = shown[shown.length - 1], sid = (last.entityIds ?? []).find((i) => c.states[i]), g = sid ? c.groups[c.states[sid].capitalGroupId] : null, el = $("#newscall"), M = S.map;
   if (!g || !el || !M) return;
@@ -95,9 +97,17 @@ function renderNews() {
 }
 /** 全画面・確認画面・建国の画面が開いている間は進行を止め、閉じたら自動で再開する（速度の設定は変えない） */
 const overlayOpen = () => { const on = (id) => { const e = document.getElementById(id); return !!e && !e.hidden; }; return !!document.querySelector("#fulltab, .wiz, .fullmodal") || on("decmodal") || on("newsmodal"); };
-function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ) || overlayOpen()) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold" && r.code !== "decision_hold") run({ type: "clock.setSpeed", speed: 0 }); live(); }
+function tick() { const w = S.w; if (!w || w.viewPast != null || !isRunning(w.civ) || overlayOpen()) return; const T = timeOf(w.civ), mps = SPEEDS.find((s) => s.id === T.speed)?.mps ?? 0, r = run({ type: "clock.run", months: Math.max(1, Math.round(mps / 4)) }); if (!r.ok && r.code !== "news_hold" && r.code !== "decision_hold") run({ type: "clock.setSpeed", speed: 0 }); if (r.ok) afterRun(); live(); }
+/** 進行のあと: 履歴の外部保存を進め、12 か月ごとに診断のサンプルを残す */
+function afterRun() { const c = S.w.civ; scheduleFlush(); if (c.monthIndex - (S.perfAt ?? -1e9) >= 12) { S.perfAt = c.monthIndex; import("../../core/civ/history-store.js").then((m) => { const hs = m.historyStatus(c); perf.sample({ year: c.date.year, monthIndex: c.monthIndex, events: c.events.length, resident: hs.resident, external: hs.records, cached: hs.cached }); }); } }
 /** 再生中の更新: 時計・ニュース・地図だけを毎回更新する。左のパネルは勝手に描き直さない（読んでいる最中・入力中・スクロール中の内容が変わらないように）。
  *  世界が進んでパネルの内容が古くなったときは、パネルの右上に「最新の状態に更新」を出し、押したときだけ描き直す */
-function live() { if (!$("#hub")) return; renderRight(); renderNews(); renderDecision(); S.map.corps = corpsMarkers(); S.map.draw(); if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");}
+/** 変更のあった部分だけ更新する（Dirty Rendering）。時間だけが進んだときは時計だけ。新しい出来事があればニュース。戦争中・年の区切りは地図も */
+const dirtySig = (c) => `${c.events.length}|${c.archive?.evBase ?? 0}|${c.activeWarIds.length}|${newsOf(c).queue.length}`;
+function live() {
+  if (!$("#hub")) return; const c = S.w.civ, sig = dirtySig(c), fresh = sig !== S.dirty; S.dirty = sig; S.dirtyNews = fresh; renderRight(); if (fresh) renderNews(); renderDecision();
+  if (fresh || c.activeWarIds.length > 0 || c.monthIndex % 12 === 0 || S.mapForce) { S.mapForce = false; S.map.corps = corpsMarkers(); S.map.draw(); }
+  if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");
+}
 export function boot() { if (!document.getElementById("v6-root")) return; initNotify(); setup(); runSplash(); }
 if (typeof window !== "undefined") { window.__v6 = { S, run, act, render: () => S.hooks.render?.(), start }; if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot); else boot(); }

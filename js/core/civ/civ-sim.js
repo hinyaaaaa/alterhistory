@@ -25,7 +25,7 @@ export function createCivSim(world, civ, { extensions = [] } = {}) {
   ticker.register("climate", stepClimate, "stepClimate");
   ticker.register("disaster", stepDisaster, "stepDisaster");
   ticker.register("economy_pop", stepCalibration, "stepCalibration", { every: 12, offset: 0 }); // v6.8.0: 年 1 回、世界の人口・技術の進みを史実の規模へ寄せる
-  ticker.register("archive", stepCompact, "stepCompact", { every: 12, offset: 7 }); // v6.9.0: 年 1 回、古い細部を整理してメモリを抑える
+  ticker.register("archive", stepCompact, "stepCompact"); // v6.9.0 → v6.20.0: 整理はキューで毎月、決まった件数ずつ（年 1 回の一括走査をしない）
   ticker.register("economy_pop", stepPopulation, "stepPopulation");
   ticker.register("culture", stepCulture, "stepCulture");
   ticker.register("culture", stepCohorts, "stepCohorts");

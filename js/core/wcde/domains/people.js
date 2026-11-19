@@ -7,6 +7,7 @@ import { makeEvent } from "../../civ/events.js";
 import { ensureProfile, nameFor, languageOfGroup } from "./language.js";
 import { regnalOf, epithetGen, leaderRng, baseOfLeader, dynastyName, restartsOnDynasty } from "./naming.js";
 import { recentEventsFor, asCauses } from "../../civ/graph.js";
+import { enqueue } from "../../civ/compaction-queue.js";
 
 const AGE_MIN = 14 * 12;
 /** 人物を作る（civ.figures）。parents は既知の親の人物ID（なければ null＝未知） */
@@ -18,7 +19,7 @@ const newHouse = (ctx, st, founder) => { const { civ, ids } = ctx; const id = id
 
 /** 国家の現在の指導者に人物を結びつける。後継の手順（継承者の誕生・登位・簒奪）をここで事実として残す */
 export function stepPeople(ctx) {
-  const { civ, ids } = ctx, mi = civ.monthIndex; if (!civ.options.wcde) return; civ.figures ??= {}; civ.houses ??= {}; compactFigures(ctx);
+  const { civ, ids } = ctx, mi = civ.monthIndex; if (!civ.options.wcde) return; civ.figures ??= {}; civ.houses ??= {}; 
   for (const st of Object.values(civ.states)) {
     if (!st.alive) continue; const L = st.leader; let cur = st.leaderFigureId ? civ.figures[st.leaderFigureId] : null;
     const heirFig = st.heirFigureId ? civ.figures[st.heirFigureId] : null;
@@ -27,7 +28,7 @@ export function stepPeople(ctx) {
     if (cur && L.renamedByCreator) { if (cur.name !== L.name) { cur.history.push({ at: mi, kind: "renamed_by_creator", from: cur.name }); cur.name = L.name; } delete L.renamedByCreator; }
     if (cur && (cur.name !== L.name || cur.bornAt !== L.bornAt || L.deposed)) {
       const succeeded = heirFig && heirFig.diedAt == null && L.heirTaken !== false && !L.deposed && cur.diedAt == null;
-      cur.diedAt = mi; cur.history.push({ at: mi, kind: L.deposed ? "deposed" : "left_office" });
+      cur.diedAt = mi; cur.history.push({ at: mi, kind: L.deposed ? "deposed" : "left_office" }); enqueue(ctx, "hist", cur.id, mi); enqueue(ctx, "fig", cur.id, mi);
       if (heirFig && heirFig.diedAt == null && !L.deposed) { // 継承者が登位する: 指導者の名前・生年を継承者に合わせる（実際に生まれていた人物）
         { const rg = regnalOf(st, heirFig.birthName ?? heirFig.name, leaderRng(civ, st, "enthrone"), epithetGen(ctx, st, civ.groups[st.capitalGroupId])); heirFig.birthName = rg.birth; heirFig.name = rg.name; } L.name = heirFig.name; L.birthName = heirFig.birthName; L.bornAt = heirFig.bornAt; cur = heirFig; st.leaderFigureId = heirFig.id; cur.history.push({ at: mi, kind: "enthroned", stateId: st.id }); st.heirFigureId = null; L.heir = false;
         makeEvent(civ, ids, { kind: "succession_by_heir", title: `${st.name}で、${cur.name}が父祖${civ.figures[cur.parents?.[0]]?.name ?? ""}の跡を継いだ`, participants: [{ entityId: st.id, role: "state" }, { entityId: cur.id, role: "successor" }, ...(cur.parents ? [{ entityId: cur.parents[0], role: "predecessor" }] : [])], provenance: "simulation" });
@@ -78,9 +79,4 @@ export function stepCities(ctx) {
     s.name = nameFor(civ, ctx.rng, lang, "place") ?? null;
   }
 }
-
-/** 人物の履歴の整理（結果記録の方針）: 没して 60 年以上たった人物は、細かい履歴（任官・離任など）を最初と最後の 2 件に縮める。系譜（親子・家・没年）は残す。年 1 回 */
-export function compactFigures(ctx) {
-  const { civ } = ctx, mi = civ.monthIndex; if (!civ.options.wcde || mi % 12 !== 5) return;
-  for (const f of Object.values(civ.figures ?? {})) if (f.diedAt != null && mi - f.diedAt > 720 && f.history.length > 2 && !f.compacted) { f.history = [f.history[0], f.history[f.history.length - 1]]; f.compacted = true; }
-}
+// v6.20.0: 人物の履歴の整理（没して 60 年以上: 履歴を最初と最後の 2 件に縮める）と、古い人物の整理は、コンパクション・キュー（civ/compaction-queue.js）が毎月、決まった件数ずつ行う。
