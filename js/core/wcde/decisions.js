@@ -19,6 +19,7 @@ import { landShare, navyShare } from "./power.js";
 import { headsOf } from "./orbat.js";
 import { createField, fieldOutcome, DOMAINS } from "./battlefield.js";
 import { stateFx } from "./statefx.js";
+import { addShock } from "./shocks.js";
 import { timeOf, newsOf, DEFAULT_SPEED } from "./clock.js";
 import { decisionsOf, pendingOf, isLive, coolUntil, setCool } from "./decision-state.js";
 
@@ -130,7 +131,7 @@ registerDecision("ally_call", (ctx, d, opt) => {
 
 // ---- 王位の継承（候補者の一覧から選ぶ。幼い継承者なら摂政も）
 const FACT_JA = { nobility: "貴族", military: "軍", clergy: "聖職者", merchants: "商人", commoners: "民衆", bureaucrats: "官僚", artisans: "職人", clans: "氏族" };
-function successionOptions(ctx, st) {
+function successionOptions(ctx, st, cause = null) {
   const { civ } = ctx, mi = civ.monthIndex, ls = lifeScale(civ, st), person = (k) => ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], leaderRng(civ, st, `sc${k}${mi}`)) ?? `${st.name}の人${k}`, u = (k) => U(civ, st.id, mi, "sc", k);
   const fkeys = Object.keys(st.politics?.factions ?? {}), has = (k) => fkeys.includes(k), { law, lawJa: lj, partition, list } = successionList(ctx, st), opts = []; // v6.19.0: 継承法と候補は succession.js
   const lawNote = (c) => `${c.risk >= 0.3 ? "／争いの火種" : ""}`;
@@ -138,21 +139,31 @@ function successionOptions(ctx, st) {
     if (c.minor) for (const [rid, rel, bk, k] of [["queen", "母后", "nobility", 5], ["vizier", "宰相", has("bureaucrats") ? "bureaucrats" : "nobility", 6], ["general", "将軍", "military", 7]]) { const reg = { name: person(k), skill: r3(0.35 + 0.5 * u(`r${rid}`)), backer: bk, relation: rel }; opts.push({ id: `${c.id}:${rid}`, ja: `${c.name}（${c.ageYears}歳）を立て、${rel}${reg.name}が摂政`, hint: `能力${Math.round(reg.skill * 100)}・${FACT_JA[bk]}が支持／正統性 高`, payload: { cand: c, regent: reg } }); }
     else opts.push({ id: c.id, ja: `${c.relation}：${c.name}（${c.ageYears}歳）`, hint: `能力${Math.round(c.skill * 100)}・正統性${Math.round(c.legit * 100)}・${FACT_JA[c.backer]}が支持${c.kin ? "" : "／王朝が代わる"}${lawNote(c)}`, payload: { cand: c } });
   }
+  // v6.21.0: 暗殺・政変のあとは、実権を握る側近や、事を起こした者も候補になる（王朝が代わる／争いの火種）
+  if (cause === "assn" || cause === "coup") {
+    const ls2 = ls, mk = (id, rel, bk, k, legit, sk) => ({ id, relation: rel, name: person(k), bornAt: mi - Math.round((34 + 18 * u(`pa${k}`)) * 12 * ls2), ageYears: Math.round(34 + 18 * u(`pa${k}`)), skill: r3(0.4 + sk * u(`ps${k}`)), legit, backer: bk, kin: false, risk: 0.32, minor: false });
+    const plot = [mk("plot_general", "将軍", "military", 11, 0.42, 0.5), mk("plot_vizier", has("bureaucrats") ? "宰相" : "重臣", has("bureaucrats") ? "bureaucrats" : "nobility", 12, 0.4, 0.5)];
+    if (has("nobility")) plot.push(mk("plot_noble", "大貴族", "nobility", 13, 0.44, 0.45));
+    const add = plot.map((c) => ({ id: c.id, ja: `${c.relation}：${c.name}（${c.ageYears}歳）`, hint: `能力${Math.round(c.skill * 100)}・正統性${Math.round(c.legit * 100)}・${FACT_JA[c.backer]}が支持／王朝が代わる／争いの火種`, payload: { cand: c } }));
+    if (cause === "coup") opts.unshift(...add); else opts.push(...add.slice(0, 2));
+  }
   const adult = list.find((c) => !c.minor && c.kin);
   if (partition && adult && (byState(ctx).get(st.id)?.length ?? 0) >= 4) opts.push({ id: "partition", ja: `領土を子らで分ける（${adult.name}が本国を継ぐ）`, hint: "分割相続。新しい国ができる（戦争にはならない）／本国は弱くなる", payload: { cand: adult, partition: true } });
   opts.law = { law, ja: lj }; return opts;
 }
-function succession(ctx, st) {
+function succession(ctx, st, cause = null) {
   const { civ } = ctx; if (!isLive(civ) || !st.player) return false; const key = `s|${st.id}`; if (openKey(civ, key)) return true;
-  const opts = successionOptions(ctx, st); const payload = {}; const options = opts.map((o) => { payload[o.id] = o.payload; return { id: o.id, ja: o.ja, hint: o.hint }; });
-  raise(ctx, { kind: "succession", key, stateId: st.id, title: `${st.leader.name}の跡を継ぐ者を決める`, body: `継承法: ${opts.law?.ja ?? lawJa(civ, st)}。候補者の中から選ぶ。`, options, payload });
+  const opts = successionOptions(ctx, st, cause); const payload = { __cause: cause }; const options = opts.map((o) => { payload[o.id] = o.payload; return { id: o.id, ja: o.ja, hint: o.hint }; });
+  const T = { assn: [`${st.leader.name}暗殺 ― 後継を決める`, "指導者が凶刃に倒れた。国を託す者を選ぶ。実権を握る側近も名乗りを上げている。"], coup: [`政変 ― 新たな首班を決める`, `${st.leader.name}は権力を失った。国を率いる者を選ぶ。事を起こした者も候補にいる。`], die: [`${st.leader.name}の死去 ― 跡を継ぐ者を決める`, "指導者が世を去った。"], abd: [`${st.leader.name}の退位 ― 跡を継ぐ者を決める`, "指導者が位を譲る。"] }[cause] ?? [`${st.leader.name}の跡を継ぐ者を決める`, ""];
+  raise(ctx, { kind: "succession", key, stateId: st.id, title: T[0], body: `${T[1]}継承法: ${opts.law?.ja ?? lawJa(civ, st)}。候補者の中から選ぶ。`, options, payload });
   return true;
 }
 registerDecision("succession", (ctx, d, opt) => {
-  const { civ } = ctx, st = civ.states[d.stateId]; if (!st?.alive) return { ok: true, note: "国がすでにない" }; const pl = d.payload[opt]; if (!pl) return { ok: false, error: "その候補はいません" }; const c = pl.cand, reg = pl.regent ?? null;
+  const { civ } = ctx, st = civ.states[d.stateId]; if (!st?.alive) return { ok: true, note: "国がすでにない" }; const pl = d.payload[opt]; if (!pl) return { ok: false, error: "その候補はいません" }; const c = pl.cand, reg = pl.regent ?? null, cause = d.payload.__cause ?? null;
   if (pl.partition) { const gs = (byState(ctx).get(st.id) ?? []).filter((g) => g.id !== st.capitalGroupId).sort((a, b) => (a.id < b.id ? -1 : 1)), part = gs.filter((_, i) => i % 2 === 1); if (part.length && part.length < gs.length + 1) { const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id }); if (ns) { ns.relations[st.id] = 20; st.relations[ns.id] = 20; makeEvent(civ, ctx.ids, { kind: "state_action", title: `${st.name}の領土が、${c.name}の継承にともない子らで分けられ、${ns.name}が成立した`, participants: [{ entityId: st.id, role: "actor" }, { entityId: ns.id, role: "target" }], location: null, provenance: "player" }); } } }
   const hit = 0.02 + 0.1 * (1 - (reg ? Math.max(c.legit, 0.8) : c.legit));
-  enthrone(ctx, st, { name: c.name, bornAt: c.bornAt, kin: c.kin, hit, how: reg ? `摂政${reg.name}のもと、${c.name}が立った` : `${c.relation}の${c.name}が立った` });
+  enthrone(ctx, st, { name: c.name, bornAt: c.bornAt, kin: c.kin, hit, how: reg ? `摂政${reg.name}のもと、${c.name}が立った` : cause === "assn" ? `暗殺のあと、${c.relation}の${c.name}が立った` : cause === "coup" ? `政変のあと、${c.relation}の${c.name}が実権を握った` : `${c.relation}の${c.name}が立った` });
+  if (cause === "coup") { st.stability = clamp(st.stability - 0.05); addShock(st, civ.monthIndex, "event", 0.04, 10); }
   st.leader.skill = c.skill; st.leader.backer = c.backer; if (reg) st.leader.regent = { name: reg.name, skill: reg.skill, backer: reg.backer, relation: reg.relation, until: civ.monthIndex + Math.max(12, Math.round((16 - c.ageYears) * 12 * lifeScale(civ, st))) };
   const F = st.politics?.factions; if (F) { const bump = (k, v) => { if (F[k]) F[k].support = clamp(F[k].support + v); }; bump(c.backer, 0.1); if (reg) bump(reg.backer, 0.06); for (const k of Object.keys(F)) if (k !== c.backer && k !== reg?.backer && (k === "nobility" || k === "military") && c.kin === false) bump(k, -0.04); }
   if (c.risk && U(civ, st.id, civ.monthIndex, "sdispute") < c.risk * (reg ? 0.6 : 1)) queueEvent(st, c.id === "usurper" || c.id === "general" ? "succ_coup_after" : "succ_dispute", 3 + Math.floor(9 * U(civ, st.id, "sdd")), civ.monthIndex); // 選ばれなかった者の不満: 継承争いの出来事が後で起きる（v6.19.0）

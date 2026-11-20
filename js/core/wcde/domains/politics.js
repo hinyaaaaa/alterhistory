@@ -83,7 +83,7 @@ function stepIdeas(ctx, st, wts, trade) {
     const cur = ideas[id] ?? 0, tgt = clamp(emergence(ctx, st, id, inf, trade)); let net = 0; for (const o of contacts) net = Math.max(net, (o.politics.ideas?.[id] ?? 0) * (ally.has(o.id) ? 0.9 : o.econ?.trade?.[st.id] ? 0.8 : 0.6));
     let nv = cur + 0.12 * (tgt - cur) + Math.max(0, net * accept - cur) * 0.2; if (tgt < cur) nv -= 0.015; nv = clamp(nv);
     if (nv < 0.03) delete ideas[id]; else ideas[id] = Math.round(nv * 1000) / 1000;
-    const reg = ((W.ideas ??= {})); if (nv >= 0.35 && !reg[id]) { reg[id] = { at: civ.monthIndex, stateId: st.id }; makeEvent(civ, ids, { kind: "ideology_emerged", title: `${st.name}で「${IDEAS[id].ja}」が広まり始めた`, participants: [{ entityId: st.id, role: "state" }], facts: { idea: id, ja: IDEAS[id].ja, stateId: st.id }, provenance: "simulation" }); }
+    const reg = ((W.ideas ??= {})); if (nv >= 0.35 && !reg[id]) { reg[id] = { at: civ.monthIndex, stateId: st.id }; makeEvent(civ, ids, { kind: "ideology_emerged", title: `${st.name}で「${IDEAS[id].ja}」が広まり始めた`, participants: [{ entityId: st.id, role: "state" }], facts: { idea: id, ja: IDEAS[id].ja, stateId: st.id }, provenance: "simulation", why: "その思想を受け入れる土壌（政体・技術・民の状態）が、基準（0.35）を超えた" }); }
   }
 }
 export const ideasOf = (st) => Object.entries(st.politics?.ideas ?? {}).sort((a, b) => b[1] - a[1]).map(([id, v]) => ({ id, ja: IDEAS[id]?.ja ?? id, v }));
@@ -162,7 +162,7 @@ export function reformPolity(ctx, st, P, to, how) {
   st.polity = to; P.lastRegimeChange = mi; st.stability = clamp(st.stability + (how === "revolution" || how === "military_takeover" ? -0.2 : how === "decline" ? -0.1 : 0.02)); P.fatigue = Math.max(0, (P.fatigue ?? 0) - 0.2);
   const rt = before !== to ? retitle(st, to, civ.date.year) : null; if (rt) { st.name = rt.name; st.nameBase = rt.base; st.titleYear = rt.year; }
   if (how === "revolution" || how === "military_takeover") { const rg = regnalOf(st, ctx.nameGen?.person(civ, civ.groups[st.capitalGroupId], ctx.rng) ?? `${st.name}の新指導者`, leaderRng(civ, st, "regime"), epithetGen(ctx, st, civ.groups[st.capitalGroupId])); st.leader = { name: rg.name, birthName: rg.birth, bornAt: mi - Math.round((300 + Math.floor(ctx.rng() * 200)) * lifeScale(civ, { capitalGroupId: st.capitalGroupId })), heir: false, deposed: true, origin: how }; }
-  makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}で${HOW_JA[how]}が起き、政体が変わった${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...(rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : [])], causes: war ? [{ targetId: war.eventId ?? war.id, relation: "caused_by", basis: "plausible" }] : [], facts: { stateId: st.id, polity: to, name: st.name, by: how }, provenance: "simulation" });
+  makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}で${HOW_JA[how]}が起き、政体が変わった${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "polity", before, after: to }, ...(rt ? [{ targetId: st.id, property: "name", before: oldName, after: rt.name }] : [])], causes: war ? [{ targetId: war.eventId ?? war.id, relation: "caused_by", basis: "plausible" }] : [], why: `政体が変わった経路: ${HOW_JA[how] ?? how}`, facts: { stateId: st.id, polity: to, name: st.name, by: how }, provenance: "simulation" });
 }
 
 /** 政変。離反した勢力（民衆・軍）と政体の技術的な可能性（stateCan）で結果が決まる: 民衆の蜂起→共和政（できるとき）／軍の掌握→帝政・王政（共和政・神権政から）／それ以外は宮廷の政変で政体は同じ */

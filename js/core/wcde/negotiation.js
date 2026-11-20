@@ -151,3 +151,8 @@ export function negotiatePeace(ctx, proposer, war, c = {}) {
   if (!principal) { leaveWar(ctx, war, proposer); proposer.lastWarEnd = civ.monthIndex; record(ctx, { ...base, status: "accepted" }); return { ok: true, effects: [], silent: true, targetId: war.id, separate: true }; }
   endWar(ctx, war, "negotiated", terms); record(ctx, { ...base, status: "accepted" }); return { ok: true, effects: [], silent: true, targetId: war.id };
 }
+/** v6.20.1: アルゴリズム国家が講和を持ちかける価値があるか（相手が受け入れる条件か）。受けられない講和を毎月出し続けない */
+export function peaceWorthProposing(civ, proposer, war) {
+  if (!war || war.status !== "active") return false; const mySide = warSide(war, proposer.id); if (!mySide) return false; const foe = mySide === "a" ? "d" : "a", other = civ.states[foe === "a" ? war.aggressor : war.defender]; if (!other?.alive) return false;
+  return evaluatePeace(civ, war, proposer, other, defaultTerms(civ, war, proposer)).accept;
+}

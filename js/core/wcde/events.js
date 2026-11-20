@@ -7,7 +7,7 @@ import { hashSeed } from "../civ/civ-state.js";
 import { byState } from "../civ/spatial.js";
 import { distKm, enthrone, runSecession } from "../civ/states.js";
 import { declareWar, atWarWith } from "../civ/diplomacy.js";
-import { makeEvent } from "../civ/events.js";
+import { makeEvent, withCause } from "../civ/events.js";
 import { TREE } from "../civ/techtree.js";
 import { addShock } from "./shocks.js";
 import { regimeOf, REGIMES } from "./regimes.js";
@@ -16,6 +16,7 @@ import { registerDecision, raise, DECISION_HOOKS } from "./decisions.js";
 import { isLive, pendingOf } from "./decision-state.js";
 import { queueEvent } from "./succession.js";
 import { EVENTS, EVENT_BY_ID, ARCH } from "./events-data.js";
+import { varOf } from "./event-variety.js";
 
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const U = (civ, ...p) => (hashSeed(civ.historySeed, "evt", ...p) % 1000003) / 1000003;
@@ -36,14 +37,14 @@ function eligible(ev, st, cx, chain) {
   if (c.poor && !cx.poor) return false; if (c.rich && !cx.rich) return false; if (c.big && !cx.big) return false; if (c.small && !cx.small) return false; if (c.coast && !cx.coast) return false; if (c.rival && !cx.rival) return false; if (c.friend && !cx.friend) return false;
   return true;
 }
-const fill = (t, st, cx) => String(t).replaceAll("{s}", st.name).replaceAll("{L}", st.leader?.name ?? "指導者").replaceAll("{r}", cx.rival?.name ?? "敵国").replaceAll("{f}", cx.friend?.name ?? "友好国");
+const fill = (t, st, cx) => String(t).replaceAll("{s}", st.name).replaceAll("{L}", st.leader?.name ?? "指導者").replaceAll("{r}", cx.rival?.name ?? "敵国").replaceAll("{f}", cx.friend?.name ?? "友好国").replaceAll("{place}", cx.v?.place ?? st.name).replaceAll("{person2}", cx.v?.person2 ?? "ある人物").replaceAll("{person}", cx.v?.person ?? "ある人物");
 
 // ---- 効果
 const fxOf = (ev, i) => { const a = ARCH[ev.arch], n = ev.opts.length; const base = i >= n ? a[3] : a[Math.min(i, 2)]; return `${base}${ev.x?.[i] ? " " + ev.x[i] : ""}`.trim(); };
 function leaderChange(ctx, st, mode) {
   const { civ } = ctx, mi = civ.monthIndex;
   if (mode === "assn") { addShock(st, mi, "event", 0.05, 12); makeEvent(civ, ctx.ids, { kind: "leader_assassinated", title: `${st.name}の${st.leader?.name ?? "指導者"}が暗殺された`, participants: [{ entityId: st.id, role: "state" }], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, facts: { stateId: st.id }, provenance: "simulation" }); }
-  if ((mode === "die" || mode === "assn" || mode === "abd") && st.player && isLive(civ) && DECISION_HOOKS.succession(ctx, st)) return; // 担当国は、次の王を自分で決める
+  if ((mode === "die" || mode === "assn" || mode === "abd" || mode === "coup") && st.player && isLive(civ) && DECISION_HOOKS.succession(ctx, st, mode)) return; // v6.21.0: 暗殺・急死・退位・政変のあとは、担当国が人をもう一度選ぶ // 担当国は、次の王を自分で決める
   enthrone(ctx, st, { kin: mode === "die" || mode === "abd" ? true : mode === "assn" ? ctx.rng() < 0.55 : false }); if (mode === "coup") { st.stability = clamp(st.stability - 0.05); addShock(st, mi, "event", 0.04, 10); }
 }
 function farPart(ctx, st) {
@@ -89,10 +90,12 @@ export function hintOf(fx) {
 }
 
 // ---- 発生と解決
-function chainAfter(ctx, st, ev, i) { const { civ } = ctx; for (const c of ev.ch) if ((!c.only || c.only.includes(i)) && U(civ, st.id, civ.monthIndex, ev.id, c.id) < c.p) queueEvent(st, c.id, c.delay, civ.monthIndex); }
-function resolve(ctx, st, ev, i, cx) {
-  const { civ } = ctx, chosen = i >= ev.opts.length ? "何もしなかった" : ev.opts[i]; applyFx(ctx, st, fxOf(ev, i), cx); chainAfter(ctx, st, ev, i); (st.evSeen ??= {})[ev.id] = civ.monthIndex; st.evLast = civ.monthIndex;
-  makeEvent(civ, ctx.ids, { kind: "event_occurred", title: `${st.name}で「${fill(ev.title, st, cx)}」（${chosen}）`, participants: [{ entityId: st.id, role: "state" }], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, facts: { eventId: ev.id, option: i, cat: ev.cat }, provenance: st.player ? "player" : "simulation" });
+function chainAfter(ctx, st, ev, i, par = null) { const { civ } = ctx; for (const c of ev.ch) if ((!c.only || c.only.includes(i)) && U(civ, st.id, civ.monthIndex, ev.id, c.id) < c.p) queueEvent(st, c.id, c.delay, civ.monthIndex, null, par); } // v6.20.1: 連鎖の次の出来事は、前の出来事を直接の原因にする
+function resolve(ctx, st, ev, i, cx, par = null) {
+  const { civ } = ctx, chosen = i >= ev.opts.length ? "何もしなかった" : ev.opts[i]; (st.evSeen ??= {})[ev.id] = civ.monthIndex; st.evLast = civ.monthIndex;
+  // v6.20.1: 出来事の記録を先に作り、選択肢の効果（政変・戦争など）と連鎖の次の出来事を、その直接の結果として結ぶ
+  const me = makeEvent(civ, ctx.ids, { kind: "event_occurred", why: par ? null : `この種の出来事が起こりうる国の状況（規模・時代・体制・近隣）に合っていた`, causes: par ? [{ targetId: par, relation: "caused_by", basis: "direct" }] : [], title: `${st.name}で「${cx.v ? fill(cx.v.incident, st, cx) : fill(ev.title, st, cx)}」（${chosen}）`, participants: [{ entityId: st.id, role: "state" }], location: civ.groups[st.capitalGroupId] ? { cell: civ.groups[st.capitalGroupId].cell } : null, facts: { eventId: ev.id, option: i, cat: ev.cat }, provenance: st.player ? "player" : "simulation" });
+  withCause(me.eventId, () => applyFx(ctx, st, fxOf(ev, i), cx)); chainAfter(ctx, st, ev, i, me.eventId);
   return chosen;
 }
 /** アルゴリズム国家の選択: 効果の見込みを点数にし、国ごとのゆらぎを足して選ぶ */
@@ -101,16 +104,16 @@ function autoPick(ctx, st, ev, cx) {
   for (let i = 0; i <= ev.opts.length; i++) { let v = 0; for (const t of fxOf(ev, i).split(/\s+/)) { const m = /^([a-zA-Z]+)([+-]\d+(?:\.\d+)?)$/.exec(t); if (m) v += (W[m[1]] ?? 0.5) * +m[2]; else if (t.startsWith("rebel:") || t.startsWith("war")) v -= 3; else if (t.startsWith("ldr:")) v -= 1; } v += 3 * U(civ, st.id, civ.monthIndex, ev.id, i) - (i === ev.opts.length ? 0.4 : 0); if (v > bv) { bv = v; best = i; } }
   return best;
 }
-function fire(ctx, st, ev, cx = contextOf(ctx, st)) {
-  const { civ } = ctx; if (st.player && isLive(civ)) {
+function fire(ctx, st, ev, cx0 = contextOf(ctx, st), par = null) {
+  const { civ } = ctx, cx = { ...cx0, v: varOf(ctx, st, ev) }; if (st.player && isLive(civ)) { // v6.21.0: 場所・人物・事件名
     const n = ev.opts.length, options = [...ev.opts.map((o, i) => ({ id: String(i), ja: o, hint: hintOf(fxOf(ev, i)) })), { id: String(n), ja: "何もしない", hint: hintOf(fxOf(ev, n)) }];
-    const d = raise(ctx, { kind: "event", key: `ev|${st.id}|${ev.id}|${civ.monthIndex}`, stateId: st.id, title: fill(ev.title, st, cx), body: fill(ev.body, st, cx), options, payload: { evId: ev.id } }); if (d) { st.evLast = civ.monthIndex; (st.evSeen ??= {})[ev.id] = civ.monthIndex; return true; }
+    const d = raise(ctx, { kind: "event", key: `ev|${st.id}|${ev.id}|${civ.monthIndex}`, stateId: st.id, title: fill(cx.v.incident, st, cx), body: `〈${fill(ev.title, st, cx)}〉${fill(ev.body, st, cx)}${fill(cx.v.scene, st, cx)}`, options, payload: { evId: ev.id, v: cx.v, ...(par ? { par } : {}) } }); if (d) { st.evLast = civ.monthIndex; (st.evSeen ??= {})[ev.id] = civ.monthIndex; return true; }
   }
-  resolve(ctx, st, ev, autoPick(ctx, st, ev, cx), cx); return true;
+  resolve(ctx, st, ev, autoPick(ctx, st, ev, cx), cx, par); return true;
 }
 registerDecision("event", (ctx, d, opt) => {
   const st = ctx.civ.states[d.stateId], ev = EVENT_BY_ID[d.payload.evId]; if (!st?.alive || !ev) return { ok: true, note: "出来事はすでに過ぎていた" }; const i = Number(opt); if (!Number.isInteger(i) || i < 0 || i > ev.opts.length) return { ok: false, error: "その選択肢はありません" };
-  const cx = contextOf(ctx, st), chosen = resolve(ctx, st, ev, i, cx); return { ok: true, note: chosen };
+  const cx = { ...contextOf(ctx, st), v: d.payload.v ?? varOf(ctx, st, ev) }, chosen = resolve(ctx, st, ev, i, cx, d.payload.par ?? null); return { ok: true, note: chosen };
 });
 
 /** 1 年あたりの出来事の回数（担当国）: 規模と時代で 0.4〜4.5 回 */
@@ -119,13 +122,13 @@ export function stepEvents(ctx) {
   const { civ } = ctx; if (!civ.options.wcde) return; const mi = civ.monthIndex, live = isLive(civ), pend = pendingOf(civ).length > 0;
   for (const id of Object.keys(civ.states)) {
     const st = civ.states[id]; if (!st.alive) continue; const q = st.evq?.find((x) => x.at <= mi);
-    if (q) { if (st.player && live && pend) continue; st.evq = st.evq.filter((x) => x !== q); const ev = EVENT_BY_ID[q.id]; if (ev) { const cx = contextOf(ctx, st); if (eligible(ev, st, cx, true)) fire(ctx, st, ev, cx); } continue; }
+    if (q) { if (st.player && live && pend) continue; st.evq = st.evq.filter((x) => x !== q); const ev = EVENT_BY_ID[q.id]; if (ev) { const cx = contextOf(ctx, st); if (eligible(ev, st, cx, true)) fire(ctx, st, ev, cx, q.par ?? null); } continue; }
     let go = false;
     if (st.player) { if (pend && live) continue; if (mi - (st.evLast ?? -99) < 3) continue; go = U(civ, st.id, mi, "roll") < annualRate(st, 2) / 12; }
     else { if ((hashSeed(st.id, "evo") % 12) !== mi % 12) continue; const pop = st.pop ?? 0; go = U(civ, st.id, mi, "roll") < clamp(0.04 + 0.16 * clamp(Math.log10(Math.max(1, pop / 2000)) / 2.5), 0.04, 0.2); }
     if (!go) continue; const cx = contextOf(ctx, st), seen = st.evSeen ?? {}, pool = [];
     if (st.player) go = U(civ, st.id, mi, "roll2") < annualRate(st, cx.era) / annualRate(st, 2); if (!go) continue;
-    for (const ev of EVENTS) if (eligible(ev, st, cx, false) && mi - (seen[ev.id] ?? -9999) > 120) pool.push(ev); if (!pool.length) continue;
+    for (const ev of EVENTS) if (eligible(ev, st, cx, false) && mi - (seen[ev.id] ?? -9999) > 240) pool.push(ev); if (!pool.length) continue;
     const tot = pool.reduce((a, e) => a + e.cond.w, 0); let x = U(civ, st.id, mi, "pick") * tot, pick = pool[0]; for (const e of pool) { x -= e.cond.w; if (x <= 0) { pick = e; break; } } fire(ctx, st, pick, cx);
   }
 }

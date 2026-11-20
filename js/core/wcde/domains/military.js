@@ -42,7 +42,7 @@ export function canAdopt(st, id) {
 export function adoptDoctrine(ctx, st, id, { provenance = "simulation", decisionId = null } = {}) {
   const c = canAdopt(st, id); if (!c.ok) return c; const { civ, ids } = ctx, d = nodeOf(st, id); const M = (st.military ??= initMilitary());
   st.treasury -= d.cost; M.doctrine.taken[id] = civ.monthIndex; M.doc = { line: d.branch, since: M.doc?.since ?? civ.monthIndex };
-  const ev = makeEvent(civ, ids, { kind: "doctrine_adopted", title: `${st.name}が「${d.ja}」を取り入れた`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "military.doctrine", before: null, after: id }], provenance, decisionId });
+  const ev = makeEvent(civ, ids, { kind: "doctrine_adopted", title: `${st.name}が「${d.ja}」を取り入れた`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "military.doctrine", before: null, after: id }], provenance, decisionId, why: "技術が進み、新しい戦いかたの系統が選べるようになった" });
   recompute(ctx, st); return { ok: true, eventId: ev?.eventId ?? null };
 }
 /** 系統の切り替え費用（いまの段が高いほど重い。まだ何も取っていなければ無料） */

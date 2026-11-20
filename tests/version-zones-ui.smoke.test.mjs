@@ -58,7 +58,7 @@ console.log("=== 詳細設定と版の表示 ===");
 wins.open("settings"); await sleep(50);
 const sw = win("settings");
 check("詳細設定に、バランス調整・時間と時代区分・このアプリについて がある（データ検査の窓は廃止）", ["バランス調整", "時間・時代区分", "このアプリについて"].every((t) => sw.textContent.includes(t)) && !sw.textContent.includes("検査を実行"));
-check("「このアプリについて」に版の名前が出る", sw.querySelector(".about-version").textContent === "v6.20.0 履歴の外部保存と軽い月次処理");
+check("「このアプリについて」に版の名前が出る", sw.querySelector(".about-version").textContent === "v6.20.1 世界の記録の見直し（原因・外交・言語と文化・国境）");
 clickBtn(sw, "バランス調整を開く").click(); await sleep(30);
 check("詳細設定からバランス調整の窓を開ける", wins.isOpen("balance"));
 wins.close("balance"); wins.close("settings");

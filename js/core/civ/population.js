@@ -3,6 +3,7 @@
 // プレイヤーの集団は自動で移住・定住・生業転換をしない。条件が整うと「提案」（civ.proposals）を出し、命令で実行する。
 import { newGroup, sortedGroupIds } from "./civ-state.js";
 import { makeEvent } from "./events.js";
+import { settleChildState } from "./borders.js";
 import { densityMult } from "./techfx.js";
 import { TECH, TECHS as TECHS_ORDER, refreshCand } from "./tech.js";
 import { LAND_WATER, BIOMES } from "./world-consts.js";
@@ -128,7 +129,7 @@ export function foundSettlement(world, civ, ids, g, cause = null) {
   if (typeof P?.settlementCell === "function") { try { const c = P.settlementCell(world, civ, g, cells, best); if (Number.isInteger(c) && cells.includes(c)) best = c; } catch { /* 標準へ */ } } // 都市プラグイン（集落のセル）
   const id = ids.next("settle"), s = { id, groupId: g.id, cell: best, foundedAt: civ.monthIndex, pop: Math.round(g.pop * POP.settledShare), stage: "village" };
   civ.settlements[id] = s; g.settlementId = id;
-  makeEvent(civ, ids, { kind: "settlement_founded", title: "集落の成立", participants: [{ entityId: g.id, role: "founder" }, { entityId: id, role: "settlement" }], location: { cell: best }, causes: cause ? [{ targetId: cause, relation: "caused_by", basis: "direct" }] : [] });
+  makeEvent(civ, ids, { kind: "settlement_founded", title: "集落の成立", participants: [{ entityId: g.id, role: "founder" }, { entityId: id, role: "settlement" }], location: { cell: best }, why: "集団が定住の条件を満たした", causes: cause ? [{ targetId: cause, relation: "caused_by", basis: "direct" }] : [] });
   return s;
 }
 
@@ -143,8 +144,8 @@ export function stepPopulation(ctx) {
     const K = Math.max(1, groupCapacity(world, g, occ) * (g.capUntil > mi ? g.capMult : 1) * (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (civ.popTrim ?? 1)), pressure = g.pop / K, gm = (ctx.growthMult ? ctx.growthMult(g.cell) : 1) * (ctx.stateMult ? ctx.stateMult(g) : 1) * speciesOf(g.speciesId, civ).growth * (civ.options.growthScale ?? 1) * (civ.popPush ?? 1);
     // 1) 人口（ロジスティック。収容力を超えると減る）。乱数は ±20%
     const noise = 0.8 + 0.4 * rng(); g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0)); // 収容力を超えた分は、飢えで早く減る
-    if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) { g.famineAt = mi; makeEvent(civ, ids, { kind: "famine", title: "飢え", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck"], 36, 1), "caused_by", "strong"), effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] }); }
-    if (g.pop < 5) { delete civ.groups[id]; if (g.settlementId) delete civ.settlements[g.settlementId]; makeEvent(civ, ids, { kind: "group_extinct", title: "集団の消滅", participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell } }); continue; }
+    if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) { g.famineAt = mi; makeEvent(civ, ids, { kind: "famine", title: "飢え", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, why: "人口が、土地の養える数を超えた", causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck"], 36, 1), "caused_by", "strong"), effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] }); }
+    if (g.pop < 5) { delete civ.groups[id]; if (g.settlementId) delete civ.settlements[g.settlementId]; makeEvent(civ, ids, { kind: "group_extinct", title: "集団の消滅", participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, why: "人口が5人を下回った" }); continue; }
     g.settledMonths = g.order ? 0 : g.settledMonths + 1;
     // 2) 命令の進行（移動）
     if (g.order?.type === "move" && mi >= g.order.arriveAt) { g.cell = g.order.to; g.cells = null; g.order = null; g.settledMonths = 0; g.settlementId = null; makeEvent(civ, ids, { kind: "group_moved", title: "集団の移動完了", participants: [{ entityId: g.id, role: "mover" }], location: { cell: g.cell } }); }
@@ -153,17 +154,17 @@ export function stepPopulation(ctx) {
     // 4) 生業の転換（v6.8.0: 土地に合うものだけが、時間をかけて転換する。農耕が広がったあとも、採集狩猟・牧畜・漁撈は土地に応じて長く残る）
     //    旧版は、知識が満ちた集団がすべて農耕へ転換し、牧畜・採集狩猟が 0 になっていた。
     const want = subsistenceShift(world, g, rng);
-    if (want) { if (g.player) addProposal(civ, ids, g, "change_subsistence", { subsistence: want }); else { const before = g.subsistence; g.subsistence = want; makeEvent(civ, ids, { kind: "subsistence_changed", title: `生業の転換（${SUBSISTENCE[before]}→${SUBSISTENCE[want]}）`, participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "subsistence", before, after: want }] }); } }
+    if (want) { if (g.player) addProposal(civ, ids, g, "change_subsistence", { subsistence: want }); else { const before = g.subsistence; g.subsistence = want; makeEvent(civ, ids, { kind: "subsistence_changed", title: `生業の転換（${SUBSISTENCE[before]}→${SUBSISTENCE[want]}）`, participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "subsistence", before, after: want }], why: "技術と土地の条件が、別の生業のほうが適する状態になった" }); } }
     // 5) 定住（集落の成立）
     if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && g.settledMonths >= POP.settleMinMonths) { if (g.player) addProposal(civ, ids, g, "found_settlement", {}); else foundSettlement(world, civ, ids, g); }
     const st = g.settlementId ? civ.settlements[g.settlementId] : null;
-    if (st) { st.pop = Math.round(g.pop * POP.settledShare); const ns = stageOf(st.pop); if (ns !== st.stage) { const old = st.stage; st.stage = ns; makeEvent(civ, ids, { kind: "settlement_stage", title: `${STAGE_JA[old]}から${STAGE_JA[ns]}へ`, participants: [{ entityId: st.id, role: "settlement" }], location: { cell: st.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck", "famine"], 24, 1), "contributed_to", "plausible") }); } }
+    if (st) { st.pop = Math.round(g.pop * POP.settledShare); const ns = stageOf(st.pop); if (ns !== st.stage) { const old = st.stage; st.stage = ns; makeEvent(civ, ids, { kind: "settlement_stage", title: `${STAGE_JA[old]}から${STAGE_JA[ns]}へ`, participants: [{ entityId: st.id, role: "settlement" }], location: { cell: st.cell }, why: "集落の人口が、次の段階の基準を超えた", causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck", "famine"], 24, 1), "contributed_to", "plausible") }); } }
     // 6) 分派（人口圧が高いとき）。移住は海・山・気候のコストで制限される
     if (pressure > POP.budPressure && g.pop >= POP.minBudPop * 2 && mi - g.lastBudAt >= POP.budCooldown && !g.order) {
       const targets = bestTargets(world, civ, g, occ, 3);
       if (targets.length) {
         if (g.player) addProposal(civ, ids, g, "split", { targets });
-        else { const t = targets[0], moved = Math.round(g.pop * POP.budShare); g.pop -= moved; g.lastBudAt = mi; const child = spawnGroup(civ, ids, g, t.cell, moved); occ.set(t.cell, 1); for (const x of ensureCells(world, child)) occ.set(x, (occ.get(x) ?? 0) + 1); makeEvent(civ, ids, { kind: "group_split", title: "集団の分派", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t.cell }, causes: asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible") }); }
+        else { const t = targets[0], moved = Math.round(g.pop * POP.budShare); g.pop -= moved; g.lastBudAt = mi; const child = spawnGroup(civ, ids, g, t.cell, moved); occ.set(t.cell, 1); for (const x of ensureCells(world, child)) occ.set(x, (occ.get(x) ?? 0) + 1); settleChildState(ctx, child, child.cells); /* v6.20.1: 親の国の領土に接していなければ、国には属さない */ makeEvent(civ, ids, { kind: "group_split", title: "集団の分派", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t.cell }, why: "人口の圧力が、分派の基準を超えた", causes: asCauses(recentEventsFor(civ, [g.id], ["famine", "disaster_struck"], 36, 1), "contributed_to", "plausible") }); }
       } else g.lastBudAt = mi - POP.budCooldown + POP.noTargetBackoff; // 行き先が無いなら一定期間あとに再評価（空きが無い世界での無駄な探索を避ける）
     }
   }

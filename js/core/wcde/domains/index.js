@@ -14,7 +14,7 @@ import { integrityStep } from "../integrity.js";
 import { syncControl } from "../control.js";
 import { stepInterventions } from "../intervention.js";
 import { predictWar } from "../warlab.js";
-import { negotiateTreaty, negotiatePeace } from "../negotiation.js";
+import { negotiateTreaty, negotiatePeace, treatyFeasible, evaluateTreaty, peaceWorthProposing } from "../negotiation.js";
 import { effective } from "./effective.js";
 import { DECISION_HOOKS, autoCivilWar } from "../decisions.js";
 import { syncCorps, defectCorps } from "../corps.js";
@@ -32,7 +32,7 @@ export function wcdeExtension(ticker, ctx) {
   registerWcdeActions(); registerPactDecisions(); ctx.nameGen = nameGen; ctx.nameLangOf = nameLangOf;
   ctx.warForecast = (a, b) => (ctx.civ.options.wcde ? predictWar(ctx.civ, a.id, b.id, ctx) : null); // 戦争研究所の予測を AI も使う
   ctx.decisions = ctx.civ.options.wcde ? DECISION_HOOKS : null; ctx.autoCivilWar = ctx.civ.options.wcde ? (ns, st) => autoCivilWar(ctx, ns, st) : null; ctx.corpsDefect = ctx.civ.options.wcde ? (ns, st, ids) => { const r = defectCorps(ctx, st, ns, ids); for (const d of r) makeEvent(ctx.civ, ctx.ids, { kind: "state_action", title: `${st.name}の${d.name}が反乱側（${ns.name}）に寝返った`, participants: [{ entityId: st.id, role: "state" }, { entityId: ns.id, role: "target" }], location: null, provenance: "simulation" }); return r; } : null; // v6.12.0: 決断（担当国の条約・宣戦・継承・反乱・会戦）と、反乱の自動の内戦
-  ctx.negotiate = { treaty: (c, a, b, t, x) => (c.civ.options.wcde ? negotiateTreaty(c, a, b, t, x) : null), peace: (c, a, w, x) => (c.civ.options.wcde ? negotiatePeace(c, a, w, x) : null) };
+  ctx.negotiate = { treaty: (c, a, b, t, x) => (c.civ.options.wcde ? negotiateTreaty(c, a, b, t, x) : null), peace: (c, a, w, x) => (c.civ.options.wcde ? negotiatePeace(c, a, w, x) : null), peaceWorth: (c, a, w) => (c.civ.options.wcde ? peaceWorthProposing(c.civ, a, w) : true), worthProposing: (c, a, b, t) => (c.civ.options.wcde ? !treatyFeasible(c.civ, a, b, t) && evaluateTreaty(c.civ, a, b, t).accept : true) }; // v6.20.1: アルゴリズム国家は、結べず相手も受けない提案を出さない
   ctx.warOps = ctx.civ.options.wcde ? { init: initWar, step: stepWar, finalize, monthly, canReach, seaTargets, settle } : null; // v6.1.0 M6: 作戦・会戦の戦争モデル（WCDE の世界だけ）
   ctx.taxFactor = (st) => (ctx.civ.options.wcde ? effective(ctx.civ, st, "taxRevenue") * (1 + stateFx(st).tax) : 1); // 財政への介入（税収の倍率）
   if (ctx.civ.options.wcde) { const sm0 = ctx.stateMult; ctx.stateMult = (g) => { const st = g.stateId ? ctx.civ.states[g.stateId] : null; return (sm0 ? sm0(g) : 1) * (st && ctx.civ.wcde?.adjust?.[st.id]?.popCapacity ? effective(ctx.civ, st, "popCapacity") : 1); }; } // 人口への介入（収容力の倍率）

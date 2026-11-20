@@ -16,7 +16,7 @@ export function officeSummary(st) {
   const e = officeEffects(st, S.w.civ.monthIndex); if (!e.count) return null; const up = officeUpkeep(st) * 3, tax = st.pop * st.policy.tax * 0.0012 * 3;
   return h("div", { class: "offsum" }, h("small", {}, `役職 ${e.count} 件（快適な数は約 ${e.comfort} 件）・維持費 ${n0(up)} / 3か月（税収の約 ${tax > 0 ? Math.round((up / tax) * 100) : 0}%）${e.extra ? `・官僚肥大 ${e.extra} 件分（安定と民衆の支持が下がる）` : ""}`), h("div", { class: "chips" }, ...fxChips({ tax: e.tax, mil: e.mil, stab: e.stab, dipl: e.dipl, scout: e.scout, tech: e.tech, cult: e.cult }, e.fac)));
 }
-export const officeChips = (id) => { const i = officeInfo(id); if (!i) return []; return [...fxChips(i.fx, i.fac), i.debuff ? h("span", { class: "chip bad", title: "欠点" }, DEBUFF_JA[i.debuff]) : null, h("span", { class: "chip", title: "維持費の重さ" }, "維持" + "●".repeat(Math.min(4, i.tier)))].filter(Boolean); };
+export const officeChips = (id) => { const i = officeInfo(id); if (!i) return []; return [i.strong ? h("span", { class: "chip", title: "効果が大きい代わりに、維持費も重い" }, "重職") : null, ...fxChips(i.fx, i.fac), i.debuff ? h("span", { class: "chip bad", title: "欠点" }, `欠点：${DEBUFF_JA[i.debuff]}`) : null, h("span", { class: "chip", title: "維持費の重さ" }, "維持" + "●".repeat(Math.min(4, i.tier)))].filter(Boolean); };
 
 /** 国策の枠（v6.17.0: バッジ）。分野ごとに、取り入れた国策のバッジが枠にはまる。空きの枠を押すと、いま取り入れられるバッジだけが並ぶ */
 export function policyBox(st, mine) {
@@ -26,13 +26,13 @@ export function policyBox(st, mine) {
   for (const [cat, ja] of Object.entries(POLICY_CATS)) {
     const row = h("div", { class: "pcat prow", "data-cat": cat }, h("b", { class: "pcn", style: `color:${CAT_STYLE[cat][0]}` }, ja), h("div", { class: "pslots" }, ...F[cat].map((slot, i) => {
       const cur = slot ? POLICIES[slot.id] : null, left = slot ? Math.max(0, SLOT_COOLDOWN - (mi - slot.since)) : 0, isOpen = open && open.cat === cat && open.slot === i;
-      const b = h("button", { class: "pslot" + (cur ? " has" : "") + (isOpen ? " sel" : ""), "data-set": cat + i, title: cur ? `${tip(slot.id, cur)}${left ? `\nあと ${left} か月は替えられない` : "\n押すと取り下げる"}` : "取り入れる", disabled: !mine || (cur && left > 0), onclick: () => { if (cur) act({ type: "focus.set", stateId: st.id, category: cat, slot: i, policyId: null }); else { S.polPick = isOpen ? null : { id: st.id, cat, slot: i }; S.hooks.panel(); } } }, policyBadge(slot?.id ?? "", cat, { on: !!cur, empty: !cur, size: 58 }), cur && left ? h("i", { class: "lock" }, left) : null);
+      const b = h("button", { class: "pslot" + (cur ? " has" : "") + (isOpen ? " sel" : ""), "data-set": cat + i, title: cur ? `${tip(slot.id, cur)}${left ? `\nあと ${left} か月は替えられない` : "\n押すと取り下げる"}` : "取り入れる", disabled: !mine || (cur && left > 0), onclick: () => { if (cur) act({ type: "focus.set", stateId: st.id, category: cat, slot: i, policyId: null }); else { S.polPick = isOpen ? null : { id: st.id, cat, slot: i }; S.hooks.panel(); } } }, policyBadge(slot?.id ?? "", cat, { on: !!cur, empty: !cur, size: 58 }), h("b", { class: "ptitle" }, cur ? cur.ja : "空き"), cur && left ? h("i", { class: "lock" }, left) : null);
       return b;
     })));
     box.append(row);
     if (open && open.cat === cat) {
       const cands = Object.entries(POLICIES).filter(([id, p]) => p.cat === cat && !policyGate(st, id, cat) && !Object.values(F).some((a) => a.some((x) => x?.id === id)));
-      box.append(h("div", { class: "ppick" }, ...(cands.length ? cands.map(([id, p]) => h("button", { class: "pcand", "data-pol": id, title: tip(id, p), onclick: () => { const r = act({ type: "focus.set", stateId: st.id, category: cat, slot: open.slot, policyId: id }); if (r.ok) S.polPick = null; S.hooks.panel(); } }, policyBadge(id, cat, { size: 52 }), h("small", {}, `${policyCost(st, id)}`), h("div", { class: "chips" }, ...fxChips(p.fx, p.fac).slice(0, 3)))) : [h("small", { class: "dim" }, "いま取り入れられる政策はありません")])));
+      box.append(h("div", { class: "ppick" }, ...(cands.length ? cands.map(([id, p]) => h("button", { class: "pcand", "data-pol": id, title: tip(id, p), onclick: () => { const r = act({ type: "focus.set", stateId: st.id, category: cat, slot: open.slot, policyId: id }); if (r.ok) S.polPick = null; S.hooks.panel(); } }, policyBadge(id, cat, { size: 52 }), h("b", { class: "ptitle" }, p.ja), h("small", {}, `費用 ${policyCost(st, id)}`), h("div", { class: "chips" }, ...fxChips(p.fx, p.fac).slice(0, 3)))) : [h("small", { class: "dim" }, "いま取り入れられる政策はありません")])));
     }
   }
   void pct; return box;

@@ -5,6 +5,7 @@
 import { makeEvent } from "./events.js";
 import { hashSeed } from "./civ-state.js";
 import { spatialOf } from "./spatial.js";
+import { settleChildState } from "./borders.js";
 import { territoryOf, bestTargets, spawnGroup, addProposal, POP } from "./population.js";
 import { BIOMES, LAND_WATER } from "./world-consts.js";
 import { recentEventsFor, asCauses } from "./graph.js";
@@ -62,10 +63,10 @@ function strike(ctx, g0, kind) {
   }
   d.deaths = Math.round(dead);
   for (const sid of states) { const st = civ.states[sid]; if (!st?.alive) continue; const b = st.stability; st.stability = Math.max(0, st.stability - 0.03 * sev * (1 - 0.6 * (st.resilience ?? 0))); remember(civ, st, kind, sev); effects.push({ targetId: sid, property: "stability", before: r3(b), after: r3(st.stability) }); }
-  const ev = makeEvent(civ, ids, { kind: "disaster_struck", title: `${KIND_JA[kind]}（規模 ${Math.round(sev * 100)}）が起きた`, participants: [{ entityId: id, role: "disaster" }, ...d.groupIds.slice(0, 8).map((x) => ({ entityId: x, role: "affected" })), ...[...states].slice(0, 4).map((x) => ({ entityId: x, role: "state" }))], location: { cell: g0.cell }, causes: [{ targetId: "world", relation: "enabled_by", basis: "plausible" }].filter(() => false).concat(civ.climate.phase !== "normal" ? [] : []), effects });
+  const ev = makeEvent(civ, ids, { kind: "disaster_struck", title: `${KIND_JA[kind]}（規模 ${Math.round(sev * 100)}）が起きた`, participants: [{ entityId: id, role: "disaster" }, ...d.groupIds.slice(0, 8).map((x) => ({ entityId: x, role: "affected" })), ...[...states].slice(0, 4).map((x) => ({ entityId: x, role: "state" }))], location: { cell: g0.cell }, causes: [{ targetId: "world", relation: "enabled_by", basis: "plausible" }].filter(() => false).concat(civ.climate.phase !== "normal" ? [] : []), effects, why: `自然災害は、気候と土地の条件のもとで確率的に起きる（規模 ${Math.round(sev * 100)}）` });
   d.eventId = ev.eventId;
   // 避難・移住: 規模の大きい災害で、最も人口の多い NPC 集団が1つだけ分かれることがある（プレイヤー集団は『提案』。連鎖的な増殖を避けるため上限1）
-  if (sev >= 0.6) { const occ = spatialOf(ctx).terr, g = d.groupIds.map((x) => civ.groups[x]).filter((x) => x && !x.order && x.pop >= POP.minBudPop * 3).sort((a, b) => b.pop - a.pop)[0]; if (g) { const t = bestTargets(world, civ, g, occ, 3); if (t.length) { if (g.player) addProposal(civ, ids, g, "split", { targets: t }); else if (rng() < 0.3) { const moved = Math.round(g.pop * POP.budShare); g.pop -= moved; g.lastBudAt = mi; const child = spawnGroup(civ, ids, g, t[0].cell, moved); occ.set(t[0].cell, [child.id]); makeEvent(civ, ids, { kind: "group_split", title: "災害を逃れて集団が分かれた", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t[0].cell }, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] }); } } } }
+  if (sev >= 0.6) { const occ = spatialOf(ctx).terr, g = d.groupIds.map((x) => civ.groups[x]).filter((x) => x && !x.order && x.pop >= POP.minBudPop * 3).sort((a, b) => b.pop - a.pop)[0]; if (g) { const t = bestTargets(world, civ, g, occ, 3); if (t.length) { if (g.player) addProposal(civ, ids, g, "split", { targets: t }); else if (rng() < 0.3) { const moved = Math.round(g.pop * POP.budShare); g.pop -= moved; g.lastBudAt = mi; const child = spawnGroup(civ, ids, g, t[0].cell, moved); occ.set(t[0].cell, [child.id]); settleChildState(ctx, child, [t[0].cell]); makeEvent(civ, ids, { kind: "group_split", title: "災害を逃れて集団が分かれた", participants: [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "offshoot" }], location: { cell: t[0].cell }, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] }); } } } }
   return d;
 }
 /** 国家が直近 months か月に受けた災害（救済・備蓄の評価に使う） */

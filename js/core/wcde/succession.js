@@ -87,4 +87,4 @@ export function successionList(ctx, st, n = 4) {
 }
 
 /** 国の出来事の待ち行列（連鎖・継承の火種）。events.js が毎月見る */
-export function queueEvent(st, id, delayMonths, mi, extra = null) { (st.evq ??= []).push({ id, at: mi + Math.max(1, Math.round(delayMonths)), ...(extra ? { x: extra } : {}) }); if (st.evq.length > 24) st.evq.shift(); }
+export function queueEvent(st, id, delayMonths, mi, extra = null, par = null) { (st.evq ??= []).push({ id, at: mi + Math.max(1, Math.round(delayMonths)), ...(extra ? { x: extra } : {}), ...(par ? { par } : {}) }); if (st.evq.length > 24) st.evq.shift(); }

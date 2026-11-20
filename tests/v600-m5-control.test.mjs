@@ -13,7 +13,7 @@ const R = createNewWorld({ worldSeed: "e2e-1", spec: { resolution: { targetCells
 dispatch(w0, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispatch(w0, { type: "time.advance", authority: A.ADMIN, months: 300 }).ok);
 const BASE = serializeWorld(w0); const fresh = () => deserializeWorld(BASE); const alive = (w) => Object.values(w.civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop);
 // v6.1.0: AI の判断は保存しない。AI の行動は、provenance が "ai" の出来事（結果）として残る
-const mk = (w) => w.civ.date.year * 12 + w.civ.date.month, actorOf = (e) => e.participants.find((p) => p.role === "actor")?.entityId ?? null, aiActs = (w, since) => w.civ.events.filter((e) => e.provenance === "ai" && e.date.year * 12 + e.date.month > since);
+const mk = (w) => w.civ.date.year * 12 + w.civ.date.month, actorOf = (e) => e.participants.find((p) => ["actor", "aggressor", "party"].includes(p.role))?.entityId ?? null, /* v6.20.1: 条約の締結（party）・宣戦（aggressor）も AI の行動。結べない提案の「不成立」が記録されなくなり、actor だけでは AI の行動を数えきれなくなった */ aiActs = (w, since) => w.civ.events.filter((e) => e.provenance === "ai" && e.date.year * 12 + e.date.month > since);
 const adm = (w, n) => { const r = dispatch(w, { type: "time.advance", authority: A.ADMIN, months: n }); assert.ok(r.ok, r.error); };
 
 console.log("=== 権限の表 ===");
@@ -38,7 +38,7 @@ await check("担当国家以外・担当が無いときの、プレイヤー命�
   dispatch(w2, { type: "view.past", authority: A.ADMIN, month: w2.civ.monthIndex - 5 }); assert.equal(w2.civ.wcde.control.stateId, null, "過去の閲覧は担当を変えない");
 });
 await check("担当していない国家（全て）は AI が動かす。担当国家は AI の計画の対象にならない", () => {
-  const w = fresh(), mine = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: mine.id }); const m0 = mk(w); adm(w, 30);
+  const w = fresh(), mine = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: mine.id }); const m0 = mk(w); adm(w, 120); /* v6.20.1: 結べない提案の「不成立」が記録されなくなったので、AI の行動が記録に残るまでの期間を長くとる（閾値は変えない） */
   const all = aiActs(w, m0), ds = all.map((e) => ({ actorId: actorOf(e) })).filter((d) => d.actorId); assert.ok(ds.length > 0); /* v6.5.0: 担当国の技術の制度化は WCDE が自動で決める（仕様）。それ以外の AI の判断は担当国に入らない */ assert.ok(all.filter((e) => e.kind !== "tech_institutionalized" && !/doctrine/.test(e.kind)).every((e) => actorOf(e) !== mine.id), "担当国家に AI の判断がある"); assert.ok(new Set(ds.map((d) => d.actorId)).size > 3, "ほかの国家は AI が動く");
 });
 await check("担当を外す（創造主モード）と、全国家が AI で動く。担当国家が滅びたら自動で外れる", () => {

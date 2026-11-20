@@ -60,12 +60,12 @@ export function signTreaty(ctx, type, a, b, { decisionId = null, provenance = "s
   const { civ, ids } = ctx, T = TREATY[type], id = ids.next("treaty"), t = { id, type, a: a.id, b: b.id, signedAt: civ.monthIndex, expiresAt: civ.monthIndex + T.months, active: true }; if (extra) t.terms = extra;
   civ.treaties[id] = t; civ.activeTreatyIds.push(id); adjustRel(a, b, T.cat === "dep" ? 5 : type === "alliance" || type === "union" || type === "marriage" ? 25 : T.cat === "land" ? 5 : 15);
   const title = T.dep ? `${b.name}が${a.name}の${{ vassal: "封臣", tributary: "朝貢国", protectorate: "保護国", union: "同君連合の一員" }[T.dep]}となった（${T.ja}）` : `${a.name}と${b.name}が${T.ja}を結んだ`;
-  const ev = makeEvent(civ, ids, { kind: "treaty_signed", title, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance });
+  const ev = makeEvent(civ, ids, { kind: "treaty_signed", title, participants: [{ entityId: a.id, role: "party" }, { entityId: b.id, role: "party" }, { entityId: id, role: "treaty" }], location: null, facts: { type, a: a.id, b: b.id }, provenance, why: "双方が条件に合意した（提案が受け入れられた）" });
   t.event = ev.eventId; onTreatySigned(ctx, t, a, b); return t;
 }
 export function endTreaty(ctx, t, why, byId = null) {
   const { civ, ids } = ctx; t.active = false; onTreatyEnded(ctx, t); t.endedAt = civ.monthIndex; enqueue(ctx, "treaty", t.id, civ.monthIndex); if (t.type === "nonaggression") for (const x of [t.a, t.b]) if (civ.states[x]) civ.states[x].lastNapEnd = civ.monthIndex; civ.activeTreatyIds = civ.activeTreatyIds.filter((i) => i !== t.id);
-  makeEvent(civ, ids, { kind: "treaty_ended", title: `${TREATY[t.type].ja}が${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId === t.b ? "breaker" : "party" }], location: null, effects: byId ? [{ targetId: t.id, property: "broken_by", before: null, after: byId }] : [] });
+  makeEvent(civ, ids, { kind: "treaty_ended", title: `${TREATY[t.type].ja}が${why}`, participants: [{ entityId: t.id, role: "treaty" }, { entityId: t.a, role: byId === t.a ? "breaker" : "party" }, { entityId: t.b, role: byId === t.b ? "breaker" : "party" }], location: null, effects: byId ? [{ targetId: t.id, property: "broken_by", before: null, after: byId }] : [], why: String(why) });
 }
 /** 過去の同じ相手との戦争が、今回の宣戦の理由になっていれば「反応」として結ぶ（負けた側が仕掛けるなら根拠は strong） */
 function revengeCauses(civ, atk, def) {
@@ -88,7 +88,7 @@ export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = nu
   const { civ, ids, rng } = ctx; if (reason === "conquest") reason = warReasonFor(ctx, atk, def);
   const id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 }; { const pt = warPretextFor(ctx, atk, def); if (pt) w.pretext = pt; w.cls = warClassOf(reason); }
   civ.wars[id] = w; civ.activeWarIds.push(id); atk.warIds.push(id); def.warIds.push(id); adjustRel(atk, def, -40);
-  const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance });
+  const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance, why: `開戦の理由: ${WAR_REASON_JA[reason] ?? reason}${w.pretext === "revenge" ? "（口実: 近い過去に戦った相手への報復）" : ""}` });
   w.declaredEvent = ev.eventId;
   for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) {
     if (t.type !== "alliance" || (t.a !== host.id && t.b !== host.id)) continue; const ally = civ.states[t.a === host.id ? t.b : t.a]; if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;

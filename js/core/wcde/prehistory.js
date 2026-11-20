@@ -171,7 +171,7 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
           if (ce.landWater[g.cell] === LAND_WATER.LAND && (g.knowledge.seafaring >= 1) && t.cost >= POP.waterCost * res * 0.5) { stats.seaCrossings++; if (stats.seaCrossings === 1) note("sea_crossed", "海を渡って新しい土地へ人々が移った", [{ entityId: g.id, role: "origin" }, { entityId: child.id, role: "settlers" }], child); }
           // 文化・言語・宗教の分化: 世代を重ねて離れるほど分かれる（孤立）。文化の分化は言語より遅い
           const co = child.cohorts[0];
-          if (child.gen >= 8 && rng() < 0.5) { const nl = createLanguage(civ, ids, rng, { parent: co.languageId, cultureId: co.cultureId }); co.languageId = nl; if (child.gen >= 14 || rng() < 0.25) { const nc = createCulture(civ, ids, rng, { parent: co.cultureId, cell: child.cell }); co.cultureId = nc; child.gen = 0; if (co.religionId && rng() < 0.4) co.religionId = createReligion(civ, ids, rng, { parent: co.religionId }); } }
+          if (child.gen >= 8 && rng() < 0.5) { /* v6.20.1: 文化が先に分かれ、言葉はそのうち半分だけ分かれる（以前は言葉が先に、文化はその 1/4 だけで、言語が文化の 2 倍以上に増えていた） */ const nc = createCulture(civ, ids, rng, { parent: co.cultureId, cell: child.cell }); co.cultureId = nc; child.gen = 0; if (rng() < 0.5) co.languageId = createLanguage(civ, ids, rng, { parent: co.languageId, cultureId: nc }); if (co.religionId && rng() < 0.4) co.religionId = createReligion(civ, ids, rng, { parent: co.religionId }); }
         }
       }
       // 宗教の発生（象徴的な行動が現れる後半から。大きな集団で）

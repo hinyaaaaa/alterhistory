@@ -175,9 +175,9 @@ export function createLiveAdapter({ store, civActions, history, timeActions, act
         ...d.causes.filter((x) => x.event).map((x) => ({ kind: "event", id: x.targetId, label: x.event.title, relation: `原因（${REL_JA[x.relation] ?? x.relation}・${BASIS_JA[x.basis] ?? x.basis}）` })),
         ...d.consequences.filter((x) => x.event).slice(0, 12).map((x) => ({ kind: "event", id: x.from, label: x.event.title, relation: "結果・後続" })),
         ...(d.decision ? [{ kind: "decision", id: d.decision.decisionId, label: `AI判断: ${d.decision.type}`, relation: "背景の判断" }] : [])];
-      const noCause = !d.causes.length;
+      const noCause = !d.causes.length && !e.why;
       return { kind, id, title: e.title, subtitle: fmtMonth(evMonth(e)), tag: c.label, tone: c.tone,
-        summary: noCause ? "記録された先行事象はありません（環境・状態・主体の判断・確率的な条件による出来事）。" : `原因として ${d.causes.length} 件の関連が記録されています。`,
+        summary: noCause ? "記録された先行事象はありません（環境・状態・主体の判断・確率的な条件による出来事）。" : [e.why ? `理由: ${e.why}。` : "", d.causes.length ? `原因として ${d.causes.length} 件の関連が記録されています。` : ""].filter(Boolean).join(""),
         stats: [{ label: "種類", value: e.kind }, { label: "関与", value: String(e.participants.length) }, { label: "原因", value: String(d.causes.length) }, { label: "後続", value: String(d.consequences.length) }], related, events: [] };
     }
     if (kind === "decision") {

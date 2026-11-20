@@ -29,6 +29,6 @@ export function stepReligion(ctx) {
     const nid = createReligion(civ, ids, ctx.rng, { parent: rid, kind: r.kind }), nr = civ.religions[nid]; nr.holyCell = far[0].cell; nr.founderId = null; nr.deity = r.deity;
     const lang = languageOfGroup(far[0]); if (lang && civ.languages[lang]) { nr.name = sectName(r.name, nameFor(civ, ctx.rng, lang, "person")); /* 〇〇教〇〇派 */ }
     for (const g of far) for (const c of g.cohorts) if (c.religionId === rid) c.religionId = nid;
-    makeEvent(civ, ids, { kind: "religion_schism", title: `${r.name}から${nr.name}が分かれた（信者の集団 ${far.length}）`, participants: [{ entityId: rid, role: "parent_religion" }, { entityId: nid, role: "new_religion" }, ...far.slice(0, 3).map((g) => ({ entityId: g.id, role: "converted_group" }))], location: { cell: far[0].cell }, effects: [{ targetId: nid, property: "religion.parent", before: null, after: rid }], provenance: "simulation" });
+    makeEvent(civ, ids, { kind: "religion_schism", title: `${r.name}から${nr.name}が分かれた（信者の集団 ${far.length}）`, participants: [{ entityId: rid, role: "parent_religion" }, { entityId: nid, role: "new_religion" }, ...far.slice(0, 3).map((g) => ({ entityId: g.id, role: "converted_group" }))], location: { cell: far[0].cell }, effects: [{ targetId: nid, property: "religion.parent", before: null, after: rid }], provenance: "simulation", why: "信者の集団が、元の宗教の中心から遠く離れていた" });
   }
 }

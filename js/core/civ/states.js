@@ -6,6 +6,7 @@ import { makeNameJa } from "./culture.js";
 import { regnalOf, leaderRng, epithetGen } from "../wcde/domains/naming.js";
 import { dominant } from "./cohorts.js";
 import { neighborGroups, byState, spatialOf } from "./spatial.js";
+import { tidyBorders } from "./borders.js";
 import { reachable, addProposal } from "./population.js";
 import { taxMult } from "./techfx.js";
 import { stateCan, groupCaps, POLITY_CAP } from "./tech.js";
@@ -36,7 +37,7 @@ export function formState(ctx, { via, groupIds, predecessor = null, player = fal
   civ.states[id] = st; for (const g of gs) g.stateId = id; if (gs.some((g) => g.player)) st.player = true;
   const causes = []; if (cause) causes.push({ targetId: cause, relation: "caused_by", basis: "plausible" }); if (threat) causes.push({ targetId: threat, relation: "reaction_to", basis: "strong" });
   if (predecessor) causes.push({ targetId: predecessor, relation: "succeeded_by", basis: "direct" });
-  const ev = makeEvent(civ, ids, { kind: "state_formed", title: `${st.name}が成立（${VIA[via].ja}）`, participants: [{ entityId: id, role: "state" }, ...gs.map((g) => ({ entityId: g.id, role: g.id === cap.id ? "capital_group" : "member" }))], location: { cell: cap.cell }, causes, facts: { stateId: id, name: st.name, polity: st.polity, capitalCell: cap.cell, cells: gs.slice(0, 24).map((g) => g.cell), nGroups: gs.length }, provenance: player ? "player" : "simulation" });
+  const ev = makeEvent(civ, ids, { kind: "state_formed", title: `${st.name}が成立（${VIA[via].ja}）`, participants: [{ entityId: id, role: "state" }, ...gs.map((g) => ({ entityId: g.id, role: g.id === cap.id ? "capital_group" : "member" }))], location: { cell: cap.cell }, why: `成立の経緯: ${VIA[via].ja}（${gs.length}の集団がまとまった）`, causes, facts: { stateId: id, name: st.name, polity: st.polity, capitalCell: cap.cell, cells: gs.slice(0, 24).map((g) => g.cell), nGroups: gs.length }, provenance: player ? "player" : "simulation" });
   st.formedEvent = ev.eventId; return st;
 }
 
@@ -98,7 +99,7 @@ export function stepUnification(ctx, groupsByState) {
       if (rng() >= p) continue;
       const gsA = groupsByState.get(aid) ?? []; for (const g of gsA) g.stateId = B.id; gsB.push(...gsA); groupsByState.delete(aid); absorbers.add(B.id);
       A.alive = false; A.corps = null; A.dissolvedAt = mi; A.mergedInto = B.id; enqueue(ctx, "state", A.id, mi); merged.add(aid); if (lead) doneLead++; else done++;
-      makeEvent(civ, ids, { kind: "state_merged", title: `${A.name}が${B.name}に統合された`, participants: [{ entityId: aid, role: "absorbed" }, { entityId: B.id, role: "state" }], location: cB ? { cell: cB.cell } : null, facts: { stateId: B.id, absorbed: aid, same: !!same }, causes: A.lastCrisisEvent ? [{ targetId: A.lastCrisisEvent, relation: "contributed_to", basis: "plausible" }] : [] });
+      makeEvent(civ, ids, { kind: "state_merged", title: `${A.name}が${B.name}に統合された`, participants: [{ entityId: aid, role: "absorbed" }, { entityId: B.id, role: "state" }], location: cB ? { cell: cB.cell } : null, facts: { stateId: B.id, absorbed: aid, same: !!same }, why: same ? "国境を接し、首都の文化が同じで、規模にも大きな差があった" : "国境を接し、規模に大きな差があり、大国が小国を取り込んだ", causes: A.lastCrisisEvent ? [{ targetId: A.lastCrisisEvent, relation: "contributed_to", basis: "plausible" }] : [] });
       B.interpDirty = true; break;
     }
   }
@@ -112,7 +113,7 @@ export function enthrone(ctx, st, o = {}) {
   const rg = regnalOf(st, nm, leaderRng(civ, st, "succ"), epithetGen(ctx, st, cap)); st.leader = { name: rg.name, birthName: rg.birth, bornAt: o.bornAt ?? mi - Math.round((300 + Math.floor(rng() * 100)) * ls), heir: false, kin: o.kin ?? (heir || rng() < 0.8), ...(st.leader.title ? { title: st.leader.title } : {}) }; /* v6.9.0: 継承者がいなくても、多くは同じ家系の親族が立つ（王朝交代は少数） */
   if (st.offices) { const ro = st.offices.find((x) => x.id === OFFICE_RULER(st)); if (ro) ro.holder = { name: st.leader.name, look: null }; /* v6.4.0: 元首の役職の担当者は為政者と同じ人 */ }
   st.stability = Math.max(0, st.stability - (o.hit ?? (heir ? 0.03 : 0.12)));
-  makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${o.how ? `（${o.how}）` : heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: cap ? { cell: cap.cell } : null, ...(o.how ? { provenance: "player" } : {}) });
+  makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}の指導者が代わった${o.how ? `（${o.how}）` : heir ? "（継承者が決まっていた）" : "（継承の混乱）"}`, participants: [{ entityId: st.id, role: "state" }], location: cap ? { cell: cap.cell } : null, why: o.how ? `交代の理由: ${o.how}` : heir ? "先の指導者が退き、継承者が決まっていた" : "先の指導者が退き、継承者が決まっていなかった", ...(o.how ? { provenance: "player" } : {}) });
 }
 /** 分離（不満が限界を超えた）: 首都から遠い地域が独立した国になる。担当国の分離は、自動で内戦になる（v6.12.0）。アルゴリズム国家どうしは従来どおり */
 export function runSecession(ctx, st, part) {
@@ -150,6 +151,7 @@ export function stepStates(ctx) {
     if (st.player) ctx.decisions?.omen(ctx, st); // v6.12.0: 反乱の前兆（偵察が行き届いていれば見える）
   }
   if (mi % 12 === 0 && civ.options?.wcde) stepUnification(ctx, byState(ctx));
+  if (mi % 12 === 6 && civ.options?.wcde) tidyBorders(ctx); // v6.20.1: 飛び地・包囲の整理（年 1 回）
   // 2) 国家のない集団: 形成の評価と吸収（NPC は自動。プレイヤー集団は提案）
   for (const id in civ.groups) {
     const g = civ.groups[id]; if (g.stateId) continue;
@@ -159,7 +161,7 @@ export function stepStates(ctx) {
     const capFull = !g.player && civ.options?.wcde && aliveStates(civ).length >= stateCap(civ); // v6.8.0: 同時に存在できる国家の数の目安を超えたら、自然には国家が生まれない（周囲の国への加入は続く）
     if (!g.player) {
       const ns = [...neighborGroups(ctx, g)].map((o) => civ.groups[o]).filter((o) => o?.stateId && civ.states[o.stateId].alive), best = ns.reduce((a, o) => (!a || civ.states[o.stateId].pop > civ.states[a.stateId].pop ? o : a), null);
-      if (best && civ.states[best.stateId].pop >= g.pop * 2 && rng() < 0.4) { g.stateId = best.stateId; makeEvent(civ, ids, { kind: "group_joined_state", title: `${civ.states[best.stateId].name}に加わった`, participants: [{ entityId: g.id, role: "group" }, { entityId: best.stateId, role: "state" }], location: { cell: g.cell }, facts: { stateId: best.stateId, cell: g.cell } }); continue; }
+      if (best && civ.states[best.stateId].pop >= g.pop * 2 && rng() < 0.4) { g.stateId = best.stateId; makeEvent(civ, ids, { kind: "group_joined_state", title: `${civ.states[best.stateId].name}に加わった`, participants: [{ entityId: g.id, role: "group" }, { entityId: best.stateId, role: "state" }], location: { cell: g.cell }, facts: { stateId: best.stateId, cell: g.cell }, why: "領域が接した国の人口が、自分の2倍以上あった" }); continue; }
     }
     if (capFull) continue;
     const f = evaluateFormation(ctx, g); if (!f) continue;

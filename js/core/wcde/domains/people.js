@@ -31,18 +31,18 @@ export function stepPeople(ctx) {
       cur.diedAt = mi; cur.history.push({ at: mi, kind: L.deposed ? "deposed" : "left_office" }); enqueue(ctx, "hist", cur.id, mi); enqueue(ctx, "fig", cur.id, mi);
       if (heirFig && heirFig.diedAt == null && !L.deposed) { // 継承者が登位する: 指導者の名前・生年を継承者に合わせる（実際に生まれていた人物）
         { const rg = regnalOf(st, heirFig.birthName ?? heirFig.name, leaderRng(civ, st, "enthrone"), epithetGen(ctx, st, civ.groups[st.capitalGroupId])); heirFig.birthName = rg.birth; heirFig.name = rg.name; } L.name = heirFig.name; L.birthName = heirFig.birthName; L.bornAt = heirFig.bornAt; cur = heirFig; st.leaderFigureId = heirFig.id; cur.history.push({ at: mi, kind: "enthroned", stateId: st.id }); st.heirFigureId = null; L.heir = false;
-        makeEvent(civ, ids, { kind: "succession_by_heir", title: `${st.name}で、${cur.name}が父祖${civ.figures[cur.parents?.[0]]?.name ?? ""}の跡を継いだ`, participants: [{ entityId: st.id, role: "state" }, { entityId: cur.id, role: "successor" }, ...(cur.parents ? [{ entityId: cur.parents[0], role: "predecessor" }] : [])], provenance: "simulation" });
+        makeEvent(civ, ids, { kind: "succession_by_heir", title: `${st.name}で、${cur.name}が父祖${civ.figures[cur.parents?.[0]]?.name ?? ""}の跡を継いだ`, participants: [{ entityId: st.id, role: "state" }, { entityId: cur.id, role: "successor" }, ...(cur.parents ? [{ entityId: cur.parents[0], role: "predecessor" }] : [])], provenance: "simulation", why: "先の指導者が退き、定められていた継承者が立った" });
         continue;
       }
       const old = cur; cur = null; const kin = L.kin && !L.deposed && old.houseId; L.deposed = false; L.kin = false;
       if (kin) { // v6.9.0: 同じ家系の親族が立つ（系譜は不明。出自は捏造しない）。王朝の交代ではない
         const nf = createFigure(ctx, st, { name: L.name, birthName: L.birthName, bornAt: L.bornAt, houseId: old.houseId }); st.leaderFigureId = nf.id; st.heirFigureId = null;
-        makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}で、${civ.houses[old.houseId]?.name ?? "同じ家系"}の${nf.name}が${old.name}の跡を継いだ`, participants: [{ entityId: st.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], provenance: "simulation" });
+        makeEvent(civ, ids, { kind: "leader_succession", title: `${st.name}で、${civ.houses[old.houseId]?.name ?? "同じ家系"}の${nf.name}が${old.name}の跡を継いだ`, participants: [{ entityId: st.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], provenance: "simulation", why: "先の指導者が退き、同じ家系の親族が立った" });
         continue;
       }
       const nf = createFigure(ctx, st, { name: L.name, birthName: L.birthName, bornAt: L.bornAt, houseId: null }); nf.houseId = newHouse(ctx, st, nf); st.leaderFigureId = nf.id; st.heirFigureId = null; st.dynastyChangedAt = mi;
       const dcauses = asCauses(recentEventsFor(civ, [st.id], ["war_ended", "war_declared", "uprising", "regime_change", "instability", "famine", "disaster_struck"], 96, 2), "caused_by", "plausible"); // v6.9.0: 王朝の交代には原因（戦争・反乱・政変・不満・飢え）を結ぶ
-      const ev = makeEvent(civ, ids, { kind: "dynasty_changed", causes: dcauses, title: `${st.name}で${civ.houses[nf.houseId]?.name ?? "新王朝"}が成立した（${civ.houses[old.houseId]?.name ?? "先の王朝"}の${old.name}が退いた）`, participants: [{ entityId: st.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], effects: [{ targetId: st.id, property: "leader.houseId", before: old.houseId, after: nf.houseId }], provenance: "simulation" });
+      const ev = makeEvent(civ, ids, { kind: "dynasty_changed", causes: dcauses, title: `${st.name}で${civ.houses[nf.houseId]?.name ?? "新王朝"}が成立した（${civ.houses[old.houseId]?.name ?? "先の王朝"}の${old.name}が退いた）`, participants: [{ entityId: st.id, role: "state" }, { entityId: old.id, role: "predecessor" }, { entityId: nf.id, role: "successor" }], effects: [{ targetId: st.id, property: "leader.houseId", before: old.houseId, after: nf.houseId }], provenance: "simulation", why: "先の指導者が退き、継承者も同じ家系の親族もいなかったため、別の家系が立った" });
       continue;
     }
     if (!cur) { const f = createFigure(ctx, st, { name: L.name, birthName: L.birthName, bornAt: L.bornAt, houseId: null }); f.houseId = newHouse(ctx, st, f); st.leaderFigureId = f.id; cur = f; }
@@ -52,7 +52,7 @@ export function stepPeople(ctx) {
       const fresh = (lang && civ.languages[lang] ? nameFor(civ, r, lang, "person") : null) ?? `${baseOfLeader(L.name)}の子`, kin = leaderRng(civ, st, "heirname"), anc = kin() < 0.35 ? baseOfLeader(L.name) : fresh;
       const child = createFigure(ctx, st, { name: anc, bornAt: born, houseId: cur.houseId, parents: [cur.id], role: "heir" });
       cur.children.push(child.id); st.heirFigureId = child.id;
-      makeEvent(civ, ids, { kind: "heir_named", title: `${st.name}の${cur.name}が継承者${child.name}を定めた`, participants: [{ entityId: st.id, role: "state" }, { entityId: cur.id, role: "parent" }, { entityId: child.id, role: "heir" }], provenance: "simulation" });
+      makeEvent(civ, ids, { kind: "heir_named", title: `${st.name}の${cur.name}が継承者${child.name}を定めた`, participants: [{ entityId: st.id, role: "state" }, { entityId: cur.id, role: "parent" }, { entityId: child.id, role: "heir" }], provenance: "simulation", why: "指導者に子が生まれ、継承者に定められた" });
     }
   }
 }

@@ -40,6 +40,7 @@ await check("指導者の交代（退位・強制）と政体変更", () => {
   const b1 = civ.states[mine.id].leader.name; click($('[data-edit="leader"]')); click($('[data-mode="depose"]')); click($$("[data-cand]")[2]); const stab0 = civ.states[mine.id].stability; click($("#ed-go"));
   assert.notEqual(civ.states[mine.id].leader.name, b1); assert.ok(civ.states[mine.id].stability < stab0 + 1e-9);
   click($('[data-edit="regime"]')); const rc = $$("[data-regime]"); if (rc.length) { const reg0 = regimeOf(civ.states[mine.id]); click(rc[0]); click($("#ed-go"));  console.log("regime", reg0, "->", regimeOf(civ.states[mine.id]), "options", rc.length); } else console.log("no regime options");
+  for (let g = 0; g < 20 && V().S.w.civ.wcde.decisions.queue.length; g++) { const d = V().S.w.civ.wcde.decisions.queue[0]; V().act({ type: "decision.resolve", decisionId: d.id, option: d.options[d.options.length - 1].id }); } // v6.21.0: 出来事の決断（事件）が出ていたら、先に選ぶ（出来事の中身が変わったため、時間を進める前に決断が残ることがある）
   assert.ok(V().run({ type: "time.advance", months: 3 }).ok);
 });
 V().S.edit = null; V().S.tab = "domestic"; V().S.hooks.panel();

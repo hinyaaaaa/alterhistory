@@ -56,8 +56,9 @@ const LEGACY_REGIMES = Object.freeze({
 });
 // v6.12.0: 政体ごとに約 50 個の役職。旧版の役職（id）はそのまま残し（保存の互換）、名前と分野が同じものは同じ id を使う。新しい役職の id は「政体_番号」
 const DOM = { R: "ruler", A: "admin", M: "mil", E: "econ", F: "faith", L: "law", C: "cult", D: "dipl", I: "intel" }, byKey = new Map(Object.entries(LEGACY_OFFICES).map(([id, [ja, d]]) => [`${d}:${ja}`, id]));
-const GEN_OFFICES = {}, GEN_BY_REGIME = {};
-for (const [rid, text0] of Object.entries(OFFICE_LISTS)) { const ids = [], seen = new Set(); let n = 0, cnt = 0; const text = MODERN_REGIMES.includes(rid) ? text0 + "\n" + MODERN_EXTRA : text0; for (const line of text.trim().split("\n")) { const [k, ...names] = line.trim().split(/\s+/); const dom = DOM[k]; for (const ja of names) { n++; if (seen.has(ja)) continue; seen.add(ja); if (SIMPLE_CAP[rid] && ++cnt > SIMPLE_CAP[rid]) continue; const old = byKey.get(`${dom}:${ja}`), id = old ?? `${rid}_${String(n).padStart(2, "0")}`; if (!old) GEN_OFFICES[id] = [ja, dom]; ids.push(id); } } GEN_BY_REGIME[rid] = ids; }
+const GEN_OFFICES = {}, GEN_BY_REGIME = {}, TAGS = {}; // v6.21.0: TAGS = 役職 id → { b: バフの印, d: 欠点の印 }（offices-data.js の「:印」）
+const parseTag = (t) => { const m = /^([stmchkdSTMCHKD])?(?:-([np$cmtb]))?$/.exec(t ?? ""); return { b: m?.[1] ?? null, d: m?.[2] ?? null }; };
+for (const [rid, text0] of Object.entries(OFFICE_LISTS)) { const ids = [], seen = new Set(); let n = 0, cnt = 0; const text = MODERN_REGIMES.includes(rid) ? text0 + "\n" + MODERN_EXTRA : text0; for (const line of text.trim().split("\n")) { const [k, ...names] = line.trim().split(/\s+/); const dom = DOM[k]; for (const tok of names) { const [ja, tg] = tok.split(":"); n++; if (seen.has(ja)) continue; seen.add(ja); if (SIMPLE_CAP[rid] && ++cnt > SIMPLE_CAP[rid]) continue; const old = byKey.get(`${dom}:${ja}`), id = old ?? `${rid}_${String(n).padStart(2, "0")}`; if (!old) GEN_OFFICES[id] = [ja, dom]; if (tg != null && dom !== "ruler" && !(id in TAGS)) TAGS[id] = parseTag(tg); ids.push(id); } } GEN_BY_REGIME[rid] = ids; }
 export const OFFICES = Object.freeze({ ...LEGACY_OFFICES, ...GEN_OFFICES });
 export const REGIMES = Object.freeze(Object.fromEntries(Object.entries(LEGACY_REGIMES).map(([id, r]) => [id, { ...r, ruler: r.ruler === "@" ? GEN_BY_REGIME[id][0] : r.ruler, offices: [...new Set([...r.offices, ...(GEN_BY_REGIME[id] ?? [])])] }])));
 export const REGIME_IDS = Object.freeze(Object.keys(REGIMES));
@@ -92,20 +93,26 @@ export function checkOffices(regime, ids) {
 /** 既定の役職（元首＋先頭から数個） */
 export const defaultOffices = (regime) => { const r = REGIMES[regime]; return r.offices.slice(0, Math.min(r.offices.length, 5)).includes(r.ruler) ? r.offices.slice(0, Math.min(r.offices.length, 5)) : [r.ruler, ...r.offices.filter((x) => x !== r.ruler).slice(0, 4)]; };
 
-// ---- 役職の効果（v6.12.0）。役職ごとに小さなバフ・デバフ（id から決まる）と維持費の階層がある。全部置くと、維持費と官僚肥大（安定度・民衆の支持）が重くなる。
+// ---- 役職の効果（v6.12.0 → v6.21.0 で、乱数をやめて役職の意味に結びつけた）。役職ごとに「バフ 1 つ」と、あれば「欠点 1 つ」、維持費の階層がある。全部置くと、維持費と官僚肥大（安定度・民衆の支持）が重くなる。
 const clampN = (v, a, b) => (v < a ? a : v > b ? b : v), r4 = (x) => Math.round(x * 10000) / 10000;
-const hh = (id, k) => { let x = 2166136261; for (const c of id + k) { x ^= c.charCodeAt(0); x = Math.imul(x, 16777619) >>> 0; } return (x >>> 0) / 4294967296; };
-/** 分野ごとの基本のバフ: stab 安定度／tax 税収／mil 軍事力／cult 文化／tech 技術／dipl 外交（条約の受け入れ）／scout 偵察 */
-const BASE = { ruler: {}, admin: { stab: 0.0025, tax: 0.0045 }, mil: { mil: 0.0045, stab: 0.001 }, econ: { tax: 0.0075 }, faith: { stab: 0.0035, cult: 0.004 }, law: { stab: 0.0035 }, cult: { cult: 0.008, tech: 0.004 }, dipl: { dipl: 0.03 }, intel: { scout: 0.05 } };
+/** バフの印 → 効果: stab 安定度／tax 税収／mil 軍事力／cult 文化／tech 技術／dipl 外交（条約の受け入れ）／scout 偵察 */
+const BUFF = { s: { stab: 0.005 }, t: { tax: 0.009 }, m: { mil: 0.008 }, c: { cult: 0.01 }, h: { tech: 0.008 }, k: { scout: 0.06 }, d: { dipl: 0.04 } };
+export const BUFF_JA = Object.freeze({ s: "安定度", t: "税収", m: "軍事力", c: "文化", h: "技術", k: "偵察", d: "外交" });
+const DEFAULT_TAG = { admin: "s", mil: "m", econ: "t", faith: "s", law: "s", cult: "c", dipl: "d", intel: "k" }, TIER0 = { admin: 2, mil: 2, econ: 2, faith: 1, law: 2, cult: 1, dipl: 1, intel: 1 };
+/** 分野ごとの、味方になる勢力（支持の目標への加減） */
 const FAC = { mil: ["military", 0.012], econ: ["merchants", 0.01], faith: ["clergy", 0.012], admin: ["bureaucrats", 0.01], law: ["commoners", 0.004], cult: ["artisans", 0.008], dipl: ["merchants", 0.004], intel: ["commoners", -0.005] };
-const DEBUFF = [null, "costly", "unpopular", "arrogant"], infoCache = new Map();
-export const DEBUFF_JA = Object.freeze({ costly: "維持費が重い", unpopular: "民衆に疎まれる", arrogant: "貴族が反発する" });
-/** 役職 1 つの効果。fx: バフ／fac: 勢力の支持の目標への加減／tier: 維持費の階層（1〜4）／debuff: 欠点 */
+/** 欠点の印 → [欠点の名前, 勢力の支持の加減, 安定度の加減] */
+const DEBUFF_FX = { n: ["arrogant", { nobility: -0.006 }, 0], p: ["unpopular", { commoners: -0.006 }, -0.001], $: ["costly", {}, 0], c: ["clergy", { clergy: -0.006 }, 0], m: ["military", { military: -0.006 }, 0], t: ["merchants", { merchants: -0.006 }, 0], b: ["bureaucrats", { bureaucrats: -0.006 }, 0] };
+const infoCache = new Map();
+export const DEBUFF_JA = Object.freeze({ costly: "維持費が重い", unpopular: "民衆に疎まれる", arrogant: "貴族が反発する", clergy: "聖職者が反発する", military: "軍が反発する", merchants: "商人が反発する", bureaucrats: "官僚が反発する" });
+/** 役職 1 つの効果。fx: バフ／fac: 勢力の支持の目標への加減／tier: 維持費の階層（1〜4）／debuff: 欠点／strong: 重職（効果 1.5 倍・維持費 +1） */
 export function officeInfo(id) {
-  if (infoCache.has(id)) return infoCache.get(id); const o = OFFICES[id]; if (!o) return null; const dom = o[1], m = 0.7 + 0.6 * hh(id, "m"), tier0 = 1 + Math.floor(hh(id, "t") * 3), deb = dom === "ruler" ? null : DEBUFF[Math.floor(hh(id, "d") * 4)], fx = {}, fac = {};
-  for (const [k, v] of Object.entries(BASE[dom] ?? {})) fx[k] = r4(v * m); if (FAC[dom]) fac[FAC[dom][0]] = r4(FAC[dom][1] * m);
-  if (deb === "unpopular") { fac.commoners = r4((fac.commoners ?? 0) - 0.006); fx.stab = r4((fx.stab ?? 0) - 0.001); } if (deb === "arrogant") fac.nobility = r4((fac.nobility ?? 0) - 0.006);
-  const info = { id, ja: o[0], dom, fx, fac, tier: dom === "ruler" ? 0 : tier0 + (deb === "costly" ? 1 : 0), debuff: deb }; infoCache.set(id, info); return info;
+  if (infoCache.has(id)) return infoCache.get(id); const o = OFFICES[id]; if (!o) return null; const dom = o[1];
+  if (dom === "ruler") { const info0 = { id, ja: o[0], dom, fx: {}, fac: {}, tier: 0, debuff: null, strong: false }; infoCache.set(id, info0); return info0; }
+  const tag = TAGS[id], letter = tag?.b ?? DEFAULT_TAG[dom], strong = letter === letter.toUpperCase(), mult = strong ? 1.5 : 1, fx = {}, fac = {};
+  for (const [k, v] of Object.entries(BUFF[letter.toLowerCase()] ?? {})) fx[k] = r4(v * mult); if (FAC[dom]) fac[FAC[dom][0]] = r4(FAC[dom][1] * mult);
+  const db = tag?.d ? DEBUFF_FX[tag.d] : null; if (db) { for (const [k, v] of Object.entries(db[1])) fac[k] = r4((fac[k] ?? 0) + v); if (db[2]) fx.stab = r4((fx.stab ?? 0) + db[2]); }
+  const deb = db ? db[0] : null, info = { id, ja: o[0], dom, fx, fac, tier: (TIER0[dom] ?? 1) + (strong ? 1 : 0) + (deb === "costly" ? 1 : 0), debuff: deb, strong }; infoCache.set(id, info); return info;
 }
 /** 国家の役職すべての効果（置いた役職の合計＋官僚肥大＋元首の力量）。上限あり（軽いバフ・デバフ）。mi: 摂政の期限の判定に使う */
 export function officeEffects(st, mi = null) {

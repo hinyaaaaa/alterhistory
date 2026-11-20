@@ -23,7 +23,7 @@ export const KIND_POLICY = Object.freeze({
   treaty_signed: P("treaty", 2), treaty_ended: P("treaty", 2), treaty: P("treaty", 2), diplomacy_failed: P("treaty", 1),
   tech_discovered: P("tech", 3), tech_institutionalized: P("tech", 1), tech_rediscovered: P("tech", 2), tech_lost: P("tech", 2),
   culture_diverged: P("culture", 2), language_diverged: P("culture", 1), religion_founded: P("culture", 3), religion_schism: P("culture", 2), religion_spread: P("culture", 0, false), culture_contact: P("culture", 0, false), cohort_formed: P("culture", 0, false), cohort_assimilated: P("culture", 0, false),
-  settlement_founded: P("city", 1), settlement_stage: P("city", 1),
+  border_tidied: P("state", 1), settlement_founded: P("city", 1), settlement_stage: P("city", 1),
   disaster_struck: P("env", 2), catastrophe: P("env", 3), disaster_ended: P("env", 0, false), climate_shift: P("env", 2), famine: P("env", 1), ecosystem_shift: P("env", 1),
   group_split: P("pop", 0, false), group_moved: P("pop", 0, false), group_extinct: P("pop", 1), subsistence_changed: P("pop", 0, false), sea_crossed: P("pop", 3), species_emerged: P("pop", 3), prehistory_epoch: P("pop", 2),
   trade_route_opened: P("economy", 1), trade_cut: P("economy", 1), demand_raised: P("economy", 0, false),
@@ -57,7 +57,7 @@ const monthOfEvent = (e) => e.date.year * 12 + (e.date.month - 1);
 const bucketOf = (m) => Math.floor(m / 12 / CHUNK_YEARS);
 /** 作業バッファの出来事を資料の形へ。AI の判断の id・出自の詳細は持たない */
 export function toRecord(civ, e) {
-  const pol = policyOf(e.kind), r = { eventId: e.eventId, date: e.date, t: monthOfEvent(e), kind: e.kind, ty: pol.ty, im: e.imp ?? pol.im, m: e.media ?? "oral", title: e.title, participants: e.participants, location: e.location ?? null, causes: e.causes?.length ? e.causes : [], effects: pol.im >= 2 ? (e.effects ?? []) : [], provenance: e.provenance ?? "simulation" };
+  const pol = policyOf(e.kind), r = { eventId: e.eventId, date: e.date, t: monthOfEvent(e), kind: e.kind, ty: pol.ty, im: e.imp ?? pol.im, m: e.media ?? "oral", title: e.title, participants: e.participants, location: e.location ?? null, causes: e.causes?.length ? e.causes : [], effects: pol.im >= 2 ? (e.effects ?? []) : [], provenance: e.provenance ?? "simulation", ...(e.why ? { why: e.why } : {}) };
   if (e.facts) r.facts = e.facts; return r;
 }
 // v6.20.0: 外部保存（history-store.js）。civ ごとに実行時だけつなぐ。つながっているとき、コンパクションは資料を捨てず（事実の台帳は完全保存）、閉じた期間は外部へ移る

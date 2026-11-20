@@ -36,7 +36,7 @@ export function civChronicleChunks(civ, { fromMonth = -Infinity, toMonth = Infin
     const m = mi(e.date); if (!inRange(m)) continue; n++;
     const who = (e.participants ?? []).map((p) => `${esc(nameOf(p.entityId))}（${esc(p.role)}）`).join("、");
     const causes = (e.causes ?? []).map((c) => `${c.relation}: ${c.targetId}（${c.basis}）`).join("；");
-    out.push(`- ${ymd(m)} **${esc(e.title)}** \`${e.eventId}\` [${esc(e.kind)}]${who ? `　関与: ${who}` : ""}${causes ? `　原因: ${causes}` : "　原因: 記録された先行事象なし（環境・状態・確率的条件）"}\n`);
+    out.push(`- ${ymd(m)} **${esc(e.title)}** \`${e.eventId}\` [${esc(e.kind)}]${who ? `　関与: ${who}` : ""}${causes ? `　原因: ${causes}` : ""}${e.why ? `　理由: ${esc(e.why)}` : causes ? "" : "　原因: 記録された先行事象なし（環境・状態・確率的条件）"}\n`);
   }
   if (!n) out.push("（この範囲に出来事はありません）\n");
 
