@@ -108,6 +108,8 @@ export const nameGen = {
   stateParts: (civ, cap, via, rng, polity = "tribal") => { const l = languageOfGroup(cap); if (!l) return null; const base = stateBase(civ, rng, l, cap), sfx = landSuffix(civ, l); return { base, sfx, name: composeStateName(base, polity, via, civ.date.year, sfx), year: civ.date.year }; },
   state: (civ, cap, via, rng) => { const l = languageOfGroup(cap); return l ? nameFor(civ, rng, l, "state") + VIA[via].suffix : null; },
   person: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "person") : null; },
+  /** v7.0.0: 集落（都市・町・村）の名。集団の言語の音から */
+  place: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "place", { max: 5 }) : null; },
   /** 家名（〇〇家）。人名と同じ言語の音から */
   family: (civ, g, rng) => { const l = languageOfGroup(g); return l ? nameFor(civ, rng, l, "place", { max: 5 }) : null; },
   /** 称号に添える語（「〇〇・ヴァーラ」のような通称） */

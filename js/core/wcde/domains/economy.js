@@ -16,13 +16,14 @@ export const ECON_PERIOD = 3;
 export { effective };
 const adopted = (st, k) => st.techAdopted?.[k] != null;
 import { fxSum } from "../../civ/tech.js";
+import { groupStage } from "../../civ/settlements.js"; // v7.0.0
 
 /** 国家の生産・食料。集団ごとに積み上げる */
 export function computeProduction(ctx, st, groups) {
   const { world, civ } = ctx, ce = world.cell; let pop = 0, output = 0, foodNum = 0, foodDen = 0;
   const techMult = 1 + fxSum(civ, st, "ind", groups) + 0.4 * fxSum(civ, st, "cap", groups), invest = 1 + (st.econ?.investment ?? 0);
   for (const g of groups) {
-    const stage = g.settlementId ? STAGE[civ.settlements[g.settlementId]?.stage] ?? 1 : 1;
+    const stage = g.settlementId ? STAGE[groupStage(civ, g)] ?? 1 : 1;
     let fert = 0; const cells = g.cells ?? [g.cell]; for (const c of cells) fert += ce.fertility[c]; fert /= cells.length;
     const nat = (ctx.ecoMult ? ctx.ecoMult(g) : 1) * (g.capUntil > civ.monthIndex ? g.capMult ?? 1 : 1); // 自然条件（生態系・災害）: 生産は土地の状態に従う（技術では完全には打ち消せない）
     const out = g.pop * (SUBS[g.subsistence] ?? 0.5) * stage * (0.7 + 0.6 * fert) * techMult * invest * (0.4 + 0.6 * nat);

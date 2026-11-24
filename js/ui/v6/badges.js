@@ -1,23 +1,140 @@
 // v6.17.0: 国策のバッジ（SVG）。分野ごとに枠の形と色を変え、中に図柄を置く（HoI4 の国是のような見え方。文字は出さない）。
 const NS = "http://www.w3.org/2000/svg";
-export const CAT_STYLE = { econ: ["#d8b45a", "hex"], mil: ["#d0605a", "shield"], relig: ["#a58bd0", "round"], cult: ["#6fa8c9", "diamond"], dipl: ["#8fb3b0", "oct"], home: ["#9fbf8a", "penta"] };
-const G = {
-  wheat: "M12 21V9M12 9c-3-1-4-3-4-5 3 0 4 2 4 5M12 9c3-1 4-3 4-5-3 0-4 2-4 5M12 14c-3-1-4-3-4-5M12 14c3-1 4-3 4-5", coin: "M12 4a8 8 0 100 16 8 8 0 000-16zM9.5 12h5M12 9v6", anvil: "M4 8h12l4 2-3 3H7l-3-3zM9 13v5h6v-2", wall: "M4 20V9h3V6h3v3h4V6h3v3h3v11zM10 20v-5h4v5",
-  sword: "M5 19l9-9M14 10l5-5V4h-1l-5 5M8 16l-2 2M7 14l3 3", bow: "M6 4c8 2 8 14 0 16M6 12h14M17 9l3 3-3 3", ship: "M3 15h18l-3 5H6zM12 15V4l6 8h-6M12 6L7 12h5", flag: "M6 21V4M6 5h12l-3 4 3 4H6", temple: "M3 20h18M5 20V10M19 20V10M12 4l9 5H3zM9 20v-6h6v6",
-  book: "M4 5h7a2 2 0 012 2v13a2 2 0 00-2-2H4zM20 5h-7M20 5v13h-7", scroll: "M7 4h11v14a2 2 0 01-2 2H6a2 2 0 002-2V6a2 2 0 00-1-2zM10 9h6M10 13h6", eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z",
-  hands: "M3 12l5-5 4 2 4-2 5 5-6 6-3-3-3 3z", scale: "M12 4v16M6 20h12M4 8h16M4 8l-2 6a3 3 0 006 0zM20 8l-2 6a3 3 0 006 0z", crown: "M3 8l4 4 5-7 5 7 4-4-2 11H5z", torch: "M12 3c3 3 4 5 2 8-1 1-3 1-4 0-2-3-1-5 2-8zM10 14h4l-1 7h-2z",
-  star: "M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z", road: "M8 3l-3 18M16 3l3 18M12 5v3M12 11v3M12 17v3", gear: "M12 9a3 3 0 100 6 3 3 0 000-6zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2",
-  people: "M9 11a3 3 0 100-6 3 3 0 000 6zM3 20c0-4 3-6 6-6s6 2 6 6M17 10a2.5 2.5 0 100-5M16 14c3 0 5 2 5 6", gun: "M3 10h13l2-2h3v4h-3l-1 2h-4l-1 3H8l1-3H3z", heart: "M12 20s-7-4.5-7-10a4 4 0 017-2 4 4 0 017 2c0 5.500-7 10-7 10z", lock: "M7 11V8a5 5 0 0110 0v3M5 11h14v9H5z", mask: "M4 6c5 1 11 1 16 0 0 8-3 13-8 13S4 14 4 6zM8 11h2M14 11h2", quill: "M20 4c-8 0-13 5-14 14M20 4c0 8-5 13-13 14M6 18l-2 2",
-  cross: "M12 3v18M6 9h12", moon: "M16 4a8 8 0 100 16 6 6 0 010-16z", mail: "M3 6h18v12H3zM3 6l9 7 9-7", cup: "M6 4h12v6a6 6 0 01-12 0zM12 16v4M8 20h8", plus: "M12 5v14M5 12h14", fort: "M5 20V8l3 2 4-4 4 4 3-2v12zM10 20v-5h4v5",
+export const CAT_STYLE = {
+  econ: ["#d8b45a", "hex"],
+  mil: ["#d0605a", "shield"],
+  relig: ["#a58bd0", "round"],
+  cult: ["#6fa8c9", "diamond"],
+  dipl: ["#8fb3b0", "oct"],
+  home: ["#9fbf8a", "penta"],
 };
-const OF = { granary: "wheat", guild_charter: "anvil", land_survey: "scroll", tax_farming: "coin", river_works: "road", border_guard: "wall", militia: "people", arsenal: "gun", officer_academy: "star", mercenaries: "sword", provincial_governors: "crown", census_taking: "scroll", legal_code: "scale", royal_progress: "flag", amnesty: "hands", temple_building: "temple", missionaries: "book", clergy_tax: "coin", tribute_system: "ship", armed_neutrality: "fort", defensive_pacts: "hands", chronicles: "quill", calendar_reform: "moon", craft_schools: "anvil", heroic_epics: "torch", agrarian: "wheat", mercantile: "coin", monopoly: "lock", public_works: "road", free_market: "scale", planned: "gear", currency: "coin", thrift: "coin", standing_army: "sword", conscription: "people", elite_corps: "star", fortress: "fort", logistics: "road", naval: "ship", gun_reform: "gun", veterans: "heart",
-  centralize: "crown", autonomy: "flag", martial_law: "lock", relief: "heart", admin_reform: "gear", exam: "scroll", tolerance: "hands", state_religion: "temple", clergy_patronage: "cross", inquisition: "eye", pilgrimage: "moon", secular: "scale", scripture_ed: "book",
-  marriage: "heart", trade_diplomacy: "ship", isolation: "wall", balance: "scale", espionage: "mask", coercion: "sword", embassies: "flag", courier: "mail", scholarship: "book", libraries: "book", arts: "quill", festivals: "torch", national_myth: "torch", language: "quill", printing: "book", public_ed: "book", medicine: "cup" };
-const SHAPE = { hex: "M32 4l24 14v28L32 60 8 46V18z", shield: "M10 8h44v24c0 14-10 22-22 26C20 54 10 46 10 32z", round: "M32 5a27 27 0 100 54 27 27 0 000-54z", diamond: "M32 3l28 29-28 29L4 32z", oct: "M20 5h24l15 15v24L44 59H20L5 44V20z", penta: "M32 4l27 20-10 32H15L5 24z" };
+const G = {
+  wheat: "M12 21V9M12 9c-3-1-4-3-4-5 3 0 4 2 4 5M12 9c3-1 4-3 4-5-3 0-4 2-4 5M12 14c-3-1-4-3-4-5M12 14c3-1 4-3 4-5",
+  coin: "M12 4a8 8 0 100 16 8 8 0 000-16zM9.5 12h5M12 9v6",
+  anvil: "M4 8h12l4 2-3 3H7l-3-3zM9 13v5h6v-2",
+  wall: "M4 20V9h3V6h3v3h4V6h3v3h3v11zM10 20v-5h4v5",
+  sword: "M5 19l9-9M14 10l5-5V4h-1l-5 5M8 16l-2 2M7 14l3 3",
+  bow: "M6 4c8 2 8 14 0 16M6 12h14M17 9l3 3-3 3",
+  ship: "M3 15h18l-3 5H6zM12 15V4l6 8h-6M12 6L7 12h5",
+  flag: "M6 21V4M6 5h12l-3 4 3 4H6",
+  temple: "M3 20h18M5 20V10M19 20V10M12 4l9 5H3zM9 20v-6h6v6",
+  book: "M4 5h7a2 2 0 012 2v13a2 2 0 00-2-2H4zM20 5h-7M20 5v13h-7",
+  scroll: "M7 4h11v14a2 2 0 01-2 2H6a2 2 0 002-2V6a2 2 0 00-1-2zM10 9h6M10 13h6",
+  eye: "M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12zM12 9a3 3 0 100 6 3 3 0 000-6z",
+  hands: "M3 12l5-5 4 2 4-2 5 5-6 6-3-3-3 3z",
+  scale: "M12 4v16M6 20h12M4 8h16M4 8l-2 6a3 3 0 006 0zM20 8l-2 6a3 3 0 006 0z",
+  crown: "M3 8l4 4 5-7 5 7 4-4-2 11H5z",
+  torch: "M12 3c3 3 4 5 2 8-1 1-3 1-4 0-2-3-1-5 2-8zM10 14h4l-1 7h-2z",
+  star: "M12 3l2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.5 6.6 19.5l1.2-6L3.3 9.3l6.1-.7z",
+  road: "M8 3l-3 18M16 3l3 18M12 5v3M12 11v3M12 17v3",
+  gear: "M12 9a3 3 0 100 6 3 3 0 000-6zM12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2",
+  people: "M9 11a3 3 0 100-6 3 3 0 000 6zM3 20c0-4 3-6 6-6s6 2 6 6M17 10a2.5 2.5 0 100-5M16 14c3 0 5 2 5 6",
+  gun: "M3 10h13l2-2h3v4h-3l-1 2h-4l-1 3H8l1-3H3z",
+  heart: "M12 20s-7-4.5-7-10a4 4 0 017-2 4 4 0 017 2c0 5.500-7 10-7 10z",
+  lock: "M7 11V8a5 5 0 0110 0v3M5 11h14v9H5z",
+  mask: "M4 6c5 1 11 1 16 0 0 8-3 13-8 13S4 14 4 6zM8 11h2M14 11h2",
+  quill: "M20 4c-8 0-13 5-14 14M20 4c0 8-5 13-13 14M6 18l-2 2",
+  cross: "M12 3v18M6 9h12",
+  moon: "M16 4a8 8 0 100 16 6 6 0 010-16z",
+  mail: "M3 6h18v12H3zM3 6l9 7 9-7",
+  cup: "M6 4h12v6a6 6 0 01-12 0zM12 16v4M8 20h8",
+  plus: "M12 5v14M5 12h14",
+  fort: "M5 20V8l3 2 4-4 4 4 3-2v12zM10 20v-5h4v5",
+};
+const OF = {
+  granary: "wheat",
+  guild_charter: "anvil",
+  land_survey: "scroll",
+  tax_farming: "coin",
+  river_works: "road",
+  border_guard: "wall",
+  militia: "people",
+  arsenal: "gun",
+  officer_academy: "star",
+  mercenaries: "sword",
+  provincial_governors: "crown",
+  census_taking: "scroll",
+  legal_code: "scale",
+  royal_progress: "flag",
+  amnesty: "hands",
+  temple_building: "temple",
+  missionaries: "book",
+  clergy_tax: "coin",
+  tribute_system: "ship",
+  armed_neutrality: "fort",
+  defensive_pacts: "hands",
+  chronicles: "quill",
+  calendar_reform: "moon",
+  craft_schools: "anvil",
+  heroic_epics: "torch",
+  agrarian: "wheat",
+  mercantile: "coin",
+  monopoly: "lock",
+  public_works: "road",
+  free_market: "scale",
+  planned: "gear",
+  currency: "coin",
+  thrift: "coin",
+  standing_army: "sword",
+  conscription: "people",
+  elite_corps: "star",
+  fortress: "fort",
+  logistics: "road",
+  naval: "ship",
+  gun_reform: "gun",
+  veterans: "heart",
+  centralize: "crown",
+  autonomy: "flag",
+  martial_law: "lock",
+  relief: "heart",
+  admin_reform: "gear",
+  exam: "scroll",
+  tolerance: "hands",
+  state_religion: "temple",
+  clergy_patronage: "cross",
+  inquisition: "eye",
+  pilgrimage: "moon",
+  secular: "scale",
+  scripture_ed: "book",
+  marriage: "heart",
+  trade_diplomacy: "ship",
+  isolation: "wall",
+  balance: "scale",
+  espionage: "mask",
+  coercion: "sword",
+  embassies: "flag",
+  courier: "mail",
+  scholarship: "book",
+  libraries: "book",
+  arts: "quill",
+  festivals: "torch",
+  national_myth: "torch",
+  language: "quill",
+  printing: "book",
+  public_ed: "book",
+  medicine: "cup",
+};
+const SHAPE = {
+  hex: "M32 4l24 14v28L32 60 8 46V18z",
+  shield: "M10 8h44v24c0 14-10 22-22 26C20 54 10 46 10 32z",
+  round: "M32 5a27 27 0 100 54 27 27 0 000-54z",
+  diamond: "M32 3l28 29-28 29L4 32z",
+  oct: "M20 5h24l15 15v24L44 59H20L5 44V20z",
+  penta: "M32 4l27 20-10 32H15L5 24z",
+};
 /** バッジの SVG 要素。on: 取り入れ済み（光る）。size: 一辺の px */
 export function policyBadge(id, cat, { size = 56, on = false, empty = false } = {}) {
-  const [col, shape] = CAT_STYLE[cat] ?? CAT_STYLE.home, s = document.createElementNS(NS, "svg"); s.setAttribute("viewBox", "0 0 64 64"); s.setAttribute("width", size); s.setAttribute("height", size); s.setAttribute("class", "pbadge" + (on ? " on" : "") + (empty ? " empty" : ""));
+  const [col, shape] = CAT_STYLE[cat] ?? CAT_STYLE.home,
+    s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", "0 0 64 64");
+  s.setAttribute("width", size);
+  s.setAttribute("height", size);
+  s.setAttribute("class", "pbadge" + (on ? " on" : "") + (empty ? " empty" : ""));
   const gid = "g" + Math.abs([...(cat + id)].reduce((a, c) => ((a << 5) - a + c.charCodeAt(0)) | 0, 7));
-  s.innerHTML = `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity="${empty ? 0.06 : on ? 0.55 : 0.32}"/><stop offset="1" stop-color="#101419" stop-opacity=".95"/></linearGradient></defs><path d="${SHAPE[shape]}" fill="url(#${gid})" stroke="${col}" stroke-width="${on ? 3 : 2}" ${empty ? 'stroke-dasharray="4 4" stroke-opacity=".55"' : ""} stroke-linejoin="round"/>` + (empty ? `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${col}" stroke-opacity=".6" stroke-width="1.6" stroke-linecap="round"><path d="${G.plus}"/></g>` : `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${on ? "#fff" : col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${G[OF[id]] ?? G.star}"/></g>`);
+  s.innerHTML =
+    `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${col}" stop-opacity="${empty ? 0.06 : on ? 0.55 : 0.32}"/><stop offset="1" stop-color="#101419" stop-opacity=".95"/></linearGradient></defs><path d="${SHAPE[shape]}" fill="url(#${gid})" stroke="${col}" stroke-width="${on ? 3 : 2}" ${empty ? 'stroke-dasharray="4 4" stroke-opacity=".55"' : ""} stroke-linejoin="round"/>` +
+    (empty
+      ? `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${col}" stroke-opacity=".6" stroke-width="1.6" stroke-linecap="round"><path d="${G.plus}"/></g>`
+      : `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${on ? "#fff" : col}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="${G[OF[id]] ?? G.star}"/></g>`);
   return s;
 }

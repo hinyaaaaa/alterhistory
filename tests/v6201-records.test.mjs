@@ -22,5 +22,5 @@ check("言語の分化は文化の分化より少ない", langDiv < cultDiv, `�
 check("使われている言語の数は、文化の数を超えない", cm.aliveLanguages <= cm.aliveCultures, `言語 ${cm.aliveLanguages} / 文化 ${cm.aliveCultures}`);
 const bm = borderMetrics(w);
 check("飛び地を持つ国は、国の 20% 以下（v6.20.0 は 7 割に近い国まで）", bm.statesWithExclaves <= Math.max(1, Math.ceil(0.2 * bm.statesWithTerritory)), `${bm.statesWithExclaves}/${bm.statesWithTerritory}`);
-check("保存ファイルに書かれる版が、アプリの版と同じ（v6.20.0 は 6.13.0 に固定されていた）", APP_VERSION_FOR_SAVE === APP_VERSION && APP_VERSION === "6.21.0", APP_VERSION_FOR_SAVE);
+check("保存ファイルに書かれる版が、アプリの版と同じ（v6.20.0 は 6.13.0 に固定されていた）", APP_VERSION_FOR_SAVE === APP_VERSION && APP_VERSION === "7.0.0-rc.1", APP_VERSION_FOR_SAVE);
 console.log(failed ? `\n${failed} 件失敗` : "\nすべて通りました"); process.exit(failed ? 1 : 0);

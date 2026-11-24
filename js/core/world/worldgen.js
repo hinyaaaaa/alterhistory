@@ -4,7 +4,7 @@
 //   歴史（月次シミュレーション）は走らせない。地理だけを作る。
 import { buildSphereMesh, frequencyForCells, cellArea, greatCircleRad, meshHash } from "./sphere-mesh.js";
 import { normalizeWorldSpec, ISLAND_MODES } from "./spec.js";
-import { siteScore, pickSite, planSettlements } from "./sites.js";
+import { siteScore, pickSite, planSettlements, planSites } from "./sites.js";
 import { activePlugin } from "./plugins.js";
 import { makeRng, hashString, fbm3, makeFbm3, gradNoise3, gfbm3, ridged3 } from "./noise.js";
 import { planContinents, makeFields, chooseSeam, seamSampleSpecs, rotZ } from "./continents.js";
@@ -319,7 +319,7 @@ export function generateWorld(specInput, options = {}) {
   };
   timings.total = Math.round(performance.now() - tAll);
   world.hash = worldHash(world);
-  Object.defineProperty(world, "siteTools", { value: { pickSite, planSettlements, siteScore }, enumerable: false, writable: true, configurable: true }); // 集落の選定の道具。国家運営層（civ）は world/ を直接 import できないので、世界に持たせて渡す（保存・複製・ハッシュに入らない）
+  Object.defineProperty(world, "siteTools", { value: { pickSite, planSettlements, planSites, siteScore }, enumerable: false, writable: true, configurable: true }); // 集落の選定の道具。国家運営層（civ）は world/ を直接 import できないので、世界に持たせて渡す（保存・複製・ハッシュに入らない）
   return world;
 }
 

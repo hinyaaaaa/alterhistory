@@ -12,6 +12,7 @@ import { hashSeed } from "../../civ/civ-state.js";
 import { lifeScale } from "../../civ/species.js";
 import { effective } from "./effective.js";
 import { retitle, regnalOf, epithetGen, leaderRng } from "./naming.js";
+import { groupStage } from "../../civ/settlements.js"; // v7.0.0
 
 export const FACTIONS = Object.freeze({ nobility: "貴族・有力者", clergy: "聖職者", merchants: "商人", military: "軍", commoners: "民衆", bureaucrats: "官僚・書記", artisans: "職人・工房", clans: "遊牧氏族" });
 export const CORE_FACTIONS = Object.freeze(["nobility", "military", "commoners"]);
@@ -31,7 +32,7 @@ const adopted = (st, k) => st.techAdopted?.[k] != null;
 /** 社会構造（勢力が成立するかの入力）: 都市の人口割合・牧畜の人口割合 */
 function socialOf(ctx, st) {
   const { civ } = ctx, gs = byState(ctx).get(st.id) ?? []; let tot = 0, city = 0, past = 0;
-  for (const g of gs) { tot += g.pop; if (g.subsistence === "pastoral") past += g.pop; const sg = g.settlementId ? civ.settlements[g.settlementId]?.stage : null; if (sg === "town" || sg === "city") city += g.pop; }
+  for (const g of gs) { tot += g.pop; if (g.subsistence === "pastoral") past += g.pop; const sg = g.settlementId ? groupStage(civ, g) : null; if (sg === "town" || sg === "city") city += g.pop; }
   return { city: tot ? city / tot : 0, pastoral: tot ? past / tot : 0 };
 }
 /** この国家にいまある勢力（貴族・軍・民衆は常に。ほかは社会構造・技術・経済・宗教・政体が整うとき） */

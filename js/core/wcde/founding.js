@@ -14,6 +14,7 @@ import { languageOfGroup } from "./domains/language.js";
 import { takeControl } from "./control.js";
 import { initMilitary, nodesOf, canAdopt, adoptDoctrine } from "./domains/military.js";
 import { REGIMES, DEFAULT_REGIME, regimeGate, checkOffices, defaultOffices, officeJa, OFFICES, regimeOf } from "./regimes.js";
+import { groupStage } from "../civ/settlements.js"; // v7.0.0
 
 const POLITY_CHOICES = { city_state: ["chiefdom", "tribal"], religious_polity: ["theocracy", "tribal"], agri_union: ["tribal", "chiefdom"], nomad_confederation: ["tribal", "chiefdom"] };
 const dominant = (g) => g.cohorts.reduce((b, c) => (c.share > b.share ? c : b));
@@ -94,7 +95,7 @@ export function planRealm(w, capGroupId) {
   const groups = [cap, ...cand.slice(0, REALM_MAX_GROUPS - 1).map((x) => x[1])];
   return { groupIds: groups.map((g) => g.id), pop: Math.round(groups.reduce((s, g) => s + g.pop, 0)), cells: groups.reduce((s, g) => s + (g.cells?.length || 1), 0) };
 }
-const viaFallback = (civ, cap) => { const s = cap.settlementId ? civ.settlements[cap.settlementId] : null; if (s && (s.stage === "town" || s.stage === "city")) return "city_state"; if (cap.subsistence === "pastoral") return "nomad_confederation"; if (cap.subsistence === "agriculture") return "agri_union"; return "city_state"; };
+const viaFallback = (civ, cap) => { const s = cap.settlementId ? civ.settlements[cap.settlementId] : null; { const sg = s ? groupStage(civ, cap) : null; if (sg === "town" || sg === "city") return "city_state"; } if (cap.subsistence === "pastoral") return "nomad_confederation"; if (cap.subsistence === "agriculture") return "agri_union"; return "city_state"; };
 
 /* ---------- 技術・軍事ドクトリンの選択肢（WCDE の制限の範囲） ---------- */
 const MAX_START_TECH = 3, TECH_TIER_MAX = 3;

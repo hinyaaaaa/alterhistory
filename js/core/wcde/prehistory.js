@@ -11,6 +11,9 @@ import { fromMonthIndex, monthIndex } from "../civ/tick.js";
 import { createCulture, createLanguage, createReligion } from "../civ/culture.js";
 import { makeEvent } from "../civ/events.js";
 import { POP, groupCapacity, reachable, cellCapacity, spawnGroup, territoryOf, verGE } from "../civ/population.js";
+import { updateRoads } from "../civ/roads.js";
+import { makeSettlement, maxSitesFor, siteIdsOf, nameSettlement, urbanPop } from "../civ/settlements.js"; // v7.0.0: 複数拠点・序列・名前
+import { nameGen as placeNameGen } from "./domains/language.js";
 import { TECHS, TECH, refreshCand, emergenceRate, pEmerge, u01, accel } from "../civ/tech.js";
 import { calibrateStart } from "../civ/calibration.js";
 import { initEco, stepEco, ecoMult } from "./domains/ecosystem.js";
@@ -190,12 +193,20 @@ export function runPrehistory(world, civ, { stepYears = PREHISTORY_STEP_YEARS, o
   if (siteNew) {
     const elig = []; for (const id of order) { const g = civ.groups[id]; if (!g) continue; g.cells = g.cells ?? territoryOf(world, g.cell); if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop) elig.push(g); }
     const CP = world.cityPlugin ?? null, pscore = typeof CP?.siteScore === "function" ? (w, c, base, g) => { try { const v = CP.siteScore(w, c, { civ, group: g, base }); return Number.isFinite(v) ? v : base; } catch { return base; } } : null; // 都市プラグインの得点があれば、集落の立地にも使う
-    sitePlan = world.siteTools.planSettlements(world, elig, hashSeed(world.spec.worldSeed, "sites"), pscore);
+    sitePlan = world.siteTools.planSites ? world.siteTools.planSites(world, elig, hashSeed(world.spec.worldSeed, "sites"), pscore, maxSitesFor) : new Map([...world.siteTools.planSettlements(world, elig, hashSeed(world.spec.worldSeed, "sites"), pscore)].map(([k, c]) => [k, [{ cell: c, score: 0, weight: 1 }]])); // v7.0.0: 集団ごとに 1 つではなく、複数の拠点（順位規模則の重みつき）
   }
   for (const id of order) { const g = civ.groups[id]; if (!g) continue; g.lastBudAt = civ.monthIndex - POP.budCooldown; g.noTargetUntil = undefined; g.famineAt = -999; g.cells = g.cells ?? territoryOf(world, g.cell); delete g.gen; delete g.noTargetUntil; delete g.capMult;
     // v6.13.0: 集落の立地は適地スコア（合流点・河口・良港・防御性・平坦さ）。それ以前の版は従来どおり
-    if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && (!siteNew || sitePlan.has(g.id))) { const sid = ids.next("settle"); let best = g.cell, bs = -1; if (siteNew) best = sitePlan.get(g.id); else for (const c of g.cells) { const s = ce.fertility[c] + (ce.river[c] ? 0.4 : 0) + (ce.coastDist[c] <= 1 ? 0.2 : 0); if (s > bs) { bs = s; best = c; } } civ.settlements[sid] = { id: sid, groupId: g.id, cell: best, foundedAt: civ.monthIndex - 60, pop: Math.round(g.pop * POP.settledShare), stage: stageOf(Math.round(g.pop * POP.settledShare)) }; g.settlementId = sid; g.settledMonths = POP.settleMinMonths; stats.settlements++; }
+    if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && (!siteNew || sitePlan.has(g.id))) {
+      const plan = siteNew ? sitePlan.get(g.id) : null; let cellsToMake = plan;
+      if (!plan) { let best = g.cell, bs = -1; for (const c of g.cells) { const sc2 = ce.fertility[c] + (ce.river[c] ? 0.4 : 0) + (ce.coastDist[c] <= 1 ? 0.2 : 0); if (sc2 > bs) { bs = sc2; best = c; } } cellsToMake = [{ cell: best, score: 0, weight: 1 }]; }
+      let W = 0; for (const x of cellsToMake) W += x.weight; g.settlementIds = [];
+      cellsToMake.forEach((x, idx) => { const sObj = makeSettlement(civ, ids, { groupId: g.id, cell: x.cell, pop: (urbanPop(g) * x.weight) / W, foundedAt: civ.monthIndex - 60 - idx * 12, weight: x.weight, score: x.score }); g.settlementIds.push(sObj.id); if (idx === 0) g.settlementId = sObj.id; stats.settlements++; });
+      g.settledMonths = POP.settleMinMonths;
+    }
     g.bornAt = Math.min(g.bornAt, civ.monthIndex); }
+  { const nctx = { civ, ids, nameGen: placeNameGen }; for (const id of order) { const g = civ.groups[id]; if (!g) continue; for (const sid of siteIdsOf(civ, g)) nameSettlement(nctx, civ.settlements[sid], g); } } // v7.0.0: 集落に、その集団の言語から名前を付ける（同じ名前は重ねない）
+  updateRoads(world, civ); // v7.0.0: 街道・航路（地形コスト最小。決定的）
   for (const id of order) { const g = civ.groups[id]; if (g && g.parent && !civ.groups[g.parent]) g.parent = null; } // 先史の集計の中で消えた親は、系譜として辿らない
   stats.groups = Object.keys(civ.groups).length; stats.pop = Math.round(Object.values(civ.groups).reduce((s, g) => s + g.pop, 0));
   { const ep = stats.epochs[stats.epochs.length - 1]; if (ep && lastEpEv) { ep.pop = stats.pop; ep.x = Math.round(stats.pop / Math.max(1, ep.pop / Math.max(0.01, ep.x)) * 100) / 100; const e0 = lastEpEv.effects.find((e) => e.property === "prehistory.pop"); if (e0) e0.after = stats.pop; lastEpEv.title = lastEpEv.title.replace(/人口 約\d+/, `人口 約${stats.pop}`); } } // v6.8.0: 起点の人口の較正のあと、最後の時代区分の値も終わりの値にそろえる

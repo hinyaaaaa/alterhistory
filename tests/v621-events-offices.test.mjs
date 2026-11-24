@@ -81,5 +81,5 @@ await check("国策は 70 個以上。必要な技術は実在し、すべてに
   for (const [id, p] of Object.entries(POLICIES)) { assert.ok(p.ja && p.desc, id); if (p.need) assert.ok(ids.has(p.need), `${id}: ${p.need}`); assert.ok(new RegExp(`\\b${id}:`).test(ofText), `図柄 ${id}`); }
   const ui = readFileSync(new URL("../js/ui/v6/policy.js", import.meta.url), "utf8"); assert.ok((ui.match(/class: "ptitle"/g) ?? []).length >= 2, "バッジの下に題名");
 });
-await check("版は 6.21.0", () => assert.equal(APP_VERSION, "6.21.0"));
+await check("版は 7 系（6.21.0 の機能を引き継ぐ）", () => assert.match(APP_VERSION, /^7\./));
 console.log(failed ? `\n${failed} 件失敗` : "\nすべて通りました"); process.exit(failed ? 1 : 0);

@@ -10,6 +10,8 @@ import { onTreatySigned, onTreatyEnded, callDependents, submitAfterWar } from ".
 import { callPacts } from "../wcde/pacts.js";
 import { recentEventsFor, asCauses, getEvent } from "./graph.js";
 import { enqueue } from "./compaction-queue.js";
+import { defaultGoals } from "../wcde/war-core.js";
+import { callAlliances } from "../wcde/war-alliance.js";
 
 /** 戦争の理由の表示名（v6.9.0）。旧版は AI の戦争がすべて「conquest」だった */
 export const WAR_REASON_JA = Object.freeze({ conquest: "領土の征服", plunder: "略奪・遠征", succession: "王位継承をめぐる争い", religion: "宗教的な対立", trade_route: "交易路・資源をめぐる争い", maritime: "海上覇権をめぐる争い", revenge: "報復・失地の回復", independence: "独立・自治を求める戦争", unification: "統一を求める戦争", ideology: "体制・イデオロギーの対立", resource: "資源をめぐる争い", subjugation: "従属の強制", civil_war: "内戦・反乱", alliance: "同盟に基づく参戦", preventive: "予防戦争", defense: "防衛" });
@@ -83,19 +85,16 @@ export function warReasonFor(ctx, atk, def) { // v6.19.0: 史実の分類（8 �
   const ents = Object.entries(wt).filter(([, v]) => v > 0), tot = ents.reduce((a, [, v]) => a + v, 0); let x = h * tot; for (const [k, v] of ents) { x -= v; if (x <= 0) return k; } return "conquest";
 }
 /** 口実（理由とは別）: 近い過去に戦った相手なら報復、国土を失っていれば失地の回復 */
-export function warPretextFor(ctx, atk, def) { const mi = ctx.civ.monthIndex; if (atk.lastWarWith?.[def.id] != null && mi - atk.lastWarWith[def.id] < 1200) return "revenge"; return null; }
-export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation" } = {}) {
+export function warPretextFor(ctx, atk, def) { const mi = ctx.civ.monthIndex; if ((atk.grudges?.[def.id] ?? 0) >= 0.25) return "revenge"; /* v7.0.0: 恨み（講和で失ったもの）が次の戦争の口実になる */ if (atk.lastWarWith?.[def.id] != null && mi - atk.lastWarWith[def.id] < 1200) return "revenge"; return null; }
+export function declareWar(ctx, atk, def, { reason = "conquest", decisionId = null, provenance = "simulation", goals = null } = {}) {
   const { civ, ids, rng } = ctx; if (reason === "conquest") reason = warReasonFor(ctx, atk, def);
   const id = ids.next("war"), w = { id, aggressor: atk.id, defender: def.id, sides: { a: [atk.id], d: [def.id] }, startedAt: civ.monthIndex, status: "active", reason, score: 0, occupied: [], outcome: null, endedAt: null, casualties: 0 }; { const pt = warPretextFor(ctx, atk, def); if (pt) w.pretext = pt; w.cls = warClassOf(reason); }
-  civ.wars[id] = w; civ.activeWarIds.push(id); atk.warIds.push(id); def.warIds.push(id); adjustRel(atk, def, -40);
+  w.phase = "active"; w.goals = (goals ?? defaultGoals(reason, atk.id, def.id)).map((g) => ({ ...g })); w.surrender = {}; w.log = []; w.fronts = []; /* v7.0.0 */ civ.wars[id] = w; civ.activeWarIds.push(id); atk.warIds.push(id); def.warIds.push(id); adjustRel(atk, def, -40);
   const ev = makeEvent(civ, ids, { kind: "war_declared", title: `${atk.name}が${def.name}に宣戦した`, participants: [{ entityId: atk.id, role: "aggressor" }, { entityId: def.id, role: "defender" }, { entityId: id, role: "war" }], location: civ.groups[def.capitalGroupId] ? { cell: civ.groups[def.capitalGroupId].cell } : null, causes: revengeCauses(civ, atk, def), facts: { warId: id, aggressor: atk.id, defender: def.id }, provenance, why: `開戦の理由: ${WAR_REASON_JA[reason] ?? reason}${w.pretext === "revenge" ? "（口実: 近い過去に戦った相手への報復）" : ""}` });
   w.declaredEvent = ev.eventId;
-  for (const [side, host, foe] of [["a", atk, def], ["d", def, atk]]) for (const t of civ.activeTreatyIds.map((i) => civ.treaties[i])) {
-    if (t.type !== "alliance" || (t.a !== host.id && t.b !== host.id)) continue; const ally = civ.states[t.a === host.id ? t.b : t.a]; if (!ally?.alive || ally.id === foe.id || w.sides.a.includes(ally.id) || w.sides.d.includes(ally.id)) continue;
-    if (ally.player && ctx.decisions?.allyCall(ctx, w, side, host, foe, ally)) continue; // v6.12.0: 担当国の参戦は、自動で決まらず決断する
-    if (rng() < 0.6) { w.sides[side].push(ally.id); ally.warIds.push(id); adjustRel(ally, foe, -25); makeEvent(civ, ids, { kind: "ally_joined", title: `${ally.name}が${host.name}側で参戦した`, participants: [{ entityId: ally.id, role: "ally" }, { entityId: id, role: "war" }], location: null, causes: [{ targetId: ev.eventId, relation: "reaction_to", basis: "strong" }] }); }
-  }
-  callDependents(ctx, w, atk, def); callPacts(ctx, w, atk, def); // v6.16.0: 従属国・盟約の参戦
+  callAlliances(ctx, w, atk, def); // v7.0.0: 二国間の同盟と盟約を統一した「同盟」の参戦要請（義務の強さ・共通の敵・担当国の決断）
+  callDependents(ctx, w, atk, def); // v6.16.0: 従属国の参戦
+ // v6.16.0: 従属国・盟約の参戦
   ctx.warOps?.init(ctx, w); // v6.1.0 M6: WCDE の世界では、戦域・部隊・作戦を持つ戦争の記録にする
   return w;
 }
@@ -103,13 +102,13 @@ export function endWar(ctx, w, outcome, terms = null) {
   const { civ, ids } = ctx; if (w.status !== "active") return; w.status = "ended"; w.outcome = outcome; w.endedAt = civ.monthIndex; civ.activeWarIds = civ.activeWarIds.filter((i) => i !== w.id);
   const all = [...w.sides.a, ...w.sides.d].map((i) => civ.states[i]); for (const s of all) s.warIds = s.warIds.filter((i) => i !== w.id);
   const atk = civ.states[w.aggressor], def = civ.states[w.defender]; const lead = outcome === "aggressor_victory" || (outcome === "negotiated" && w.score > 0);
-  const gained = [], moved = []; const settled = ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null; // v6.1.0 M7: WCDE の世界では、占領した国家ごとに領土を移す
+  const gained = [], moved = []; const byDemands = terms?.kind === "conference" || terms?.kind === "demands"; /* v7.0.0: 講和会議・要求つきの講和は、領土の移転を要求の実行（war-peace.js）がすでに済ませている */ const settled = byDemands ? [] : ctx.warOps?.settle ? ctx.warOps.settle(ctx, w, outcome, terms) : null; // v6.1.0 M7: WCDE の世界では、占領した国家ごとに領土を移す
   if (settled) for (const x of settled) { gained.push(x.gid); moved.push(x); } else if (lead && atk?.alive) for (const gid of w.occupied) { const g = civ.groups[gid]; if (g && g.stateId === w.defender) { g.stateId = atk.id; gained.push(gid); } }
-  submitAfterWar(ctx, w, outcome); // v6.16.0: 敗戦国が従属することがある
+  if (!byDemands) submitAfterWar(ctx, w, outcome); // v6.16.0: 敗戦国が従属することがある
   for (const x of w.sides.a) for (const y of w.sides.d) { const X = civ.states[x], Y = civ.states[y]; if (X && Y) { (X.lastWarWith ??= {})[y] = civ.monthIndex; (Y.lastWarWith ??= {})[x] = civ.monthIndex; } } // v6.9.0: 同じ 2 国の再戦を抑える
   for (const s of all) { s.lastWarEnd = civ.monthIndex; s.stability = Math.max(0, s.stability - 0.04); if (s.campaign?.warId === w.id) s.campaign = null; }
   if (atk && def) adjustRel(atk, def, -10);
-  makeEvent(civ, ids, { kind: "war_ended", title: `${atk?.name ?? "?"}と${def?.name ?? "?"}の戦争が終わった（${{ aggressor_victory: "攻撃側の勝利", defender_victory: "防衛側の勝利", stalemate: "決着つかず", negotiated: terms?.kind === "cession" ? "講和（占領地の割譲）" : "講和", state_dissolved: "国家の消滅" }[outcome] ?? outcome}）`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => { const m = moved.find((x) => x.gid === gid); return { targetId: gid, property: "stateId", before: m?.from ?? w.defender, after: m?.to ?? atk.id }; }), facts: { warId: w.id, outcome, terms: terms?.kind ?? null, stateId: gained.length ? (moved[0]?.to ?? atk?.id ?? null) : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
+  makeEvent(civ, ids, { kind: "war_ended", title: `${atk?.name ?? "?"}と${def?.name ?? "?"}の戦争が終わった（${{ aggressor_victory: byDemands ? "攻撃側の勝利（講和会議）" : "攻撃側の勝利", defender_victory: byDemands ? "防衛側の勝利（講和会議）" : "防衛側の勝利", stalemate: "決着つかず", negotiated: terms?.kind === "cession" ? "講和（占領地の割譲）" : terms?.kind === "demands" ? "講和（要求つき）" : "講和", state_dissolved: "国家の消滅" }[outcome] ?? outcome}）`, participants: [{ entityId: w.id, role: "war" }, ...all.map((s) => ({ entityId: s.id, role: "belligerent" }))], location: null, causes: [{ targetId: w.declaredEvent, relation: "part_of", basis: "direct" }], effects: gained.map((gid) => { const m = moved.find((x) => x.gid === gid); return { targetId: gid, property: "stateId", before: m?.from ?? w.defender, after: m?.to ?? atk.id }; }), facts: { warId: w.id, outcome, terms: terms?.kind ?? null, stateId: gained.length ? (moved[0]?.to ?? atk?.id ?? null) : null, cells: gained.slice(0, 24).map((gid) => civ.groups[gid]?.cell).filter(Number.isFinite) } });
   ctx.warOps?.finalize(ctx, w, outcome); // 作戦・部隊・戦域を片付け、代表的な戦いだけを資料に残す（領土の移転のあと）
 }
 

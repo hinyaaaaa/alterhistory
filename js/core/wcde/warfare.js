@@ -17,8 +17,14 @@ import { BIOMES } from "../civ/world-consts.js";
 import { effective } from "./domains/effective.js";
 import { nameFor, languageOfGroup } from "./domains/language.js";
 import { kanjiNum, siteDescriptors, warNameFor } from "./domains/naming.js";
-import { landPower, navalPower, navyShare, landShare, supplyAt, airSupport } from "./power.js";
+import { landPower, navalPower, navyShare, landShare, supplyAt, airSupport, supplyRange } from "./power.js";
+import { lineOf } from "./domains/doctrine.js";
 import { pendingOf } from "./decision-state.js";
+import { groupStage } from "../civ/settlements.js";
+import { ensureWarV7, stepSurrender, sideCollapsed, isCapitulated, surrenderRec } from "./war-core.js";
+import { beginConference, stepConference, stepAutoPeace } from "./war-peace.js";
+import { offerCeasefires } from "./war-decisions.js";
+import { stepAftermath } from "./war-aftermath.js";
 import { corpsForWar, corpsById, corpsFx, corpsLoss, serviceLoss, leadCorps, syncCorps, corpsAfterBattle, cmdMult, marchSteps, ensureCorps } from "./corps.js";
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x), r3 = (x) => Math.round(x * 1000) / 1000;
@@ -65,7 +71,7 @@ function fieldSite(ctx, w, camp, g) {
 
 // ---- 地形・要塞
 const terrainBonus = (world, cell) => { const ce = world.cell, b = ce.biome[cell]; return ((ce.mountain?.[cell] ?? 0) > 0 || b === BIOMES.ALPINE ? 0.25 : 0) + (ce.river[cell] ? 0.1 : 0) + (b === BIOMES.WETLAND || b === BIOMES.TEMPERATE_FOREST || b === BIOMES.RAINFOREST ? 0.1 : 0); };
-const stageOf = (civ, g) => (g?.settlementId ? civ.settlements[g.settlementId]?.stage ?? "village" : null);
+const stageOf = (civ, g) => (g?.settlementId ? groupStage(civ, g) ?? "village" : null); // v7.0.0: 集落が増えても、集団単位の段階で見る（civ/settlements.js）
 
 // ---- 戦争の開始・部隊・戦域
 export function initWar(ctx, w) {
@@ -79,6 +85,7 @@ const commitOf = (w, st) => clamp(w.ops.direction[st.id]?.commit ?? 0.75, 0.3, 1
 export function syncForces(ctx, w) {
   const { civ } = ctx, ops = w.ops, live = new Set();
   for (const side of ["a", "d"]) for (const st of members(civ, w, side)) {
+    if (isCapitulated(w, st.id)) continue; // v7.0.0: 降伏した国は戦わない（部隊は片付く）
     // v6.13.0: 担当国もアルゴリズム国家も、陸・海・空の部隊と指揮官を持つ（ensureCorps）。担当国は部隊ごとに、アルゴリズム国家は軍ごとに 1 つの部隊として戦う（世界の較正を保つため）
     ensureCorps(ctx, st); if (!st.player) syncCorps(ctx, st);
     const c = commitOf(w, st), ns = navyShare(st), cps = corpsForWar(civ, st, w, "land"), fls = corpsForWar(civ, st, w, "sea"), want = [];
@@ -154,7 +161,16 @@ function frontierTargets(ctx, w, side) {
   for (const g of mine.slice(0, 90)) for (const o of neighborGroups(ctx, g)) { if (seen.has(o)) continue; seen.add(o); const t = civ.groups[o]; if (t && holderSide(w, t, civ) === foe && t.stateId && civ.states[t.stateId]?.alive) out.push(t); }
   return out.sort((x, y) => (x.id < y.id ? -1 : 1));
 }
-const valueOf = (ctx, w, g, from) => { const civ = ctx.civ, st = civ.states[g.stateId], stage = stageOf(civ, g), cap = st?.capitalGroupId === g.id; return Math.sqrt(g.pop + 1) * (cap ? 1.9 : stage === "city" ? 1.6 : stage === "town" ? 1.25 : 1) / (1 + distKm(ctx.world, from, g.cell) / 900); };
+// 目標の価値。担当国も AI も同じ式（指揮する部隊を選ばない部隊は、これで目標を決める）。軍事ドクトリンの系統・補給の届く範囲・距離を加味する
+const DOCTRINE_AIM = Object.freeze({ firepower: { urban: 1.25, reach: 900 }, mobile: { cap: 1.3, reach: 1800 }, mass: { urban: 1.1, reach: 900 }, position: { reach: 600 }, special: { cap: 1.5, reach: 1400 } });
+const valueOf = (ctx, w, g, from, st = null) => {
+  const civ = ctx.civ, ts = civ.states[g.stateId], stage = stageOf(civ, g), cap = ts?.capitalGroupId === g.id, urban = stage === "city" || stage === "town";
+  const aim = (st && DOCTRINE_AIM[lineOf(st)]) || {}, d = distKm(ctx.world, from, g.cell);
+  let v = Math.sqrt(g.pop + 1) * (cap ? 1.9 : stage === "city" ? 1.6 : stage === "town" ? 1.25 : 1) / (1 + d / (aim.reach ?? 900));
+  if (cap) v *= aim.cap ?? 1; else if (urban) v *= aim.urban ?? 1;
+  if (st && d > supplyRange(civ, st) * 1.3) v *= 0.5; // 補給が届かない遠い目標は後回し
+  return v;
+};
 
 // ---- 作戦の立案（AI もプレイヤーの国家も同じ。プレイヤーは方針・投入割合・重点の戦域で導く）
 function planFor(ctx, w, f) {
@@ -169,13 +185,13 @@ function planFor(ctx, w, f) {
   if (post === "defensive") return mk("defense", { theaterId: (dir.focus && ops.theaters[dir.focus] ? dir.focus : Object.values(ops.theaters).find((t) => t.kind === "land")?.id) ?? null });
   const from = capCell(civ, st) ?? 0, cands = frontierTargets(ctx, w, side).filter((g) => !dir.focus || ops.theaters[dir.focus]?.kind !== "land" || [ops.theaters[dir.focus].a, ops.theaters[dir.focus].d].includes(g.stateId));
   if (cands.length) {
-    let best = null, bs = -1; for (const g of cands) { const s = valueOf(ctx, w, g, from) * (1 + 0.25 * U(civ, w.id, st.id, mi, "tg", g.id)); if (s > bs) { bs = s; best = g; } }
+    let best = null, bs = -1; for (const g of cands) { const s = valueOf(ctx, w, g, from, st) * (1 + 0.25 * U(civ, w.id, st.id, mi, "tg", g.id)); if (s > bs) { bs = s; best = g; } }
     const stage = stageOf(civ, best), tst = civ.states[best.stateId], cap = tst?.capitalGroupId === best.id, th = landTheaterFor(w, st.id, best.stateId) ?? Object.values(ops.theaters).find((t) => t.kind === "land");
     return mk(stage === "city" || stage === "town" || cap ? "siege" : "offensive", { theaterId: th?.id ?? null, targetGroupId: best.id, targetStateId: best.stateId });
   }
   // 陸で接していない: 艦隊の護衛のもとで上陸
   const landing = (fx(st).landing ?? 0) > 0 || hasT(st, "seafaring"); const foeGs = members(civ, w, other(side)).flatMap((s) => byState(ctx).get(s.id) ?? []).filter((g) => world.cell.coastDist[g.cell] <= 1 && holderSide(w, g, civ) === other(side));
-  if (landing && sea && foeGs.length) { const best = foeGs.reduce((b, g) => (!b || valueOf(ctx, w, g, from) > valueOf(ctx, w, b, from) ? g : b), null); return mk("landing", { theaterId: sea.id, targetGroupId: best.id, targetStateId: best.stateId }); }
+  if (landing && sea && foeGs.length) { const best = foeGs.reduce((b, g) => (!b || valueOf(ctx, w, g, from, st) > valueOf(ctx, w, b, from, st) ? g : b), null); return mk("landing", { theaterId: sea.id, targetGroupId: best.id, targetStateId: best.stateId }); }
   return mk("defense", { theaterId: Object.values(ops.theaters).find((t) => t.kind === "land")?.id ?? null });
 }
 const fx = (st) => st.military?.fx ?? {};
@@ -300,12 +316,12 @@ function advance(ctx, w, camp) {
 
 /** 国家ごとの毎月の処理（戦争とは独立）: 損耗した兵力は少しずつ補充される・封鎖の期限 */
 export function monthly(ctx) {
-  const { civ } = ctx; for (const id in civ.states) { const s = civ.states[id]; if (!s.alive) continue; if (s.warLoss > 0) { s.warLoss = s.warLoss < 0.004 ? 0 : r3(s.warLoss * 0.97); } if (s.blockade != null && s.blockade <= civ.monthIndex) delete s.blockade; }
+  const { civ } = ctx; stepAftermath(ctx); // v7.0.0: 敗戦後（抵抗・恨み・自治度） for (const id in civ.states) { const s = civ.states[id]; if (!s.alive) continue; if (s.warLoss > 0) { s.warLoss = s.warLoss < 0.004 ? 0 : r3(s.warLoss * 0.97); } if (s.blockade != null && s.blockade <= civ.monthIndex) delete s.blockade; }
 }
 
 /** 戦争 1 件の月次（stepWars から。WCDE の世界だけ）。部隊の同期 → 作戦の立案・進行 → 戦況の集約 → 終結の判定 */
 export function stepWar(ctx, w) {
-  const { civ } = ctx, mi = civ.monthIndex; if (!w.ops) initWar(ctx, w); const ops = w.ops;
+  const { civ } = ctx, mi = civ.monthIndex; if (!w.ops) initWar(ctx, w); ensureWarV7(w); if (w.phase === "conference") { stepConference(ctx, w); return; } const ops = w.ops; // v7.0.0: 会議の局面では戦わない
   syncForces(ctx, w); if (mi % 3 === 0 || !Object.keys(ops.theaters).length) ensureTheaters(ctx, w);
   for (const f of forcesOf(w, "a").concat(forcesOf(w, "d"))) if (f.corpsId) moveCorps(ctx, w, f); // v6.12.0: 軍団は行軍ルートに沿って動く
   for (const f of forcesOf(w, "a").concat(forcesOf(w, "d"))) { if (f.corpsId) { planCorps(ctx, w, f); continue; } const c = f.campaignId ? ops.campaigns[f.campaignId] : null; if (!c || c.phase !== "active") { if (c) delete ops.campaigns[c.id]; f.campaignId = null; planFor(ctx, w, f); } }
@@ -316,8 +332,9 @@ export function stepWar(ctx, w) {
   const mor = (side) => { const fs = forcesOf(w, side); const tot = fs.reduce((s, f) => s + f.size, 0); return tot ? fs.reduce((s, f) => s + f.morale * f.size, 0) / tot : 0; };
   const mA = mor("a"), mD = mor("d"); w.score = clamp(w.score + (mA - mD) * 2.5, -100, 100); ops.broken.a = mA < 0.15 ? ops.broken.a + 1 : 0; ops.broken.d = mD < 0.15 ? ops.broken.d + 1 : 0;
   ops.lastMi = mi; snapOps(ctx, w); if (ops.dom) for (const k in ops.dom) ops.dom[k] = r3(ops.dom[k] * 0.97); if (ctx.decisions?.skirmish && mi % 3 === 0) for (const dm of ["air", "space"]) ctx.decisions.skirmish(ctx, w, dm);
-  const age = mi - w.startedAt;
-  if (w.score >= 80 || ops.broken.d >= 6) endWar(ctx, w, "aggressor_victory"); else if (w.score <= -80 || ops.broken.a >= 6) endWar(ctx, w, "defender_victory"); else if (age > warMaxMonths(ctx.civ.date.year, new Set([...w.sides.a, ...w.sides.d]).size)) endWar(ctx, w, "stalemate"); // v6.9.0: 戦争の長さは時代で決まる（古代 50 年・近代 6 年・大戦 20 年）
+  // v7.0.0: 自動終戦（スコア ±80・軍の壊滅・最大期間）を廃止。国ごとの降伏 → 片側が崩れたら講和会議へ。AI どうしの戦争だけ、理由つきで自動終結する。
+  stepSurrender(ctx, w); for (const side of ["a", "d"]) if (sideCollapsed(w, side)) { beginConference(ctx, w, side); return; }
+  if (stepAutoPeace(ctx, w)) return; offerCeasefires(ctx, w); // 担当国が絡む戦争は、決断なしに終わらない（停戦の申し出も決断として届く）
 }
 
 /** v6.18.0: 開戦時・ピーク時・終戦時の兵力と、民間人の損害の積算（戦争画面の 3 点表示）。毎月、現在の値を last に記録し、最初と最大を残す */

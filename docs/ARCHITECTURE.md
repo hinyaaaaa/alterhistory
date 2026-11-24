@@ -1,255 +1,27 @@
-# ALTERHISTORY アーキテクチャ
+# アーキテクチャ（7.0.0-rc.1）
 
-## 設計原則
-
-1. **依存は一方向**: `ui → app → (core / render / io)`。`core` は誰にも依存しない。
-2. **DOM に触れるのは `ui/` と `render/renderer.js` だけ。** それ以外は Node.js で動き、単体でテストできる。
-3. **描画は Canvas 2D の命令だけで書く。** 同じ描画コードに SVG 記録コンテキスト（`render/svg-context.js`）を渡すと SVG が得られる。画面と SVG で描画ロジックを二重に持たない。
-4. **ビルド不要で動く。** `dist/app.js` は `js/` を1つにまとめた通常のスクリプトなので、`index.html` をダブルクリックするだけで動く（`file://` でも CORS の問題が出ない）。
-5. **黙って失敗しない。** 壊れたデータ・未対応の内容は、エラーまたは警告として画面に出す。
-6. **編集はコマンドで行う。** どんな変更も「変更前後の絶対値」を持つコマンドにし、Store 経由で適用する。
-   これにより Undo/Redo を何度繰り返しても誤差やズレが出ない。
-
-## 構成
-
+## 層と約束
 ```
-alterhistory/
-├ index.html                画面の骨格（表示ツールバー・編集ツールバー・時間バー・凡例/編集パネル）
-├ css/                      base / layout / components
-├ dist/app.js               ビルド済みの本体（npm run build で js/ から生成）
-├ js/
-│  ├ main.js                部品を作って配線するだけ（ロジックなし）
-│  ├ app/
-│  │   actions.js           表示・保存・書き出しの操作
-│  │   edit-actions.js      編集ツールの操作 → core/edit/* の呼び出し。エラーは画面に出す
-│  │   sim-actions.js       部隊・戦闘・同盟・戦争/講和の操作 → core/sim, core/edit/{alliances,wars}
-│  │   time-actions.js      時間の開始/停止・速度調整。年次更新はUndo可能、月の進行自体は対象外
-│  ├ core/                  ★純粋ロジック（DOM なし）
-│  │   model.js             MapData の型・検証・再描画用の版数(rev)・worldTime
-│  │   geometry.js          ボロノイ図・grid→pack 再構築・頂点の手動移動・セル面積
-│  │   derive.js            geometry を MapData に取り付け（セル数の整合を検査）
-│  │   store.js             状態・購読・Undo/Redo（バッチ対応・未保存の追跡 isDirty）
-│  │   spatial.js           最近傍・範囲内セル検索（ブラシ・ホバー・選択・部隊配置で使う索引）
-│  │   query.js stats.js random.js
-│  │   names/               ★名前の生成（純粋ロジック）
-│  │     katakana.js        カタカナの地名・国家名・宗教名・文化名・属州名の仮生成（7系統: 西欧/北欧/ラテン/中東/スラヴ/エルフ/和風）
-│  │   sim/                 ★歴史シミュレーション（時間・人口・軍事・戦闘）
-│  │     time.js            年月の世界時計（1ヶ月進める・年またぎ検出）
-│  │     economy.js         人口・産業の年次更新（技術水準によるロジスティック成長）
-│  │     units.js           兵科（歩兵/機甲/航空/海軍/特殊部隊/先端技術/核）とドクトリンの定義
-│  │     military.js        部隊の編成・移動・編集・解散・年次徴兵
-│  │     battle.js          戦闘の即時判定（戦力比較＋乱数、双方の損耗を計算）
-│  │     world.js           年次更新（経済＋徴兵）を全国家ぶん1コマンドにまとめる
-│  │   edit/                ★編集の計画（コマンドを作るだけ。適用は Store が行う）
-│  │     commands.js        コマンドの部品（絶対値で記録し、Undo/Redo を何度でも正確に）
-│  │     paint.js           国家・文化・宗教・属州・地形の塗り替え（統計の再計算込み）
-│  │     burgs.js           都市の追加・移動・改名・削除・首都変更
-│  │     markers.js         マーカーの追加・移動・編集・削除
-│  │     notes.js           文章（旧形式のnotes配列／新形式のnoteフィールド、HTML変換）
-│  │     naming.js          仮名の提案（既存名と被らない・文化の系統を辿る）と「仮」フラグの管理
-│  │     attributes.js      技術水準等の自由な追加属性（ALTERHISTORY拡張データに保存）
-│  │     diplomacy.js       国家間の外交関係（対称性・宗主国/従属国の反転）
-│  │     alliances.js       多国間同盟（2カ国以上のグループ。ALTERHISTORY拡張データに保存）
-│  │     wars.js            宣戦布告・戦績記録・講和条約（割譲候補の自動算出・賠償金）
-│  │     integrity.js       編集後の整合性検査（baseline基準で「新たに壊した分」だけ検出）
-│  │     pole.js            塗り替え後のラベル位置（極）の再計算
-│  ├ io/                    ★入出力（形式の変換だけ）
-│  │   azgaar-reader.js     .map → MapData（新旧の設定形式に対応）
-│  │   azgaar-writer.js     MapData → .map（無編集なら元とバイト一致）
-│  │   native-format.js     ALTERHISTORY 形式（拡張行。worldTime・属性・同盟・戦争もここに入る）
-│  │   loader.js            gzip 判定・読み込みの入口
-│  │   exporter.js          PNG / SVG 書き出し
-│  ├ render/                描画（状態を読むだけ）
-│  │   scene.js             どの層をどの順で描くか
-│  │   layers/              terrain / politics / lines / places
-│  │   renderer.js          rAF 間引き・DPR・操作中の高速表示
-│  │   viewport.js palette.js edges.js svg-context.js options.js
-│  ├ ui/                    DOM とイベント（ロジックは app/ へ）
-│  │   map-view toolbar legend status-bar banner file-input shortcuts download
-│  │   edit-mode.js         編集ツールのポインタ操作（ブラシ・配置・選択・部隊配置/移動の割込み）
-│  │   edit-toolbar.js      編集ツールバーの表示（ツール・対象・ブラシの大きさ）
-│  │   time-bar.js          時間バー（開始/停止・速度・年月表示）
-│  │   windows.js           地図の上に重ねる浮動ウィンドウ（設定・戦争・軍事・外交・講和・バランス調整ほか）
-│  │   settings-windows.js  設定メニューから開く各ウィンドウの組み立て
-│  │   war-outcome-window.js 戦争ウィンドウの概要・部隊・経過・講和タブ
-│  │   safe-render.js       再描画してもフォーカスとスクロールを保つ補助
-│  │   tools/               brush.js（ブラシの共通処理）selection.js（クリック判定）
-│  │   panels/editor-panel.js     選んだ対象の編集フォーム（都市・マーカー・国家など）
-│  │   panels/wars-panel.js       戦争タブ（宣戦布告・戦績・講和条約フォーム）
-│  │   panels/alliances-panel.js  同盟タブ（結成・メンバー編集・解消）
-│  └ vendor/delaunator.min.js   公式が同梱するのと同じビルド（ISC）
-├ docs/                     MAP_FORMAT_SPEC.md（形式の仕様）ほか
-└ tests/                    全スイートを tests/run-all.mjs が実行（合成マップで完結。実マップ検証は test:compat）
+js/ui/v6  →  js/core/wcde（dispatch・契約）  →  js/core/civ（文明の計算）  →  js/core/world（球面メッシュ・地形）
+js/io（保存・出力）は core を読む。core は ui にも io にも依存しない。
 ```
+1. **世界を変えるのは `dispatch` だけ。** 命令（コマンド）は権限つきで、結果は `{ ok, error | result }`。台帳は `docs/COMMANDS.md`。
+2. **`js/core/` は DOM に触れない。** Node でそのまま動き、テストできる。
+3. **同じ seed なら同じ世界。** 乱数は seed と日付から決まる（`hashSeed`・`rngOf`）。
+4. **黙って失敗しない。** 整合検査（`wcde/integrity.js`・`civ/civ-sim.js`）が、壊れた状態を検出する。
+5. **領域（domain）が自分のデータだけを所有する。** 台帳は `core/wcde/domains/registry.js`、生成文書は `V6_1_M1_CONTRACT_TICK.md`。
 
-## 「pack の形は保存されていない」問題
+## 中身
+- `core/world/` 球面メッシュ・地形・気候・川。`sites.js` が集落の立地（複数拠点・順位規模則）。
+- `core/civ/` 集団・集落（`settlements.js`）・街道（`roads.js`）・国家・文化・技術・外交・出来事・履歴。月次の `tick.js` が順に呼ぶ。
+- `core/wcde/` 契約（`contract.js`）と、命令・戦争・決断・政体・人物・保存。
+  - 戦争: `warfare.js`（作戦と戦闘）・`war-core.js`（戦争目的・降伏）・`war-peace.js`（講和会議）・`war-alliance.js`（同盟）・`war-aftermath.js`・`corps.js`（軍団と命令）。
+  - 領域: `domains/`（経済・政治・軍事・ドクトリン・言語・宗教・人物ほか）。
+- `io/` セーブ（`wcde/savefile.js`）・Obsidian 出力（`obsidian.js`・`obsidian-compact.js`）・ZIP・PNG・履歴の IndexedDB。
+- `ui/v6/` 画面。`docs/UI_GUIDE.md`。
 
-`.map` に保存されるのは grid（粗い格子）の点と、pack のセルごとの属性だけ。pack のセル形状は、
-公式も読み込むたびに grid から再計算している。同じ計算を `core/geometry.js` で再現している
-（三角形分割の順序まで一致させる必要があるため、公式と同一の Delaunator を使う）。
-再構築したセル数が保存済みの配列と一致しなければ、間違った地図を描く代わりにエラーにする。
-詳細は `MAP_FORMAT_SPEC.md`。
+## 時間と履歴
+`time.advance`（即時）と `clock.run`（画面が進める。決断で自動停止）。履歴は区間ごとに圧縮して IndexedDB に置く（`workers/history-worker.js`）。
 
-## 歴史シミュレーションの設計
-
-- **時間はユーザーが進める。アルゴリズム国家の行動は無い。** スタート/ストップと速度調整のみ。
-  時間経過で自動的に変わるのは「人口・産業力・徴兵」という数値だけで、戦争や外交の意思決定は
-  常にユーザーが行う（要件どおり）。
-- **月の進行そのものはUndo対象外。人口・徴兵の年次変化はUndo対象。** 「1ヶ月進んだ」を毎回
-  履歴に積むと、通常の編集Undoと混ざって使いにくくなるための判断。年をまたいだ瞬間に生じる
-  人口・産業・徴兵の変化だけをコマンド化する。
-- **国家の rural/urban は、経済モデル上は「集計値」として直接更新する。** セル単位の pop 配列
-  への反映はスコープ外（要件が「簡易な人口・産業計算」だったため）。整合性検査
-  （core/edit/integrity.js）は、この意図的な乖離を `skipEconomyChecks` オプションで除外できる。
-- **戦闘は即時判定、国境は動かさない。** 勝敗はその場の部隊の戦力比較（兵科ごとの戦力係数×
-  ドクトリン補正、乱数±15%）で即決するが、領土の変更は行わない。占領・割譲は講和条約でのみ確定する
-  （要件どおり）。
-- **講和の割譲候補は機械的に算出する。** 実データでは属州が全領土の一部（約41%、しかも国境沿いに
-  薄いことが判明）にしか存在しないため、「属州単位」に加えて「属州の無い前線セルの連結成分」も
-  候補として提示する（フラッドフィルで作る「未編入地域」）。属州は分割せず丸ごと譲渡する。
-- **部隊はどこにでも自由配置できる。** 他国領内でも部隊を作れる（要件どおり）。ただし基地は
-  部隊のセル位置に紐付くだけで、独立したデータは持たない。
-- **同盟・戦争はAzgaar形式に無い概念なので、ALTERHISTORY拡張データ(ext.data)に保存する。**
-  Azgaar互換で書き出すと失われる（属性・ノートと同じ扱い）。
-
-## 編集の設計
-
-- **コマンドは絶対値を記録する。** 「+1」ではなく「変更前の値／変更後の値」を持つので、Undo/Redo を
-  何度繰り返しても誤差が出ない（浮動小数点の足し引きを繰り返さない）。
-- **統計（セル数・人口・都市数など）は、実データで完全一致を確認できたものだけ、差分で更新する。**
-  面積(area)は保存値と約0.5%ずれることが実データで判明しているため、絶対値では扱わない。
-  neighbors（隣接国の一覧）は生成時点の記録で再計算できないため、編集では変更しない。
-- **水域・首都・属州の中心都市は保護される。** 塗り替えでうっかり壊さないための既定の安全策で、
-  `force` を指定すれば外せる（国家の合併など、意図的な操作のため）。
-- **整合性検査は baseline（編集前の状態）基準。** 手で編集された実データには、最初から
-  小さな食い違いがある（実データで確認: 都市の文化のずれ2件、宗教の保存値と実測のずれ1件）。
-  これらを毎回エラーとして報告すると、編集していない部分のノイズで警告が埋もれてしまうため、
-  「編集によって新たに壊れたもの」だけを検出する。
-- **ALTERHISTORY 固有のデータ（属性・拡張情報・worldTime・同盟・戦争・名前の系統・仮名の印）は `ext.data` に保存される。**
-  Azgaar 互換で書き出すと失われる。
-- **名前の仮生成は「入力欄を埋める」だけの仕組み。** UI は 🎲 で `editActions.suggestName(kind, ctx)` を呼んで入力欄を
-  埋める。edit-actions は提案した名前を覚えておき、その名前がそのまま追加・改名で確定されたときだけ「仮」の印
-  （`ext.data.provisionalNames`）を付ける。手で書き換えた名前や、空欄→自動生成でない名前には付かない。
-  空欄のまま作成すると自動で仮名が付く。印は名前の変更と同じコマンドで付け外しするので、Undo で一緒に戻る。
-
-## 実装状況
-
-| 状態 | 内容 |
-|---|---|
-| ✅ 完成・検証済み | Azgaar `.map` / `.map.gz` の読み込み（旧形式・新形式の設定、形状再構築、頂点の手動移動） |
-| ✅ | 表示: 地形（バイオーム/標高）・国家/文化/宗教/属州の色分けと境界・海岸線・河川・道路/航路・都市・ラベル（日本語可） |
-| ✅ | 操作: ズーム・パン・ホバー情報・凡例からの移動・キーボード・ドラッグ＆ドロップ |
-| ✅ | 保存: ALTERHISTORY 形式、Azgaar 互換 `.map`、PNG（2倍）、SVG |
-| ✅ | **編集**: 国家・文化・宗教・属州・地形をブラシで塗り替え（統計の再計算、極の再配置、Undo/Redo込み） |
-| ✅ | **編集**: 都市の追加・移動・改名・削除・首都の変更 |
-| ✅ | **編集**: マーカーの追加・移動・編集・削除 |
-| ✅ | **編集**: 国家・文化・宗教・属州・都市・マーカーへの文章（ノート）の書き込み |
-| ✅ | **編集**: 国家・文化・宗教・属州への自由な追加属性（技術水準など。ALTERHISTORY拡張として保存） |
-| ✅ | **編集**: 国家間の外交関係（同盟・敵対・宗主国/従属国など） |
-| ✅ | 編集後の整合性検査（都市が無所属の土地に残る、削除済みを参照する等を検出） |
-| ✅ | **時間**: スタート/ストップで進行（既定1年=2分、速度調整可）。手動で1ヶ月ずつ進めることも可能 |
-| ✅ | **経済**: 年次に、国家の技術水準(1〜10)と規模に応じて人口(ロジスティック成長)・産業力を自動更新 |
-| ✅ | **軍事**: 部隊の編成・移動・兵力編集（歩兵/機甲/航空/海軍/特殊部隊/先端技術/核）・4種のドクトリン |
-| ✅ | **軍事**: 年次に人口・産業力の一部を自動徴兵（本国部隊に集約。前線への配分は手動） |
-| ✅ | **戦闘**: ユーザーが明示した部隊どうしの即時判定（戦力比較＋乱数、双方が損耗）。国境は動かさない |
-| ✅ | **同盟**: 3カ国以上の多国間グループ（結成・メンバー編集・解消） |
-| ✅ | **戦争・講和**: 宣戦布告、戦績の蓄積、講和時に割譲候補（属州＋未編入の前線地域）を自動提示し選択、賠償金 |
-| ⬜ 未実装 | **マップの生成**（地形・河川・気候・都市・道路・国家・宗教） |
-| ✅ | **カタカナの名前の仮生成**: 都市・属州・国家（政体語つき）・宗教（神名つき）・文化。文化ごとに系統を選べる。生成した名前は「仮」扱いで、確定/書き換えで外れる |
-| ⬜ | 国家・宗教などの**ユーザー設定に基づく自動配置**（手動編集・戦争・外交は可能） |
-| ⬜ | 境界線・頂点そのものの手動編集（今は「セル単位の塗り替え」のみ） |
-| ⬜ | 書き出し画像への凡例・スケールバー（画面の凡例はある） |
-| ⬜ | 重い処理の Web Worker 化（今は読み込み・塗り替え・年次更新の間、画面が一瞬止まる） |
-| ⬜ | 将来構想: 軽い都市建築＋徒歩視点（別ジャンルのアプリになる規模。着手していない） |
-
-## 検証の限界（重要）
-
-- 自動テストは Node.js と jsdom で動く。**実ブラウザ（Edge）と Surface Go 4 での見た目・操作感・速度は未確認。**
-- 描画結果は、Node 上の Canvas で PNG にして目視確認し、SVG との画素比較（平均色差 0.1〜0.3/255）で確認した。
-- SVG の文字は、開くソフトのフォントに依存する（フォントは埋め込まない）。
-- 都市の新規追加時の人口は、近隣都市からの単純な推定値であり、公式の生成アルゴリズム
-  （居住適性・道路の連結度などを使う）とは異なる。見積もりとして扱うこと。
-- 編集のファズテスト（数百回のランダム操作）は2つの実データで実行しているが、
-  境界に近い特殊なケース（属州の中心都市を含む一括操作など）を全て網羅してはいない。
-- 戦闘・経済の数値バランス（成長率・戦力係数・損耗率）は、実データに基づく設計ではなく、
-  妥当と考えられる値を仮に置いたもの。実際にプレイしての調整が必要になる可能性が高い。
-- 徴兵は「本国部隊（ID0）に自動集約」という単純化をしている。複数の前線に部隊を分けて
-  運用したい場合、配分は全て手動（部隊の移動）で行う設計。
-
-## 次にやること
-
-未実装の機能一覧、仮置きの数値、既知の制約、UIの粗さ、作業中に踏んだ落とし穴は
-`docs/HANDOFF.md` に分けてまとめてある。次のセッションはまずそちらを読むこと。
-
-## シミュレーションの意味（どこまでが計算で、どこからが演出か）
-
-- **戦争の判定**（`core/sim/war-engine.js`）: 陸・海・空の戦力、士気、民意、ドクトリン、戦争の形態から「優勢度」を求め、
-  開戦時に一度だけ決めた乱数（`noise`）と、できごとによる補正（`edgeShift`）を足して勝敗を決める。
-  乱数は戦争ごとに固定なので、結果が勝手に揺れることはない。
-- **勝敗は戦力に追従する**: 召集する部隊の変更・撤退・損耗（月が進むたび）・ハプニング・隠密作戦・核の使用のたびに
-  `reevaluateWar` が、いまの戦力・士気・民意で勝敗と戦争スコアを判定し直す。
-  ただし首都陥落と民意の崩壊で決着した戦争は、その決着を保つ。
-- **表に出る勝敗**: 戦争が続いている間、画面は勝敗を出さない（見通しは講和条約を結ぶ段階で明らかになる）。
-- **月ごとの損害・できごと**（`core/edit/wars.js` の `planAdvanceWars`）は、判定結果に向けて損耗を積み上げる演出であり、
-  ここで直接勝敗を決めてはいない。
-- **バランス設定**（`core/sim/balance.js`）: 実行時の値は `BALANCE`。アプリの既定値＋その地図の上書き値
-  （`map.ext.data.balance`。`core/edit/balance-setting.js`）で作る。地図を開く・Undo/Redo のたびに作り直す。
-
-
-## v2.0.0 で足した層（画面の外枠・条約・ゾーン）
-- `ui/hub.js`（左ハブ。窓の入口はここだけ）／`ui/news.js`（新聞風イベント。文面は `io/chronicle.js` の `buildTimeline` と共通）／`ui/war-status.js`（右下の戦争状況）／`ui/hover-connector.js`（ホバー連動型コネクターライン）／`ui/icons.js`（細線 SVG）／`ui/diplomacy-window.js`（外交と条約）／`css/shell.css`（外枠の寸法と挙動）。
-- `core/edit/treaties.js`（条約。DOM に依存しない）。既存の `alliances.js`・`vassals.js`・`wars.js` と、`core/sim/trade.js`（経済協力の補正）につながる。
-- `core/edit/zones.js`（期間つきの一時ゾーン）／`render/layers/zones.js`。
-- 版: `js/version.js`、保存形式の版は `core/edit/treaties.js` の `SAVE_FORMAT`。
-
-## v2.7.0 で足した層（因果・人口・制約・技術・思想・言語）
-- **状態の層**: `core/sim/pressure.js`。指標（地図から毎月導く）と余波（`ext.data.shocks`）が、あらゆる出来事の確率と影響の入力になる。出来事 → 余波 → 次の出来事、という循環が、ほかの機能の土台。
-- **システム**: `population.js`（月次の人口）・`tech-progress.js`（進捗。三位一体）・`ideas.js`（思潮）・`limits.js` / `capacity.js`（経済の制約）。どれも「月ごとの更新」から呼ばれ、結果は1つのコマンドとして commit される（Undo 可）。
-- **読み込みの向き**: `limits.js`（`military.js` が使う）は `pressure.js` と `doctrines.js` だけを読む。`capacity.js`（表示用）は `world.js` を読む。循環を作らないこと（`military → capacity → world → military` になる）。
-- **言語**: `core/names/language.js`（純粋。音節の記号・辞書・音変化・名前）→ `core/edit/language.js`（地図と結ぶ）→ `naming.js` / `person.js` / `leaders.js`。`katakana.js` の生成器は、系統（キー）の代わりに言語から作ったオブジェクトも受け取る。
-- 何が「計算」で何が「演出」か: 指標・余波・人口・進捗・思潮は計算（バランス調整で係数を変えられる）。出来事の文面と、言語の音の好みは演出。
-
-## v3.0.0 で足した層（アルゴリズム国家の行動）
-- **判断は純粋、実行は app 層**: `core/sim/ai.js` は地図を変えず、決定の一覧を返す。実行は `app/sim-actions.js` の `runDecision` が、ユーザーと同じ既存の操作で行う（だから年表・検証・Undo は同じ）。AI 専用の「近道」は作らない。
-- **ペースの調整は、速さの倍率だけ**: `ai-pace.js` は、数値を直接動かさず、技術の進捗の速さと宣戦の意欲にかかる倍率だけを返す。
-- **読み込みの向き**: `ai.js` → `edit/wars.js`・`edit/treaties.js`・`sim/war-engine.js`・`sim/ideas.js`・`sim/pressure.js`。`tech-progress.js` → `ai-pace.js`（`ai.js` は読まない）。
-- **時計に依存しない**: 判断の間隔はゲーム内の月で数える（`(月の通し番号 + 国ID) % 間隔`）。倍速にしても、1年あたりの行動数は変わらない。
-
-
-## v4.0.0 で足した層（球面世界）
-
-```
-js/core/world/   純粋ロジック（DOM・旧モデル非依存。決定的）
-  sphere-mesh.js   球面メッシュ（正二十面体の分割）・投影・距離・面積・検査
-  spec.js noise.js WorldSpec・乱数
-  worldgen.js      G1〜G8 と、再利用できる部品（気候・水系・土地利用・初期集団）
-  spatial-index.js 最近傍・半径内・拡張
-  edit.js          標高ブラシ・局所再計算・Undo/Redo
-  ahmap2.js        .ahmap v2 コンテナ（docs/AHMAP2_SPEC.md）
-js/render/         sphere-view.js（描画）・world-colors.js（レイヤー）・pixel-map.js（画素→セル）
-js/workers/        worldgen.worker.js（生成）。ビルドで js/generated/worldgen-worker.txt に埋め込み、Blob URL で起動
-js/app/            world-service.js（生成の Worker・中断・フォールバック）・world-actions.js（意味のある操作）
-js/ui/             world-workspace.js（画面）
-```
-- 依存の向き: `ui → app → core/world / render`。旧モデル（`core/model`・`derive`・`edit`・`sim`）と `io` は、球面世界を import しない。逆も同じ。境界は `tests/v400-architecture.test.mjs` が確認する。
-- 正本は球面上の座標と隣接。矩形投影は表示の都合で、地理計算（距離・面積・隣接）は球面で行う。
-- 地理生成の乱数は WorldSpec の worldSeed から段階別に作る（歴史の乱数とは別系統）。同じ worldSeed・WorldSpec・generatorVersion なら出力は一致する。
-- 局所再計算（編集）は、生成と同じ式を 1 か所（`worldgen.js` の部品）に置いて共有している。
-- v5 は、`entities.*`・`history.*` を `.ahmap` v2 の別チャンクとして足す（既存チャンクの意味は変えない）。
-
-## 世界生成の統合（v5.0.0 V5-M0）
-
-```
-core/world/*  純粋・決定的な球面世界（生成・編集・.ahmap v2 のコンテナ）。国家運営層を知らない
-     ↑
-core/world-bridge.js   World → MapData（国家運営層の地図）。唯一の橋渡し（導出・局所更新 refreshMapCells / refreshRivers）
-     ↑
-io/ahmap-file.js       保存・読み込み（.ahmap v2。国家運営層の状態は拡張チャンク app.map-state、開始集団は entities.start）
-core/edit/sculpt.js    標高ブラシ（世界の編集器の履歴と対の Undo）
-app/actions.js         newWorld / openFile / saveNative、app/group-actions.js が初期集団（すべて Undo 可能なコマンド）
-ui/world-new-dialog.js, ui/groups-panel.js
-```
-- 地理の正本は `map.world`。`pack.cells.biome`・`geometry.pack.h`・河川などは導出値で、保存しない（バイオームの手塗りだけ保存）。
-- 描画は旧来の Canvas 経路をそのまま使う（地形・国境・都市・ラベル）。初期集団の印は `render/layers/groups.js`。
-- 依存の向きは `tests/v400-architecture.test.mjs` が検査する。
-
+## ビルドとテスト
+`scripts/build.mjs` が `dist/v6.js`・`history-worker.js`・`worldgen-preview.js` と `build-info.json`（版・ビルド識別子・SHA-256）を作る。CI は dist とソースの一致を確かめる。テストは `tests/*.test.mjs`（1 本ずつ実行する。重いものは 1〜5 分）。

@@ -12,6 +12,7 @@ import { BIOMES, RES, LAND_WATER } from "./world-consts.js";
 import { hashSeed } from "./civ-state.js";
 import { lateBoost } from "./calibration.js";
 import { TREE, NODE, LANE, LANES, validateTree, layoutGrid, COLS } from "./techtree.js";
+import { groupStage } from "./settlements.js"; // v7.0.0
 
 export { LANES, validateTree, layoutGrid, COLS };
 // v6.10.1: 成立条件を世界ごとに相対化する。乾燥・氷の多い世界では肥沃度が 0.45 を超える土地が 0、粘土も 0 セルになり、農耕・土器が永久に発見できず、技術が 27 個で止まっていた
@@ -78,7 +79,7 @@ export function emergenceRate(world, civ, g, t, env) {
   const st = g.stateId ? civ.states[g.stateId] : null, base = 1 / (t.E * (g.tech.lost[t.key] ? 1 / REDISCOVER : 1));
   const popF = Math.min(2.5, Math.sqrt(g.pop / Math.max(60, t.minPop || 60))), known = knownStats(g, civ).n;
   const knowF = 0.7 + 0.5 * Math.min(1, known / 30), contactF = 1 + 0.2 * Math.min(4, env.contact ?? 0);
-  const urbanF = g.settlementId ? stageMult[civ.settlements[g.settlementId]?.stage] ?? 1 : 0.85, econF = (st ? 1.2 : 1) * (1 + (st?.econ?.techBoost ?? 0)), learnF = 1 + learnFx(g, civ, st);
+  const urbanF = g.settlementId ? stageMult[groupStage(civ, g)] ?? 1 : 0.85, econF = (st ? 1.2 : 1) * (1 + (st?.econ?.techBoost ?? 0)), learnF = 1 + learnFx(g, civ, st);
   const compF = 1 + (st?.warIds?.length ? 0.12 : 0) + 0.06 * Math.min(3, env.rivals ?? 0);
   return base * popF * knowF * contactF * urbanF * econF * learnF * compF * env.accel * (env.norm ?? 1) * lateBoostOf(civ, t); // v6.8.0: 目標の年を過ぎた技術は発生しやすい
 }

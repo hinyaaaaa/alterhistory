@@ -66,3 +66,40 @@ export function pickSite(world, cells, occ, score = null) {
   }
   return best;
 }
+
+/**
+ * v7.0.0: 先史の終わりの集落の配置（複数拠点・順位規模則）。planSettlements（集団ごとに 1 つ）の後継。
+ *   ・集団の周り 2 セル以内の陸から、適地スコア＋ゆらぎで選ぶ。集団ごとに 1 つに限らない（大きな集団ほど多い）。
+ *   ・1 巡目: 各集団の「中心の集落」を、得点の高い順に置く。置いたあと周り 0〜2 セルは中心を置けない（間隔がまちまち）。
+ *   ・2 巡目: 人口の大きい集団から、追加の集落を置く（既存の集落の隣は減点。置けるだけ。確率で途中でやめる）。→ 少数の大都市＋多数の小集落。
+ *   ・各集団の集落の重みは 1/k（k は得点順）にゆらぎを掛けたもの＝順位規模則の種。
+ * groups: [{ id, cell, pop, cells? }]。maxSites(pop): 集団ごとの上限（civ 層の maxSitesFor を渡す。world/ は civ を import しない）。
+ * 戻り値: Map(groupId → [{ cell, score, weight }])（先頭が中心の集落）
+ */
+export function planSites(world, groups, seed, score = null, maxSites = () => 1) {
+  const { mesh, cell } = world, off = mesh.neighborOffsets, nb = mesh.neighborIds, V = mesh.cellCount, out = new Map();
+  const cands = new Map(), sc = (g, c) => (score ? score(world, c, siteScore(world, c), g) : siteScore(world, c)) + (cellRand(seed, c, 1) - 0.5) * 0.3;
+  for (const g of groups) {
+    const seen = new Set([g.cell]), q = [g.cell], depth = new Map([[g.cell, 0]]), list = [];
+    for (let h = 0; h < q.length; h++) { const x = q[h]; if (cell.elevation[x] > 0) list.push({ c: x, s: sc(g, x) }); if (depth.get(x) >= 2) continue; for (let k = off[x]; k < off[x + 1]; k++) { const j = nb[k]; if (!seen.has(j)) { seen.add(j); depth.set(j, depth.get(x) + 1); q.push(j); } } }
+    list.sort((a, b) => b.s - a.s || a.c - b.c); if (list.length) cands.set(g.id, list);
+  }
+  const blocked = new Uint8Array(V), taken = new Uint8Array(V), spread = (c, r) => { const seenL = new Set([c]); let fr = [c]; for (let d = 0; d < r; d++) { const nx = []; for (const x of fr) for (let k = off[x]; k < off[x + 1]; k++) { const j = nb[k]; if (!seenL.has(j)) { seenL.add(j); blocked[j] = 1; nx.push(j); } } fr = nx; } };
+  const order = groups.filter((g) => cands.has(g.id)).map((g) => ({ g, s: cands.get(g.id)[0].s })).sort((a, b) => b.s - a.s || (a.g.id < b.g.id ? -1 : 1));
+  const pops = order.map((o) => o.g.pop).sort((x, y) => x - y), q75 = pops[Math.floor(pops.length * 0.7)] ?? Infinity;
+  for (const { g } of order) { // 1 巡目: 中心の集落
+    const pick = cands.get(g.id).find((x) => !blocked[x.c] && !taken[x.c]); if (!pick) continue;
+    out.set(g.id, [{ cell: pick.c, score: pick.s, weight: 1 }]); taken[pick.c] = 1; blocked[pick.c] = 1; spread(pick.c, g.pop >= q75 ? 4 + Math.floor(cellRand(seed, pick.c, 2) * 2) : Math.floor(cellRand(seed, pick.c, 2) * 2)); /* 大きな集団の中心は周りを広く空ける（孤立した大都市）。小さな集団は密に並ぶ（集まった小集落） */
+  }
+  const big = [...out.keys()].map((id) => groups.find((g) => g.id === id)).sort((a, b) => b.pop - a.pop || (a.id < b.id ? -1 : 1));
+  for (const g of big) { // 2 巡目: 追加の集落
+    const m = maxSites(g.pop), want = cellRand(seed, g.cell, 6) < 0.4 ? 1 + Math.floor((m - 1) * Math.pow(cellRand(seed, g.cell, 5), 1.2) + 0.5) : 1, mine = out.get(g.id); let k = 1; /* 集団ごとに集落の数がばらつく（1 つだけの孤立した集落も多い） */
+    while (mine.length < want) {
+      let best = null, bs = -Infinity;
+      for (const x of cands.get(g.id)) { if (taken[x.c]) continue; let s = x.s; for (let m = off[x.c]; m < off[x.c + 1]; m++) if (taken[nb[m]]) { s = cellRand(seed, x.c, 7) < 0.75 ? -Infinity : s - 0.3; break; } /* 隣に置くかどうかもばらつく */ if (s > bs) { bs = s; best = x; } }
+      if (!best || bs < -0.3 || cellRand(seed, best.c, 3) < 0.12) break; // 適地が尽きた・確率で打ち切り（ばらつき）
+      k++; mine.push({ cell: best.c, score: best.s, weight: Math.pow(1 / k, 1.2) * (0.7 + 0.6 * cellRand(seed, best.c, 4)) }); taken[best.c] = 1;
+    }
+  }
+  return out;
+}

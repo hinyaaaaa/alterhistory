@@ -1,3 +1,4 @@
+import { groupStage } from "./settlements.js"; // v7.0.0
 // V5-M7: 全国家の月次状態（ロスレスな「変化の時系列」）と、任意の月への復元。
 //   方式: 実体（国家・集団）ごとに、項目ごとの [t0,v0,t1,v1,…]（変化した月 t と、その月からの値 v）を持つ。月ごとに全項目を複製しない（変化した項目だけ書く）。
 //   値はすべて整数に量子化して持つ（文字列は辞書）。ある月 m の値 = t ≤ m の最後の v。変化の無い月は前の値が続く＝全ての月の状態が欠落・推定なしに再構築できる。
@@ -47,7 +48,7 @@ export function recordMonth(ctx, byStateMap) {
   const dec = t % GROUP_DECADE === 0;
   for (const id in civ.groups) {
     const g = civ.groups[id]; if (g.stateId) counts.set(g.stateId, (counts.get(g.stateId) ?? 0) + 1);
-    const st = g.settlementId ? civ.settlements[g.settlementId]?.stage ?? "" : "", L = c.lastG.get(id);
+    const st = g.settlementId ? groupStage(civ, g) ?? "" : "", L = c.lastG.get(id);
     if (!dec && L && L.alive === 1 && L.cell === g.cell && L.st === (g.stateId ?? "") && L.sub === g.subsistence && L.stage === st) continue; // 変化なし（大半の集団・月）は何も作らない
     const cur = { alive: 1, cell: g.cell, st: g.stateId ?? "", sub: g.subsistence, stage: st }; if (dec) { cur.pop = Math.round(g.pop); cur.coh = g.cohorts.map((x) => `${x.cultureId}|${x.religionId ?? ""}|${x.speciesId}|${Math.round(x.share * 1000)}`).join(";"); }
     recordEntity(H, c, H.groups, c.lastG, id, cur, t); c.aliveG.add(id);

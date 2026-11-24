@@ -11,6 +11,7 @@ import { dominant } from "../civ/cohorts.js";
 import { hashSeed } from "../civ/civ-state.js";
 import { raise, registerDecision } from "./decisions.js";
 import { regimeOf } from "./regimes.js";
+import { registerWarDecisions } from "./war-decisions.js";
 
 export const PACT_PURPOSES = Object.freeze({
   defense: { ja: "防衛同盟", suffix: "同盟", merit: "攻められたとき助けが来る", cost: "加盟国どうしで戦えない" },
@@ -97,6 +98,7 @@ export function stepPacts(ctx) {
 }
 /** 担当国への誘い・提案の決断（拡張の登録時に 1 回だけ呼ぶ） */
 export function registerPactDecisions() {
+  registerWarDecisions(); // v7.0.0: 降伏の打診・講和会議・講和条件の決断
   registerDecision("pact_invite", (ctx, d, opt) => { const { civ } = ctx, p = pactsOf(civ).items[d.payload.pactId], st = civ.states[d.payload.state]; if (!p?.active || !st?.alive) return { ok: true, note: "盟約はすでに無かった" }; if (opt === "decline") { adjustRel(st, civ.states[p.leaderId], -2); return { ok: true, note: "誘いを断った" }; } return joinPact(ctx, p, st) ? { ok: true, note: `${p.name}に加わった` } : { ok: true, note: "加われなかった" }; });
   registerDecision("pact_merge", (ctx, d, opt) => { const { civ } = ctx, p = pactsOf(civ).items[d.payload.pactId]; if (!p?.active) return { ok: true, note: "盟約はすでに無かった" }; if (opt === "decline") { p.mergeCool = civ.monthIndex + 480; return { ok: true, note: "提案を断った" }; } return mergePact(ctx, p) ? { ok: true, note: "一つの国にまとまった" } : { ok: true, note: "まとまれなかった" }; });
 }

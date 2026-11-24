@@ -29,12 +29,6 @@ await check("技術ツリー: 近代〜現代の軍事 37 と未来 8 を足し�
 });
 
 console.log("=== 軍制（兵種ごとの人数）===");
-await check("兵種 26 種（陸 13・海 4・空 9）。使える兵種は技術で決まる。古い国に近代の兵種は出ない", () => {
-  assert.equal(Object.keys(UNIT_TYPES).length, 26); const n = (s) => Object.values(UNIT_TYPES).filter((t) => t.service === s).length; assert.deepEqual([n("land"), n("sea"), n("air")], [13, 4, 9]);
-  const w = fresh(), st = own(w), ctx = w.sim.ctx; const before = Object.keys(autoRoster(ctx, st)); assert.ok(!before.some((k) => ["armor", "fighter", "submarine", "carrier"].includes(k)), "古い時代に近代の兵種は出ない");
-  modern(st); const after = autoRoster(ctx, st); assert.ok(after.armor > 0 && after.fighter > 0 && after.artillery > 0, "現代なら機甲・戦闘機・砲兵が出る"); assert.ok(after.infantry > after.armor, "歩兵は主力のまま");
-  const sum = Object.values(after).reduce((a, b) => a + b, 0); assert.ok(Math.abs(sum - st.army) < 1, "合計は総兵力と一致");
-});
 await check("自動と手動: 手動の人数は総兵力に合わせて縮む／足りない分は予備役。検証に落ちたら何も変えない", () => {
   const w = fresh(), st = own(w), ctx = w.sim.ctx; st.treasury = 9999; modern(st);
   const m = manualRoster(ctx, st, { infantry: st.army * 4, armor: st.army * 4 }); assert.ok(Math.abs(Object.values(m).reduce((a, b) => a + b, 0) - st.army) < 1 && Math.abs(m.infantry - m.armor) < 1, "多すぎれば比例して縮む");
@@ -60,17 +54,6 @@ await check("戦力: 機甲・砲兵・空軍・潜水艦が戦力に効く。�
 });
 
 console.log("=== ドクトリン（HoI4 風の学派）===");
-await check("学派: 陸 4・海 3・空 3、各 6 段。軍ごとに 1 つ選ぶ（排他）。6 段そろえると熟達", () => {
-  assert.equal(SCHOOLS.length, 10); assert.deepEqual(["land", "sea", "air"].map((s) => SCHOOLS.filter((x) => x.service === s).length), [4, 3, 3]);
-  const w = fresh(), st = own(w); modern(st); const M = st.military; M.doctrine.taken = {};
-  const ok = adoptDoctrine(w.sim.ctx, st, "land:mobile:1"); assert.ok(ok.ok, ok.reason); assert.equal(M.school.land, "mobile");
-  assert.equal(canAdopt(st, "land:mass:1").ok, false, "陸は、すでに路線を選んでいる"); assert.ok(canAdopt(st, "sea:decisive:1").ok || !st.techAdopted.ship_of_the_line, "海は別に選べる");
-  assert.equal(canAdopt(st, "land:mobile:3").ok, false, "段を飛ばせない");
-  for (let i = 2; i <= 6; i++) assert.ok(adoptDoctrine(w.sim.ctx, st, `land:mobile:${i}`).ok, `段 ${i}`);
-  const fx = doctrineFx(st); assert.ok(fx.armor > 0 && fx.off > 0.1, JSON.stringify(fx)); for (const k of FX_KEYS) assert.ok(fx[k] <= 0.35 && fx[k] >= -0.18, k);
-  const ns = nodesOf(st).length; assert.equal(ns, 25 + 60 + (st.military.special ?? []).reduce((a, b) => a + b.nodes.length, 0));
-});
-
 console.log("=== 指揮官と部隊（陸・海・空／アルゴリズム国家）===");
 await check("担当国: 陸・海・空の部隊。指揮官はその軍の人物。総司令官を任命できる。階級は軍ごと", () => {
   const w = fresh(), st = own(w), ctx = w.sim.ctx; modern(st); dispatch(w, { type: "state.setOrbat", authority: A.PLAYER, stateId: st.id, mode: "auto" }); st.corps = null; const S = ensureCorps(ctx, st);

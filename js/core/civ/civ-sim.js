@@ -18,6 +18,7 @@ import { byState } from "./spatial.js";
 import { applyCommand } from "./commands.js";
 import { stepCalibration } from "./calibration.js";
 import { stepCompact } from "./compact.js";
+import { capitalProblems } from "./settlements.js";
 
 export function createCivSim(world, civ, { extensions = [] } = {}) {
   const ids = createIdGen(civ.seq), ticker = createTicker();
@@ -70,6 +71,7 @@ export function checkCivIntegrity(world, civ, { sinceEvent = 0, structure = true
   if (structure) for (const id of sortedGroupIds(civ)) { const g = civ.groups[id]; if (g.stateId && !civ.states[g.stateId]?.alive) errs.push(`集団 ${id} が存在しない国家 ${g.stateId} に属している`); let sh = 0; for (const c of g.cohorts) sh += c.share; if (Math.abs(sh - 1) > 1e-6) errs.push(`集団 ${id} のコホート割合の合計が1でない`); }
   for (const wid of civ.activeWarIds) { const w = civ.wars[wid]; if (!w || w.status !== "active") errs.push(`進行中の戦争の記録が不正 ${wid}`); }
   for (const s of Object.values(civ.settlements)) if (!civ.groups[s.groupId]) errs.push(`集落 ${s.id} の集団が無い`);
+  for (const m of capitalProblems(civ)) errs.push(m); // v7.0.0: 生存する国家の首都は都市で、capitalSettlementId と capitalGroupId が一致する
   if (sinceEvent === 0) { // 全件検査: イベントID重複・親の集団が履歴にある
     const seen = new Set(), known = new Set(); for (const e of civ.events) { if (seen.has(e.eventId)) errs.push(`イベントID重複 ${e.eventId}`); seen.add(e.eventId); for (const p of e.participants) known.add(p.entityId); }
     // 親の集団が（資料の整理で）履歴に残っていなくてもよい。出自は捏造せず、辿れなければ不明

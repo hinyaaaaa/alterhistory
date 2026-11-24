@@ -10,15 +10,15 @@ const mk = (seed) => createNewWorld({ worldSeed: seed, spec: { resolution: { tar
 const U = (r) => (r.ok && r.result && typeof r.result === "object" ? { ...r, ...r.result, ok: r.result.ok ?? r.ok } : r); // dispatch の結果は { ok, result } に包まれる
 const P = (w, c) => U(dispatch(w, { authority: A.PLAYER, ...c })), AD = (w, c) => U(dispatch(w, { authority: A.ADMIN, ...c })), CR = (w, c) => U(dispatch(w, { authority: A.CREATOR, ...c }));
 
-await check("政体は 15 種。役職は 30 種以上。どの政体も元首の役職を持ち、役職はすべて定義がある", () => {
-  assert.equal(Object.keys(REGIMES).length, 15); assert.ok(Object.keys(OFFICES).length >= 30);
+await check("政体の定義（数は REGIMES に従う）。役職は 30 種以上。どの政体も元首の役職を持ち、役職はすべて定義がある", () => {
+  assert.ok(Object.keys(REGIMES).length >= 15); assert.ok(Object.keys(OFFICES).length >= 30);
   for (const [k, r] of Object.entries(REGIMES)) { assert.ok(r.offices.includes(r.ruler), k); for (const o of r.offices) assert.ok(OFFICES[o], `${k}:${o}`); assert.equal(checkOffices(k, defaultOffices(k)), null, k); }
   assert.ok(checkOffices("kingdom", ["vizier", "marshal", "treasurer"]), "元首を外せない"); assert.ok(checkOffices("presidential", ["president", "marshal", "treasurer"]), "別の政体の役職は置けない");
 });
 
 const w = mk("v640-a"); const o = AD(w, { type: "founding.options" });
 await check("建国の入口: 政体の一覧（選べない理由つき）・国のない都市の候補が出る", () => {
-  assert.ok(o.ok); assert.equal(o.regimes.length, 15); assert.ok(o.regimes.find((r) => r.id === "tribal").ok);
+  assert.ok(o.ok); assert.equal(o.regimes.length, Object.keys(REGIMES).length); assert.ok(o.regimes.find((r) => r.id === "tribal").ok);
   const o2 = AD(w, { type: "founding.options", regime: "tribal" }); assert.ok(o2.sites.length >= 1, "首都の候補"); assert.ok(o2.sites.every((s) => s.ok));
 });
 const sites = AD(w, { type: "founding.options", regime: "tribal" }).sites, site = sites[0];

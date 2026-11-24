@@ -13,6 +13,8 @@ import { grievance } from "../civ/interpret.js";
 import { effective } from "./domains/effective.js";
 import { totalPower } from "./power.js";
 import { leaveWar, warSide, placeName } from "./warfare.js";
+import { warSupport, goalsOf, surrenderRec, sideOf as wsideOf } from "./war-core.js";
+import { proposeWithDemands, concludeWithDemands } from "./war-peace.js";
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 const r2 = (x) => Math.round(x * 100) / 100;
@@ -103,11 +105,16 @@ export function evaluatePeace(civ, war, proposer, other, terms = { kind: "white"
   s += add("疲労", effective(civ, other, "fatigue") * 1.0); s += add("国内の不安定", (1 - effective(civ, other, "stability")) * 0.8);
   if (other.treasury < 0) s += add("国庫の枯渇", 0.5); s += add("戦争の損耗", (other.warLoss ?? 0) * 1.5);
   s += add("戦争の長期化", clamp(Math.max(0, civ.monthIndex - war.startedAt) / 60, 0, 1.5));
+  { // v7.0.0: 戦争支持（民意）と、達成できそうな戦争目的が、受諾の理由に加わる
+    const sup = war.surrender?.[other.id]?.support ?? warSupport({ civ }, war, other); s += add("戦争支持（低いほど講和したい）", clamp((50 - sup) / 60, -1, 1));
+    const mine = goalsOf(war, other.id); if (mine.length) { let hope = 0; for (const id of war.sides[foe]) { const r = war.surrender?.[id]; if (r) hope = Math.max(hope, r.vpPct / Math.max(1, r.limit)); } if (hope >= 0.5) s += add("達成できそうな戦争目的（続けたい）", -1.5 * hope); else if (hope < 0.15 && civ.monthIndex - war.startedAt > 24) s += add("戦争目的の達成は見込めない", 0.6); }
+    if (war.surrender?.[other.id]?.capitulated) s += add("すでに降伏している", 3);
+  }
   let need = 0.2; const otherPays = lead < 0 || (lead === 0 && other.treasury < proposer.treasury);
   if (terms.kind === "reparations") { const pay = clamp((terms.amount ?? 0) / (Math.max(0, otherPays ? other.treasury : proposer.treasury) + 1), 0, 2); need += otherPays ? add("賠償の重さ", 1.5 * pay) : -add("賠償を受け取れる", 0.5 * pay); }
   else if (terms.kind === "cession") { need += add("土地を失う（割譲）", 2.5 * occ.lost) - add("占領地を保持できる", 1.2 * occ.held); }
   else if (occ.held > 0) need += add("占領地を返す（白紙講和）", 1.5 * occ.held);
-  s -= need; return { accept: s >= 0, score: r2(s), factors: f };
+  s -= need; const reasons = [...f].filter((x) => x.v !== 0).sort((a, b) => Math.abs(b.v) - Math.abs(a.v)).slice(0, 3).map((x) => `${x.ja}（${x.v > 0 ? "講和に傾く" : "続けたい"}）`); return { accept: s >= 0, score: r2(s), factors: f, reasons };
 }
 
 /** 提案の記録（履歴は消さない）。残すのは結果だけ（提案・受諾・拒否・別条件・不成立・単独講和）。相手の評価の点数・要因・理由は保存しない（仕様 §2.5・§9） */
@@ -139,11 +146,16 @@ export function negotiatePeace(ctx, proposer, war, c = {}) {
   const civ = ctx.civ; if (!war || war.status !== "active" || !proposer.warIds.includes(war.id)) return { ok: false, error: "その戦争は進行中ではない" };
   const mySide = warSide(war, proposer.id); if (!mySide) return { ok: false, error: "その戦争の参戦国ではない" }; const foe = mySide === "a" ? "d" : "a", foePrincipal = foe === "a" ? war.aggressor : war.defender, principal = proposer.id === war.aggressor || proposer.id === war.defender;
   const otherId = c.withId && war.sides[foe].includes(c.withId) ? c.withId : foePrincipal, other = civ.states[otherId]; if (!other?.alive) return { ok: false, error: "相手が存在しない" };
+  if (c.terms?.demands && !c.forceAccept) { // v7.0.0: 要求つきの講和（併合・従属化・割譲・解放など）。受諾は理由つきで返す
+    const r = proposeWithDemands(ctx, proposer, war, { demands: c.terms.demands, withId: c.withId }); if (!r.ok) return { ok: false, error: r.error };
+    if (!r.accepted) return failure(`講和は受け入れられなかった（理由: ${r.reasons.slice(0, 3).join("、")}）`, { targetId: war.id, reasons: r.reasons, pct: r.pct });
+    concludeWithDemands(ctx, war, r.mySide, r.demands, r.reasons[0] ?? ""); return { ok: true, effects: [], silent: true, targetId: war.id, pct: r.pct, reasons: r.reasons };
+  }
   const k = c.terms?.kind, terms = k === "reparations" ? { kind: "reparations", amount: Math.max(0, Number(c.terms.amount) || 0) } : k === "cession" ? { kind: "cession" } : k === "white" ? { kind: "white" } : defaultTerms(civ, war, proposer);
   if (!principal && terms.kind === "cession") terms.kind = "white"; // 単独講和は土地を動かさない（戦争全体の整理は主たる交戦国の講和・終戦で行う）
   if (!c.forceAccept) { const r = ctx.decisions?.offerPeace(ctx, proposer, war, other, terms); if (r) return r; } // v6.12.0: 担当国への講和の申し入れは、決断にする
   const ev = c.forceAccept ? { accept: true } : evaluatePeace(civ, war, proposer, other, terms), base = { kind: "peace", warId: war.id, from: proposer.id, to: otherId, terms, separate: !principal };
-  if (!ev.accept) { record(ctx, { ...base, status: "rejected" }); return failure("講和は受け入れられなかった", { targetId: war.id }); }
+  if (!ev.accept) { record(ctx, { ...base, status: "rejected" }); return failure(`講和は受け入れられなかった（理由: ${(ev.reasons ?? []).join("、") || "—"}）`, { targetId: war.id, reasons: ev.reasons ?? [] }); }
   if (war.status !== "active") { record(ctx, { ...base, status: "failed_recheck" }); return failure("条件が変わり、講和できなかった", { targetId: war.id }); }
   if (terms.kind === "reparations") { const ahead = war.score >= 0 ? "a" : "d", payerSide = ahead === "a" ? "d" : "a", payer = civ.states[payerSide === mySide ? proposer.id : otherId], getter = civ.states[payer.id === proposer.id ? otherId : proposer.id]; const amt = Math.min(terms.amount, Math.max(0, payer.treasury)); payer.treasury -= amt; getter.treasury += amt; base.terms = { ...terms, paid: Math.round(amt) }; }
   { /* v6.5.0: 講和条約の名前は、史実のように地名から付く（負けた側の首都の地名。単独講和は「単独講和条約」） */
@@ -153,6 +165,7 @@ export function negotiatePeace(ctx, proposer, war, c = {}) {
 }
 /** v6.20.1: アルゴリズム国家が講和を持ちかける価値があるか（相手が受け入れる条件か）。受けられない講和を毎月出し続けない */
 export function peaceWorthProposing(civ, proposer, war) {
-  if (!war || war.status !== "active") return false; const mySide = warSide(war, proposer.id); if (!mySide) return false; const foe = mySide === "a" ? "d" : "a", other = civ.states[foe === "a" ? war.aggressor : war.defender]; if (!other?.alive) return false;
+  if (!war || war.status !== "active") return false; if (civ.monthIndex - war.startedAt < 3) return false; // 宣戦したその月に引き分け講和で終わる、をなくす（3 か月は戦う）
+  const mySide = warSide(war, proposer.id); if (!mySide) return false; const foe = mySide === "a" ? "d" : "a", other = civ.states[foe === "a" ? war.aggressor : war.defender]; if (!other?.alive) return false;
   return evaluatePeace(civ, war, proposer, other, defaultTerms(civ, war, proposer)).accept;
 }

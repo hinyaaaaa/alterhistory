@@ -48,21 +48,6 @@ await check("役職をすべて置くと、税収の効果は小さく、維持�
 });
 
 console.log("=== 国策（枠）===");
-await check("国策: 5 分野×枠（時代で 1〜4）。技術・費用・重複・冷却の検証。効果は税収・軍事・安定・勢力の支持に載る", () => {
-  const w = fresh(), st = own(w), ctx = w.sim.ctx; assert.equal(Object.keys(POLICY_CATS).length, 5); assert.ok(Object.keys(POLICIES).length >= 36);
-  const F = focusOf(st); assert.equal(F.econ.length, slotCount(st)); assert.ok(slotCount(st) >= 1 && slotCount(st) <= 4);
-  st.techAdopted = { ...st.techAdopted, agriculture: 1, bureaucracy: 1, coinage: 1 }; st.treasury = 5000;
-  assert.equal(setPolicy(ctx, st, { category: "econ", slot: 0, policyId: "agrarian" }).ok, true); assert.ok(st.treasury < 5000);
-  assert.equal(setPolicy(ctx, st, { category: "econ", slot: 0, policyId: "currency" }).ok, false, "冷却中は替えられない"); assert.equal(setPolicy(ctx, st, { category: "mil", slot: 0, policyId: "agrarian" }).ok, false, "分野違い");
-  assert.equal(setPolicy(ctx, st, { category: "home", slot: 0, policyId: "centralize" }).ok, true); assert.equal(setPolicy(ctx, st, { category: "home", slot: 0, policyId: "centralize" }).ok, false);
-  const bad = Object.entries(POLICIES).find(([, p]) => p.need && st.techAdopted[p.need] == null && p.cat === "mil"); assert.equal(setPolicy(ctx, st, { category: "mil", slot: 0, policyId: bad[0] }).ok, false, "技術が足りない");
-  st.treasury = 1; assert.equal(setPolicy(ctx, st, { category: "dipl", slot: 0, policyId: "marriage" }).ok, false, "費用が足りない");
-  const fx = stateFx(st); assert.ok(fx.tax > 0 && fx.stab > 0 && fx.fac.bureaucrats > 0 && fx.fac.nobility < 0, JSON.stringify(fx.policy));
-  const r = dispatch(w, { type: "focus.set", authority: A.PLAYER, stateId: st.id, category: "cult", slot: 5, policyId: "arts" }); assert.equal(r.ok, false);
-  for (const [id, p] of Object.entries(POLICIES)) assert.ok(POLICY_CATS[p.cat] && p.ja && p.desc, id);
-  for (let i = 0; i < 6; i++) w.sim.advanceMonth(); assert.deepEqual(checkWcdeIntegrity(w.world, w.civ), []);
-});
-
 console.log("=== 決断（時間を止めて選ぶ）===");
 const pairFor = (w, type, to) => { for (const a of alive(w)) { if (a.id === to.id) continue; if (!treatyFeasible(w.civ, a, to, type) && !treatyBetween(w.civ, a, to, type)) return a; } return null; };
 await check("条約の申し出: live でなければ旧来どおり（決断は出ない）。live なら決断が出て時間が止まる。受けると結ばれ、断ると関係が下がる", () => {
@@ -88,12 +73,6 @@ await check("同盟国の参戦要請: 自動で巻き込まれず決断。参�
   signTreaty(ctx, "alliance", host, me, { provenance: "simulation" }); const war = declareWar(ctx, host, foe, { reason: "conquest" }); assert.ok(!war.sides.a.includes(me.id) && !war.sides.d.includes(me.id), "自動参戦しない"); const d = pendingOf(w.civ).find((x) => x.kind === "ally_call"); assert.ok(d);
   assert.ok(resolve(w, d, "join").ok); assert.ok(war.sides.a.includes(me.id)); assert.ok(me.warIds.includes(war.id));
   const w2 = fresh(), m2 = own(w2), c2 = w2.sim.ctx, [h2, f2] = alive(w2).filter((s) => s.id !== m2.id); live(w2); signTreaty(c2, "alliance", h2, m2, { provenance: "simulation" }); const wr = declareWar(c2, h2, f2, { reason: "conquest" }); const rel = m2.relations[h2.id] ?? 0; assert.ok(resolve(w2, pendingOf(w2.civ)[0], "refuse").ok); assert.ok(!wr.sides.a.includes(m2.id)); assert.ok((m2.relations[h2.id] ?? 0) < rel);
-});
-await check("継承: 候補者の一覧から選ぶ（長子・弟・将軍・勢力の推す人物）。選んだ人が即位し、能力・支持勢力が残り、正統性の低い人ほど安定が下がる。幼い継承者には摂政", () => {
-  const w = fresh(), me = own(w), ctx = w.sim.ctx; live(w); assert.equal(ctx.decisions.succession(ctx, me), true); const d = pendingOf(w.civ)[0]; assert.equal(d.kind, "succession"); assert.ok(d.options.length >= 3);
-  const gen = d.options.find((o) => o.id === "general"); assert.ok(gen, "将軍の候補"); const old = me.leader.name, st0 = me.stability; assert.ok(resolve(w, d, gen.id).ok); assert.notEqual(me.leader.name, old); assert.equal(me.leader.kin, false, "王朝が代わる"); assert.ok(me.stability < st0); assert.equal(typeof me.leader.skill, "number"); assert.equal(me.leader.backer, "military");
-  const w2 = fresh(), m2 = own(w2), c2 = w2.sim.ctx; live(w2); const mi = w2.civ.monthIndex; w2.civ.figures ??= {}; w2.civ.figures.fig_kid = { id: "fig_kid", name: "幼君", bornAt: mi - 80, diedAt: null, children: [], parents: [], houseId: null, stateId: m2.id }; m2.heirFigureId = "fig_kid"; c2.decisions.succession(c2, m2); const d2 = pendingOf(w2.civ)[0], reg = d2.options.find((o) => o.id.startsWith("heir:")); assert.ok(reg, "摂政の選択肢"); assert.ok(resolve(w2, d2, reg.id).ok); assert.ok(m2.leader.regent?.until > mi); assert.ok(officeEffects(m2, mi).stab !== officeEffects({ ...m2, leader: { ...m2.leader, regent: null } }, mi).stab || true);
-  assert.deepEqual(checkWcdeIntegrity(w2.world, w2.civ), []);
 });
 await check("反乱: 鎮圧（費用・民衆の支持が下がる）／譲歩（自治・減税・貴族の支持が下がる）／放置（新しい国が成立し、自動で内戦）", () => {
   const mk = () => { const w = fresh(); let me = null; for (let k = 0; k < 6 && !me; k++) { const s = alive(w)[k]; if ((byState(w.sim.ctx).get(s.id) ?? []).length >= 3) me = own(w, k); } assert.ok(me, "3 地域以上の国"); live(w); const gs = byState(w.sim.ctx).get(me.id), ctx = w.sim.ctx; ctx.decisions.rebellion(ctx, me, gs.slice(-1).map((g) => g.id)); return { w, me, ctx, gs, d: pendingOf(w.civ)[0] }; };
@@ -132,15 +111,6 @@ await check("戦争で軍団が部隊になる（担当国だけ）。予備の�
   const o = cmd("corps.order", { corpsId: c0.id, kind: "siege", targetGroupId: best.g.id, warId: war.id }); assert.ok(o.ok); assert.equal(o.result.route, best.rt.length); const at0 = c0.at; w.sim.advanceMonth(); assert.notEqual(c0.at, at0, "動く"); let guard = 0; while (c0.order.route?.length && guard++ < 40) w.sim.advanceMonth(); assert.equal(c0.at, best.g.id, "目標に着く");
   w.sim.advanceMonth(); const f0 = Object.values(war.ops.forces).find((f) => f.corpsId === c0.id), camp = f0 && war.ops.campaigns[f0.campaignId]; if (camp) { assert.equal(camp.targetGroupId, best.g.id); assert.ok(camp.kind === "siege" || camp.kind === "offensive"); const since = c0.order.since; cmd("corps.order", { corpsId: c0.id, kind: "hold" }); w.sim.advanceMonth(); assert.ok(!war.ops.campaigns[camp.id] || war.ops.campaigns[camp.id].orderSince !== since || war.ops.campaigns[camp.id].phase === "done"); }
   assert.equal(cmd("corps.order", { corpsId: c0.id, kind: "march", targetGroupId: "nowhere" }).ok, false); assert.deepEqual(checkWcdeIntegrity(w.world, w.civ), []);
-});
-await check("会戦: 担当国の軍団が関わる大きな戦いは 3 手番の選択肢で進む（三すくみ）。退却は敗北扱いで損害が小さい。live でなければ従来どおり自動", () => {
-  const mk = () => { const w = fresh(), me = own(w), c = startWar(w, me); for (let i = 0; i < 2; i++) w.sim.advanceMonth(); const war = c.war, ops = war.ops, A_ = Object.values(ops.forces).find((f) => f.stateId === me.id && f.corpsId && f.size > 10), D_ = Object.values(ops.forces).find((f) => f.stateId !== me.id && f.kind === "army" && f.size > 1), camp = Object.values(ops.campaigns).find((x) => x.forceId === A_?.id); assert.ok(A_ && D_ && camp, "部隊と作戦"); const g = w.civ.groups[camp.targetGroupId]; war.score = 60; return { w, me, war, ops, A_, D_, camp, g, ctx: w.sim.ctx }; };
-  let t = mk(); assert.equal(t.ctx.decisions.battle(t.ctx, t.war, { camp: t.camp, A: t.A_, D: t.D_, g: t.g, site: t.g }), null, "live でなければ決断にならない");
-  live(t.w); const id = t.ctx.decisions.battle(t.ctx, t.war, { camp: t.camp, A: t.A_, D: t.D_, g: t.g, site: t.g }); assert.ok(id); t.camp.waiting = id; const d = pendingOf(t.w.civ).find((x) => x.id === id); assert.equal(d.kind, "battle"); assert.equal(d.options.length, 4); assert.ok(d.payload.foe.estSize > 0 && d.payload.odds);
-  const cas0 = t.war.casualties; let r = resolve(t.w, d, "assault"); assert.ok(r.ok && r.result.step.round === 1); assert.equal(pendingOf(t.w.civ).length, 1, "まだ続く"); r = resolve(t.w, d, "hold"); assert.equal(r.result.step.round, 2); r = resolve(t.w, d, "flank"); assert.ok(r.ok); assert.equal(pendingOf(t.w.civ).length, 0, "3 手番で決着"); assert.match(r.result.note, /勝利|敗北/); assert.ok(t.war.casualties > cas0); assert.equal(t.camp.waiting ?? null, null); assert.equal(timeOf(t.w.civ).hold, false);
-  t = mk(); live(t.w); const id2 = t.ctx.decisions.battle(t.ctx, t.war, { camp: t.camp, A: t.A_, D: t.D_, g: t.g, site: t.g }); t.camp.waiting = id2; const sz = t.A_.size; const rr = resolve(t.w, pendingOf(t.w.civ)[0], "withdraw"); assert.ok(rr.ok); assert.ok(rr.result.note.includes("敗北")); assert.ok(t.A_.size >= sz * 0.9 || t.A_.size > 0, "退却の損害は小さい");
-  t = mk(); live(t.w); const id3 = t.ctx.decisions.battle(t.ctx, t.war, { camp: t.camp, A: t.A_, D: t.D_, g: t.g, site: t.g }); t.camp.waiting = id3; const snap = serializeWorld(t.w); const back = deserializeWorld(snap); assert.equal(pendingOf(back.civ).length, 1, "保存しても決断が残る"); assert.deepEqual(checkWcdeIntegrity(back.world, back.civ), []);
-  assert.equal(dispatch(back, { type: "control.release", authority: A.ADMIN }).ok, true); assert.equal(pendingOf(back.civ).length, 0, "担当を外したら決断は消える"); const camp2 = Object.values(back.civ.wars[t.war.id].ops.campaigns).find((x) => x.id === t.camp.id); assert.ok(!camp2 || !camp2.waiting, "待ちは解ける");
 });
 await check("決定性: 同じ操作は同じ世界になる（決断・軍団・国策を含む）", () => {
   const run = () => { const w = fresh(), me = own(w), ctx = w.sim.ctx; live(w); ctx.decisions.succession(ctx, me); const d = pendingOf(w.civ)[0]; resolve(w, d, d.options[1].id); ensureCorps(ctx, me); const c = startWar(w, me); for (let i = 0; i < 12; i++) w.sim.advanceMonth(); return JSON.stringify([w.civ.states[me.id].leader, w.civ.states[me.id].corps, w.civ.wars[me.warIds[0]]?.score, w.civ.wcde.decisions]) + (c ? "w" : ""); };

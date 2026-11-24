@@ -1,6 +1,6 @@
 # v6.1.0 M3: 統合技術ツリー（自動生成）
 
-ノード 129・レーン 11・列 14。正本は `js/core/civ/techtree.js`。
+ノード 174・レーン 11・列 20。正本は `js/core/civ/techtree.js`。
 
 ## ◆ 素材・道具
 
@@ -71,6 +71,7 @@
 | 鉄道（`railway`） | 10 | steam_engine, steel | — | trade:rail | trade+0.2 cap+0.05 |
 | 自動車（`motor_vehicle`） | 12 | internal_combustion, roads | — | — | trade+0.1 |
 | 航空（`aviation`） | 13 | internal_combustion, precision_tools, motor_vehicle | — | unit:air | — |
+| 人工衛星（`satellites`） | 14 | ballistic_missile, computing | — | space:satellite | trade+0.05 |
 
 ## ∑ 数学・測量・天文
 
@@ -103,6 +104,7 @@
 | 電信（`telegraph`） | 12 | electricity | — | — | — |
 | 計算機（`computing`） | 12 | electricity, calculus, precision_tools | — | — | learn+0.15 ind+0.1 |
 | 無線通信（`radio`） | 13 | telegraph, electric_grid | — | — | learn+0.1 trade+0.04 |
+| 機械学習（`machine_learning`） | 13 | computing, statistics | — | — | learn+0.06 |
 
 ## ✚ 医療・衛生
 
@@ -163,12 +165,54 @@
 | 攻城兵器（`siege_engines`） | 7 | iron_weapons, construction | — | — | off+0.05 |
 | 兵站（`military_logistics`） | 7 | roads, administration | — | war:far | — |
 | 海戦術（`naval_warfare`） | 7 | shipbuilding, iron_weapons | — | war:naval | off+0.05 |
+| 弩（`crossbow`） | 7 | bow, iron_weapons | — | unit:ranged | off+0.04 |
 | 常備軍（`standing_army`） | 8 | administration, iron_weapons, tax_system | — | — | off+0.08 def+0.04 |
+| 板金鎧（`plate_armor`） | 8 | steel, iron_weapons | — | — | def+0.05 off+0.02 |
 | 火薬（`gunpowder`） | 10 | steel, mathematics, chemistry | 規模8000 | unit:firearms | off+0.8 |
+| 徴兵制（`conscription`） | 10 | standing_army, public_education | — | army:conscription | off+0.08 |
 | 銃（`firearms`） | 11 | gunpowder, precision_tools | — | — | off+0.1 |
 | 火砲（`artillery`） | 11 | gunpowder, bellows | — | — | off+0.1 def+0.03 |
 | 施条銃（`rifled_arms`） | 12 | firearms, precision_tools | — | — | off+0.1 |
+| 槍と銃の連携（`pike_and_shot`） | 12 | firearms, standing_army | — | — | off+0.06 def+0.03 |
+| 榴弾砲・野砲（`howitzer`） | 12 | artillery, steel, industry | — | — | off+0.06 def+0.02 |
+| 戦列艦（`ship_of_the_line`） | 12 | ocean_sailing, artillery, naval_warfare | — | unit:capital_ship | off+0.06 |
+| 装甲艦（`ironclad`） | 12 | steamship, steel, artillery | — | — | off+0.08 def+0.03 |
+| ロケット（`rocketry`） | 12 | internal_combustion, chemistry, calculus | — | — | off+0.03 |
 | 機械化戦（`mechanized_warfare`） | 13 | motor_vehicle, steel, standing_army | — | unit:armor | off+0.2 |
+| 後装式小銃（`breech_loading`） | 13 | rifled_arms, steel, industry | — | — | off+0.1 |
+| 精密誘導兵器（`guided_munitions`） | 13 | computing, howitzer | — | — | off+0.1 |
+| 魚雷（`torpedo`） | 13 | ironclad, internal_combustion | — | — | off+0.05 |
+| 弩級戦艦（`dreadnought`） | 13 | ironclad, structural_steel, electricity | — | unit:battleship | off+0.1 def+0.03 |
+| 弾道ミサイル（`ballistic_missile`） | 13 | rocketry, computing | — | unit:strategic_missile | off+0.06 |
+| 機関銃（`machine_gun`） | 14 | breech_loading, industry | — | — | off+0.05 def+0.1 |
+| 特殊部隊（`special_forces`） | 14 | radio, standing_army | — | unit:special | off+0.03 |
+| 指揮統制網（`network_warfare`） | 14 | radio, computing | — | — | off+0.05 def+0.05 |
+| 潜水艦（`submarine`） | 14 | torpedo, electricity | — | unit:submarine | off+0.04 |
+| 航空母艦（`aircraft_carrier`） | 14 | dreadnought, aviation | — | unit:carrier | off+0.08 |
+| レーダー・ソナー（`radar_sonar`） | 14 | radio, electric_grid | — | — | def+0.05 |
+| 誘導ミサイル（`guided_missiles`） | 14 | rocketry, guided_munitions | — | unit:missile_force | off+0.1 |
+| 核戦力（`nuclear_arsenal`） | 14 | nuclear, ballistic_missile | — | unit:nuclear_force, action:nuclear_weapon | def+0.08 |
+| 塹壕と鉄条網（`trench_warfare`） | 15 | machine_gun, fortification | — | — | def+0.1 |
+| 戦車（`tank`） | 15 | mechanized_warfare, machine_gun | — | unit:armor | off+0.12 |
+| 原子力推進（`nuclear_propulsion`） | 15 | nuclear, submarine | — | — | off+0.04 |
+| 軍用航空（`military_aviation`） | 15 | aviation, machine_gun | — | unit:air_corps | off+0.05 |
+| 防空網（`air_defense`） | 15 | radar_sonar, guided_missiles | — | — | def+0.06 |
+| サイバー戦（`cyber_warfare`） | 15 | computing, network_warfare | — | unit:cyber | def+0.03 |
+| 指向性エネルギー兵器（`directed_energy`） | 15 | electric_grid, guided_missiles | — | — | def+0.08 |
+| 対戦車兵器（`anti_tank`） | 16 | tank, howitzer | — | — | def+0.08 |
+| 機械化歩兵（`motorized_infantry`） | 16 | tank, radio | — | unit:mechanized | off+0.06 |
+| 水陸両用戦（`amphibious_assault`） | 16 | steamship, tank | — | unit:marine | off+0.05 |
+| 戦闘機（`fighter_aircraft`） | 16 | military_aviation, radio | — | unit:fighter | def+0.04 |
+| 爆撃機（`bomber_aircraft`） | 16 | military_aviation, steel | — | unit:bomber | off+0.06 |
+| ジェット機関（`jet_engine`） | 16 | military_aviation, petroleum, precision_tools | — | — | off+0.04 |
+| ヘリコプター（`helicopter`） | 16 | military_aviation, internal_combustion | — | unit:helicopter | off+0.03 |
+| 軌道戦（`orbital_warfare`） | 16 | satellites, directed_energy | — | unit:orbital | off+0.05 def+0.05 |
+| 認知戦（`cognitive_warfare`） | 16 | cyber_warfare, machine_learning | — | — | def+0.05 |
+| ステルス（`stealth`） | 17 | jet_engine, radar_sonar, computing | — | — | off+0.05 |
+| 無人機（`drone_warfare`） | 17 | guided_munitions, jet_engine, network_warfare | — | unit:drone | off+0.05 |
+| 自律兵器（`autonomous_systems`） | 18 | drone_warfare, machine_learning | — | unit:autonomous | off+0.08 |
+| 極超音速兵器（`hypersonic_weapons`） | 18 | ballistic_missile, stealth | — | — | off+0.08 |
+| 強化外骨格（`power_armor`） | 19 | autonomous_systems, special_forces | — | — | off+0.05 |
 
 ## ⚙ エネルギー・産業
 
@@ -185,4 +229,5 @@
 | 内燃機関（`internal_combustion`） | 11 | industry, chemistry | — | — | ind+0.15 |
 | 送電網（`electric_grid`） | 12 | electricity, industry | — | — | ind+0.2 |
 | 核（`nuclear`） | 12 | electricity, calculus | 規模100000 | action:nuclear_program | ind+0.1 |
+| 核融合（`fusion_power`） | 14 | nuclear, machine_learning | — | — | ind+0.2 |
 

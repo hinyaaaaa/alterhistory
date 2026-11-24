@@ -1,0 +1,567 @@
+/* 共通ウィジェット: 入力欄・ツールバー・更新ボタンなど（実データ接続の追加分） */
+#v6-root {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+:root {
+  --pw: 520px;
+}
+/* 実データ接続のための追加（モックのクラスを土台にし、同じ配色・字体・罫線を使う） */
+input,
+select {
+  font: inherit;
+  font-size: 14px;
+  background: var(--bg3);
+  color: var(--tx);
+  border: 1px solid var(--line);
+  padding: 2px 6px;
+}
+input[type="range"] {
+  padding: 0;
+}
+.center {
+  max-width: 560px;
+  margin: 8vh auto;
+  padding: 0 16px;
+}
+.center h1 {
+  font-weight: 400;
+  letter-spacing: 0.12em;
+}
+.center label {
+  display: block;
+  margin: 10px 0;
+}
+#hub {
+  width: 78px !important;
+}
+#hub button {
+  width: 68px;
+}
+#hub button small {
+  font-size: 10px;
+  letter-spacing: 0;
+}
+#mapwrap {
+  position: relative;
+  overflow: hidden;
+}
+#map {
+  position: absolute;
+  inset: 0;
+  width: 100% !important;
+  height: 100% !important;
+  display: block;
+}
+#panel.open {
+  width: var(--pw, 360px);
+}
+#pin {
+  width: var(--pw, 360px);
+}
+.lk {
+  color: var(--blue);
+  cursor: pointer;
+  text-decoration: none;
+}
+.lk:hover {
+  text-decoration: underline;
+}
+.warn {
+  color: var(--yellow);
+  font-size: 14px;
+}
+.err {
+  color: var(--red);
+  font-size: 14px;
+}
+
+#newsmodal {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 11, 0.94);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+#newsmodal[hidden] {
+  display: none;
+}
+.modalbox {
+  max-width: 640px;
+  padding: 28px;
+  border: 1px solid var(--yellow);
+  background: var(--bg2);
+  text-align: center;
+}
+.modalbox h2 {
+  font-size: 29px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  margin: 14px 0;
+}
+/* v6.12.0: 決断ウィンドウ（急使の報せ）・軍・国策 */
+#decmodal {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 9, 11, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 48;
+  padding: 12px;
+  overflow: auto;
+}
+#decmodal[hidden] {
+  display: none;
+}
+#decmodal.battle {
+  background: rgba(8, 9, 11, 0.55);
+  align-items: flex-end;
+}
+.decbox {
+  position: relative;
+  max-width: 720px;
+  width: 100%;
+  padding: 26px 28px 22px;
+  border: 1px solid var(--yellow);
+  background: linear-gradient(180deg, #1d1a14, var(--bg2));
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.6);
+}
+.decbox h2 {
+  font-size: 25px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  margin: 10px 0 6px;
+}
+.decbody {
+  margin: 0 0 14px;
+  line-height: 1.7;
+  color: var(--dim);
+}
+.decseal {
+  position: absolute;
+  right: 18px;
+  top: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 2px solid #b3402e;
+  color: #d4604c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 25px;
+  transform: rotate(-8deg);
+  opacity: 0.9;
+}
+.decopts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.decopt {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  padding: 11px 14px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  cursor: pointer;
+}
+.decopt:hover:not([disabled]) {
+  border-color: var(--yellow);
+  background: #262014;
+}
+.decopt[disabled] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.decopt small {
+  color: var(--dim);
+}
+.cands {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 10px;
+}
+.cand {
+  display: flex;
+  gap: 12px;
+  text-align: left;
+  padding: 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  cursor: pointer;
+}
+.cand:hover {
+  border-color: var(--yellow);
+}
+.cand .ci {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.cand .cb {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  font-size: 14px;
+}
+.cand .rg {
+  color: #d8b45a;
+}
+.rounds {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 2px 0 12px;
+}
+.rounds i {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid var(--dim);
+}
+.rounds i.done {
+  background: var(--yellow);
+  border-color: var(--yellow);
+}
+.rounds i.now {
+  border-color: #ff3b30;
+  box-shadow: 0 0 6px #ff3b30;
+}
+.bgrid {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.bside {
+  padding: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.bside.a {
+  border-color: #6fa8c9;
+}
+.bside.d {
+  border-color: #d0605a;
+}
+.bside .bm {
+  font-size: 14px;
+  color: var(--dim);
+}
+.vs {
+  text-align: center;
+  font-size: 20px;
+}
+.vs small {
+  display: block;
+  font-size: 13px;
+  color: var(--yellow);
+}
+.blog {
+  margin: 8px 0;
+  font-size: 14px;
+  color: var(--dim);
+}
+.blog em {
+  color: var(--yellow);
+  font-style: normal;
+  margin-right: 8px;
+}
+.bhint {
+  font-size: 14px;
+  color: #8fb3b0;
+  margin: 6px 0;
+}
+.stances {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 10px 0;
+}
+.stance {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  align-items: center;
+  text-align: center;
+  padding: 10px 8px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  cursor: pointer;
+}
+.stance:hover {
+  border-color: var(--yellow);
+  background: #262014;
+}
+.stance .gl {
+  font-style: normal;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  border: 2px solid var(--yellow);
+}
+.stance.st-assault .gl {
+  border-color: #d0605a;
+}
+.stance.st-hold .gl {
+  border-color: #6fa8c9;
+}
+.stance.st-flank .gl {
+  border-color: #9fbf8a;
+}
+.stance.st-withdraw .gl {
+  border-color: #888;
+}
+.stance small {
+  color: var(--dim);
+  font-size: 13px;
+}
+.corpslist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.corpsrow {
+  text-align: left;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg);
+  cursor: pointer;
+}
+.corpsrow.on,
+.corpsrow:hover {
+  border-color: var(--yellow);
+}
+.corpsrow .cr1 {
+  display: flex;
+  justify-content: space-between;
+}
+.corpsrow .cr2,
+.corpsrow .cr3 {
+  font-size: 14px;
+  color: var(--dim);
+}
+.corpsdetail .pbox {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.corpsdetail .prow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.corpsdetail .unit {
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--line);
+}
+.bar2 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+.chip.good {
+  color: #9fbf8a;
+}
+.chip.bad {
+  color: #d0605a;
+}
+.chip.trait {
+  border-color: #6fa8c9;
+}
+.chips.sm {
+  margin-top: 2px;
+}
+.chips.sm .chip {
+  font-size: 12px;
+  padding: 0 4px;
+}
+.pcat {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pslot {
+  margin: 4px 0;
+}
+.pdesc {
+  margin-top: 2px;
+}
+.odom {
+  margin: 6px 0;
+}
+.offsum {
+  margin: 6px 0;
+}
+
+#callout {
+  display: none;
+}
+#callout.on {
+  display: block;
+}
+.layrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 0;
+  border-bottom: 1px solid #262a31;
+  font-size: 15px;
+}
+.layrow .g {
+  flex: 1;
+  cursor: pointer;
+}
+.layrow .opa {
+  width: 64px;
+  accent-color: var(--yellow);
+}
+.vlist {
+  height: 56vh;
+  overflow: auto;
+  position: relative;
+}
+.vrow {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-bottom: 1px solid #262a31;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+svg.tree {
+  width: 100%;
+  background: #101216;
+  border: 1px solid var(--line);
+  cursor: grab;
+  touch-action: none;
+}
+svg.tree:active {
+  cursor: grabbing;
+}
+.tnode {
+  cursor: pointer;
+}
+.tnode:hover rect {
+  stroke: var(--tx);
+}
+.mx td.rc {
+  font-size: 13px;
+}
+.rowb {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+.barv {
+  display: inline-block;
+  width: 90px;
+  height: 8px;
+  background: #101216;
+  border: 1px solid var(--line);
+  vertical-align: middle;
+}
+.barv i {
+  display: block;
+  height: 100%;
+}
+/* v6.1.2: 国名は省略せず全部出す。外交の関係表は、列の見出しを縦書きにして全名を入れる。一覧の行は折り返す */
+.mx th.colh {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  white-space: nowrap;
+  vertical-align: bottom;
+  text-align: left;
+  padding: 4px 0;
+  line-height: 1.15;
+  font-size: 14px;
+}
+.mx th.rh,
+.mx .rh {
+  white-space: normal;
+  width: 112px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.vrow.full {
+  white-space: normal;
+  text-overflow: clip;
+  line-height: 1.3;
+  align-items: center;
+  padding: 2px 0;
+}
+.vrow.full > span:not(.sw) {
+  flex: 1;
+}
+/* 同盟関係の図（陣営ごとのカード） */
+.bloc-card {
+  padding: 8px 10px 6px;
+}
+.bloc-card .bh b {
+  font-size: 16px;
+  font-weight: 600;
+}
+.bloc-card .bh small {
+  color: var(--dim);
+}
+.bloc-card .bw {
+  color: var(--red);
+  font-size: 14px;
+  margin: 2px 0 4px;
+  line-height: 1.4;
+}
+svg.bloc {
+  display: block;
+  margin-top: 6px;
+}
+svg.bloc text {
+  font-family: inherit;
+}
+/* パネルの自動更新はしない。世界が進んで内容が古くなったときだけ、押して更新する */
+#panel {
+  position: relative;
+}
+#prefresh {
+  position: absolute;
+  right: 10px;
+  top: 10px;
+  z-index: 3;
+  display: none;
+  font: inherit;
+  font-size: 14px;
+  background: #262b33;
+  color: var(--yellow);
+  border: 1px solid var(--yellow);
+  padding: 2px 8px;
+  cursor: pointer;
+}
+#prefresh.stale {
+  display: block;
+}
+#prefresh:hover {
+  background: #2f3540;
+}

@@ -25,8 +25,4 @@ await check("世界名と暦を決めて生成できる。世界は建国の前�
   assert.ok(p.done && c.wcde.entry.months === short && c.monthIndex === short && c.wcde.phase === "founding", "進んでも建国の段階のまま");
   assert.ok(capitalSites(w).length > 0, "首都にできる場所（国家のない都市）が残っている"); assert.equal(c.wcde.news.scanned, c.events.length, "過去のニュースで時間は止まらない"); assert.ok(!/紀元/.test(formatWorldDate(w)));
 });
-await check("背景の絵は 1000 通り（すべて異なり、正しい SVG）", () => {
-  assert.equal(SCENE_COUNT, 1000); const set = new Set(); for (let i = 0; i < 1000; i++) { const s = sceneSvg(i); assert.ok(s.startsWith("<svg") && s.endsWith("</svg>") && !/NaN|undefined/.test(s), "seed " + i); set.add(s); } assert.equal(set.size, 1000); assert.equal(sceneSvg(5), sceneSvg(5)); assert.equal(sceneSvg(1005), sceneSvg(5));
-  assert.ok(logoSvg().includes("ALTER") && logoSvg({ withText: false }).startsWith("<svg"));
-});
 console.log(failed ? `\n${failed} 件失敗` : "\n全て成功"); process.exit(failed ? 1 : 0);

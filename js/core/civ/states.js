@@ -18,6 +18,7 @@ import { speciesOf, lifeScale } from "./species.js";
 import { REGIMES as REG15, regimeOf as regimeOf15 } from "../wcde/regimes.js";
 import { stateStability as officeStability } from "../wcde/statefx.js"; // v6.12.0: 役職と国策の効果
 import { enqueue } from "./compaction-queue.js";
+import { ensureCapital } from "./settlements.js";
 const OFFICE_RULER = (st) => REG15[regimeOf15(st)].ruler;
 
 export const POLITY = Object.freeze({ tribal: "部族", chiefdom: "首長制", kingdom: "王国", empire: "帝国", republic: "共和制", theocracy: "神権制" });
@@ -35,6 +36,7 @@ export function formState(ctx, { via, groupIds, predecessor = null, player = fal
     personality: { security: 0.6 + (h % 100) / 125, prosperity: 0.6 + ((h >> 7) % 100) / 125, expansion: 0.6 + ((h >> 14) % 100) / 125, stability: 0.6 + ((h >> 21) % 100) / 125, culture: 0.6 + ((h >> 4) % 100) / 125, tech: 0.6 + ((h >> 11) % 100) / 125, prestige: 0.6 + ((h >> 18) % 100) / 125 } };
   { const rg = regnalOf(st, st.leader.name, leaderRng(civ, st, "found"), epithetGen(ctx, st, cap)); st.leader.name = rg.name; st.leader.birthName = rg.birth; } // 君主は、本名と即位名を分ける（文化ごとの名乗りの型）
   civ.states[id] = st; for (const g of gs) g.stateId = id; if (gs.some((g) => g.player)) st.player = true;
+  ensureCapital(ctx, st, gs); // v7.0.0: 首都は必ず集落（capitalSettlementId と capitalGroupId を一致させる）
   const causes = []; if (cause) causes.push({ targetId: cause, relation: "caused_by", basis: "plausible" }); if (threat) causes.push({ targetId: threat, relation: "reaction_to", basis: "strong" });
   if (predecessor) causes.push({ targetId: predecessor, relation: "succeeded_by", basis: "direct" });
   const ev = makeEvent(civ, ids, { kind: "state_formed", title: `${st.name}が成立（${VIA[via].ja}）`, participants: [{ entityId: id, role: "state" }, ...gs.map((g) => ({ entityId: g.id, role: g.id === cap.id ? "capital_group" : "member" }))], location: { cell: cap.cell }, why: `成立の経緯: ${VIA[via].ja}（${gs.length}の集団がまとまった）`, causes, facts: { stateId: id, name: st.name, polity: st.polity, capitalCell: cap.cell, cells: gs.slice(0, 24).map((g) => g.cell), nGroups: gs.length }, provenance: player ? "player" : "simulation" });
@@ -133,7 +135,7 @@ export function stepStates(ctx) {
     const st = civ.states[id]; if (!st.alive) continue; const gs = groupsByState.get(id);
     if (!gs?.length) { dissolve(ctx, st, "消滅した"); continue; }
     let pop = 0, tens = 0, settle = 0, big = gs[0], mar = 0; for (const g of gs) { pop += g.pop; mar += g.pop * speciesOf(g.speciesId, civ).martial; if (g.settlementId) settle++; if (g.pop > big.pop) big = g; let t = 0; for (const c of g.cohorts) if (c.tension > t) t = c.tension; tens += t * g.pop; }
-    st.pop = pop; st.martial = pop ? Math.round((mar / pop) * 1000) / 1000 : 1; st.settlements = settle; if (!civ.groups[st.capitalGroupId] || civ.groups[st.capitalGroupId].stateId !== id) st.capitalGroupId = big.id;
+    st.pop = pop; st.martial = pop ? Math.round((mar / pop) * 1000) / 1000 : 1; st.settlements = settle; void big; ensureCapital(ctx, st, gs); // v7.0.0: 首都を失っていたら、国内の最大の集落に選び直す
     const cap = civ.groups[st.capitalGroupId]; let far = 0, mx = 0; const dists = []; for (const g of gs) { const d = distKm(world, cap.cell, g.cell); dists.push([d, g]); if (d > mx) mx = d; }
     const adm = stateCan(civ, st, "polity:empire") ? 0.6 : stateCan(civ, st, "polity:kingdom") ? 0.35 : 0;
     const target = 0.8 - 0.5 * (tens / pop) - Math.min(1, mx / 15000) * 0.3 * (1 - adm) - Math.max(0, st.policy.tax - 0.15) * 0.6 - (st.warIds.length ? 0.05 : 0) - (st.policy.mobilization * 0.3) + (st.leader.heir ? 0.03 : 0) + (st.magic?.kind === "temple" ? 0.04 * st.magic.power : 0) + ({ chiefdom: 0.02, kingdom: 0.05, empire: 0.08, republic: 0.06, theocracy: 0.05, tribal: 0 }[st.polity]) + (st.offices?.length ? officeStability(st) : 0); /* v6.4.0: 役職の分野が揃うほど安定度が少し上がる（上限 +0.04） */

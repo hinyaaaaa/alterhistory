@@ -2,12 +2,12 @@
 //   世界の作成（wcde/world.js）と保存の読み込みは、この関数を通る。プラグインが無ければ generateWorld と同じ結果（決定性は変わらない）。
 import { generateWorld, validateWorld, worldHash } from "./worldgen.js";
 import { activePlugin, pluginStamp } from "./plugins.js";
-import { pickSite, planSettlements, siteScore } from "./sites.js";
+import { pickSite, planSettlements, planSites, siteScore } from "./sites.js";
 
 const hide = (world, key, value) => { Object.defineProperty(world, key, { value, enumerable: false, writable: true, configurable: true }); return value; }; // 保存・複製・ハッシュに入らない付属物
 const note = (world, msg) => { (world.pluginReport ?? hide(world, "pluginReport", { notes: [], used: pluginStamp() })).notes.push(msg); };
 /** 世界に、使うプラグインの記録（pluginReport）と都市プラグイン（cityPlugin。civ 層が foundSettlement で使う）を付ける */
-const attach = (world) => { hide(world, "pluginReport", { notes: world.pluginReport?.notes ?? [], used: pluginStamp() }); hide(world, "cityPlugin", activePlugin("city") ?? null); if (!world.siteTools) hide(world, "siteTools", { pickSite, planSettlements, siteScore }); return world; };
+const attach = (world) => { hide(world, "pluginReport", { notes: world.pluginReport?.notes ?? [], used: pluginStamp() }); hide(world, "cityPlugin", activePlugin("city") ?? null); if (!world.siteTools) hide(world, "siteTools", { pickSite, planSettlements, planSites, siteScore }); return world; };
 export function generateWorldPluggable(specInput, options = {}) {
   const T = activePlugin("terrain"); if (!T) return attach(generateWorld(specInput, options));
   let world = null;

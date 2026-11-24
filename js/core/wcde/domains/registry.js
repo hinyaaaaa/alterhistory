@@ -52,7 +52,7 @@ export function validateRegistry(phaseKeys = null, domains = DOMAINS) {
     for (const u of d.updates) if (!domains.some((o) => o.id !== d.id && o.owns.some((x) => pathsOverlap(x, u)))) errs.push(`${d.id}.updates が、他の領域の所有経路を指していない: ${u}`);
     if (phaseKeys && !phaseKeys.includes(d.phase)) errs.push(`${d.id} の phase ${d.phase} が PHASES に無い`);
     for (const s of d.steps) { if (stepOwner.has(s)) errs.push(`処理 ${s} が複数の領域に宣言されている（${stepOwner.get(s)} と ${d.id}）`); stepOwner.set(s, d.id); }
-    if (!(d.every >= 1)) errs.push(`${d.id} の every が不正`);
+    if (!(d.every >= 1) && d.cadence !== "boundary") errs.push(`${d.id} の every が不正`);
   }
   for (let i = 0; i < domains.length; i++) for (let j = i + 1; j < domains.length; j++) for (const a of domains[i].owns) for (const b of domains[j].owns) if (pathsOverlap(a, b)) errs.push(`所有の重なり: ${domains[i].id}「${a}」と ${domains[j].id}「${b}」`);
   // updates は他の領域が所有する経路だけを指す（自分の所有を updates に書かない）

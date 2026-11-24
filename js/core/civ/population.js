@@ -9,6 +9,8 @@ import { TECH, TECHS as TECHS_ORDER, refreshCand } from "./tech.js";
 import { LAND_WATER, BIOMES } from "./world-consts.js";
 import { recentEventsFor, asCauses } from "./graph.js";
 import { speciesOf } from "./species.js";
+import { updateRoads } from "./roads.js";
+import { makeSettlement, refreshSettlements, wantsNewSite, siteIdsOf, urbanPop } from "./settlements.js";
 
 export const SUBSISTENCE = Object.freeze({ forage: "採集狩猟", pastoral: "牧畜", agriculture: "農耕", fishing: "漁撈" });
 export const POP = Object.freeze({
@@ -127,9 +129,24 @@ export function foundSettlement(world, civ, ids, g, cause = null) {
     const p = world.siteTools.pickSite(world, cells, occ, typeof P?.siteScore === "function" ? (w, c, base) => withPlugin(c, base) : undefined); if (p >= 0) best = p;
   } else for (const c of cells) { const s = withPlugin(c, std(c)); if (s > bs) { bs = s; best = c; } }
   if (typeof P?.settlementCell === "function") { try { const c = P.settlementCell(world, civ, g, cells, best); if (Number.isInteger(c) && cells.includes(c)) best = c; } catch { /* 標準へ */ } } // 都市プラグイン（集落のセル）
-  const id = ids.next("settle"), s = { id, groupId: g.id, cell: best, foundedAt: civ.monthIndex, pop: Math.round(g.pop * POP.settledShare), stage: "village" };
-  civ.settlements[id] = s; g.settlementId = id;
+  const s = makeSettlement(civ, ids, { groupId: g.id, cell: best, pop: urbanPop(g), foundedAt: civ.monthIndex }), id = s.id; // v7.0.0: 序列・重み・名前の履歴つき
+  g.settlementId = id; g.settlementIds = [id]; g.lastSiteAt = civ.monthIndex;
   makeEvent(civ, ids, { kind: "settlement_founded", title: "集落の成立", participants: [{ entityId: g.id, role: "founder" }, { entityId: id, role: "settlement" }], location: { cell: best }, why: "集団が定住の条件を満たした", causes: cause ? [{ targetId: cause, relation: "caused_by", basis: "direct" }] : [] });
+  return s;
+}
+
+/** v7.0.0: 集団の周りに、衛星の集落を 1 つ新設する（既存の集落から離れた適地。順位規模則に沿って、中心より小さな重みで始まる） */
+export function foundSatellite(ctx, g, occ) {
+  const { world, civ, ids } = ctx, off = world.mesh.neighborOffsets, nb = world.mesh.neighborIds; g.lastSiteAt = civ.monthIndex;
+  const seen = new Set([g.cell]), q = [g.cell], depth = new Map([[g.cell, 0]]); for (let h = 0; h < q.length; h++) { const x = q[h]; if (depth.get(x) >= 2) continue; for (let k = off[x]; k < off[x + 1]; k++) { const j = nb[k]; if (!seen.has(j)) { seen.add(j); depth.set(j, depth.get(x) + 1); q.push(j); } } }
+  const taken = new Set(Object.values(civ.settlements).map((x) => x.cell)), P = world.cityPlugin ?? null;
+  const base = world.siteTools?.pickSite; if (!base) return null;
+  const score = typeof P?.siteScore === "function" ? (w, c, b) => { try { const v = P.siteScore(w, c, { civ, group: g, base: b }); return Number.isFinite(v) ? v : b; } catch { return b; } } : undefined;
+  const c = base(world, q, taken, score); if (c < 0) return null;
+  const mine = siteIdsOf(civ, g).map((id) => civ.settlements[id]), minW = mine.reduce((a, x) => Math.min(a, x.weight ?? 1), 1);
+  const s = makeSettlement(civ, ids, { groupId: g.id, cell: c, pop: 0, foundedAt: civ.monthIndex, weight: Math.max(0.03, minW * 0.6), score: world.siteTools.siteScore ? world.siteTools.siteScore(world, c) : 0 });
+  g.settlementIds = [...siteIdsOf(civ, g), s.id]; if (occ) occ.set(c, occ.get(c) ?? 1);
+  makeEvent(civ, ids, { kind: "settlement_founded", title: "新しい集落の成立", participants: [{ entityId: g.id, role: "founder" }, { entityId: s.id, role: "settlement" }], location: { cell: c }, why: "集団が増え、周りに新しい集落を開いた", facts: { settlementId: s.id, groupId: g.id } });
   return s;
 }
 
@@ -138,6 +155,7 @@ export function foundSettlement(world, civ, ids, g, cause = null) {
  * 返り値は無い。変更は civ（集団・集落・イベント・提案）へ直接書く。
  */
 export function stepPopulation(ctx) {
+  if (ctx.civ.monthIndex % 12 === 5) updateRoads(ctx.world, ctx.civ); // v7.0.0: 新しい集落を街道・航路へつなぐ（年 1 回）
   const { world, civ, ids, rng } = ctx, occ = occupancy(world, civ), mi = civ.monthIndex;
   for (const id of sortedGroupIds(civ)) {
     const g = civ.groups[id]; if (!g) continue;
@@ -145,7 +163,7 @@ export function stepPopulation(ctx) {
     // 1) 人口（ロジスティック。収容力を超えると減る）。乱数は ±20%
     const noise = 0.8 + 0.4 * rng(); g.pop = Math.max(0, g.pop + g.pop * POP.growthPerMonth * (1 - pressure) * noise * gm - (pressure > 1 ? g.pop * POP.overshootDeath * (pressure - 1) : 0)); // 収容力を超えた分は、飢えで早く減る
     if (pressure > POP.famineRatio && mi - g.famineAt >= POP.famineGap) { g.famineAt = mi; makeEvent(civ, ids, { kind: "famine", title: "飢え", participants: [{ entityId: g.id, role: "sufferer" }], location: { cell: g.cell }, why: "人口が、土地の養える数を超えた", causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck"], 36, 1), "caused_by", "strong"), effects: [{ targetId: g.id, property: "pop", before: Math.round(g.pop), after: Math.round(g.pop) }] }); }
-    if (g.pop < 5) { delete civ.groups[id]; if (g.settlementId) delete civ.settlements[g.settlementId]; makeEvent(civ, ids, { kind: "group_extinct", title: "集団の消滅", participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, why: "人口が5人を下回った" }); continue; }
+    if (g.pop < 5) { delete civ.groups[id]; for (const sid of siteIdsOf(civ, g)) delete civ.settlements[sid]; if (g.settlementId) delete civ.settlements[g.settlementId]; if (Array.isArray(civ.roads)) civ.roads = civ.roads.filter((r) => civ.settlements[r.a] && civ.settlements[r.b]); /* v7.0.0: 集団の全ての集落（と、つながる街道）を消す */ makeEvent(civ, ids, { kind: "group_extinct", title: "集団の消滅", participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, why: "人口が5人を下回った" }); continue; }
     g.settledMonths = g.order ? 0 : g.settledMonths + 1;
     // 2) 命令の進行（移動）
     if (g.order?.type === "move" && mi >= g.order.arriveAt) { g.cell = g.order.to; g.cells = null; g.order = null; g.settledMonths = 0; g.settlementId = null; makeEvent(civ, ids, { kind: "group_moved", title: "集団の移動完了", participants: [{ entityId: g.id, role: "mover" }], location: { cell: g.cell } }); }
@@ -157,8 +175,7 @@ export function stepPopulation(ctx) {
     if (want) { if (g.player) addProposal(civ, ids, g, "change_subsistence", { subsistence: want }); else { const before = g.subsistence; g.subsistence = want; makeEvent(civ, ids, { kind: "subsistence_changed", title: `生業の転換（${SUBSISTENCE[before]}→${SUBSISTENCE[want]}）`, participants: [{ entityId: g.id, role: "subject" }], location: { cell: g.cell }, effects: [{ targetId: g.id, property: "subsistence", before, after: want }], why: "技術と土地の条件が、別の生業のほうが適する状態になった" }); } }
     // 5) 定住（集落の成立）
     if (!g.settlementId && g.subsistence !== "forage" && g.subsistence !== "pastoral" && g.pop >= POP.settleMinPop && g.settledMonths >= POP.settleMinMonths) { if (g.player) addProposal(civ, ids, g, "found_settlement", {}); else foundSettlement(world, civ, ids, g); }
-    const st = g.settlementId ? civ.settlements[g.settlementId] : null;
-    if (st) { st.pop = Math.round(g.pop * POP.settledShare); const ns = stageOf(st.pop); if (ns !== st.stage) { const old = st.stage; st.stage = ns; makeEvent(civ, ids, { kind: "settlement_stage", title: `${STAGE_JA[old]}から${STAGE_JA[ns]}へ`, participants: [{ entityId: st.id, role: "settlement" }], location: { cell: st.cell }, why: "集落の人口が、次の段階の基準を超えた", causes: asCauses(recentEventsFor(civ, [g.id], ["disaster_struck", "famine"], 24, 1), "contributed_to", "plausible") }); } }
+    if (g.settlementId && civ.settlements[g.settlementId]) { refreshSettlements(ctx, g); if (wantsNewSite(civ, g)) foundSatellite(ctx, g, occ); } // v7.0.0: 集落の人口配分・序列・名前・放棄・新設
     // 6) 分派（人口圧が高いとき）。移住は海・山・気候のコストで制限される
     if (pressure > POP.budPressure && g.pop >= POP.minBudPop * 2 && mi - g.lastBudAt >= POP.budCooldown && !g.order) {
       const targets = bestTargets(world, civ, g, occ, 3);

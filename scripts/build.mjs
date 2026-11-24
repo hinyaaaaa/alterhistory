@@ -40,17 +40,12 @@ export async function buildAll({ write = true } = {}) {
     outs[outfile] = Buffer.from(file.contents);
     if (write) { mkdirSync(path.dirname(rel(outfile)), { recursive: true }); writeFileSync(rel(outfile), file.contents); }
   };
-  await run("js/workers/worldgen.worker.js", "js/generated/worldgen-worker.txt");
   const src = sourceHash(), buildId = src.slice(0, 12);
-  // app.js が取り込む worker は、ディスク上の js/generated/worldgen-worker.txt ではなく、いま作った worker にする（write=false でも同じ結果になる）
-  const workerText = outs["js/generated/worldgen-worker.txt"].toString("utf8");
-  const useBuiltWorker = { name: "built-worker", setup(b) { b.onLoad({ filter: /worldgen-worker\.txt$/ }, () => ({ contents: workerText, loader: "text" })); } };
-  await run("js/main.js", "dist/app.js", { loader: { ".txt": "text" }, plugins: [useBuiltWorker], define: { __BUILD_ID__: JSON.stringify(buildId) } });
+  await run("js/ui/v6/main.js", "dist/v6.js", { define: { __BUILD_ID__: JSON.stringify(buildId) } }); // 画面（index.html が読む）。世界の生成から、地図・ハブ・ニュースと時間まで
   await run("js/tools/worldgen-preview.js", "dist/worldgen-preview.js");
-  await run("js/ui/v6/main.js", "dist/v6.js", { define: { __BUILD_ID__: JSON.stringify(buildId) } }); // v6 の画面（世界の生成から、地図・ハブ・ニュースと時間まで）
   await run("js/workers/history-worker.js", "dist/history-worker.js"); // v6.20.0: 履歴の圧縮・展開を画面の外で行う Worker
   const pkg = JSON.parse(readFileSync(rel("package.json"), "utf8"));
-  const info = { version: pkg.version, buildId, sourceSha256: src, files: { "app.js": sha256(outs["dist/app.js"]), "worldgen-preview.js": sha256(outs["dist/worldgen-preview.js"]), "v6.js": sha256(outs["dist/v6.js"]), "history-worker.js": sha256(outs["dist/history-worker.js"]) } };
+  const info = { version: pkg.version, buildId, sourceSha256: src, files: { "worldgen-preview.js": sha256(outs["dist/worldgen-preview.js"]), "v6.js": sha256(outs["dist/v6.js"]), "history-worker.js": sha256(outs["dist/history-worker.js"]) } };
   outs["dist/build-info.json"] = Buffer.from(JSON.stringify(info, null, 2) + "\n");
   if (write) writeFileSync(rel("dist/build-info.json"), outs["dist/build-info.json"]);
   return { outs, info };
@@ -64,5 +59,5 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     for (const [f, buf] of Object.entries(outs)) { const cur = readFileSync(rel(f)); const ok = sha256(cur) === sha256(buf); if (!ok) bad++; console.log(`${ok ? "OK  " : "差異"} ${f}`); }
     process.exit(bad ? 1 : 0);
   }
-  console.log(`build ${info.version} (${info.buildId}) app.js sha256=${info.files["app.js"].slice(0, 16)}…`);
+  console.log(`build ${info.version} (${info.buildId}) v6.js sha256=${info.files["v6.js"].slice(0, 16)}…`);
 }

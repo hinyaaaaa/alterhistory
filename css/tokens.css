@@ -1,0 +1,14 @@
+/* 色・配色の変数（ここだけ変えれば全体の色が変わる） */
+:root {
+  color-scheme: dark;
+  --bg: #14161a;
+  --bg2: #1a1d23;
+  --bg3: #161a1f;
+  --line: #343a44;
+  --tx: #d9d6cc;
+  --dim: #a1a6b0;
+  --blue: #6fa8c9;
+  --yellow: #d8b45a;
+  --purple: #a58bd0;
+  --red: #d0605a;
+}

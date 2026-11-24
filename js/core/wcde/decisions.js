@@ -26,7 +26,7 @@ import { decisionsOf, pendingOf, isLive, coolUntil, setCool } from "./decision-s
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v), r3 = (x) => Math.round(x * 1000) / 1000;
 const U = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
 const HANDLERS = {}; export const registerDecision = (kind, fn) => { HANDLERS[kind] = fn; };
-export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", commander_death: "指揮官の戦死", pact_invite: "盟約への誘い", pact_merge: "統合の提案", event: "出来事" });
+export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", commander_death: "指揮官の戦死", pact_invite: "盟約への誘い", pact_merge: "統合の提案", event: "出来事", surrender_call: "降伏の打診", conference: "講和会議", peace_terms: "講和の条件" });
 
 // ---- 出す・止める・解く
 function hold(civ) { const T = timeOf(civ); if (!T.hold) { T.hold = true; T.resumeSpeed = T.speed; } }

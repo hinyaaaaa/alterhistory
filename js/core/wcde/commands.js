@@ -15,6 +15,7 @@ import { directWar } from "./warfare.js";
 import { resolveDecision } from "./decisions.js";
 import { setPolicy } from "./policies.js";
 import { changeName, changeRegime, changeFlag, changeLeader, setFinance } from "./identity.js";
+import { renameSettlement } from "../civ/settlements.js";
 import { ensureCorps, renameCorps, renameUnit, splitCorps, mergeCorps, transferUnits, convertUnit, appoint, dismiss, setOrder, commitWar, setComposition, appointChief, dismissChief } from "./corps.js";
 import { tickField, orderWing, orderAll, reinforce, setAuto } from "./battlefield.js";
 import { covertOp, nuclearStrike, nukeTargets } from "./special-ops.js";
@@ -22,6 +23,7 @@ import { switchLine, switchCost } from "./domains/military.js";
 import { createCorps } from "./corps.js";
 import { pendingOf } from "./decision-state.js";
 import { planTechEdit, techEdit, techEditReset, techGrant } from "./techedit.js";
+import { registerWarCommands } from "./war-commands.js";
 
 const ALL = ["prehistory", "founding", "running"];
 let registered = false;
@@ -105,11 +107,28 @@ corpsCmd("corps.order", (ctx, st, c) => setOrder(ctx, st, c));
   defineCommand("focus.set", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = setPolicy(w.sim.ctx, st, { category: c.category, slot: c.slot, policyId: c.policyId ?? null }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
   // 戦争の高位の方針（posture 攻勢/均衡/守勢・投入割合・重点の戦域）。作戦の立案と実行は AI と同じ経路（プレイヤーは個々の作戦を直接動かさない）
   defineCommand("war.direct", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId], war = w.civ.wars[c.warId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; if (!war) return { ok: false, error: "その戦争はありません" }; const r = directWar(w.sim.ctx, st, war, { posture: c.posture ?? null, commit: c.commit ?? null, focus: c.focus }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
+  // 動員と戦略を一度に決める入口（画面はこれだけ呼べばよい）。corpsIds＝出す部隊、posture/commit/focus＝戦略、orders＝自分で指揮する部隊（省略可）。
+  //   orders に入れない動員部隊は「お任せ（auto）」のまま＝AI が、目標・戦略・ドクトリン・補給を見て自動で戦う
+  defineCommand("war.mobilize", { authorities: [A.PLAYER], control: true, apply: (w, c) => {
+    const st = w.civ.states[c.stateId], war = w.civ.wars[c.warId], ctx = w.sim.ctx; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; if (!war) return { ok: false, error: "その戦争はありません" };
+    let r = commitWar(ctx, st, { corpsIds: c.corpsIds ?? [], warId: c.warId }); if (!r.ok) return { ok: false, error: r.error ?? r.reason };
+    const manual = new Set((c.orders ?? []).map((o) => o.corpsId));
+    for (const cp of st.corps?.list ?? []) if (cp.warId === c.warId && !manual.has(cp.id) && cp.order?.kind !== "auto") cp.order = { kind: "auto", since: w.civ.monthIndex };
+    for (const o of c.orders ?? []) { r = setOrder(ctx, st, { corpsId: o.corpsId, kind: o.kind, targetGroupId: o.targetGroupId ?? null, warId: c.warId }); if (!r.ok) return { ok: false, error: r.error ?? r.reason }; }
+    if (c.posture != null || c.commit != null || c.focus !== undefined) { r = directWar(ctx, st, war, { posture: c.posture ?? null, commit: c.commit ?? null, focus: c.focus }); if (!r.ok) return { ok: false, error: r.error }; }
+    return { ok: true, result: { corps: (c.corpsIds ?? []).length, manual: manual.size, auto: (c.corpsIds ?? []).length - manual.size } };
+  } });
   defineCommand("state.reorganize", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; return reorganize(w.sim.ctx, st, c.shares); } });
   defineCommand("state.setOrbat", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = setOrbat(w.sim.ctx, st, c); return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason }; } }); // v6.13.0: 兵種ごとの人数（自動／手動）
   defineCommand("state.adoptDoctrine", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = adoptDoctrine(w.sim.ctx, st, c.doctrineId ?? c.id, { provenance: "player" }); return r.ok ? { ok: true, result: r } : { ok: false, error: r.reason }; } });
   // v6.17.0: 国名・政体・国旗・指導者・財政値（代償つき。identity.js）
   const idCmd = (name, fn) => defineCommand(name, { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return { ok: false, error: "その国家は存在しません" }; const r = fn(w.sim.ctx, st, c); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error }; } });
+  // 集落の改名（自国の集落だけ。創造者は誰のでも）。履歴は nameHistory に残る
+  defineCommand("settlement.rename", { authorities: [A.PLAYER, A.CREATOR], control: true, apply: (w, c) => {
+    const s = w.civ.settlements[c.settlementId]; if (!s) return { ok: false, error: "その集落は存在しません" };
+    if (c.authority !== A.CREATOR && w.civ.groups[s.groupId]?.stateId !== c.stateId) return { ok: false, error: "自国の集落ではありません" };
+    const r = renameSettlement(w.sim.ctx, s.id, c.name, "rename"); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error };
+  } });
   idCmd("state.rename", (ctx, st, c) => changeName(ctx, st, c.name)); idCmd("state.setRegime", (ctx, st, c) => changeRegime(ctx, st, c.regime)); idCmd("state.setFlag", (ctx, st, c) => changeFlag(ctx, st, c.flag));
   idCmd("state.changeLeader", (ctx, st, c) => changeLeader(ctx, st, { mode: c.mode, cand: c.cand })); idCmd("state.setFinance", (ctx, st, c) => setFinance(ctx, st, { key: c.key, value: c.value }));
   // 創造主の直接編集（担当の有無に依らない）
@@ -125,4 +144,6 @@ corpsCmd("corps.order", (ctx, st, c) => setOrder(ctx, st, c));
   defineCommand("creator.cancelIntervention", { authorities: [A.CREATOR], apply: (w, c) => cancelIntervention(w, c) });
   // 暦の表示設定（時代区分の名前・表示形式。日付・境界は変えない）
   defineCommand("calendar.edit", { authorities: [A.ADMIN, A.CREATOR], phases: ALL, apply: (w, c) => { const r = applyDisplayEdit(w.civ.wcde.config.calendar, c.edit ?? {}); if (r.errors.length) return { ok: false, error: r.errors.join(" / ") }; w.civ.wcde.config.calendar = r.calendar; return { ok: true }; } });
+  // ---- v7.0.0: 戦争システムの再設計（別ブロック。docs/WAR_API.md）
+  registerWarCommands(defineCommand, A);
 }

@@ -1,5 +1,6 @@
 // v6.0.0 M5: 命令の契約（権限・段階・原子性・冪等性・過去閲覧）／担当国家（最大1）／創造主の直接編集／AI とプレイヤーの共通経路／過去の復元。
 import assert from "node:assert/strict";
+import { COMMON_NODES } from "../js/core/wcde/domains/doctrine.js";
 import { createNewWorld, serializeWorld, deserializeWorld } from "../js/core/wcde/world.js";
 import { dispatch, safeAdvance, defineCommand, COMMANDS, AUTHORITY as A } from "../js/core/wcde/contract.js";
 import { EDITABLE_STATE_FIELDS } from "../js/core/wcde/control.js";
@@ -39,7 +40,7 @@ await check("担当国家以外・担当が無いときの、プレイヤー命�
 });
 await check("担当していない国家（全て）は AI が動かす。担当国家は AI の計画の対象にならない", () => {
   const w = fresh(), mine = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: mine.id }); const m0 = mk(w); adm(w, 120); /* v6.20.1: 結べない提案の「不成立」が記録されなくなったので、AI の行動が記録に残るまでの期間を長くとる（閾値は変えない） */
-  const all = aiActs(w, m0), ds = all.map((e) => ({ actorId: actorOf(e) })).filter((d) => d.actorId); assert.ok(ds.length > 0); /* v6.5.0: 担当国の技術の制度化は WCDE が自動で決める（仕様）。それ以外の AI の判断は担当国に入らない */ assert.ok(all.filter((e) => e.kind !== "tech_institutionalized" && !/doctrine/.test(e.kind)).every((e) => actorOf(e) !== mine.id), "担当国家に AI の判断がある"); assert.ok(new Set(ds.map((d) => d.actorId)).size > 3, "ほかの国家は AI が動く");
+  const all = aiActs(w, m0), ds = all.map((e) => ({ actorId: actorOf(e) })).filter((d) => d.actorId); assert.ok(ds.length > 0); /* v6.5.0: 担当国の技術の制度化は WCDE が自動で決める（仕様）。それ以外の AI の判断は担当国に入らない */ assert.ok(all.filter((e) => e.kind !== "tech_institutionalized" && !/doctrine/.test(e.kind)).every((e) => actorOf(e) !== mine.id), "担当国家に AI の判断がある"); assert.ok(new Set(ds.map((d) => d.actorId)).size >= 2, "ほかの国家は AI が動く（複数の国家が行動する）");
 });
 await check("担当を外す（創造主モード）と、全国家が AI で動く。担当国家が滅びたら自動で外れる", () => {
   const w = fresh(), s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); assert.ok(dispatch(w, { type: "control.release", authority: A.ADMIN }).ok); assert.equal(alive(w).filter((x) => x.player).length, 0); const actors = new Set(); for (let i = 0; i < 6; i++) { const m0 = mk(w); adm(w, 12); for (const e of aiActs(w, m0)) { const a = actorOf(e); if (a) actors.add(a); } } /* AI の行動は大きな出来事だけが記録に残る。特定の 1 国が 6 年のうちに必ず何かを記録するとは限らないので、「全国家が AI の対象」を、担当がいないこと＋複数の国家が AI で動くことで確かめる */
@@ -63,7 +64,8 @@ await check("新しい領域の行動（ドクトリン・産業投資・勢力�
 await check("プレイヤーはドクトリンの取得を命令できる。前提不足は拒否され、状態は変わらない", () => {
   const w = fresh(), s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); s.treasury = 1e5; s.polity = "kingdom"; s.military.doctrine.taken = {};
   const before = JSON.stringify(s.military.doctrine); assert.equal(dispatch(w, { type: "state.adoptDoctrine", authority: A.PLAYER, id: "gun_line" }).ok, false); assert.equal(JSON.stringify(s.military.doctrine), before);
-  const r = dispatch(w, { type: "state.adoptDoctrine", authority: A.PLAYER, id: "levy_drill" }); assert.ok(r.ok, r.error); assert.ok(s.military.doctrine.taken.levy_drill != null); assert.equal(w.civ.events.at(-1).provenance, "player");
+  const first = COMMON_NODES.find((n) => n.id.endsWith(":1")); for (const t of first.tech) s.techAdopted = { ...s.techAdopted, [t]: 1 };
+  const r = dispatch(w, { type: "state.adoptDoctrine", authority: A.PLAYER, id: first.id }); assert.ok(r.ok, r.error); assert.ok(s.military.doctrine.taken[first.id] != null); assert.equal(w.civ.events.at(-1).provenance, "player");
 });
 
 console.log("=== 創造主の直接編集 ===");

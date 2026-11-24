@@ -1,42 +1,173 @@
-/* ==========================================================================
-   画面の骨組み（v2.0.0「静かな戦略卓」）
-   地図は常に画面いっぱい（ハブの収縮時は、横幅の95%以上）。ハブ・時計・ニュース・戦争状況・
-   ウィンドウは、地図の上に重なる。上部バー・ステータスバー・凡例サイドバーは廃止した。
-   ========================================================================== */
-:root { --rail: 56px; --win-top: 76px; }
-#app { position: relative; height: 100vh; background: var(--bg-map); overflow: hidden; }
-main { position: absolute; inset: 0 0 0 var(--rail); display: block; margin: 0; overflow: hidden; }
-#stage { position: absolute; inset: 0; min-width: 0; min-height: 0; background: var(--bg-map); }
-#map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; outline: none; }
-#map-canvas.dragging { cursor: grabbing; }
-
-/* 地図の隅の小さな表示（地図名・ホバー中のセル・拡大率）。ステータスバーの代わり */
-.map-corner {
-  position: fixed; left: calc(var(--rail) + 12px); bottom: 8px; z-index: 30; display: flex; gap: 14px; align-items: baseline;
-  max-width: calc(100vw - var(--rail) - 360px); color: var(--muted); font-size: 11px; letter-spacing: .04em; pointer-events: none;
-  text-shadow: 0 0 4px rgba(0,0,0,.7);
+/* 配置: 地図とパネルの重なり（基準 1280×853）・長押しボタン */
+/* v6.14.0: 基準 1280×853。地図は広げたまま、パネルを重ねる（開いても地図は縮まない）。長押しボタン */
+#mapwrap {
+  position: absolute;
+  left: 78px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  flex: none;
 }
-.map-corner #status-hover { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.map-corner #status-zoom, .map-corner #status-map { white-space: nowrap; font-family: var(--font-mono); }
-
-/* 詳細(#sidebar)・地図編集は、地図の上に浮かぶ動かせるウィンドウ */
-#sidebar, .edit-panel {
-  position: absolute; z-index: 22; max-height: calc(100% - var(--win-top) - 12px);
-  background: var(--panel); border: 1px solid var(--line-strong); border-radius: var(--radius-win);
-  box-shadow: var(--shadow-panel); overflow-y: auto;
+#panel {
+  position: absolute;
+  left: 78px;
+  top: 0;
+  bottom: 0;
+  z-index: 12;
+  box-shadow: 10px 0 34px rgba(0, 0, 0, 0.45);
 }
-#sidebar { top: var(--win-top); left: 24px; width: min(380px, calc(100% - 24px)); }
-#sidebar:has(#editor-panel[hidden]) { display: none !important; }
-.edit-panel { top: var(--win-top); right: 340px; bottom: auto; left: auto; width: min(320px, calc(100% - 24px)); }
-.edit-panel[hidden] { display: none !important; }
-
-/* --- 地図を開く前の案内（元の #empty-state に手順を足した） --- */
-.empty-steps { margin: 14px auto 18px; padding: 0; list-style: none; max-width: 30em; text-align: left; font-size: 13px; line-height: 1.8; counter-reset: step; color: var(--muted); }
-.empty-steps li { counter-increment: step; padding-left: 2em; position: relative; }
-.empty-steps li::before { content: counter(step); position: absolute; left: 0; top: 0.35em; width: 1.4em; height: 1.4em; line-height: 1.4em; text-align: center; border: 1px solid var(--brass-dim); border-radius: 50%; font-size: 11px; color: var(--brass); }
-.empty-steps b { color: var(--text); }
-
-@media (max-width: 720px) {
-  .map-corner { display: none; }
-  .edit-panel { right: 12px; width: min(86vw, 320px); }
+#panel.open {
+  width: var(--pw, 520px);
+}
+#pin {
+  width: var(--pw, 520px);
+  padding: 16px 18px 24px;
+}
+.hold {
+  position: relative;
+  overflow: hidden;
+}
+.holdfill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  background: rgba(216, 180, 90, 0.38);
+  pointer-events: none;
+}
+.hold > span {
+  position: relative;
+}
+button.b {
+  min-height: 34px;
+  padding: 4px 14px;
+}
+input,
+select {
+  padding: 5px 8px;
+}
+.fgrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
+.fgrid.tight {
+  grid-template-columns: repeat(auto-fill, 34px);
+  gap: 4px;
+}
+.fc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  cursor: pointer;
+  min-width: 0;
+  font-size: 15px;
+}
+.fc b {
+  font-weight: 400;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+.fc small {
+  color: var(--dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.fc:hover,
+.fc.on {
+  background: #20242b;
+  border-color: var(--yellow);
+}
+.fm {
+  position: relative;
+  cursor: pointer;
+}
+.fm .ico {
+  position: absolute;
+  right: -3px;
+  top: -6px;
+  color: var(--yellow);
+}
+.prop .tcard,
+.pcards .tcard,
+.pc {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
+  padding: 8px 10px;
+  margin: 6px 0;
+  background: #1a1d23;
+}
+.tcard.off {
+  opacity: 0.55;
+}
+.tcard.sel {
+  cursor: pointer;
+}
+.tcard.sel.on {
+  border-color: var(--yellow);
+  background: #20242b;
+}
+.tcard .th,
+.pc .th {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+}
+.tcard .th b,
+.pc .th b {
+  flex: 1;
+  font-weight: 500;
+}
+.tcard .pl {
+  color: #9fbf8a;
+  font-size: 14px;
+  margin-top: 3px;
+}
+.tcard .mi {
+  color: #d8b45a;
+  font-size: 14px;
+}
+.tcard .abtn {
+  margin-top: 6px;
+  padding: 7px;
+}
+.tst {
+  font-size: 13px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+}
+.tst.ok {
+  color: #9fbf8a;
+  border-color: #9fbf8a;
+}
+.tst.ng {
+  color: #d0605a;
+  border-color: #d0605a;
+}
+.tst.off {
+  font-size: 12px;
+}
+.tp {
+  display: block;
+  color: var(--dim);
+  font-size: 13px;
+  margin: 6px 0 3px;
+}
+.pc.mine {
+  border-left-color: var(--blue);
+}
+.pc .th small {
+  color: var(--dim);
+  font-size: 13px;
+}
+.pc button {
+  margin-top: 6px;
 }

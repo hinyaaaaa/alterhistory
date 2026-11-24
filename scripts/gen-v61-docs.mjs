@@ -11,3 +11,13 @@ let t = `# v6.1.0 M3: 統合技術ツリー（自動生成）\n\nノード ${TRE
 for (const l of LANES) { t += `## ${l.glyph} ${l.ja}\n\n| 技術 | 列 | 前提 | 成立の条件 | 解禁 | 効果 |\n|---|---|---|---|---|---|\n`; for (const n of TREE.filter((x) => x.lane === l.id).sort((a, b) => a.col - b.col)) t += `| ${n.ja}（\`${n.id}\`） | ${n.col} | ${n.prereq.join(", ") || "—"} | ${[n.pop ? `規模${n.pop}` : "", n.s ? "定住" : "", n.cond ?? ""].filter(Boolean).join("・") || "—"} | ${n.caps.join(", ") || "—"} | ${Object.entries(n.fx).map(([k, v]) => `${k}+${v}`).join(" ") || "—"} |\n`; t += "\n"; }
 writeFileSync(new URL("../docs/V6_1_M3_TECH_TREE.md", import.meta.url), t);
 console.log("docs generated", DOMAINS.length, "domains,", TREE.length, "techs");
+
+// コマンド一覧（画面が dispatch で呼べる操作の台帳）。正本は commands.js ほかの defineCommand。
+{
+  const { createNewWorld } = await import("../js/core/wcde/world.js"); const { commandTable } = await import("../js/core/wcde/contract.js");
+  createNewWorld({ worldSeed: "docs", spec: { resolution: { targetCells: 1000 } }, magic: { enabled: false } }); // 世界を 1 つ作ると、全コマンドが登録される
+  const rows = commandTable().sort((a, b) => a.type.localeCompare(b.type));
+  const md = ["# コマンド一覧（自動生成: npm run docs）", "", "画面は `dispatch(world, { type, authority, ...引数 })` だけで世界を変える。引数の形は `js/core/wcde/commands.js` と `war-commands.js` の `defineCommand` を見る。", "", "| type | 権限 | 領域 | 時期 |", "|---|---|---|---|", ...rows.map((c) => `| \`${c.type}\` | ${c.authorities.join(", ")} | ${c.domain ?? ""} | ${c.phases.join(", ")} |`), ""].join("\n");
+  writeFileSync(new URL("../docs/COMMANDS.md", import.meta.url), md);
+  console.log(`docs/COMMANDS.md: ${rows.length} コマンド`);
+}

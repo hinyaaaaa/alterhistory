@@ -15,6 +15,7 @@ import { formatDate } from "./calendar.js";
 import { hashSeed } from "../civ/civ-state.js";
 import { safeAdvance } from "./contract.js";
 import { skipNews } from "./clock.js";
+import { upgradeAllSettlements } from "../civ/settlements.js";
 
 /** 新しい世界を作る。errors があれば作らない。historySeed は呼ぶ側が決める（既定は設定から導く＝同じ設定は同じ歴史）。onProgress(段階, 0..1) */
 export function createNewWorld(input, { generate = generateWorldPluggable, historySeed = null, stepYears, onProgress = null } = {}) {
@@ -53,5 +54,5 @@ export const formatWorldDate = (w, mi = w.civ.monthIndex) => formatDate(w.civ.wc
 export function serializeWorld(w) { return JSON.stringify({ format: "alterhistory-wcde", wcdeVersion: WCDE_VERSION, civ: w.civ }); }
 export function deserializeWorld(text, { generate = generateWorldPluggable } = {}) {
   registerCommands(); const d = JSON.parse(text); if (d.format !== "alterhistory-wcde") throw new Error("WCDE の保存形式ではありません");
-  const world = generate(d.civ.wcde.config.spec), w = createWcde(world, d.civ); const pw = stampProblems(d.civ.wcde.plugins); if (pw.length) w.pluginWarnings = pw; return w;
+  const world = generate(d.civ.wcde.config.spec); upgradeAllSettlements(d.civ); /* v7.0.0: 旧セーブの集落に、序列・名前の履歴・重みを補う（配置は作り直さない） */ const w = createWcde(world, d.civ); const pw = stampProblems(d.civ.wcde.plugins); if (pw.length) w.pluginWarnings = pw; return w;
 }

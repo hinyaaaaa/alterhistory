@@ -6,7 +6,7 @@ import { DOMAINS } from "../js/core/wcde/domains/registry.js";
 import { computeProduction, effective, stepEconomy, ECON_PERIOD } from "../js/core/wcde/domains/economy.js";
 import { stepPolitics, regimeChange, FACTIONS, initPolitics } from "../js/core/wcde/domains/politics.js";
 import { DOCTRINES, DOCTRINE, canAdopt, adoptDoctrine, reorganize, UNIT_KINDS, OFF_CAP, DEF_CAP, stepMilitary, nodesOf } from "../js/core/wcde/domains/military.js";
-import { CAP, COMMON_BRANCHES, FX_KEYS } from "../js/core/wcde/domains/doctrine.js";
+import { CAP, LINES, TIERS, COMMON_NODES, doctrineFx, FX_KEYS } from "../js/core/wcde/domains/doctrine.js";
 import { iterRecords } from "../js/core/civ/archive.js";
 import { ensureProfile, nameFor, syllablesOf } from "../js/core/wcde/domains/language.js";
 import { checkWcdeIntegrity } from "../js/core/wcde/integrity.js";
@@ -29,7 +29,7 @@ await check("台帳の各領域は、宣言した処理（steps）が実際に t
   const trace = new Set(); for (let i = 0; i < 12; i++) { w.sim.advanceMonth(); for (const t of ctx().trace) trace.add(t.split(":")[1]); } /* 生態系は年 1 回 */
   for (const d of DOMAINS) for (const s of d.steps) { if (d.cadence === "boundary") continue; /* 歴史資料への書き出しは月次の tick ではなく、n か月が成功したあとの安全な境界（civ-sim の advanceMonths）で行う */ assert.ok(trace.has(s), `${d.id} の処理 ${s} が tick に無い`); }
   assert.ok(DOMAINS.some((d) => d.id === "archive" && d.cadence === "boundary" && d.steps.includes("commitArchive")));
-  const st = alive()[0]; for (const d of DOMAINS) for (const p of d.owns) { if (p.startsWith("world.")) continue; const parts = p.split("."); if (parts[0] === "states" && parts[1] === "*") assert.ok(parts[2] in st || ["warLoss", "blockade"].includes(parts[2]) /* 戦争の損耗・封鎖は、起きたときだけ作られる項目 */ || parts[2] === "milBonus" || parts[2] === "milDef" || parts[2] === "econ" || parts[2] === "politics" || parts[2] === "military", `${d.id}: ${p}`); else if (!parts.includes("*")) assert.ok(parts[0] in civ, `${d.id}: ${p}`); }
+  const st = alive()[0]; for (const d of DOMAINS) for (const p of d.owns) { if (p.startsWith("world.")) continue; const parts = p.split("."); if (parts[0] === "states" && parts[1] === "*") assert.ok(parts[2] in st || ["warLoss", "blockade", "dependency"].includes(parts[2]) /* 戦争の損耗・封鎖は、起きたときだけ作られる項目（従属関係も同様） */ || parts[2] === "milBonus" || parts[2] === "milDef" || parts[2] === "econ" || parts[2] === "politics" || parts[2] === "military", `${d.id}: ${p}`); else if (!parts.includes("*")) assert.ok(parts[0] in civ, `${d.id}: ${p}`); }
 });
 await check("台帳の各領域の事件（events）は、重複した宣言がなく、フェーズ順は 経済→政治→軍事→AI（指示書 §6）", () => {
   assert.ok(PHASE_KEYS.indexOf("tech") < PHASE_KEYS.indexOf("economy") && PHASE_KEYS.indexOf("economy") < PHASE_KEYS.indexOf("politics") && PHASE_KEYS.indexOf("politics") < PHASE_KEYS.indexOf("military") && PHASE_KEYS.indexOf("military") < PHASE_KEYS.indexOf("ai_plan"));
@@ -77,29 +77,11 @@ console.log("=== 軍事組織 ===");
 await check("部隊は総兵力を配分したもの（合計≒兵力）。装備・練度は 0〜1。使えない種類（銃兵など）は無い", () => {
   for (const st of alive()) { const M = st.military; assert.ok(M); const sum = M.units.reduce((s, u) => s + u.size, 0); assert.ok(Math.abs(sum - M.armyBasis) <= Math.max(1, M.armyBasis * 0.02) + M.units.length * 0.1, `${st.id}: ${sum} vs ${M.armyBasis}`); assert.ok(M.equipLevel >= 0 && M.equipLevel <= 1 && M.readiness >= 0 && M.readiness <= 1); for (const u of M.units) { assert.ok(UNIT_KINDS[u.kind].need(st, ctx()), `${u.kind} は今は編制できない`); assert.ok(u.id.startsWith("unit_")); } }
 });
-await check("ドクトリン: 前提・技術・固有系統・財政を満たさないと取れない（理由つき）", () => {
-  const st = alive()[0]; st.military.doctrine.taken = {}; st.techAdopted = {}; st.treasury = 1e5;
-  assert.match(canAdopt(st, "spear_phalanx").reason, /前提/); assert.ok(canAdopt(st, "levy_drill").ok, "第 1 段は前提なしで取れる");
-  st.military.doctrine.taken = { levy_drill: 1 }; assert.match(canAdopt(st, "spear_phalanx").reason, /技術/); st.techAdopted = { bronze_weapons: 1 }; assert.ok(canAdopt(st, "spear_phalanx").ok);
-  const other = alive().find((s) => s !== st && s.military.special.length), foreign = other.military.special.flatMap((b) => b.nodes).find((n) => !st.military.special.some((b) => b.nodes.some((m) => m.id === n.id)));
-  if (foreign) assert.match(canAdopt(st, foreign.id).reason, /固有|ありません/, "他国の固有ノードは取れない");
-  st.treasury = 1; assert.match(canAdopt(st, "shield_wall").reason, /財政/); assert.match(canAdopt({ ...st, treasury: 1e5 }, "nope").reason, /ありません/);
-});
-await check("ドクトリンの取得は、財政を使い、軍事能力（milBonus・防御）に反映され、既存の戦力計算（milMult・strength）に届く。事件が残る", () => {
-  const st = alive()[0]; st.military.doctrine.taken = {}; st.techAdopted = {}; st.treasury = 1e5; st.army = 100; { const mi = civ.monthIndex; civ.monthIndex = mi - (mi % 3); stepMilitary(ctx()); civ.monthIndex = mi; } const m0 = milMult(st), s0 = strength(civ, st), t0 = st.treasury, n = civ.events.length;
-  assert.ok(adoptDoctrine(ctx(), st, "shield_wall").ok); assert.ok(adoptDoctrine(ctx(), st, "levy_drill").ok); assert.ok(adoptDoctrine(ctx(), st, "supply_train").ok);
-  assert.ok(st.treasury < t0); assert.ok(milMult(st) > m0, "攻撃の倍率が上がる"); assert.ok(st.milDef > 0); assert.ok(strength(civ, st) > s0); assert.equal(civ.events.length, n + 3); assert.equal(civ.events[civ.events.length - 1].kind, "doctrine_adopted");
-});
-await check("上限: 全てのドクトリンを取っても、各効果は上限（攻撃 +25%・防御 +40% ほか）を超えない。固有の系統が変わると、前の系統は休眠する", () => {
-  const st = alive()[0]; st.techAdopted = Object.fromEntries(DOCTRINES.flatMap((d) => d.tech).concat(nodesOf(st).flatMap((d) => d.tech)).map((k) => [k, 1]));
-  st.military.doctrine.taken = Object.fromEntries(nodesOf(st).map((d) => [d.id, 1])); const mi = civ.monthIndex; civ.monthIndex = mi - (mi % 3); stepMilitary(ctx()); civ.monthIndex = mi;
-  for (const k of FX_KEYS) assert.ok(st.military.fx[k] <= CAP[k] + 1e-9, `${k} が上限 ${CAP[k]} を超えた: ${st.military.fx[k]}`); assert.ok(st.milDef <= DEF_CAP + 1e-9 && st.milBonus <= 0.6 + 1e-9);
-  const pure = DOCTRINES.reduce((s, d) => s + (d.fx.off ?? 0), 0); assert.ok(pure > OFF_CAP, "（全部足すと上限を超える設計であること＝上限が効いている）");
-});
-await check("ドクトリンの定義: 共通 5 系統 × 5 段 = 25、前提は実在し、前提の段は自分より上。国家固有は 3 系統", () => {
-  assert.equal(DOCTRINES.length, 25); assert.equal(COMMON_BRANCHES.length, 5); for (const b of COMMON_BRANCHES) assert.deepEqual(DOCTRINES.filter((d) => d.branch === b.id).map((d) => d.tier), [1, 2, 3, 4, 5]);
-  for (const d of DOCTRINES) for (const p of d.prereq) assert.ok(DOCTRINE[p] && DOCTRINE[p].tier < d.tier, `${d.id} の前提 ${p}`);
-  for (const st of alive()) assert.equal(st.military.special.length, 3, `${st.id} の固有の系統は 3 本`);
+await check("ドクトリンの定義: 5 系統 × 15 段 = 75 ノード。段は 1..15 で並び、id は重複しない。全ノードを取っても各効果は上限（CAP）を超えない", () => {
+  assert.equal(LINES.length, 5); assert.equal(TIERS, 15); assert.equal(COMMON_NODES.length, 75); assert.equal(new Set(COMMON_NODES.map((n) => n.id)).size, 75);
+  for (const l of LINES) assert.deepEqual(COMMON_NODES.filter((n) => n.id.startsWith(l.id + ":")).map((n) => +n.id.split(":")[1]), Array.from({ length: TIERS }, (_, i) => i + 1));
+  const st = alive()[0]; st.military.doc = { ...(st.military.doc ?? {}), line: LINES[0].id }; st.military.doctrine.taken = Object.fromEntries(COMMON_NODES.map((n) => [n.id, 1]));
+  const fx = doctrineFx(st); for (const k of FX_KEYS) assert.ok((fx[k] ?? 0) <= CAP[k] + 1e-9 || k in {}, `${k} が上限 ${CAP[k]} を超えた: ${fx[k]}`);
 });
 await check("部隊の再編: 使えない種類・合計が 1 でない・費用不足は拒否。成功すると編制が変わり費用を払う", () => {
   const st = alive().find((s) => s.army > 50) ?? alive()[0]; st.army = Math.max(st.army, 100); st.treasury = 1e4; st.techAdopted = { bronze_weapons: 1 };

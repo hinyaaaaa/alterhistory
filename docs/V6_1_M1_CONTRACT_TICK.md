@@ -45,10 +45,10 @@
 ### 創造主の介入（一時補正）（`interventions`）
 - 担当: wcde/intervention／位置: `interventions`／頻度: monthly（every 1）
 - 処理: `stepInterventions`
-- 所有（正本）: `wcde.interventions`, `wcde.adjust`, `wcde.edits`
-- 読む: economy, politics, military／書き換える（所有しない）: `techOverrides`, `groups.*.tech`, `states.*.techAdopted`
-- 残す結果（emits）: なし
-- 不変条件: 補正は通常計算値とは別のレイヤー（有効値 = 通常値 + 残存補正） / 介入の台帳は歴史の事実と混ぜない
+- 所有（正本）: `wcde.interventions`, `wcde.adjust`, `wcde.edits`, `wcde.catastrophes`
+- 読む: economy, politics, military, population, war_diplomacy／書き換える（所有しない）: `groups.*.tech`, `states.*.techAdopted`, `groups.*.pop`, `groups.*.cohorts`, `states.*.army`, `states.*.stability`, `states.*.treasury`
+- 残す結果（emits）: catastrophe
+- 不変条件: 補正は通常計算値とは別のレイヤー（有効値 = 通常値 + 残存補正） / 介入の台帳は歴史の事実と混ぜない（創造主の編集・介入は civ.events に記録しない。災厄の結果だけが事実の出来事 catastrophe になる） / 介入は経済・軍事・政治・国家・人口・外交（関係値）の計算値に届く。災厄は指定値を超えて人口を失わせず（最大 95%）、発生前へ巻き戻さない
 
 ### 地理・環境（`geography`）
 - 担当: core/world（生成）・civ/disaster／位置: `climate`／頻度: monthly（every 1）
@@ -101,7 +101,7 @@
 ### 技術（`tech`）
 - 担当: civ/tech／位置: `tech`／頻度: monthly（every 1）
 - 処理: `stepTech`
-- 所有（正本）: `techWorld`, `groups.*.tech`, `groups.*.knowledge`, `states.*.techAdopted`, `techOverrides`
+- 所有（正本）: `techWorld`, `groups.*.tech`, `groups.*.knowledge`, `states.*.techAdopted`
 - 読む: population, geography, economy, politics／書き換える（所有しない）: なし
 - 残す結果（emits）: tech_discovered, tech_transferred, tech_lost, tech_rediscovered, tech_institutionalized
 - 不変条件: 前提技術のない技術を保有しない（喪失は文脈に応じた劣化を伴う） / 研究点・研究キュー・研究所は存在しない / 利用条件（行動・ユニット・制度）は技術ツリーの unlocks から導く
@@ -116,7 +116,7 @@
 
 ### 国内政治（`politics`）
 - 担当: wcde/domains/politics／位置: `politics`／頻度: quarterly（every 3）
-- 処理: `stepPolitics`
+- 処理: `stepPolitics`, `stepRegimeEvolution`
 - 所有（正本）: `states.*.politics`, `wcde.ideas`
 - 読む: economy, war_diplomacy, religion, tech, military／書き換える（所有しない）: `states.*.stability`
 - 残す結果（emits）: regime_change, ideology_emerged
@@ -140,10 +140,10 @@
 
 ### 戦争・外交（`war_diplomacy`）
 - 担当: civ/diplomacy・wcde/warfare／位置: `conflict`／頻度: monthly（every 1）
-- 処理: `stepWars`
-- 所有（正本）: `wars`, `treaties`, `activeWarIds`, `activeTreatyIds`, `proposals`, `states.*.relations`, `states.*.sanctions`, `states.*.warIds`, `states.*.warLoss`, `states.*.blockade`
+- 処理: `stepWars`, `stepDependencies`, `stepPacts`, `stepTreatyAI`
+- 所有（正本）: `wars`, `treaties`, `wcde.pacts`, `states.*.dependency`, `activeWarIds`, `activeTreatyIds`, `proposals`, `states.*.relations`, `states.*.sanctions`, `states.*.warIds`, `states.*.warLoss`, `states.*.blockade`
 - 読む: military, economy, tech, politics／書き換える（所有しない）: `states.*.army`, `groups.*.pop`
-- 残す結果（emits）: war_declared, war_ended, war_epilogue, battle_fought, territory_occupied, treaty_signed, treaty_ended, diplomacy_failed
+- 残す結果（emits）: war_declared, war_ended, war_epilogue, battle_fought, territory_occupied, treaty_signed, treaty_ended, diplomacy_failed, pact_formed, pact_joined, pact_left, pact_ended, state_merged
 - 不変条件: 戦争参照は進行中のものだけ / 同じ命令検証を AI とプレイヤーが通る / 戦争は War / Theater / Force / Campaign / Battle を、戦争の記録（wars.*.ops）の中の一つの正本として持つ（別々に複製しない） / 戦力の定義は戦争研究所と実戦で共通（wcde/power.js） / 終結した戦争に部隊・作戦・戦域は残らない（要約と代表的な戦いだけ） / 戦闘の乱数は (historySeed, 月, 戦争, 作戦) から導く（他の領域の乱数を動かさない）
 
 ### 国家（`states`）
@@ -156,10 +156,10 @@
 
 ### 人物・家系（`people`）
 - 担当: wcde/domains/people／位置: `people`／頻度: monthly（every 1）
-- 処理: `stepPeople`
+- 処理: `stepPeople`, `stepEvents`, `stepRecovery`, `stepRuins`
 - 所有（正本）: `figures`, `houses`
 - 読む: states／書き換える（所有しない）: なし
-- 残す結果（emits）: heir_named, succession_by_heir, dynasty_changed
+- 残す結果（emits）: heir_named, succession_by_heir, dynasty_changed, event_occurred, leader_assassinated, ruin_discovered
 - 不変条件: 親は子より先に生まれ、子は親に載る / 出自は捏造しない（未知は null）
 
 ### 都市（`cities`）
@@ -171,8 +171,8 @@
 - 不変条件: 付いた名前は変わらない
 
 ### 歴史資料（結果の記録）（`archive`）
-- 担当: civ/archive／位置: `archive`／頻度: monthly（every 1）
-- 処理: `stageArchive`
+- 担当: civ/archive／位置: `archive`／頻度: boundary（every 0）
+- 処理: `commitArchive`
 - 所有（正本）: `events`, `archive`, `interpretations`, `works`
 - 読む: states／書き換える（所有しない）: なし
 - 残す結果（emits）: なし

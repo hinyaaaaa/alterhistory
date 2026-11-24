@@ -12,6 +12,7 @@ import { dominant } from "./cohorts.js";
 import { grievance } from "./interpret.js";
 import { institutionCandidates, institutionExecute } from "./magic.js";
 import { recentDisasterLoad, disasterMemory } from "./disaster.js";
+import { moveCapitalTo } from "./settlements.js";
 
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
 const cand = (key, f, o = {}) => ({ key, target: o.target ?? null, opt: o.opt ?? null, factors: f, eligible: o.eligible ?? true, reason: o.reason ?? null, label: o.label ?? null });
@@ -101,7 +102,7 @@ export const ACTIONS = [
     execute(ctx, st, c) { const t = ctx.civ.groups[c.target]; if (!t || t.stateId || t.player) return { ok: false, error: "その集団は編入できない" }; if (!spend(st, 20)) return { ok: false, error: "財政が足りない" }; t.stateId = st.id; learnByAnnexation(ctx, st, t); return { ok: true, facts: { stateId: st.id, cell: t.cell }, effects: [{ targetId: t.id, property: "stateId", before: null, after: st.id }], targetId: t.id, title: "周辺の集団を編入" }; } },
   { key: "move_capital", domain: "city", label: "遷都", enabled: true,
     candidates(ctx, st, e) { const cap = ctx.civ.groups[st.capitalGroupId], big = e.gs.reduce((a, b) => (b.pop > (a?.pop ?? 0) ? b : a), null); return big && cap && big.id !== cap.id && big.pop > cap.pop * 2 ? [cand("move_capital", { stability: 0.2, prestige: 0.15 }, { target: big.id })] : []; },
-    execute(ctx, st, c) { const g = ctx.civ.groups[c.target]; if (!g || g.stateId !== st.id) return { ok: false, error: "その集団は国内にない" }; const ef = []; eff(ef, st, "capitalGroupId", st.capitalGroupId, g.id); st.capitalGroupId = g.id; return { ok: true, effects: ef, targetId: g.id }; } },
+    execute(ctx, st, c) { const g = ctx.civ.groups[c.target]; if (!g || g.stateId !== st.id) return { ok: false, error: "その集団は国内にない" }; const ef = []; eff(ef, st, "capitalGroupId", st.capitalGroupId, g.id); st.capitalGroupId = g.id; moveCapitalTo(ctx, st, g); /* v7.0.0: その集団の最大の集落が首都になる */ return { ok: true, effects: ef, targetId: g.id }; } },
   { key: "reconcile", domain: "peace", label: "和解", enabled: true,
     candidates(ctx, st, e) { return e.nbs.filter((n) => !n.atWar && n.rel < -20 && st.treasury >= 15).map((n) => cand("reconcile", { security: 0.3 + 0.3 * grievance(ctx.civ, st, n.st.id), prestige: 0.1 }, { target: n.st.id })); },
     execute(ctx, st, c) { const t = free(ctx, c.target); if (!t?.alive) return { ok: false, error: "相手が存在しない" }; if (!spend(st, 15)) return { ok: false, error: "財政が足りない" }; adjustRel(st, t, 25); return { ok: true, effects: [], targetId: t.id, title: "和解の使節" }; } },

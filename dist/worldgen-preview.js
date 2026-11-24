@@ -371,6 +371,79 @@
     }
     return best;
   }
+  function planSites(world2, groups, seed, score = null, maxSites = () => 1) {
+    const { mesh, cell } = world2, off = mesh.neighborOffsets, nb = mesh.neighborIds, V = mesh.cellCount, out = /* @__PURE__ */ new Map();
+    const cands = /* @__PURE__ */ new Map(), sc = (g, c) => (score ? score(world2, c, siteScore(world2, c), g) : siteScore(world2, c)) + (cellRand(seed, c, 1) - 0.5) * 0.3;
+    for (const g of groups) {
+      const seen = /* @__PURE__ */ new Set([g.cell]), q = [g.cell], depth = /* @__PURE__ */ new Map([[g.cell, 0]]), list = [];
+      for (let h = 0; h < q.length; h++) {
+        const x = q[h];
+        if (cell.elevation[x] > 0) list.push({ c: x, s: sc(g, x) });
+        if (depth.get(x) >= 2) continue;
+        for (let k = off[x]; k < off[x + 1]; k++) {
+          const j = nb[k];
+          if (!seen.has(j)) {
+            seen.add(j);
+            depth.set(j, depth.get(x) + 1);
+            q.push(j);
+          }
+        }
+      }
+      list.sort((a, b) => b.s - a.s || a.c - b.c);
+      if (list.length) cands.set(g.id, list);
+    }
+    const blocked = new Uint8Array(V), taken = new Uint8Array(V), spread = (c, r) => {
+      const seenL = /* @__PURE__ */ new Set([c]);
+      let fr = [c];
+      for (let d = 0; d < r; d++) {
+        const nx = [];
+        for (const x of fr) for (let k = off[x]; k < off[x + 1]; k++) {
+          const j = nb[k];
+          if (!seenL.has(j)) {
+            seenL.add(j);
+            blocked[j] = 1;
+            nx.push(j);
+          }
+        }
+        fr = nx;
+      }
+    };
+    const order = groups.filter((g) => cands.has(g.id)).map((g) => ({ g, s: cands.get(g.id)[0].s })).sort((a, b) => b.s - a.s || (a.g.id < b.g.id ? -1 : 1));
+    const pops = order.map((o) => o.g.pop).sort((x, y) => x - y), q75 = pops[Math.floor(pops.length * 0.7)] ?? Infinity;
+    for (const { g } of order) {
+      const pick = cands.get(g.id).find((x) => !blocked[x.c] && !taken[x.c]);
+      if (!pick) continue;
+      out.set(g.id, [{ cell: pick.c, score: pick.s, weight: 1 }]);
+      taken[pick.c] = 1;
+      blocked[pick.c] = 1;
+      spread(pick.c, g.pop >= q75 ? 4 + Math.floor(cellRand(seed, pick.c, 2) * 2) : Math.floor(cellRand(seed, pick.c, 2) * 2));
+    }
+    const big = [...out.keys()].map((id) => groups.find((g) => g.id === id)).sort((a, b) => b.pop - a.pop || (a.id < b.id ? -1 : 1));
+    for (const g of big) {
+      const m = maxSites(g.pop), want = cellRand(seed, g.cell, 6) < 0.4 ? 1 + Math.floor((m - 1) * Math.pow(cellRand(seed, g.cell, 5), 1.2) + 0.5) : 1, mine = out.get(g.id);
+      let k = 1;
+      while (mine.length < want) {
+        let best = null, bs = -Infinity;
+        for (const x of cands.get(g.id)) {
+          if (taken[x.c]) continue;
+          let s = x.s;
+          for (let m2 = off[x.c]; m2 < off[x.c + 1]; m2++) if (taken[nb[m2]]) {
+            s = cellRand(seed, x.c, 7) < 0.75 ? -Infinity : s - 0.3;
+            break;
+          }
+          if (s > bs) {
+            bs = s;
+            best = x;
+          }
+        }
+        if (!best || bs < -0.3 || cellRand(seed, best.c, 3) < 0.12) break;
+        k++;
+        mine.push({ cell: best.c, score: best.s, weight: Math.pow(1 / k, 1.2) * (0.7 + 0.6 * cellRand(seed, best.c, 4)) });
+        taken[best.c] = 1;
+      }
+    }
+    return out;
+  }
 
   // js/core/world/plugins.js
   var REG = { terrain: /* @__PURE__ */ new Map(), city: /* @__PURE__ */ new Map() };
@@ -1282,7 +1355,7 @@
     };
     timings.total = Math.round(performance.now() - tAll);
     world2.hash = worldHash(world2);
-    Object.defineProperty(world2, "siteTools", { value: { pickSite, planSettlements, siteScore }, enumerable: false, writable: true, configurable: true });
+    Object.defineProperty(world2, "siteTools", { value: { pickSite, planSettlements, planSites, siteScore }, enumerable: false, writable: true, configurable: true });
     return world2;
   }
   function tempAt(latRad, elevation, lapse) {

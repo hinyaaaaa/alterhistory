@@ -15,7 +15,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
-      # dist/app.js は js/ から作る成果物。ソースと食い違っていたら失敗にして、
+      # dist/ は js/ から作る成果物。ソースと食い違っていたら失敗にして、
       # 「distだけが新しい」状態（ソースの取り残し）を防ぐ。
       - name: dist がソースと一致しているか
-        run: git diff --exit-code -- dist js/generated
+        run: git diff --exit-code -- dist
