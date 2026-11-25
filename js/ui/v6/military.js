@@ -488,7 +488,7 @@ export function pMilitary() {
     btn(
       "＋ 新しい軍団を編成する",
       () => {
-        S.full = { key: "corpsnew", title: "軍団の編成", build: () => newCorpsForm(st, view), onClose: () => {} };
+        S.corpsNew ??= { svc: "land", name: "", cmd: null }; /* 画面を開いている状態は S.corpsNew が持つ（パネルを描き直すたびに S.full は作り直される） */
         S.hooks.panel();
       },
       "p",
@@ -496,7 +496,7 @@ export function pMilitary() {
     ),
   );
   // 総司令官（各軍に 1 人）
-  if (S.full?.key === "corpsnew" && S.corpsNew)
+  if (S.corpsNew)
     S.full = {
       key: "corpsnew",
       title: "軍団の編成",
@@ -506,7 +506,7 @@ export function pMilitary() {
       },
     };
   box.append(
-    lb("総司令官", "COMMANDERS-IN-CHIEF"),
+    lb("総司令官", ""),
     ...SERVICE_KEYS.filter((k) => view.usable[k]).map((k) => {
       const ch = view.chiefs[k],
         pool = view.pool.filter((q) => (q.service ?? "land") === k),

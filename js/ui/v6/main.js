@@ -6,50 +6,28 @@ import "./domsafe.js";
 import { createNewWorld, formatWorldDate } from "../../core/wcde/world.js";
 import { SPEEDS, timeOf, newsOf, newsFeed, isRunning } from "../../core/wcde/clock.js";
 import { h, btn, polityJa, n0, pct, colorOf, face, sv } from "./common.js";
+import { buildFrame, openFull, closeFull, closeDialog } from "../v7/frame.js";
+import { renderTop, renderRail, renderLayers, wireTools, showCard, modeOf, entryOf, toCreator, toPlayer } from "../v7/chrome.js";
+import { PANEL } from "../v7/panels.js";
+import { screenSpec, openGear } from "../v7/screens.js";
+import { sample } from "../v7/series.js";
 import { TECH } from "../../core/civ/tech.js";
 import { ecoSummary } from "../../core/wcde/domains/ecosystem.js";
-import { S, run, act, stateName, aliveStates, controlled } from "./store.js";
+import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
 import { MapView } from "./map.js";
 import { openWizard } from "./wizard.js";
 import { showTitle, showWorldConfig, runLoading, runSplash } from "./title.js";
 import { eraLabel, eraOf } from "../../core/wcde/calendar.js";
 import { initNotify, notify } from "./notify.js";
-import { pGeo, pNations, link, uprisingFull } from "./views-a.js";
+import { link, uprisingFull } from "./views-a.js";
 import { renderDecision } from "./decision.js";
-import { pMilitary, corpsMarkers } from "./military.js";
+import { corpsMarkers } from "./military.js";
 import { linkHistory, scheduleFlush } from "./history-link.js";
 import { perf } from "../../core/perf/perf-monitor.js";
-import { pWar, pDiplo, pEntity, pStats, pSettings, pCreator, fileLoader } from "./views-b.js";
+import { fileLoader } from "./views-b.js";
 export { h };
 const $ = (s) => document.querySelector(s),
   root = () => $("#v6-root");
-const HUB = [
-  ["geo", "地理", "GEO"],
-  ["nations", "国家", "NATION"],
-  ["war", "戦争", "WAR"],
-  ["mil", "軍", "MIL"],
-  ["diplo", "外交", "DIPLO"],
-  ["culture", "文化", "CULT"],
-  ["language", "言語", "LANG"],
-  ["religion", "宗教", "RELIG"],
-  ["stats", "統計", "STATS"],
-  ["creator", "創造主", "CREATOR"],
-  ["settings", "世界設定", "CONFIG"],
-];
-const PANELS = {
-  geo: pGeo,
-  nations: pNations,
-  war: pWar,
-  mil: pMilitary,
-  diplo: pDiplo,
-  culture: () => pEntity("culture"),
-  language: () => pEntity("language"),
-  religion: () => pEntity("religion"),
-  stats: pStats,
-  creator: pCreator,
-  settings: pSettings,
-};
-
 /* ---------- 起動: スタート画面 → 世界の設定 → 生成（ロード画面）→ 建国 ---------- */
 function setup() {
   const loader = fileLoader((w, warn) => {
@@ -181,6 +159,7 @@ function start() {
   S.dirty = null;
   linkHistory(S.w);
   S.hub = null;
+  S.screen = null;
   S.sel = controlled() ?? null;
   S.hooks = {
     founding,
@@ -191,6 +170,8 @@ function start() {
     },
     select,
     focusCell,
+    clock: () => renderTop(),
+    gear: (k) => openGear(k),
     loaded: (w, warn) => {
       S.w = w;
       S.fileWarn = warn;
@@ -202,40 +183,15 @@ function start() {
   clearInterval(S.timer);
   S.timer = setInterval(tick, 250);
 }
+/** 画面の中から開く全面画面（編集・軍団の詳細・反乱）。閉じると下の画面へ戻る */
+const CHILD_FULL = ["nedit", "corps", "corpsnew", "upr"];
 function shell() {
   const cv = h("canvas", { id: "map", "aria-label": "世界地図" });
-  root().replaceChildren(
-    h(
-      "div",
-      { id: "app" },
-      h("nav", { id: "hub" }),
-      h(
-        "aside",
-        { id: "panel" },
-        h(
-          "button",
-          {
-            id: "prefresh",
-            title: "世界が進んだので、このページの内容は古くなっています",
-            onclick: () => renderPanel(),
-          },
-          "↻ 最新の状態に更新",
-        ),
-        h("div", { id: "pin" }),
-      ),
-      h(
-        "main",
-        { id: "mapwrap" },
-        cv,
-        h("div", { id: "clock" }),
-        h("div", { id: "callout" }),
-        h("div", { id: "newscall" }),
-        h("div", { id: "pops" }),
-      ),
-    ),
-    h("div", { id: "newsmodal", hidden: true }),
-    h("div", { id: "decmodal", hidden: true }),
-  );
+  buildFrame(root(), cv);
+  $("#prefresh").onclick = () => renderPanel();
+  $("#full-close").onclick = () => closeAny();
+  $("#dg-close").onclick = () => closeDialog();
+  wireTools();
   S.map = new MapView(cv, S.w);
   S.map.sel = S.sel;
   S.map.onPick = callout;
@@ -244,58 +200,36 @@ function shell() {
   });
   window.addEventListener("resize", () => S.map?.draw());
 }
+/** 全面画面を閉じる（開いている画面の onClose を呼び、地図の強調を戻す） */
+function closeAny() {
+  const f = S.full;
+  f?.onClose?.();
+  S.full = null;
+  if (!CHILD_FULL.includes(f?.key)) S.screen = null; /* 編集・軍団の詳細は、下の画面（国の詳細など）へ戻る */
+  render();
+}
 function render() {
-  if (!$("#hub")) return;
-  renderHub();
+  if (!$("#v7")) return;
+  renderTop();
+  renderRail();
   renderPanel();
-  renderRight();
   renderNews();
   renderDecision();
+  if (S.cardId && S.w.civ.states[S.cardId]) showCard(S.cardId);
   S.map.sel = S.sel;
   S.map.corps = corpsMarkers();
   S.map.draw();
-}
-function renderHub() {
-  $("#hub").replaceChildren(
-    ...HUB.map(([k, ja, code]) =>
-      h(
-        "button",
-        {
-          class: S.hub === k ? "on" : "",
-          "data-hub": k,
-          onclick: () => {
-            S.hub = S.hub === k ? null : k;
-            S.detail = false;
-            S.war = null;
-            S.upr = null;
-            S.dip = null;
-            S.entity = { culture: null, language: null, religion: null };
-            if (S.map) S.map.hl = null;
-            render();
-            setTimeout(() => S.map?.draw(), 220);
-          },
-        },
-        ja,
-        h("small", {}, code),
-      ),
-    ),
-  );
+  if (!S.newsSeen) announce();
 }
 function renderPanel() {
   S.full = null;
-  const p = $("#panel");
   S.paintedMonth = S.w?.civ.monthIndex ?? null;
-  $("#prefresh")?.classList.remove("stale");
-  if (!S.hub) {
-    p.classList.remove("open");
-    return;
-  }
-  p.classList.add("open");
-  const wide = S.hub === "nations" && (S.tab === "tech" || S.tab === "doctrine") && S.sel;
-  /* 技術ツリー・ドクトリンは大きく見せる */ p.style.setProperty("--pw", wide ? "min(760px, 62vw)" : "");
-  const keep = $("#pin").scrollTop;
-  $("#pin").replaceChildren(PANELS[S.hub]());
-  $("#pin").scrollTop = keep;
+  $("#prefresh")?.classList.remove("on");
+  S.hub = entryOf();
+  const keep = $("#lp").scrollTop;
+  sample(S.w.civ, S.w.civ.states[controlled()]);
+  $("#lpin").replaceChildren(PANEL[modeOf()][S.hub]());
+  $("#lp").scrollTop = keep;
   if (S.upr?.open && S.upr.stateId && S.w.civ.states[S.upr.stateId])
     S.full = {
       key: "upr",
@@ -305,41 +239,26 @@ function renderPanel() {
         S.upr = null;
       },
     };
+  /* 開いている画面（宣戦・講和・技術ツリーなど）は、戦争の詳細などの上に重ねる。画面の中から開く編集・軍団の詳細は、その画面の上に出す */
+  if (S.screen && !CHILD_FULL.includes(S.full?.key)) S.full = screenSpec() ?? S.full;
   renderFull();
 }
-/** v6.5.0: 全面タブ（地図とパネルを覆う）。建国フロー・戦争の詳細・反乱の作成など、広く使いたい画面で使う。基本は横のパネル */
-function renderFull() {
-  document.querySelector("#fulltab")?.remove();
+/** 全面画面（地図の上に重なる）。建国フロー・戦争の詳細・反乱の作成・技術ツリーなど。値を変えるだけの操作は左パネルの滑り棒 */
+function renderFull(depth = 0) {
   const f = S.full;
-  if (!f || S.upr?.picking) return;
-  const el = h(
-    "div",
-    { id: "fulltab" },
-    h(
-      "div",
-      { class: "fthead" },
-      btn(
-        "← 閉じる",
-        () => {
-          f.onClose?.();
-          S.full = null;
-          render();
-        },
-        "",
-        { id: "full-close" },
-      ),
-      h("b", {}, f.title),
-    ),
-    h("div", { class: "ftbody" }, f.build()),
-  );
-  $("#app")?.append(el);
+  if (!f || S.upr?.picking) {
+    closeFull();
+    return;
+  }
+  openFull({ key: f.key, title: f.title, build: f.build, side: f.side, bare: f.bare, footer: f.footer?.() ?? [] });
+  /* 画面の中身を作る途中で、旧部品が別の全面画面（編集・軍団の詳細）を S.full に指定することがある。その場合は、そちらを重ねて出し直す */
+  if (S.full !== f && S.full && depth < 3) renderFull(depth + 1);
 }
 function select(id) {
   S.sel = id;
-  S.detail = true;
-  S.hub = "nations";
-  if (!S.tab) S.tab = "info";
-  render();
+  S.map.sel = id;
+  S.map.draw();
+  showCard(id);
   $("#callout").classList.remove("on");
 }
 function focusCell(cell) {
@@ -383,6 +302,10 @@ function callout(p) {
     st = p.stateId ? civ.states[p.stateId] : null,
     ce = S.w.world.cell,
     mine = st && controlled() === st.id;
+  if (st && !p.settlement) {
+    select(st.id);
+    return;
+  }
   const body = st
     ? [
         h(
@@ -396,14 +319,11 @@ function callout(p) {
         p.settlement
           ? h("div", { class: "sub" }, `都市: ${p.settlement.name ?? "—"}（人口 ${n0(p.settlement.pop)}）`)
           : null,
+        p.settlement && (mine || !controlled()) ? renameRow(p.settlement) : null,
         h(
           "div",
           { class: "bt" },
-          btn("詳細", () => select(st.id)),
-          btn("外交", () => {
-            S.tab = "diplomacy";
-            select(st.id);
-          }),
+          btn("国のカード", () => select(st.id)),
           mine
             ? null
             : btn(
@@ -429,7 +349,7 @@ function callout(p) {
           : h("div", { class: "sub" }, "国家に属していません"),
       ];
   c.replaceChildren(...body);
-  const W = $("#mapwrap").clientWidth;
+  const W = $("#stage").clientWidth;
   c.style.left = Math.min(Math.max(8, p.x + 10), W - 280) + "px";
   c.style.top = Math.max(8, p.y + 10) + "px";
   c.classList.add("on");
@@ -440,44 +360,25 @@ function callout(p) {
   }
 }
 
-/* ---------- 右: ニュースと時間のみ ---------- */
+/** 吹き出しでの集落の改名（自国の集落。創造主はどの集落でも）。履歴は nameHistory に残る（settlement.rename） */
+function renameRow(set) {
+  const inp = h("input", { type: "text", value: set.name ?? "", id: "rename-in", style: "width:100%;margin-top:8px", "aria-label": "都市の名前" });
+  const go = () => {
+    const name = inp.value.trim();
+    if (!name || name === set.name) return;
+    const cmd = { type: "settlement.rename", settlementId: set.id, name };
+    const r = controlled() ? act({ ...cmd, stateId: controlled() }) : creator(cmd);
+    if (r.ok) {
+      notify("ok", `${set.name} を ${name} に改めました`);
+      $("#callout").classList.remove("on");
+    }
+  };
+  inp.addEventListener("keydown", (e) => e.key === "Enter" && go());
+  return h("div", {}, inp, h("div", { class: "bt" }, btn("名前を改める", go, "p", { id: "rename-go" })));
+}
+/* ---------- 時間・ニュース（時計は上部バー） ---------- */
 function renderRight() {
-  const w = S.w,
-    T = timeOf(w.civ),
-    cs = controlled();
-  const eraNow = eraLabel(w.civ.wcde.config.calendar, w.civ.monthIndex);
-  $("#clock").replaceChildren(
-    h("div", { class: "wn" }, w.civ.wcde.config.name ?? ""),
-    h("div", { class: "d", id: "date" }, formatWorldDate(w)),
-    eraNow && !eraOf(w.civ.wcde.config.calendar, w.civ.monthIndex)?.restart
-      ? h("div", { class: "era", id: "era" }, eraNow)
-      : null,
-    h(
-      "div",
-      { class: "c" },
-      ...SPEEDS.map((s) =>
-        h(
-          "button",
-          {
-            class: (T.hold ? T.resumeSpeed : T.speed) === s.id ? "on" : "",
-            "data-speed": s.id,
-            title: s.id ? `${s.mps} か月／秒` : "停止",
-            onclick: () => {
-              run({ type: "clock.setSpeed", speed: s.id });
-              renderRight();
-            },
-          },
-          s.label,
-        ),
-      ),
-    ),
-    h(
-      "div",
-      { class: "n", id: "runstate" },
-      cs ? `担当: ${stateName(cs)}` : "担当国なし（見守り）",
-      overlayOpen() || T.hold ? "・一時停止" : T.speed ? "" : "・停止中",
-    ),
-  );
+  renderTop();
   if (S.dirtyNews !== false) announce(); // v6.20.0: ニュースは、新しい出来事があったときだけ見る（毎回の再検索をしない）
 }
 /** v6.3.0: 右のニュース欄は廃止。重大でない大きな出来事は、地図のコールアウトとトースト通知で知らせる（重大ニュースは中央の確認画面） */
@@ -554,7 +455,7 @@ const overlayOpen = () => {
     const e = document.getElementById(id);
     return !!e && !e.hidden;
   };
-  return !!document.querySelector("#fulltab, .wiz, .fullmodal") || on("decmodal") || on("newsmodal");
+  return !!document.querySelector("#fs.on, #dg.on, .wiz, .fullmodal") || on("decmodal") || on("newsmodal");
 };
 function tick() {
   const w = S.w;
@@ -591,7 +492,7 @@ function afterRun() {
 const dirtySig = (c) =>
   `${c.events.length}|${c.archive?.evBase ?? 0}|${c.activeWarIds.length}|${newsOf(c).queue.length}`;
 function live() {
-  if (!$("#hub")) return;
+  if (!$("#v7")) return;
   const c = S.w.civ,
     sig = dirtySig(c),
     fresh = sig !== S.dirty;
@@ -605,11 +506,41 @@ function live() {
     S.map.corps = corpsMarkers();
     S.map.draw();
   }
-  if (S.hub && S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("stale");
+  if (S.w.civ.monthIndex !== S.paintedMonth) $("#prefresh")?.classList.add("on");
+}
+/** ショートカット（入力欄・選択欄にいるときは効かせない）。一覧は歯車メニューの「ショートカット」 */
+function keys(e) {
+  if (!$("#v7") || !S.w || e.ctrlKey && e.key.toLowerCase() !== "k" || e.altKey || e.metaKey) return;
+  const t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+  if (e.key === "Escape") {
+    if (!$("#dg").classList.contains("on") && $("#fs").classList.contains("on")) return closeAny();
+    if ($("#dg").classList.contains("on")) return closeDialog();
+    $("#gearmenu").classList.remove("on");
+    for (const id of ["#lay", "#srch", "#cc"]) $(id).classList.remove("on");
+    S.cardId = null;
+    return;
+  }
+  if (e.ctrlKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    $("#bs").click();
+    return;
+  }
+  if (typing || overlayOpen()) return;
+  if (e.key === " ") {
+    e.preventDefault();
+    const T = timeOf(S.w.civ);
+    if (T.speed) S.lastSpeed = T.speed;
+    run({ type: "clock.setSpeed", speed: T.speed ? 0 : S.lastSpeed || 1 });
+    renderTop();
+  } else if (/^[1-4]$/.test(e.key)) {
+    run({ type: "clock.setSpeed", speed: Number(e.key) });
+    renderTop();
+  } else if (e.key === "[" || e.key === "]") $("#ph").click();
 }
 export function boot() {
   if (!document.getElementById("v6-root")) return;
   initNotify();
+  document.addEventListener("keydown", keys);
   setup();
   runSplash();
 }

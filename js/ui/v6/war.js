@@ -369,6 +369,17 @@ const snapCard = (label, s) =>
       ),
     ),
   );
+/** v7: 担当国の戦争の操作（講和・降伏・動員と戦略）。命令は peace.propose / surrender.* / war.mobilize（docs/WAR_API.md） */
+function warActions(x, me) {
+  const sr = x.surrender?.[me];
+  return h(
+    "div",
+    { class: "warbar" },
+    x.phase === "conference" ? btn("講和会議を開く", () => import("../v7/war-screens.js").then((m) => m.openPeace(x.id)), "p", { id: "war-conf" }) : btn("講和を申し込む", () => import("../v7/war-screens.js").then((m) => m.openPeace(x.id)), "p", { id: "war-peace" }),
+    btn("動員と戦略", () => import("../v7/war-screens.js").then((m) => m.openMobilize(x.id)), "", { id: "war-mobilize" }),
+    sr?.capitulated ? null : btn("降伏する", () => act({ type: "surrender.accept", stateId: me, warId: x.id }), "", { id: "war-surrender" }),
+  );
+}
 function warDetail(x) {
   const c = civ(),
     mine = controlled(),
@@ -416,6 +427,7 @@ function warDetail(x) {
     mapBox,
     slider,
   );
+  if (live && inWar) out.querySelector(".whead").append(warActions(x, mine));
   const sn = x.ops?.snap;
   if (sn) {
     const mil =

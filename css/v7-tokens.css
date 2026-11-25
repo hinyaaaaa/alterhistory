@@ -1,0 +1,57 @@
+/* v7 デザイントークン — 色・書体・寸法・動きの値は、ここだけで決める（docs/UI_RULES.md §2）。
+   他のCSSは値を直書きせず、必ずこの変数を通す。 */
+:root {
+  color-scheme: dark;
+  /* 面と線 */
+  --bg: #0d1214;
+  --p1: rgba(11, 16, 19, 0.8); /* 上部バー・レール・左パネル */
+  --p2: #141d22; /* ボタンの面・入力の面 */
+  --p3: rgba(15, 22, 26, 0.96); /* 地図の上に浮かぶカード・通知・ダイアログ */
+  --ln: rgba(157, 180, 192, 0.14);
+  --lh: rgba(157, 180, 192, 0.34);
+  --bd: #3b4b53;
+  --fill: rgba(255, 255, 255, 0.03);
+  --fill2: rgba(255, 255, 255, 0.06);
+  /* 文字 */
+  --tx: #e8eef0;
+  --mu: #8a9ca5;
+  --ac: #9db4c0;
+  /* 意味の色: 真鍮＝選択・主操作／青＝自国・味方／紫＝外交・従属／赤＝危険・敵対／緑＝良化・友好／黄＝注意 */
+  --br: #b8a06a;
+  --bl: #7cc4e8;
+  --pu: #c49ad6;
+  --dn: #e0806f;
+  --ok: #7fc29a;
+  --wa: #dcbc6c;
+  --on-br: #16120a; /* 真鍮の上の文字 */
+  /* 書体 */
+  --mi: "Zen Old Mincho", "Yu Mincho", "Hiragino Mincho ProN", "Noto Serif CJK JP", serif;
+  --go: "Zen Kaku Gothic New", "Yu Gothic UI", "Hiragino Sans", "Noto Sans CJK JP", system-ui, sans-serif;
+  --nm: "Barlow Condensed", "Zen Kaku Gothic New", "Noto Sans CJK JP", sans-serif;
+  /* 寸法（基準 1280×853） */
+  --top-h: 60px;
+  --rail-w: 64px;
+  --lp-w: 380px;
+  --cut: polygon(0 0, calc(100% - 9px) 0, 100% 9px, 100% 100%, 9px 100%, 0 calc(100% - 9px));
+  --cut-s: polygon(0 0, calc(100% - 5px) 0, 100% 5px, 100% 100%, 5px 100%, 0 calc(100% - 5px));
+  /* 動き */
+  --ease: cubic-bezier(0.3, 0.8, 0.3, 1);
+  --t-panel: 0.25s;
+  --t-full: 0.2s;
+  --t-toast: 0.3s;
+  /* 層（z-index）: 地図 0 → 上部バー・左パネル → 国のカード・地図の道具 → 全面画面 → 通知・確認 */
+  --z-bar: 10;
+  --z-card: 12;
+  --z-full: 14;
+  --z-modal: 16;
+  --z-toast: 18;
+  /* 旧画面（v6 の部品）が参照する変数を v7 の値に寄せる。新しい部品では使わない */
+  --bg2: var(--p2);
+  --bg3: #101619;
+  --line: #2a3a42;
+  --dim: var(--mu);
+  --blue: var(--bl);
+  --yellow: var(--br);
+  --purple: var(--pu);
+  --red: var(--dn);
+}

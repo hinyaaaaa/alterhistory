@@ -1,0 +1,93 @@
+/* v7 旧部品の取り込み — v6 の部品（.lb .n .lrow .b など）を、v7 の面・文字・色で見せる。新しい部品はここに足さない（docs/UI_RULES.md §6）。 */
+.v-legacy { font: 13px/1.65 var(--go); color: var(--tx); }
+.v-legacy .lb, .v-legacy h3 { display: flex; align-items: center; gap: 9px; font: 700 11.5px var(--go); color: var(--ac); letter-spacing: 0.2em; margin: 20px 0 9px; }
+.v-legacy .lb:before { content: ""; width: 6px; height: 6px; background: var(--br); transform: rotate(45deg); flex: none; }
+.v-legacy .lb small { margin-left: auto; font: 500 10px var(--nm); color: var(--mu); letter-spacing: 0.16em; }
+.v-legacy p.n, .v-legacy .n { color: var(--mu); font-size: 12px; margin: 6px 0; }
+.v-legacy button.b, .v-legacy .b { font: 700 12px var(--mi); letter-spacing: 0.1em; color: var(--tx); background: var(--p2); border: 1px solid var(--bd); padding: 5px 12px; cursor: pointer; }
+.v-legacy button.b:hover { border-color: var(--br); color: var(--br); }
+.v-legacy button.b.p { border-color: var(--br); color: var(--br); }
+.v-legacy button.b:disabled { opacity: 0.4; cursor: not-allowed; }
+.v-legacy .lrow { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-bottom: 1px solid var(--ln); cursor: pointer; }
+.v-legacy .lrow:hover { background: var(--fill2); }
+.v-legacy .lrow small { margin-left: auto; color: var(--mu); }
+.v-legacy .grp { color: var(--mu); font-size: 11px; letter-spacing: 0.12em; padding: 8px 4px 2px; }
+.v-legacy .tabs { display: flex; border-bottom: 1px solid var(--ln); margin: 10px 0 14px; }
+.v-legacy .tabs b { flex: 1; text-align: center; padding: 7px 0; color: var(--mu); font: 700 13px var(--mi); cursor: pointer; letter-spacing: 0.1em; }
+.v-legacy .tabs b.on { color: var(--tx); box-shadow: inset 0 -2px var(--br); }
+.v-legacy input[type="text"], .v-legacy input[type="number"], .v-legacy select, .v-legacy textarea { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--ln); color: var(--tx); padding: 6px 9px; font: inherit; }
+.v-legacy .rowb { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.v-legacy a.lk { color: var(--bl); }
+.v-legacy details.dt { border: 1px solid var(--ln); padding: 8px 10px; margin: 8px 0; }
+.v-legacy details.dt > summary { cursor: pointer; color: var(--ac); }
+.v-legacy .hero { display: none; }
+/* 重大ニュース・決断の札 */
+.modalbox { width: 560px; max-width: 94vw; max-height: 86vh; overflow: auto; padding: 26px 28px; background: rgba(15, 22, 26, 0.97); border: 1px solid var(--lh); position: relative; text-align: center; }
+.modalbox h2 { font: 700 22px var(--mi); letter-spacing: 0.12em; margin: 10px 0; }
+.modalbox .code { color: var(--dn); font: 700 11px var(--go); letter-spacing: 0.3em; }
+/* 関係の表・陣営 */
+.v-mx { display: grid; gap: 2px; align-items: stretch; font-size: 11px; }
+.v-mh { writing-mode: vertical-rl; text-align: left; padding: 4px 0; color: var(--mu); border-bottom: 2px solid var(--c); overflow: hidden; height: 92px; white-space: nowrap; text-overflow: ellipsis; }
+.v-ml { display: flex; align-items: center; color: var(--ac); cursor: pointer; padding-right: 6px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.v-ml.me { color: var(--br); font-weight: 700; }
+.v-mc { display: block; height: 22px; background: rgba(255, 255, 255, 0.04); }
+.v-mc.d { background: transparent; border: 1px dashed var(--ln); }
+.v-mc.xa { background: var(--br); } .v-mc.xf { background: var(--ok); opacity: 0.8; } .v-mc.xn { background: var(--mu); opacity: 0.6; } .v-mc.xv { background: var(--pu); } .v-mc.xh { background: var(--dn); }
+.v-leg { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 8px; font-size: 11px; color: var(--mu); }
+.v-leg .v-mc { display: inline-block; width: 14px; height: 10px; margin-right: 5px; }
+.v-bm { display: flex; align-items: center; gap: 4px; padding: 2px 0; cursor: pointer; font-size: 12.5px; color: var(--ac); }
+.v-bm:hover { color: var(--tx); }
+.v-bm small { margin-left: auto; }
+.v-treefull { height: 100%; display: flex; flex-direction: column; }
+#cc .v-bars { margin: 6px 0; }
+/* 英語の見出し・操作説明は出さない（docs/UI_RULES.md §5） */
+.v-legacy .lb small, .v-legacy .code { display: none; }
+/* 地図の吹き出し（都市・未所属地）。ボタンは v7 のボタンと同じ形 */
+#callout button.b { font: 700 12px var(--mi); letter-spacing: 0.12em; color: var(--tx); background: var(--bd); border: 0; padding: 6px 13px; clip-path: var(--cut-s); cursor: pointer; }
+#callout button.b:hover { background: var(--br); color: var(--on-br); }
+#callout button.b.p { background: var(--br); color: var(--on-br); }
+#callout .sw { border-radius: 0; width: 10px; height: 10px; transform: rotate(45deg); }
+#newscall b { font: 700 13px var(--mi); display: block; }
+/* 決断の札 */
+#decmodal .modalbox, #newsmodal .modalbox { text-align: left; }
+.decopt { display: block; width: 100%; text-align: left; margin: 6px 0; padding: 10px 14px; background: var(--fill); border: 1px solid var(--ln); color: var(--tx); font: inherit; cursor: pointer; }
+.decopt:hover:not(:disabled) { border-color: var(--br); background: rgba(184, 160, 106, 0.1); }
+.decopt:disabled { opacity: 0.45; cursor: not-allowed; }
+.decopt b { font: 700 14px var(--mi); display: block; }
+.decopt small { color: var(--mu); }
+/* 旧画面すべての button.b を v7 のボタンに揃える（主＝真鍮、ほかは暗い面に細い縁）。起動画面・建国・軍団の編成・戦争の画面もここで揃う */
+.v7 button.b { position: relative; font: 700 13px var(--mi); letter-spacing: 0.14em; color: var(--tx); background: var(--p2); border: 0; padding: 8px 18px; box-shadow: inset 0 0 0 1px var(--bd); clip-path: var(--cut); cursor: pointer; transition: 0.18s; }
+.v7 button.b:hover:not(:disabled) { box-shadow: inset 0 0 0 1px var(--br); color: var(--br); }
+.v7 button.b.p { background: var(--br); color: var(--on-br); box-shadow: none; }
+.v7 button.b.p:hover:not(:disabled) { filter: brightness(1.1); color: var(--on-br); }
+.v7 button.b:disabled { opacity: 0.4; cursor: not-allowed; }
+.v7 button.b.big { padding: 11px 30px; font-size: 15px; }
+.v7 .titlescreen .code, .v7 .cfgbox .code, .v7 .wiz .code, .v7 .loadbox .code { display: none; }
+.v7 .cfgbox, .v7 .wiz .wbox, .v7 .loadbox { background: rgba(13, 18, 20, 0.9); backdrop-filter: blur(10px); border: 1px solid var(--lh); }
+.v7 .cfgbox h2, .v7 .titlescreen h2 { font: 700 24px var(--mi); letter-spacing: 0.16em; }
+.v7 .fld > span { font-size: 11px; color: var(--mu); letter-spacing: 0.1em; }
+.v7 .fld input, .v7 .fld select, .v7 .cfgbox input, .v7 .cfgbox select { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--ln); border-bottom-color: var(--lh); color: var(--tx); padding: 8px 11px; }
+/* 技術ツリー（放射状）: 全面画面いっぱいに広げる。拡大が小さいとき名前は隠す */
+.v-treefull { height: 100%; display: flex; flex-direction: column; }
+.v-treefull > div { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.v-treefull .techwrap { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
+.v-treefull .techwrap > svg { flex: 1; min-height: 0; height: auto !important; }
+.v-treefull .techwrap > .rowb { padding: 8px 16px; }
+.v-treefull > div > input, .v-treefull > div > .rowb { margin: 8px 16px 0; }
+.v-treefull .dt { position: absolute; right: 16px; top: 8px; width: 330px; max-height: calc(100% - 70px); overflow: auto; background: rgba(15, 22, 26, 0.95); border: 1px solid var(--lh); padding: 12px 14px; font-size: 12.5px; line-height: 1.7; }
+.techradial .tlab { display: none; }
+.techradial.zoomed .tlab { display: block; }
+.v-treefull .lg { padding: 6px 16px 10px; display: flex; gap: 14px; color: var(--mu); font-size: 11px; }
+.v-treefull button.b { padding: 4px 12px; font-size: 12px; letter-spacing: 0.08em; }
+.v-treefull .rowb { margin-top: 6px; gap: 6px; }
+.v-treefull .techwrap > .rowb { order: 3; }
+.v-treefull .techwrap > p.n { position: absolute; left: 16px; bottom: 46px; margin: 0; max-width: 520px; }
+.v7 .lb em, .v7 .code { display: none; }
+/* 旧い確認札（.fullmodal）を v7 の確認カードの位置・面に揃える */
+.v7 .fullmodal { position: fixed; inset: var(--top-h) 0 0 0; z-index: var(--z-modal); display: grid; place-items: center; background: rgba(5, 8, 10, 0.55); backdrop-filter: blur(3px); }
+.v7 .fullmodal .modalbox { text-align: center; }
+/* 戦争の詳細（全面画面の中の旧部品） */
+#fb .wmbox, #fb .warmap { max-width: 760px; margin: 0 auto; }
+#fb .wmcv, #fb .wmsvg { width: 100%; height: auto; max-height: 330px; }
+#fb .minimap { max-height: 220px; }
+.warbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }

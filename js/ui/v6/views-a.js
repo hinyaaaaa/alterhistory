@@ -21,7 +21,7 @@ import {
 } from "./common.js";
 import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
 import { LAYERS, GROUPS, FILL_IDS } from "./map.js";
-import { techTree, doctrineTree } from "./trees.js";
+import { techRadial as techTree, doctrineTree } from "./trees.js";
 import { TECHS, TECH, LANES, COND, available } from "../../core/civ/tech.js";
 import { formatDate } from "../../core/wcde/calendar.js";
 import { actionGate } from "../../core/civ/actions.js";
@@ -258,7 +258,7 @@ export function pNations() {
   );
   return box;
 }
-function stateDetail(st) {
+export function stateDetail(st) {
   const c = civ(),
     mine = controlled() === st.id,
     tabs = [
@@ -729,11 +729,10 @@ const FX_JA = {
 };
 let TECH_LANE = null,
   TECH_Q = "",
-  TECH_FULL = false,
   TECH_VB = null,
   DOC_VB = null,
   DOC_FULL = false;
-function tTech(st, mine) {
+export function tTech(st, mine) {
   const c = civ(),
     status = techStatus(st),
     sel = TECH[S.tech] ?? null,
@@ -860,21 +859,15 @@ function tTech(st, mine) {
     );
   }
   // 拡大表示: 画面いっぱいに広げ、右に詳細を出す（パネルの外＝body に置く。パネルを描き直しても、拡大の状態は保つ）
-  document.querySelectorAll(".techwrap.full").forEach((e) => e.remove());
-  const wrap = h("div", { class: "techwrap" + (TECH_FULL ? " full" : "") }),
-    big = btn(TECH_FULL ? "閉じる" : "拡大表示", () => {
-      TECH_FULL = !TECH_FULL;
-      S.hooks.panel();
-    });
+  const wrap = h("div", { class: "techwrap" });
   wrap.append(
     svg,
     h(
       "div",
       { class: "rowb" },
-      big,
       btn("全体", tree.fit),
-      btn("左端", tree.left),
-      btn("最前線", tree.frontier),
+      btn("中心", tree.left),
+      btn("現在地", tree.frontier),
       btn("選んだ技術へ", () => S.tech && tree.focus(S.tech), "", { id: "tech-goto", disabled: !S.tech }),
       q && hit?.size
         ? btn(`検索結果へ（${hit.size} 件）`, () => tree.focus([...hit][0]), "", { id: "tech-goto-hit" })
@@ -882,16 +875,12 @@ function tTech(st, mine) {
     ),
     detail,
   );
-  if (TECH_FULL) {
-    document.body.append(wrap);
-    tree.frontier();
-  }
   return h(
     "div",
     {},
     search,
     h("div", { class: "rowb", style: "flex-wrap:wrap" }, ...laneBtns),
-    TECH_FULL ? note("拡大表示中です（画面いっぱい）。右の「閉じる」で戻れます。") : wrap,
+    wrap,
     h(
       "div",
       { class: "lg" },
@@ -913,6 +902,6 @@ function tTech(st, mine) {
   );
 }
 const COND_JA = (k) => COND[k]?.ja ?? k;
-function tDoctrine(st, mine) {
+export function tDoctrine(st, mine) {
   return doctrineBoard(st, mine);
 }

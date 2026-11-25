@@ -1,7 +1,5 @@
 // v6.5.0: 開戦前の最終確認。数値の予測は出さず、見通しをざっくりした言葉で示す（「戦争研究所」とは名乗らない）。
-import { h, btn, colorOf } from "./common.js";
-import { S, act, stateName } from "./store.js";
-import { flag, icon } from "./visual.js";
+import { S } from "./store.js";
 import { predictWar } from "../../core/wcde/warlab.js";
 
 const outlook = (p) => {
@@ -67,53 +65,7 @@ export function lightOutlook(a, b) {
   void A;
   return rows;
 }
-/** 開戦の最終確認の画面を出す。確認されたら declare_war を実行 */
-export function confirmWar(stateId, targetId, onDone) {
-  document.getElementById("warconfirm")?.remove();
-  const c = S.w.civ,
-    rows = lightOutlook(stateId, targetId);
-  const close = () => document.getElementById("warconfirm")?.remove();
-  const box = h(
-    "div",
-    { id: "warconfirm", class: "fullmodal" },
-    h(
-      "div",
-      { class: "modalbox wcbox" },
-      h("div", { class: "code", style: "justify-content:center" }, "開戦の最終確認"),
-      h(
-        "div",
-        { class: "vs" },
-        h("div", { class: "side" }, flag(stateId, 72), h("b", {}, stateName(stateId))),
-        h("div", { class: "x" }, icon("sword", 28)),
-        h("div", { class: "side" }, flag(targetId, 72), h("b", {}, stateName(targetId))),
-      ),
-      h(
-        "div",
-        { class: "wcrows" },
-        ...rows.map(([k, v, tone]) => h("div", { class: "wcrow " + tone }, h("small", {}, k), h("b", {}, v))),
-      ),
-      h(
-        "div",
-        { class: "n", style: "text-align:center" },
-        c.states[targetId]?.alive ? "いったん始まった戦争は、講和が成立するまで終わりません。" : "",
-      ),
-      h(
-        "div",
-        { class: "rowb", style: "justify-content:center;margin-top:12px" },
-        btn(
-          "開戦する",
-          () => {
-            close();
-            const r = act({ type: "state.act", stateId, action: "declare_war", target: targetId });
-            onDone?.(r);
-          },
-          "p",
-          { id: "war-confirm-go" },
-        ),
-        btn("やめる", close, "", { id: "war-confirm-no" }),
-      ),
-    ),
-  );
-  document.body.append(box);
-  void colorOf;
+/** 宣戦: 全面画面（戦争目的・見通し・出す部隊と指揮）を開く。開戦は war.declare → war.mobilize（js/ui/v7/war-screens.js） */
+export function confirmWar(stateId, targetId) {
+  return import("../v7/war-screens.js").then((m) => m.openDeclare(stateId, targetId));
 }

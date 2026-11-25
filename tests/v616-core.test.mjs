@@ -55,7 +55,7 @@ await check("盟約: 3 か国以上で結成でき、統合すると盟主の国
 await check("外交画面: 関係の一覧がくくられ、条約の提案が専用の画面で出て、担当国から提案できる", async () => {
   const me = alive().find((s) => !s.dependency && !s.warIds.length), other = alive().find((s) => s.id !== me.id && !s.warIds.includes?.(me.id));
   assert.ok(V().run({ type: "control.take", stateId: me.id }).ok); V().S.hub = "diplo"; V().S.dtab = "rel"; V().S.dip = null; V().render(); await wait(30);
-  assert.ok(/ほかの国|同盟国|敵対国/.test($("#pin").textContent), "一覧");
+  assert.ok(/ほかの国|同盟国|敵対国/.test($("#lpin").textContent), "一覧");
   V().S.dip = { a: me.id, b: other.id }; V().render(); await wait(30); assert.ok($$(".tcard").length >= 1, "提案の候補"); assert.ok($$("[data-pcat]").length === 5);
   click($("[data-pcat='eco']")); await wait(20); assert.ok($$(".tcard").length >= 3);
   V().S.dtab = "pact"; V().S.dip = null; V().render(); await wait(30); assert.ok($("#pact-create"), "盟約の結成");

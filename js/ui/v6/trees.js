@@ -578,3 +578,156 @@ export function miniLineage(items, id, { onPick }) {
   if (more > 0) svg.append(sv("text", { x: cx + NW + GX, y: H - 1, "font-size": 10, fill: "#838995" }, `ほか ${more}`));
   return svg;
 }
+
+/** v7: 放射状の技術ツリー。中心に「文明の起点」、分野が扇形に分かれ、外側へ時代が進む。位置は (分野, 列, 同じ列の通し番号) だけで決まり、状態・選択では動かない。
+ *  拡大が小さいときは名前を隠す。選んだ技術の「必要な技術」は金、「開ける技術」は青で線を強調する。戻り値は techTree と同じ（svg・COL・SYM・fit・left・frontier・focus）。 */
+export function techRadial({ techs, status, onPick, selected, lane = null, hit = null, vb0 = null, onView = null }) {
+  const R0 = 130,
+    DR = 50,
+    cols = Math.max(...techs.map((t) => t.col)) + 1,
+    Rmax = R0 + cols * DR + 40,
+    W = Rmax * 2,
+    byKey = new Map(techs.map((t) => [t.key, t])),
+    cnt = new Map(),
+    slotOf = new Map(),
+    perLane = {};
+  for (const t of techs) {
+    const k = t.lane + "|" + t.col,
+      i = cnt.get(k) ?? 0;
+    cnt.set(k, i + 1);
+    slotOf.set(t.key, i);
+    perLane[t.lane] = (perLane[t.lane] ?? 0) + 1;
+  }
+  const wt = LANES.map((l) => Math.pow(perLane[l.id] ?? 1, 0.55)),
+    wsum = wt.reduce((a, b) => a + b, 0),
+    sector = {};
+  let a0 = -Math.PI / 2;
+  LANES.forEach((l, i) => {
+    const w = (wt[i] / wsum) * Math.PI * 2;
+    sector[l.id] = { a: a0, w, mid: a0 + w / 2 };
+    a0 += w;
+  });
+  const P = (t) => {
+    const s = sector[t.lane],
+      n = cnt.get(t.lane + "|" + t.col),
+      f = ((slotOf.get(t.key) + 0.5) / n) * 0.84 + 0.08,
+      ang = s.a + s.w * f,
+      r = R0 + t.col * DR + (n > 1 ? ((slotOf.get(t.key) % 2) - 0.5) * 12 : 0);
+    return { x: Rmax + Math.cos(ang) * r, y: Rmax + Math.sin(ang) * r, ang };
+  };
+  const COL = {
+      adopted: ["#7cc4e8", "#12303d"],
+      available: ["#b8a06a", "#2c2614"],
+      known: ["#c49ad6", "#241a2e"],
+      lost: ["#e0806f", "#2c1814"],
+      locked: ["#4b5a62", "#10161a"],
+    },
+    SYM = { adopted: "■", available: "◆", known: "◇", lost: "✕", locked: "○" };
+  const svg = sv("svg", { class: "tree techradial", viewBox: `0 0 ${W} ${W}`, style: "width:100%;height:100%;touch-action:none;display:block" });
+  // 時代の輪（外へ進むほど後の時代）
+  const stageOf = new Map();
+  for (const t of techs) {
+    const a = stageOf.get(t.col) ?? [];
+    a.push(NODESTAGE[t.key] ?? 0);
+    stageOf.set(t.col, a);
+  }
+  let lastLab = null;
+  for (let c = 0; c < cols; c++) {
+    const a = (stageOf.get(c) ?? []).sort((x, y) => x - y),
+      m = a.length ? a[a.length >> 1] : 0,
+      r = R0 + c * DR;
+    svg.append(sv("circle", { cx: Rmax, cy: Rmax, r, fill: "none", stroke: "rgba(157,180,192,.07)", "stroke-width": 1 }));
+    if (STAGES[m] && STAGES[m] !== lastLab) {
+      lastLab = STAGES[m];
+      svg.append(sv("text", { x: Rmax + 4, y: Rmax - r - 3, "font-size": 11, fill: "#6d7f88", class: "tlab-era" }, STAGES[m]));
+    }
+  }
+  // 分野の根（中心からの放射線と見出し）
+  LANES.forEach((l) => {
+    const s = sector[l.id],
+      on = !lane || lane === l.id,
+      x1 = Rmax + Math.cos(s.a) * R0 * 0.5,
+      y1 = Rmax + Math.sin(s.a) * R0 * 0.5,
+      x2 = Rmax + Math.cos(s.a) * (Rmax - 10),
+      y2 = Rmax + Math.sin(s.a) * (Rmax - 10),
+      lx = Rmax + Math.cos(s.mid) * (R0 - 38),
+      ly = Rmax + Math.sin(s.mid) * (R0 - 38);
+    svg.append(
+      sv("line", { x1, y1, x2, y2, stroke: "rgba(157,180,192,.10)", "stroke-width": 1 }),
+      sv("text", { x: lx, y: ly + 4, "text-anchor": "middle", "font-size": 12, fill: lane === l.id ? "#b8a06a" : "#8a9ca5", opacity: on ? 1 : 0.4, class: "tlane" }, `${l.glyph} ${l.ja.slice(0, 4)}`),
+    );
+  });
+  svg.append(sv("circle", { cx: Rmax, cy: Rmax, r: 26, fill: "#12171a", stroke: "#b8a06a", "stroke-width": 1.6 }), sv("text", { x: Rmax, y: Rmax + 4, "text-anchor": "middle", "font-size": 11, fill: "#e8eef0" }, "起点"));
+  // 前提の線。選択中は、必要な技術（金）と開ける技術（青）を強調する
+  const deps = new Map();
+  for (const t of techs) for (const pk of t.prereq) (deps.get(pk) ?? deps.set(pk, []).get(pk)).push(t.key);
+  const rootOf = (t) => ({ x: Rmax + Math.cos(sector[t.lane].mid) * R0 * 0.9, y: Rmax + Math.sin(sector[t.lane].mid) * R0 * 0.9 });
+  for (const t of techs) {
+    const q = P(t),
+      from = t.prereq.length ? t.prereq.map((k) => byKey.get(k)).filter(Boolean) : [null];
+    for (const pt of from) {
+      const a = pt ? P(pt) : rootOf(t),
+        isReq = selected && selected === t.key,
+        isUnl = selected && pt && selected === pt.key,
+        cross = pt && pt.lane !== t.lane,
+        dim = (lane && t.lane !== lane && (!pt || pt.lane !== lane)) || status(t) === "locked";
+      svg.append(
+        sv("path", {
+          d: `M${a.x} ${a.y}L${q.x} ${q.y}`,
+          fill: "none",
+          stroke: isReq ? "#b8a06a" : isUnl ? "#7cc4e8" : dim ? "#222c32" : pt && status(pt) === "locked" ? "#2b373d" : "#4c8aa8",
+          "stroke-width": isReq || isUnl ? 2.2 : 1,
+          opacity: isReq || isUnl ? 1 : cross ? 0.22 : dim ? 0.5 : 0.8,
+        }),
+      );
+    }
+  }
+  const lab = sv("g", { class: "tlabels" });
+  const zoomInfo = { k: 1 };
+  const pz = panZoom(svg, W, W, {
+    onChange: (v) => {
+      zoomInfo.k = W / v.w;
+      svg.classList.toggle("zoomed", zoomInfo.k >= 2.2);
+      onView?.(v);
+    },
+  });
+  for (const t of techs) {
+    const p = P(t),
+      s = status(t),
+      [stroke, fill] = COL[s],
+      dim = (lane && t.lane !== lane) || (hit && !hit.has(t.key)),
+      rad = s === "adopted" ? 8 : 6.5;
+    svg.append(
+      sv(
+        "g",
+        { class: "tnode", "data-key": t.key, opacity: dim ? 0.3 : 1, style: "cursor:pointer", onclick: () => { if (!pz.moved) onPick(t); } },
+        sv("title", {}, `${SYM[s]} ${t.name}`),
+        sv("circle", { cx: p.x, cy: p.y, r: rad + 4, fill: "transparent" }),
+        sv("circle", { cx: p.x, cy: p.y, r: rad, fill, stroke: selected === t.key ? "#fff" : stroke, "stroke-width": selected === t.key ? 2.6 : s === "adopted" ? 2.2 : 1.4, "stroke-dasharray": s === "locked" ? "3 2" : s === "lost" ? "2 2" : null }),
+        sv("text", { x: p.x + (Math.cos(p.ang) >= 0 ? rad + 4 : -rad - 4), y: p.y + 4, "text-anchor": Math.cos(p.ang) >= 0 ? "start" : "end", "font-size": 11, fill: s === "locked" ? "#6d7f88" : "#d9e1e4", class: "tlab" }, t.name),
+      ),
+    );
+  }
+  const frontier = techs.filter((t) => ["adopted", "known", "available"].includes(status(t))).reduce((a, t) => Math.max(a, t.col), 0),
+    view = (cx, cy, w) => pz.set({ x: cx - w / 2, y: cy - w / 2, w, h: w }),
+    fr = () => {
+      const R = R0 + (frontier + 1) * DR + 30;
+      view(Rmax, Rmax, Math.min(W, R * 2.2));
+    };
+  if (vb0) pz.set(vb0);
+  else fr();
+  return {
+    svg,
+    COL,
+    SYM,
+    fit: () => pz.set({ x: 0, y: 0, w: W, h: W }),
+    left: () => view(Rmax, Rmax, Math.min(W, (R0 + 4 * DR) * 2)),
+    frontier: fr,
+    focus: (key) => {
+      const t = byKey.get(key);
+      if (!t) return;
+      const p = P(t);
+      view(p.x, p.y, 420);
+    },
+  };
+}

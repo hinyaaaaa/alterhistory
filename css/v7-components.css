@@ -1,0 +1,153 @@
+/* v7 部品 — 6 つの基本部品（ボタン・行・カード・滑り棒・表・全面画面）と、その周辺の小部品。
+   接頭辞 v- を付ける。値は v7-tokens.css の変数だけを使う（docs/UI_RULES.md §3）。 */
+.v7 {
+  font: 13px/1.65 var(--go);
+  color: var(--tx);
+  letter-spacing: 0;
+}
+.v7 :where(button) { font: inherit; color: inherit; cursor: pointer; border: 0; background: none; }
+.v7 .v-num, .v7 .v-tbl td, .v7 .v-ch2 b { font-family: var(--nm); font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
+/* ボタン: 角を 2 か所だけ切る。主＝真鍮、弱＝枠線、危険＝赤の枠線 */
+.v-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 9px 22px; font: 700 13px var(--mi); letter-spacing: 0.16em; white-space: nowrap; color: var(--on-br); background: var(--br); clip-path: var(--cut); transition: 0.18s; overflow: hidden; }
+.v-btn:after { content: ""; position: absolute; top: 0; left: -70%; width: 40%; height: 100%; background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.4), transparent); transform: skewX(-20deg); transition: 0.55s; }
+.v-btn:hover:after { left: 140%; }
+.v-btn:hover { filter: brightness(1.1); }
+.v-btn:active { transform: translateY(1px); }
+.v-btn.g { background: var(--bd); color: var(--tx); }
+.v-btn.g:before { content: ""; position: absolute; inset: 1px; background: var(--p2); clip-path: var(--cut); z-index: -1; }
+.v-btn.g:hover { background: var(--br); color: var(--br); filter: none; }
+.v-btn.d { background: #7a3d33; color: var(--dn); }
+.v-btn.d:before { content: ""; position: absolute; inset: 1px; background: #1b1412; clip-path: var(--cut); z-index: -1; }
+.v-btn.d:hover { background: var(--dn); color: #fff; filter: none; }
+.v-btn.s { padding: 5px 13px; font-size: 12px; }
+.v-btn.w { width: 100%; }
+.v-btn:disabled, .v-btn.off { opacity: 0.4; cursor: not-allowed; filter: none; pointer-events: none; }
+.v-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; }
+.v-ib { width: 36px; height: 36px; display: grid; place-items: center; background: var(--bd); position: relative; clip-path: var(--cut); flex: none; }
+.v-ib:before { content: ""; position: absolute; inset: 1px; background: var(--p2); clip-path: var(--cut); }
+.v-ib svg { position: relative; width: 18px; height: 18px; }
+.v-ib:hover { background: var(--br); }
+/* 見出し */
+.v-h2 { font: 700 21px var(--mi); letter-spacing: 0.16em; margin: 0 0 14px; display: flex; align-items: baseline; gap: 10px; }
+.v-ix { font: 500 12px var(--nm); color: var(--br); letter-spacing: 0.16em; }
+.v-h3 { display: flex; align-items: center; gap: 9px; font: 700 11.5px var(--go); color: var(--ac); letter-spacing: 0.2em; margin: 22px 0 10px; }
+.v-h3:before { content: ""; width: 6px; height: 6px; background: var(--br); transform: rotate(45deg); flex: none; }
+.v-h3:after { content: ""; flex: 1; height: 1px; background: linear-gradient(90deg, var(--lh), transparent); }
+.v-h3 small { font: 400 11px var(--go); color: var(--mu); letter-spacing: 0.04em; order: 3; }
+/* カード・行 */
+.v-card { position: relative; background: var(--fill); border: 1px solid var(--ln); padding: 11px 12px; }
+.v-card:before, .v-card:after { content: ""; position: absolute; width: 8px; height: 8px; pointer-events: none; }
+.v-card:before { left: -1px; top: -1px; border-left: 1px solid var(--br); border-top: 1px solid var(--br); }
+.v-card:after { right: -1px; bottom: -1px; border-right: 1px solid var(--br); border-bottom: 1px solid var(--br); }
+.v-row { --c: var(--ac); position: relative; display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 14px; border: 1px solid var(--ln); margin-bottom: 6px; background: var(--fill); cursor: pointer; transition: 0.18s; text-align: left; width: 100%; }
+.v-row:before { content: ""; position: absolute; left: -1px; top: -1px; bottom: -1px; width: 3px; background: var(--c); }
+.v-row:hover { border-color: var(--lh); background: rgba(157, 180, 192, 0.08); transform: translateX(2px); }
+.v-row.on { border-color: var(--br); background: rgba(184, 160, 106, 0.12); }
+.v-row b { font-weight: 500; font-size: 13.5px; }
+.v-row small { color: var(--mu); margin-left: auto; font-size: 11px; white-space: nowrap; }
+.v-row .u { font-size: 10.5px; color: var(--mu); display: block; line-height: 1.3; }
+.v-row.static { cursor: default; }
+.v-row.static:hover { transform: none; }
+.v-row > .v-grow { flex: 1; min-width: 0; }
+.v-tag { display: inline-block; padding: 0 8px; font: 700 10.5px/17px var(--go); letter-spacing: 0.1em; border: 1px solid currentColor; margin-left: auto; white-space: nowrap; }
+.v-t-a { color: var(--br); } .v-t-f { color: var(--ok); } .v-t-n { color: var(--mu); } .v-t-h { color: var(--dn); } .v-t-v { color: var(--pu); } .v-t-b { color: var(--bl); }
+.v-mut { color: var(--mu); font-size: 12px; }
+.v-ok { color: var(--ok); } .v-dn { color: var(--dn); } .v-wa { color: var(--wa); }
+.v-g3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.v-g3 > div { border: 1px solid var(--ln); padding: 8px 10px; background: rgba(255, 255, 255, 0.02); }
+.v-g3 b { display: block; font: 500 20px/1.2 var(--nm); }
+.v-g3 span { font-size: 10.5px; color: var(--mu); }
+/* 先月の変化カード */
+.v-chg { margin-bottom: 7px; }
+.v-ch1 { display: flex; justify-content: space-between; align-items: center; font-size: 11px; color: var(--mu); letter-spacing: 0.12em; }
+.v-spk { width: 96px; height: 26px; }
+.v-ch2 { display: flex; align-items: baseline; gap: 8px; }
+.v-ch2 b { font: 500 30px/1.1 var(--nm); }
+.v-ch2 em { font: 500 14px var(--nm); font-style: normal; }
+.v-ch2 small { margin-left: auto; color: var(--mu); font-size: 11px; }
+.v-parts { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 6px; }
+.v-parts span { font: 500 11.5px var(--nm); padding: 1px 8px; background: rgba(255, 255, 255, 0.05); }
+.v-parts span i { font-style: normal; font-family: var(--go); color: var(--mu); margin-right: 5px; }
+/* 支持層 */
+.v-sup { display: flex; gap: 14px; align-items: center; }
+.v-dn-ring { width: 92px; flex: none; }
+.v-dn-ring text { font: 500 11px var(--nm); fill: var(--tx); text-anchor: middle; }
+.v-sr { display: grid; grid-template-columns: 84px 1fr 28px; gap: 6px; align-items: center; margin: 5px 0; font-size: 12px; }
+.v-sr em { font: 500 13px var(--nm); font-style: normal; text-align: right; }
+.v-gg { display: flex; gap: 2px; }
+.v-gg i { flex: 1; height: 8px; background: rgba(255, 255, 255, 0.08); transform: skewX(-18deg); }
+.v-gg i.on { background: var(--c); }
+/* 滑り棒 */
+.v-sl { margin-bottom: 14px; }
+.v-sl > div { display: flex; justify-content: space-between; align-items: baseline; }
+.v-sl output { font: 500 15px var(--nm); color: var(--br); }
+.v-sl small { color: var(--mu); font-size: 11px; }
+.v7 input[type="range"] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: transparent; }
+.v7 input[type="range"]::-webkit-slider-runnable-track { height: 3px; background: linear-gradient(90deg, var(--br) var(--p, 50%), var(--bd) var(--p, 50%)); }
+.v7 input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; margin-top: -4.5px; background: var(--br); transform: rotate(45deg); border: 2px solid var(--bg); box-shadow: 0 0 0 1px var(--br); }
+.v7 input[type="range"]::-moz-range-thumb { width: 10px; height: 10px; background: var(--br); border: 2px solid var(--bg); border-radius: 0; transform: rotate(45deg); }
+.v7 input[type="range"]::-moz-range-track { height: 3px; background: var(--bd); }
+.v7 input[type="range"]::-moz-range-progress { height: 3px; background: var(--br); }
+/* 入力 */
+.v-in, .v7 .v-fd input[type="text"], .v7 .v-fd input[type="number"], .v7 .v-fd select, .v7 .v-search input { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--ln); border-bottom-color: var(--lh); color: var(--tx); padding: 8px 11px; width: 100%; outline: 0; user-select: text; font: inherit; }
+.v-in:focus, .v7 .v-fd input:focus, .v7 .v-fd select:focus { border-color: var(--br); }
+.v7 select option { background: var(--p2); }
+.v-fd { margin-bottom: 14px; }
+.v-fd > span { display: block; font-size: 11px; color: var(--mu); letter-spacing: 0.1em; margin-bottom: 4px; }
+.v-ck { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--ln); cursor: pointer; }
+.v-ck input { accent-color: var(--br); }
+.v-ck small { margin-left: auto; color: var(--mu); }
+/* タブ・チップ */
+.v-tabs { display: flex; border-bottom: 1px solid var(--ln); margin-bottom: 14px; }
+.v-tabs button { flex: 1; padding: 8px 0; font: 700 13px var(--mi); letter-spacing: 0.14em; color: var(--mu); position: relative; }
+.v-tabs button.on { color: var(--tx); }
+.v-tabs button.on:after { content: ""; position: absolute; left: 18%; right: 18%; bottom: -1px; height: 2px; background: var(--br); }
+.v-chip { display: inline-block; padding: 3px 12px; margin: 0 5px 6px 0; font-size: 12px; border: 1px solid var(--bd); color: var(--mu); cursor: pointer; transition: 0.15s; clip-path: var(--cut-s); }
+.v-chip:hover { color: var(--tx); }
+.v-chip.on { background: var(--br); border-color: var(--br); color: var(--on-br); font-weight: 700; }
+.v-rk { margin-bottom: 9px; }
+.v-rk > div { display: flex; justify-content: space-between; font-size: 12.5px; }
+.v-rk em { font: 500 14px var(--nm); font-style: normal; color: var(--ac); }
+.v-rk i { display: block; height: 5px; margin-top: 3px; background: var(--fill2); }
+.v-rk i b { display: block; height: 100%; background: var(--c); }
+/* 表 */
+.v-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.v-tbl th { font: 500 10.5px var(--go); color: var(--mu); text-align: right; padding: 6px 4px; border-bottom: 1px solid var(--lh); cursor: pointer; white-space: nowrap; letter-spacing: 0.06em; }
+.v-tbl th:first-child { text-align: left; }
+.v-tbl th:hover { color: var(--tx); }
+.v-tbl th.s { color: var(--br); }
+.v-tbl td { white-space: nowrap; padding: 8px 4px; text-align: right; border-bottom: 1px solid rgba(157, 180, 192, 0.07); font-size: 14px; }
+.v-tbl td:first-child { white-space: normal; text-align: left; font: 500 13px var(--go); }
+.v-tbl tr.r { cursor: pointer; }
+.v-tbl tr.r:hover td { background: rgba(157, 180, 192, 0.07); }
+.v-tbl tr.r.on td { background: rgba(184, 160, 106, 0.14); }
+.v-dt { display: inline-block; width: 8px; height: 8px; transform: rotate(45deg); margin-right: 8px; background: var(--c); }
+/* 年表 */
+.v-ev { display: grid; grid-template-columns: 62px 18px 1fr; gap: 0 6px; padding-bottom: 14px; }
+.v-ev .yr { text-align: right; font: 500 20px/1.1 var(--nm); }
+.v-ev .yr small { display: block; font: 400 10.5px var(--go); color: var(--mu); }
+.v-ev .rl { position: relative; }
+.v-ev .rl:before { content: ""; position: absolute; left: 8px; top: 0; bottom: -14px; width: 1px; background: var(--lh); }
+.v-ev .rl i { position: absolute; left: 3px; top: 6px; width: 11px; height: 11px; transform: rotate(45deg); background: var(--bg); border: 2px solid var(--c); }
+.v-ev .bd { padding: 2px 0; }
+.v-ev b { font: 700 14px var(--mi); letter-spacing: 0.06em; }
+.v-ev p { font-size: 12px; color: var(--mu); margin: 2px 0 0; }
+.v-ev p.why { color: var(--ac); font-size: 11.5px; }
+/* 確認カード・ダイアログ・全面画面の中身 */
+.v-opt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.v-opt > .v-card { cursor: pointer; transition: 0.18s; }
+.v-opt > .v-card:hover { border-color: var(--lh); }
+.v-opt > .v-card.on { border-color: var(--br); background: rgba(184, 160, 106, 0.12); }
+.v-opt b { display: block; font: 700 15px var(--mi); margin-bottom: 4px; }
+.v-opt p { font: 500 12px var(--nm); color: var(--mu); margin: 0; }
+.v-steps { display: flex; gap: 2px; margin-bottom: 18px; }
+.v-steps i { flex: 1; height: 3px; background: var(--bd); }
+.v-steps i.on { background: var(--br); }
+.v-two { display: grid; grid-template-columns: 300px 1fr; gap: 22px; }
+.v-bars div { display: grid; grid-template-columns: 40px 1fr 62px; gap: 8px; align-items: center; font-size: 11px; color: var(--mu); margin: 4px 0; }
+.v-bars i { height: 4px; background: rgba(255, 255, 255, 0.08); }
+.v-bars b { display: block; height: 100%; background: var(--c); }
+.v-bars em { font: 500 13px var(--nm); font-style: normal; color: var(--tx); text-align: right; }
+.v-flag { width: 52px; height: 35px; border: 1px solid var(--lh); flex: none; }
+.v-scroll { scrollbar-width: thin; scrollbar-color: var(--bd) transparent; }
+@media (pointer: coarse) { .v-btn.s { padding: 11px 16px; } .v-row { padding: 13px 12px 13px 14px; } .v-chip { padding: 8px 15px; } }
