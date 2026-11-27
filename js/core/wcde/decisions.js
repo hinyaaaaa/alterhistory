@@ -22,6 +22,7 @@ import { stateFx } from "./statefx.js";
 import { addShock } from "./shocks.js";
 import { timeOf, newsOf, DEFAULT_SPEED } from "./clock.js";
 import { decisionsOf, pendingOf, isLive, coolUntil, setCool } from "./decision-state.js";
+import { worthAsking, noteAsked } from "./pace.js";
 
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v), r3 = (x) => Math.round(x * 1000) / 1000;
 const U = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
@@ -34,7 +35,7 @@ function release(civ) { const T = timeOf(civ); if (T.hold && !newsOf(civ).queue.
 const openKey = (civ, key) => pendingOf(civ).some((d) => d.key === key);
 /** 決断を出す。live でなければ null（呼び出し側が旧来の自動処理を行う） */
 export function raise(ctx, spec) {
-  const { civ } = ctx; if (!isLive(civ)) return null; const D = decisionsOf(civ);
+  const { civ } = ctx; if (!isLive(civ)) return null; if (!worthAsking(civ, spec)) return null; const D = decisionsOf(civ); noteAsked(civ, spec.kind);
   const d = { id: `dec_${++D.seq}`, status: "open", at: civ.monthIndex, date: { ...civ.date }, kind: spec.kind, key: spec.key ?? null, stateId: spec.stateId, title: spec.title, body: spec.body ?? "", options: spec.options, payload: spec.payload ?? {}, fresh: true };
   D.queue.push(d); hold(civ); return d;
 }

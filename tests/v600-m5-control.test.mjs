@@ -64,7 +64,7 @@ await check("新しい領域の行動（ドクトリン・産業投資・勢力�
 await check("プレイヤーはドクトリンの取得を命令できる。前提不足は拒否され、状態は変わらない", () => {
   const w = fresh(), s = alive(w)[0]; dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }); s.treasury = 1e5; s.polity = "kingdom"; s.military.doctrine.taken = {};
   const before = JSON.stringify(s.military.doctrine); assert.equal(dispatch(w, { type: "state.adoptDoctrine", authority: A.PLAYER, id: "gun_line" }).ok, false); assert.equal(JSON.stringify(s.military.doctrine), before);
-  const first = COMMON_NODES.find((n) => n.id.endsWith(":1")); for (const t of first.tech) s.techAdopted = { ...s.techAdopted, [t]: 1 };
+  const ln = s.military.doc?.line, first = COMMON_NODES.find((n) => (ln ? n.id === ln + ":1" : n.id.endsWith(":1"))); // 国の系統の第 1 段（系統は 1 つだけ） for (const t of first.tech) s.techAdopted = { ...s.techAdopted, [t]: 1 };
   const r = dispatch(w, { type: "state.adoptDoctrine", authority: A.PLAYER, id: first.id }); assert.ok(r.ok, r.error); assert.ok(s.military.doctrine.taken[first.id] != null); assert.equal(w.civ.events.at(-1).provenance, "player");
 });
 

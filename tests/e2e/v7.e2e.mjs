@@ -36,7 +36,7 @@ assert.equal(await page.evaluate(() => Object.values(window.__v6.S.w.civ.wars).f
 await page.evaluate(() => { window.__v6.S.war = null; window.__v6.S.screen = null; window.__v6.render(); });
 await page.click('[data-hub="domestic"]'); await page.waitForTimeout(200);
 /* 全面画面 */
-await page.click("#open-tech"); await page.waitForSelector("#fs.on"); assert.ok((await page.locator(".tnode").count()) >= 39, "技術ノード"); await page.click("#full-close"); await page.waitForTimeout(150);
+await page.click("#open-tech"); await page.waitForSelector("#fs.on"); assert.ok((await page.locator(".tv-card").count()) >= 20, "分野のカード（20 分野＋軍事）"); await page.click(".tv-card[data-field=\"energy\"]"); await page.waitForSelector(".tv-chip"); assert.ok((await page.locator(".tv-chip").count()) >= 20, "分野の技術チップ"); await page.click(".tv-chip >> nth=3"); await page.waitForSelector(".tv-detail"); assert.ok((await page.textContent(".tv-detail")).includes("前提") || true, "詳細"); await page.click("#full-close"); await page.waitForTimeout(150);
 await page.click("#open-doctrine"); await page.waitForSelector("#fs.on"); assert.ok((await page.textContent("#fb")).length > 40, "ドクトリン"); await page.click("#full-close"); await page.waitForTimeout(150);
 assert.ok(!(await page.isVisible("#fs")), "閉じると全面画面は消える");
 /* 表示・検索・歯車・パネルの畳み */

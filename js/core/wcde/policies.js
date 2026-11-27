@@ -95,7 +95,7 @@ export function focusOf(st) {
 export const policyCost = (st, id) => Math.round((POLICIES[id]?.cost ?? 1) * (15 + (st.pop ?? 0) * 0.0003));
 /** 取り入れられない理由（取れるなら null） */
 export function policyGate(st, id, cat = null) {
-  const p = POLICIES[id]; if (!p) return "その国策はありません"; if (cat && p.cat !== cat) return "その分野の国策ではありません"; if (p.need && st.techAdopted?.[p.need] == null) return `技術「${p.need}」を制度化していない`; return null;
+  const p = POLICIES[id]; if (!p) return "その国策はありません"; if (cat && p.cat !== cat) return "その分野の国策ではありません"; if (p.need && st.techAdopted?.[p.need] == null) return `技術「${p.need}」を採用していない`; return null;
 }
 export function setPolicy(ctx, st, { category, slot, policyId }) {
   const { civ } = ctx, F = focusOf(st), mi = civ.monthIndex; if (!POLICY_CATS[category]) return { ok: false, error: "分野は econ / mil / relig / cult / dipl / home" };

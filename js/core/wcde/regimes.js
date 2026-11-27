@@ -6,6 +6,7 @@
 //   ・選べる政体は、成立する集団（または国家の首都の集団）が知っている技術で絞る（WCDE の制限）。
 import { groupCaps, POLITY_CAP } from "../civ/tech.js";
 import { OFFICE_LISTS, MODERN_REGIMES, MODERN_EXTRA, SIMPLE_CAP } from "./offices-data.js";
+import { POLITY_LIST, MIGRATE_REGIME, DEFAULT_BY_CORE } from "./polity30.js";
 
 /** 役職: id → [表示名, 分野] 分野: ruler 元首／admin 行政／mil 軍／econ 経済／faith 信仰／law 司法／cult 文化／dipl 外交／intel 情報 */
 const LEGACY_OFFICES = Object.freeze({
@@ -28,32 +29,8 @@ const LEGACY_OFFICES = Object.freeze({
 export const OFFICE_DOMAIN_JA = Object.freeze({ ruler: "元首", admin: "行政", mil: "軍事", econ: "経済", faith: "信仰", law: "司法", cult: "文化", dipl: "外交", intel: "情報" });
 
 /** 政体: id → { ja, core（内部の政体）, needs（技術）, ruler（元首の役職）, offices（選べる役職）, heredity（世襲か）, blurb } */
-const LEGACY_REGIMES = Object.freeze({
-  tribal: { ja: "部族制", core: "tribal", needs: [], ruler: "chief", offices: ["chief", "elder_council", "shaman", "war_leader", "hunt_master"], heredity: false, blurb: "氏族の長老と戦士が合議する。" },
-  chiefdom: { ja: "首長制", core: "chiefdom", needs: ["cap:polity:chiefdom"], ruler: "chieftain", offices: ["chieftain", "elder_council", "steward", "war_leader", "shaman", "storyteller", "tribute_collector"], heredity: true, blurb: "首長が貢納を集め、一族で地位を継ぐ。" },
-  theocracy: { ja: "神権制", core: "theocracy", needs: ["cap:polity:chiefdom"], ruler: "high_priest", offices: ["high_priest", "temple_steward", "oracle", "inquisitor", "temple_guard", "storyteller", "tribute_collector"], heredity: false, blurb: "神の名のもとに祭司が国を治める。" },
-  despotism: { ja: "絶対王政", core: "kingdom", needs: ["cap:polity:kingdom", "tech:standing_army", "tech:gunpowder"], ruler: "despot", offices: ["despot", "vizier", "chancellor", "marshal", "treasurer", "chamberlain", "spymaster", "court_historian"], heredity: true, blurb: "君主が常備軍と官僚で権力を集める。" },
-  kingdom: { ja: "王政", core: "kingdom", needs: ["cap:polity:kingdom"], ruler: "king", offices: ["king", "vizier", "chancellor", "marshal", "treasurer", "chamberlain", "royal_envoy", "court_historian", "court_physician"], heredity: true, blurb: "国王と宰相が官僚を率いる。" },
-  feudal: { ja: "封建制", core: "kingdom", needs: ["cap:polity:kingdom", "tech:fortification"], ruler: "overlord", offices: ["overlord", "duke", "constable", "bishop", "chancellor", "treasurer", "royal_envoy"], heredity: true, blurb: "諸侯が土地と軍役で結ばれる。" },
-  empire: { ja: "帝政", core: "empire", needs: ["cap:polity:empire"], ruler: "emperor", offices: ["emperor", "grand_secretary", "governor", "censor", "legion_commander", "treasurer", "royal_envoy", "spymaster", "court_historian"], heredity: true, blurb: "皇帝のもと、総督が諸地域を治める。" },
-  oligarchic_republic: { ja: "貴族共和制", core: "republic", needs: ["cap:polity:republic"], ruler: "consul", offices: ["consul", "senate", "tribune", "magistrate", "general", "trade_master", "treasurer"], heredity: false, blurb: "有力な家門が元老院で国を動かす。" },
-  direct_democracy: { ja: "民主制", core: "republic", needs: ["cap:polity:republic", "tech:alphabet", "tech:law"], ruler: "convener", offices: ["convener", "strategos", "archon", "magistrate", "trade_master", "royal_envoy"], heredity: false, blurb: "市民が集会で決め、政務官を選ぶ。" },
-  constitutional_monarchy: { ja: "立憲君主制", core: "kingdom", needs: ["cap:polity:kingdom", "tech:parliament"], ruler: "figurehead", offices: ["figurehead", "prime_minister", "minister_finance", "minister_defense", "minister_interior", "minister_foreign", "speaker", "chief_justice"], heredity: true, blurb: "君主は象徴となり、議会と内閣が政治を行う。" },
-  parliamentary: { ja: "議院内閣制", core: "republic", needs: ["tech:parliament"], ruler: "prime_minister", offices: ["prime_minister", "minister_finance", "minister_defense", "minister_interior", "minister_foreign", "speaker", "chief_justice", "minister_culture"], heredity: false, blurb: "議会の多数派が内閣を組む。" },
-  presidential: { ja: "大統領制", core: "republic", needs: ["tech:constitutionalism"], ruler: "president", offices: ["president", "minister_finance", "minister_defense", "minister_interior", "minister_foreign", "speaker", "chief_justice", "intel_director"], heredity: false, blurb: "国民が選んだ大統領が行政を率いる。" },
-  socialist: { ja: "社会主義", core: "republic", needs: ["tech:industry", "tech:electricity"], ruler: "party_secretary", offices: ["party_secretary", "politburo", "commissar", "planner", "prosecutor", "propaganda", "security_chief"], heredity: false, blurb: "一つの党が計画経済と国家を導く。" },
-  junta: { ja: "軍政", core: "republic", needs: ["tech:standing_army", "tech:conscription"], ruler: "junta_chair", offices: ["junta_chair", "general", "admiral", "security_chief", "minister_finance", "minister_interior"], heredity: false, blurb: "軍の評議会が非常の権限で統治する。" },
-  confederation: { ja: "連邦制", core: "republic", needs: ["cap:polity:republic", "tech:diplomacy", "tech:railway", "tech:telegraph"], ruler: "federal_chair", offices: ["federal_chair", "federal_envoy", "federal_court", "minister_finance", "minister_defense", "speaker"], heredity: false, blurb: "自治する諸邦が合議で結びつく。" },
-  city_state: { ja: "都市国家", core: "chiefdom", needs: ["cap:polity:chiefdom", "tech:writing", "tech:markets"], ruler: "@", offices: [], heredity: false, blurb: "一つの都市とその周りの農地が、そのまま国になる。" },
-  merchant_republic: { ja: "商人共和制", core: "republic", needs: ["cap:polity:republic", "tech:banking", "tech:shipbuilding"], ruler: "@", offices: [], heredity: false, blurb: "大商人の評議会が、交易と海運で国を動かす。" },
-  clerical_state: { ja: "宗教国家", core: "theocracy", needs: ["cap:polity:chiefdom", "tech:administration", "tech:writing"], ruler: "@", offices: [], heredity: false, blurb: "教団の組織が、領地と税を持って国を治める。" },
-  elective_monarchy: { ja: "選挙君主制", core: "kingdom", needs: ["cap:polity:kingdom", "tech:law", "tech:diplomacy"], ruler: "@", offices: [], heredity: false, blurb: "有力者の合議で、次の王が選ばれる。" },
-  one_party: { ja: "一党制", core: "republic", needs: ["tech:electricity", "tech:radio"], ruler: "@", offices: [], heredity: false, blurb: "単一の政党が政治を独占する。" },
-  anarchist: { ja: "無政府主義", core: "tribal", needs: ["tech:newspapers"], ruler: "@", offices: [], heredity: false, crisisOnly: true, blurb: "小さな共同体と評議会が連合し、民兵が守る。革命や内戦の中でだけ生まれる。" },
-  totalitarian: { ja: "全体主義", core: "republic", needs: ["tech:radio", "tech:mechanized_warfare"], ruler: "@", offices: [], heredity: false, blurb: "国家が社会のすみずみまでを統制する。" },
-  technocracy: { ja: "技術官僚制", core: "republic", needs: ["tech:computing"], ruler: "@", offices: [], heredity: false, blurb: "専門家の評議会が、データに基づいて統治する。" },
-  adv_direct_democracy: { ja: "発展直接民主制", core: "republic", needs: ["tech:computing", "tech:machine_learning"], ruler: "@", offices: [], heredity: false, blurb: "通信網と機械知能で、全市民が政策に直接参加する。" },
-});
+/** v7.1.0: 政体は polity30.js の 30 種。役職の一覧は旧い政体の一覧を元にする（offices-data.js） */
+const LEGACY_REGIMES = Object.freeze(Object.fromEntries(POLITY_LIST.map((r) => [r.id, { ja: r.ja, core: r.core, needs: r.needs, ruler: "@", offices: [], heredity: r.heredity, blurb: r.blurb, center: r.center, group: r.grp, ex: r.ex, ...(r.id === "council_republic" ? { crisisOnly: true } : {}) }])));
 // v6.12.0: 政体ごとに約 50 個の役職。旧版の役職（id）はそのまま残し（保存の互換）、名前と分野が同じものは同じ id を使う。新しい役職の id は「政体_番号」
 const DOM = { R: "ruler", A: "admin", M: "mil", E: "econ", F: "faith", L: "law", C: "cult", D: "dipl", I: "intel" }, byKey = new Map(Object.entries(LEGACY_OFFICES).map(([id, [ja, d]]) => [`${d}:${ja}`, id]));
 const GEN_OFFICES = {}, GEN_BY_REGIME = {}, TAGS = {}; // v6.21.0: TAGS = 役職 id → { b: バフの印, d: 欠点の印 }（offices-data.js の「:印」）
@@ -63,13 +40,16 @@ export const OFFICES = Object.freeze({ ...LEGACY_OFFICES, ...GEN_OFFICES });
 export const REGIMES = Object.freeze(Object.fromEntries(Object.entries(LEGACY_REGIMES).map(([id, r]) => [id, { ...r, ruler: r.ruler === "@" ? GEN_BY_REGIME[id][0] : r.ruler, offices: [...new Set([...r.offices, ...(GEN_BY_REGIME[id] ?? [])])] }])));
 export const REGIME_IDS = Object.freeze(Object.keys(REGIMES));
 /** 内部の政体から、標準の政体（古い保存・AI が作った国家の表示用） */
-export const DEFAULT_REGIME = Object.freeze({ tribal: "tribal", chiefdom: "chiefdom", theocracy: "theocracy", kingdom: "kingdom", empire: "empire", republic: "oligarchic_republic" });
-export const regimeOf = (st) => (st.regime && REGIMES[st.regime] && REGIMES[st.regime].core === st.polity ? st.regime : DEFAULT_REGIME[st.polity] ?? "tribal"); // 内部の政体が変わったら、標準の政体に戻る
+export const DEFAULT_REGIME = DEFAULT_BY_CORE;
+export const regimeOf = (st) => { // 古い保存の政体は、新しい 30 種へ移す
+  let r = st.regime; if (r && !REGIMES[r] && MIGRATE_REGIME[r]) r = MIGRATE_REGIME[r];
+  return r && REGIMES[r] && REGIMES[r].core === st.polity ? r : DEFAULT_REGIME[st.polity] ?? "elder_council"; }; // 内部の政体が変わったら、標準の政体に戻る
 export const regimeJa = (st) => REGIMES[regimeOf(st)].ja;
 export const officeJa = (id) => OFFICES[id]?.[0] ?? id;
 
 /** その政体を選べない理由（選べるなら null）。known: 集団が知っている技術（g.tech.known）／caps: 集団の解禁 */
-export function regimeGate(civ, group, id, { crisis = false } = {}) {
+export function regimeGate(civ, group, id0, { crisis = false } = {}) {
+  const id = canonRegime(id0);
   const r = REGIMES[id]; if (!r) return "未知の政体"; if (r.crisisOnly && !crisis) return "革命・内戦・国家崩壊のときだけ成立する"; const caps = groupCaps(civ, group);
   for (const n of r.needs) {
     if (n.startsWith("cap:")) { if (!caps.has(n.slice(4))) return `技術の解禁「${n.slice(4)}」が必要`; }
@@ -82,7 +62,8 @@ export const regimeChoices = (civ, group) => REGIME_IDS.map((id) => ({ id, ja: R
 
 export const MIN_OFFICES = 3, MAX_OFFICES = 100; // v6.12.0: 全部置ける（置きすぎは維持費と官僚肥大の副作用で抑える。officeEffects）
 /** 役職の選択の検証。元首の役職は必須。政体で選べないものは不可。戻り値: エラー文または null */
-export function checkOffices(regime, ids) {
+export function checkOffices(regime0, ids) {
+  const regime = canonRegime(regime0);
   const r = REGIMES[regime]; if (!r) return "未知の政体"; if (!Array.isArray(ids)) return "役職の一覧が必要です";
   const set = new Set(ids); if (set.size !== ids.length) return "同じ役職が重複しています";
   for (const i of ids) if (!r.offices.includes(i)) return `「${officeJa(i)}」はこの政体では置けません`;
@@ -91,7 +72,9 @@ export function checkOffices(regime, ids) {
   return null;
 }
 /** 既定の役職（元首＋先頭から数個） */
-export const defaultOffices = (regime) => { const r = REGIMES[regime]; return r.offices.slice(0, Math.min(r.offices.length, 5)).includes(r.ruler) ? r.offices.slice(0, Math.min(r.offices.length, 5)) : [r.ruler, ...r.offices.filter((x) => x !== r.ruler).slice(0, 4)]; };
+/** 旧い政体 id（部族制 tribal など）も受け付け、30 種の id へ読み替える（v7.1.0） */
+export const canonRegime = (id) => (REGIMES[id] ? id : MIGRATE_REGIME[id] ?? id);
+export const defaultOffices = (regime) => { const r = REGIMES[canonRegime(regime)]; return r.offices.slice(0, Math.min(r.offices.length, 5)).includes(r.ruler) ? r.offices.slice(0, Math.min(r.offices.length, 5)) : [r.ruler, ...r.offices.filter((x) => x !== r.ruler).slice(0, 4)]; };
 
 // ---- 役職の効果（v6.12.0 → v6.21.0 で、乱数をやめて役職の意味に結びつけた）。役職ごとに「バフ 1 つ」と、あれば「欠点 1 つ」、維持費の階層がある。全部置くと、維持費と官僚肥大（安定度・民衆の支持）が重くなる。
 const clampN = (v, a, b) => (v < a ? a : v > b ? b : v), r4 = (x) => Math.round(x * 10000) / 10000;

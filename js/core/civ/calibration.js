@@ -8,8 +8,11 @@ import { LAND_WATER } from "./world-consts.js";
 const EARTH_LAND_KM2 = 149.8e6;
 /** 史実の世界人口（McEvedy & Jones ほか）。[世界の年, 人口]。年 0=紀元前 3000 年、年 3000=紀元 0 年、年 5000=2000 年 */
 export const POP_CURVE = Object.freeze([[0, 14e6], [1000, 27e6], [2000, 50e6], [2500, 100e6], [3000, 230e6], [3500, 235e6], [4000, 270e6], [4300, 400e6], [4500, 460e6], [4700, 600e6], [4800, 990e6], [4900, 1650e6], [4950, 2500e6], [5000, 6100e6]]);
-/** 発見された技術の目標数（未来を除く全 166 のうち）。年 5000 で 9 割以上（≥150）。v6.13.0: 近代〜現代の軍事技術 37 を足したので、後半の目標を引き上げた（〜年 4000 は従来と同じ） */
-export const TECH_CURVE = Object.freeze([[0, 23], [1000, 33], [2000, 48], [3000, 62], [4000, 74], [4300, 83], [4600, 98], [4800, 118], [4900, 134], [4950, 146], [5000, 154]]);
+/** 発見された技術の目標数（未来を除く）。v7.1.0: 木が 500 項目＋軍事（未来を除き 487）になったので、旧版の曲線（166 のうち）を、木の大きさの比で引き伸ばす。年 5000 で 9 割以上。 */
+import { TREE } from "./techtree.js";
+const TECH_BASE = [[0, 23], [1000, 33], [2000, 48], [3000, 62], [4000, 74], [4300, 83], [4600, 98], [4800, 118], [4900, 134], [4950, 146], [5000, 154]];
+const NON_FUTURE = TREE.filter((t) => t.stage < 12).length, K = NON_FUTURE / 166;
+export const TECH_CURVE = Object.freeze(TECH_BASE.map(([y, v]) => [y, Math.round(v * K)]));
 
 const interp = (pts, y, logY) => {
   if (y <= pts[0][0]) return pts[0][1];
@@ -53,7 +56,7 @@ export function stepCalibration(ctx) {
   push = clamp(push + (goalPush - push) * 0.3, 1, 2.5); civ.popPush = Math.round(push * 1000) / 1000;
   const have = Object.keys(civ.techWorld).length, want = targetTechCount(year), q = (want + 3) / (have + 3);
   let pace = civ.techPace ?? 1;
-  const goal = q >= TECH_DEADBAND[0] && q <= TECH_DEADBAND[1] ? 1 : clamp(Math.pow(q, 3), 0.5, 10);
-  pace = clamp(pace + (goal - pace) * 0.3, 0.5, 10);
+  const goal = q >= TECH_DEADBAND[0] && q <= TECH_DEADBAND[1] ? 1 : clamp(Math.pow(q, 3), 0.15, 10);
+  pace = clamp(pace + (goal - pace) * 0.3, 0.15, 10);
   civ.techPace = Math.round(pace * 1000) / 1000;
 }

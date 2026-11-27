@@ -5,6 +5,7 @@
 //   ・安全に直せる軽微な不備（派生データの欠落など）だけ直し、直した内容を警告と診断記録（civ.wcde.diagnostics）に残す。直せなければ理由つきで拒否し、空の世界や新しい世界へ黙って置き換えない。元の文字列は一切変更しない。
 //   ・過去の客観イベントは、復旧でも書き換えない。
 //   ・保存しないもの: 派生の索引・予測のキャッシュ（復元時に正本から再構築される）。
+import { migrateTechTree } from "./migrate.js";
 import { defaultGenerate } from "./world.js";
 import { createWcde } from "./contract.js";
 import { registerCommands } from "./commands.js";
@@ -50,6 +51,7 @@ export function unpackSave(text, { generate = defaultGenerate, allowChecksumMism
   // チェックサム: civ 部分の文字列を、書いたときと同じ形で作り直して比べる（JSON は同じ値から同じ文字列になる）
   const sum = checksum(JSON.stringify(civ));
   if (d.checksum !== sum) { if (!allowChecksumMismatch) return refuse("チェックサムが一致しません（保存後に内容が変わったか、ファイルが壊れています）。読み込みを中止しました"); warnings.push("チェックサムが一致しませんでしたが、利用者の指示で、検証を通る場合に限って読み込みました"); }
+  { const n = migrateTechTree(civ); if (n) warnings.push(`移行: 新しい技術ツリーに無い技術の記録を ${n} 件取り除きました`); } // v7.1.0
   // 必須項目・値域・配列の構造
   if (civ.decisions != null && (!Array.isArray(civ.decisions) || civ.decisions.length)) return refuse("AI の判断記録を含む保存ファイルは、v6.1.0 では読み込めません（判断は保存しない仕様です）");
   const need = [["monthIndex", fin], ["date", (x) => x && typeof x === "object"], ["states", (x) => x && typeof x === "object" && !Array.isArray(x)], ["groups", (x) => x && typeof x === "object"], ["events", Array.isArray], ["wcde", (x) => x && typeof x === "object"], ["seq", (x) => x && typeof x === "object"], ["options", (x) => x && typeof x === "object"]];

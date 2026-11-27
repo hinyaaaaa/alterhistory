@@ -22,7 +22,7 @@ export function registerWarDecisions() {
   registerDecision("surrender_call", (ctx, d, opt) => {
     const { civ } = ctx, p = d.payload, w = civ.wars[p.warId], st = civ.states[p.state]; if (!w || w.status !== "active" || !st?.alive) return { ok: true, note: "戦争はすでに終わっていた" }; const rec = surrenderRec(w, st.id);
     if (opt === "accept") { capitulate(ctx, w, st, rec); return { ok: true, note: "降伏を受け入れた。講和会議が開かれる" }; }
-    if (opt === "resist") { rec.resist = 1; rec.pending = null; rec.askedAt = civ.monthIndex; wlog(ctx, w, "resist", `${st.name}は抗戦を選んだ（民意と兵力が削られる）`); return { ok: true, note: "抗戦する（降伏ゲージは保たれ、民意と兵力が毎月削られる）" }; }
+    if (opt === "resist") { rec.resist = 1; rec.pending = null; rec.askedAt = civ.monthIndex; wlog(ctx, w, "resist", `${st.name}は抗戦を選んだ（民意と兵力が削られる）`); return { ok: true, note: "抗戦する（降伏までの進みは保たれ、民意と兵力が毎月削られる）" }; }
     rec.pending = null; rec.askedAt = civ.monthIndex; const r = negotiatePeace(ctx, st, w, { terms: { kind: "white" } }); return { ok: true, note: r.ok ? "逆提案が受け入れられ、戦争が終わった" : `逆提案は拒まれた（${r.error ?? "—"}）。3 か月後に再び降伏を迫られる` };
   });
   registerDecision("conference", (ctx, d, opt) => {

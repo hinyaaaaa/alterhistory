@@ -8,7 +8,7 @@ import { byState } from "../civ/spatial.js";
 import { distKm, enthrone, runSecession } from "../civ/states.js";
 import { declareWar, atWarWith } from "../civ/diplomacy.js";
 import { makeEvent, withCause } from "../civ/events.js";
-import { TREE } from "../civ/techtree.js";
+import { NODE } from "../civ/techtree.js";
 import { addShock } from "./shocks.js";
 import { regimeOf, REGIMES } from "./regimes.js";
 import { regimeCandidates, switchRegime, familyOf } from "./regime-evolution.js";
@@ -22,11 +22,21 @@ const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v);
 const U = (civ, ...p) => (hashSeed(civ.historySeed, "evt", ...p) % 1000003) / 1000003;
 const FAC = { nob: "nobility", mil: "military", clr: "clergy", mer: "merchants", com: "commoners", bur: "bureaucrats", art: "artisans", clan: "clans" };
 const FAC_JA = { nobility: "貴族", military: "軍", clergy: "聖職者", merchants: "商人", commoners: "民衆", bureaucrats: "官僚", artisans: "職人", clans: "氏族" };
+/** 国の「時代」0〜5。採用した技術のうち、3 つ以上そろっている最も進んだ時代（stage）で決める（木の大きさに依らない）。
+ *  0 部族 / 1 古代（青銅・鉄）/ 2 古典〜中世 / 3 近世 / 4 産業 / 5 現代以降 */
+/** 重い出来事の型（これは standard でも必ず決断になる）。ほかは顧問が処理する */
+const BIG_ARCH = new Set(["succession_crisis", "coup_threat", "rebel_peasant", "rebel_noble", "war_threat", "opportunity_war", "plague", "disaster", "tragedy_royal", "crisis"]);
+const ERA_STAGE = [2, 4, 6, 8, 10];
+export function eraOf(st) {
+  const cnt = new Array(13).fill(0); for (const k in st.techAdopted ?? {}) { const t = NODE[k]; if (t && !t.hidden && t.lane !== "mil") cnt[t.stage]++; }
+  let top = 0; for (let s = 12; s >= 0; s--) if (cnt[s] >= 3) { top = s; break; }
+  let era = 0; while (era < 5 && top >= ERA_STAGE[era]) era++; return era;
+}
 const ERA_AT = [0.06, 0.15, 0.3, 0.5, 0.75], scaleOf = (st) => 20 + (st.pop ?? 0) * 0.0003;
 
 /** 国の状況（条件の判定用）。1 回の判定で 1 度だけ作る */
 function contextOf(ctx, st) {
-  const { civ } = ctx, n = Object.keys(st.techAdopted ?? {}).length / Math.max(1, TREE.length); let era = 0; while (era < 5 && n >= ERA_AT[era]) era++;
+  const { civ } = ctx, era = eraOf(st);
   let rival = null, friend = null, rv = -15, fv = 15; for (const id of Object.keys(st.relations ?? {}).sort()) { const o = civ.states[id]; if (!o?.alive || o.id === st.id) continue; const v = st.relations[id]; if (v < rv) { rv = v; rival = o; } if (v > fv) { fv = v; friend = o; } }
   const cap = civ.groups[st.capitalGroupId], S = scaleOf(st);
   return { era, rival, friend, war: st.warIds.length > 0, poly: st.polity, her: !!REGIMES[regimeOf(st)]?.heredity, stab: st.stability, poor: st.treasury < S * 4, rich: st.treasury > S * 20, big: st.pop > 150000, small: st.pop < 40000, coast: !!cap && (ctx.world?.cell?.coastDist?.[cap.cell] ?? 9) <= 1, S };
@@ -52,7 +62,7 @@ function farPart(ctx, st) {
   const far = gs.filter((g) => g.id !== cap.id).map((g) => [distKm(ctx.world, cap.cell, g.cell), g]).sort((a, b) => b[0] - a[0] || (a[1].id < b[1].id ? -1 : 1)).map((x) => x[1]); return far.slice(0, Math.max(1, Math.min(far.length - 1, Math.round(gs.length * 0.35))));
 }
 function shift(ctx, st, kind) {
-  const { civ } = ctx, cand = regimeCandidates(ctx, st, 0.7).filter((c) => (kind === "mil" ? c.id === "junta" || familyOf(c.id) === "aut" : kind === "rep" ? familyOf(c.id) === "rep" : kind === "mon" ? familyOf(c.id) === "mon" : familyOf(c.id) !== familyOf(regimeOf(st)) || c.gap > 0));
+  const { civ } = ctx, cand = regimeCandidates(ctx, st, 0.7).filter((c) => (kind === "mil" ? c.id === "military_junta" || familyOf(c.id) === "aut" : kind === "rep" ? familyOf(c.id) === "rep" : kind === "mon" ? familyOf(c.id) === "mon" : familyOf(c.id) !== familyOf(regimeOf(st)) || c.gap > 0));
   if (!cand.length) { st.stability = clamp(st.stability - 0.04); return false; } const tot = cand.reduce((a, c) => a + c.w, 0); let x = U(civ, st.id, civ.monthIndex, "rg", kind) * tot, pick = cand[0].id; for (const c of cand) { x -= c.w; if (x <= 0) { pick = c.id; break; } }
   const ok = switchRegime(ctx, st, pick, kind === "mil" ? "military_takeover" : kind === "rev" ? "revolution" : "reform"); return !!ok;
 }
@@ -106,8 +116,8 @@ function autoPick(ctx, st, ev, cx) {
 }
 function fire(ctx, st, ev, cx0 = contextOf(ctx, st), par = null) {
   const { civ } = ctx, cx = { ...cx0, v: varOf(ctx, st, ev) }; if (st.player && isLive(civ)) { // v6.21.0: 場所・人物・事件名
-    const n = ev.opts.length, options = [...ev.opts.map((o, i) => ({ id: String(i), ja: o, hint: hintOf(fxOf(ev, i)) })), { id: String(n), ja: "何もしない", hint: hintOf(fxOf(ev, n)) }];
-    const d = raise(ctx, { kind: "event", key: `ev|${st.id}|${ev.id}|${civ.monthIndex}`, stateId: st.id, title: fill(cx.v.incident, st, cx), body: `〈${fill(ev.title, st, cx)}〉${fill(ev.body, st, cx)}${fill(cx.v.scene, st, cx)}`, options, payload: { evId: ev.id, v: cx.v, ...(par ? { par } : {}) } }); if (d) { st.evLast = civ.monthIndex; (st.evSeen ??= {})[ev.id] = civ.monthIndex; return true; }
+    const n = ev.opts.length, heavy = BIG_ARCH.has(ev.arch), options = [...ev.opts.map((o, i) => ({ id: String(i), ja: o, hint: hintOf(fxOf(ev, i)) })), { id: String(n), ja: "何もしない", hint: hintOf(fxOf(ev, n)) }];
+    const d = raise(ctx, { kind: "event", heavy, key: `ev|${st.id}|${ev.id}|${civ.monthIndex}`, stateId: st.id, title: fill(cx.v.incident, st, cx), body: `〈${fill(ev.title, st, cx)}〉${fill(ev.body, st, cx)}${fill(cx.v.scene, st, cx)}`, options, payload: { evId: ev.id, v: cx.v, ...(par ? { par } : {}) } }); if (d) { st.evLast = civ.monthIndex; (st.evSeen ??= {})[ev.id] = civ.monthIndex; return true; }
   }
   resolve(ctx, st, ev, autoPick(ctx, st, ev, cx), cx, par); return true;
 }
@@ -116,20 +126,22 @@ registerDecision("event", (ctx, d, opt) => {
   const cx = { ...contextOf(ctx, st), v: d.payload.v ?? varOf(ctx, st, ev) }, chosen = resolve(ctx, st, ev, i, cx, d.payload.par ?? null); return { ok: true, note: chosen };
 });
 
+/** 出来事の重み。幅の広い（ほぼ全時代の）出来事は控えめにし、その時代に固有の出来事を出やすくする（v7.1.0: 時代が進んでも同じ出来事ばかり、を避ける） */
+function weightFor(ev, era) { const c = ev.cond, e = c.e; if (!e) return c.w * 0.5; const width = e[1] - e[0]; return c.w * (width >= 4 ? 0.45 : width >= 3 ? 0.7 : 1.3); }
 /** 1 年あたりの出来事の回数（担当国）: 規模と時代で 0.4〜4.5 回 */
-export const annualRate = (st, era) => clamp(0.4 + 3.6 * clamp(Math.log10(Math.max(1, (st.pop ?? 0) / 2000)) / 2.5) * (0.5 + 0.12 * era), 0.3, 4.5);
+export const annualRate = (st, era) => clamp(0.3 + 1.5 * clamp(Math.log10(Math.max(1, (st.pop ?? 0) / 2000)) / 2.5) * (0.6 + 0.1 * era), 0.25, 2.2); // v7.1.0: 旧版は 0.3〜4.5 回／年
 export function stepEvents(ctx) {
   const { civ } = ctx; if (!civ.options.wcde) return; const mi = civ.monthIndex, live = isLive(civ), pend = pendingOf(civ).length > 0;
   for (const id of Object.keys(civ.states)) {
     const st = civ.states[id]; if (!st.alive) continue; const q = st.evq?.find((x) => x.at <= mi);
     if (q) { if (st.player && live && pend) continue; st.evq = st.evq.filter((x) => x !== q); const ev = EVENT_BY_ID[q.id]; if (ev) { const cx = contextOf(ctx, st); if (eligible(ev, st, cx, true)) fire(ctx, st, ev, cx, q.par ?? null); } continue; }
     let go = false;
-    if (st.player) { if (pend && live) continue; if (mi - (st.evLast ?? -99) < 3) continue; go = U(civ, st.id, mi, "roll") < annualRate(st, 2) / 12; }
+    if (st.player) { if (pend && live) continue; if (mi - (st.evLast ?? -99) < 8) continue; go = U(civ, st.id, mi, "roll") < annualRate(st, 2) / 12; }
     else { if ((hashSeed(st.id, "evo") % 12) !== mi % 12) continue; const pop = st.pop ?? 0; go = U(civ, st.id, mi, "roll") < clamp(0.04 + 0.16 * clamp(Math.log10(Math.max(1, pop / 2000)) / 2.5), 0.04, 0.2); }
     if (!go) continue; const cx = contextOf(ctx, st), seen = st.evSeen ?? {}, pool = [];
     if (st.player) go = U(civ, st.id, mi, "roll2") < annualRate(st, cx.era) / annualRate(st, 2); if (!go) continue;
     for (const ev of EVENTS) if (eligible(ev, st, cx, false) && mi - (seen[ev.id] ?? -9999) > 240) pool.push(ev); if (!pool.length) continue;
-    const tot = pool.reduce((a, e) => a + e.cond.w, 0); let x = U(civ, st.id, mi, "pick") * tot, pick = pool[0]; for (const e of pool) { x -= e.cond.w; if (x <= 0) { pick = e; break; } } fire(ctx, st, pick, cx);
+    const wt = (e) => weightFor(e, cx.era), tot = pool.reduce((a, e) => a + wt(e), 0); let x = U(civ, st.id, mi, "pick") * tot, pick = pool[0]; for (const e of pool) { x -= wt(e); if (x <= 0) { pick = e; break; } } fire(ctx, st, pick, cx);
   }
 }
 export { EVENTS };

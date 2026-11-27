@@ -65,7 +65,9 @@ export const available = (w, g, t, civ = null) => g.tech.known[t.key] == null &&
 // ---- 発生率（1年あたり）。画面の説明・先史の圧縮モデル・月次の tick が同じ関数を使う
 export const worldDepth = (civ) => Math.min(1, Object.keys(civ.techWorld).length / 45);
 /** 知識の蓄積による加速（世界で発見された技術が多いほど、発明は速い）と、世界人口の効果 */
-export const accel = (civ, worldPop) => Math.min(1.5, Math.max(0.2, worldPop / POP_REF)) * (0.35 + 1.65 * worldDepth(civ)) * (civ.techPace ?? 1); // v6.8.0: techPace は世界の較正（calibration.js）が掛ける係数
+/** v7.1.0: 木が 3 倍近い大きさになったので、1 項目あたりの発生率を木の大きさの比で下げる（同じ年に同じ進み具合になるように） */
+let RATE = 0; const techRate = () => (RATE ||= 166 / Math.max(166, TREE.filter((t) => t.stage < 12).length));
+export const accel = (civ, worldPop) => Math.min(1.5, Math.max(0.2, worldPop / POP_REF)) * (0.35 + 1.65 * worldDepth(civ)) * (civ.techPace ?? 1) * techRate(); // v6.8.0: techPace は世界の較正（calibration.js）が掛ける係数
 // 集団の知識から導く値（知っている技術の数・学習の効果の和）。知識が変わると refreshCand が cand の配列を作り直すので、その配列を鍵に使い回す（派生データ）
 const memo = new WeakMap();
 export function knownStats(g, civ = null) { if (!g.tech.cand) refreshCand(g, civ); const c = g.tech.cand; let m = memo.get(c); if (!m) { let n = 0, l = 0; for (const k in g.tech.known) { n++; const t = TECH[k]; if (t) l += fxOf(civ, t).learn ?? 0; } m = { n, l }; memo.set(c, m); } return m; }
@@ -123,6 +125,17 @@ export function stepTech(ctx) {
     }
   }
   if (mi % 12 === 6) tradeTransfer(ctx);
+  if (mi % 12 === 3) customAdoption(civ, mi);
+}
+/** v7.1.0: 国内の 6 割以上が知っている技術は、費用なしで慣習として採用される（前提がそろっているものだけ）。分離した国が採用ゼロからやり直す／大国が分裂して世界の技術が後戻りする、を防ぐ。年に 1 回 */
+const CUSTOM_COVER = 0.6;
+function customAdoption(civ, mi) {
+  const by = {}; for (const id in civ.groups) { const g = civ.groups[id]; if (g.stateId) (by[g.stateId] ??= []).push(g); }
+  for (const sid in by) {
+    const st = civ.states[sid]; if (!st?.alive) continue; const gs = by[sid]; let total = 0; const have = {}; for (const g of gs) { total += g.pop; for (const key in g.tech.known) have[key] = (have[key] ?? 0) + g.pop; }
+    const keys = Object.keys(have).filter((k) => TECH[k] && TECH[k].cost > 0 && st.techAdopted[k] == null && have[k] >= total * CUSTOM_COVER).sort((a, b) => TECH[a].col - TECH[b].col);
+    for (const k of keys) { if (TECH[k].prereq.every((p) => st.techAdopted[p] != null || !TECH[p])) st.techAdopted[k] = mi; }
+  }
 }
 /** 教育・記録の制度（国家が採用した技術の learn 効果の合計）。国内への伝播の強さ */
 export const learnBonus = (civ, st) => { let s = 0; for (const k in st.techAdopted) s += fxOf(civ, TECH[k] ?? { key: k, fx: {} }).learn ?? 0; return s; };
@@ -146,9 +159,12 @@ export function learnByAnnexation(ctx, state, group) {
 /** 国内の人口のうち、その技術を知っている割合（0〜1）。派生データ（保存しない） */
 export function techCoverage(groups, key) { let tot = 0, have = 0; for (const g of groups) { tot += g.pop; if (g.tech.known[key] != null) have += g.pop; } return tot ? have / tot : 0; }
 /** 国家が採用できる技術（所属集団の人口の3割以上が知っていて、まだ採用していない。前提も採用済みか、少なくとも広く知られている） */
+/** v7.1.0: 採用に要る国内の普及。旧版は 3 割で、5627 年の世界でも多くの国が現代技術を採れなかった（採用数の中央値 45／173）。首都の集団が知っていれば、普及に関わらず採れる（中央が学びを持ち込む） */
+export const ADOPT_COVER = 0.15;
 export function adoptable(ctx, state, groups) {
   let total = 0; const have = {}; for (const g of groups) { total += g.pop; for (const key in g.tech.known) have[key] = (have[key] ?? 0) + g.pop; }
-  return TECHS.filter((t) => t.cost > 0 && state.techAdopted[t.key] == null && (have[t.key] ?? 0) >= total * 0.3).sort((a, b) => a.tier - b.tier || (a.key < b.key ? -1 : 1));
+  const cap = state.capitalGroupId ? groups.find((g) => g.id === state.capitalGroupId) : null;
+  return TECHS.filter((t) => t.cost > 0 && state.techAdopted[t.key] == null && ((have[t.key] ?? 0) >= total * ADOPT_COVER || (cap && cap.tech.known[t.key] != null))).sort((a, b) => a.tier - b.tier || (a.key < b.key ? -1 : 1));
 }
 
 // ---- 利用（できること）。行動のボタンの表示条件と、ドメイン側の検証が、同じ caps から導かれる
@@ -165,7 +181,7 @@ export const ACTION_CAP = Object.freeze({ found_city: "action:found_city", build
 export const TREATY_CAP = Object.freeze({ nonaggression: "treaty:nonaggression", alliance: "treaty:alliance", trade: "treaty:trade" });
 export const POLITY_CAP = Object.freeze({ tribal: null, chiefdom: "polity:chiefdom", theocracy: "polity:chiefdom", kingdom: "polity:kingdom", republic: "polity:republic", empire: "polity:empire" });
 /** 必要な caps が無いときの理由（有るなら null） */
-export function gateReason(civ, st, cap) { if (!cap || stateCan(civ, st, cap)) return null; const ts = techsFor(cap); return `技術「${ts.map((t) => t.name).join("・")}」を制度化していない`; }
+export function gateReason(civ, st, cap) { if (!cap || stateCan(civ, st, cap)) return null; const ts = techsFor(cap); return `技術「${ts.map((t) => t.name).join("・")}」を採用していない`; }
 
 // ---- 技術の効果。採用した技術の fx の和。前提を欠く（喪失など）ときは、その割合だけ劣化する（即座には消さない）
 /** 機能の度合い（0〜1）: 前提の技術が国内でどれだけ保たれているか。通常は 1 */

@@ -62,7 +62,7 @@ export function callDependents(ctx, w, atk, def) {
 export function submitAfterWar(ctx, w, outcome) {
   const { civ } = ctx; if (outcome !== "aggressor_victory") return; const atk = civ.states[w.aggressor], def = civ.states[w.defender];
   if (!atk?.alive || !def?.alive || atk.player || def.player || depFeasible(civ, atk, def) || atk.pop < def.pop * 1.5 || (hashSeed(w.id, civ.monthIndex, "submit") % 100) >= 30) return;
-  const yr = civ.date.year, kind = regimeOf(atk) === "feudal" || REGIMES[regimeOf(atk)]?.core === "kingdom" && yr < 4000 ? "feudal" : yr < 4300 ? "tribute" : yr >= 4600 && atk.techAdopted?.railway != null ? "protectorate" : "feudal";
+  const yr = civ.date.year, kind = regimeOf(atk) === "estates_monarchy" || REGIMES[regimeOf(atk)]?.core === "kingdom" && yr < 4000 ? "feudal" : yr < 4300 ? "tribute" : yr >= 4600 && atk.techAdopted?.railway != null ? "protectorate" : "feudal";
   if (TREATY[kind].needs?.some((k) => atk.techAdopted?.[k] == null)) return; signTreaty(ctx, kind, atk, def, { provenance: "simulation" });
 }
 /** 年 1 回（3 月）: 宗主の消滅・貢納・独立の動き */

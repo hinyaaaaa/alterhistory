@@ -2,6 +2,7 @@
 //   首都 → 国名 → 国旗 → 政体 → 役職 → 為政者 → 軍事ドクトリン → 確認。首都を最初に決める（文化・言語が決まり、命名がそこから始まる）。
 //   各欄の右にサイコロ。振るたびに、その場所の言語から作った名前・国旗・候補が変わる。上の「すべて振る」で一括して決める。
 //   mode: "player"（担当して建国）／"creator"（創造主が国家を作る）／"rebel"（反乱で国家をつくる。首都は反乱の中心地）／"reform"（革命・クーデターが成功したときの新体制）
+import { POLITY_GROUPS } from "../../core/wcde/polity30.js";
 import { h, btn, face, n0, sv } from "./common.js";
 import { S, act, creator } from "./store.js";
 import { MapView } from "./map.js";
@@ -412,7 +413,9 @@ export function openWizard(opts) {
       h(
         "div",
         { class: "wgrid" },
-        ...regimeIds().map((id) => {
+        ...POLITY_GROUPS.flatMap((gp) => { // v7.1.0: 30 の政体を、6 つの系統に分けて並べる
+          const ids = regimeIds().filter((id) => REGIMES[id].group === gp.id); if (!ids.length) return [];
+          return [h("div", { class: "wgh" }, h("b", {}, gp.ja), h("small", {}, gp.note)), ...ids.map((id) => {
           const r = REGIMES[id],
             on = D.regime === id;
           return h(
@@ -428,8 +431,9 @@ export function openWizard(opts) {
             },
             h("b", {}, r.ja),
             h("small", {}, r.blurb),
-            h("small", { class: "dim" }, `${officeJa(r.ruler)}${r.heredity ? "・世襲" : ""}`),
+            h("small", { class: "dim" }, `${r.center ? "統治の中心: " + r.center + "・" : ""}${officeJa(r.ruler)}${r.heredity ? "・世襲" : ""}`),
           );
+        })];
         }),
       ),
     );

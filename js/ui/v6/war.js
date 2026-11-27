@@ -370,15 +370,37 @@ const snapCard = (label, s) =>
     ),
   );
 /** v7: 担当国の戦争の操作（講和・降伏・動員と戦略）。命令は peace.propose / surrender.* / war.mobilize（docs/WAR_API.md） */
-function warActions(x, me) {
-  const sr = x.surrender?.[me];
-  return h(
-    "div",
-    { class: "warbar" },
-    x.phase === "conference" ? btn("講和会議を開く", () => import("../v7/war-screens.js").then((m) => m.openPeace(x.id)), "p", { id: "war-conf" }) : btn("講和を申し込む", () => import("../v7/war-screens.js").then((m) => m.openPeace(x.id)), "p", { id: "war-peace" }),
-    btn("動員と戦略", () => import("../v7/war-screens.js").then((m) => m.openMobilize(x.id)), "", { id: "war-mobilize" }),
-    sr?.capitulated ? null : btn("降伏する", () => act({ type: "surrender.accept", stateId: me, warId: x.id }), "", { id: "war-surrender" }),
+/** v7.1.0: 戦況ボード。担当国が参戦中の戦争で、知りたいこと（どちらが優勢か・降伏までの距離）と、する操作（方針・投入・重点・講和）だけを出す。
+ *  作戦の細部（行軍・包囲）はお任せ。細かい指示が要るときは「動員と戦略」へ。 */
+function warBoard(x, me) {
+  const c = civ(), mySide = x.sides.a.includes(me) ? "a" : "d", foeSide = mySide === "a" ? "d" : "a", d = x.ops?.direction?.[me] ?? {};
+  const cur = d.posture ?? postureOf(S.w.sim.ctx, x, c.states[me]), commit = d.commit ?? 0.75, th = Object.values(x.ops?.theaters ?? {}), box = h("div", { class: "wboard" });
+  const tone = (v) => (v >= 66 ? "bad" : v >= 40 ? "mid" : "ok");
+  const gauge = (label, st, rec) => { const v = Math.round(rec?.vpPct ?? 0), lim = rec?.limit ?? 80; return h("div", { class: "wg" }, h("div", { class: "wgt" }, h("b", {}, label), h("small", {}, rec?.capitulated ? "降伏した" : `占領 ${v}%（限度 ${lim}%）`)), h("div", { class: "wgb" }, h("i", { class: tone(Math.round((v / Math.max(1, lim)) * 100)), style: `width:${Math.min(100, Math.round((v / Math.max(1, lim)) * 100))}%` }))); };
+  const leadOf = (side) => (side === "a" ? x.aggressor : x.defender), nameOf = (side) => (c.states[leadOf(side)]?.name ?? "？");
+  const lead = mySide === "a" ? x.score : -x.score, word = lead > 25 ? "優勢" : lead > 8 ? "やや優勢" : lead < -25 ? "劣勢" : lead < -8 ? "やや劣勢" : "互角";
+  box.append(
+    h("div", { class: "wsum" }, h("b", {}, word), h("small", {}, `戦況スコア ${lead > 0 ? "+" : ""}${Math.round(lead)}`)),
+    gauge(`${nameOf(foeSide)}（敵）の降伏まで`, null, x.surrender?.[leadOf(foeSide)]),
+    gauge(`${nameOf(mySide)}（自国）の耐久`, null, x.surrender?.[me]),
   );
+  // 方針: 3 つのボタン（押すとすぐ伝わる）
+  const send = (patch) => act({ type: "war.direct", stateId: me, warId: x.id, posture: cur, commit, focus: d.focus ?? null, ...patch });
+  const seg = (items, on, fn, cls = "") => h("div", { class: "wseg " + cls }, ...items.map(([k, ja, note]) => h("button", { class: on === k ? "on" : "", title: note ?? "", "data-k": k, onclick: () => fn(k) }, ja)));
+  box.append(
+    h("div", { class: "lb" }, "方針"),
+    seg([["offensive", "攻める", "敵地へ進み、都市を落とす"], ["balanced", "均衡", "状況に合わせる"], ["defensive", "守る", "自国を守り、消耗を抑える"]], cur, (k) => send({ posture: k }), "p3"),
+    h("div", { class: "lb" }, "投入する兵力"),
+    seg([[0.5, "控えめ"], [0.75, "標準"], [1, "総力"]], [0.5, 0.75, 1].reduce((b, v) => (Math.abs(v - commit) < Math.abs(b - commit) ? v : b), 0.75), (k) => send({ commit: Number(k) }), "p3"),
+  );
+  if (th.length) {
+    const fr = th.map((t) => { const mine = Object.values(x.ops.forces ?? {}).filter((f) => f.side === mySide && f.theaterId === t.id).length, foe = Object.values(x.ops.forces ?? {}).filter((f) => f.side === foeSide && f.theaterId === t.id).length; return { t, mine, foe }; });
+    box.append(h("div", { class: "lb" }, "重点とする戦線"), seg([["", "お任せ"], ...th.map((t) => [t.id, t.name])], d.focus ?? "", (k) => send({ focus: k || null }), "wrap"));
+    box.append(h("div", { class: "wfr" }, ...fr.slice(0, 6).map(({ t, mine, foe }) => h("div", { class: "wfc" }, h("b", {}, t.name), h("small", {}, `${t.kind === "sea" ? "海" : "陸"}・味方 ${mine}／敵 ${foe}`)))));
+  }
+  const sr = x.surrender?.[me];
+  box.append(h("div", { class: "wact" }, x.phase === "conference" ? btn("講和会議を開く", () => import("../v7/war-screens.js").then((m) => m.openPeace(x.id)), "p", { id: "war-conf" }) : btn("講和を申し込む", () => import("../v7/war-screens.js").then((m) => m.openPeace(x.id)), "p", { id: "war-peace" }), btn("細かく指示する", () => import("../v7/war-screens.js").then((m) => m.openMobilize(x.id)), "", { id: "war-mobilize" }), sr?.capitulated ? null : btn("降伏する", () => act({ type: "surrender.accept", stateId: me, warId: x.id }), "", { id: "war-surrender" })));
+  return box;
 }
 function warDetail(x) {
   const c = civ(),
@@ -427,7 +449,7 @@ function warDetail(x) {
     mapBox,
     slider,
   );
-  if (live && inWar) out.querySelector(".whead").append(warActions(x, mine));
+  const more = h("details", { class: "wmore" }, h("summary", {}, "くわしい経緯（兵力・損害・流れ）"));
   const sn = x.ops?.snap;
   if (sn) {
     const mil =
@@ -441,94 +463,14 @@ function warDetail(x) {
           return o;
         })(),
       cv = x.ops.civ ?? { a: 0, d: 0 };
-    out.append(
-      h(
-        "div",
-        { class: "snaps" },
-        snapCard("開戦", sn.start),
-        snapCard("最大", sn.peak),
-        snapCard(live ? "現在" : "終戦", sn.end ?? sn.last),
-      ),
-      h(
-        "div",
-        { class: "loss" },
-        h("div", {}, h("small", {}, "戦死"), h("b", { class: "a" }, n0(mil.a)), h("b", { class: "d" }, n0(mil.d))),
-        h("div", {}, h("small", {}, "民間人"), h("b", { class: "a" }, n0(cv.a)), h("b", { class: "d" }, n0(cv.d))),
-      ),
+    more.append(
+      h("div", { class: "snaps" }, snapCard("開戦", sn.start), snapCard("最大", sn.peak), snapCard(live ? "現在" : "終戦", sn.end ?? sn.last)),
+      h("div", { class: "loss" }, h("div", {}, h("small", {}, "戦死"), h("b", { class: "a" }, n0(mil.a)), h("b", { class: "d" }, n0(mil.d))), h("div", {}, h("small", {}, "民間人"), h("b", { class: "a" }, n0(cv.a)), h("b", { class: "d" }, n0(cv.d)))),
     );
   }
-  out.append(h("div", { class: "lb" }, "主要な流れ"), flowOf(x));
-  if (live && inWar) {
-    // 方針の指示と講和（担当国が参戦しているときだけ）
-    const o = x.ops,
-      d = o?.direction?.[mine] ?? {},
-      cur = d.posture ?? postureOf(S.w.sim.ctx, x, c.states[mine]),
-      post = h(
-        "select",
-        { id: "war-posture" },
-        ...Object.entries(POSTURES).map(([k, ja]) => h("option", { value: k, selected: k === cur }, ja)),
-      ),
-      com = h("input", { id: "war-commit", type: "range", min: 0.3, max: 1, step: 0.05, value: d.commit ?? 0.75 }),
-      foc = h(
-        "select",
-        { id: "war-focus" },
-        h("option", { value: "" }, "重点: 自動"),
-        ...th.map((t) => h("option", { value: t.id, selected: d.focus === t.id }, t.name)),
-      );
-    out.append(
-      h("div", { class: "lb" }, "方針"),
-      h(
-        "div",
-        { class: "rowb" },
-        post,
-        foc,
-        h("small", {}, "投入"),
-        com,
-        btn(
-          "伝える",
-          () =>
-            act({
-              type: "war.direct",
-              stateId: mine,
-              warId: x.id,
-              posture: post.value,
-              commit: Number(com.value),
-              focus: foc.value || null,
-            }),
-          "p",
-          { id: "war-direct" },
-        ),
-      ),
-    );
-    const kind = h(
-        "select",
-        { id: "peace-kind" },
-        h("option", { value: "white" }, "白紙講和"),
-        h("option", { value: "reparations" }, "賠償つき"),
-      ),
-      amt = h("input", { id: "peace-amt", type: "number", placeholder: "賠償額", style: "width:90px" });
-    out.append(
-      h("div", { class: "lb" }, "講和"),
-      h(
-        "div",
-        { class: "rowb" },
-        kind,
-        amt,
-        btn(
-          "講和を申し入れる",
-          () =>
-            act({
-              type: "diplomacy.peace",
-              stateId: mine,
-              warId: x.id,
-              terms: { kind: kind.value, amount: Number(amt.value) || 0 },
-            }),
-          "p",
-          { id: "peace-go" },
-        ),
-      ),
-    );
-  }
+  more.append(h("div", { class: "lb" }, "主要な流れ"), flowOf(x));
+  if (live && inWar) out.insertBefore(warBoard(x, mine), mapBox);
+  out.append(more);
   void colorOf;
   void placeName;
   return out;

@@ -6,7 +6,7 @@ import { makeEvent } from "../civ/events.js";
 import { lifeScale } from "../civ/species.js";
 import { regnalOf, epithetGen, leaderRng } from "./domains/naming.js";
 import { languageOfGroup, nameFor } from "./domains/language.js";
-import { REGIMES, regimeOf, officeJa } from "./regimes.js";
+import { REGIMES, regimeOf, officeJa, canonRegime } from "./regimes.js";
 import { switchRegime, changeScale, playerRegimeOptions } from "./regime-evolution.js";
 import { normalizeFlag } from "../names/flag.js";
 import { LEADER_TRAITS } from "./founding.js";
@@ -38,7 +38,8 @@ export function changeName(ctx, st, name) {
   eventOf(ctx, st, "state_renamed", `${old}は国名を${nm}と改めた`, { from: old, to: nm }); ctx._byState = null; st.interpDirty = true; return { ok: true, cost };
 }
 /** 政体の変更（担当国が選べる政体は playerRegimeOptions） */
-export function changeRegime(ctx, st, to) {
+export function changeRegime(ctx, st, to0) {
+  const to = canonRegime(to0);
   const { civ } = ctx, mi = civ.monthIndex; if (!st?.alive) return fail("その国家は存在しません");
   const opt = playerRegimeOptions(ctx, st).find((x) => x.id === to); if (!opt) return fail("その政体へは、いまは移れません");
   const from = regimeOf(st), cross = REGIMES[from].core !== REGIMES[to].core, cost = changeCost(st, mi, "regime", { scale: opt.scale, crossFamily: opt.scale > 0.3 }), how = opt.scale > 0.5 ? "revolution" : "reform";

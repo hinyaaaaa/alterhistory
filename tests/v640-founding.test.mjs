@@ -18,7 +18,7 @@ await check("政体の定義（数は REGIMES に従う）。役職は 30 種以
 
 const w = mk("v640-a"); const o = AD(w, { type: "founding.options" });
 await check("建国の入口: 政体の一覧（選べない理由つき）・国のない都市の候補が出る", () => {
-  assert.ok(o.ok); assert.equal(o.regimes.length, Object.keys(REGIMES).length); assert.ok(o.regimes.find((r) => r.id === "tribal").ok);
+  assert.ok(o.ok); assert.equal(o.regimes.length, Object.keys(REGIMES).length); assert.ok(o.regimes.find((r) => r.id === "elder_council").ok);
   const o2 = AD(w, { type: "founding.options", regime: "tribal" }); assert.ok(o2.sites.length >= 1, "首都の候補"); assert.ok(o2.sites.every((s) => s.ok));
 });
 const sites = AD(w, { type: "founding.options", regime: "tribal" }).sites, site = sites[0];
@@ -39,7 +39,7 @@ await check("担当して建国する（国名→政体→役職→為政者→�
   const opt = AD(w, { type: "founding.options", regime: "tribal", capital: { groupId: site.groupId } }), tk = opt.techChoices.slice(0, 2).map((t) => t.key);
   const r = P(w, { type: "founding.found", name: "ヴァルテリア部族連合", regime: "tribal", offices: ["chief", "elder_council", "shaman", "war_leader"], leader: { name: "ヴァルディスの子オルヴェン", look: 5 }, capital: { groupId: site.groupId }, techs: tk, doctrine: opt.doctrineChoices[0]?.id ?? null });
   assert.ok(r.ok, r.error); sid = r.stateId; const st = w.civ.states[sid];
-  assert.equal(st.name, "ヴァルテリア部族連合"); assert.equal(st.regime, "tribal"); assert.equal(st.polity, "tribal"); assert.equal(st.leader.name, "ヴァルディスの子オルヴェン"); assert.equal(st.leader.look, 5);
+  assert.equal(st.name, "ヴァルテリア部族連合"); assert.equal(st.regime, "elder_council"); assert.equal(st.polity, "tribal"); assert.equal(st.leader.name, "ヴァルディスの子オルヴェン"); assert.equal(st.leader.look, 5);
   assert.deepEqual(st.offices.map((x) => x.id), ["chief", "elder_council", "shaman", "war_leader"]); assert.equal(st.offices[0].holder.name, st.leader.name); assert.ok(st.offices.every((x) => x.holder.name));
   assert.equal(st.capitalGroupId, site.groupId); assert.ok(w.civ.groups[site.groupId].stateId === sid); assert.ok(r.realmGroups >= 1);
   for (const k of tk) assert.ok(st.techAdopted[k] != null); assert.equal(w.civ.wcde.control.stateId, sid); assert.equal(w.civ.wcde.phase, "running");
@@ -107,7 +107,7 @@ await check("既存の国家の領土は首都にできない", () => {
 });
 await check("保存して読み込んでも、政体・役職・為政者の顔が残る（.ahw）", async () => {
   const { packSaveGz, unpackSaveAny } = await import("../js/core/wcde/savefile.js"); const p = await packSaveGz(w); const r = await unpackSaveAny(p.bytes); assert.ok(r.ok, JSON.stringify(r.errors ?? r.error));
-  const st = r.w.civ.states[sid]; assert.equal(st.regime, "tribal"); assert.deepEqual(st.offices.map((x) => x.id), w.civ.states[sid].offices.map((x) => x.id)); assert.equal(st.leader.name, w.civ.states[sid].leader.name); assert.equal(st.leader.look ?? null, w.civ.states[sid].leader.look ?? null);
+  const st = r.w.civ.states[sid]; assert.equal(st.regime, "elder_council"); assert.deepEqual(st.offices.map((x) => x.id), w.civ.states[sid].offices.map((x) => x.id)); assert.equal(st.leader.name, w.civ.states[sid].leader.name); assert.equal(st.leader.look ?? null, w.civ.states[sid].leader.look ?? null);
   const ro = st.offices.find((x) => x.id === "chief"); assert.equal(ro.holder.name, st.leader.name, "元首の役職は為政者と同じ人");
 });
 console.log(failed ? `\n${failed} 件失敗` : "\nすべて成功"); process.exit(failed ? 1 : 0);

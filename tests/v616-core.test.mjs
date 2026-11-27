@@ -24,17 +24,17 @@ set($("#cells"), "3000"); set($("#seed"), "ui-616"); click($("#gen")); for (let 
 assert.ok(V().run({ type: "time.advance", months: 6000 }).ok);
 const w = V().S.w, civ = w.civ, ctx = w.sim.ctx, alive = () => Object.values(civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop);
 
-await check("政体は 24 種。役職は単純な政体で少なく、複雑な政体で多い。主席の役職がある", () => {
-  assert.equal(Object.keys(REGIMES).length, 24); for (const [k, r] of Object.entries(REGIMES)) assert.ok(r.offices.includes(r.ruler), k + " の首長の役職");
-  assert.ok(REGIMES.tribal.offices.length <= 20 && REGIMES.chiefdom.offices.length <= 25 && REGIMES.totalitarian.offices.length >= 60 && REGIMES.parliamentary.offices.length >= 60);
-  for (const k of ["parliamentary", "presidential", "technocracy", "adv_direct_democracy", "anarchist", "city_state"]) assert.ok(REGIMES[k], k);
+await check("政体は 30 種。役職は単純な政体で少なく、複雑な政体で多い。主席の役職がある", () => {
+  assert.equal(Object.keys(REGIMES).length, 30); for (const [k, r] of Object.entries(REGIMES)) assert.ok(r.offices.includes(r.ruler), k + " の首長の役職");
+  assert.ok(REGIMES.elder_council.offices.length <= 20 && REGIMES.chiefs_league.offices.length <= 25 && REGIMES.mobilized_state.offices.length >= 60 && REGIMES.parliamentary_republic.offices.length >= 60);
+  for (const k of ["parliamentary_republic", "presidential_republic", "technocracy", "direct_democracy", "council_republic", "aristocratic_republic"]) assert.ok(REGIMES[k], k);
 });
-await check("無政府主義は危機のときだけ。新しい側の政体ほど段が高い。変更の規模は系統をまたぐほど大きい", () => {
-  assert.ok(REGIMES.anarchist.crisisOnly); assert.ok(tierOf("technocracy") > tierOf("kingdom") && tierOf("kingdom") > tierOf("tribal"));
-  assert.ok(changeScale("oligarchic_republic", "direct_democracy") < changeScale("parliamentary", "socialist"));
+await check("評議会共和制は危機のときだけ。新しい側の政体ほど段が高い。変更の規模は系統をまたぐほど大きい", () => {
+  assert.ok(REGIMES.council_republic.crisisOnly); assert.ok(tierOf("technocracy") > tierOf("estates_monarchy") && tierOf("estates_monarchy") > tierOf("elder_council"));
+  assert.ok(changeScale("aristocratic_republic", "direct_democracy") < changeScale("parliamentary_republic", "planned_socialist"));
 });
 await check("政体を移すと、記録・安定度の低下・役職の更新が起きる（内部の政体と矛盾しない）", () => {
-  const st = alive().find((s) => !s.player && s.polity === "kingdom") ?? alive().find((s) => !s.player); const before = st.stability; const to = st.polity === "kingdom" ? "despotism" : Object.keys(REGIMES).find((k) => REGIMES[k].core === st.polity && k !== regimeOf(st));
+  const st = alive().find((s) => !s.player && s.polity === "kingdom") ?? alive().find((s) => !s.player); const before = st.stability; const to = st.polity === "kingdom" ? "absolute_monarchy" : Object.keys(REGIMES).find((k) => REGIMES[k].core === st.polity && k !== regimeOf(st));
   if (!to) return; const r = switchRegime(ctx, st, to, "reform"); assert.ok(r && regimeOf(st) === to && st.stability < before && st.regimeHistory.at(-1).to === to);
 });
 await check("条約は 5 分類（軍事・従属・経済・領土・王家）。講和以外の全種類に利点と欠点がある", () => {

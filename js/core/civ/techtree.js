@@ -5,11 +5,10 @@
 //   ・cond: 成立に必要な地理条件（資源・地形）。pop: 成立に必要な集団規模。s: 定住が必要。
 //   ・caps: この技術が解禁する「できること」（行動・制度・ユニット・条約・経済・人口）。ゲームの検証とUIの表示条件は、同じ caps から導く。
 //   ・fx: 数値の効果（加算の倍率）。cap=収容力 tax=税収 trade=交易 ind=産業力 off=攻撃 def=防御 health=衛生 learn=学習・伝播の速さ。
-export const LANES = Object.freeze([
-  { id: "mat", ja: "素材・道具", glyph: "◆" }, { id: "agr", ja: "農業・牧畜", glyph: "❀" }, { id: "bld", ja: "建築", glyph: "▣" }, { id: "trn", ja: "輸送・航海", glyph: "➤" },
-  { id: "sci", ja: "数学・測量・天文", glyph: "∑" }, { id: "rec", ja: "記録・文字・通信", glyph: "✎" }, { id: "med", ja: "医療・衛生", glyph: "✚" }, { id: "gov", ja: "統治・行政・法", glyph: "⚖" },
-  { id: "eco", ja: "経済・金融", glyph: "¤" }, { id: "mil", ja: "軍事・兵站", glyph: "⚔" }, { id: "ind", ja: "エネルギー・産業", glyph: "⚙" },
-]);
+import { FIELDS, FAMILIES, buildDocTree } from "./tech500.js";
+// v7.1.0: 分野は 500 項目の 20 分野＋「軍事」。土台（base）は先史の成立条件を担う節点で、画面には出さない。
+export const LANES = Object.freeze([...FIELDS.map((f) => ({ id: f.id, ja: f.ja, glyph: f.glyph, fam: f.fam })), { id: "mil", ja: "軍事", glyph: "⚔", fam: "arms", hidden: true }, { id: "base", ja: "土台", glyph: "·", fam: "phys", hidden: true }]);
+export { FAMILIES };
 export const STAGES = Object.freeze(["原初", "後期旧石器", "新石器", "青銅器", "鉄器・古典", "古典後期", "中世", "近世初期", "近世", "産業革命", "近代", "現代", "未来"]);
 const POOL = 6000; // 歴史時代の E は「世界全体で次の技術が出るまでの年数 × 同条件の集団の数と、発生率に掛かる係数の典型値の積（約6000）」。1 集団あたりの独立発見は非常にまれで、世界のどこかで起こる
 const E_BY_STAGE = [400000, 1200000, 4500000, ...[110, 150, 190, 230, 250, 260, 220, 200, 170].map((y) => y * POOL), 300 * POOL]; // v6.13.0: 最後の 1 つは「未来」（現代の次の段。世界の年 5000 より先で起こる） // 先史（原初〜新石器）の E は、集団数が数百・数千年の刻みで進む圧縮モデルを前提とした値（先史の技術は 1 集団あたり数十万〜数百万年に1回）
@@ -131,7 +130,7 @@ n("central_bank", "中央銀行", "eco", 10, ["banking", "bureaucracy", "statist
 n("hunting_weapons", "狩猟具", "mil", 1, ["hafted_tools"], { fx: { off: 0.02 }, d: "投槍・罠。" });
 n("bow", "弓", "mil", 2, ["hafted_tools", "cordage"], { caps: ["unit:ranged"], fx: { off: 0.03 }, d: "弓矢。" });
 n("bronze_weapons", "青銅武器", "mil", 3, ["bronze"], { caps: ["unit:ranged"], fx: { off: 0.2 }, d: "青銅の剣・槍・鏃。" });
-n("chariot", "戦車", "mil", 4, ["wheel", "horse_riding", "bronze_weapons"], { fx: { off: 0.1 }, d: "馬に引かせる戦闘用の車。" });
+n("chariot", "戦闘馬車", "mil", 4, ["wheel", "horse_riding", "bronze_weapons"], { fx: { off: 0.1 }, d: "馬に引かせる戦闘用の車。" });
 n("cavalry", "騎兵", "mil", 4, ["horse_riding", "bronze_weapons"], { caps: ["unit:cavalry"], fx: { off: 0.3 }, d: "騎乗戦闘部隊。" });
 n("iron_weapons", "鉄武器", "mil", 5, ["iron", "bronze_weapons"], { fx: { off: 0.35 }, d: "鉄の剣・槍・鎧。" });
 n("siege_engines", "攻城兵器", "mil", 5, ["iron_weapons", "construction"], { fx: { off: 0.05 }, d: "破城槌・投石機。" });
@@ -208,6 +207,7 @@ n("power_armor", "強化外骨格", "mil", 12, ["autonomous_systems", "special_f
 n("cognitive_warfare", "認知戦", "mil", 12, ["cyber_warfare", "machine_learning"], { fx: { def: 0.05 }, d: "世論・判断・意思決定を狙う情報戦。" });
 n("fusion_power", "核融合", "ind", 12, ["nuclear", "machine_learning"], { fx: { ind: 0.2 }, d: "軽い原子核を融合させるエネルギー。" });
 
+nodes.splice(0, nodes.length, ...buildDocTree(nodes.slice(), E_BY_STAGE)); // v7.1.0: 500 項目の木へ組み替える（tech500.js）
 // 列（col）= max(宣言した時代, 前提の列 + 1)。左から右へだけ進むことを、データの手書きではなく構造で保証する（前提の位置は必ず自分より左）
 { const by = new Map(nodes.map((x) => [x.id, x])), memo = new Map(), colOf = (id, seen = new Set()) => { if (memo.has(id)) return memo.get(id); if (seen.has(id)) throw new Error("技術ツリーに循環がある: " + id); seen.add(id); const t = by.get(id); let c = t.stage; for (const p of t.prereq) c = Math.max(c, colOf(p, seen) + 1); memo.set(id, c); return c; }; for (const t of nodes) t.col = colOf(t.id); }
 export const TREE = Object.freeze(nodes.map((x) => Object.freeze(x)));

@@ -9,7 +9,7 @@ import { distKm } from "../civ/states.js";
 import { declareWar } from "../civ/diplomacy.js";
 import { makeEvent } from "../civ/events.js";
 import { retitle, leaderRng } from "./domains/naming.js";
-import { REGIMES, regimeOf, regimeGate, checkOffices, officeJa } from "./regimes.js";
+import { REGIMES, regimeOf, regimeGate, checkOffices, officeJa, canonRegime } from "./regimes.js";
 import { assignOffices, foundNation } from "./founding.js";
 import { controlledState } from "./control.js";
 import { tagRebelCommanders } from "./decisions.js";
@@ -57,6 +57,7 @@ function applyReform(ctx, st, reform) {
 }
 /** 反乱を起こす。spec.found（国家をつくる反乱）か spec.reform（体制を変える反乱）を添える */
 export function startUprising(w, { stateId, kind, cell, asState = null, found = null, reform = null }) {
+  if (found?.regime) found = { ...found, regime: canonRegime(found.regime) }; if (reform?.regime) reform = { ...reform, regime: canonRegime(reform.regime) }; // v7.1.0: 旧い政体 id も受ける
   const { civ, sim } = w, ctx = sim.ctx, st = civ.states[stateId], K = UPRISING_KINDS[kind];
   if (!st?.alive) return fail("その国家は存在しません"); if (controlledState(civ)?.id !== stateId) return fail("担当している国の中でだけ、反乱を起こせます");
   const plan = planUprising(w, { stateId, kind, cell }); if (!plan.ok) return plan;

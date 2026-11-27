@@ -27,6 +27,8 @@ import { offerCeasefires } from "./war-decisions.js";
 import { stepAftermath } from "./war-aftermath.js";
 import { corpsForWar, corpsById, corpsFx, corpsLoss, serviceLoss, leadCorps, syncCorps, corpsAfterBattle, cmdMult, marchSteps, ensureCorps } from "./corps.js";
 
+/** v7.1.0: 戦争の速さ。旧版は 5 か月で決着する戦争が過半（2181 件中 1136）で、攻撃側が 76% 勝っていた。包囲・進軍の進みを遅くし、守りの駐留を厚くする */
+const WAR_TEMPO = 0.55, WAR_DEFENSE = 1.3;
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x), r3 = (x) => Math.round(x * 1000) / 1000;
 export const POSTURES = Object.freeze({ offensive: "攻勢", balanced: "均衡", defensive: "守勢" });
 export const CAMPAIGN_KINDS = Object.freeze({ offensive: "進攻", siege: "包囲", defense: "防衛", naval_control: "制海", blockade: "封鎖", landing: "上陸" });
@@ -298,12 +300,12 @@ function advance(ctx, w, camp) {
   if (camp.kind === "landing") { const sea = seaTheater(w), ctl = sea ? (side === "a" ? sea.control : -sea.control) : 0; if (ctl < -0.3) { camp.phase = "done"; camp.result = "failed"; return; }
       { const risk = crossingRisk(st, distKm(world, capCell(civ, st) ?? g.cell, g.cell)); if (U(civ, w.id, mi, camp.id, "wreck") < risk) { const frac = clamp(0.05 + 0.3 * U(civ, w.id, mi, camp.id, "wreckn"), 0.05, 0.35), lost = F.size * frac; st.army = Math.max(0, st.army - lost); F.size -= lost; lossOf(st, F, lost); F.morale = clamp(F.morale - 0.08); w.casualties += lost; ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + lost; ops.stats.wrecks = (ops.stats.wrecks ?? 0) + 1; ops.battles.push({ id: nid(ops, "b"), at: mi, kind: "wreck", name: `${placeName(ctx, g)}沖の遭難`, theater: camp.theaterId, cell: g.cell, a: F.stateId, d: g.stateId, winner: null, deadA: Math.round(lost), deadD: 0, win: null, notable: lost > 300, domain: "sea" }); if (F.size < 1) { camp.phase = "done"; camp.result = "failed"; return; } } } /* v6.18.0: 渡海の事故 */ camp.progress += 0.18 + 0.4 * (fx(st).landing ?? 0); if (camp.progress < 1) return; }
   const Dn = defenderForce(ctx, w, foe, g.stateId, g), tst = civ.states[g.stateId], stage = stageOf(civ, g);
-  const garrison = (g.pop * 0.02 + 20) * (1 + (tst?.defense ?? 0) * 2 + (tst?.milDef ?? 0)) * (stage === "city" ? 2 : stage === "town" ? 1.4 : 1);
+  const garrison = (g.pop * 0.02 + 20) * (1 + (tst?.defense ?? 0) * 2 + (tst?.milDef ?? 0)) * (stage === "city" ? 2 : stage === "town" ? 1.4 : 1) * WAR_DEFENSE;
   if (camp.kind === "landing") { const r = fight(ctx, w, { kind: "landing", A: F, D: Dn && Dn.stateId === g.stateId ? Dn : null, camp, g, garrison }); if (r.win === "A") { occupy(ctx, w, g, side, camp); ops.stats.landings++; camp.phase = "done"; camp.result = "success"; } else { camp.phase = "done"; camp.result = "failed"; } return; }
   if (Dn && U(civ, w.id, mi, camp.id, "eng") < (camp.kind === "siege" ? 0.25 : 0.45)) { const site = fieldSite(ctx, w, camp, g), bd = ctx.decisions?.battle(ctx, w, { camp, A: F, D: Dn, g, site }); if (bd) { camp.waiting = bd; return; } /* v6.12.0: 大きな戦いは、担当国が選択肢で進める（決断） */ fieldEngage(ctx, w, camp, F, Dn, g, { site }); if (camp.phase === "done") return; }
   else {
     const atkP = landPower(civ, st, F.size) * moraleF(F) * (0.5 + 0.5 * F.supply) * cmdMult(st, F, "atk"), co = F.corpsId ? 1 + 0.4 * Math.min(2, Math.max(0, Object.values(ops.campaigns).filter((c2) => c2.id !== camp.id && c2.phase === "active" && c2.side === side && c2.targetGroupId === camp.targetGroupId && ops.forces[c2.forceId]?.corpsId).length)) : 1, ratio = atkP / (garrison * (1 + terrainBonus(world, g.cell)) + 1);
-    const rate = camp.kind === "siege" ? clamp(0.035 * ratio * (1 + 2 * (fx(st).siege ?? 0) + cf.siege + (fx(st).strike ?? 0) + 0.5 * airSupport(st)) * co, 0.01, 0.22) : clamp(0.06 * ratio, 0.02, 0.3); camp.progress = clamp(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);
+    const rate = WAR_TEMPO * (camp.kind === "siege" ? clamp(0.035 * ratio * (1 + 2 * (fx(st).siege ?? 0) + cf.siege + (fx(st).strike ?? 0) + 0.5 * airSupport(st)) * co, 0.01, 0.22) : clamp(0.06 * ratio, 0.02, 0.3)); camp.progress = clamp(camp.progress + rate * (0.6 + 0.4 * F.supply), 0, 1.2);
     if (camp.kind === "siege") { const l = F.size * 0.004 * (1 - (fx(st).attr ?? 0)); st.army = Math.max(0, st.army - l); F.size -= l; lossOf(st, F, l); w.casualties += l; ops.stats.dead[st.id] = (ops.stats.dead[st.id] ?? 0) + l; }
   }
   if (camp.progress >= 1) {

@@ -1,4 +1,5 @@
 // v6 UI: 地理・国家（一覧と 5 タブの詳細）。すべて Query で読み、Command で変える。
+import { axisOf, ECONOMY, STRUCTURE, IDEOLOGY } from "../../core/wcde/polity30.js";
 import {
   h,
   lb,
@@ -22,7 +23,7 @@ import {
 import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
 import { LAYERS, GROUPS, FILL_IDS } from "./map.js";
 import { techRadial as techTree, doctrineTree } from "./trees.js";
-import { TECHS, TECH, LANES, COND, available } from "../../core/civ/tech.js";
+import { TECHS, TECH, LANES, COND, available, ADOPT_COVER } from "../../core/civ/tech.js";
 import { formatDate } from "../../core/wcde/calendar.js";
 import { actionGate } from "../../core/civ/actions.js";
 import { taxMult } from "../../core/civ/techfx.js";
@@ -311,6 +312,10 @@ export function officesBox(st, mine) {
     offs = st.offices ?? [],
     can = st.alive && (mine || !controlled()),
     box = h("div", {}, lb("官制・役職", "OFFICES"), note(`${R.ja}・元首は${officeJa(R.ruler)}`));
+  { // v7.1.0: 政体とは別に選ぶ 3 つの軸
+    const ax = axisOf(st, rg), nm = (list, id) => list.find((x) => x.id === id)?.ja ?? id;
+    box.append(h("div", { class: "chips sm axes" }, h("span", {}, `経済 ${nm(ECONOMY, ax.economy)}`), h("span", {}, `構造 ${nm(STRUCTURE, ax.structure)}`), h("span", {}, `思想 ${nm(IDEOLOGY, ax.ideology)}`)));
+  }
   box.append(
     offs.length
       ? h(
@@ -651,7 +656,7 @@ export function creatorBox(st) {
 }
 
 // ---- 技術タブ（v6.1.0 M3）。状態は 5 つ: 制度化（国が採用）／採用できる（国内の 3 割以上が知っている）／保有（一部の集団だけが知る）／失われた／未発見
-function techStatus(st) {
+export function techStatus(st) {
   const c = civ(),
     groups = Object.values(c.groups).filter((g) => g.stateId === st.id),
     total = groups.reduce((a, g) => a + g.pop, 0) || 1,
@@ -665,7 +670,7 @@ function techStatus(st) {
     f = (t) =>
       st.techAdopted?.[t.key] != null
         ? "adopted"
-        : cov(t.key) >= 0.3
+        : cov(t.key) >= ADOPT_COVER
           ? "available"
           : cov(t.key) > 0
             ? "known"
@@ -675,7 +680,7 @@ function techStatus(st) {
   f.cov = cov;
   return f;
 }
-const CAP_JA = {
+export const CAP_JA = {
   "polity:chiefdom": "首長制へ",
   "polity:kingdom": "王国へ",
   "polity:republic": "共和政へ",
@@ -717,7 +722,7 @@ const CAP_JA = {
   "policy:tax_high": "高い税率",
   "policy:parliament": "議会制",
 };
-const FX_JA = {
+export const FX_JA = {
   cap: "収容力",
   tax: "税収",
   trade: "交易",
@@ -758,7 +763,7 @@ export function tTech(st, mine) {
     { svg, COL, SYM } = tree,
     s = sel && status(sel);
   const lab = {
-    adopted: "制度化済み（この国が採用）",
+    adopted: "採用済み",
     available: "採用できる（国内の人口の 3 割以上が知っている）",
     known: "保有（一部の集団だけが知る。国としてはまだ採用できない）",
     lost: "失われた（かつて知っていたが、今は誰も知らない）",
@@ -799,7 +804,7 @@ export function tTech(st, mine) {
     },
     id: "tech-q",
   });
-  let detail = note("ノードを選ぶと、前提・成立の条件・解禁されること・効果・世界での広がりが出ます。");
+  let detail = note("技術を選ぶと、前提・成立の条件・解禁されること・効果・世界での広がりが出ます。");
   if (sel) {
     const gs = Object.values(c.groups).filter((g) => g.stateId === st.id),
       cov = Math.round(status.cov(sel.key) * 100),
@@ -885,7 +890,7 @@ export function tTech(st, mine) {
       "div",
       { class: "lg" },
       ...Object.entries({
-        adopted: "制度化",
+        adopted: "採用",
         available: "採用できる",
         known: "保有",
         lost: "失われた",

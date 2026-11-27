@@ -21,8 +21,8 @@ const alive = (w) => Object.values(w.civ.states).filter((s) => s.alive).sort((a,
 const own = (w, k = 0) => { const s = alive(w)[k]; assert.ok(dispatch(w, { type: "control.take", authority: A.ADMIN, stateId: s.id }).ok); return s; };
 
 console.log("=== 出来事の整理 ===");
-await check("どうでもよい出来事を減らした（240 → 190 未満）。消した出来事は、連鎖の行き先にもない", () => {
-  assert.ok(EVENTS.length < 190 && EVENTS.length > 150, String(EVENTS.length));
+await check("どうでもよい出来事を減らした（旧版 240 → 190 未満。v7.1.0 で時代固有の 56 種を足して 250 未満）。消した出来事は、連鎖の行き先にもない", () => {
+  assert.ok(EVENTS.length < 250 && EVENTS.length > 150, String(EVENTS.length));
   for (const e of EVENTS) for (const c of e.ch) assert.ok(EVENT_BY_ID[c.id], `${e.id} → ${c.id}`);
   for (const id of ["court_poet", "twin_suns", "sports_festival", "heat_wave", "protest_note"]) assert.ok(!EVENT_BY_ID[id], id);
 });
@@ -69,9 +69,9 @@ await check("同じ名前なら、いつ読んでも同じ効果（乱数でな�
   for (const id of Object.keys(OFFICES)) { const a = officeInfo(id), b = officeInfo(id); assert.deepEqual(a, b); if (a.dom !== "ruler") assert.ok(Object.keys(a.fx).length >= 1, id); if (a.debuff) assert.ok(DEBUFF_JA[a.debuff], a.debuff); }
 });
 await check("近代の政体は 60 個以上、史実の官名（総理大臣・国務長官・党書記…）が入っている", () => {
-  for (const id of ["presidential", "parliamentary", "socialist", "constitutional_monarchy"]) assert.ok(REGIMES[id].offices.length >= 60, `${id} ${REGIMES[id].offices.length}`);
+  for (const id of ["presidential_republic", "parliamentary_republic", "planned_socialist", "parliamentary_monarchy"]) assert.ok(REGIMES[id].offices.length >= 60, `${id} ${REGIMES[id].offices.length}`);
   const names = (rid) => REGIMES[rid].offices.map((o) => OFFICES[o][0]);
-  assert.ok(names("presidential").includes("国務長官")); assert.ok(names("kingdom").includes("伯")); assert.ok(names("oligarchic_republic").includes("護民官")); assert.ok(names("empire").includes("御史大夫"));
+  assert.ok(names("presidential_republic").includes("国務長官")); assert.ok(names("estates_monarchy").includes("伯")); assert.ok(names("aristocratic_republic").includes("護民官")); assert.ok(names("bureaucratic_state").includes("御史大夫"));
 });
 
 console.log("=== 国策 ===");

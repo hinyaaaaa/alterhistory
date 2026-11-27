@@ -23,8 +23,8 @@ const own = (w, k = 0) => { const s = alive(w)[k]; assert.ok(dispatch(w, { type:
 const modern = (st) => { for (const t of TREE) st.techAdopted[t.id] ??= 0; st.treasury = 1e9; }; // 技術をすべて制度化した国家
 
 console.log("=== 技術（現代戦〜未来）===");
-await check("技術ツリー: 近代〜現代の軍事 37 と未来 8 を足し、検証を通る。未来は『未来』の段", () => {
-  assert.deepEqual(validateTree(), []); assert.equal(TREE.length, 174); assert.equal(TREE.filter((t) => t.stage === 12).length, 8);
+await check("技術ツリー: 500 項目＋軍事（近代〜現代 37・未来 6）。検証を通る。軍事の未来は『未来』の段", () => {
+  assert.deepEqual(validateTree(), []); assert.equal(TREE.filter((t) => t.doc).length, 500, "資料の 500 項目"); assert.equal(TREE.filter((t) => t.lane === "mil" && t.stage === 12).length, 6);
   for (const id of ["machine_gun", "tank", "submarine", "dreadnought", "aircraft_carrier", "fighter_aircraft", "bomber_aircraft", "ballistic_missile", "nuclear_arsenal", "stealth", "cyber_warfare", "autonomous_systems", "orbital_warfare"]) assert.ok(TREE.some((t) => t.id === id), id);
 });
 

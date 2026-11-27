@@ -13,7 +13,7 @@ import { grievance } from "../civ/interpret.js";
 import { effective } from "./domains/effective.js";
 import { totalPower } from "./power.js";
 import { leaveWar, warSide, placeName } from "./warfare.js";
-import { warSupport, goalsOf, surrenderRec, sideOf as wsideOf } from "./war-core.js";
+import { warSupport, goalsOf, surrenderRec, sideOf as wsideOf, MIN_WAR_MONTHS } from "./war-core.js";
 import { proposeWithDemands, concludeWithDemands } from "./war-peace.js";
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
@@ -154,7 +154,7 @@ export function negotiatePeace(ctx, proposer, war, c = {}) {
   const k = c.terms?.kind, terms = k === "reparations" ? { kind: "reparations", amount: Math.max(0, Number(c.terms.amount) || 0) } : k === "cession" ? { kind: "cession" } : k === "white" ? { kind: "white" } : defaultTerms(civ, war, proposer);
   if (!principal && terms.kind === "cession") terms.kind = "white"; // 単独講和は土地を動かさない（戦争全体の整理は主たる交戦国の講和・終戦で行う）
   if (!c.forceAccept) { const r = ctx.decisions?.offerPeace(ctx, proposer, war, other, terms); if (r) return r; } // v6.12.0: 担当国への講和の申し入れは、決断にする
-  const ev = c.forceAccept ? { accept: true } : evaluatePeace(civ, war, proposer, other, terms), base = { kind: "peace", warId: war.id, from: proposer.id, to: otherId, terms, separate: !principal };
+  const ev0 = c.forceAccept ? { accept: true } : evaluatePeace(civ, war, proposer, other, terms), young = !c.forceAccept && civ.wcde.control?.stateId !== proposer.id && civ.monthIndex - (war.startedAt ?? 0) < MIN_WAR_MONTHS, ev = ev0.accept && young ? { ...ev0, accept: false, reasons: [...(ev0.reasons ?? []), "開戦から間もない（AI の講和は 9 か月たってから）"] } : ev0 /* v7.1.0 */, base = { kind: "peace", warId: war.id, from: proposer.id, to: otherId, terms, separate: !principal };
   if (!ev.accept) { record(ctx, { ...base, status: "rejected" }); return failure(`講和は受け入れられなかった（理由: ${(ev.reasons ?? []).join("、") || "—"}）`, { targetId: war.id, reasons: ev.reasons ?? [] }); }
   if (war.status !== "active") { record(ctx, { ...base, status: "failed_recheck" }); return failure("条件が変わり、講和できなかった", { targetId: war.id }); }
   if (terms.kind === "reparations") { const ahead = war.score >= 0 ? "a" : "d", payerSide = ahead === "a" ? "d" : "a", payer = civ.states[payerSide === mySide ? proposer.id : otherId], getter = civ.states[payer.id === proposer.id ? otherId : proposer.id]; const amt = Math.min(terms.amount, Math.max(0, payer.treasury)); payer.treasury -= amt; getter.treasury += amt; base.terms = { ...terms, paid: Math.round(amt) }; }

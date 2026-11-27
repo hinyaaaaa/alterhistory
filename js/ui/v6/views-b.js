@@ -1,4 +1,5 @@
 // v6 UI: 戦争・世界の外交・文化/言語/宗教・年表・統計・検索・世界設定。
+import { paceOf, PACE_MODES } from "../../core/wcde/pace.js";
 import { h, lb, stat, btn, holdBtn, table, pct, n0, r2, colorOf, polityJa, vlist, sv } from "./common.js";
 import { S, run, act, creator, stateName, aliveStates, controlled } from "./store.js";
 import { lineageTree, nestedLineage, miniLineage } from "./trees.js";
@@ -469,10 +470,13 @@ export function pSettings() {
       }),
     );
   });
+  const paceNow = paceOf(c).mode;
+  const paceBox = h("div", { class: "rowb", id: "pace-box" }, h("small", {}, "決断の出し方"), ...Object.entries(PACE_MODES).map(([k, ja]) => btn(ja, () => { act({ type: "pace.set", mode: k }); S.hooks.panel(); }, paceNow === k ? "p" : "", { id: `pace-${k}` })), h("small", {}, "静か＝重い決断だけ／標準＝軽い決断は間隔を空ける／すべて＝旧来どおり"));
   return h(
     "div",
     {},
     ...head("SETTINGS", "世界設定・出力"),
+    paceBox,
     table(
       ["項目", "値"],
       [

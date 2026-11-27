@@ -25,14 +25,14 @@ const live = (w, on = true) => { decisionsOf(w.civ).live = on; };
 const resolve = (w, d, option) => dispatch(w, { type: "decision.resolve", authority: A.PLAYER, decisionId: d.id, option });
 
 console.log("=== 役職（政体ごとに約 50）===");
-await check("24 政体すべてで、政体の複雑さに応じた数（単純 10〜25／複雑 60〜100）の役職。旧版の役職 id は残り、元首の役職を含む。全部置いても検証を通る", () => {
-  assert.equal(Object.keys(REGIMES).length, 24);
+await check("30 政体すべてで、政体の複雑さに応じた数（単純 10〜25／複雑 60〜100）の役職。旧版の役職 id は残り、元首の役職を含む。全部置いても検証を通る", () => {
+  assert.equal(Object.keys(REGIMES).length, 30);
   for (const [id, r] of Object.entries(REGIMES)) { assert.ok(r.offices.length >= 10 && r.offices.length <= 100, `${id}: ${r.offices.length}`); assert.ok(r.offices.includes(r.ruler)); assert.equal(new Set(r.offices).size, r.offices.length); for (const o of r.offices) assert.ok(OFFICES[o], o); assert.equal(checkOffices(id, r.offices), null, id); }
   for (const o of ["chief", "king", "vizier", "treasurer", "prime_minister", "junta_chair", "federal_chair"]) assert.ok(OFFICES[o], o);
   assert.ok(MAX_OFFICES >= 60);
 });
 await check("役職の効果は軽く（上限あり）、全部置くと維持費と官僚肥大が重い。少なく置けば軽い。元首の力量が効く", () => {
-  const r = REGIMES.kingdom, st = (n) => ({ offices: r.offices.slice(0, n).map((id) => ({ id })), pop: 200000, leader: { skill: 0.5 } });
+  const r = REGIMES.estates_monarchy, st = (n) => ({ offices: r.offices.slice(0, n).map((id) => ({ id })), pop: 200000, leader: { skill: 0.5 } });
   const all = officeEffects(st(r.offices.length)), few = officeEffects(st(8)); assert.ok(Math.abs(all.tax) <= 0.12 && Math.abs(all.stab) <= 0.06 && Math.abs(all.mil) <= 0.08 && Math.abs(all.dipl) <= 0.3);
   for (const v of Object.values(all.fac)) assert.ok(Math.abs(v) <= 0.12);
   assert.ok(all.extra > few.extra && all.extra > 0, "置きすぎで官僚肥大"); assert.ok((all.fac.commoners ?? 0) < (few.fac.commoners ?? 0), "民衆の支持の副作用");

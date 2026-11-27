@@ -3,7 +3,8 @@
 //   （戦争・講和・軍団の編成・反乱は、既存の部品が S.full を直接作る。どちらも同じ入れ物 #fs に出る）。docs/UI_RULES.md §4。
 import { h } from "../v6/common.js";
 import { S, controlled } from "../v6/store.js";
-import { stateDetail, tTech, tDoctrine } from "../v6/views-a.js";
+import { stateDetail, tDoctrine } from "../v6/views-a.js";
+import { techScreen } from "./tech-view.js";
 import { tInfoV } from "../v6/nation.js";
 import { civ, legacy } from "./panels-common.js";
 import { declareSpec, peaceSpec, mobilizeSpec } from "./war-screens.js";
@@ -31,7 +32,7 @@ function specOf(sc, st) {
     case "about": return { key: "about", title: "版の情報", build: () => h("div", {}, H3("AlterHistory"), Mut(APP_VERSION_LABEL)), onClose: close };
     case "nation": return { key: "nation", title: st.name, build: () => legacy(h("div", { class: "v-nation" }, stateDetail(stateOf(sc.id)))), onClose: () => { close(); S.detail = false; } };
     case "info": return { key: "info", title: `${st.name} の情報`, build: () => legacy(h("div", {}, tInfoV(stateOf(sc.id), mine))), onClose: close };
-    case "tech": return { key: "tech", title: "技術ツリー", bare: true, build: () => h("div", { class: "v-treefull" }, tTech(stateOf(sc.id), mine)), onClose: close };
+    case "tech": return { key: "tech", title: "技術", build: () => techScreen(stateOf(sc.id), mine, () => S.hooks.panel()), onClose: close };
     case "doctrine": return { key: "doctrine", title: "軍事ドクトリン", build: () => legacy(h("div", {}, tDoctrine(stateOf(sc.id), mine))), onClose: close };
   }
   return null;

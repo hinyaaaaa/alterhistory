@@ -13,7 +13,7 @@ import { lifeScale } from "../civ/species.js";
 import { languageOfGroup } from "./domains/language.js";
 import { takeControl } from "./control.js";
 import { initMilitary, nodesOf, canAdopt, adoptDoctrine } from "./domains/military.js";
-import { REGIMES, DEFAULT_REGIME, regimeGate, checkOffices, defaultOffices, officeJa, OFFICES, regimeOf } from "./regimes.js";
+import { REGIMES, DEFAULT_REGIME, regimeGate, checkOffices, defaultOffices, officeJa, OFFICES, regimeOf, canonRegime } from "./regimes.js";
 import { groupStage } from "../civ/settlements.js"; // v7.0.0
 
 const POLITY_CHOICES = { city_state: ["chiefdom", "tribal"], religious_polity: ["theocracy", "tribal"], agri_union: ["tribal", "chiefdom"], nomad_confederation: ["tribal", "chiefdom"] };
@@ -131,7 +131,8 @@ function checkSpec(w, s) {
 }
 /** 3 つの経路（担当・創造主・反乱）に共通の建国。spec: { name, regime, offices[], leader:{name,look}, capital:{groupId|cell}, techs[], doctrine, groupIds?（領域の指定。反乱のとき） }
  *  mode: "player"（担当して始める）／"creator"（担当しない）／"rebel"（反乱。predecessor・cause を渡す） */
-export function foundNation(w, spec, { mode = "player", predecessor = null, cause = null, via: viaIn = null } = {}) {
+export function foundNation(w, spec0, { mode = "player", predecessor = null, cause = null, via: viaIn = null } = {}) {
+  const spec = spec0 && spec0.regime ? { ...spec0, regime: canonRegime(spec0.regime) } : spec0; // v7.1.0
   const { civ, sim } = w, ctx = sim.ctx, c = checkSpec(w, spec); if (!c.ok) return c;
   const plan = planCapital(w, spec.capital ?? {}); if (!plan.ok) return plan;
   const capG = plan.group ?? civ.groups[plan.parentId]; const gate = regimeGate(civ, capG, spec.regime); if (gate) return fail(`この首都では「${REGIMES[spec.regime].ja}」を選べません（${gate}）`);
@@ -173,7 +174,8 @@ export function foundAsCreator(w, spec) { return foundNation(w, spec, { mode: "c
 export function delegateToWorld(w) { const { civ } = w; civ.wcde.phase = "running"; civ.wcde.foundedAt = civ.monthIndex; civ.wcde.control.stateId = null; return { ok: true }; }
 
 /** 建国の画面に渡す情報（何も変えない）。regime・capital を渡すと、その先の選択肢も返す */
-export function foundingOptions(w, { regime = null, capital = null, techs = [] } = {}) {
+export function foundingOptions(w, { regime: regime0 = null, capital = null, techs = [] } = {}) {
+  const regime = regime0 ? canonRegime(regime0) : null;
   const { civ } = w, out = { ok: true, regimes: [], sites: [], looks: LOOKS, maxTech: MAX_START_TECH };
   const anyG = Object.values(civ.groups).filter((g) => g.settlementId && !g.stateId).sort((a, b) => b.pop - a.pop).slice(0, 80);
   out.regimes = Object.keys(REGIMES).map((id) => { const reasons = anyG.map((g) => regimeGate(civ, g, id)); const ok = reasons.some((r) => !r); return { id, ja: REGIMES[id].ja, blurb: REGIMES[id].blurb, ruler: officeJa(REGIMES[id].ruler), heredity: REGIMES[id].heredity, offices: REGIMES[id].offices.map((o) => ({ id: o, ja: officeJa(o), dom: OFFICES[o][1] })), defaultOffices: defaultOffices(id), ok, reason: ok ? null : (reasons[0] ?? "この世界の誰もまだ条件を満たしていない") }; });

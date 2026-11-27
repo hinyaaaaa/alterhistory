@@ -1,4 +1,5 @@
 // v6 M0/M5: 命令の定義。どの権限で・どの段階で・何を変えられるか（権限の表）。すべて dispatch（contract.js）を通る。
+import { setPace } from "./pace.js";
 import { AUTHORITY as A, defineCommand, safeAdvance } from "./contract.js";
 import { foundAsPlayer, foundAsCreator, delegateToWorld, refreshCandidates, foundingOptions } from "./founding.js";
 import { planUprising, startUprising, setOffices } from "./uprising.js";
@@ -84,6 +85,7 @@ export function registerCommands() {
   defineCommand("ops.covert", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive || !st.player) return { ok: false, error: "その国家は担当国ではありません" }; return covertOp(w.sim.ctx, st, { kind: c.kind, target: c.target }); } });
   defineCommand("ops.nuclear", { authorities: [A.PLAYER], control: true, apply: (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive || !st.player) return { ok: false, error: "その国家は担当国ではありません" }; return nuclearStrike(w.sim.ctx, st, { target: c.target, group: c.group ?? null, scale: c.scale ?? "tactical" }); } });
   defineCommand("ops.nukeTargets", { authorities: [A.PLAYER], control: true, mutates: false, apply: (w, c) => ({ ok: true, list: nukeTargets(w.sim.ctx, w.civ.states[c.stateId], c.target, c.scale ?? "tactical") }) });
+  defineCommand("pace.set", { authorities: [A.PLAYER, A.ADMIN], control: false, checkpoint: false, validate: (w, c) => (typeof c.mode === "string" && ["calm", "standard", "all"].includes(c.mode) ? null : { ok: false, error: "mode は calm / standard / all" }), apply: (w, c) => (setPace(w.civ, c.mode) ? { ok: true, effects: [], mode: c.mode } : { ok: false, error: "不明なモード" }) });
   defineCommand("decision.resolve", { authorities: [A.PLAYER], control: true, checkpoint: true, validate: (w, c) => (typeof c.decisionId === "string" && typeof c.option === "string" ? null : { ok: false, error: "decisionId と option が必要です" }), apply: (w, c) => resolveDecision(w, { id: c.decisionId, option: c.option, extra: c.extra ?? null }) });
   // v6.12.0: 軍団（名前・兵力・指揮官を持つ部隊）の編成・人事・作戦命令。担当国家だけ。検証は corps.js（失敗したら何も変えない）
   const cs = (w, c) => { const st = w.civ.states[c.stateId]; if (!st?.alive) return null; ensureCorps(w.sim.ctx, st); return st; };

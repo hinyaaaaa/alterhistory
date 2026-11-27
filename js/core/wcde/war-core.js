@@ -14,6 +14,8 @@ import { effective } from "./domains/effective.js";
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 const r1 = (x) => Math.round(x * 10) / 10;
 
+/** v7.1.0: 開戦から降伏を数えはじめるまでの月数（国どうしが一瞬で決着しないように） */
+export const MIN_WAR_MONTHS = 9;
 export const DEFAULT_LIMIT = 80; // 降伏の限度（%）
 export const WAR_PHASE = Object.freeze({ active: "active", conference: "conference", ended: "ended" });
 
@@ -138,7 +140,7 @@ export function stepSurrender(ctx, w) {
     }
     if (rec.resist > 0) { rec.resist++; const lose = (st.army ?? 0) * 0.01; st.army = Math.max(0, (st.army ?? 0) - lose); } // 抗戦: 降伏ゲージは維持され、毎月、民意と兵力が削られる
     const collapse = rec.zero >= 12; // 支持 0 が 1 年続けば、占領が少なくても国は持たない（民意が 0 でも降伏しない、を防ぐ）
-    if (rec.vpPct >= rec.limit || collapse) { if (askOrCapitulate(ctx, w, st, rec, collapse)) out.push(st); }
+    if ((rec.vpPct >= rec.limit || collapse) && mi - w.startedAt >= MIN_WAR_MONTHS) { if (askOrCapitulate(ctx, w, st, rec, collapse)) out.push(st); }
   }
   return out;
 }

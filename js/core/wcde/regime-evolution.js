@@ -4,6 +4,7 @@
 //   ・変える圧力: 戦争の疲弊・財政難・民衆の不満・隣国の優位。隣国の政体は模倣されやすい。
 //   ・変わり方: 改革／革命／軍の掌握／征服。規模（段差・系統の違い）が大きいほど、安定度の低下と勢力の離反が大きい。
 //   ・内部の政体（st.polity。6 値）が変わるときは politics.js の reformPolity を通す（国号の称号も組み直る）。
+import { POLITY_LIST } from "./polity30.js";
 import { REGIMES, REGIME_IDS, regimeOf, regimeGate, defaultOffices, regimeJa } from "./regimes.js";
 import { assignOffices } from "./founding.js";
 import { reformPolity, initPolitics } from "./domains/politics.js";
@@ -16,15 +17,10 @@ import { effective } from "./domains/effective.js";
 
 const clamp = (x, a = 0, b = 1) => (x < a ? a : x > b ? b : x);
 /** 政体の段（時代の新しさ）と系統。tri 前国家／the 神権／mon 君主制／rep 共和制／aut 近代の一党・軍・統制／anar 無政府 */
-export const REGIME_META = Object.freeze({
-  tribal: [0, "tri"], chiefdom: [1, "tri"], city_state: [2, "tri"], theocracy: [2, "the"], kingdom: [3, "mon"], oligarchic_republic: [3, "rep"], direct_democracy: [3, "rep"],
-  empire: [4, "mon"], feudal: [4, "mon"], clerical_state: [4, "the"], merchant_republic: [5, "rep"], elective_monarchy: [5, "mon"], despotism: [6, "mon"],
-  constitutional_monarchy: [7, "mon"], confederation: [7, "rep"], anarchist: [7, "anar"], parliamentary: [8, "rep"], presidential: [8, "rep"], socialist: [8, "aut"], junta: [8, "aut"],
-  one_party: [9, "aut"], totalitarian: [9, "aut"], technocracy: [10, "aut"], adv_direct_democracy: [11, "rep"],
-});
+export const REGIME_META = Object.freeze(Object.fromEntries(POLITY_LIST.map((r) => [r.id, [r.tier, r.fam]])));
 export const tierOf = (id) => REGIME_META[id]?.[0] ?? 0;
 export const familyOf = (id) => REGIME_META[id]?.[1] ?? "tri";
-const RARITY = { adv_direct_democracy: 0.3, technocracy: 0.45, totalitarian: 0.5, junta: 0.6, one_party: 0.7 }; // 新しい政体でも、すべての国が同じになるわけではない
+const RARITY = Object.freeze(Object.fromEntries(POLITY_LIST.map((r) => [r.id, r.rarity]))); // 新しい政体でも、すべての国が同じになるわけではない
 const MIN_POP = { tribal: 0, chiefdom: 0, theocracy: 0, kingdom: 2000, republic: 300, empire: 60000 };
 const HOW_JA = { reform: "制度の改革", revolution: "革命", military_takeover: "軍による権力の掌握", conquest: "征服による大国化", decline: "中央の衰退", imitation: "隣国にならった改革" };
 
@@ -35,9 +31,9 @@ export function changeScale(from, to) {
 }
 function gateFor(ctx, st, id) {
   const civ = ctx.civ, g = civ.groups[st.capitalGroupId]; if (!g) return "首都がない"; const r = REGIMES[id], why = regimeGate(civ, g, id); if (why) return why;
-  if (id === "direct_democracy" && st.pop > 200000 && (st.techAdopted?.public_education == null && g.tech.known.public_education == null)) return "大きな国の民主制には公教育が要る";
+  if (id === "direct_democracy" && st.pop > 200000 && (st.techAdopted?.public_education == null && g.tech.known.public_education == null)) return "大きな国の直接民主制には公教育が要る";
   if ((st.pop ?? 0) < (MIN_POP[r.core] ?? 0)) return "人口が足りない";
-  const size = byState(ctx).get(st.id)?.length ?? 0; if (id === "empire" && size < 12) return "領土が小さい"; if (id === "city_state" && size > 3) return "領土が広すぎる";
+  const size = byState(ctx).get(st.id)?.length ?? 0; if ((id === "bureaucratic_state" || id === "meritocratic_state") && size < 12) return "領土が小さい"; if ((id === "corporate_state" || id === "aristocratic_republic" && false) && size > 6) return "領土が広すぎる";
   return null;
 }
 /** 国が見直せる政体の候補と重み（何も変えない）。pressure: 変える圧力（0〜1） */
@@ -79,7 +75,7 @@ export function stepRegimeEvolution(ctx) {
     if (!st.alive || st.player || civ.wcde?.control?.stateId === st.id) continue; const P = (st.politics ??= initPolitics(st)); if (mi - (P.lastRegimeChange ?? -9999) < 360) continue; // 30 年は続く
     const pr = pressureOf(ctx, st), u = (hashSeed(st.id, mi, "regime") % 100000) / 100000, cur = regimeOf(st);
     // 無政府主義: 国家が崩れ、小さな国になったときだけ（短命。周辺の大国に潰されやすい）
-    if (pr > 0.7 && st.stability < 0.2 && st.pop < 150000 && !gateFor(ctx, st, "tribal") && regimeGate(civ, civ.groups[st.capitalGroupId], "anarchist", { crisis: true }) == null && u < 0.08) { switchRegime(ctx, st, "anarchist", "revolution"); continue; }
+    if (pr > 0.7 && st.stability < 0.2 && st.pop < 150000 && !gateFor(ctx, st, "elder_council") && regimeGate(civ, civ.groups[st.capitalGroupId], "council_republic", { crisis: true }) == null && u < 0.08) { switchRegime(ctx, st, "council_republic", "revolution"); continue; }
     const cands = regimeCandidates(ctx, st, pr); if (!cands.length) continue; const best = Math.max(...cands.filter((c) => c.w > 0.15).map((c) => c.gap), 0);
     const tradition = clamp(0.5 * effective(civ, st, "legitimacy") + 0.3 * st.stability + 0.2 * (P.factions?.nobility?.support ?? 0.5)), lag = 1 + 0.6 * Math.max(0, best - 1), resist = 1 - 0.5 * tradition;
     const p = clamp(0.015 * (1 + 3 * pr) * lag * resist, 0, 0.35); if (u >= p) continue;

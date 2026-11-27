@@ -1,3 +1,4 @@
+import { POLITY_LIST } from "./polity30.js";
 // v6.21.0: 政体ごとの役職の名前（史実の官名・職名に見直し）と、役職の効果の印。
 //   1 行 = 分野（R 元首／A 行政／M 軍事／E 経済／F 信仰／L 司法／C 文化／D 外交／I 情報）＋ 名前（空白区切り）。
 //   名前の後ろの「:印」が、その役職の効果を決める（regimes.js の officeInfo）。ハッシュの乱数ではなく、役職の意味に結びつけてある。
@@ -6,7 +7,7 @@
 //     印がなければ、分野の標準（行政 s・軍事 m・経済 t・信仰 s・司法 s・文化 c・外交 d・情報 k）。
 //   同じ名前の旧い役職（保存の互換のための id）は、最初に出た政体の印を使う。
 //   単純な政体（SIMPLE_CAP）は先頭から数えた数だけ使うので、分野が偏らないよう行を交互に並べてある。
-export const OFFICE_LISTS = Object.freeze({
+const BASE_LISTS = Object.freeze({
   tribal: `
 R 族長
 A 長老会議:s 集会の司会:s
@@ -275,8 +276,12 @@ D 外交の公開の担当官:d 条約投票の運営官:d 国際対話の使節
 I 公開情報の分析官:k 情報の安全の管理官:k`,
 });
 
+// v7.1.0: 30 政体の役職は、旧い政体の一覧（BASE_LISTS）の元首の行だけを差し替えて作る。新しい id の役職は「政体_番号」で、旧い id の役職（古い保存）もそのまま残る。
+const NEW_ROOT = POLITY_LIST.map((r) => [r.id, r.src, r.ruler]);
+const swapRuler = (text, ruler) => `R ${ruler}\n` + text.trim().split("\n").filter((l) => !l.startsWith("R ")).join("\n");
+export const OFFICE_LISTS = Object.freeze({ ...BASE_LISTS, ...Object.fromEntries(NEW_ROOT.filter(([id]) => !(id in BASE_LISTS)).map(([id, src, ruler]) => [id, swapRuler(BASE_LISTS[src], ruler)])) });
 /** 近代以降の複雑な政体に足す役職（政体の複雑さに応じて 60〜80 個になる）。名前が既にある政体では重複を飛ばす */
-export const MODERN_REGIMES = Object.freeze(["constitutional_monarchy", "parliamentary", "presidential", "socialist", "one_party", "totalitarian", "technocracy", "direct_democracy", "confederation", "adv_direct_democracy"]);
+export const MODERN_REGIMES = Object.freeze([...POLITY_LIST.filter((r) => r.tier >= 7).map((r) => r.id), "constitutional_monarchy", "parliamentary", "presidential", "socialist", "one_party", "totalitarian", "technocracy", "direct_democracy", "confederation", "adv_direct_democracy"]);
 export const MODERN_EXTRA = `
 A 統計局長官:h 公文書館長:s 選挙管理委員長:s 国土整備の長官:t 地方行政の長官:s 公衆衛生の長官:s 郵便電信の総裁:d 鉄道の総裁:t 港湾の長官:t 環境の長官:s 特許局長官:h 会計検査院長:S
 M 消防の総監:s 沿岸警備隊の長官:m 退役軍人の長官:s 軍需調達の長官:m
@@ -287,4 +292,4 @@ C 教育の長官:c 国立大学の総長:h 国立図書館長:c 放送の監督
 D 国際機関への代表:d 通商交渉の代表:d 移民の長官:s
 I 通信保全の長官:k`;
 /** 単純な政体は役職を少なく（10〜20 個）。先頭から数えた上限 */
-export const SIMPLE_CAP = Object.freeze({ tribal: 14, chiefdom: 18, city_state: 20, anarchist: 18 });
+export const SIMPLE_CAP = Object.freeze({ tribal: 14, chiefdom: 18, city_state: 20, anarchist: 18, elder_council: 14, chiefs_league: 18 });
