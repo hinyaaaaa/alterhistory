@@ -21,6 +21,7 @@ import { syncCorps, defectCorps } from "../corps.js";
 import { stateFx } from "../statefx.js";
 import { officeUpkeep } from "../regimes.js";
 import { stepRegimeEvolution } from "../regime-evolution.js";
+import { stepTransitions } from "../transition.js";
 import { stepDependencies } from "../dependency.js";
 import { stepPacts, registerPactDecisions } from "../pacts.js";
 import { stepTreatyAI } from "../treaty-ai.js";
@@ -44,6 +45,7 @@ export function wcdeExtension(ticker, ctx) {
   ticker.register("economy", stepEconomy, "stepEconomy", { every: 3 });
   ticker.register("politics", stepPolitics, "stepPolitics", { every: 3 });
   ticker.register("politics", stepRegimeEvolution, "stepRegimeEvolution");
+  ticker.register("politics", stepTransitions, "stepTransitions", { every: 3 }); // v7.2.0: 政体の局面（前兆→危機→決着）・選挙
   ticker.register("conflict", stepDependencies, "stepDependencies");
   ticker.register("conflict", stepPacts, "stepPacts");
   ticker.register("conflict", stepTreatyAI, "stepTreatyAI");

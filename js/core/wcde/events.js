@@ -11,7 +11,7 @@ import { makeEvent, withCause } from "../civ/events.js";
 import { NODE } from "../civ/techtree.js";
 import { addShock } from "./shocks.js";
 import { regimeOf, REGIMES } from "./regimes.js";
-import { regimeCandidates, switchRegime, familyOf } from "./regime-evolution.js";
+import { igniteArc } from "./transition.js";
 import { registerDecision, raise, DECISION_HOOKS } from "./decisions.js";
 import { isLive, pendingOf } from "./decision-state.js";
 import { queueEvent } from "./succession.js";
@@ -61,10 +61,10 @@ function farPart(ctx, st) {
   const gs = byState(ctx).get(st.id) ?? [], cap = ctx.civ.groups[st.capitalGroupId]; if (gs.length < 4 || !cap) return null;
   const far = gs.filter((g) => g.id !== cap.id).map((g) => [distKm(ctx.world, cap.cell, g.cell), g]).sort((a, b) => b[0] - a[0] || (a[1].id < b[1].id ? -1 : 1)).map((x) => x[1]); return far.slice(0, Math.max(1, Math.min(far.length - 1, Math.round(gs.length * 0.35))));
 }
-function shift(ctx, st, kind) {
-  const { civ } = ctx, cand = regimeCandidates(ctx, st, 0.7).filter((c) => (kind === "mil" ? c.id === "military_junta" || familyOf(c.id) === "aut" : kind === "rep" ? familyOf(c.id) === "rep" : kind === "mon" ? familyOf(c.id) === "mon" : familyOf(c.id) !== familyOf(regimeOf(st)) || c.gap > 0));
-  if (!cand.length) { st.stability = clamp(st.stability - 0.04); return false; } const tot = cand.reduce((a, c) => a + c.w, 0); let x = U(civ, st.id, civ.monthIndex, "rg", kind) * tot, pick = cand[0].id; for (const c of cand) { x -= c.w; if (x <= 0) { pick = c.id; break; } }
-  const ok = switchRegime(ctx, st, pick, kind === "mil" ? "military_takeover" : kind === "rev" ? "revolution" : "reform"); return !!ok;
+function shift(ctx, st, kind) { // v7.2.0: 出来事が政体の変化を起こすときも、局面（前兆→危機→決着）を通す。担当国は危機で決断できる
+  const k = kind === "mil" ? "coup" : kind === "rev" ? "revolution" : "reform";
+  if (!st.arc) { const a = igniteArc(ctx, st, { kind: k, delay: 2, note: "ある出来事がきっかけになった" }); if (a) return true; }
+  st.stability = clamp(st.stability - 0.04); return false;
 }
 function applyFx(ctx, st, fx, cx) {
   const { civ } = ctx, mi = civ.monthIndex, S = cx.S, F = st.politics?.factions;

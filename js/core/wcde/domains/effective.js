@@ -15,6 +15,10 @@ export const FIELDS = Object.freeze({
   equipLevel:  { ja: "装備水準",         mode: "add", min: 0, max: 1,   half: 24, eps: 0.002, nominal: (c, s) => s.military?.equipLevel },
   readiness:   { ja: "練度・即応",       mode: "add", min: 0, max: 1,   half: 12, eps: 0.002, nominal: (c, s) => s.military?.readiness },
   legitimacy:  { ja: "正統性",           mode: "add", min: 0, max: 1,   half: 24, eps: 0.002, nominal: (c, s) => (s.politics?.legitimacy == null ? undefined : Math.max(0, s.politics.legitimacy - shockLegit(s, c.monthIndex))) },
+  // v7.2.0: 政体の局面を動かす 3 つの数値。創造主が介入で上げ下げすれば、局面（前兆→危機）が起きやすく／起きにくくなる
+  unrest:      { ja: "民衆の不満",       mode: "add", min: 0, max: 1,   half: 12, eps: 0.002, nominal: (c, s) => s.politics?.unrest },
+  reformMood:  { ja: "改革の機運",       mode: "add", min: 0, max: 1,   half: 12, eps: 0.002, nominal: (c, s) => s.politics?.reformMood },
+  militaryRise:{ ja: "軍の台頭",         mode: "add", min: 0, max: 1,   half: 12, eps: 0.002, nominal: (c, s) => s.politics?.militaryRise },
   fatigue:     { ja: "疲労度",           mode: "add", min: 0, max: 1,   half: 12, eps: 0.002, nominal: (c, s) => s.politics?.fatigue },
   // v6.1.0 M7: 複数ドメインへの拡張（国家・人口・外交）。domain は領域の台帳の ID
   stability:   { ja: "安定度",           mode: "add", min: 0, max: 1,   half: 18, eps: 0.002, domain: "states",     nominal: (c, s) => s.stability },

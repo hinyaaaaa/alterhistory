@@ -16,7 +16,7 @@ import { byState } from "../js/core/civ/spatial.js";
 
 let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("  OK  ", name); } catch (e) { failed++; console.log("  FAIL", name + ":", String(e.stack ?? e).split("\n").slice(0, 7).join(" | ")); } };
-const R = createNewWorld({ worldSeed: "v612-1", spec: { resolution: { targetCells: 6000 } }, magic: { enabled: false } }); const w0 = R.w;
+const R = createNewWorld({ worldSeed: "alt-a", spec: { resolution: { targetCells: 6000 } }, magic: { enabled: false } }); const w0 = R.w;
 dispatch(w0, { type: "founding.delegate", authority: A.ADMIN }); assert.ok(dispatch(w0, { type: "time.advance", authority: A.ADMIN, months: 500 }).ok);
 const BASE = serializeWorld(w0), fresh = () => deserializeWorld(BASE);
 const alive = (w) => Object.values(w.civ.states).filter((s) => s.alive).sort((a, b) => b.pop - a.pop);
@@ -42,7 +42,7 @@ await check("役職の効果は軽く（上限あり）、全部置くと維持�
   const kinds = new Set(r.offices.map((id) => officeInfo(id).debuff)); assert.ok(kinds.has(null) && kinds.size >= 3, "欠点のある役職がある");
 });
 await check("役職をすべて置くと、税収の効果は小さく、維持費（国庫）が毎期引かれる。アルゴリズム国家は効果ゼロ", () => {
-  const w = fresh(), st = own(w), ai = alive(w)[1]; const ids = REGIMES[st.regime && REGIMES[st.regime] ? st.regime : "kingdom"]?.offices ?? REGIMES.kingdom.offices;
+  const w = fresh(), st = own(w), ai = alive(w)[1]; const ids = REGIMES[st.regime && REGIMES[st.regime] ? st.regime : "estates_monarchy"].offices; // v7.2.0: 政体が一度も変わらない国は st.regime が空（旧版は早くから設定されていた）
   st.offices = ids.map((id) => ({ id, holder: { name: "x", look: 0 } })); const fx = stateFx(st); assert.ok(fx.office.count === ids.length); assert.equal(stateFx(ai).tax, 0); assert.equal(stateFx(ai).stab, 0);
   const t0 = st.treasury = 1000; for (let i = 0; i < 3; i++) w.sim.advanceMonth(); assert.ok(st.treasury < t0 + 3 * (st.pop * st.policy.tax * 0.0012 * 1.2), "維持費が引かれる");
 });

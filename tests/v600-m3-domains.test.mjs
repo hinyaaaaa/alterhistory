@@ -19,7 +19,7 @@ import { stateAt } from "../js/core/civ/history.js";
 
 let failed = 0;
 const check = async (name, fn) => { try { await fn(); console.log("  OK  ", name); } catch (e) { failed++; console.log("  FAIL", name + ":", String(e.stack ?? e).split("\n").slice(0, 3).join(" | ")); } };
-const R = createNewWorld({ worldSeed: "e2e-1", spec: { resolution: { targetCells: 6000 } }, magic: { enabled: true } }); const w = R.w, civ = w.civ;
+const R = createNewWorld({ worldSeed: "alt-a", spec: { resolution: { targetCells: 6000 } }, magic: { enabled: true } }); const w = R.w, civ = w.civ;
 dispatch(w, { type: "founding.delegate", authority: A.ADMIN }); const adv = dispatch(w, { type: "time.advance", authority: A.ADMIN, months: 360 }); assert.ok(adv.ok, adv.error);
 const alive = () => Object.values(civ.states).filter((s) => s.alive), ctx = () => w.sim.ctx;
 console.log(`（準備: ${civ.date.year}年 / 国家 ${alive().length} / 集団 ${Object.keys(civ.groups).length}）`);

@@ -12,7 +12,7 @@ import { leaderName, leaderRng } from "./domains/naming.js";
 import { enthrone, runSecession, formState } from "../civ/states.js";
 import { treatyFeasible, recordProposal, negotiatePeace } from "./negotiation.js";
 import { OFFICES } from "./regimes.js";
-import { successionList, lawJa, queueEvent } from "./succession.js";
+import { successionList, lawJa, lawOf, queueEvent } from "./succession.js";
 import { fieldEngage, navalEngage, placeName, warHelpers } from "./warfare.js";
 import { corpsById, serviceLoss, leadCorps, installCommander, ensureCorps } from "./corps.js";
 import { landShare, navyShare } from "./power.js";
@@ -27,7 +27,7 @@ import { worthAsking, noteAsked } from "./pace.js";
 const clamp = (v, a = 0, b = 1) => (v < a ? a : v > b ? b : v), r3 = (x) => Math.round(x * 1000) / 1000;
 const U = (civ, ...p) => hashSeed(civ.historySeed, "dec", ...p) / 4294967296;
 const HANDLERS = {}; export const registerDecision = (kind, fn) => { HANDLERS[kind] = fn; };
-export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", commander_death: "指揮官の戦死", pact_invite: "盟約への誘い", pact_merge: "統合の提案", event: "出来事", surrender_call: "降伏の打診", conference: "講和会議", peace_terms: "講和の条件" });
+export const DECISION_JA = Object.freeze({ treaty_offer: "条約の申し出", peace_offer: "講和の申し出", war_incoming: "宣戦布告", ally_call: "同盟国の参戦要請", succession: "王位の継承", rebellion: "反乱・分離", omen: "不穏の前兆", battle: "会戦", commander_death: "指揮官の戦死", pact_invite: "盟約への誘い", pact_merge: "統合の提案", event: "出来事", surrender_call: "降伏の打診", conference: "講和会議", peace_terms: "講和の条件", transition: "政変" });
 
 // ---- 出す・止める・解く
 function hold(civ) { const T = timeOf(civ); if (!T.hold) { T.hold = true; T.resumeSpeed = T.speed; } }
@@ -152,15 +152,25 @@ function successionOptions(ctx, st, cause = null) {
   if (partition && adult && (byState(ctx).get(st.id)?.length ?? 0) >= 4) opts.push({ id: "partition", ja: `領土を子らで分ける（${adult.name}が本国を継ぐ）`, hint: "分割相続。新しい国ができる（戦争にはならない）／本国は弱くなる", payload: { cand: adult, partition: true } });
   opts.law = { law, ja: lj }; return opts;
 }
+// v7.2.0: 選挙・合議・党で次の指導者が決まる継承法では、担当国は「後押しする候補」を選ぶ。必ず選ばれるとは限らない（有力者の支持・正統性・能力で決まる）
+const ELECTIVE_LAWS = new Set(["elective", "election", "kurultai", "party"]);
+function electScore(ctx, st, p, chosen, id, trial) { const c = p.cand, F = st.politics?.factions ?? {}; return 0.6 * c.legit + 0.4 * (F[c.backer]?.support ?? 0.5) + 0.1 * c.skill + (id === chosen ? 0.14 : 0) + (U(ctx.civ, st.id, ctx.civ.monthIndex, "elk", id, trial) - 0.5) * 0.2; }
+function electedAmong(ctx, st, payload, chosenId, trial = 0) {
+  const cs = Object.entries(payload).filter(([k, v]) => k !== "__cause" && v?.cand && !v.partition && !v.regent); let best = null;
+  for (const [id, p] of cs) { const v = electScore(ctx, st, p, chosenId, id, trial); if (!best || v > best.v) best = { id, p, v }; }
+  return { pl: best?.p ?? payload[chosenId], failed: !!best && best.id !== chosenId, chosen: payload[chosenId]?.cand, winner: best?.p?.cand };
+}
+function electChance(ctx, st, payload, id) { let w = 0; const N = 40; for (let t = 1; t <= N; t++) if (!electedAmong(ctx, st, payload, id, t).failed) w++; return w / N; }
 function succession(ctx, st, cause = null) {
   const { civ } = ctx; if (!isLive(civ) || !st.player) return false; const key = `s|${st.id}`; if (openKey(civ, key)) return true;
-  const opts = successionOptions(ctx, st, cause); const payload = { __cause: cause }; const options = opts.map((o) => { payload[o.id] = o.payload; return { id: o.id, ja: o.ja, hint: o.hint }; });
+  const opts = successionOptions(ctx, st, cause); const payload = { __cause: cause }; const elective = ELECTIVE_LAWS.has(lawOf(civ, st)); for (const o of opts) payload[o.id] = o.payload;
+  const options = opts.map((o) => { let hint = o.hint; if (elective && o.payload?.cand && !o.payload.partition && !o.payload.regent) { const p = electChance(ctx, st, payload, o.id); hint += `／後押しした場合の見込み: ${p >= 0.7 ? "高い" : p >= 0.4 ? "五分五分" : p >= 0.15 ? "低い" : "ほぼ望めない"}`; } return { id: o.id, ja: o.ja, hint }; });
   const T = { assn: [`${st.leader.name}暗殺 ― 後継を決める`, "指導者が凶刃に倒れた。国を託す者を選ぶ。実権を握る側近も名乗りを上げている。"], coup: [`政変 ― 新たな首班を決める`, `${st.leader.name}は権力を失った。国を率いる者を選ぶ。事を起こした者も候補にいる。`], die: [`${st.leader.name}の死去 ― 跡を継ぐ者を決める`, "指導者が世を去った。"], abd: [`${st.leader.name}の退位 ― 跡を継ぐ者を決める`, "指導者が位を譲る。"] }[cause] ?? [`${st.leader.name}の跡を継ぐ者を決める`, ""];
-  raise(ctx, { kind: "succession", key, stateId: st.id, title: T[0], body: `${T[1]}継承法: ${opts.law?.ja ?? lawJa(civ, st)}。候補者の中から選ぶ。`, options, payload });
+  raise(ctx, { kind: "succession", key, stateId: st.id, title: T[0], body: `${T[1]}継承法: ${opts.law?.ja ?? lawJa(civ, st)}。${elective ? "有力者が選ぶ。あなたが後押しする候補を決めるが、選ばれるとは限らない。" : "候補者の中から選ぶ。"}`, options, payload });
   return true;
 }
 registerDecision("succession", (ctx, d, opt) => {
-  const { civ } = ctx, st = civ.states[d.stateId]; if (!st?.alive) return { ok: true, note: "国がすでにない" }; const pl = d.payload[opt]; if (!pl) return { ok: false, error: "その候補はいません" }; const c = pl.cand, reg = pl.regent ?? null, cause = d.payload.__cause ?? null;
+  const { civ } = ctx, st = civ.states[d.stateId]; if (!st?.alive) return { ok: true, note: "国がすでにない" }; let pl = d.payload[opt]; if (!pl) return { ok: false, error: "その候補はいません" }; let steer = null; if (ELECTIVE_LAWS.has(lawOf(civ, st)) && pl.cand && !pl.partition && !pl.regent) { steer = electedAmong(ctx, st, d.payload, opt); pl = steer.pl; } const c = pl.cand, reg = pl.regent ?? null, cause = d.payload.__cause ?? null;
   if (pl.partition) { const gs = (byState(ctx).get(st.id) ?? []).filter((g) => g.id !== st.capitalGroupId).sort((a, b) => (a.id < b.id ? -1 : 1)), part = gs.filter((_, i) => i % 2 === 1); if (part.length && part.length < gs.length + 1) { const ns = formState(ctx, { via: "secession", groupIds: part.map((g) => g.id), predecessor: st.id }); if (ns) { ns.relations[st.id] = 20; st.relations[ns.id] = 20; makeEvent(civ, ctx.ids, { kind: "state_action", title: `${st.name}の領土が、${c.name}の継承にともない子らで分けられ、${ns.name}が成立した`, participants: [{ entityId: st.id, role: "actor" }, { entityId: ns.id, role: "target" }], location: null, provenance: "player" }); } } }
   const hit = 0.02 + 0.1 * (1 - (reg ? Math.max(c.legit, 0.8) : c.legit));
   enthrone(ctx, st, { name: c.name, bornAt: c.bornAt, kin: c.kin, hit, how: reg ? `摂政${reg.name}のもと、${c.name}が立った` : cause === "assn" ? `暗殺のあと、${c.relation}の${c.name}が立った` : cause === "coup" ? `政変のあと、${c.relation}の${c.name}が実権を握った` : `${c.relation}の${c.name}が立った` });
@@ -168,7 +178,8 @@ registerDecision("succession", (ctx, d, opt) => {
   st.leader.skill = c.skill; st.leader.backer = c.backer; if (reg) st.leader.regent = { name: reg.name, skill: reg.skill, backer: reg.backer, relation: reg.relation, until: civ.monthIndex + Math.max(12, Math.round((16 - c.ageYears) * 12 * lifeScale(civ, st))) };
   const F = st.politics?.factions; if (F) { const bump = (k, v) => { if (F[k]) F[k].support = clamp(F[k].support + v); }; bump(c.backer, 0.1); if (reg) bump(reg.backer, 0.06); for (const k of Object.keys(F)) if (k !== c.backer && k !== reg?.backer && (k === "nobility" || k === "military") && c.kin === false) bump(k, -0.04); }
   if (c.risk && U(civ, st.id, civ.monthIndex, "sdispute") < c.risk * (reg ? 0.6 : 1)) queueEvent(st, c.id === "usurper" || c.id === "general" ? "succ_coup_after" : "succ_dispute", 3 + Math.floor(9 * U(civ, st.id, "sdd")), civ.monthIndex); // 選ばれなかった者の不満: 継承争いの出来事が後で起きる（v6.19.0）
-  return { ok: true, note: reg ? `摂政を置き、${c.name}が即位した` : `${c.name}が即位した` };
+  if (steer?.failed) { addShock(st, civ.monthIndex, "event", 0.03, 6); const bf = F?.[steer.chosen.backer]; if (bf) bf.support = clamp(bf.support - 0.04); makeEvent(civ, ctx.ids, { kind: "state_action", title: `${st.name}で、${steer.chosen.name}を推す動きは実らず、${c.name}が選ばれた`, participants: [{ entityId: st.id, role: "actor" }], location: null, provenance: "player" }); return { ok: true, note: `後押しした${steer.chosen.name}は選ばれず、${c.name}が即位した` }; }
+  return { ok: true, note: reg ? `摂政を置き、${c.name}が即位した` : steer ? `後押しした${c.name}が選ばれ、即位した` : `${c.name}が即位した` };
 });
 
 // ---- 反乱・分離（鎮圧か譲歩か。放置すれば分離して内戦になる）／前兆

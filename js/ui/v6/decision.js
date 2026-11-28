@@ -21,6 +21,7 @@ const SEAL = {
   omen: "兆",
   battle: "陣",
   commander_death: "将",
+  transition: "政",
 };
 
 function resolve(d, option) {

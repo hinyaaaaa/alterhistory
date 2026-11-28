@@ -37,6 +37,7 @@ export function alertsOf(st) {
   if (st.treasury < 0) out.push({ c: "var(--dn)", t: "国庫が赤字", s: "内政", go: () => { S.hub = "domestic"; S.hooks.render(); } });
   const leg = st.politics ? effective(c, st, "legitimacy") : 1;
   if (leg < 0.35) out.push({ c: "var(--wa)", t: `正統性が低い（${Math.round(leg * 100)}）`, s: "内政", go: () => { S.hub = "domestic"; S.hooks.render(); } });
+  if (st.arc && st.arc.kind !== "election") out.push({ c: "var(--wa)", t: `政局が動いている（${{ revolution: "革命", coup: "軍の掌握", reform: "制度改革" }[st.arc.kind] ?? "政変"}の${st.arc.stage === "crisis" ? "山場" : "前兆"}）`, s: "内政", go: () => { S.hub = "domestic"; S.hooks.render(); } });
   const pend = pendingOf(c).length;
   if (pend) out.push({ c: "var(--wa)", t: `決断が${pend}件、待っている`, s: "決断", go: () => S.hooks.render() });
   return out;

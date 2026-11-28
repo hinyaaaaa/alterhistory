@@ -15,6 +15,8 @@ import { atWarWith, endTreaty, declareWar } from "../civ/diplomacy.js";
 import { directWar } from "./warfare.js";
 import { resolveDecision } from "./decisions.js";
 import { setPolicy } from "./policies.js";
+import { pursueRegime } from "./transition.js";
+import { canonRegime } from "./regimes.js";
 import { changeName, changeRegime, changeFlag, changeLeader, setFinance } from "./identity.js";
 import { renameSettlement } from "../civ/settlements.js";
 import { ensureCorps, renameCorps, renameUnit, splitCorps, mergeCorps, transferUnits, convertUnit, appoint, dismiss, setOrder, commitWar, setComposition, appointChief, dismissChief } from "./corps.js";
@@ -131,7 +133,8 @@ corpsCmd("corps.order", (ctx, st, c) => setOrder(ctx, st, c));
     if (c.authority !== A.CREATOR && w.civ.groups[s.groupId]?.stateId !== c.stateId) return { ok: false, error: "自国の集落ではありません" };
     const r = renameSettlement(w.sim.ctx, s.id, c.name, "rename"); return r.ok ? { ok: true, result: r } : { ok: false, error: r.error };
   } });
-  idCmd("state.rename", (ctx, st, c) => changeName(ctx, st, c.name)); idCmd("state.setRegime", (ctx, st, c) => changeRegime(ctx, st, c.regime)); idCmd("state.setFlag", (ctx, st, c) => changeFlag(ctx, st, c.flag));
+  // v7.2.0: 担当国の政体変更は、一瞬では変わらず局面を始める（危機で方法を選ぶ）。創造主は直接変える
+  idCmd("state.rename", (ctx, st, c) => changeName(ctx, st, c.name)); idCmd("state.setRegime", (ctx, st, c) => (c.authority === A.CREATOR ? changeRegime(ctx, st, c.regime) : pursueRegime(ctx, st, canonRegime(c.regime)))); idCmd("state.setFlag", (ctx, st, c) => changeFlag(ctx, st, c.flag));
   idCmd("state.changeLeader", (ctx, st, c) => changeLeader(ctx, st, { mode: c.mode, cand: c.cand })); idCmd("state.setFinance", (ctx, st, c) => setFinance(ctx, st, { key: c.key, value: c.value }));
   // 創造主の直接編集（担当の有無に依らない）
   defineCommand("creator.editState", { authorities: [A.CREATOR], apply: (w, c) => creatorEditState(w, c) });

@@ -25,6 +25,7 @@ import {
   LEADER_MODES,
 } from "../../core/wcde/identity.js";
 import { shockLeft } from "../../core/wcde/shocks.js";
+import { situationOf, METRIC_JA } from "../../core/wcde/transition.js";
 import { LEADER_TRAITS } from "../../core/wcde/founding.js";
 import {
   FLAG_FIELDS,
@@ -372,6 +373,7 @@ export function tInfoV(st, mine) {
       metric("crown", "正統性", pct(leg), { bar: leg, color: "#a58bd0" }),
     ),
   );
+  if (st.politics) out.append(situationBox(st));
   const { out: cp, tot } = compOf(st);
   out.append(
     h(
@@ -389,6 +391,28 @@ export function tInfoV(st, mine) {
   return out;
 }
 
+/** 政情: 不満・改革の機運・軍の台頭と、進行中の政局（前兆・危機）。高いほど政体が揺らぐ */
+function situationBox(st) {
+  const sit = situationOf(st),
+    col = (v, hot) => (v >= hot ? "#d0605a" : v >= hot * 0.75 ? "#d8b45a" : "#9fbf8a"),
+    stage = { omen: "前兆", crisis: "山場" };
+  return h(
+    "div",
+    { class: "metrics situation" },
+    metric("pop", METRIC_JA.unrest, pct(sit.unrest), { bar: sit.unrest, color: col(sit.unrest, 0.55) }),
+    metric("scroll", METRIC_JA.reformMood, pct(sit.reformMood), { bar: sit.reformMood, color: col(sit.reformMood, 0.45) }),
+    metric("sword", METRIC_JA.militaryRise, pct(sit.militaryRise), { bar: sit.militaryRise, color: col(sit.militaryRise, 0.5) }),
+    sit.arc
+      ? h(
+          "span",
+          { class: "chip bad" },
+          `${sit.arc.ja}の${stage[sit.arc.stage] ?? ""}${sit.arc.to ? `（${sit.arc.to}へ）` : ""}`,
+        )
+      : sit.ruling
+        ? h("span", { class: "chip" }, `与党 ${sit.ruling}`)
+        : null,
+  );
+}
 /* ---------- 編集（全画面）: 国名・政体・指導者・国旗 ---------- */
 function done(fn) {
   return (...a) => {
@@ -504,7 +528,7 @@ function regimeEd(st, mine, ctx, mi, E) {
       "div",
       { class: "rowb" },
       btn(
-        "政体を移す",
+        "移行を始める",
         () => {
           const r = doit(mine, { type: "state.setRegime", stateId: st.id, regime: sel.id });
           if (r.ok) {

@@ -59,7 +59,7 @@ export function pressureOf(ctx, st) {
 export function switchRegime(ctx, st, to, how = "reform") {
   const { civ, ids } = ctx, P = (st.politics ??= initPolitics(st)), from = regimeOf(st), R = REGIMES[to], mi = civ.monthIndex; if (!R || from === to) return null;
   const scale = changeScale(from, to), oldName = st.name, polityBefore = st.polity;
-  if (R.core !== st.polity) { const hw = how === "imitation" || how === "conquest" ? "reform" : how; reformPolity(ctx, st, P, R.core, { reform: "reform", revolution: "revolution", military_takeover: "military_takeover", decline: "decline" }[hw] ?? "reform"); }
+  if (R.core !== st.polity) { const hw = how === "imitation" || how === "conquest" ? "reform" : how; reformPolity(ctx, st, P, R.core, { reform: "reform", revolution: "revolution", military_takeover: "military_takeover", decline: "decline" }[hw] ?? "reform", true); }
   st.regime = to; P.lastRegimeChange = mi; st.regimeSince = mi; (st.regimeHistory ??= []).push({ at: mi, from, to, how }); if (st.regimeHistory.length > 8) st.regimeHistory.shift();
   st.stability = clamp(st.stability - 0.02 - 0.16 * scale); // 規模が大きいほど安定度が下がる
   const f = P.factions; if (f) { const k = familyOf(from) !== familyOf(to) ? 0.12 * scale + 0.04 : 0.02; for (const x of Object.keys(f)) f[x].support = clamp(f[x].support - (x === "nobility" || x === "clergy" ? k * 1.4 : k * 0.6)); } // 一部の勢力が離反する
@@ -68,20 +68,6 @@ export function switchRegime(ctx, st, to, how = "reform") {
   makeEvent(civ, ids, { kind: "regime_change", title: `${oldName}の政体が${REGIMES[from].ja}から${R.ja}へ移った（${HOW_JA[how] ?? how}）${rt ? `。国号は${rt.name}と改まった` : ""}`, participants: [{ entityId: st.id, role: "state" }], effects: [{ targetId: st.id, property: "regime", before: from, after: to }], facts: { stateId: st.id, regime: to, from, by: how, scale: Math.round(scale * 100) / 100 }, provenance: "simulation" });
   return { from, to, how, scale };
 }
-/** 年 1 回: 政体の見直し（担当国は動かさない。決めるのはプレイヤー） */
-export function stepRegimeEvolution(ctx) {
-  const { civ } = ctx, mi = civ.monthIndex; if (!civ.options.wcde || mi % 12 !== 7) return;
-  for (const st of Object.values(civ.states)) {
-    if (!st.alive || st.player || civ.wcde?.control?.stateId === st.id) continue; const P = (st.politics ??= initPolitics(st)); if (mi - (P.lastRegimeChange ?? -9999) < 360) continue; // 30 年は続く
-    const pr = pressureOf(ctx, st), u = (hashSeed(st.id, mi, "regime") % 100000) / 100000, cur = regimeOf(st);
-    // 無政府主義: 国家が崩れ、小さな国になったときだけ（短命。周辺の大国に潰されやすい）
-    if (pr > 0.7 && st.stability < 0.2 && st.pop < 150000 && !gateFor(ctx, st, "elder_council") && regimeGate(civ, civ.groups[st.capitalGroupId], "council_republic", { crisis: true }) == null && u < 0.08) { switchRegime(ctx, st, "council_republic", "revolution"); continue; }
-    const cands = regimeCandidates(ctx, st, pr); if (!cands.length) continue; const best = Math.max(...cands.filter((c) => c.w > 0.15).map((c) => c.gap), 0);
-    const tradition = clamp(0.5 * effective(civ, st, "legitimacy") + 0.3 * st.stability + 0.2 * (P.factions?.nobility?.support ?? 0.5)), lag = 1 + 0.6 * Math.max(0, best - 1), resist = 1 - 0.5 * tradition;
-    const p = clamp(0.015 * (1 + 3 * pr) * lag * resist, 0, 0.35); if (u >= p) continue;
-    const tot = cands.reduce((a, c) => a + c.w, 0); let x = ((hashSeed(st.id, mi, "pick") % 100000) / 100000) * tot, pick = cands[cands.length - 1]; for (const c of cands) { x -= c.w; if (x <= 0) { pick = c; break; } }
-    const to = pick.id, diff = familyOf(to) !== familyOf(cur), how = familyOf(to) === "aut" && familyOf(cur) !== "aut" ? (pr > 0.5 ? "military_takeover" : "revolution") : diff ? (pr > 0.35 ? "revolution" : "reform") : pick.gap < 0 ? "decline" : (cands.length && (neighborStates(ctx, st).some((n) => regimeOf(civ.states[n]) === to)) ? "imitation" : "reform");
-    switchRegime(ctx, st, to, how);
-  }
-}
+/** v7.2.0: 年 1 回の確率判定は廃止（transition.js の局面に一本化）。呼び出し口だけ残す */
+export function stepRegimeEvolution() {}
 export { regimeJa };
